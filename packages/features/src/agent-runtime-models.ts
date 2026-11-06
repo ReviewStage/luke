@@ -1,10 +1,8 @@
 /**
  * agent-runtime-models.ts -- the models, fast versions, and context windows a coding agent may move to, by the runtime it runs on: the one rule the model chip, `list_models`, `update_agent`, and the agent's PATCH all read.
  *
- * An agent on eve may move to any model the catalog offers its account, a
- * fast version or the standard window among them. An agent on a provider's
- * own harness runs that provider's models alone, through the harness's own
- * CLI, and no choice of context window, since the CLI manages its context
+ * An agent on a provider's own harness runs that provider's models alone,
+ * through the harness's own CLI, and no choice of context window, since the CLI manages its context
  * itself: Claude Code takes Claude models, a fast version among them, which
  * it runs as the base model with its own fast mode on; Codex takes GPT
  * models, a fast version among them where the account's ChatGPT plan or
@@ -13,11 +11,10 @@
  * `ultrafast` tier, since OpenAI offers Ultrafast on few plans; on a Mac's
  * own sign-in, whatever it is signed in with, it runs neither. A runtime's
  * rule is one row of `NATIVE_MODEL_RULE`, Codex's on the plan
- * (`CODEX_FAST`) and on an API key (`CODEX_ON_API_KEY`) its own; a runtime
- * with no row is eve's, which offers everything.
+ * (`CODEX_FAST`) and on an API key (`CODEX_ON_API_KEY`) its own; no runtime, or
+ * one with no row, offers everything (`ANY_MODEL`).
  * Start is not narrowed here: it offers every model, and what it starts on
- * decides the runtime (`agent-runtime-choice.ts`). eve runs no new agent,
- * and its rule is left offering everything, Ultrafast versions among them.
+ * decides the runtime (`agent-runtime-choice.ts`).
  */
 
 import { AGENT_PAYER, AGENT_RUNTIME, type AgentPayer, type AgentRuntime } from "./agent-wire.js";
@@ -41,13 +38,17 @@ export interface RuntimeModelRule {
   readonly ultrafastRefusal?: string;
 }
 
-/** eve's rule: everything the catalog offers. */
+/**
+ * The rule where no harness narrows the choice: everything the catalog
+ * offers, as a Start's list reads before what it starts on decides the
+ * runtime. It refuses nothing, so a refusal never says its name.
+ */
 const ANY_MODEL: RuntimeModelRule = {
   provider: undefined,
   fast: true,
   ultrafast: true,
   contextWindow: true,
-  name: "eve",
+  name: "any runtime",
 };
 
 /** The native harnesses' rules. */
@@ -110,7 +111,7 @@ const RUNTIME_CHOICE_REFUSAL = {
 export type RuntimeChoiceRefusal =
   (typeof RUNTIME_CHOICE_REFUSAL)[keyof typeof RUNTIME_CHOICE_REFUSAL];
 
-/** The rule of the runtime and payer given; eve's for no runtime, an agent from before the column. */
+/** The rule of the runtime and payer given; `ANY_MODEL` for no runtime, or one that is no native harness. */
 export function runtimeModelRule(
   runtime: AgentRuntime | undefined,
   payer?: AgentPayer | null | undefined,
@@ -140,7 +141,7 @@ function runsSpeedOf(rule: RuntimeModelRule, modelId: string): boolean {
  * The models an agent on the runtime may move to, of those offered: its
  * provider's alone, no fast or Ultrafast version where it runs none, and no context
  * windows where it takes no choice of them, so a menu drawn from the list
- * offers neither. eve's list is the one given, untouched.
+ * offers neither. `ANY_MODEL`'s list is the one given, untouched.
  */
 export function runtimeModels<
   M extends {

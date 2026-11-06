@@ -79,7 +79,7 @@ export interface TunnelAsk {
   readonly bridge: TunnelBridge;
 }
 
-/** The agent a connection reached: its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
+/** The agent a connection reached: its conversation, whose lease it holds, and the session its sandbox is tagged with, none before it ran. */
 export interface TunnelAgent {
   readonly conversationId: string;
   readonly sessionId: string | undefined;
@@ -92,16 +92,16 @@ export interface TunnelDependencies {
     userId: string,
     agentId: string,
   ) => Effect.Effect<Option.Option<TunnelAgent>, unknown>;
-  /** A PTY minted on the running sandbox the eve session is tagged with, or where it stands; never a resume. */
+  /** A PTY minted on the running sandbox the session is tagged with, or where it stands; never a resume. */
   readonly open: (sessionId: string) => Effect.Effect<SandboxOpen, SandboxUnavailable>;
-  /** The stopped sandbox the eve session is tagged with resumed, as the Terminal's resume wakes it; one running is left as it is. */
+  /** The stopped sandbox the session is tagged with resumed, as the Terminal's resume wakes it; one running is left as it is. */
   readonly resume: (sessionId: string) => Effect.Effect<unknown, SandboxUnavailable>;
   /** Opens the PTY's socket for the connection's scope. */
   readonly connect: (
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
-  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  /** Keeps the running sandbox the session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
 }
 

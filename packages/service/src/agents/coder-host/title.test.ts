@@ -156,7 +156,7 @@ function scriptedTitleModel(title: string) {
   return { model, asked };
 }
 
-/** The agent's session opened on `prompt`, as eve records it. */
+/** The agent's session opened on `prompt`, as the store records it. */
 const openedOn = (owner: string, agent: Agent, prompt: string) =>
   Effect.gen(function* () {
     const placedAt = new Date(yield* Clock.currentTimeMillis);
@@ -175,7 +175,7 @@ const openedOn = (owner: string, agent: Agent, prompt: string) =>
     return agent;
   });
 
-/** An agent started on the task with `prompt`, its session opened on the prompt as eve records it. */
+/** An agent started on the task with `prompt`, its session opened on the prompt as the store records it. */
 const startOnTask = (owner: string, taskId: string, prompt: string) =>
   Effect.gen(function* () {
     const started = Option.getOrThrow(
@@ -368,7 +368,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
-        // The session opened on the handed prompt, as eve records an agent's first message.
+        // The session opened on the handed prompt, as the store records an agent's first message.
         yield* Database.use((db) =>
           db.insert(messages).values({
             userId: owner,
@@ -575,7 +575,11 @@ const journaledAgent = Effect.gen(function* () {
   /** A turn opened, taking the line given first, which opens it. */
   const opened = (turnId: string, lineId: string) =>
     Effect.gen(function* () {
-      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
+      yield* writer.enqueueTurn(target, {
+        turnId,
+        origin: TURN_ORIGIN.TYPED,
+        runtimeTurnId: turnId,
+      });
       yield* writer.consume(target, {
         ...next(turnId),
         kind: RUN_EVENT.TURN_STARTED,

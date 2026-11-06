@@ -15,7 +15,7 @@ import {
   readRunnerTokenConversation,
 } from "@repo/database/models/agent-store";
 import { Effect, Option } from "effect";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 
 /** What a bearer header leads with before the bearer. */
 export const BEARER_PREFIX = "Bearer ";

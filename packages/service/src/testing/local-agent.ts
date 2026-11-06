@@ -24,9 +24,9 @@ import { DateTime, Effect, Layer, Option } from "effect";
 import { AgentImage } from "../agents/coder-host/agent-image.js";
 import { claudeCodeSessions } from "../agents/coder-host/claude-code-sessions.js";
 import { claimedDeviceAgentLine } from "../agents/device-agent.js";
-import { EVE_SEND_OUTCOME } from "../agents/eve-host/eve-sessions.js";
 import { AgentMachine } from "../agents/machine/agent-machine.js";
 import { deviceMachine } from "../agents/machine/device-machine.js";
+import { SESSION_SEND_OUTCOME } from "../agents/sessions/agent-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import { LINK_OUTCOME } from "../github/github-installations.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "./agent-credentials.js";
@@ -156,7 +156,7 @@ export const warmLocalAgent = Effect.gen(function* () {
   const { userId, deviceId, agent } = opened;
   const sessions = yield* localAgentSessions(userId);
   const started = yield* sessions.open(typedMessage(agent, "Fix the invitations."));
-  assert.ok(started.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+  assert.ok(started.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
   const { sessionId } = started;
   // The agent's record names the session, as its Start claims it.
   yield* db

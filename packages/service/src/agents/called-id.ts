@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 
 /**
- * called-id.ts -- the id a row an agent's call makes is made under, drawn from the member and eve's key for the call.
+ * called-id.ts -- the id a row an agent's call makes is made under, drawn from the member and the call's key.
  *
- * eve runs a tool call again where its answer was lost, under the same key,
- * so a call that makes a row, a section or a task, makes it under an id
+ * A harness may run a tool call again where its answer was lost, and the
+ * retry runs under the same key (`workspace-mcp/call-key.ts`), so a call that makes a row, a section or a task, makes it under an id
  * named from that key and the member the caller acts for: the call run
  * again names the row it made, and finds it rather than making a second,
  * and no other account's call names it.

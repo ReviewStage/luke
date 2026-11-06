@@ -64,8 +64,8 @@ import {
   hostedStoreOrUnavailable,
   repositoryNotReachable,
 } from "../../http/http-effect.js";
-import type { AgentSessions } from "../eve-host/eve-sessions.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
+import type { AgentSessions } from "../sessions/agent-sessions.js";
 import { RUNNER_CHECKOUT, runnerCheckedOut } from "./runtime-sessions.js";
 import { confirmedBranch } from "./start.js";
 import { agentLineSender, steerAgent } from "./steer.js";
@@ -78,7 +78,7 @@ export interface RepositoryAdder {
 
 /** How the agent is told: the sessions and the writer its line goes through, and the key it is sent under, which a repeat carries again. */
 export interface RepositoryTelling {
-  readonly eve: AgentSessions;
+  readonly agentSessions: AgentSessions;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly clientKey: string;
 }
@@ -196,7 +196,7 @@ export const addAgentRepository = /* @__PURE__ */ Effect.fn("web/addAgentReposit
   // Note that only a checkout that landed in a running place is told, so an idle agent is never woken by a
   // line saying something not yet true, and an agent adding to itself reads the line as its call's answer.
   if (live && adder.agent?.id !== agent.id) {
-    yield* steerAgent(telling.eve, telling.writer, agent.userId, agent, {
+    yield* steerAgent(telling.agentSessions, telling.writer, agent.userId, agent, {
       text: addedRepositoryLine(added),
       clientKey: telling.clientKey,
       sender: agentLineSender(agent),

@@ -12,6 +12,8 @@ import {
   type AgentTodos,
   agentTodosInputSchema,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
+import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -35,8 +37,6 @@ import {
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
 import { linkLabels } from "@repo/features/mention-link";
 import type { ModelChoice } from "@repo/features/models-wire";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
-import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   browserCallWords,
   CALL_KIND,
@@ -63,8 +63,8 @@ import { holderTaskId, type MentionHolder } from "./mention-holder.js";
  * verb is `turn-rows.ts`'s, but for a command
  * the model said the purpose of, whose line says that instead; the body's two
  * blocks are read from the input and the output in the tool's own terms
- * (a command, a patch, a file's words) where the tool is one eve gives the
- * agent, and as their JSON where it is not. A delegation's row is read the
+ * (a command, a patch, a file's words) where the tool is one the retired runtime gave the
+ * agent or a native harness's read as one (`native-tool-calls.ts`), and as their JSON where it is not. A delegation's row is read the
  * same way from the part S1's `delegate` tool stores: the task, the pair
  * the worker runs on, and its answer once it has one. A to-do write's list
  * is read through the wire's own schema, since its input is the list the
@@ -754,7 +754,7 @@ export function sentWords(tool: string, input: WireValue | undefined): SentWords
   return { words, note };
 }
 
-/** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
+/** The job of each worker, by the retired runtime's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 
 /** What a stop names: the job of the worker it stopped where it is known, and the task's id otherwise. */
@@ -848,7 +848,7 @@ function nativeMcpView(
   };
 }
 
-/** A call eve ran on a connection, named by the connection its input names as its card names it, and by the one field of the input a reader looks for first. */
+/** A call the retired runtime ran on a connection, named by the connection its input names as its card names it, and by the one field of the input a reader looks for first. */
 function connectionCall(
   kind: CallKind,
   field: string,
@@ -914,7 +914,7 @@ const SEARCH_MEMORY_CALL: ToolReader = ({ input, output }) =>
  * a tool's kind is chosen: a `Record` over every tool, so a tool added to
  * `AGENT_TOOL` does not compile until it says how it reads, never the
  * wrench and "Used" a tool this build does not know wears. A native
- * harness's own call is read as the eve call that does the same before it
+ * harness's own call is read as the call of the same kind before it
  * reaches here (`native-tool-calls.ts`).
  */
 const AGENT_TOOL_VIEWS = {
@@ -1168,7 +1168,7 @@ const RETIRED_TOOL_VIEWS = {
     namedCall(CALL_KIND.REOPEN_THREAD, input, output, undefined),
 } as const satisfies Record<RetiredTool, ToolReader>;
 
-/** The tools eve gives a session and a native harness's subagent, a message to one and a stop of what runs in Claude Code's background, which a transcript carries beside the agent's own, and the connection tools: a connection's search and its run, each naming the server its input does. */
+/** The tools the retired runtime gave a session and a native harness's subagent, a message to one and a stop of what runs in Claude Code's background, which a transcript carries beside the agent's own, and the retired runtime's connection tools: a connection's search and its run, each naming the server its input does. */
 const OTHER_TOOL_VIEWS: Readonly<Record<string, ToolReader>> = {
   [CLAUDE_CODE_TOOL.AGENT]: ({ input, output }) => subagentCallView(input, output),
   [CODEX_TOOL.SUBAGENT]: ({ input, output }) => subagentCallView(input, output),
@@ -1540,7 +1540,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries: an eve agent's `delegate` call's task, model, effort, and result, and the message the brain's worker is handed in the task's place. */
+/** The fields a delegation's part carries: the task, model, effort, and result of a `delegate` call by an agent on the retired runtime, and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",

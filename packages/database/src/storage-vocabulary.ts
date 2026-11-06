@@ -8,13 +8,15 @@ export const CONVERSATION_KIND = {
 } as const;
 
 /**
- * What answers a conversation's turns: eve, or a provider's own coding
- * harness running unmodified in the agent's sandbox, Claude Code or Codex.
- * Settled as the conversation is opened and never moved after; a
- * conversation from before the column runs on eve.
+ * What answers a conversation's turns: a provider's own coding harness
+ * running unmodified in the agent's sandbox, Claude Code or Codex, or the
+ * retired runtime, which answers nothing any more and keeps the spelling
+ * its rows were stored with. Settled as the conversation is opened and
+ * never moved after; a conversation from before the column ran on the
+ * retired runtime too (`readAgentRouting`).
  */
 export const CONVERSATION_RUNTIME = {
-  EVE: "eve",
+  RETIRED: "eve",
   CLAUDE_CODE: "claude_code",
   CODEX: "codex",
 } as const;

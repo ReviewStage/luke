@@ -93,8 +93,8 @@ import { workspaceAgent } from "./workspace-agents.js";
  * or the workspace installed none, since nothing would ever fire it, and a
  * delivery to Slack where the workspace connected no Slack bot, since
  * nothing would ever be sent. An automation
- * is made under an id drawn from eve's key for the call (`called-id.ts`),
- * so a call eve runs again names the one it made. Every answer is data the
+ * is made under an id drawn from the call's key (`called-id.ts`),
+ * so a call run again names the one it made. Every answer is data the
  * model reads, never a credential.
  */
 
@@ -838,7 +838,7 @@ export function runRunAutomation(
     return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_ID));
   }
   const { automationId } = asked.success;
-  const { eveAs } = call;
+  const { agentSessionsAs } = call;
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -848,12 +848,12 @@ export function runRunAutomation(
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
       const runnable = yield* readAutomation(userId, automationId, AUTOMATION_ACCESS.RUN);
       if (Option.isNone(runnable)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NOT_RUNNABLE);
-      // Note that the run reaches eve as the deployment acting for the account it starts as, its creator, whoever fired it, as the sweep's runs do.
+      // Note that the run reaches the agent's sessions as the deployment acting for the account it starts as, its creator, whoever fired it, as the sweep's runs do.
       const ran = yield* runAutomationNowAs(
         userId,
         runnable.value,
         calledId(userId, call.clientKey),
-        (account) => Effect.succeed(eveAs(account)),
+        (account) => Effect.succeed(agentSessionsAs(account)),
       ).pipe(Effect.result);
       if (Result.isFailure(ran)) return agentToolRejected(refusalWords(ran.failure));
       return {

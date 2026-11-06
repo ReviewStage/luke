@@ -16,6 +16,21 @@ import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
 import type { Refused, Written } from "@repo/sync";
 import { hostMintedId } from "@repo/wire/host-ids";
 
+/**
+ * The name each task write that may wait is kept under on disk
+ * (`QueuedWrite.name`), the Gateway method it was once sent by, so a queue
+ * written by an earlier build is laid back by the same name.
+ */
+export const TASK_QUEUED_WRITE = {
+  START: "tasks.start",
+  RENAME: "tasks.rename",
+  SET_STANDING: "tasks.setStanding",
+  PIN: "tasks.pin",
+  MARK_READ: "tasks.markRead",
+  PIN_REPOSITORY: "tasks.pinRepository",
+  WRITE_SECTION: "tasks.writeSection",
+} as const;
+
 /** What a write answers its caller whether the service kept it or refused it. */
 export interface WriteAnswers<Answer> {
   readonly kept: Answer;

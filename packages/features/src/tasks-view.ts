@@ -10,6 +10,7 @@ import {
   tasklessAgentSchema,
 } from "./agent-wire.js";
 import { githubContract } from "./contract/github.js";
+import { tasksContract } from "./contract/tasks.js";
 import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
   descriptionCommentActionRequestSchema,
@@ -40,7 +41,7 @@ import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
-import { wireUuidSchema } from "./service-wire.js";
+import { HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 import {
   workspaceSlackBotAnswerSchema,
   workspaceSlackBotChannelRequestSchema,
@@ -373,16 +374,52 @@ export const tasksChangeRelationParamsSchema = EffectSchema.Struct({
 
 export type TasksChangeRelationParams = typeof tasksChangeRelationParamsSchema.Type;
 
+/**
+ * The task domain's failures that shipped spelled otherwise than their
+ * refusal's slug: the tree's own rules, each named for the relation it
+ * guards, and a child held to its parent's repository as the parent's.
+ */
+export const TASK_RENAMES = {
+  [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: "parent-cycle",
+  [HOSTED_API_ERROR.TASK_PARENT_HELD]: "parent-held",
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: "parent-repository-differs",
+  [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: "block-cycle",
+} as const;
+
+/**
+ * The task domain's renames as a block's change and a relation's move read
+ * them: a block of a task on itself or across workspaces is refused as an
+ * invalid request, which the window has always drawn as the other task out
+ * of reach.
+ */
+export const TASK_BLOCK_RENAMES = {
+  ...TASK_RENAMES,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_API_ERROR.NOT_FOUND,
+} as const;
+
+/** The task procedures that declare their own refusals, read through `hostedCall`. */
+const declaredTaskCalls = {
+  list: tasksContract.list,
+  create: tasksContract.create,
+  update: tasksContract.update,
+  block: tasksContract.block,
+  parent: tasksContract.parent,
+  relation: tasksContract.relation,
+};
+
+/** Every failure those procedures may end with, as the domain spells it. */
+const TASK_FAILURE = failureSetOf(declaredTaskCalls, { as: TASK_RENAMES });
+
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
-  UNANSWERED: "unanswered",
+  UNANSWERED: TASK_FAILURE.UNANSWERED,
   /** The task is not one the account holds: deleted, or never the caller's. */
-  NOT_FOUND: "not-found",
+  NOT_FOUND: TASK_FAILURE.NOT_FOUND,
   /** The repository named is not one our GitHub App reaches for the account. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
-  LOCAL_AGENT_REFUSED: "local-agent-refused",
+  REPOSITORY_NOT_REACHABLE: TASK_FAILURE.REPOSITORY_NOT_REACHABLE,
+  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. No task procedure answers it now, since a start answers its agent's refusal beside the task it made, but the window still reads it. */
+  LOCAL_AGENT_REFUSED: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
 } as const;
 
 export type TaskCallFailure = (typeof TASK_CALL_FAILURE)[keyof typeof TASK_CALL_FAILURE];
@@ -399,9 +436,9 @@ const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILUR
 
 /** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, the parent works in another repository, or, for a start as a task's parent, that task has a parent already. */
 export const TASK_PARENT_FAILURE = {
-  CYCLE: "parent-cycle",
-  REPOSITORY_DIFFERS: "parent-repository-differs",
-  HELD: "parent-held",
+  CYCLE: TASK_RENAMES[HOSTED_API_ERROR.TASK_PARENT_CYCLE],
+  REPOSITORY_DIFFERS: TASK_RENAMES[HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED],
+  HELD: TASK_RENAMES[HOSTED_API_ERROR.TASK_PARENT_HELD],
 } as const;
 
 /** Why a start answered no plan: a repository call's reasons, the workspace it was to start in or the task it was to relate to is none of the account's, the device it named would not take its agents, or the relation it named was refused by the tree's rules (`TASK_PARENT_FAILURE`). */
@@ -459,15 +496,13 @@ export type TasksMoveAnswer = typeof tasksMoveAnswerSchema.Type;
 
 /** Why a block change wrote nothing a call's other reasons do not say: it would close a cycle. */
 export const TASK_BLOCK_FAILURE = {
-  CYCLE: "block-cycle",
+  CYCLE: TASK_RENAMES[HOSTED_API_ERROR.TASK_BLOCK_CYCLE],
 } as const;
 
 /** Why a block change wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or it would close a cycle. */
-const BLOCK_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_BLOCK_FAILURE.CYCLE,
-] as const;
+const BLOCK_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.block, { as: TASK_BLOCK_RENAMES }),
+);
 
 export type BlockCallFailure = (typeof BLOCK_CALL_FAILURES)[number];
 
@@ -483,12 +518,9 @@ export const tasksBlockAnswerSchema = EffectSchema.Union([
 export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
 
 /** Why a parent write wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or the parent's own reasons. */
-const PARENT_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_PARENT_FAILURE.CYCLE,
-  TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
-] as const;
+const PARENT_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.parent, { as: TASK_RENAMES }),
+);
 
 export type ParentCallFailure = (typeof PARENT_CALL_FAILURES)[number];
 
@@ -501,7 +533,9 @@ export const tasksSetParentAnswerSchema = EffectSchema.Union([
 export type TasksSetParentAnswer = typeof tasksSetParentAnswerSchema.Type;
 
 /** Why a relation's move wrote nothing: a block's reasons, or a parent's. */
-const RELATION_CALL_FAILURES = [...BLOCK_CALL_FAILURES, ...PARENT_CALL_FAILURES] as const;
+const RELATION_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.relation, { as: TASK_BLOCK_RENAMES }),
+);
 
 export type RelationCallFailure = (typeof RELATION_CALL_FAILURES)[number];
 

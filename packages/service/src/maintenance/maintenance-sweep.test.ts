@@ -41,7 +41,6 @@ interface Recorded {
   withdrawnLines: number[];
   automated: number[];
   pictures: number[];
-  tokenPullRequests: number[];
   hostPairings: number[];
   syncLog: number[];
   staleFirewalls: number[];
@@ -60,7 +59,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     withdrawnLines: [],
     automated: [],
     pictures: [],
-    tokenPullRequests: [],
     hostPairings: [],
     syncLog: [],
     staleFirewalls: [],
@@ -120,11 +118,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.pictures.push(now);
         return 4;
       }),
-    sweepTokenPullRequests: (now) =>
-      Effect.sync(() => {
-        recorded.tokenPullRequests.push(now);
-        return { polled: 2, told: 1 };
-      }),
     sweepAgentQueues: () => Effect.succeed(0),
     sweepHostPairings: (now) =>
       Effect.sync(() => {
@@ -176,7 +169,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       withdrawnLines: [],
       automated: [],
       pictures: [],
-      tokenPullRequests: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -206,7 +198,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       withdrawnLines: [],
       automated: [],
       pictures: [],
-      tokenPullRequests: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -223,7 +214,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       withdrawnLines: [],
       automated: [],
       pictures: [],
-      tokenPullRequests: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -244,7 +234,6 @@ it.effect(
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
-      assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       assert.equal(answer.body.syncLog, 5);
       assert.equal(answer.body.staleFirewalls, 7);
       assert.deepEqual(answer.body.codexPlanSwaps, { renewed: 2, failed: 0 });
@@ -261,7 +250,6 @@ it.effect(
         withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
-        tokenPullRequests: [instant],
         hostPairings: [instant],
         syncLog: [instant],
         staleFirewalls: [instant],

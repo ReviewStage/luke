@@ -16,8 +16,8 @@ import { ACTION_RESULT_STATUS, RUN_EVENT, TURN_ORIGIN, unparsedWire } from "../.
 import { saveNotes } from "../../tasks/description-notes.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { added } from "../../testing/task-contents.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
+import { SESSION_TURN } from "../sessions/agent-sessions.js";
 import { runAgentEditDescription } from "./agent-doors.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -79,7 +79,7 @@ const ranTurn = (admitted: AdmittedConversation, turnId: string, at: number) =>
     yield* writer.enqueueTurn(admitted.target, {
       turnId,
       origin: TURN_ORIGIN.TYPED,
-      eveTurnId: turnId,
+      runtimeTurnId: turnId,
     });
     yield* writer.consume(admitted.target, {
       ...turn,
@@ -109,7 +109,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
           coderTurnMessage(
             admitted,
             agent,
-            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
+            { kind: SESSION_TURN.TYPED, turnId: undefined },
             handed,
             TURN_STARTS_AT,
           );
@@ -140,7 +140,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
               coderTurnMessage(
                 admitted,
                 agent,
-                { kind: EVE_HOST_TURN.TYPED, turnId },
+                { kind: SESSION_TURN.TYPED, turnId },
                 handed,
                 TURN_STARTS_AT,
               ),

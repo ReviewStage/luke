@@ -1,7 +1,6 @@
 import type { DB } from "@better-auth/drizzle-adapter";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { type Agent, createAgent } from "@repo/database/models/agent-store";
-import { enrollOwnDevice } from "@repo/database/models/host-store";
 import {
   actOnDescriptionCommentThread,
   DESCRIPTION_COMMENT_OUTCOME,
@@ -9,7 +8,7 @@ import {
   type DescriptionCommentWriterRef,
   startDescriptionCommentThread,
 } from "@repo/database/models/description-comments";
-import { writePage } from "@repo/database/models/task-pages";
+import { enrollOwnDevice } from "@repo/database/models/host-store";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import { saveProviderKey, setProviderKeyForAgents } from "@repo/database/models/provider-key-store";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
@@ -19,6 +18,7 @@ import {
   type TaskBlockCycle,
   type TaskBlockSelf,
 } from "@repo/database/models/task-block-store";
+import { writePage } from "@repo/database/models/task-pages";
 import {
   createTaskOnce,
   saveDescriptionText,
@@ -37,14 +37,14 @@ import {
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_MACHINE, type AgentMachineKind, MESSAGE_SENDER } from "@repo/features/agent-wire";
-import { HOST_WIRE } from "@repo/features/host-wire";
-import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
-import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_SCOPE,
 } from "@repo/features/description-comment-wire";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
+import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { DESCRIPTION_ACTOR, TASK_STATUS, type TaskOrigin } from "@repo/features/task-wire";
 import { ACTION_RESULT_STATUS, MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
@@ -650,7 +650,7 @@ function seedTurn(
     yield* landed(step, yield* writer.writeAwaitingLine(target, line, Effect.succeed(true)));
     const enqueue = {
       turnId: turn.id,
-      eveTurnId: turn.id,
+      runtimeTurnId: turn.id,
       origin: TURN_ORIGIN.TYPED,
       model: agent.model,
       reasoningEffort: agent.effort,

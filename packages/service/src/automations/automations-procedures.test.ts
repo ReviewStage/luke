@@ -58,10 +58,10 @@ import { SqlClient } from "effect/sql";
 import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
 import {
   type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-} from "../agents/eve-host/eve-sessions.js";
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+} from "../agents/sessions/agent-sessions.js";
 import { requestUserId } from "../auth/bearer.js";
 import { TURN_FAILURE } from "../core.js";
 import {
@@ -103,7 +103,7 @@ const automationRunsPath = (automationId: string): string => `${automationPath(a
  * or task will not do, read and changed by its own account alone, paused
  * and resumed with its due instant cleared and computed again, a webhook's
  * secret answered once and kept only as its hash, and a "Run now" one run
- * per key that starts its agent. eve is a fake at the client's boundary,
+ * per key that starts its agent. The harness is a fake at the client's boundary,
  * GitHub a script, the catalog fixed, and the store PGlite. Synthetic
  * accounts, bearers, tasks, and words throughout.
  */
@@ -147,7 +147,7 @@ function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** The automation procedures over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
+/** The automation procedures over the test's own database, GitHub, and a fake harness that writes down every session it opens and who opened it. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const opened: string[] = [];
@@ -158,11 +158,11 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         Effect.sync(() => {
           opened.push(message.conversationId);
           openedAs.push(caller);
-          return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
+          return { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
         }),
-      send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
-      cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
-      reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+      send: () => Effect.succeed({ outcome: SESSION_SEND_OUTCOME.FAILED, status: 500 }),
+      cancel: () => Effect.succeed({ outcome: SESSION_CANCEL_OUTCOME.ACCEPTED }),
+      reset: () => Effect.succeed({ outcome: SESSION_RESET_OUTCOME.RESET }),
     });
     // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
     const sessions = new Map(
@@ -778,7 +778,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           runs.map((each) => `${each.agent?.status}:${each.agent?.failureReason ?? ""}`).toSorted(),
           [
             `${AGENT_STATUS.FAILED}:${AGENT_FAILURE.GITHUB}`,
-            // A run with no turn yet reads running, its prompt awaiting the turn eve opens on it.
+            // A run with no turn yet reads running, its prompt awaiting the turn its harness opens on it.
             `${AGENT_STATUS.RUNNING}:`,
           ],
         );
@@ -895,7 +895,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         assert.equal(first.run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
-        // The run's prompt, which its Start wrote, awaits the first turn eve opens on it.
+        // The run's prompt, which its Start wrote, awaits the first turn its harness opens on it.
         assert.equal(first.run.agent?.status, AGENT_STATUS.RUNNING);
         assert.deepEqual(again.run, first.run, "the same key answers the run it made");
         assert.equal(opened.length, 1, "and starts nothing again");

@@ -94,7 +94,6 @@ function scriptedSandbox(state: SandboxState) {
     attach: () => Effect.die("the routes attach nothing"),
     open: () => Effect.die("the routes open nothing"),
     setCredential: () => Effect.die("the routes set no credential"),
-    withdrawCredential: () => Effect.die("the routes withdraw no credential"),
   };
   return { layer: Layer.succeed(AgentSandbox, service), service, asked };
 }

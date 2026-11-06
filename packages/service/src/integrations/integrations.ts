@@ -207,7 +207,7 @@ export const INTEGRATION = {
    * plain `/mcp` is its default `model` elicitation mode, which answers a
    * call an app's policy holds for approval as a tool result for the agent
    * to put to the developer and `resume`, where `native` would ask over an
-   * MCP elicitation that eve's client never answers
+   * MCP elicitation that our connection's client never answers
    * (https://executor.sh/docs/mcp, "Elicitation modes").
    */
   [INTEGRATION_PROVIDER.EXECUTOR]: {

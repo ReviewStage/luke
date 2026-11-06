@@ -24,7 +24,7 @@ import { InstantColumnSchema } from "./columns.js";
  * taken, and it expires: a holder that died between its claim and its record
  * leaves a claim no one clears, which the next claimant past the expiry
  * takes over. What the dead holder handed over is never handed over again,
- * since neither eve nor a native runner refuses a message it already took:
+ * since a native runner refuses no message it already took:
  * its line stands as written. The expiry is twice the longest a hand-over
  * may take, so a live holder always records before it.
  *

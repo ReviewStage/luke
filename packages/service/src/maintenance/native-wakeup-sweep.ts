@@ -63,13 +63,19 @@ const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
     // An agent gone since is no one's to tell, and its wakeups went with it.
     if (Option.isNone(agent)) return true;
     if (!(yield* agentWakeupStands(wakeup.id))) return true;
-    const eve = yield* sessionsFor(wakeup.userId);
-    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), wakeup.userId, agent.value, {
-      text: wakeup.prompt,
-      clientKey: wakeupKey(wakeup),
-      sender: agentLineSender(agent.value),
-      metadata: APP_LINE_METADATA,
-    });
+    const agentSessions = yield* sessionsFor(wakeup.userId);
+    yield* steerAgent(
+      agentSessions,
+      storeWriter({ tools: CODER_TOOL_SET }),
+      wakeup.userId,
+      agent.value,
+      {
+        text: wakeup.prompt,
+        clientKey: wakeupKey(wakeup),
+        sender: agentLineSender(agent.value),
+        metadata: APP_LINE_METADATA,
+      },
+    );
     yield* deleteAgentWakeup(wakeup.id);
     return true;
   }).pipe(

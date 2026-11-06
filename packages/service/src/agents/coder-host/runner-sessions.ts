@@ -2,14 +2,14 @@
  * runner-sessions.ts -- a coding agent's sessions on a native harness: the runner launched on the machine we open for it, its stdin written to, and the machine's place stopped, resumed, and thrown away around it.
  *
  * The launch machinery the `claude_code` and `codex` implementations of
- * `AgentSessions` (`eve-host/eve-sessions.ts`) share; each names what is
+ * `AgentSessions` (`sessions/agent-sessions.ts`) share; each names what is
  * its own as a `RunnerHarness` (`claude-code-sessions.ts`,
  * `codex-sessions.ts`): the credential its runner is started with, its
  * config line, and the lines that go ahead of a message to a runner already
  * running. Its session is our own: an id minted as the session opens,
  * which the machine finds the agent's place by (in a sandbox, its
  * `sessionId` tag, so the Terminal tab, the stop and the cleanup sweep find
- * the sandbox by it exactly as they find eve's: `terminal/agent-sandbox.ts`,
+ * the sandbox by it: `terminal/agent-sandbox.ts`,
  * `session-sandboxes.ts`). The
  * harness's own session or thread id is the conversation's
  * `native_session`, which the events route records from what the runner
@@ -26,19 +26,19 @@
  * the runner's bearer and records its digest on the agent's row, and starts
  * the runner with the harness's credential and the bearer in its
  * environment and nowhere else: never in its argv, its config line, a file,
- * or a record. A credential the harness holds at the place's firewall
- * (`HarnessLaunch`'s `held`) is kept there with the launch's swaps before
+ * or a record. A credential held at the place's firewall (one of
+ * `HarnessLaunch`'s `credentials` its machine holds there) is kept there with the launch's swaps before
  * the runner starts, its placeholder in the environment in its place, and
  * sent with every write to the place's firewall while the launch stands
- * (`../sandbox-firewall.ts`); it comes off with every other credential at
- * the place's stop, or alone, the launch let go, at a launch's end that
- * leaves the place up, for a Terminal or for the launch that hands its lines
- * on. The launch declares the bearer as a credential its machine hands over
- * (`AgentMachineService`'s `deliverCredentials`): in a sandbox it goes no
- * further than its firewall either, the runner handed a placeholder for it,
- * which the firewall swaps for the bearer on requests to our host, kept and
- * let go on the same terms. The config line and the first message are its
- * first lines. The machine records the runner and the first event number of its launch
+ * (`../sandbox-firewall.ts`); it stays there, with every other credential,
+ * until the place stops or the next launch writes its own, a place a
+ * launch's end leaves up, for a Terminal or for the launch that hands its
+ * lines on, included. The launch declares the bearer as a credential its
+ * machine hands over (`AgentMachineService`'s `deliverCredentials`): in a
+ * sandbox it goes no further than its firewall either, the runner handed a
+ * placeholder for it, which the firewall swaps for the bearer on requests to
+ * our host, kept on the same terms. The config line and the first message
+ * are its first lines. The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
  * A message's words go as text and its images as image blocks; any other
@@ -75,7 +75,7 @@
  * the earlier one launched. A call that waits past `CODER.RUNNER_LEASE.WAIT`
  * fails as unavailable.
  *
- * Every call answers in eve's outcomes, so a caller holds one interface
+ * Every call answers in `AgentSessions`' outcomes, so a caller holds one interface
  * whichever runtime answers. What fails here (the machine, the store, GitHub, a
  * missing credential or snapshot) answers `failed`, said once in the log as an
  * error naming the agent, in the failure's own words, Vercel's answer for a
@@ -158,20 +158,11 @@ import {
   SERVER_HANDOFF_PATH,
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  PLAN_REFUSAL,
-  RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
 import {
   AgentMachine,
   type AgentMachineService,
   CREDENTIAL_RENEWAL,
+  type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
   type MachineLayout,
@@ -188,12 +179,17 @@ import {
 import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
+import { LAUNCH_SWAP } from "../sandbox-firewall.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
-  type FirewallEntry,
-  LAUNCH_SWAP,
-  type LaunchSwapKind,
-  type LaunchSwaps,
-} from "../sandbox-firewall.js";
+  PLAN_REFUSAL,
+  RUNTIME_REFUSAL,
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  type SessionMessage,
+  type SessionTurn,
+} from "../sessions/agent-sessions.js";
 import {
   COMMAND_GONE,
   NOT_FOUND_STATUS,
@@ -248,16 +244,10 @@ export interface RunnerSessionsOptions {
 
 /** What a launch's command is started with of the harness's own. */
 export interface HarnessLaunch {
-  /** The variables beside the bearer: the harness's credential, and whatever else it reads. Never written anywhere but the command's environment. */
+  /** The variables beside the bearer and the declared credentials: whatever else the harness reads. Never written anywhere but the command's environment. */
   readonly env: Readonly<Record<string, string>>;
-  /** The credential held at the place's firewall rather than handed to the command: the variables carrying the launch's placeholder, the swap kept for the launch before the runner starts, and what a fingerprint reads in the placeholder's place. */
-  readonly held?: {
-    readonly env: Readonly<Record<string, string>>;
-    readonly kind: LaunchSwapKind;
-    readonly entry: FirewallEntry;
-    /** The real credential, digested into the fingerprint so a warm runner on a changed key relaunches; none where the service renews the swap itself. */
-    readonly fingerprint?: Redacted.Redacted;
-  };
+  /** The harness's credentials, which its machine hands over beside the bearer (`AgentMachineService`'s `deliverCredentials`). */
+  readonly credentials?: readonly RunnerCredential[];
 }
 
 /** The lines a message to a running runner goes behind. */
@@ -277,9 +267,10 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   readonly runtime: (typeof SERVER_AGENT_HARNESS)[keyof typeof SERVER_AGENT_HARNESS];
   /** What a session id it mints begins with, before a fresh UUID. */
   readonly sessionPrefix: string;
-  /** The credential a launch starts with, read afresh for every launch. */
+  /** The credential a launch on a machine of the layout given starts with, read afresh for every launch. */
   readonly launch: (
     agent: Agent,
+    layout: MachineLayout,
   ) => Effect.Effect<HarnessLaunch, E | LaunchRefused, RunnerServices>;
   /** The config line of a launch on a machine of the layout given, resuming the harness's session where one is named, cut before the line a rewind dropped where one waits. */
   readonly config: (
@@ -321,8 +312,7 @@ const MINTED_AT_DIGITS = 12;
  * A session id the harness's prefix begins, minted at the instant given: the
  * instant in fixed-width hex, then a fresh UUID. The instant first is what
  * lets a session opened later claim the conversation's record over one that
- * ended (`claimRuntimeSession`, forward only, by the ids' order), as eve's
- * own ids do.
+ * ended (`claimRuntimeSession`, forward only, by the ids' order).
  */
 function sessionIdOf(prefix: string, mintedAt: number): string {
   return `${prefix}${mintedAt.toString(16).padStart(MINTED_AT_DIGITS, "0")}-${randomUUID()}`;
@@ -354,14 +344,6 @@ function runnerBearer(bearer: string, host: string): RunnerCredential {
   };
 }
 
-/** The swaps a launch holds at its place's firewall: its harness's credential's where it holds one there, then those its machine keeps for what it delivered; none on a machine with no firewall of ours. */
-function launchSwaps(credential: HarnessLaunch, delivered: LaunchSwaps): LaunchSwaps {
-  const swaps = new Map<LaunchSwapKind, FirewallEntry>();
-  if (credential.held !== undefined) swaps.set(credential.held.kind, credential.held.entry);
-  for (const [kind, entry] of delivered) swaps.set(kind, entry);
-  return swaps;
-}
-
 /** How a file written for the agent is kept: readable by every user, written by none but the API's. */
 const ATTACHMENT_MODE = 0o644;
 
@@ -377,7 +359,7 @@ type MessageLine = Extract<InputLine, { readonly type: typeof INPUT_LINE.MESSAGE
 interface RunnerMessage {
   readonly line: MessageLine;
   readonly files: readonly SandboxFile[];
-  readonly turn: EveHostTurn;
+  readonly turn: SessionTurn;
   readonly timeZone: string | undefined;
 }
 
@@ -404,8 +386,8 @@ function attachmentFileName(name: string, at: number): string {
  * A message's content as the runner's lines carry it, and the files it
  * names: words as text, an image as an image block, and any other file,
  * such as a PDF, written into the machine under the line's own folder of
- * the attachments folder given and named by its path, as eve stages a file
- * part in its sandbox. A file whose bytes are not in the message, a URL
+ * the attachments folder given and named by its path. A file whose bytes
+ * are not in the message, a URL
  * elsewhere, is named as not passed.
  */
 function runnerContent(
@@ -502,23 +484,32 @@ function stopLine(launch: number): InputLine {
  * truncated, so the record carries nothing of the credential. Note that a
  * credential held at the firewall is read by its kind and its real value,
  * never its placeholder, which every launch mints afresh, under the key a
- * slot once named it by, so a digest reads as it did; and that a launch
- * holding none digests what it did before any was held.
+ * slot once named it by, so a digest reads as it did; that a declared
+ * credential its machine hands the runner itself is read among the
+ * variables, as one the harness set there itself once was; and that a
+ * launch holding none digests what it did before any was held.
  */
 function launchFingerprint(
   credential: HarnessLaunch,
+  delivered: DeliveredCredentials,
   integrations: readonly IntegrationServer[],
 ): string {
-  const env = Object.entries(credential.env).sort(([one], [other]) => one.localeCompare(other));
+  const declared = credential.credentials ?? [];
+  const isHeld = (each: RunnerCredential) => delivered.swaps.has(each.slot);
+  const handed = declared.flatMap((each) => {
+    const value = delivered.env[each.variable];
+    return isHeld(each) || value === undefined ? [] : [[each.variable, value] as const];
+  });
+  const env = [...Object.entries(credential.env), ...handed].sort(([one], [other]) =>
+    one.localeCompare(other),
+  );
   const names = integrations.map((each) => each.name).sort();
-  const { held } = credential;
-  const swapped =
-    held === undefined
-      ? undefined
-      : {
-          slot: held.kind,
-          credential: held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
-        };
+  const slots = declared.filter(isHeld).map((each) => ({
+    slot: each.slot,
+    credential: each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+  }));
+  // Note that one slot is digested alone, under the key it was digested by, as the one a launch could hold before credentials were declared.
+  const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
   return createHash("sha256")
     .update(JSON.stringify({ env, names, held: swapped }))
     .digest("hex")
@@ -722,7 +713,7 @@ function namedOutcome(failure: { readonly _tag: string }): boolean {
 /** The sessions for one account on the harness given, over the calling fiber's services. */
 export const runnerSessions = <
   E extends { readonly _tag: string },
-  Turn extends EveHostTurn = EveHostTurn,
+  Turn extends SessionTurn = SessionTurn,
 >(
   harness: RunnerHarness<E>,
   options: RunnerSessionsOptions,
@@ -781,7 +772,7 @@ export const runnerSessions = <
     /**
      * One launch of the runner in the running place: its swaps kept at the
      * place's firewall where its machine holds them there (`runnerBearer`,
-     * `HarnessLaunch`'s `held`), ahead of every write that composes the
+     * `HarnessLaunch`'s `credentials`), ahead of every write that composes the
      * place's policy; then a fresh bearer recorded, the launch's record
      * written, its config read, the caller's own steps (`alongside`) run,
      * and the place's whole policy written, the repository's credential
@@ -817,8 +808,12 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
-        const delivered = machine.deliverCredentials(agent, [runnerBearer(bearer, serviceHost)]);
-        const swaps = launchSwaps(credential, delivered.swaps);
+        const delivered = machine.deliverCredentials(agent, [
+          ...(credential.credentials ?? []),
+          runnerBearer(bearer, serviceHost),
+        ]);
+        // The swaps its machine keeps for what it delivered; none on a machine with no firewall of ours.
+        const { swaps } = delivered;
         // Kept before any write of this launch's, so the checkout's finish and the launch's own each send them.
         if (swaps.size > 0) {
           yield* machine.firewall.keepLaunch(place.running, agent.userId, {
@@ -912,7 +907,6 @@ export const runnerSessions = <
         } = yield* machine.launchRunner(place.running, {
           env: {
             ...credential.env,
-            ...credential.held?.env,
             ...delivered.env,
           },
           userId,
@@ -924,7 +918,11 @@ export const runnerSessions = <
             Effect.gen(function* () {
               const mark: RunnerMark = {
                 firstSequence: made.firstSequence,
-                fingerprint: launchFingerprint(credential, yield* options.integrations(agent)),
+                fingerprint: launchFingerprint(
+                  credential,
+                  delivered,
+                  yield* options.integrations(agent),
+                ),
                 ...(layout.linesRead ? { linesRead: true } : undefined),
               };
               const opened = made.opening === undefined ? [] : [made.opening.line];
@@ -976,7 +974,7 @@ export const runnerSessions = <
       deliveredTo(machine, userId, agent.id, runner, lines);
 
     /** The message as a line, under our id for it where the caller named one, and the files it names, where the machine's layout keeps them. */
-    const messageLine = (message: EveMessage<Turn>, layout: MachineLayout): RunnerMessage => {
+    const messageLine = (message: SessionMessage<Turn>, layout: MachineLayout): RunnerMessage => {
       const uuid = message.lineId ?? randomUUID();
       const { content, files } = runnerContent(
         message.message,
@@ -1041,7 +1039,7 @@ export const runnerSessions = <
           !namedOutcome(failure),
         ),
         {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: failedStatus(failure),
           ...(failure instanceof LaunchRefused && failure.planRefusal !== undefined
             ? { planRefusal: failure.planRefusal }
@@ -1176,12 +1174,13 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const target = { userId, conversationId: agent.conversationId };
-        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares.
+        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares,
+        // as is the agent's own where the place holds no checkout of it, as a launch whose checkout failed leaves it.
         const [, routing, credential] = yield* Effect.all(
           [
-            machine.checkOutExtras(running, target, agent, false),
+            machine.checkOutMissing(running, target, agent, false),
             readAgentRouting(userId, agent.id),
-            harness.launch(agent),
+            harness.launch(agent, layout),
           ],
           { concurrency: "unbounded" },
         );
@@ -1215,11 +1214,17 @@ export const runnerSessions = <
      * what it has, and one from before fingerprints were tagged is never
      * read as stale.
      */
-    const staleWarm = (agent: Agent, runner: RunnerMark, turnRunning: boolean) =>
+    const staleWarm = (
+      agent: Agent,
+      layout: MachineLayout,
+      runner: RunnerMark,
+      turnRunning: boolean,
+    ) =>
       Effect.gen(function* () {
         if (runner.fingerprint === undefined || turnRunning) return false;
-        const credential = yield* harness.launch(agent);
-        const now = launchFingerprint(credential, yield* options.integrations(agent));
+        const credential = yield* harness.launch(agent, layout);
+        const delivered = machine.deliverCredentials(agent, credential.credentials ?? []);
+        const now = launchFingerprint(credential, delivered, yield* options.integrations(agent));
         return now !== runner.fingerprint;
       });
 
@@ -1232,7 +1237,7 @@ export const runnerSessions = <
      */
     const sendHolding = (
       sessionId: string,
-      message: EveMessage<Turn>,
+      message: SessionMessage<Turn>,
       layout: MachineLayout,
       sent: RunnerMessage,
       handsOn: boolean,
@@ -1243,15 +1248,15 @@ export const runnerSessions = <
           [firstPlace(machine, userId, sessionId), Effect.exit(agentOf(message.conversationId))],
           { concurrency: "unbounded" },
         );
-        if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        if (Option.isNone(found)) return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         const agent = yield* agentRead;
         // The session must be the conversation's own agent's, which the account reaches.
         if (found.value.agentId !== agent.id) {
-          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         }
         const target = { userId, conversationId: agent.conversationId };
         const accepted = {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
@@ -1290,7 +1295,7 @@ export const runnerSessions = <
           if (
             pastWarmWindow(found.value.machine, turn, handedAt) ||
             (yield* stopWritten(machine, running)) ||
-            (yield* staleWarm(agent, running.mark, turnRunning))
+            (yield* staleWarm(agent, layout, running.mark, turnRunning))
           ) {
             yield* machine.kill(running.handle);
             yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
@@ -1419,7 +1424,7 @@ export const runnerSessions = <
           // standing for the next message to try again rather than retired; a delete that fails
           // leaves the expired one beside the fresh one, which `listTagged` lists after it as the
           // older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent));
+          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent, layout));
           yield* machine
             .discard(found.value)
             .pipe(
@@ -1454,16 +1459,16 @@ export const runnerSessions = <
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isNone(found) || found.value.agentId !== agent.id) {
-          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
-          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
         // Note that its exit is read at most `CODER.RUNNER_EXIT_READ`, as a message reads it, so a Stop never waits out a live runner's exit.
         const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
-        if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+        if (live === undefined) return { outcome: SESSION_CANCEL_OUTCOME.ACCEPTED } as const;
         yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]).pipe(
           Effect.catchIf(
             (failure) =>
@@ -1471,7 +1476,10 @@ export const runnerSessions = <
             () => Effect.void,
           ),
         );
-        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED, launch: live.mark.firstSequence } as const;
+        return {
+          outcome: SESSION_CANCEL_OUTCOME.ACCEPTED,
+          launch: live.mark.firstSequence,
+        } as const;
       });
 
     /**
@@ -1580,7 +1588,7 @@ export const runnerSessions = <
      * A repository added beside the agent's own handed to the place it runs
      * in now, under the agent's runner lease: the credential set afresh for
      * the whole set, and every extra the place does not hold cloned and
-     * shared with the runner's user (`checkOutExtras`). Nothing where no place
+     * shared with the runner's user (`checkOutMissing`). Nothing where no place
      * runs, since the next launch clones it, a fresh place's with the rest
      * and a resumed one's as it relaunches (`relaunched`).
      */
@@ -1595,7 +1603,7 @@ export const runnerSessions = <
         }
         const target = { userId, conversationId: agent.conversationId };
         yield* renewCredential(target, agent, running);
-        yield* machine.checkOutExtras(running, target, agent, true);
+        yield* machine.checkOutMissing(running, target, agent, true);
         return RUNNER_CHECKOUT.CHECKED_OUT;
       });
 
@@ -1636,7 +1644,13 @@ export const runnerSessions = <
           return place;
         }).pipe(Effect.retry(RESUME_WHILE_ENDING));
         if (resumed === PLACE_RESUME.GONE) {
-          yield* openedPlace(agent, sessionId, layout, undefined, yield* harness.launch(agent));
+          yield* openedPlace(
+            agent,
+            sessionId,
+            layout,
+            undefined,
+            yield* harness.launch(agent, layout),
+          );
           yield* Effect.ignore(machine.discard(found.value));
           return SERVER_HANDOFF_PATH.FRESH;
         }
@@ -1668,7 +1682,7 @@ export const runnerSessions = <
           const turnId = randomUUID();
           yield* writer.enqueueTurn(
             { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+            { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
           // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason,
@@ -1796,7 +1810,7 @@ export const runnerSessions = <
     const sentTo = (
       agent: Agent,
       sessionId: string,
-      message: EveMessage<Turn>,
+      message: SessionMessage<Turn>,
       answersFirst: boolean,
     ) =>
       Effect.gen(function* () {
@@ -1815,7 +1829,7 @@ export const runnerSessions = <
         // opening its sandbox holds the lease, which is the very case this queue is for.
         const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isSome(found) && found.value.agentId !== agent.id) {
-          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         }
         // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
         // the message, and go ahead of it for a recorded runner's launch; with none recorded, the
@@ -1830,7 +1844,7 @@ export const runnerSessions = <
           : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
         yield* handedOnAfter(sessionId, agent, sent.line.uuid);
         return {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
@@ -1850,8 +1864,8 @@ export const runnerSessions = <
             const agent = yield* agentOf(message.conversationId);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
             return yield* Effect.gen(function* () {
-              const credential = yield* harness.launch(agent);
               const layout = yield* machine.layout(agent);
+              const credential = yield* harness.launch(agent, layout);
               const first = messageLine(message, layout);
               const withdrawn = layout.linesRead
                 ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
@@ -1872,7 +1886,7 @@ export const runnerSessions = <
                   withdrawn,
                 ),
               ).pipe(Effect.onError(() => withdrawn));
-              return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+              return { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId } as const;
             }).pipe(
               Effect.catch(failed("open")),
               Effect.annotateLogs(agentLogIds(agent, sessionId)),
@@ -1925,13 +1939,13 @@ export const runnerSessions = <
             const agentId = Option.isSome(found) ? found.value.agentId : undefined;
             const agent = agentId === undefined ? Option.none() : yield* readAgent(userId, agentId);
             if (Option.isNone(agent)) {
-              return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+              return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
             }
             const canceled = yield* holdingRunner(
               agent.value.id,
               cancelHolding(sessionId, turnId, agent.value),
             );
-            if (canceled.outcome !== EVE_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
+            if (canceled.outcome !== SESSION_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
               return { outcome: canceled.outcome } as const;
             }
             const launch = "launch" in canceled ? canceled.launch : undefined;
@@ -1954,7 +1968,8 @@ export const runnerSessions = <
       reset: (sessionId) =>
         Effect.gen(function* () {
           const places = yield* machine.findPlaces(userId, sessionId);
-          if (places.length === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          if (places.length === 0)
+            return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
           let retired = 0;
           for (const place of places) {
             if (!(yield* ownsPlace(place))) continue;
@@ -1966,11 +1981,11 @@ export const runnerSessions = <
             yield* machine.discard(place);
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
-          if (retired === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
           // Note that the session's drive goes through the delete queue rather than here, because a
           // sandbox just deleted holds its drive a few seconds more, which the queue's next pass waits out.
           yield* queueSessionSandboxes([sessionId]);
-          return { outcome: EVE_RESET_OUTCOME.RESET } as const;
+          return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),
           Effect.annotateLogs(agentLogIds({}, sessionId)),
@@ -2166,7 +2181,7 @@ export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(fu
 /** How a launch's end left its place. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",
-  /** A developer's Terminal holds the place, left up with every credential taken off, for its timeout to stop. */
+  /** A developer's Terminal holds the place, left up with its credentials, for its timeout to stop. */
   HELD: "held",
   /** The END is from a launch a newer one replaced, or the place is gone or already down. */
   STALE: "stale",
@@ -2181,13 +2196,11 @@ export const RUNNER_ENDED = {
 } as const;
 
 /**
- * A launch's end, as its END event tells it, for either harness: every
- * credential taken off the firewall, then the place stopped unless a
- * developer's Terminal holds it, which leaves it to its timeout; where a
- * message waits for the launch that hands it on, the place is left up with
- * the ended launch's swaps let go and nothing else sent, the launch that
- * hands it on setting its own; and nothing for an END older than the launch
- * its place runs now.
+ * A launch's end, as its END event tells it, for either harness: the place
+ * stopped, its kept launch deleted first, unless a developer's Terminal
+ * holds it, which leaves it up with its credentials to its timeout; where a message waits for the launch that hands it on, the
+ * place is left up as it stands, the launch that hands it on setting its own
+ * swaps; and nothing for an END older than the launch its place runs now.
  * Decided and stopped under the agent's runner lease, read again once it is
  * held, so a `send` relaunching the runner either finishes first, and its
  * newer launch makes this END stale, or starts after the stop and resumes
@@ -2271,27 +2284,16 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
     ending.reason !== RUNNER_END.FAILED &&
     (yield* linesWaitAt(ending.target.userId, agentId))
   ) {
-    // Note that credentials that would not come off are said and passed over, because the launch that
-    // hands the lines on keeps its own in their place, and an END that failed would hand nothing on.
-    yield* machine.firewall
-      .endLaunch(running, ending.target.userId, {})
-      .pipe(
-        Effect.catch((failure) =>
-          Effect.logWarning(
-            `an ended runner's credentials stayed on a place left up for its lines: ${keptFailureWords(failureWords(failure))}`,
-          ),
-        ),
-      );
     return RUNNER_ENDED.LINES_WAITING;
   }
-  // Every credential comes off first, and a place they would not come off is left up rather than
-  // stopped with them: the call fails, and the place stops at its own timeout.
-  yield* machine.firewall.clear(running);
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the
-  // place, which its timeout then stops once nothing keeps it alive.
+  // place, its credentials with it, which its timeout then stops once nothing keeps it alive.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
     return RUNNER_ENDED.HELD;
   }
+  // The launch kept for the place goes ahead of the stop, so no renewal writes to it again; its
+  // credentials stay on its firewall until the stop.
+  yield* machine.firewall.clear(running);
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });

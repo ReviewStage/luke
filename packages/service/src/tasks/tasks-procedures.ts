@@ -55,8 +55,8 @@
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
-import { devicesNamed } from "@repo/database/models/device-store";
 import { listRevisions, readRevision } from "@repo/database/models/description-revisions";
+import { devicesNamed } from "@repo/database/models/device-store";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   addTaskBlock,
@@ -103,9 +103,9 @@ import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import { everyStoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
 import type { SandboxStopReach } from "../agents/session-sandboxes.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED } from "../core.js";
 import { SERVER_TASK_SOURCE } from "../events/server-events.js";
@@ -194,7 +194,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The agent the key names on the plan, where the Start made one before it
- * failed: a store write or read after eve took the session failed the
+ * failed: a store write or read after the session was opened failed the
  * Start, though the agent works on. Nothing where it made none, or where it
  * could not be read either.
  */
@@ -218,7 +218,7 @@ const taskAfterStart = (userId: string, task: Task) =>
 
 /**
  * The agent a start asks for, started on the plan it just made through the
- * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * agent's own Start (`startRequestedAgent`), reaching the agent's sessions as the developer;
  * a refusal is answered beside the plan rather than in its place, since the
  * plan stands either way and the developer's words are theirs to try again.
  * A Start that failed after its agent was made answers that agent, since it
@@ -232,7 +232,7 @@ const startedAgentOn = (
 ) => {
   const { task } = stored;
   return startRequestedAgent(
-    routedSessions<EveTypedTurn>(userId),
+    routedSessions<TypedTurn>(userId),
     userId,
     { taskId: task.id },
     agent,
@@ -603,9 +603,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /**
      * Every coding agent of the plan stopped for good first, as a Stop stops
      * one, so none works on for a plan that is gone; then the
-     * plan's eve sessions and its agents' retired (`retire-sessions.ts`),
+     * plan's sessions and its agents' retired (`retire-sessions.ts`),
      * with no transaction open; then the plan, under its lock, which reads
-     * again which agents stand. An eve that refuses a Stop, an agent with a turn still
+     * again which agents stand. A harness that refuses a Stop, an agent with a turn still
      * coming that no Stop can name yet, or an agent started while the others
      * were stopped, leaves the plan standing and refused.
      *
@@ -621,7 +621,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         listAgents(userId, taskId, { includeArchived: true }),
       );
       yield* everyStoppedForGood(writer, userId, agents);
-      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on eve;
+      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on a harness;
       // an agent started meanwhile is none of these, keeps its session, and refuses the delete below.
       yield* hostedStoreOrUnavailable(
         retiredBeforeDelete(retiring)(agents.map(({ conversationId }) => conversationId)),

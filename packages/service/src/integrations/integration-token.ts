@@ -2,15 +2,14 @@
  * integration-token.ts -- one account's token at an integration, read for the member acting in a conversation, and the fixed sentences that say why there is none.
  *
  * The door a native harness reaches over our MCP server
- * (`connection-door.ts`) reads an integration's credential here, and
- * nothing here imports eve. The credential is the account's, read from
+ * (`connection-door.ts`) reads an integration's credential here. The credential is the account's, read from
  * Vercel Connect under the
  * user id the admission names as the caller, never a session's principal.
  *
  * A connection that cannot be used fails only the call that tried it: the
  * read answers one of the fixed sentences below. No sentence carries a
- * token, a Connect message, or an HTTP status, because eve reads a status
- * in an error's words as a sign-in to start.
+ * token, a Connect message, or an HTTP status, because the retired runtime
+ * read a status in an error's words as a sign-in to start.
  *
  * A read is two steps: the grant the token would be read on, from the store
  * alone (`integrationGrant`), and the token on it, asked of Connect only
@@ -31,7 +30,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { causeKind } from "@repo/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import type { ConversationAdmission } from "../agents/eve-host/conversation.js";
+import type { ConversationAdmission } from "../agents/sessions/admitted-conversation.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { GITHUB_GRANT_REFUSAL, githubSignInGrant } from "./github-integration.js";
 import {
@@ -65,7 +64,7 @@ export function integrationUnavailable(provider: IntegrationProvider): Unavailab
   };
 }
 
-/** The credential eve sends the provider: the token in the clear, which is the one place it is. */
+/** The credential the connection door sends the provider: the token in the clear, which is the one place it is. */
 interface IntegrationTokenResult {
   readonly token: string;
   readonly expiresAt: number;

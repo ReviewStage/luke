@@ -68,6 +68,7 @@
 
 import {
   AGENT_USER,
+  CODEX_PIN,
   RUNNER_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
@@ -80,7 +81,14 @@ import {
   readAgentRunnerRecord,
   writeAgentRunnerRecord,
 } from "@repo/database/models/agent-runner-record";
-import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
+import {
+  type Agent,
+  hasRepository,
+  readAgent,
+  type WithRepository,
+} from "@repo/database/models/agent-store";
+import type { FirewallOwner } from "@repo/database/models/provider-key-seal";
+import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
@@ -112,9 +120,11 @@ import {
   agentFirewallSources,
   agentRepositoryRead,
   CheckoutRefused,
+  type CheckoutServices,
   cloneAgentExtras,
   cloneAgentRepository,
   finishCheckoutWith,
+  firewallSourcesOfAgent,
   openWorkingFolder,
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
@@ -127,6 +137,8 @@ import {
   type LaunchSwapKind,
   newPlaceholder,
   placeholderSwap,
+  renewedSwap,
+  type SandboxFirewall,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
 import {
@@ -161,6 +173,9 @@ import {
   type RunnerHandle,
   type RunnerMark,
   type RunnerRecord,
+  SWAP_RENEWAL,
+  type SwapRenewal,
+  type SwapRenewalAsk,
 } from "./agent-machine.js";
 
 /**
@@ -193,7 +208,8 @@ const SANDBOX_LAYOUT: MachineLayout = {
   attachments: ATTACHMENT_DIRECTORY,
   sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
-  codexExecutable: undefined,
+  codexExecutable: CODEX_PIN.LINK,
+  codexHome: CODEX_PIN.HOME,
   linesRead: true,
   transcriptsKept: true,
 };
@@ -250,6 +266,15 @@ const SHARE_WAIT = Duration.minutes(2);
 
 /** Why checkouts cloned under a running runner were not shared with its user. */
 const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
+
+/** What a place holds where it holds the agent's own checkout: its repository's git folder. */
+const CHECKOUT_GIT_PATH = `${CODER.CHECKOUT_PATH}/.git`;
+
+/** Where a finished checkout's commit identity stands (`finishCheckoutWith`): its repository's own config, read as a file so no ownership check stands in the way. */
+const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
+
+/** Why a checkout cloned before a relaunch was not finished: the store did not answer for its commit identity. */
+const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
 
 /**
  * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
@@ -540,6 +565,82 @@ function readFileCommand(path: string, maxBytes: number) {
 }
 
 /**
+ * The firewall session a kept launch runs in, its sandbox found by name the
+ * way an agent's sandbox is found: the agent the launch named, the session
+ * its conversation records, the sandboxes tagged with it, and among them the
+ * one still running the owner's session. None where any of them no longer
+ * stands, as for a row its session outlived, or one kept before launches
+ * named their agent.
+ */
+const launchSession = (api: VercelSandboxApi, owner: FirewallOwner, agentId: string | undefined) =>
+  Effect.gen(function* () {
+    if (agentId === undefined) return undefined;
+    const agent = yield* readAgent(owner.userId, agentId);
+    if (Option.isNone(agent)) return undefined;
+    const runtime = yield* recordedRuntimeSession({
+      userId: owner.userId,
+      conversationId: agent.value.conversationId,
+    });
+    if (runtime === undefined) return undefined;
+    const sandboxes = yield* api.listTagged(runtime);
+    const sandbox = sandboxes.find((each) => each.currentSessionId === owner.sandboxSessionId);
+    if (sandbox === undefined) return undefined;
+    return { ...owner, name: sandbox.name } satisfies FirewallSession;
+  });
+
+/** What a renewal writes once it gathered it: the session found running, the swap renewed, and the sources sent beside it. */
+interface SwapWrite {
+  readonly session: FirewallSession;
+  readonly entry: FirewallEntry;
+  readonly sources: FirewallSources;
+}
+
+/**
+ * A standing launch's swap renewed at its sandbox session's firewall
+ * (`MachineFirewall`'s `renew`): the fresh value asked only where the launch
+ * kept for the session holds the slot, set behind the same placeholder where
+ * the swap stands on the target's host alone and sets another value, and the
+ * session's whole policy sent with the agent's repository credential minted
+ * afresh beside it (`firewallSourcesOfAgent`). A launch whose sandbox no
+ * longer runs its session is left (`launchSession`), for the sweep's drop.
+ */
+const swapRenewed = <E extends { readonly _tag: string }, R>(
+  api: VercelSandboxApi,
+  firewall: SandboxFirewall,
+  owner: FirewallOwner,
+  { credential, fresh }: SwapRenewalAsk<E, R>,
+): Effect.Effect<SwapRenewal, SandboxUnavailable, R | CheckoutServices> =>
+  Effect.gen(function* () {
+    const launch = yield* firewall.launchOf(owner);
+    const standing = launch?.swaps.get(credential.slot);
+    if (launch === undefined || standing === undefined) return { outcome: SWAP_RENEWAL.LEFT };
+    const next: SwapRenewal | SwapWrite = yield* Effect.gen(function* () {
+      const value = yield* fresh;
+      if (value === undefined) return { outcome: SWAP_RENEWAL.UNANSWERED } as const;
+      const hosts = Redacted.value(standing.rules).map(([host]) => host);
+      if (!hosts.every((host) => host === credential.target.domain)) {
+        return { outcome: SWAP_RENEWAL.ELSEWHERE } as const;
+      }
+      const entry = renewedSwap(
+        standing,
+        Redacted.make(`${credential.scheme}${Redacted.value(value)}`),
+      );
+      if (entry === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
+      const session = yield* launchSession(api, owner, launch.agentId);
+      if (session === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
+      const sources = yield* firewallSourcesOfAgent(owner.userId, launch.agentId);
+      return { session, entry, sources };
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.succeed({ outcome: SWAP_RENEWAL.FAILED, failure: failure._tag } as const),
+      ),
+    );
+    if ("outcome" in next) return next;
+    yield* firewall.renew(next.session, launch, credential.slot, next.entry, next.sources);
+    return { outcome: SWAP_RENEWAL.RENEWED };
+  });
+
+/**
  * What the machine does to a place it already opened, over the API given:
  * everything but opening one and launching a runner in it, so a caller with
  * no edge's runner to hand the checkout, as a launch's end, still reaches it.
@@ -573,9 +674,8 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
       keepLaunch: (place, userId, launch) =>
         firewall.keepLaunch(firewallSessionOf(place, userId), launch),
-      endLaunch: (place, userId, sources) =>
-        firewall.endLaunch(firewallSessionOf(place, userId), sources),
       clear: (place) => firewall.clear(sessionOfPlace(place)),
+      renew: (owner, ask) => swapRenewed(api, firewall, owner, ask),
     },
 
     stop: (place) =>
@@ -815,6 +915,52 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       return yield* gotOn(agent, sessionId, drive, checkout);
     });
 
+  /**
+   * The agent's own checkout made whole in a place about to be relaunched:
+   * cloned where the place holds none, and finished as an opening finishes
+   * it (`finishCheckoutWith`) where it holds no commit identity, as after a
+   * restore whose finish failed; nothing where it holds a finished one. Note
+   * that a place can stand without one, because a launch whose checkout
+   * failed leaves its sandbox and its drive for the next message, which
+   * resumes them as kept and checks nothing out, so its runner would start
+   * in a folder that is not there.
+   */
+  const ownCheckoutRestored = (
+    place: OpenedPlace,
+    target: ConversationTarget,
+    agent: WithRepository<Agent>,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* api.session(sessionOfPlace(place));
+      const finished = yield* session.run({
+        command: "git",
+        args: ["config", "--file", CHECKOUT_CONFIG_PATH, "--get", "user.email"],
+      });
+      if (finished.exitCode === 0) return;
+      const holds = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
+      const [read, plan] = yield* Effect.all(
+        [
+          agentRepositoryRead(target, agent),
+          agentCheckoutPlan(target, agent).pipe(
+            Effect.mapError((failure) =>
+              failure instanceof CheckoutRefused
+                ? failure
+                : new CheckoutRefused({ reason: RESTORE_PLAN_UNREAD }),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const sandbox = yield* checkoutIn(place, agent.userId);
+      if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
+      yield* finishCheckoutWith(sandbox, plan);
+      yield* Effect.logWarning(
+        holds.exitCode === 0
+          ? "A relaunch found its agent's checkout unfinished and finished it"
+          : "A relaunch found no checkout of its agent's repository and cloned it",
+      );
+    });
+
   return {
     ...vercelLifecycle(api),
 
@@ -892,9 +1038,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
     // so only a repository added since the place opened is cloned here. A runner already running
     // keeps its repository credential through the clone, minted afresh, since each write is whole.
-    checkOutExtras: (place, target, agent, shared) =>
+    // Before a relaunch (not `shared`), the agent's own checkout is cloned first where the place
+    // holds none (`ownCheckoutRestored`).
+    checkOutMissing: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
+        if (!shared) yield* ownCheckoutRestored(place, target, agent);
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
         const beside = shared ? yield* agentFirewallSources(target, agent) : {};

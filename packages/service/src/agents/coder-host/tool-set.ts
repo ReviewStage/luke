@@ -9,30 +9,21 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
  *
- * An eve agent ran eve's own tools, authored one file each in the eve app,
- * so the set is exactly this list and eve added nothing
- * beside it but its tools over each connection it was handed (`../../integrations/connection-tools.ts`): its shell and its file tools, the code extension's patch and
- * search, eve's provider-run web search on the agent's own model call and
- * key, the hosted page read, the delegation of a slice of its
- * work to a worker, the notes it takes on
- * its description (`description-edit.ts`), its to-do list, and the
- * threads it posts to the inbox (`inbox.ts`), the pull
- * request the service opens for it (`pull-request.ts`), its reach to the
- * other coding agents of its workspace, a message to one among it
- * (`../agent-tools.ts`, `agent-message.ts`), the load of one of its
- * repository's skills (`skills.ts`), the pages it shows the developer
- * (`../../tasks/page-tool.ts`), and eve's own durable `sleep`, which it waits on its
- * checks or a deploy with. The worker's own rows name
- * a few of the same tools (`../agent-runtime/tools.ts`), so one writer
- * over this set holds both transcripts. The writer holds every tool part
- * of a row to a registered tool, so each is registered here under the name
- * its part spells; eve declares each tool's input itself, so what is held
- * is that the input is an object and not its fields, which eve's own
- * schema already read before the call ran.
+ * A row names our own tools (`../agent-runtime/tools.ts`), those the
+ * native harnesses run themselves (Claude Code's and Codex's), the tools
+ * an agent ran before the native harnesses, which old transcripts still
+ * name, and the calls over each connection it was handed
+ * (`../../integrations/connection-tools.ts`). The worker's own rows name
+ * a few of the same tools, so one writer over this set holds both
+ * transcripts. The writer holds every tool part of a row to a registered
+ * tool, so each is registered here under the name its part spells; the
+ * tool that ran declared its input itself, so what is held is that the
+ * input is an object and not its fields, which that tool's own schema
+ * already read before the call ran.
  */
 
 /**
- * The tools the coding agent is offered, by the name eve mounts each under,
+ * The tools the coding agent is offered, by the name each is mounted under,
  * as the registry names them (`../agent-runtime/tools.ts`), named here for
  * the callers that pick one out.
  */
@@ -87,9 +78,9 @@ export const CODER_TOOL = {
 
 /**
  * The tools a coding agent's transcript may name that no agent is offered
- * now: eve's provider-run page fetch, which coding agents ran before they had
+ * now: the retired runtime's provider-run page fetch, which coding agents ran before they had
  * the hosted page read, our own hosted search on our key, since
- * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
+ * replaced by the retired runtime's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, that post and its read, since named `post_thread` and
@@ -138,10 +129,10 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 });
 
 /**
- * The two task controls eve added beside any task, which a coding agent's
- * `delegate` was: eve ran them, so they are no
- * tool of ours, but a turn that waits on its worker or stops one names them.
- * Their tasks are eve's subagent tasks, not a task of ours.
+ * The two task controls the retired runtime added beside any task, which a coding agent's
+ * `delegate` was: that runtime ran them, so they are no
+ * tool of ours, but a turn that waited on its worker or stopped one names them.
+ * Their tasks are the retired runtime's subagent tasks, not a task of ours.
  */
 const CODER_TASK_TOOL = {
   TASK_WAIT: "task_wait",
@@ -166,6 +157,6 @@ export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
       ...Object.values(CLAUDE_CODE_TOOL),
       ...Object.values(CODEX_TOOL),
     ]),
-  ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),
+  ].map((name) => [name, wireValidatedTool(`the stored ${name} tool`, TOOL_INPUT)]),
   ...connectionToolEntries(),
 ]);

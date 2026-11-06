@@ -190,7 +190,7 @@ async function mount(): Promise<HTMLElement> {
       createElement(
         OpenSettingsProvider,
         { value: (link: SettingsLink) => opened.push(link) },
-        // Note that the toasts draw from the window's registry under the page's one client, since a second subscription would write that registry's document over the test's.
+        // Note that the toasts draw under the page's one client, since a second `withQueryClient` inside it is refused.
         onRegistry(
           AtomRegistry.make(),
           createElement(

@@ -1,38 +1,37 @@
 import { Schema as EffectSchema } from "effect";
+import { integrationsContract } from "./contract/integrations.js";
+import { failureFactsSchema } from "./failure-facts.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
 import {
   INTEGRATION_LABEL_MAX,
-  integrationAccountAnswerSchema,
   integrationConnectionNameSchema,
   integrationProviderSchema,
-  integrationStatusAnswerSchema,
-  integrationToolsAnswerSchema,
 } from "./integration-wire.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * integration-view.ts -- the account's integrations as one Mac's window hears them: where they stand, or why there is no answer.
  *
  * The host asks the service on the window's behalf and answers the window
- * one of the shapes here. A Connect's answer is only whether the browser
+ * one of the shapes here, each derived from its procedure's declared
+ * refusals (`hosted-failure.ts`). A Connect's answer is only whether the browser
  * was sent to sign in: the address the service answered is opened by the
  * host and never reaches a window, since it begins a grant for the account.
  */
 
-/** Why an integration call answered nothing a window can draw. */
+/** The failure integrations draw as their own though any procedure may answer it, under its own slug. */
+export const INTEGRATION_RENAMES = {
+  [HOSTED_API_ERROR.UNAVAILABLE]: "unavailable",
+} as const;
+
+/** Why an integration call answered nothing a window can draw: the procedures' failures, and the host's own when the sign-in address could not be opened on this Mac. */
 export const INTEGRATION_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The service could not do it now: no such connector on this deployment, or Vercel Connect unreachable. */
-  UNAVAILABLE: "unavailable",
-  /** The sign-in address could not be opened on this Mac. */
+  ...failureSetOf(integrationsContract, { as: INTEGRATION_RENAMES }),
   NOT_OPENED: "not-opened",
 } as const;
 
 export type IntegrationCallFailure =
   (typeof INTEGRATION_CALL_FAILURE)[keyof typeof INTEGRATION_CALL_FAILURE];
-
-const failed = EffectSchema.Struct({
-  failure: EffectSchema.Literals(Object.values(INTEGRATION_CALL_FAILURE)),
-});
 
 /**
  * The one account a Connect, a Cancel, a Disconnect, or a tools read is
@@ -58,18 +57,16 @@ export const integrationRenameParamsSchema = EffectSchema.Struct({
 export type IntegrationRenameParams = typeof integrationRenameParamsSchema.Type;
 
 /** Where one provider's connection stands once a Disconnect ended it, as the window hears it. */
-export const integrationStatusViewSchema = EffectSchema.Union([
-  integrationStatusAnswerSchema,
-  failed,
-]);
+export const integrationStatusViewSchema = answerView(integrationsContract.disconnect, {
+  as: INTEGRATION_RENAMES,
+});
 
 export type IntegrationStatusView = typeof integrationStatusViewSchema.Type;
 
 /** One provider's tools as the window hears them, or why there are none to draw. */
-export const integrationToolsViewSchema = EffectSchema.Union([
-  integrationToolsAnswerSchema,
-  failed,
-]);
+export const integrationToolsViewSchema = answerView(integrationsContract.tools, {
+  as: INTEGRATION_RENAMES,
+});
 
 export type IntegrationToolsView = typeof integrationToolsViewSchema.Type;
 
@@ -79,15 +76,17 @@ export const integrationConnectViewSchema = EffectSchema.Union([
     opened: EffectSchema.Literal(true),
     connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
   }),
-  failed,
+  EffectSchema.Struct({
+    failure: EffectSchema.Literals(Object.values(INTEGRATION_CALL_FAILURE)),
+    cause: EffectSchema.optionalKey(failureFactsSchema),
+  }),
 ]);
 
 export type IntegrationConnectView = typeof integrationConnectViewSchema.Type;
 
 /** One account as a rename left it, as the window hears it, or why there is no answer. */
-export const integrationAccountViewSchema = EffectSchema.Union([
-  integrationAccountAnswerSchema,
-  failed,
-]);
+export const integrationAccountViewSchema = answerView(integrationsContract.rename, {
+  as: INTEGRATION_RENAMES,
+});
 
 export type IntegrationAccountView = typeof integrationAccountViewSchema.Type;

@@ -128,7 +128,7 @@ const findAccountSessions = SqlSchema.findAll({
 });
 
 /**
- * Erases the user row; every dependent row cascades with it. The eve session
+ * Erases the user row; every dependent row cascades with it. The runtime session
  * each of the account's conversations ran in, a deleted task's too, is
  * queued for its sandbox's deletion in the same transaction, since nothing
  * after it names them. The user's row is locked first, so a conversation

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
@@ -20,6 +21,7 @@ import { TestClock } from "effect/testing";
 import { agentBrowserOver } from "../agents/browser/agent-browser.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { SERVER_AGENT_TOOL } from "../events/server-events.js";
+import { Sync, type SyncShape } from "../sync/watch.js";
 import type { RelayFrame } from "../terminal/relay.js";
 import {
   FAKE_IMAGE,
@@ -248,6 +250,29 @@ const inputs = (commands: readonly FakeCdpCommand[]) =>
   commands.filter((command) => command.method.startsWith("Input."));
 
 /** The relay running for one panel over the browser and store given, once its screencast has started. */
+/** Sync whose watches wake only on a write the test names, on one of the watch's topics: never on the clock. */
+function heardSync() {
+  const watches: { readonly topics: readonly SyncTopic[]; readonly woken: Queue.Queue<void> }[] =
+    [];
+  const shape: SyncShape = {
+    watch: (topics) =>
+      Effect.gen(function* () {
+        const woken = yield* Queue.unbounded<void>();
+        watches.push({ topics, woken });
+        return { next: Effect.as(Queue.take(woken), []), heardAt: Effect.succeed(Option.none()) };
+      }),
+  };
+  const write = (topic: SyncTopic) =>
+    Effect.forEach(
+      watches.filter((watch) =>
+        watch.topics.some(([kind, id]) => kind === topic[0] && id === topic[1]),
+      ),
+      (watch) => Queue.offer(watch.woken, undefined),
+      { discard: true },
+    );
+  return { shape, write };
+}
+
 function started(peer: FakeCdpPeer, commands: readonly FakeCdpCommand[], run: Effect.Effect<void>) {
   return Effect.gen(function* () {
     const fiber = yield* Effect.forkChild(run);
@@ -837,12 +862,38 @@ it.effect("a tab its agent closed, or its browser destroyed, closes the socket a
     const listed = yield* liveBrowser();
     const listedPanel = yield* scriptedViewer;
     const store = world(listed.browser);
+    const sync = heardSync();
+    let storeDown = false;
+    let failedReads = 0;
+    const deps: BrowserLiveDependencies = {
+      ...store.deps,
+      readTab: (...asked) =>
+        storeDown
+          ? Effect.andThen(
+              Effect.sync(() => {
+                failedReads += 1;
+              }),
+              Effect.fail("store down"),
+            )
+          : store.deps.readTab(...asked),
+    };
     const { fiber } = yield* started(
       listed.peer,
       listed.commands,
-      Effect.scoped(relayBrowserTab(listedPanel.viewer, ASK, reachedTab(undefined), store.deps)),
+      Effect.scoped(
+        relayBrowserTab(listedPanel.viewer, ASK, reachedTab(undefined), deps).pipe(
+          Effect.provideService(Sync, sync.shape),
+        ),
+      ),
     );
     store.close();
+    // The close is heard on the tab's task, but the read it wakes finds the store down, so it is
+    // read again on the clock, with no second write to wake it.
+    storeDown = true;
+    yield* sync.write([TOPIC.TASK, TASK]);
+    yield* until(() => failedReads > 0);
+    yield* settle;
+    storeDown = false;
     yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY);
     yield* Fiber.join(fiber);
     assert.deepEqual(listedPanel.closed, [BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.GONE]]);

@@ -4,7 +4,6 @@ import {
   Arrival,
   DetailPage,
   ErrorState,
-  List,
   PAGE_FRAME,
   STATUS_TONE,
   useMinute,
@@ -14,16 +13,15 @@ import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
 import { useRef, useState } from "react";
-import { useInboxRowDrafts } from "../composer-drafts.js";
+import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { NOTICE_LOOK } from "../tasks/connect-agent-banner.js";
-import { InboxItemRow, inboxRowDraft } from "../tasks/inbox-list.js";
+import { InboxItemRows } from "../tasks/inbox-item-rows.js";
 import { type InboxListed, waitsOnReaderNow } from "../tasks/inbox-model.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
-import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items.js";
@@ -138,7 +136,8 @@ function useArriving(tasks: TasksControl, read: WaitingItems, waiting: number): 
  * Inbox: the items waiting on the reader, a teammate's left to the Inbox and
  * one with a reminder still ahead left out until it comes due, as the
  * sidebar's Inbox row counts them (`waitsOnReaderNow`), or a refused read's Retry; nothing while
- * none waits. A press on a row opens the Inbox on its item.
+ * none waits. A press on a row opens the Inbox on its item, and its menu
+ * offers what the Inbox's row's does (`InboxItemRows`).
  */
 function HomeInbox({
   tasks,
@@ -149,8 +148,6 @@ function HomeInbox({
   read: WaitingItems;
   waiting: readonly InboxListed[];
 }): React.JSX.Element | null {
-  const drafts = useInboxRowDrafts();
-  const open = (listed: InboxListed) => tasks.inboxView.onOpenItem(choiceOf(listed));
   // Note that nothing waiting draws nothing, while a read is still out or the list was refused too, because an empty section would only say what the page already shows; a refused list is Recent's to say.
   if (waiting.length === 0 && (tasks.listFailed || !read.failed)) return null;
   if (read.failed) {
@@ -169,21 +166,7 @@ function HomeInbox({
       count={waiting.length}
       tone={STATUS_TONE.ATTENTION}
     >
-      <ReplayMask>
-        <List label={TAB_WORDS.INBOX} joinsWalk>
-          {waiting.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
-              {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-              models={tasks.agents.models}
-              readerId={tasks.me}
-              onChoose={open}
-            />
-          ))}
-        </List>
-      </ReplayMask>
+      <InboxItemRows label={TAB_WORDS.INBOX} listed={waiting} tasks={tasks} joinsWalk />
     </PersonSectionFrame>
   );
 }
@@ -285,22 +268,25 @@ export function DesktopHome({
   const waiting = read.items.filter(({ item }) => waitsOnReaderNow(item, tasks.me, now));
   const arriving = useArriving(tasks, read, waiting.length);
   return (
-    // Note that the greeting welcomes the reader back while the list is read, because an account is new but once.
-    <DetailPage frame={PAGE_FRAME.PAGE} title={greeting(accountName, welcomed(tasks))}>
-      <HomeComposer tasks={tasks} takesFocus={takesFocus} />
-      {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
-      <div className="home-rows contents" {...roving}>
-        {/* Note that the sections stand in one mark, so a section still follows the last (`person-frame.tsx`), and their names, counts, and notes show in a screen recording while each masks its rows. */}
-        <ReplayUnmask>
-          <Arrival reading={arriving} label={READING_TASKS}>
-            {/* The Inbox's rows name who started each agent, and Recent's who is on each task, read against the listed workspace's members. */}
-            <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-              <HomeInbox tasks={tasks} read={read} waiting={waiting} />
-              <HomeRecent tasks={tasks} room={room} staged={staged} />
-            </MemberDirectory>
-          </Arrival>
-        </ReplayUnmask>
-      </div>
-    </DetailPage>
+    // Note that the rows' links are written under the listed workspace, so their menus offer Copy link.
+    <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
+      {/* Note that the greeting welcomes the reader back while the list is read, because an account is new but once. */}
+      <DetailPage frame={PAGE_FRAME.PAGE} title={greeting(accountName, welcomed(tasks))}>
+        <HomeComposer tasks={tasks} takesFocus={takesFocus} />
+        {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
+        <div className="home-rows contents" {...roving}>
+          {/* Note that the sections stand in one mark, so a section still follows the last (`person-frame.tsx`), and their names, counts, and notes show in a screen recording while each masks its rows. */}
+          <ReplayUnmask>
+            <Arrival reading={arriving} label={READING_TASKS}>
+              {/* The Inbox's rows name who started each agent, and Recent's who is on each task, read against the listed workspace's members. */}
+              <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+                <HomeInbox tasks={tasks} read={read} waiting={waiting} />
+                <HomeRecent tasks={tasks} room={room} staged={staged} />
+              </MemberDirectory>
+            </Arrival>
+          </ReplayUnmask>
+        </div>
+      </DetailPage>
+    </LinkWorkspaceProvider>
   );
 }

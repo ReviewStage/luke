@@ -609,7 +609,7 @@ it.effect(
 );
 
 it.effect(
-  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to eve, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
+  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to the agent's session, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
   () =>
     Effect.gen(function* () {
       const request = { text: "Also the emails.", clientKey: "key-1" };
@@ -768,31 +768,6 @@ it.effect(
           { failure },
           error,
         );
-      }
-    }),
-);
-
-it.effect(
-  "a dictated clip answers its words, and a clip refused for want of an OpenAI key says so rather than unanswered",
-  () =>
-    Effect.gen(function* () {
-      const clip = { audio: "T2dnUw==", durationMs: 1_500, keywords: ["relay"] };
-      const answering = fakeCloudApi({
-        "POST /api/dictation": { answer: () => ({ text: "Run the tests" }) },
-      });
-      const heard = yield* Effect.provide(client().transcribeDictation(clip), answering.layer);
-      assert.deepEqual(heard, { text: "Run the tests" });
-
-      const refusals = [
-        [HOSTED_API_ERROR.OPENAI_KEY_MISSING, AGENT_CALL_FAILURE.OPENAI_KEY_MISSING],
-        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
-      ] as const;
-      for (const [error, failure] of refusals) {
-        const refusing = fakeCloudApi({
-          "POST /api/dictation": { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
-        });
-        const refused = yield* Effect.provide(client().transcribeDictation(clip), refusing.layer);
-        assert.deepEqual(uncaused(refused), { failure }, error);
       }
     }),
 );

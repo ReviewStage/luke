@@ -170,7 +170,7 @@ export type NativeMoment =
 
 /**
  * What one model call read and wrote: its input whole, the prefix cache's
- * reads and writes among it, and its output, as eve's step reports them.
+ * reads and writes among it, and its output, as the harness reports them.
  */
 export interface NativeContextUsage {
   readonly inputTokens: number;

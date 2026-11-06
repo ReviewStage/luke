@@ -74,14 +74,27 @@ export function useWorkspaceAgents(
   );
 }
 
+/**
+ * The agent `agentId` names as the task list carries it, on a task or on
+ * none, archived or not; none where the list holds no such agent, which
+ * may yet be one on a task the list has not carried live, so a caller
+ * that must know reads it of the service then.
+ */
+export function listedAgentIn(
+  tasks: Pick<TasksView, "taskAgents" | "tasklessAgents"> | undefined,
+  agentId: string,
+): ListedAgent | undefined {
+  const onTask = tasks?.taskAgents?.find((agent) => agent.id === agentId);
+  if (onTask !== undefined) return onTask;
+  const taskless = tasks?.tasklessAgents?.find((agent) => agent.id === agentId);
+  return taskless === undefined ? undefined : summaryOfTaskless(taskless);
+}
+
 /** The agent `agentId` names as the task list carries it, past the newest and archived alike; none while none is named, or where the list holds no such agent. */
 export function useListedAgent(agentId: string | null): AgentSummary | undefined {
   const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
-  return useMemo(() => {
-    if (agentId === null) return undefined;
-    const onTask = tasks?.taskAgents?.find((agent) => agent.id === agentId);
-    if (onTask !== undefined) return onTask;
-    const taskless = tasks?.tasklessAgents?.find((agent) => agent.id === agentId);
-    return taskless === undefined ? undefined : summaryOfTaskless(taskless);
-  }, [tasks, agentId]);
+  return useMemo(
+    () => (agentId === null ? undefined : listedAgentIn(tasks, agentId)),
+    [tasks, agentId],
+  );
 }

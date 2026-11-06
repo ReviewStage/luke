@@ -4,13 +4,13 @@ import { COALESCED_LINE_SEPARATOR } from "@repo/database/models/message-reads";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
 import { PICTURE_OMISSION } from "@repo/features/conversation-picture-wire";
 import { test } from "vitest";
-import { eveContent, type MessageReceivedPart, receivedMessage } from "./attached-files.js";
+import { type MessageReceivedPart, receivedMessage, turnContent } from "./attached-files.js";
 
 /**
- * attached-files.test.ts -- eve is handed a message's text files, inlined, before its images and
+ * attached-files.test.ts -- the harness is handed a message's text files, inlined, before its images and
  * PDFs, each group in the order the files were attached, which a first message's note marker counts
  * on to tell the note's files, the last of each group, from the brief's; and each image with the
- * line naming what was kept of it, which eve's receipt is matched by. Synthetic files throughout.
+ * line naming what was kept of it, which the retired runtime's receipt is matched by. Synthetic files throughout.
  */
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
@@ -29,8 +29,8 @@ const picture = (name: string) => ({
   data: PNG,
 });
 
-test("eve is handed the words, then the text files, then the images and PDFs, each group in the order attached", () => {
-  const handed = eveContent("Match these.", [
+test("the harness is handed the words, then the text files, then the images and PDFs, each group in the order attached", () => {
+  const handed = turnContent("Match these.", [
     picture("brief.png"),
     textFile("brief.txt"),
     picture("note.png"),
@@ -50,8 +50,8 @@ test("eve is handed the words, then the text files, then the images and PDFs, ea
   );
 });
 
-/** A message as eve's receipt lists it: each text part as handed, and each file staged, by its name and type with no bytes. */
-function receiptOf(handed: ReturnType<typeof eveContent>): MessageReceivedPart[] {
+/** A message as the retired runtime's receipt listed it: each text part as handed, and each file staged, by its name and type with no bytes. */
+function receiptOf(handed: ReturnType<typeof turnContent>): MessageReceivedPart[] {
   assert.ok(Array.isArray(handed));
   return handed.map((part): MessageReceivedPart => {
     if (part.type === "text") return { type: "text", text: part.text };
@@ -61,14 +61,14 @@ function receiptOf(handed: ReturnType<typeof eveContent>): MessageReceivedPart[]
   });
 }
 
-test("each image is handed with the line naming what was kept of it, which eve's receipt is matched by as the journal keeps it, and which a receipt's own row reads back onto the image rather than into its words", () => {
+test("each image is handed with the line naming what was kept of it, which the retired runtime's receipt is matched by as the journal keeps it, and which a receipt's own row reads back onto the image rather than into its words", () => {
   const id = "0b7c6a52-3f1d-4c8e-9a40-5d2e1f7b9c33";
   const attachments = [
     { ...picture("flow.png"), kept: { id } },
     { ...picture("huge.png"), kept: { omitted: PICTURE_OMISSION.LIMIT } },
     { name: "spec.pdf", mediaType: AGENT_ATTACHMENT_TYPE.PDF, data: PNG },
   ];
-  const handed = eveContent("Match these.", attachments);
+  const handed = turnContent("Match these.", attachments);
   const received = receivedMessage({ message: "", parts: receiptOf(handed) });
 
   assert.deepEqual(

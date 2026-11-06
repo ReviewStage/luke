@@ -31,7 +31,7 @@ import {
 /**
  * What a sandbox we open is named as, beside a digest of its session's id
  * (`agentSandboxName`), or a fresh UUID for one opened before `getOrCreate`;
- * the sweep tells a native sandbox from eve's by it.
+ * the sweep tells an agent's sandbox from any other by it.
  */
 export const SANDBOX_NAME = "agent-sandbox-";
 
@@ -42,7 +42,7 @@ export const SANDBOX_NAME = "agent-sandbox-";
  */
 export const AGENT_TAG = "agentId";
 
-/** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
+/** The variables the sandbox opens with. */
 export const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
 
 /** Why a sandbox could not be opened where its build named no agents' image (`coder-host/agent-image.ts`). */

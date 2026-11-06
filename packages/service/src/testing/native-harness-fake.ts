@@ -1,7 +1,7 @@
 /**
  * native-harness-fake.ts -- a suite's scripted sessions standing in for the native harnesses its agents start on.
  *
- * No agent starts on eve, and one on eve takes no message
+ * No agent starts on the retired runtime, and one left on it takes no message
  * (`agent-runtime-choice.ts`, `runtime-sessions.ts`), so a suite whose
  * agents start and take messages provides `NativeAgentSessions` over the
  * scripted sessions it writes its calls down with. Each harness acts for
@@ -24,10 +24,10 @@ import {
 } from "../agents/coder-host/runtime-sessions.js";
 import {
   type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-} from "../agents/eve-host/eve-sessions.js";
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+} from "../agents/sessions/agent-sessions.js";
 
 /** Who the script writes down a harness's call as made for: the agent's starter. */
 export function harnessFor(account: string): string {
@@ -74,17 +74,21 @@ export function recordingHarness() {
       Effect.sync(() => {
         heard.push({ call: "open", account });
         return {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId: `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`,
         } as const;
       }),
     send: (sessionId) =>
       Effect.sync(() => {
         heard.push({ call: "send", account });
-        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() } as const;
+        return {
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
+          sessionId,
+          deliveryId: randomUUID(),
+        } as const;
       }),
-    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
-    reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+    cancel: () => Effect.succeed({ outcome: SESSION_CANCEL_OUTCOME.ACCEPTED }),
+    reset: () => Effect.succeed({ outcome: SESSION_RESET_OUTCOME.RESET }),
   }));
   return { heard, layer };
 }

@@ -426,7 +426,7 @@ function spelledCall(step: ReplayStep): CallRead {
   };
 }
 
-/** A call's step whose marker named its tool as the transcript draws it: a native harness's as the eve call that draws the same (`drawnCall`), its input and its result as the values they were. */
+/** A call's step whose marker named its tool as the transcript draws it: a native harness's as the call of the same kind (`drawnCall`), its input and its result as the values they were. */
 function stepCall(
   step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
   tool: string,

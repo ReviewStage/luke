@@ -68,26 +68,25 @@ import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-co
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
-  type AgentToolCall,
   runAgentComment,
   runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
   runAgentShowImage,
   runAgentShowPage,
-  runAgentTools,
 } from "../coder-host/agent-doors.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   isServedTool,
   refusedByDoor,
   TOOL_CATALOG,
   type WorkspaceMcpServices,
 } from "../tool-catalog/catalog.js";
+import { GATES, TOOL_GATE } from "../tool-catalog/gates.js";
 import {
   WORKSPACE_INTEGRATION_MCP_PATH,
   WORKSPACE_MCP_PATH,
@@ -104,7 +103,7 @@ import { workspaceMcpDoorSeams } from "./door-seams.js";
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
  * server lists `read_threads` and runs it through the coder host's inbox door
- * as the agent's starter, the door eve's tool reaches through the coder host, and a wrong bearer, a missing one, and a retired
+ * as the agent's starter, the door the tool catalog names for it, and a wrong bearer, a missing one, and a retired
  * one are each refused before anything is read. Synthetic accounts and
  * words throughout.
  *
@@ -121,7 +120,7 @@ const PICTURE: Picture = {
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]),
 };
 
-/** A deployment that names nothing of its environment: no eve to reach, no keys. */
+/** A deployment that names nothing of its environment: nothing to reach, no keys. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -141,7 +140,7 @@ const NO_INTEGRATIONS = integrationConnectOf(() => ({
   configured: false,
 }));
 
-/** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
+/** The services the doors run against, over the test's database: GitHub, the catalog, and Linear none of them reach. */
 const doorServices = Effect.gen(function* () {
   return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -331,16 +330,8 @@ function post(
 const descriptionsOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
 
-/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
-const SERVED_TOOLS = [
-  "post_thread",
-  "read_threads",
-  "withdraw_ask",
-  "open_pull_request",
-  "edit_description",
-  "look_at_picture",
-  "show_image",
-  "show_page",
+/** The agent tools about the workspace's agents, tasks, automations, and memory, each of whose catalog entries names its own run (`tool-catalog/catalog.ts`'s `agentTool`). */
+const AGENT_TOOLS = [
   "read_page",
   "start_agent",
   "stop_agent",
@@ -362,6 +353,19 @@ const SERVED_TOOLS = [
   "run_automation",
   "save_memory",
   "search_memory",
+] as const;
+
+/** The tools a native agent is served: every tool of our catalog that its harness has no equal of. */
+const SERVED_TOOLS = [
+  "post_thread",
+  "read_threads",
+  "withdraw_ask",
+  "open_pull_request",
+  "edit_description",
+  "look_at_picture",
+  "show_image",
+  "show_page",
+  ...AGENT_TOOLS,
   "read_comments",
   "reply_to_comment",
   "update_comment",
@@ -371,29 +375,28 @@ const SERVED_TOOLS = [
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
 
-/** A call of a door made directly, as eve's tool for it makes one through the coder host. */
+/** A call of a door made directly, as the catalog makes one for the server's tool. */
 type DirectCall = (
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
   seams: AgentDoorSeams,
 ) => Effect.Effect<object, never, WorkspaceMcpServices>;
 
-const agentTool =
-  (tool: AgentToolCall["tool"]): DirectCall =>
-  (admitted, input, seams) =>
-    runAgentTools(seams, admitted, { tool, input, callId: randomUUID() });
-
 const commentTool =
   (name: CommentToolName): DirectCall =>
   (admitted, input) =>
-    runAgentComment(admitted, name, input);
+    runAgentComment(admitted, name, input, true);
 
 /**
- * Each tool's own door, called as eve's tool calls it: the server's answer to
+ * Each tool's own door, called directly as the catalog calls it: the server's answer to
  * a tool is to be this one's, so a tool routed to any other door, or to
- * none, answers otherwise.
+ * none, answers otherwise. The agent tools are left out, since each one's
+ * catalog entry names its run itself, and no door of theirs stands apart
+ * from the catalog to call.
  */
-const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
+const DOOR_OF: Readonly<
+  Record<Exclude<ServedTool, "run_on_mac" | "browser" | (typeof AGENT_TOOLS)[number]>, DirectCall>
+> = {
   post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
@@ -403,33 +406,12 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),
   show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
   show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
-  read_page: agentTool("read_page"),
-  start_agent: agentTool("start_agent"),
-  stop_agent: agentTool("stop_agent"),
-  list_agents: agentTool("list_agents"),
-  read_agent: agentTool("read_agent"),
-  message_agent: agentTool("message_agent"),
-  update_agent: agentTool("update_agent"),
-  list_models: agentTool("list_models"),
-  list_tasks: agentTool("list_tasks"),
-  read_task: agentTool("read_task"),
-  create_task: agentTool("create_task"),
-  update_task: agentTool("update_task"),
-  create_section: agentTool("create_section"),
-  delete_section: agentTool("delete_section"),
-  list_automations: agentTool("list_automations"),
-  create_automation: agentTool("create_automation"),
-  update_automation: agentTool("update_automation"),
-  delete_automation: agentTool("delete_automation"),
-  run_automation: agentTool("run_automation"),
-  save_memory: agentTool("save_memory"),
-  search_memory: agentTool("search_memory"),
   read_comments: commentTool("read_comments"),
   reply_to_comment: commentTool("reply_to_comment"),
   update_comment: commentTool("update_comment"),
 };
 
-/** The eve tools a harness has its own of, which the server never serves. */
+/** The tools a harness has its own of, as the retired runtime named them, which the server never serves. */
 const HARNESS_TOOLS = [
   "bash",
   "read_file",
@@ -605,7 +587,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list names every Vespin tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
+    "tools/list names every Vespin tool the agent's harness has no equal of, each with its catalog entry's schema, and none the harness has",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -652,7 +634,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       withheld: ["browser", "run_on_mac"],
     },
   ])(
-    "tools/list leaves out what eve offers no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
+    "tools/list leaves out what the catalog's gates offer no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
     ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -763,11 +745,56 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "each tool answers as its own door does, called as eve's tool calls it, for the same agent and input",
+    "a device agent's run_on_mac and browser are refused at the catalog in its sandbox gate's words, and neither door runs",
+    () =>
+      Effect.gen(function* () {
+        // A browser that would answer and keep its tab, were the door run.
+        const peer = yield* fakeCdpPeer({
+          pages: [{ targetId: "tab-1", url: "https://shop.test/", title: "Shop" }],
+          answer: (command) => PAGE_ANSWERS[command.method],
+        });
+        const fetch = yield* standingOver(
+          NO_SANDBOX,
+          undefined,
+          agentBrowserTestLayer(peer, SESSION),
+        );
+        const agent = yield* agentInSandbox;
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.agentId)),
+        );
+        const client = yield* connected(fetch, agent.bearer);
+
+        const mac = yield* Effect.promise(() =>
+          client.callTool({ name: "run_on_mac", arguments: { command: "ls ~/code" } }),
+        );
+        const browser = yield* Effect.promise(() =>
+          client.callTool({
+            name: "browser",
+            arguments: { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] },
+          }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        const refused = { status: "not-run", reason: GATES[TOOL_GATE.SANDBOX].refusal };
+        assert.deepEqual([mac.isError, firstJson(mac)], [true, refused]);
+        assert.deepEqual([browser.isError, firstJson(browser)], [true, refused]);
+        assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
+      }),
+  );
+
+  it.effect(
+    "each tool answers as its own door does, called directly as the catalog calls it, for the same agent and input",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        // Every gate stands open, so each call reaches its door.
+        yield* writeAccountPreferences(agent.userId, {
+          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
+        });
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
         const seams = yield* workspaceMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
         const client = yield* connected(fetch, agent.bearer);
@@ -791,7 +818,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const client = yield* connected(fetch, agent.bearer);
-        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
+        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no harness to be made; on no repository, since no GitHub stands here to reach one.
         const create = (input: Readonly<Record<string, string | null>>) =>
           Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
         const name = "Expire stale invitations";

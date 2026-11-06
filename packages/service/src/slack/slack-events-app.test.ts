@@ -726,9 +726,9 @@ it.layer(getTestDB())("our Slack route", (it) => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
       return Effect.gen(function* () {
-        // An agent left on eve runs on no harness, so its session has ended for good.
+        // An agent left on the retired runtime runs on no harness, so its session has ended for good.
         const { owner, agent, taskId, threadTs, slackUserId } = yield* openThreadAgent(
-          CONVERSATION_RUNTIME.EVE,
+          CONVERSATION_RUNTIME.RETIRED,
           true,
         );
 

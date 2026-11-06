@@ -38,8 +38,8 @@ import {
   cloudBrowserTab,
   draftTab,
   followedAgent,
-  isDraftTab,
   pageTab,
+  STRIP_TAB_KIND,
   sameTab,
   subagentTab,
   TAB_WORDS,
@@ -1271,7 +1271,12 @@ function DescriptionDocument({
   const columnLabel =
     tab === undefined || isOverviewTab(tab) ? planLabel : mainTabLabel(tab, agents);
   const draftShown =
-    pane === TASK_PANE.AGENT && tab !== undefined && isDraftTab(tab) ? tab : undefined;
+    pane === TASK_PANE.AGENT &&
+    tab !== undefined &&
+    !isOverviewTab(tab) &&
+    tab.kind === STRIP_TAB_KIND.DRAFT
+      ? tab
+      : undefined;
   // Back leaves the task on Overview, and goes back a screen anywhere else: the panel shuts over
   // the column, and the column goes back to Overview, which lets an empty draft go (`use-main-tabs.ts`).
   const back =

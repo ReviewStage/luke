@@ -1,9 +1,7 @@
 /**
  * vercel-sandbox-api.ts -- every call we make of Vercel Sandbox, through `@vercel/sandbox`, under the deployment's own OIDC token.
  *
- * eve opens and drives each session's sandbox through the SDK it bundles,
- * and hands our own code no handle to it. What we ask of a sandbox
- * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
+ * Everything we ask of a sandbox — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall,
  * a native harness's sandbox got or created from the agents' image on its
@@ -22,7 +20,7 @@
  * `currentSession`), looked up once and held for one operation's calls and
  * polls (`session`).
  *
- * Every sandbox eve opens carries its session's id as a tag, so a session's
+ * Every agent's sandbox carries its session's id as a tag, so a session's
  * sandbox is found by the tag alone; a session has one, so the first page is
  * all of them. What is sent is a tag, a name, and the argv of a command we
  * wrote; what a failure carries is the call that failed, its status, and
@@ -46,7 +44,7 @@ import { Context, Data, Duration, Effect, Option, Redacted, Result, Schema } fro
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
 
-/** The tag eve sets on every session's sandbox, its value the session's id; a sandbox we open ourselves carries it too. */
+/** The tag every session's sandbox carries, its value the session's id. */
 export const SESSION_TAG = "sessionId";
 
 /** The statuses Vercel names a sandbox by that we read: up in `running`, which the list of running sandboxes filters on. */
@@ -64,7 +62,7 @@ export const UP_STATUSES: ReadonlySet<string> = new Set([
   SANDBOX_STATUS.RUNNING,
 ]);
 
-/** The policy with no credential on it: eve's default, the open internet. */
+/** The policy with no credential on it: the open internet. */
 export const OPEN_INTERNET_POLICY = { mode: "allow-all" } as const;
 
 /** Vercel's answer for a sandbox, session, or snapshot already gone. */

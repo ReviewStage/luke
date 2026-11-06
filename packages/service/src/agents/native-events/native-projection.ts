@@ -16,7 +16,7 @@ import {
   type TurnFailure,
 } from "../../core.js";
 import { CODER_REFUSAL } from "../coder-host/bounds.js";
-import { EVE_HOST_TURN, EVE_HOST_TURN_KIND } from "../eve-host/bounds.js";
+import { SESSION_TURN, SESSION_TURN_KIND } from "../sessions/agent-sessions.js";
 import {
   NATIVE_ENDING,
   NATIVE_MOMENT,
@@ -28,13 +28,13 @@ import {
 } from "./native-moments.js";
 
 /**
- * native-projection.ts -- a native harness's moments folded into the store writer's events, as eve's relay folds eve's stream.
+ * native-projection.ts -- a native harness's moments folded into the store writer's events.
  *
  * A coding agent on a native harness runs one turn per launch of its runner:
  * the turn opens at the first sign of work (the line we handed it, the
  * harness's start, or its first words) and ends with the launch, so a model
  * turn that ends with background work or a wakeup still to come leaves the
- * agent's turn running, as eve's parked turn does. Inside it each model call
+ * agent's turn running. Inside it each model call
  * is a step; its words are told the writer a finished sentence at a time
  * while they form, and whole once the step is over; each call stands in the
  * record before its answer and settles with it; reasoning joins under an id
@@ -304,7 +304,7 @@ class Fold {
     this.state = cold;
     const id = nativeTurnId(this.#context.conversationId, this.#context.sequence);
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
-    const { origin, trigger } = EVE_HOST_TURN_KIND[EVE_HOST_TURN.TYPED];
+    const { origin, trigger } = SESSION_TURN_KIND[SESSION_TURN.TYPED];
     const opened = this.#tell(
       { id, told: 0, steps: 0, calls: {}, openedAt: this.#context.now },
       { kind: RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },

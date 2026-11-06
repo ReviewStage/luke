@@ -967,7 +967,7 @@ test("a call about the plan or another task hangs that task's card as its Plan t
   assert.deepEqual(cardOf("create_task"), { task: "", name: "Billing cleanup" });
 });
 
-/** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
+/** The retired runtime's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
 const LINEAR_RUN = [
   toolPart(
     "connection_execute",
