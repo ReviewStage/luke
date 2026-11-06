@@ -30,6 +30,7 @@ import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
 import { installWindowHistory } from "@repo/panel/navigation-history";
+import { QueryProvider } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
@@ -170,8 +171,10 @@ export async function mountWebApp(
   root.render(
     <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
-        <WebAppearance />
-        <App />
+        <QueryProvider>
+          <WebAppearance />
+          <App />
+        </QueryProvider>
       </RegistryContext.Provider>
     </ErrorBoundary>,
   );
