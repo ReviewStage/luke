@@ -426,8 +426,8 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   README holds a design that outlives one change. The one comment kept is
   one a tool reads: a shebang, a license header, a generated file's banner,
   a lint or type suppression, a pragma (`@vitest-environment`,
-  `/// <reference>`), a JSDoc tag a tool acts on (`@public`, `@deprecated`),
-  and the style guard's `/* off-scale */` and `/* no ring: … */` markers.
+  `/// <reference>`), and a JSDoc tag a tool acts on (`@public`,
+  `@deprecated`).
 - UI draws with `@repo/ui` (`packages/ui/README.md`): its components, page
   patterns and `--ui-*` tokens; no raw controls where a component exists,
   no literal colors or sizes, no `className` on its controls. A missing

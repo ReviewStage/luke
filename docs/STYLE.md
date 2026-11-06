@@ -264,9 +264,7 @@ changes what the build does:
   where the lint rules allow one;
 - a pragma: `@vitest-environment`, `/// <reference>`;
 - a JSDoc tag a tool acts on: `@public` for knip, `@deprecated` for the
-  editor;
-- the style guard's markers in a stylesheet: `/* off-scale */` and
-  `/* no ring: … */` (`docs/DESIGN.md`).
+  editor.
 
-A marker says only what its tool needs. Prose beside it is a comment and
-goes where Part 3 sends it.
+Such a comment says only what its tool needs. Prose beside it is a comment
+and goes where Part 3 sends it.

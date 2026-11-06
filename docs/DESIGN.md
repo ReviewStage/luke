@@ -220,8 +220,7 @@ that one edge. Controls in a row stand `--ui-control-gap` apart, a glyph
 content `--ui-page-inset` from its column, each the desktop profile's role.
 No pixel of padding, margin, or gap in `shell.css` and `desktop.css` is
 anything but one of these; the optical
-exception above is marked `/* off-scale */` on its declaration, so a reader
-sees it is deliberate.
+exception above gives its reason in the PR that adds it.
 
 The window's buttons are `@repo/ui`'s Button and IconButton
 (`packages/ui/src/components/button/`). A glyph alone is an IconButton: a `--ui-control-height` square with a `--ui-control-icon` glyph in
@@ -264,9 +263,10 @@ leaves its ring whole. A row that runs the scroller's width by design, a line of
 code or Pierre's tree, draws the ring inside it instead. A
 field holding the caret wears no ring, however the caret arrived: the caret
 and the field's own ground say where typing goes, and so does a well's, a
-search's or the composer's, around a field set borderless in it. A rule that takes the ring away
-marks it `/* no ring: … */` with what shows focus instead; menus mark a row
-with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
+search's or the composer's, around a field set borderless in it. A rule that
+takes the ring away leaves something else showing focus, and its PR names
+what: menus mark a row with its fill. One that leaves nothing showing focus
+is a bug, and so is a ring drawn off the tokens.
 
 Every menu and popover is one surface, from the menu tokens: the desktop
 profile's menu roles in `packages/ui/src/tokens/profiles.css`. It is the
