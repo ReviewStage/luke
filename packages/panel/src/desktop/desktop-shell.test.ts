@@ -538,8 +538,8 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
         sidePanel: {
           ...tasksControl().sidePanel,
           open: true,
-          tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-          strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+          tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+          strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
           tab: SIDE_PANEL_TAB.INBOX,
         },
       },

@@ -1782,7 +1782,7 @@ export function useTasksTab(input: {
     for (const pin of sidePanel.pins) {
       if (!("task" in pin)) continue;
       const { task: taskId, tab } = pin;
-      if (tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(taskId)) continue;
+      if (tab !== SIDE_PANEL_TAB.DESCRIPTION || migratedPins.current.has(taskId)) continue;
       const pinned = tasks.tasks.find((each) => each.id === taskId);
       if (pinned === undefined) continue;
       migratedPins.current.add(taskId);

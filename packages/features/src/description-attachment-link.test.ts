@@ -21,16 +21,16 @@ const SECOND = "3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02";
 const EARLIER = "5d7e8f90-1a2b-4c3d-9e4f-5a6b7c8d9e03";
 const UNDER_TASK = "7e8f9a0b-2c3d-4e5f-8a6b-7c8d9e0f1a04";
 
-test("a picture's address is the plan's own under /plan/, which every shipped build reads, with its id after it, and reads back by either scheme and under /task/", () => {
+test("a picture's address is its task's own under /task/, with its id after it, and reads back by either scheme and under the /plan/ every older picture holds", () => {
   const address = descriptionAttachmentAddress({ taskId: TASK_ID, attachmentId: PICTURE }, "acme");
 
-  assert.equal(address, `https://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE}`);
+  assert.equal(address, `https://vespin.dev/acme/task/${TASK_ID}/files/${PICTURE}`);
   assert.deepEqual(descriptionAttachmentOf(address), { taskId: TASK_ID, attachmentId: PICTURE });
   assert.deepEqual(descriptionAttachmentOf(address.replace("https:", "vespin:")), {
     taskId: TASK_ID,
     attachmentId: PICTURE,
   });
-  assert.deepEqual(descriptionAttachmentOf(address.replace("/plan/", "/task/")), {
+  assert.deepEqual(descriptionAttachmentOf(address.replace("/task/", "/plan/")), {
     taskId: TASK_ID,
     attachmentId: PICTURE,
   });

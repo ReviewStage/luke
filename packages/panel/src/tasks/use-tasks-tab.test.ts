@@ -1813,7 +1813,7 @@ test("a section shown is let go, so the plan opened again later opens where it w
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
+  act(() => panel().onClose(SIDE_PANEL_TAB.DESCRIPTION));
   for (let close = 0; close < 20; close += 1) {
     act(() => panel().onOpenFile(FILE_REF));
     act(() => panel().onClose(FILE));

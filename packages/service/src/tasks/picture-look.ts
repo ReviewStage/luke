@@ -75,7 +75,7 @@ export type PictureLookResult =
 const LOOK_INPUT = Schema.Struct({
   address: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(PICTURE_LOOK.MAX_ADDRESS_CHARS)),
-    `The picture's address exactly as the description's text writes it, inside its ![alt](address): ${LINK_ORIGIN}/<workspace>/plan/<plan>/files/<picture>.`,
+    `The picture's address exactly as the description's text writes it, inside its ![alt](address): ${LINK_ORIGIN}/<workspace>/task/<task>/files/<picture>, or under /plan/ in place of /task/ for a picture written before the rename.`,
   ),
 });
 

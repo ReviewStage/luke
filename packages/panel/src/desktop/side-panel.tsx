@@ -724,7 +724,7 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
   return {
     id: tab,
     ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }),
-    replayMasked: tab === SIDE_PANEL_TAB.PLAN && plan !== undefined,
+    replayMasked: tab === SIDE_PANEL_TAB.DESCRIPTION && plan !== undefined,
   };
 }
 

@@ -153,7 +153,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 /** A fixed tab's card: the Plan tab's its task's; the panel's other kinds hang none, their names saying all there is. */
 function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }>) {
   switch (subject.tab) {
-    case SIDE_PANEL_TAB.PLAN:
+    case SIDE_PANEL_TAB.DESCRIPTION:
       return subject.plan === undefined ? null : (
         <PlanCard taskId={subject.plan.taskId} standing={subject.plan.standing} />
       );
@@ -178,7 +178,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         <PlanCard
           taskId={subject.taskId}
           standing={{
-            name: subject.name ?? SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.PLAN].label,
+            name: subject.name ?? SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.DESCRIPTION].label,
             status: subject.status,
           }}
         />

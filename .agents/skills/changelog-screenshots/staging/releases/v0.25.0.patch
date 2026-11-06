@@ -1782,7 +1782,7 @@ index 000000000..c65bf6156
 +      plans: standingPlans(),
 +      extra: { workspaces: whoWorkspaces(members.length) },
 +    }),
-+    sidePanel: { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN },
++    sidePanel: { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.DESCRIPTION },
 +    readerId: MEMBER.DEAN.userId,
 +    answers: {
 +      ...codingAgentAnswers(),
@@ -5010,7 +5010,7 @@ index d9b59dca1..e5ddeb859 100644
    activeTaskId: FIXTURE_TASK.id,
    document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
 @@ -574,7 +587,10 @@ const FIXTURE_DOCUMENT_PANEL: SidePanelState = {
-   tab: SIDE_PANEL_TAB.PLAN,
+   tab: SIDE_PANEL_TAB.DESCRIPTION,
    width: SIDE_PANEL_WIDTH.DEFAULT,
  };
 -const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_DOCUMENT_PANEL, open: false };

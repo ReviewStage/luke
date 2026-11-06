@@ -72,9 +72,10 @@ import { parsedUrl } from "./parsed-url.js";
  * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
  * its task and written no more.
  *
- * A picture in a plan, `/plan/<id>/files/<picture>` (`description-attachment-link.ts`),
- * still written under `/plan/` for the builds that read a picture there alone,
- * is read as its task, and a picture in an Inbox item's words, the item's
+ * A picture in a description, `/task/<id>/files/<picture>`
+ * (`description-attachment-link.ts`), or under `/plan/` as every picture
+ * written before the rename stands, is read as its task, and a picture in an
+ * Inbox item's words, the item's
  * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
  * the item, since nothing of a picture is opened by its link.
  *
@@ -203,6 +204,20 @@ const COMMENT_QUERY = "comment";
 
 /** The steps a task is read under: the one written, and the one every older link holds. */
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
+
+/**
+ * A workspace's path as it is written now: its task's step `/task/` where it
+ * holds `/plan/`, the step every link written before the task was a task
+ * holds, the rest of it, its query and its fragment included, as it was; any
+ * other path as it is. A tab opened at an older link is moved onto the one
+ * written now, which names the same place.
+ */
+export function currentTaskPath(path: string): string {
+  const [, workspace, step, rest] = /^\/([^/?#]+)\/([^/?#]+)(.*)$/su.exec(path) ?? [];
+  return workspace !== undefined && step === STEP.PLAN
+    ? `/${workspace}/${STEP.TASK}${rest ?? ""}`
+    : path;
+}
 
 const LINK_BOUNDS = {
   /** The most characters a link may spell before it is read: a section's at the mention codec's own bound, its anchor a long heading percent-encoded. */
@@ -549,7 +564,7 @@ function taskFields(taskId: string, rest: readonly string[]) {
       return { kind: LINK_PLACE.TASK, planId: taskId };
     case STEP.INBOX:
       return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
-    // A picture of the task's plan opens the task, and nothing of the picture.
+    // A picture of the task's description opens the task, and nothing of the picture.
     case STEP.FILES:
       return PICTURE_ID.test(id) ? { kind: LINK_PLACE.TASK, planId: taskId } : undefined;
     default:

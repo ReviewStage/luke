@@ -10,7 +10,7 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@repo/features/inbox-wire";
-import { Duration, Effect, Equal, Schema } from "effect";
+import { Duration, Effect, Equal, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
@@ -83,6 +83,23 @@ export const DRAFT_PLACE = {
   EDIT: "edit",
 } as const;
 
+/** A description's comment's kind as storage holds it: today's, or `planComment`, which every draft kept before the description was named so holds, read as today's. */
+const descriptionCommentKind = Schema.Literals([
+  DRAFT_PLACE.DESCRIPTION_COMMENT,
+  "planComment",
+]).pipe(
+  Schema.decodeTo(
+    Schema.Literal(DRAFT_PLACE.DESCRIPTION_COMMENT),
+    SchemaTransformation.transform<
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT,
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT | "planComment"
+    >({
+      decode: () => DRAFT_PLACE.DESCRIPTION_COMMENT,
+      encode: (kind) => kind,
+    }),
+  ),
+);
+
 const draftPlaceSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.AGENT),
@@ -125,7 +142,7 @@ const draftPlaceSchema = Schema.Union([
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.DESCRIPTION_COMMENT),
+    kind: descriptionCommentKind,
     /** The plan the comment is on, which the sidebar marks. */
     planId: Schema.String,
     /**

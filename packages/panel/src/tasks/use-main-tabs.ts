@@ -107,7 +107,8 @@ export function isOverviewTab(tab: StripTab | undefined): tab is OverviewTab {
  * would otherwise not read at all and lose every other choice it holds.
  */
 const RETIRED_MAIN_TAB = {
-  PLAN: "plan",
+  // Note that the value is the name the description had, which is what an earlier version kept.
+  DESCRIPTION: "plan",
   INBOX: "inbox",
   CALL: "call",
   CHAT: "chat",

@@ -1698,7 +1698,7 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -2698,9 +2698,9 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
       open: true,
       fullScreen: room === SHELL_ROOM.NARROW,
       fullScreenOnly: room === SHELL_ROOM.NARROW,
-      tabs: [SIDE_PANEL_TAB.PLAN],
-      strip: [SIDE_PANEL_TAB.PLAN],
-      tab: SIDE_PANEL_TAB.PLAN,
+      tabs: [SIDE_PANEL_TAB.DESCRIPTION],
+      strip: [SIDE_PANEL_TAB.DESCRIPTION],
+      tab: SIDE_PANEL_TAB.DESCRIPTION,
     },
   });
   const host = document.body.appendChild(document.createElement("div"));

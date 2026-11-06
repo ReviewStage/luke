@@ -140,7 +140,7 @@ function openTab(
       return renames();
     },
     onMarkTask: (taskId, mark) => asked.marked.push([taskId, mark]),
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
   return { tasks, asked };
 }
@@ -395,7 +395,10 @@ function sharedTab(me: string): TasksControl {
 
 /** `tasks` with its side panel open on the plan, whose tab's ⋯ drops the task's menu. */
 function descriptionShown(tasks: TasksControl): TasksControl {
-  return { ...tasks, sidePanel: { ...tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN } };
+  return {
+    ...tasks,
+    sidePanel: { ...tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
+  };
 }
 
 /** The lines under the open menu's items, each with its time left off. */
@@ -664,7 +667,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
   const tasks: TasksControl = {
     ...opened.tasks,
     workspaces: [{ ...PERSONAL, slug: "dean" }],
-    sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   };
   const link = `https://vespin.dev/dean/task/${TASK.id}`;
   const copyFromMenu = async () => {

@@ -228,7 +228,7 @@ function viewerButton(words: string): HTMLButtonElement | undefined {
   );
 }
 
-const LINE = `![Members page](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
+const LINE = `![Members page](https://vespin.dev/acme/task/${TASK_ID}/files/${KEPT_ID})`;
 
 test("Add to description keeps the picture on the description and writes its line at the description's end, and Undo takes it back out", async () => {
   await opened(await drawn(PAGE));
@@ -298,7 +298,7 @@ async function withBlobs(body: () => Promise<void>): Promise<void> {
   }
 }
 
-const VIDEO_LINE = `![Inviting a member](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
+const VIDEO_LINE = `![Inviting a member](https://vespin.dev/acme/task/${TASK_ID}/files/${KEPT_ID})`;
 
 test("Add to description keeps a recording as it is, never re-encoded, and writes its line at the description's end", () =>
   withBlobs(async () => {

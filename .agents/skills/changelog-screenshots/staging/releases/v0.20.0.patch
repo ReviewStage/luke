@@ -1666,7 +1666,7 @@ index 000000000..d89f1a63e
 +      plans: standingPlans(),
 +      extra: { workspaces: whoWorkspaces(members.length) },
 +    }),
-+    sidePanel: { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN },
++    sidePanel: { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.DESCRIPTION },
 +    readerId: MEMBER.DEAN.userId,
 +    answers: {
 +      ...codingAgentAnswers(),
@@ -3857,7 +3857,7 @@ index 4c2aca679..6241f5cbb 100644
 -const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
 +/** Throwaway: exported for the changelog shots (`shots/`). */
 +export const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
- const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN };
+ const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.DESCRIPTION };
 -const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
 +/** Throwaway: exported for the changelog shots (`shots/`). */
 +export const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };

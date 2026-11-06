@@ -175,9 +175,10 @@ export const SIDE_PANEL_TAB = {
    * The task's description, which the column's Overview holds now
    * (`use-main-tabs.ts`). Note that it is kept here, drawn and offered
    * nowhere (`DRAWN_KINDS`), because what an earlier version kept and pinned
-   * names it, and a pin or a link naming it opens Overview instead.
+   * names it, and a pin or a link naming it opens Overview instead. Its value
+   * is the name the description had then, which is what was kept.
    */
-  PLAN: "plan",
+  DESCRIPTION: "plan",
   /**
    * The task's Inbox, whose threads open in the window's Inbox narrowed to
    * the task now. Note that it is kept here, drawn and offered nowhere
@@ -296,7 +297,7 @@ interface SidePanelTabKind {
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.PLAN]: { label: "Description", icon: DocumentIcon },
+  [SIDE_PANEL_TAB.DESCRIPTION]: { label: "Description", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
@@ -311,7 +312,7 @@ const RETIRED_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX, SIDE_
 
 /** The kinds the panel draws: none of the description's, which the column's Overview holds, nor the retired ones. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN && !RETIRED_KINDS.includes(kind),
+  (kind) => kind !== SIDE_PANEL_TAB.DESCRIPTION && !RETIRED_KINDS.includes(kind),
 );
 
 /** Whether a tab is of a retired kind, which nothing chooses, shows, or reopens. */
@@ -1803,7 +1804,9 @@ function settled(state: SidePanelState): HeldState {
   return {
     ...state,
     // The description's tab leads, since a kept order from before it stood here holds it nowhere.
-    tabs: [...new Set([SIDE_PANEL_TAB.PLAN, ...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    tabs: [
+      ...new Set([SIDE_PANEL_TAB.DESCRIPTION, ...state.tabs.filter(current), ...SIDE_PANEL_TABS]),
+    ],
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
