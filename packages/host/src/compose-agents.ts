@@ -67,21 +67,11 @@ import {
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
   type ChatGptDevicePollAnswerView,
-  type ChatGptDeviceStartAnswerView,
-  chatGptDeviceLoginParamsSchema,
-  chatGptDeviceWaitParamsSchema,
-  type DictationTranscribeAnswerView,
-  dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
-  githubTokenSaveParamsSchema,
   hostIdParamsSchema,
   INBOX_SCOPE_KIND,
   memoriesFollowParamsSchema,
-  memoryForgetParamsSchema,
   type ProviderKeysAnswerView,
-  providerKeyForAgentsParamsSchema,
-  providerKeyRemoveParamsSchema,
-  providerKeySaveParamsSchema,
   pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
@@ -133,6 +123,7 @@ import {
   type AnyWrite,
   anyWrite,
   declaredMethod,
+  declaredWrite,
   type EntityPool,
   type FieldChange,
   ROW_GONE,
@@ -184,8 +175,10 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { ACCOUNT_ASK_ACTS } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import { heldHosts, hostRemove } from "./hosts-follow.js";
 import {
@@ -389,6 +382,8 @@ export interface AgentsDependencies {
 }
 
 export interface AgentsComposer extends Composer {
+  /** The account's own asks, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof ACCOUNT_ASK_ACTS>;
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
@@ -1227,8 +1222,7 @@ function composed(
     });
 
   /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
-  const keysWritten = (answer: ProviderKeysAnswerView) =>
-    Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
+  const keysWritten = (answer: ProviderKeysAnswerView) => Effect.as(keysAnswered(answer), answer);
   /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them, and the models asked again, whose marks they move. */
   const keysAnswered = (answer: ProviderKeysAnswerView) =>
     Effect.suspend(() => {
@@ -1245,7 +1239,7 @@ function composed(
   const deviceAnswered = (answer: ChatGptDevicePollAnswerView) =>
     Effect.as(
       "keys" in answer && answer.keys !== undefined ? keysAnswered(answer.keys) : Effect.void,
-      carried<ChatGptDevicePollAnswerView>(answer),
+      answer,
     );
 
   /**
@@ -1267,8 +1261,37 @@ function composed(
           userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
         );
       }),
-      carried<GitHubTokenAnswerView>(answer),
+      answer,
     );
+
+  /** The account's own asks, answered as the panel's port asks them (`ACCOUNT_ASK_ACTS`). */
+  const acts: HostActTable<typeof ACCOUNT_ASK_ACTS> = {
+    PROVIDER_KEYS_SAVE: (save) => Effect.flatMap(asked(client.saveProviderKey(save)), keysWritten),
+    PROVIDER_KEYS_REMOVE: (removal) =>
+      Effect.flatMap(asked(client.removeProviderKey(removal)), keysWritten),
+    PROVIDER_KEYS_FOR_AGENTS: (change) =>
+      Effect.flatMap(asked(client.setProviderKeyForAgents(change)), keysWritten),
+    CHATGPT_DEVICE_START: () => asked(client.startChatGptDeviceLogin()),
+    // Note that the login is asked after here, on the interval its start named, so a window waits on one answer rather than asking again on a timer of its own.
+    CHATGPT_DEVICE_WAIT: ({ loginId, intervalSeconds }) => {
+      const interval = Duration.seconds(intervalSeconds);
+      const poll = Effect.suspend(() => asked(client.pollChatGptDeviceLogin({ loginId })));
+      return Effect.andThen(
+        Effect.sleep(interval),
+        Effect.repeat(poll, { schedule: Schedule.spaced(interval), until: deviceSettled }),
+      ).pipe(Effect.flatMap(deviceAnswered));
+    },
+    CHATGPT_DEVICE_CANCEL: (login) =>
+      Effect.flatMap(asked(client.cancelChatGptDeviceLogin(login)), deviceAnswered),
+    GITHUB_TOKEN_SAVE: (save) => Effect.flatMap(asked(client.saveGitHubToken(save)), tokenWritten),
+    GITHUB_TOKEN_REMOVE: () => Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
+    MEMORIES_FORGET: declaredWrite(
+      dependencies.pool,
+      memoryForget((forget) => asked(client.forgetMemory(forget))),
+    ),
+    // Note that the clip passes through once and is noted nowhere, because its words are the developer's voice.
+    DICTATION_TRANSCRIBE: (clip) => asked(client.transcribeDictation(clip)),
+  };
 
   const methods: HostMethodTable = {
     // The models are held for the windows while any draws a model or a device, under the account signed in, and told only on the app state (`MODELS_CHANGED`).
@@ -1342,16 +1365,6 @@ function composed(
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : keys.retry(userId), {});
       }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: (params) =>
-      Effect.gen(function* () {
-        // Note that the sentence names the shape and never the value, because the value is a key.
-        const save = yield* readParams(
-          providerKeySaveParamsSchema,
-          params,
-          "a save names a provider and a key",
-        );
-        return yield* keysWritten(yield* asked(client.saveProviderKey(save)));
-      }),
     // A workspace's memories are held for the windows while Settings › Memory shows them, and told only on the app state (`MEMORIES_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.MEMORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1388,74 +1401,6 @@ function composed(
         yield* memories.retry(workspaceId);
         return {};
       }),
-    [GATEWAY_METHOD.MEMORIES_FORGET]: declaredMethod(
-      dependencies.pool,
-      memoryForget((forget) => asked(client.forgetMemory(forget))),
-      (params: WireRecord) =>
-        readParams(
-          memoryForgetParamsSchema,
-          params,
-          "a forget names a workspace and a memory's id",
-        ),
-    ),
-    [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
-      Effect.gen(function* () {
-        // Note that the sentence names the shape and never the words, because they are the developer's voice.
-        const clip = yield* readParams(
-          dictationTranscribeParamsSchema,
-          params,
-          "a clip names its audio, its length, and its words",
-        );
-        const answer = yield* asked(client.transcribeDictation(clip));
-        return carried<DictationTranscribeAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_REMOVE]: (params) =>
-      Effect.gen(function* () {
-        const removal = yield* readParams(
-          providerKeyRemoveParamsSchema,
-          params,
-          "a removal names a provider",
-        );
-        return yield* keysWritten(yield* asked(client.removeProviderKey(removal)));
-      }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
-      Effect.gen(function* () {
-        const change = yield* readParams(
-          providerKeyForAgentsParamsSchema,
-          params,
-          "a default names a provider, a plan, and on or off",
-        );
-        return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
-      }),
-    [GATEWAY_METHOD.CHATGPT_DEVICE_START]: () =>
-      Effect.map(asked(client.startChatGptDeviceLogin()), (answer) =>
-        carried<ChatGptDeviceStartAnswerView>(answer),
-      ),
-    // Note that the login is asked after here, on the interval its start named, so a window waits on one answer rather than asking again on a timer of its own.
-    [GATEWAY_METHOD.CHATGPT_DEVICE_WAIT]: (params) =>
-      Effect.gen(function* () {
-        const { loginId, intervalSeconds } = yield* readParams(
-          chatGptDeviceWaitParamsSchema,
-          params,
-          "a wait names a login and its interval",
-        );
-        const interval = Duration.seconds(intervalSeconds);
-        const poll = Effect.suspend(() => asked(client.pollChatGptDeviceLogin({ loginId })));
-        const answer = yield* Effect.andThen(
-          Effect.sleep(interval),
-          Effect.repeat(poll, { schedule: Schedule.spaced(interval), until: deviceSettled }),
-        );
-        return yield* deviceAnswered(answer);
-      }),
-    [GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL]: (params) =>
-      Effect.gen(function* () {
-        const login = yield* readParams(
-          chatGptDeviceLoginParamsSchema,
-          params,
-          "a cancel names a login",
-        );
-        return yield* deviceAnswered(yield* asked(client.cancelChatGptDeviceLogin(login)));
-      }),
     // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
     [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
     [GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW]: () => Effect.as(tokenHold.unfollow, {}),
@@ -1464,14 +1409,6 @@ function composed(
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : token.retry(userId), {});
       }),
-    [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
-      Effect.gen(function* () {
-        // Note that the sentence names the shape and never the value, because the value is a token.
-        const save = yield* readParams(githubTokenSaveParamsSchema, params, "a save names a token");
-        return yield* tokenWritten(yield* asked(client.saveGitHubToken(save)));
-      }),
-    [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
-      Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
     [GATEWAY_METHOD.AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* readParams(
@@ -2099,6 +2036,7 @@ function composed(
 
   return {
     methods,
+    acts,
     lifetime: Effect.void,
     open,
     reset,

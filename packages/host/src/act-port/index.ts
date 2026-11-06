@@ -2,9 +2,11 @@ import { type ContractedRouter, onError, type Router } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
 import {
   type actContract,
+  HOST_ACTS,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
 } from "../contract/index.js";
+import type { HostActTable } from "../host-acts.js";
 import {
   type AccountAskProceduresDependencies,
   accountAskProcedures,
@@ -21,6 +23,7 @@ import {
 } from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
 import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
+import { declaredActProcedures } from "./declared-acts.js";
 import {
   type InstalledSkillProceduresDependencies,
   installedSkillProcedures,
@@ -49,12 +52,12 @@ import {
  * context `ActPortContext` names.
  */
 
-export { accountAskProcedures } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export { browserLiveProcedures } from "./browser-live-procedures.js";
+export { declaredActProcedures } from "./declared-acts.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { type MacShell, macShellProcedures } from "./mac-shell-procedures.js";
 export { portForwardProcedures } from "./port-forward-procedures.js";
@@ -105,6 +108,8 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   readonly accountAsks: AccountAskProceduresDependencies;
+  /** Every declared act's handler, which the port answers directly (`HostAssembly`'s). */
+  readonly acts: HostActTable;
   readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
@@ -137,6 +142,7 @@ export function createActPortHandler<Sender>(
     ...platformProcedures,
     ...accountProcedures(dependencies.account),
     ...accountAskProcedures(dependencies.accountAsks),
+    ...declaredActProcedures(HOST_ACTS, dependencies.acts),
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { INBOX_REPLY, type InboxAnswers } from "@repo/features/inbox-wire";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@repo/features/task-wire";
 import {
   carried,
@@ -111,36 +110,6 @@ it.effect(
         ],
       );
     }),
-);
-
-it.effect("a save names the kind of credential it carries, and an API key's names none", () =>
-  Effect.gen(function* () {
-    const { client, requests } = recordingClient();
-    const operator = operatorOver(client);
-    const key = "sk-ant-oat01-fake-setup-token-0000";
-
-    yield* operator.providerKeySave({
-      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-      kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
-      key,
-    });
-    yield* operator.providerKeySave({ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key });
-
-    assert.deepEqual(
-      requests.map((request) => [request.method, request.params]),
-      [
-        [
-          GATEWAY_METHOD.PROVIDER_KEYS_SAVE,
-          {
-            provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-            kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
-            key,
-          },
-        ],
-        [GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key }],
-      ],
-    );
-  }),
 );
 
 it.effect("a task filed for later carries its status, priority, and assignee to the host", () =>
@@ -292,40 +261,4 @@ it.effect(
       ]);
     }).pipe(Effect.provide(sentry.layer));
   },
-);
-it.effect(
-  "a forget travels to the host naming its workspace and id, and its answer is read with its transaction kept and a key a newer host added dropped",
-  () =>
-    Effect.gen(function* () {
-      const requests: RecordedCall[] = [];
-      const memory = {
-        id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
-        text: "Deployments go out from the release branch.",
-        keptBy: { userId: "user-1", name: "Dean" },
-        forgettable: false,
-        createdAt: 1,
-        updatedAt: 2,
-      };
-      const workspaceId = "workspace-1";
-      const client: GatewayClient = {
-        call: (method, params = {}) =>
-          Effect.sync(() => {
-            requests.push({ method, params });
-            return {
-              ok: true,
-              result: carried({ memories: [{ ...memory, pinned: true }], txid: "41" }),
-            };
-          }),
-        on: () => () => undefined,
-      };
-      const operator = operatorOver(client);
-
-      const forgot = yield* operator.memoryForget({ workspaceId, id: memory.id });
-
-      assert.deepEqual(forgot, { memories: [memory], txid: "41" });
-      assert.deepEqual(
-        requests.map((request) => [request.method, request.params]),
-        [[GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId, id: memory.id }]],
-      );
-    }),
 );

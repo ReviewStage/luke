@@ -1099,6 +1099,8 @@ function subject(
     };
     return {
       call,
+      /** The composer's declared acts, each handed its input as the port reads it. */
+      acts: composer.acts,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
       held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
@@ -1526,32 +1528,27 @@ it.effect(
 );
 
 it.effect(
-  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held, and a save the schema refuses is refused in words that hold no key",
+  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held",
   () =>
     Effect.gen(function* () {
-      const { call, asked, providerKeys } = yield* subject();
+      const { call, acts, asked, providerKeys } = yield* subject();
 
       yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
       yield* settled;
       const read = providerKeys().at(-1);
-      const saved = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
+      const saved = yield* acts.PROVIDER_KEYS_SAVE({
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key: PROVIDER_KEY,
       });
-      const removed = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
+      const removed = yield* acts.PROVIDER_KEYS_REMOVE({
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
       });
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: "google", key: PROVIDER_KEY }),
-      );
 
       assert.deepEqual(read, { "user-dana": { rows: { keys: [KEPT] } } });
       assert.deepEqual(saved, { keys: [KEPT] });
       assert.deepEqual(removed, { keys: [] });
       assert.deepEqual(providerKeys().at(-1), { "user-dana": { rows: { keys: [] } } });
       assert.ok(!JSON.stringify([providerKeys(), saved, removed]).includes(PROVIDER_KEY));
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
       assert.deepEqual(asked, [
         "keys",
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
@@ -1607,13 +1604,13 @@ it.effect(
 );
 
 it.effect(
-  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved, and a save the schema refuses is refused in words that hold no token",
+  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved",
   () =>
     Effect.gen(function* () {
       // The token the windows held as each write's read of the repository lists landed, a turn after it was asked.
       const movedUnder: unknown[] = [];
       let held: () => unknown[] = () => [];
-      const { call, asked, githubToken } = yield* subject({
+      const { call, acts, asked, githubToken } = yield* subject({
         repositoriesMoved: Effect.andThen(
           Effect.yieldNow,
           Effect.sync(() => void movedUnder.push(held().at(-1))),
@@ -1624,12 +1621,9 @@ it.effect(
       yield* call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW);
       yield* settled;
       const read = githubToken().at(-1);
-      const saved = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: GITHUB_TOKEN });
+      const saved = yield* acts.GITHUB_TOKEN_SAVE({ token: GITHUB_TOKEN });
       const afterSave = githubToken().at(-1);
-      const removed = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE);
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: `${GITHUB_TOKEN} spaced` }),
-      );
+      const removed = yield* acts.GITHUB_TOKEN_REMOVE(undefined);
 
       assert.deepEqual(read, { "user-dana": { rows: { token: null } } });
       assert.deepEqual(saved, { token: SAVED_TOKEN });
@@ -1637,8 +1631,6 @@ it.effect(
       assert.deepEqual(removed, { token: null });
       assert.deepEqual(githubToken().at(-1), { "user-dana": { rows: { token: null } } });
       assert.ok(!JSON.stringify([githubToken(), saved, removed]).includes(GITHUB_TOKEN));
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
       assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
       assert.deepEqual(movedUnder, [read, afterSave], "each write's lists move before its token");
     }),
@@ -3687,7 +3679,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, live, answerForgets } = harness;
+      const { call, acts, live, answerForgets } = harness;
       const shown = () => memoryIdsOf(harness.memories().at(-1));
       yield* call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
@@ -3699,7 +3691,7 @@ it.effect(
       const answering = yield* Deferred.make<void>();
       answerForgets({ memories: [OTHER_MEMORY], txid: "9200" }, Deferred.await(answering));
       const forgetting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: MEMORY.id }),
+        acts.MEMORIES_FORGET({ workspaceId: WORKSPACE_ID, id: MEMORY.id }),
       );
       yield* settled;
       assert.equal(forgetting.pollUnsafe(), undefined, "no answer while the service is asked");
@@ -3718,7 +3710,7 @@ it.effect(
       const refusing = yield* Deferred.make<void>();
       answerForgets({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }, Deferred.await(refusing));
       const refused = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: OTHER_MEMORY.id }),
+        acts.MEMORIES_FORGET({ workspaceId: WORKSPACE_ID, id: OTHER_MEMORY.id }),
       );
       yield* settled;
       assert.deepEqual(shown(), []);
@@ -3795,27 +3787,19 @@ it.effect(
 );
 
 it.effect(
-  "a forget naming no memory id, or a hold naming no workspace, is refused before the service is asked, and a closed gate answers a forget unanswered",
+  "a hold naming no workspace is refused before the service is asked, and a closed gate answers a forget unanswered",
   () =>
     Effect.gen(function* () {
       const { call, asked } = yield* subject();
       const signedOut = yield* subject({ signedIn: false });
 
-      const refused = [
-        yield* Effect.flip(
-          call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: "not-a-memory" }),
-        ),
-        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_FOLLOW, {})),
-      ];
-      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_FORGET, {
+      const refused = yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_FOLLOW, {}));
+      const unanswered = yield* signedOut.acts.MEMORIES_FORGET({
         workspaceId: WORKSPACE_ID,
         id: MEMORY.id,
       });
 
-      assert.deepEqual(
-        refused.map((refusal) => refusal._tag),
-        ["InvalidParamsRefusal", "InvalidParamsRefusal"],
-      );
+      assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
       assert.deepEqual(asked, []);
       assert.deepEqual(signedOut.asked, []);
