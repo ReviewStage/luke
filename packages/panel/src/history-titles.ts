@@ -14,7 +14,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { mainTabLabel } from "./desktop/main-tabs.js";
 import type { StepTitle } from "./navigation-history.js";
-import { ROUTED_PLACE, type RoutedPlace } from "./route-gates.js";
+import type { RoutedPlace } from "./places/routed-places.js";
 import { agentName } from "./tasks/agent-model.js";
 import { isOverviewTab, type MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelTab } from "./tasks/use-side-panel.js";
@@ -41,10 +41,10 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
  */
 
 /** What a version history's step says under its task's name. */
-const VERSION_HISTORY_WORDS = "Version history";
+export const VERSION_HISTORY_WORDS = "Version history";
 
 /** What the Inbox's step is called. */
-const INBOX_WORDS = "Inbox";
+export const INBOX_WORDS = "Inbox";
 
 /** What a Page tab is called where the window does not read its page's title. */
 const PAGE_WORDS = "Page";
@@ -122,34 +122,26 @@ export type StepTitleTasks = Pick<
 >;
 
 /** The name of a task the account lists, where it is listed. */
-function taskName(tasks: StepNameTasks, taskId: string | undefined): string | undefined {
+export function taskName(tasks: StepNameTasks, taskId: string | undefined): string | undefined {
   if (taskId === undefined) return undefined;
   return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
-/** What the step the window stands on is called; none while nothing names it, as a task not yet listed. */
+/** What the step the window stands on is called; none while nothing names it, as a task not yet listed. A routed place names its step by its declaration (`places/routed-places.ts`), the place under it by the window's state. */
 export function stepTitle(
   routed: RoutedPlace | undefined,
   tasks: StepTitleTasks,
 ): StepTitle | undefined {
-  if (routed === ROUTED_PLACE.SETTINGS) return { label: "Settings" };
-  // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
-  // A person's page, the Board, and the Automations pages are routed places over the window's state too, but are named for themselves, as they always were.
-  if (tasks.personView.userId !== undefined) {
-    return { label: tasks.personView.name ?? "Profile" };
-  }
-  if (tasks.boardView.open) return { label: "Tasks" };
-  if (tasks.automationsView.open) return { label: "Automations" };
-  if (tasks.inboxView.open) {
-    const { chosen } = tasks.inboxView;
-    const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
-    return { label: INBOX_WORDS, detail: taskName(tasks, holder) };
-  }
+  const under = () => stateStepTitle(tasks);
+  return routed === undefined ? under() : routed.title(tasks, under);
+}
+
+/** What the step of the place the window's state says is called. */
+function stateStepTitle(tasks: StepTitleTasks): StepTitle | undefined {
   if (tasks.agentView.agentId !== undefined) return { label: "Agent" };
   if (tasks.boundFor === undefined) return { label: "Home" };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;
-  if (tasks.history.open) return { label: name, detail: VERSION_HISTORY_WORDS };
   // Note that the strips are named only once they are the task's, as the history reads them.
   if (tasks.activeTaskId !== tasks.boundFor) return { label: name };
   const { boundFor } = tasks;

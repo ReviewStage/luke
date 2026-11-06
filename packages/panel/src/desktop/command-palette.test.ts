@@ -51,6 +51,7 @@ import {
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
 import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
+import { ROUTED_PLACE, type RoutedPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { fileLook } from "../tasks/file-ref.js";
@@ -116,11 +117,13 @@ function AgentPageTelling(props: { agentId: string; workspaceId: string }): null
 /** The palette as the window draws it, offering the links at hand through the window's own Copy link, beside an agent's page where one tells its workspace. */
 function WindowPalette({
   page,
+  place,
   ...props
 }: Omit<Parameters<typeof CommandPalette>[0], "links"> & {
   page?: { agentId: string; workspaceId: string } | undefined;
+  place?: RoutedPlace | undefined;
 }): React.JSX.Element {
-  const links = useCopyLink(props.tasks, undefined, true);
+  const links = useCopyLink(props.tasks, undefined, true, SHELL_ROOM.WIDE, undefined, place);
   return createElement(
     PageWorkspaceProvider,
     { value: links.onPageWorkspace },
@@ -139,6 +142,8 @@ function openPalette(
   tab: PanelTab = PANEL_TAB.TASKS,
   /** A registry of its own, so the palette reads main's document anew as the test handed it; the window's shared one where none is given. */
   registry?: AtomRegistry.AtomRegistry,
+  /** The routed place the window stands on, which offers its own links. */
+  place?: RoutedPlace,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -160,6 +165,7 @@ function openPalette(
       onViewChange: (view) => sent.views.push(view),
     },
     page,
+    place,
   });
   // The repository's files are read whole through the act port, by the plan they stand on.
   fakeActPort({
@@ -1862,26 +1868,32 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
-  for (const tasks of [
-    ON_AGENT_TAB,
-    tasksControl({
-      ...listed,
-      inboxView: {
-        ...tasksControl().inboxView,
-        open: true,
-        chosen: { agentId: LINKED_AGENT, itemId },
-      },
-    }),
-    tasksControl({
-      ...listed,
-      automationsView: {
-        ...tasksControl().automationsView,
-        open: true,
-        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
-      },
-    }),
-  ]) {
-    openPalette(tasks);
+  for (const [tasks, place] of [
+    [ON_AGENT_TAB, undefined],
+    [
+      tasksControl({
+        ...listed,
+        inboxView: {
+          ...tasksControl().inboxView,
+          open: true,
+          chosen: { agentId: LINKED_AGENT, itemId },
+        },
+      }),
+      ROUTED_PLACE.INBOX,
+    ],
+    [
+      tasksControl({
+        ...listed,
+        automationsView: {
+          ...tasksControl().automationsView,
+          open: true,
+          place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
+        },
+      }),
+      ROUTED_PLACE.AUTOMATIONS,
+    ],
+  ] as const) {
+    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, place);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -1929,20 +1941,25 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
   ]);
 });
 
-test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⇧⌘C copies their page's link in the workspace it opened in", async () => {
+test("on a person's page ⌘K offers Copy link to profile and ⇧⌘C copies their page's link in the workspace it opened in", async () => {
   const copied = installClipboard();
   const [acme] = ON_AGENT_TAB.workspaces;
   openPalette(
     tasksControl({
       workspaces: ON_AGENT_TAB.workspaces,
       workspace: acme,
-      inboxView: { ...tasksControl().inboxView, open: true },
       personView: {
         ...tasksControl().personView,
         userId: "user-charles",
         workspaceId: acme?.id,
       },
     }),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    ROUTED_PLACE.PERSON,
   );
   type("copy link");
   const listed = rows().filter((row) => row.startsWith("Copy link to "));

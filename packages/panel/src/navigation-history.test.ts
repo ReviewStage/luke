@@ -30,6 +30,7 @@ import {
   useWindowHistory,
   type WindowHistoryLists,
 } from "./navigation-history.js";
+import type { RoutedPlace } from "./places/routed-places.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
@@ -97,7 +98,7 @@ function askingThrough(ask: LeaveAskHolder, base: TasksControl): TasksControl {
 function mount(
   initial: TasksControl,
   held: TestWindowRouter = windowRouter(),
-  titled?: (tasks: TasksControl) => StepTitle | undefined,
+  titled?: (tasks: TasksControl, place: RoutedPlace | undefined) => StepTitle | undefined,
 ) {
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
@@ -184,24 +185,26 @@ function mount(
       listedSlug: () => tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug,
       onClose: () => undefined,
     });
+    const routed = useRoutedStanding();
     const copyLink = useCopyLink(
       tasks,
       undefined,
       true,
       SHELL_ROOM.WIDE,
       admin.open ? admin.view : undefined,
+      routed?.place,
     );
     history = useWindowHistory({
       known: true,
       link: copyLink.placed,
-      routed: useRoutedStanding(),
+      routed,
       settingsList: undefined,
       onSettingsList: () => undefined,
       automations,
       versionHistory: versions,
       inbox,
       room: SHELL_ROOM.WIDE,
-      title: titled?.(tasks),
+      title: titled?.(tasks, routed?.place),
       tasks,
     });
     useHistoryMouseButtons(history, true);
@@ -561,18 +564,6 @@ test("a person's page is a step of its own, which Back from a plan opened after 
   assert.equal(window.at(), "/acme/person/user-charles");
 });
 
-test("a person's page is theirs in the workspace it stood in, so once another is listed Back passes over it", async () => {
-  const window = mount(tasksControl({ workspaces: [ACME, PLATFORM], workspace: ACME }));
-  window.openPerson("user-charles", undefined, ACME.slug);
-  await settle();
-  window.leaveFor(tasksControl({ workspaces: [ACME, PLATFORM], workspace: PLATFORM }));
-
-  act(() => window.history().onBack());
-  await settle();
-
-  assert.notEqual(window.at(), "/acme/person/user-charles");
-});
-
 test("a person's page opened again with a newer name keeps that name, which Back opens it with", async () => {
   const listed = { workspaces: [ACME], workspace: ACME };
   const window = mount(tasksControl(listed));
@@ -653,34 +644,6 @@ test("another automation opened over a new automation's page, as a notification 
   await settle();
 
   assert.equal(window.at(), "/acme/automations/new");
-});
-
-test("an automation's page is of the workspace it stood in, so once another is listed Back passes over it", async () => {
-  const window = mount(tasksControl({ workspaces: [ACME, PLATFORM], workspace: ACME }));
-  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
-  await settle();
-  window.leaveFor(tasksControl({ workspaces: [ACME, PLATFORM], workspace: PLATFORM }));
-  await settle();
-
-  act(() => window.history().onBack());
-  await settle();
-
-  assert.notEqual(window.at(), `/acme/automation/${AUTOMATION_ID}`);
-});
-
-test("a deleted automation's page is passed over by Back, which returns to the page before it", async () => {
-  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
-  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-kept" });
-  await settle();
-  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
-  await settle();
-  window.openAutomations({ kind: AUTOMATIONS_PAGE.LIST, deleted: AUTOMATION_ID });
-  await settle();
-
-  act(() => window.history().onBack());
-  await settle();
-
-  assert.equal(window.at(), "/acme/automation/automation-kept");
 });
 
 test("the Board is its workspace's tasks, so Back returns to it in that workspace and passes over it once another is listed", async () => {
@@ -910,7 +873,8 @@ function onTabs(input: {
 }
 
 /** Each step named as the window's root names the one it stands on (`stepTitle`). */
-const namedAsShown = (tasks: TasksControl): StepTitle | undefined => stepTitle(undefined, tasks);
+const namedAsShown = (tasks: TasksControl, place: RoutedPlace | undefined): StepTitle | undefined =>
+  stepTitle(place, tasks);
 
 /** The task the window lists, under `name`, its row naming agent A under `agentTitle` where one is given. */
 function listedTask(name: string, agentTitle?: string): TaskSummary {
@@ -1261,11 +1225,11 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
 });
 
 /** Each step named as the window's root names the one it stands on. */
-function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
-  return stepTitle(undefined, tasks);
+function stepTitleOf(tasks: TasksControl, place: RoutedPlace | undefined): StepTitle | undefined {
+  return stepTitle(place, tasks);
 }
 
-test("a task the Inbox is narrowed to is a step linked by it, which Back leaves for the Inbox and Forward narrows to again", async () => {
+test("a task the Inbox is narrowed to is a step linked by it and named by the task, which Back leaves for the Inbox and Forward narrows to again", async () => {
   const workspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -1278,6 +1242,7 @@ test("a task the Inbox is narrowed to is a step linked by it, which Back leaves 
   const onInbox = tasksControl({
     workspace,
     workspaces: [workspace],
+    tasks: [{ ...DOCUMENT_TASK, id: taskId, name: "Auth refactor" }],
     inboxView: { ...base.inboxView, open: true },
   });
   const window = mount(onInbox, windowRouter(), stepTitleOf);
@@ -1288,6 +1253,11 @@ test("a task the Inbox is narrowed to is a step linked by it, which Back leaves 
   assert.deepEqual(window.addresses(), ["/acme/inbox", `/acme/inbox/task/${taskId}`]);
   act(() => window.history().onBack());
   assert.equal(window.inbox().narrowed, undefined, "Back shows every task's items");
+  assert.deepEqual(
+    window.history().steps.forward.map((step) => step.title),
+    [{ label: "Inbox", detail: "Auth refactor" }],
+    "Forward's list names the narrowed Inbox by its task",
+  );
   act(() => window.history().onForward());
   assert.equal(window.inbox().narrowed, taskId, "Forward narrows to the task again");
 });

@@ -198,6 +198,7 @@ test.each([
   ["the Automations page", "/acme/automations", { kind: LINK_PLACE.AUTOMATIONS }],
   ["the Board", "/acme/tasks", { kind: LINK_PLACE.BOARD }],
   ["the Inbox", "/acme/inbox", { kind: LINK_PLACE.INBOX }],
+  ["an Inbox item", "/acme/inbox/item-1", { kind: LINK_PLACE.INBOX_ITEM, itemId: "item-1" }],
   [
     "a task's version",
     "/acme/task/7/version/3",

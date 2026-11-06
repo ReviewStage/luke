@@ -134,6 +134,7 @@ async function mounted(room: ShellRoom = SHELL_ROOM.WIDE) {
             createElement(TabSwitcher, {
               available: true,
               tab: PANEL_TAB.TASKS,
+              place: undefined,
               onTabChange: () => undefined,
               tasks,
             }),

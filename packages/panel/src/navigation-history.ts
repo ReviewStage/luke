@@ -136,13 +136,15 @@ import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
 import type { InboxRoute } from "./inbox-route.js";
 import { workspaceMembersQuery } from "./live-reads.js";
 import {
+  type PlaceParams,
+  placeParamsOf,
   ROUTED_PLACE,
   type RoutedPlace,
   routedPlaceOf,
-  routedStands,
-  useRouteAccess,
-} from "./route-gates.js";
-import { useRoutedLocation } from "./routed-location.js";
+  routedStepStands,
+  useWindowPlace,
+} from "./places/routed-places.js";
+import { useRouteAccess } from "./route-gates.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
@@ -156,14 +158,6 @@ export const MOUSE_BUTTON = {
   BACK: 3,
   FORWARD: 4,
 } as const;
-
-/** The routed places that stand over the plan's place beside the sidebar, the window's state staying as it was under them, and whose workspace is their address's. */
-const OVER_THE_PLAN: ReadonlySet<RoutedPlace | undefined> = new Set([
-  ROUTED_PLACE.BOARD,
-  ROUTED_PLACE.PERSON,
-  ROUTED_PLACE.AUTOMATIONS,
-  ROUTED_PLACE.INBOX,
-]);
 
 /** Which kind of place the window is on. */
 const PLACE_KIND = {
@@ -217,12 +211,12 @@ type Place =
 export interface RoutedStanding {
   readonly place: RoutedPlace;
   readonly address: string;
-  readonly params: Readonly<Record<string, string | undefined>>;
+  readonly params: PlaceParams;
 }
 
-/** The routed place the router's history stands the window on; none while the window's state says where it stands. */
+/** The routed place the router's history stands the window on (`useWindowPlace`); none while the window's state says where it stands. */
 export function useRoutedStanding(): RoutedStanding | undefined {
-  const { place, href, params } = useRoutedLocation();
+  const { place, href, params } = useWindowPlace();
   return useMemo(
     () => (place === undefined ? undefined : { place, address: href, params }),
     [place, href, params],
@@ -498,7 +492,7 @@ function surfacesOf(
     case PLACE_KIND.HOME:
       return [{ surface: PRODUCT_SURFACE.HOME }];
     case PLACE_KIND.ROUTED:
-      // Note that a routed place is counted by the place its route stands on, which its step does not hold (`routedSurfaces`).
+      // Note that a routed place is counted by the place its route stands on, which its step does not hold (its declaration's `surfaces`).
       return [];
   }
 }
@@ -526,6 +520,11 @@ function samePlace(one: Place, other: Place): boolean {
 /** A step on the routed place at `address`. */
 function routedPlace(address: string): Place {
   return { kind: PLACE_KIND.ROUTED, address };
+}
+
+/** The query of an address, as its routes read it. */
+function searchOf(address: string): URLSearchParams {
+  return new URL(address, "https://panel.invalid").searchParams;
 }
 
 /** The path of an address a step is held at, which the router matches routes by. */
@@ -563,31 +562,6 @@ function sameDraft(one: Place, other: Place): boolean {
     VERSION_STEPS.has(theirs[4]) &&
     sameStart(4)
   );
-}
-
-/** The surfaces a routed place shows, as the window counts them opened, a version history by the task `historyTask` its address names. */
-function routedSurfaces(
-  routed: RoutedStanding,
-  historyTask: string | undefined,
-): readonly OpenSurface[] {
-  switch (routed.place) {
-    case ROUTED_PLACE.ADMIN:
-      return [{ surface: PRODUCT_SURFACE.ADMIN }];
-    case ROUTED_PLACE.SETTINGS:
-      return [{ surface: PRODUCT_SURFACE.SETTINGS }];
-    case ROUTED_PLACE.BOARD:
-      return [{ surface: PRODUCT_SURFACE.BOARD }];
-    case ROUTED_PLACE.PERSON:
-      return [{ surface: PRODUCT_SURFACE.PERSON, of: routed.params.userId }];
-    case ROUTED_PLACE.AUTOMATIONS:
-      return [{ surface: PRODUCT_SURFACE.AUTOMATIONS }];
-    case ROUTED_PLACE.VERSION_HISTORY:
-      return historyTask === undefined
-        ? []
-        : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: historyTask }];
-    case ROUTED_PLACE.INBOX:
-      return [{ surface: PRODUCT_SURFACE.INBOX }];
-  }
 }
 
 /**
@@ -1640,7 +1614,7 @@ export function useWindowHistory(input: {
       const inboxBeside =
         routed?.place === ROUTED_PLACE.INBOX && beside !== undefined ? [beside] : [];
       return untitled?.kind === PLACE_KIND.ROUTED && routed !== undefined
-        ? [...routedSurfaces(routed, routedHistory), ...inboxBeside]
+        ? [...routed.place.surfaces(routed.params, routedHistory), ...inboxBeside]
         : surfacesOf(untitled, columnKnown, beside);
     }, [untitled, columnKnown, sideTab, boundFor, routed, routedHistory]),
     input.room,
@@ -1658,21 +1632,15 @@ export function useWindowHistory(input: {
     const column = knownColumns.get(to.taskId);
     return to.column === undefined || column === undefined || column.has(tabKey(to.column));
   };
-  // A workspace's Board, a person's page, or the Automations pages name their workspace by their address's first step, which stands only while it is the one listed;
-  // an automation's page stands no more once it is deleted.
+  // What a routed step's declaration reads to say whether it is still there (`routedStepStands`).
   const { automations, inbox } = input;
-  const listedStands = (matches: ReturnType<typeof router.matchRoutes>) => {
-    const routedHere = routedPlaceOf(matches);
-    // Note that a version history is passed over once its task is deleted, as the task's own step is.
-    const historyTask = historyTaskOf(matches);
-    if (historyTask !== undefined) return taskStands(historyTask);
-
-    if (!OVER_THE_PLAN.has(routedHere)) return true;
-    const automationId = matches.at(-1)?.params.automationId;
-    if (automationId !== undefined && automations.deleted.has(automationId)) return false;
-    const step = matches.find((match) => match.params.workspace !== undefined)?.params.workspace;
-    return step === undefined || workspaceOfSlug(tasks.workspaces, step)?.id === listedWorkspace;
-  };
+  const thereOf = (matches: ReturnType<typeof router.matchRoutes>) => ({
+    historyTask: historyTaskOf(matches),
+    taskStands,
+    automationStands: (automationId: string) => !automations.deleted.has(automationId),
+    listed: (workspace: string) =>
+      workspaceOfSlug(tasks.workspaces, workspace)?.id === listedWorkspace,
+  });
   // Whether a task a step stands on is still there: the one bound for, one no list held yet, or one the list holds, unless the list could not be read.
   const taskStands = (taskId: string) =>
     taskId === boundFor ||
@@ -1680,11 +1648,10 @@ export function useWindowHistory(input: {
     !everListed.has(taskId) ||
     tasks.tasks.some((task) => task.id === taskId);
   const reachable = (to: Place) => {
-    // A routed place stands only where its route's gate lets it, Admin an admin's alone, a Settings page an experiment holds only while it is on.
-    // A workspace's Board and a person's page are theirs in the workspace listed as they stood, so Back passes over them once another is.
+    // A routed step stands as its place's declaration says: where its gate lets it, what it names is still there, and its workspace is still the one listed.
     if (to.kind === PLACE_KIND.ROUTED) {
       const matches = router.matchRoutes(pathOf(to.address));
-      return routedStands(matches, access) && listedStands(matches);
+      return routedStepStands(matches, searchOf(to.address), access, thereOf(matches));
     }
     if (to.kind === PLACE_KIND.TASK && !tabsStand(to)) return false;
     // Note that an Inbox narrowed to a task is passed over once the task is deleted, as the task's own step is.
@@ -1696,7 +1663,7 @@ export function useWindowHistory(input: {
     // as opening any of them has it.
     if (to.kind === PLACE_KIND.ROUTED) {
       const matches = router.matchRoutes(pathOf(to.address));
-      if (!OVER_THE_PLAN.has(routedPlaceOf(matches))) return;
+      if (routedPlaceOf(matches)?.overThePlan !== true) return;
       if (pageAgent !== undefined) tasks.agentView.onClose();
       if (unknownWorkspace) tasks.unknownWorkspace.onClose();
       // An Inbox item's step stands the side panel beside it as it stood, on the item's own task or agent.
@@ -1732,14 +1699,6 @@ export function useWindowHistory(input: {
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
     else sidePanel.onSetOpen(panel.open);
   };
-  // The person a routed step's page is, where it is one's, which its step is listed by the name they go by now.
-  const personOf = (to: Place): string | undefined => {
-    if (to.kind !== PLACE_KIND.ROUTED) return undefined;
-    const matches = router.matchRoutes(pathOf(to.address));
-    if (routedPlaceOf(matches) !== ROUTED_PLACE.PERSON) return undefined;
-    const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
-    return params.userId;
-  };
   // The workspace's members, read only while a person's page stands on the trail.
   // Note that the place standing counts as on the trail already, so its visit, written after it draws, draws the window no second time.
   const personStanding = routed?.place === ROUTED_PLACE.PERSON;
@@ -1757,34 +1716,19 @@ export function useWindowHistory(input: {
   );
   const members = useQuery(workspaceMembersQuery(personListed ? tasks.workspace?.id : undefined))
     .data?.members;
-  // The task a routed step's version history is of, where it is one's, which its step is listed by the name it goes by now.
-  const historyOf = (to: Place): string | undefined =>
-    to.kind === PLACE_KIND.ROUTED
-      ? historyTaskOf(router.matchRoutes(pathOf(to.address)))
-      : undefined;
-  // The task a routed step's Inbox is named by, where it is the Inbox's: its chosen item's, else the one its list is narrowed to.
-  const inboxNamed = (to: Place): NamedStep | undefined => {
-    if (to.kind !== PLACE_KIND.ROUTED) return undefined;
-    const matches = router.matchRoutes(pathOf(to.address));
-    if (routedPlaceOf(matches) !== ROUTED_PLACE.INBOX) return undefined;
-    const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
-    const chosen = params.itemId === undefined ? undefined : inbox.choiceOf(params.itemId);
-    const narrowed =
-      params.taskId ??
-      new URL(to.address, "https://panel.invalid").searchParams.get("task") ??
-      undefined;
-    const holder = chosen === undefined ? undefined : choiceTask(chosen);
-    return { kind: NAMED_STEP.INBOX, taskId: holder ?? narrowed };
+  // The task an Inbox item is of, by the item's id, where a door chose it.
+  const itemTask = (itemId: string) => {
+    const chosen = inbox.choiceOf(itemId);
+    return chosen === undefined ? undefined : choiceTask(chosen);
+  };
+  // A routed step is named again as its place's declaration says, by the ids its address names.
+  const routedNamed = (address: string): NamedStep | undefined => {
+    const matches = router.matchRoutes(pathOf(address));
+    const naming = { historyTask: historyTaskOf(matches), itemTask };
+    return routedPlaceOf(matches)?.named(placeParamsOf(matches), searchOf(address), naming);
   };
   const named = (to: Place) => {
-    const person = personOf(to);
-    const history = historyOf(to);
-    const step: NamedStep | undefined =
-      person !== undefined
-        ? { kind: NAMED_STEP.PERSON, userId: person }
-        : history !== undefined
-          ? { kind: NAMED_STEP.VERSION_HISTORY, taskId: history }
-          : (inboxNamed(to) ?? namedStepOf(to));
+    const step = to.kind === PLACE_KIND.ROUTED ? routedNamed(to.address) : namedStepOf(to);
     return liveStepTitle(step, titleOf(to), tasks, members);
   };
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
