@@ -73,14 +73,6 @@ const HOLDER = { taskId: TASK };
  */
 const DRAWS_NOTHING: TaskDraws = { agents: [], openAgents: [], taskAgents: [], pages: [] };
 
-/** A task whose agents, open agent tabs, and pages name every tab below. */
-const DRAWS_ALL: TaskDraws = {
-  agents: [AGENT],
-  openAgents: [AGENT],
-  taskAgents: [AGENT],
-  pages: [PAGE],
-};
-
 /** A task none of whose agents, open agent tabs, or pages are read yet. */
 const DRAWS_UNREAD: TaskDraws = {
   agents: undefined,
@@ -369,13 +361,21 @@ describe("a strip tab's kind answers", () => {
     },
   );
 
+  // Note that each row names its tab in its own list alone, so a kind that reads another list draws nothing.
   it.each([
-    { kind: "agent", tab: agentTab(AGENT) },
-    { kind: "subagent", tab: subagentTab(CALL, { agent: AGENT, task: "Read the logs" }) },
-    { kind: "changes", tab: changesTab(AGENT) },
-    { kind: "page", tab: pageTab(PAGE) },
-  ])("$kind: drawn again where the task names it, and before the task is read", ({ tab }) => {
-    assert.equal(stripTabDrawsAgain(tab, DRAWS_ALL), true);
-    assert.equal(stripTabDrawsAgain(tab, DRAWS_UNREAD), true);
-  });
+    { kind: "agent", tab: agentTab(AGENT), draws: { ...DRAWS_NOTHING, agents: [AGENT] } },
+    {
+      kind: "subagent",
+      tab: subagentTab(CALL, { agent: AGENT, task: "Read the logs" }),
+      draws: { ...DRAWS_NOTHING, openAgents: [AGENT] },
+    },
+    { kind: "changes", tab: changesTab(AGENT), draws: { ...DRAWS_NOTHING, taskAgents: [AGENT] } },
+    { kind: "page", tab: pageTab(PAGE), draws: { ...DRAWS_NOTHING, pages: [PAGE] } },
+  ])(
+    "$kind: drawn again where the task names it, and before the task is read",
+    ({ tab, draws }) => {
+      assert.equal(stripTabDrawsAgain(tab, draws), true);
+      assert.equal(stripTabDrawsAgain(tab, DRAWS_UNREAD), true);
+    },
+  );
 });

@@ -20,30 +20,27 @@ import {
   accountPreferencesToPush,
   accountPreferencesToWrite,
   EXPERIMENT_COUNTED_AS,
-  type Experiment,
-  isAppSettingField,
-  isExperiment,
-  isSettingsResetScope,
   settingAnalytics,
   snapshotAccountPreferences,
 } from "@repo/settings";
 import type { SettingsUpdateResult } from "@repo/settings/wire";
-import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@repo/wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@repo/wire";
 import { Cause, Effect, Option, Queue, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
+import type { SETTINGS_ACTS } from "./contract/index.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AccountSource, AppIdentity, SettingsChangedElsewhere } from "./effect/seams.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import type { HostMethodTable } from "./gateway-door.js";
+import { ActReporter, type HostActTable } from "./host-acts.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { SettingsStore } from "./settings-store.js";
-import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
 
@@ -69,15 +66,9 @@ interface SettingsLinks {
   readonly confirmAccount: () => Effect.Effect<void>;
 }
 
-/** The fields a reset keeps, as a call names them: none where absent, and nothing usable where any is not a setting. */
-function keptFields(value: UnparsedWireValue): readonly AppSettingField[] | undefined {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) return undefined;
-  const fields = value.filter(isAppSettingField);
-  return fields.length === value.length ? fields : undefined;
-}
-
 export interface SettingsComposer extends Composer {
+  /** The settings writes, which a window's act port answers by hand around these. */
+  readonly acts: HostActTable<typeof SETTINGS_ACTS>;
   readonly store: SettingsStore;
   readonly recordProductEvent: RecordProductEvent;
   emitSettingsSnapshot: (settings: SettingsUpdateResult["settings"], reporter?: string) => void;
@@ -500,79 +491,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         Effect.map(Effect.orDie(store.snapshot()), (snapshot) => ({
           settings: carried(snapshot),
         })),
-      [GATEWAY_METHOD.SETTINGS_UPDATE]: (params) =>
-        Effect.gen(function* () {
-          const field = params.field;
-          if (!isAppSettingField(field)) return yield* invalid("field must name a setting");
-          const parsed = APP_SETTING_SCHEMA[field].guard(params.value);
-          if (!parsed.valid) return yield* invalid("value is not the shape that setting takes");
-          const result = yield* settingsWrite(
-            () => store.set(field, parsed.value),
-            (saved) =>
-              saved.reason
-                ? Effect.void
-                : Effect.gen(function* () {
-                    recordSettingUpdate(field, saved.settings);
-                    yield* applyHostSettingSideEffect(field, saved.settings);
-                  }),
-            "Could not save that setting on this system.",
-            reporterOf(params),
-          );
-          if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
-          return carried(result);
-        }),
-      [GATEWAY_METHOD.EXPERIMENTS_SET]: (params) =>
-        Effect.gen(function* () {
-          const { experiment: named, on } = params;
-          if (!isExperiment(named)) return yield* invalid("experiment must name one");
-          if (!isWireBoolean(on)) return yield* invalid("on must be true or false");
-          const experiment: Experiment = named;
-          const accountKey = yield* readAccountPreferenceAccountKey();
-          if (!accountKey) return carried(yield* refusedSettings(EXPERIMENT_SIGNED_OUT));
-          const result = yield* settingsWrite(
-            () => experiments.write(accountKey, experiment, on),
-            (saved) =>
-              Effect.sync(() => {
-                if (saved.reason) return;
-                recordProductEvent(PRODUCT_EVENT.EXPERIMENT_TOGGLE, {
-                  experiment: EXPERIMENT_COUNTED_AS[experiment],
-                  setting_value: on ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
-                  experiment_scope: PRODUCT_EXPERIMENT_SCOPE.ACCOUNT,
-                });
-              }),
-            EXPERIMENT_UNANSWERED,
-            reporterOf(params),
-          );
-          return carried(result);
-        }),
-      [GATEWAY_METHOD.SETTINGS_RESET]: (params) =>
-        Effect.gen(function* () {
-          const scope = params.scope;
-          if (!isSettingsResetScope(scope))
-            return yield* invalid("scope is not one this build knows");
-          const kept = keptFields(params.kept);
-          if (kept === undefined) return yield* invalid("kept must name settings");
-          const result = yield* settingsWrite(
-            () => store.resetSettings(scope, kept),
-            (saved) =>
-              saved.reason
-                ? Effect.void
-                : Effect.gen(function* () {
-                    recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
-                    for (const field of APP_SETTING_FIELDS) {
-                      const definition = APP_SETTING_SCHEMA[field];
-                      if (!("resetScope" in definition) || definition.resetScope !== scope)
-                        continue;
-                      if (kept.includes(field)) continue;
-                      yield* applyHostSettingSideEffect(field, saved.settings);
-                    }
-                  }),
-            "Could not reset those settings on this system.",
-            reporterOf(params),
-          );
-          if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
-          return carried(result);
-        }),
       // A count the client's own surfaces made: read against the allowlist
       // again here, and queued only when it reads. Nothing observed can travel
       // in one, because the reader builds the event from the allowlist rather
@@ -589,8 +507,72 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       },
     };
 
+    const acts: HostActTable<typeof SETTINGS_ACTS> = {
+      SETTING_UPDATE: ({ field, value }) =>
+        Effect.gen(function* () {
+          const result = yield* settingsWrite(
+            // SAFETY: the act's own input schema parsed this value with this field's guard.
+            () => store.set(field, value as never),
+            (saved) =>
+              saved.reason
+                ? Effect.void
+                : Effect.gen(function* () {
+                    recordSettingUpdate(field, saved.settings);
+                    yield* applyHostSettingSideEffect(field, saved.settings);
+                  }),
+            "Could not save that setting on this system.",
+            yield* ActReporter,
+          );
+          if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
+          return result;
+        }),
+      EXPERIMENT_SET: ({ experiment, on }) =>
+        Effect.gen(function* () {
+          const accountKey = yield* readAccountPreferenceAccountKey();
+          if (!accountKey) return yield* refusedSettings(EXPERIMENT_SIGNED_OUT);
+          return yield* settingsWrite(
+            () => experiments.write(accountKey, experiment, on),
+            (saved) =>
+              Effect.sync(() => {
+                if (saved.reason) return;
+                recordProductEvent(PRODUCT_EVENT.EXPERIMENT_TOGGLE, {
+                  experiment: EXPERIMENT_COUNTED_AS[experiment],
+                  setting_value: on ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+                  experiment_scope: PRODUCT_EXPERIMENT_SCOPE.ACCOUNT,
+                });
+              }),
+            EXPERIMENT_UNANSWERED,
+            yield* ActReporter,
+          );
+        }),
+      SETTINGS_RESET: ({ scope, kept }) =>
+        Effect.gen(function* () {
+          const result = yield* settingsWrite(
+            () => store.resetSettings(scope, kept),
+            (saved) =>
+              saved.reason
+                ? Effect.void
+                : Effect.gen(function* () {
+                    recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
+                    for (const field of APP_SETTING_FIELDS) {
+                      const definition = APP_SETTING_SCHEMA[field];
+                      if (!("resetScope" in definition) || definition.resetScope !== scope)
+                        continue;
+                      if (kept.includes(field)) continue;
+                      yield* applyHostSettingSideEffect(field, saved.settings);
+                    }
+                  }),
+            "Could not reset those settings on this system.",
+            yield* ActReporter,
+          );
+          if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
+          return result;
+        }),
+    };
+
     return {
       methods,
+      acts,
       store,
       recordProductEvent,
       emitSettingsSnapshot,

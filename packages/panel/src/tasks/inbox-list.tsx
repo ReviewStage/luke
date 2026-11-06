@@ -153,7 +153,8 @@ import {
   NEEDS_YOU,
   narrowedByWhose,
 } from "./inbox-model.js";
-import { type InboxReminder, useInboxReminding, useRemindMany } from "./inbox-remind.js";
+import { type InboxReminder, useRemindMany } from "./inbox-remind.js";
+import { useInboxRowActs } from "./inbox-row-acts.js";
 import { type InboxListMark, type InboxSelection, useInboxSelection } from "./inbox-selection.js";
 import { PlanGlyph } from "./tab-look.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -1591,17 +1592,14 @@ export function InboxList({
   // Note that the rows are handed doors that stand across draws, each calling the newest the list was handed,
   // because the page hands new ones on every draw and a row handed a new door draws again (`InboxItemRow`).
   const choose = useSteadyDoor(onChoose);
-  const mark = useSteadyDoor(onMark);
-  const remind = useSteadyDoor(onRemind);
   // Note that H sets a reminder on the chosen item from its row, and a time of the reader's own is picked there, in the list's room.
-  const reminding = useInboxReminding({
+  const acts = useInboxRowActs({
+    doors: { onMark, onResolve: onClose, onRemind },
     room: bodyRef,
     rowOf: rows.find,
     chosen: drawn.find(({ item }) => item.id === chosen)?.item,
-    active: head.shown,
-    onRemind,
+    shown: head.shown,
   });
-  const pickRemind = useSteadyDoor(reminding.onPick);
   const remindMany = useRemindMany(onRemind);
   const selection = useInboxSelection({
     listed: picks,
@@ -1615,7 +1613,7 @@ export function InboxList({
         ? undefined
         : (chosen, onAt) => {
             const anchor = chosen.find((item) => rows.find(item.id) !== undefined) ?? chosen[0];
-            if (anchor !== undefined) reminding.onPick(anchor, onAt);
+            if (anchor !== undefined) acts.onPick(anchor, onAt);
           },
   });
   // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
@@ -1624,7 +1622,6 @@ export function InboxList({
   // Note that a phone's head is its own, so a phone keeps the acts in a bar at the list's foot.
   const phone = usePhoneRoom();
   const footed = head.phone !== undefined || (head.tab === true && phone);
-  const resolve = useSteadyDoor(onClose);
   // Note that E resolves every item chosen where several are, else the item open beside the list, as U and H act on it.
   const resolvable = picks.length > 0 ? picks : drawn.filter(({ item }) => item.id === chosen);
   useAppCommand(
@@ -1660,10 +1657,7 @@ export function InboxList({
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}
-      onMark={mark}
-      onResolve={onClose === undefined ? undefined : resolve}
-      onRemind={onRemind === undefined ? undefined : remind}
-      onPickRemind={onRemind === undefined ? undefined : pickRemind}
+      {...acts.row}
       several={several !== undefined && picked.has(listed.item.id) ? several : undefined}
     />
   );
@@ -1741,7 +1735,7 @@ export function InboxList({
           </ReplayUnmask>
         </Stack>
       ) : null}
-      {reminding.popover}
+      {acts.layers}
       {columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );
