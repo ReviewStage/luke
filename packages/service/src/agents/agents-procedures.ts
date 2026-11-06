@@ -104,7 +104,6 @@ import {
   acceptedAgentChoice,
   placeOfAgent,
   requestedChoice,
-  startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
 import {
@@ -123,6 +122,7 @@ import {
   stoppedForGood,
   summaryOf,
 } from "./coder-host/stop.js";
+import { startedFromBefore } from "./coder-host/takeover.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { descriptionsOnFor } from "./descriptions-on.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
