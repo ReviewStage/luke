@@ -31,4 +31,16 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
+
+  /* Note that a named input stands where its control does, as Base UI
+     places it, so a form's refusal points at the control it is about. */
+  input[aria-hidden="true"][tabindex="-1"][name]:not([name=""]):is(
+    [type="radio"],
+    [type="checkbox"]
+  ) {
+    position: absolute;
+    top: auto;
+    left: auto;
+    margin: -1px;
+  }
 }
