@@ -112,6 +112,7 @@ import {
   readAgentOfConversation,
   readAgentRouting,
   readNativeRunStanding,
+  recordAgentNativeSession,
   recordAgentRunnerToken,
 } from "@repo/database/models/agent-store";
 import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
@@ -130,7 +131,7 @@ import {
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
-import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
+import { AGENT_MACHINE, type AgentMachineKind, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { causeKind, failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
@@ -156,6 +157,7 @@ import {
   SERVER_HANDOFF_PATH,
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
+import { logStoreFailure } from "../../http/store-failure.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
@@ -199,12 +201,16 @@ import {
   SandboxUnavailable,
   sessionEnding,
 } from "../vercel-sandbox-api.js";
+import { experimentsOnIn } from "../workspace-experiment-on.js";
 import { BEARER_PREFIX, runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { type AgentImage, AgentImageMissing } from "./agent-image.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentFirewallSources, CheckoutRefused, type CheckoutServices } from "./checkout.js";
+import { contextWindowOf } from "./context.js";
 import { nativeSkillFiles } from "./native-skills.js";
+import { restartReplayOf } from "./replay.js";
+import { REPLAY_FIT, replayBudgetBytes } from "./replay-summary.js";
 import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHECKOUT, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
@@ -996,13 +1002,20 @@ export const runnerSessions = <
      * The message line with the turn's own words ahead of the developer's
      * (`turn-message.ts`), composed on what the harness's session has handed
      * (`native_handed`): nothing yet for a fresh session, whose history
-     * holds none of it, and what the row keeps otherwise.
+     * holds none of it, and what the row keeps otherwise. A fresh session
+     * keeps the workspace's experiments it opens on beside what it was
+     * handed, and a resumed one the ones it opened on, or, for one opened
+     * before they were kept, the ones standing. A session opened afresh on
+     * the agent's own conversation (`replayed`) is handed its steps so far
+     * ahead of the turn's words, in the one block they ride in
+     * (`restartReplayOf`).
      */
     const openedLine = (
       agent: Agent,
       sessionId: string,
       sent: RunnerMessage,
       fresh: boolean,
+      replayed = false,
     ): Effect.Effect<OpenedLine, never, DatabaseServices> =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -1015,12 +1028,73 @@ export const runnerSessions = <
         };
         const now = yield* Clock.currentTimeMillis;
         const turn = { kind: sent.turn, turnId: undefined };
-        const opened = yield* coderTurnMessage(admitted, agent, turn, handed, now);
+        const [opened, experiments, replay] = yield* Effect.all(
+          [
+            coderTurnMessage(admitted, agent, turn, handed, now),
+            experimentsOnIn(agent.organizationId),
+            replayed ? restartReplay(agent) : Effect.succeed(undefined),
+          ],
+          { concurrency: "unbounded" },
+        );
         const { content } = sent.line;
+        const words = [replay, opened.text].filter((part) => part !== undefined);
         const ahead: readonly ContentBlock[] =
-          opened.text === undefined ? [] : [{ type: "text", text: opened.text }];
-        const taken = recordNativeTurnHanded(target, opened.handed);
+          words.length === 0 ? [] : [{ type: "text", text: words.join("\n\n") }];
+        const taken = recordNativeTurnHanded(target, {
+          ...opened.handed,
+          experiments: fresh ? experiments : (handed.experiments ?? experiments),
+        });
         return { line: { ...sent.line, content: [...ahead, ...content] }, taken };
+      });
+
+    /**
+     * The agent's own steps so far, as a session opened afresh on its
+     * conversation is handed them (`restartReplayOf`), bounded by its
+     * model's window less the instructions told where none was measured;
+     * nothing where its rows cannot be read, logged, so the session still
+     * opens on the turn's words.
+     */
+    const restartReplay = (agent: Agent) =>
+      restartReplayOf(
+        agent,
+        replayBudgetBytes(
+          contextWindowOf([], agent.model, agent.contextWindow ?? CONTEXT_WINDOW.LONG),
+          REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS,
+          0,
+        ),
+      ).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.orElseSucceed(() => undefined),
+      );
+
+    /**
+     * Whether the message must open the harness's session afresh, its
+     * conversation replayed into it: the workspace's experiments its session
+     * opened on (`native_handed`) are no longer the ones standing, since a
+     * resumed Claude Code or Codex session keeps the instructions it opened
+     * with until it compacts. Never while a turn runs, which goes on with what
+     * it has, the change caught by the next message after it; never for a
+     * session that resumes none, which opens fresh as it is; and never for one
+     * opened before its experiments were kept.
+     */
+    const experimentsChanged = (agent: Agent, turnRunning: boolean) =>
+      Effect.gen(function* () {
+        if (turnRunning) return false;
+        const routing = yield* readAgentRouting(userId, agent.id);
+        if (Option.isNone(Option.flatMapNullishOr(routing, (read) => read.nativeSession))) {
+          return false;
+        }
+        const opened = (yield* readNativeTurnHanded({
+          userId,
+          conversationId: agent.conversationId,
+        })).experiments;
+        if (opened === undefined) return false;
+        const standing = yield* experimentsOnIn(agent.organizationId);
+        return (
+          opened.descriptionsOn !== standing.descriptionsOn ||
+          opened.pilotOn !== standing.pilotOn ||
+          opened.memoryOn !== standing.memoryOn
+        );
       });
 
     /** The files a message names written into the running place, before its line names them. */
@@ -1146,6 +1220,7 @@ export const runnerSessions = <
       layout: MachineLayout,
       sent: RunnerMessage | undefined,
       created = false,
+      queuedFirst?: OpenedLine,
     ) =>
       Effect.gen(function* () {
         const target = { userId, conversationId: agent.conversationId };
@@ -1173,6 +1248,7 @@ export const runnerSessions = <
                 writeInstalledSkills(running, nativeSkillFiles(skills, layout.skillsUpload)),
               )
             : Effect.void,
+          queuedFirst,
         );
       });
 
@@ -1227,6 +1303,15 @@ export const runnerSessions = <
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
+        // A session opened on experiments since changed is opened afresh, on the same place, its
+        // conversation replayed into it: its harness's session is let go before anything is
+        // handed, so every launch past here, the one a hand-on runs past the answer among them,
+        // resumes none, and the first line, its replay ahead of it, is composed once.
+        const restart = yield* experimentsChanged(agent, turnRunning);
+        if (restart) yield* recordAgentNativeSession(userId, agent.id, null);
+        const restartLine = restart
+          ? yield* openedLine(agent, sessionId, sent, true, true)
+          : undefined;
         const handedAt = yield* Clock.currentTimeMillis;
         const handed = (path: HandoffPath) =>
           recordServerEvent(
@@ -1256,12 +1341,22 @@ export const runnerSessions = <
           // or not the sweep or the IDLE's retire ran, since a Mac drops a line once its runner
           // has gone, so a line written to a runner on its way down is lost.
           if (
+            restart ||
             pastWarmWindow(found.value.machine, turn, handedAt) ||
             (yield* stopWritten(machine, running)) ||
             (yield* staleWarm(agent, running.mark, turnRunning))
           ) {
             yield* machine.kill(running.handle);
-            yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
+            yield* relaunched(
+              agent,
+              sessionId,
+              found.value.name,
+              runnerPlace,
+              layout,
+              sent,
+              false,
+              restartLine,
+            );
             yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
             return accepted;
           }
@@ -1354,7 +1449,7 @@ export const runnerSessions = <
           const fresh = Option.isNone(
             Option.flatMapNullishOr(routing, (read) => read.nativeSession),
           );
-          const opened = yield* openedLine(agent, sessionId, sent, fresh);
+          const opened = restartLine ?? (yield* openedLine(agent, sessionId, sent, fresh));
           yield* queued(agent, ANY_LAUNCH, [opened.line]);
           yield* opened.taken;
           yield* handedOnAfter(sessionId, agent, sent.line.uuid, handed);
@@ -1374,6 +1469,7 @@ export const runnerSessions = <
             layout,
             sent,
             place.created,
+            restartLine,
           );
           return place;
         }).pipe(Effect.retry({ times: 1, while: sessionEnding }));
@@ -1386,7 +1482,14 @@ export const runnerSessions = <
           // standing for the next message to try again rather than retired; a delete that fails
           // leaves the expired one beside the fresh one, which `listTagged` lists after it as the
           // older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent));
+          yield* openedPlace(
+            agent,
+            sessionId,
+            layout,
+            sent,
+            yield* harness.launch(agent),
+            restartLine,
+          );
           yield* machine
             .discard(found.value)
             .pipe(

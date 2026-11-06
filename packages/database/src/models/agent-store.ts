@@ -1313,7 +1313,7 @@ const updateAgentNativeSession = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
-    nativeSession: Schema.String,
+    nativeSession: Schema.NullOr(Schema.String),
   }),
   Result: IdRowSchema,
   execute: ({ userId, agentId, nativeSession }) =>
@@ -3660,11 +3660,11 @@ export function nativeRouteOfReached(
   return findNativeRoute({ conversationId });
 }
 
-/** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */
+/** The harness's own session or thread id recorded on the agent's conversation, over whatever stood, or none, so its next launch opens a fresh session rather than resuming one; answers whether the account reached the agent. */
 export function recordAgentNativeSession(
   userId: string,
   agentId: string,
-  nativeSession: string,
+  nativeSession: string | null,
 ): AgentStoreEffect<boolean> {
   return Effect.map(
     updateAgentNativeSession({ userId, agentId, nativeSession }),

@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@repo/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   type AgentRepositoryEntry,
   readAgentRepositories,
@@ -30,6 +30,7 @@ import {
   type Replay,
   type ReplayStep,
   type ReplaySummary,
+  replayText,
   START_NOTE_HEADING,
   type StartNoteHeading,
   toolStep,
@@ -72,6 +73,7 @@ import { standingAgentDrive } from "../agent-drive.js";
 import { controlsAgent } from "../agent-reach.js";
 import { deploymentOidcToken, vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { agentPublished } from "./published.js";
+import { fitReplay } from "./replay-summary.js";
 import {
   copySourceWork,
   SNAPSHOT_MISS,
@@ -1271,3 +1273,71 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     },
   };
 });
+
+/**
+ * What the preamble of a session opened afresh on the agent's own
+ * conversation says: it goes on in its own checkout as it left it, on the
+ * instructions and tools it has now, its steps so far following as
+ * history. It names nothing that changed, which an agent is told nothing of
+ * where it is off.
+ */
+function restartPreamble(kept: number, total: number): string {
+  const left = total - kept;
+  const leftOut =
+    left === 0
+      ? ""
+      : ` The oldest ${left} of them ${left === 1 ? "is" : "are"} left out, since they no longer fit.`;
+  return (
+    "Your session was opened afresh on this same conversation, in your own checkout as you left " +
+    "it, under your instructions and tools as they stand now. Your steps so far follow as " +
+    `history.${leftOut} Where they rely on a tool or an instruction you no longer have, it no ` +
+    "longer holds: go on with what you have now."
+  );
+}
+
+/**
+ * What an agent is handed where its harness's session is opened afresh on
+ * its own conversation, its checkout as it left it, as the replay's block
+ * ahead of its next turn's words: its own steps, those its own replay carried
+ * ahead of them, and its note, the newest that fit the bound given, summarized
+ * nowhere, since no summary model is at hand where its runner launches.
+ * Nothing where it took no step of its own yet, or where its rows cannot be
+ * read, which then opens the session on its next turn's words alone. Note
+ * that a line in no turn yet, as the one being sent and any waiting for the
+ * launch, is left out, since each is handed on its own; and that an agent
+ * handed its description is handed none of it again here, since the next
+ * turn hands its task as it stands now.
+ */
+export const restartReplayOf = (
+  agent: Agent,
+  budgetBytes: number,
+): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
+  Effect.gen(function* () {
+    const read = yield* recordsOf(agent, undefined);
+    if (read === undefined) return undefined;
+    const records = read.records.filter(
+      (record, index) =>
+        index === 0 || record.message.role !== MESSAGE_ROLE.USER || record.turnId !== undefined,
+    );
+    const senders = yield* lineSendersOf(
+      { userId: agent.userId, conversationId: agent.conversationId },
+      records.filter((record) => record.message.role === MESSAGE_ROLE.USER).map(({ id }) => id),
+    );
+    const own = transcriptSteps(records, senders, undefined) ?? [];
+    if (own.length === 0) return undefined;
+    const opened = records[0]?.message.role === MESSAGE_ROLE.USER ? records[0].placedAt : undefined;
+    const handed = agent.prompt === null ? undefined : briefOf(agent.prompt, opened);
+    const mine = handed?.note === undefined ? own : [handed.note, ...own];
+    const steps = [...(handed?.carried?.steps ?? []), ...mine];
+    const totalSteps = (handed?.carried?.totalSteps ?? 0) + mine.length;
+    const fitted = yield* fitReplay(steps, handed?.carried?.summary, budgetBytes, () =>
+      Effect.succeed(Option.none()),
+    );
+    return replayText({
+      agentId: agent.id,
+      preamble: restartPreamble(fitted.kept.length, totalSteps),
+      ...(fitted.summary === undefined ? undefined : { summary: fitted.summary }),
+      steps: fitted.kept,
+      totalSteps,
+    });
+  });

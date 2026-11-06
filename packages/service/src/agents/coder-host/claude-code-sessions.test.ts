@@ -43,6 +43,7 @@ import {
 import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { nextSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { storeWriter } from "@repo/database/models/writer";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -76,7 +77,7 @@ import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { USER_ROLE } from "../../admin/admin-access.js";
-import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
+import { MESSAGE_AUTHOR, TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
@@ -117,6 +118,7 @@ import { RUNNER_ENDED, type RunnerSessionsOptions, runnerEnded } from "./runner-
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
+import { recordNativeTurnHanded } from "./turn-message.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -1407,6 +1409,70 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual((yield* handedLines(userId, api.commands[1])).map(developerContent), [
           [{ type: "text", text: "Now the emails." }],
         ]);
+      }),
+  );
+
+  it.effect(
+    "a message to an agent whose workspace's experiments changed since its session opened opens a fresh session in the same sandbox, its conversation so far replayed ahead of the turn's words",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        sequence.next = 42;
+        yield* runnerTook(agent.id);
+        const target = { userId, conversationId: agent.conversationId };
+        // The session opened with every experiment of its workspace off, and took one step.
+        yield* recordNativeTurnHanded(target, {
+          experiments: { descriptionsOn: false, pilotOn: false, memoryOn: false },
+        });
+        yield* (yield* Database).insert(messages).values({
+          id: randomUUID(),
+          ...target,
+          seq: 1,
+          clientId: "first-step",
+          role: MESSAGE_ROLE.ASSISTANT,
+          parts: [{ type: "text", text: "I renamed InviteToken to InvitationToken." }],
+          metadata: { author: MESSAGE_AUTHOR.MODEL },
+          placedAt: new Date(0),
+          finishedAt: new Date(0),
+        });
+        yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
+          Effect.provide(api.layer),
+        );
+        yield* setWorkspaceExperiment({
+          organizationId: agent.organizationId,
+          experiment: EXPERIMENT.DESCRIPTIONS,
+          on: true,
+          by: userId,
+        });
+        const kept = keptAfterResponse();
+
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+        yield* across(kept.run, CODER.RESUME_WHILE_ENDING.SPACING, 4);
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 2);
+        assert.equal(api.sandboxes.length, 1);
+        const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+        assert.equal(config.resume, undefined);
+        const [line] = yield* handedLines(userId, api.commands[1]);
+        const [ahead] = line?.type === INPUT_LINE.MESSAGE ? line.content : [];
+        assert.ok(
+          ahead?.type === "text" &&
+            ahead.text.includes("I renamed InviteToken to InvitationToken."),
+          JSON.stringify(ahead),
+        );
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
+        assert.equal(routing.nativeSession, null);
       }),
   );
 
