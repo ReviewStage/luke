@@ -1878,7 +1878,9 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   viewedHeld = undefined;
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
   await refreshAsTheTab();
-  assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true);
+  await vi.waitFor(() =>
+    assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true),
+  );
 });
 
 test("unmarking a deleted file opens it, and a press GitHub refuses puts back the fold chosen before", async () => {

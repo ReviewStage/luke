@@ -598,7 +598,7 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
   const tab = await draw(controlAnswering({ chapters: answering(ready()) }));
 
-  assert.equal(heading(tab), "Read the expiry");
+  await vi.waitFor(() => assert.equal(heading(tab), "Read the expiry"));
   const bars = tab.querySelectorAll(".chapters-view .ui-pane-bar");
   assert.equal(bars.length, 1, "the chapter's bar is the one bar over its list");
   assert.notEqual(
@@ -628,6 +628,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
 
 test("← and → step through the chapters, held at either end, and a key change's lines bring its file into view", async () => {
   const tab = await draw(controlAnswering({ chapters: answering(ready()) }));
+  await vi.waitFor(() => assert.equal(heading(tab), "Read the expiry"));
 
   press(tab, { key: "ArrowLeft" });
   assert.equal(heading(tab), "Read the expiry");
@@ -673,6 +674,7 @@ test("a key change's press scrolls to its first lines in the chapter's file orde
       chapters: answering(ready(HEAD, [READ_STORE, pointed])),
     }),
   );
+  await vi.waitFor(() => assert.equal(heading(tab), "Read the expiry"));
   press(tab, { key: "ArrowRight" });
   await settle();
   assert.equal(heading(tab), "Sweep what expired");
@@ -693,7 +695,9 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
   );
 
   const rail = () => tab.querySelector(".chapter-rail");
-  assert.match(drawnWords(railRow(rail(), 0)), /viewed$/u, "the read's one file is viewed");
+  await vi.waitFor(() =>
+    assert.match(drawnWords(railRow(rail(), 0)), /viewed$/u, "the read's one file is viewed"),
+  );
   assert.equal(chaptersTabWords(tab), "Chapters 1/3 viewed", "the tab counts the chapters viewed");
   assert.doesNotMatch(drawnWords(railRow(rail(), 1)), /viewed/u, "the sweep's new file is not");
 
@@ -734,7 +738,7 @@ test("the Chapters tab says where the chapters stand before their view is opened
   );
 
   assert.equal(tab.querySelector(".chapters-view"), null, "the view was never opened");
-  assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
+  await vi.waitFor(() => assert.equal(chaptersTabWords(tab), "Chapters out of date 3"));
 });
 
 test("the Chapters tab counts none viewed where the files' read names no head, since the view takes the chapters as out of date then", async () => {
@@ -747,7 +751,9 @@ test("the Chapters tab counts none viewed where the files' read names no head, s
     }),
   );
 
-  assert.match(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
+  await vi.waitFor(() =>
+    assert.match(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u),
+  );
   assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
 });
 
@@ -765,14 +771,18 @@ function madeBy(model: string, headSha = HEAD): AgentsControl {
 
 test("the rail's foot says which model made the chapters, inside the tab's ph-no-capture root", async () => {
   const tab = await draw(madeBy("claude-haiku-5-5"));
-  const line = tab.querySelector(".chapter-rail-credit") ?? assert.fail("the model is named");
+  const line = await vi.waitFor(
+    () => tab.querySelector(".chapter-rail-credit") ?? assert.fail("the model is named"),
+  );
   assert.equal(line.textContent, "Chapters by Haiku 5.5");
   assert.notEqual(line.closest(".ph-no-capture"), null);
 });
 
 test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
   const tab = await draw(madeBy("scripted", OLDER));
-  assert.match(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
+  await vi.waitFor(() =>
+    assert.match(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u),
+  );
   assert.equal(tab.querySelector(".chapter-rail-credit")?.textContent, "Chapters by scripted");
 });
 
@@ -788,9 +798,11 @@ test("chapters made for an older head stand under a line saying new commits came
     }),
   );
 
-  assert.match(
-    tab.querySelector(".ui-tab-notice")?.textContent ?? "",
-    /New commits since these chapters/u,
+  await vi.waitFor(() =>
+    assert.match(
+      tab.querySelector(".ui-tab-notice")?.textContent ?? "",
+      /New commits since these chapters/u,
+    ),
   );
   assert.equal(heading(tab), "Read the expiry", "the chapters stand as they were");
   assert.match(tab.textContent ?? "", /Is the expiry read in the member's time zone\?/u);
@@ -827,7 +839,9 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
     }),
   );
 
-  act(() => button(tab, "Generate chapters (Haiku 5.5)").click());
+  // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
+  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  act(() => generate.click());
   await settle();
   assert.equal(heading(tab), "Read the expiry");
   assert.doesNotMatch(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
@@ -850,7 +864,9 @@ test("a generation that failed says why with Retry, chapters someone else is mak
       },
     }),
   );
-  assert.match(tooLarge.textContent ?? "", /This pull request is too large to chapter\./u);
+  await vi.waitFor(() =>
+    assert.match(tooLarge.textContent ?? "", /This pull request is too large to chapter\./u),
+  );
   act(() => button(tooLarge, "Retry").click());
   await settle();
   assert.equal(generates, 1);

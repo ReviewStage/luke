@@ -795,7 +795,9 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   const upload =
     description.querySelector<HTMLImageElement>('img[alt="before and after"]') ??
     assert.fail("the upload is drawn");
-  assert.equal(upload.src, `data:${PIXEL.contentType};base64,${PIXEL.base64}`);
+  await vi.waitFor(() =>
+    assert.equal(upload.src, `data:${PIXEL.contentType};base64,${PIXEL.base64}`),
+  );
   assert.equal(
     description.querySelector('img[alt="pixel"]'),
     null,
@@ -883,10 +885,14 @@ it.effect(
         images.every((src) => !src.startsWith("https://avatars.githubusercontent.com/")),
         "a picture GitHub's avatar host serves is never asked of the service",
       );
-      assert.equal(
-        rows[1]?.querySelector("img")?.getAttribute("src"),
-        `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
-        "any other is drawn as the service read it",
+      yield* Effect.promise(() =>
+        vi.waitFor(() =>
+          assert.equal(
+            rows[1]?.querySelector("img")?.getAttribute("src"),
+            `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
+            "any other is drawn as the service read it",
+          ),
+        ),
       );
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
 
@@ -1082,7 +1088,7 @@ test("the header offers Preview once the checks land, before their tab is shown:
         }),
     }),
   );
-  const single = preview(one) ?? assert.fail("the header offers Preview");
+  const single = await vi.waitFor(() => preview(one) ?? assert.fail("the header offers Preview"));
   assert.equal(single.tagName, "A", "one deployment is a link to the address it serves");
   assert.equal(single.getAttribute("href"), "https://web-git-expiry.vercel.app");
   act(() => single.click());
@@ -1105,8 +1111,12 @@ test("the header offers Preview once the checks land, before their tab is shown:
         }),
     }),
   );
-  const menuButton = preview(several) ?? assert.fail("the header offers Preview");
-  assert.equal(menuButton.getAttribute("aria-haspopup"), "menu");
+  // Note that the checks the first draw read stand in the cache until this draw's read lands.
+  const menuButton = await vi.waitFor(() => {
+    const button = preview(several) ?? assert.fail("the header offers Preview");
+    assert.equal(button.getAttribute("aria-haspopup"), "menu");
+    return button;
+  });
   act(() => menuButton.click());
   const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   assert.deepEqual(
@@ -1129,7 +1139,10 @@ test("the header offers Preview once the checks land, before their tab is shown:
         }),
     }),
   );
-  assert.equal(preview(none), undefined, "nothing serving offers no Preview");
+  // Note that the checks the draw before read stand in the cache until this draw's read lands.
+  await vi.waitFor(() =>
+    assert.equal(preview(none) === undefined, true, "nothing serving offers no Preview"),
+  );
 });
 
 test("every check is listed, however many there are, those that failed first, then those still running, then the rest, with no control folding any away", async () => {
@@ -1170,7 +1183,9 @@ test("the earlier entries a read left on GitHub are counted first, in the headin
   );
   const conversation =
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
-  assert.equal(conversation.querySelector(".pull-request-count")?.textContent, "5");
+  await vi.waitFor(() =>
+    assert.equal(conversation.querySelector(".pull-request-count")?.textContent, "5"),
+  );
   const earlier =
     conversation.querySelector<HTMLAnchorElement>(".pull-request-earlier a") ??
     assert.fail("the earlier entries are counted");
@@ -1254,6 +1269,9 @@ test("a review that only left line comments draws each thread under it: its file
     }),
   );
 
+  await vi.waitFor(() =>
+    assert.equal(tab.querySelectorAll(".pull-request-thread").length, 2, "both threads stand"),
+  );
   const [open, folded] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
   assert.ok(open !== undefined && folded !== undefined, "both threads stand under the review");
   assert.equal(
@@ -1380,10 +1398,12 @@ test("the description, a comment, a review, and a thread comment wear their reac
       pill.getAttribute("aria-pressed") ??
         String(pill.querySelector('.ui-badge[data-lit="true"]') !== null),
     ]);
-  assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
-    ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
-    ["🚀1", "Charles Pan reacted with rocket", "false"],
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
+      ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
+      ["🚀1", "Charles Pan reacted with rocket", "false"],
+    ]),
+  );
   const [reviewed, commented] = [...tab.querySelectorAll(".pull-request-entry")];
   assert.deepEqual(
     pills(
@@ -1441,7 +1461,9 @@ test("a reaction is pressed to take the reader's own back, waits on its change w
       conversation: () => Promise.resolve({ pullRequest: reacted(heart) }),
     }),
   );
-  const pressed = heartOf(tab) ?? assert.fail("the description's heart is a press");
+  const pressed = await vi.waitFor(
+    () => heartOf(tab) ?? assert.fail("the description's heart is a press"),
+  );
   assert.equal(pressed.getAttribute("aria-pressed"), "true", "lit as the reader's own");
   const pill = tab.querySelector(".pull-request-state")?.textContent;
 
@@ -1490,10 +1512,12 @@ test("a reaction pressed again before the conversation is read again takes back 
       },
     }),
   );
-  const entry = tab.querySelector(".pull-request-entry") ?? assert.fail("the comment stands");
-  const eyes =
-    entry.querySelector<HTMLButtonElement>(`button${REACTION_PILL}`) ??
-    assert.fail("the comment's eyes are a press");
+  // Note that the comment's reactions stand once the conversation's read reaches its query.
+  const eyes = await vi.waitFor(
+    () =>
+      tab.querySelector<HTMLButtonElement>(`.pull-request-entry button${REACTION_PILL}`) ??
+      assert.fail("the comment's eyes are a press"),
+  );
   act(() => eyes.click());
   await settle();
   assert.deepEqual(
@@ -1524,10 +1548,13 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
       conversation: () => Promise.resolve({ pullRequest: reacted(undefined) }),
     }),
   );
+  // Note that the comment stands once the conversation's read reaches its query.
+  const add = await vi.waitFor(
+    () =>
+      tab.querySelector<HTMLButtonElement>('.pull-request-entry [aria-label="Add reaction"]') ??
+      assert.fail("the comment offers Add reaction"),
+  );
   const entry = tab.querySelector(".pull-request-entry") ?? assert.fail("the comment stands");
-  const add =
-    entry.querySelector<HTMLButtonElement>('[aria-label="Add reaction"]') ??
-    assert.fail("the comment offers Add reaction");
   act(() => add.click());
   const row =
     entry.querySelector<HTMLElement>('[role="toolbar"]') ?? assert.fail("a row of reactions opens");
@@ -1686,10 +1713,12 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
   });
   const tab = await draw(control);
 
-  assert.deepEqual(
-    words(tab, ".pull-request-filter button"),
-    ["Hide resolved3", "Hide bots2"],
-    "each counts what it would leave out, resolved threads and bots' entries",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      words(tab, ".pull-request-filter button"),
+      ["Hide resolved3", "Hide bots2"],
+      "each counts what it would leave out, resolved threads and bots' entries",
+    ),
   );
   assert.equal(filterNote(tab, "Hide bots"), "Hides 2 comments and reviews by bots");
   assert.equal(filterNote(tab, "Hide resolved"), "Hides 3 resolved review threads");
@@ -1842,11 +1871,13 @@ test("where the filters leave nothing of the conversation, it says no comment ma
   );
   const conversation =
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
-  assert.equal(conversation.querySelector(".pull-request-entry"), null);
-  assert.equal(
-    conversation.querySelector(".pull-request-none")?.textContent,
-    "No matching comments.",
+  await vi.waitFor(() =>
+    assert.equal(
+      conversation.querySelector(".pull-request-none")?.textContent,
+      "No matching comments.",
+    ),
   );
+  assert.equal(conversation.querySelector(".pull-request-entry") === null, true);
 });
 
 test("the Description and the Conversation each fold under a heading pressed across its row, both open at first, and each stays as left, on its own, for the next pull request drawn", async () => {
