@@ -45,118 +45,106 @@ const WORKSPACE = { workspaceId: "workspace-acme" };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
 
-/** Each declared act, with a payload its schema takes and the sentence it is refused in. */
-const ACTS: readonly {
-  readonly kind: (typeof WORKSPACE_ACTS)[keyof typeof WORKSPACE_ACTS]["kind"];
+/** What a declared act's refusal row holds: a payload its schema takes, and the sentence it is refused in. */
+interface RefusalRow {
   readonly payload: WireBoundaryInput;
   /** Its refusal, as the window drew it before the act was declared. */
   readonly refusal: string;
   /** Whether its procedure is written by hand, which the host's relayed port does not serve. */
   readonly byHand?: true;
-}[] = [
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_CREATE,
+}
+
+/** Every declared act's row, keyed by its name, so an act declared with no row here does not compile. */
+const REFUSAL_ROWS: { readonly [Name in keyof typeof WORKSPACE_ACTS]: RefusalRow } = {
+  WORKSPACE_CREATE: {
     refusal: "Could not make that workspace on this system.",
     payload: { name: "Relay Labs" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_RENAME,
+  WORKSPACE_RENAME: {
     refusal: "Could not rename that workspace on this system.",
     payload: { ...WORKSPACE, name: "Acme Labs" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET,
+  WORKSPACE_SLUG_SET: {
     refusal: "Could not change that workspace's link on this system.",
     payload: { ...WORKSPACE, slug: "acme-labs" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET,
+  WORKSPACE_PHOTO_SET: {
     refusal: "Could not change that workspace's photo on this system.",
     payload: { ...WORKSPACE, photo: null },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITE,
+  WORKSPACE_INVITE: {
     refusal: "Could not invite that address on this system.",
     payload: { ...WORKSPACE, email: "alan@app.test", role: WORKSPACE_ROLE.MEMBER },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL,
+  WORKSPACE_INVITATION_CANCEL: {
     refusal: "Could not cancel that invitation on this system.",
     payload: { ...WORKSPACE, invitationId: "inv-1" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT,
+  WORKSPACE_GITHUB_DISCONNECT: {
     refusal: "Could not disconnect GitHub from that workspace on this system.",
     payload: WORKSPACE,
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
+  WORKSPACE_SENTRY_DISCONNECT: {
     refusal: "Could not disconnect Sentry from that workspace on this system.",
     payload: { ...WORKSPACE, installationId: "installation-1" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT,
+  WORKSPACE_SLACK_BOT_CONNECT: {
     refusal: "Could not connect the Slack bot to that workspace on this system.",
     payload: WORKSPACE,
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT,
+  WORKSPACE_SLACK_BOT_DISCONNECT: {
     refusal: "Could not disconnect the Slack bot from that workspace on this system.",
     payload: WORKSPACE,
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS,
+  WORKSPACE_SLACK_BOT_NOTIFICATIONS: {
     refusal: "Could not change your Slack notifications on this system.",
     payload: { ...WORKSPACE, notifications: false },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY,
+  WORKSPACE_SLACK_BOT_REPOSITORY: {
     refusal: "Could not change the Slack bot's default repository on this system.",
     payload: { ...WORKSPACE, repository: null },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL,
+  WORKSPACE_SLACK_BOT_CHANNEL: {
     refusal: "Could not change that Slack channel on this system.",
     payload: { ...WORKSPACE, channelId: "C1", member: false },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE,
+  WORKSPACE_MEMBER_REMOVE: {
     refusal: "Could not remove that member on this system.",
     payload: { ...WORKSPACE, userId: "user-grace" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE,
+  WORKSPACE_MEMBER_ROLE: {
     refusal: "Could not change that member's role on this system.",
     payload: { ...WORKSPACE, userId: "user-grace", role: WORKSPACE_ROLE.ADMIN },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER,
+  WORKSPACE_TRANSFER: {
     refusal: "Could not transfer that workspace on this system.",
     payload: { ...WORKSPACE, userId: "user-grace" },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_LEAVE,
+  WORKSPACE_LEAVE: {
     refusal: "Could not leave that workspace on this system.",
     payload: WORKSPACE,
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET,
+  WORKSPACE_TOKEN_REPOSITORY_SET: {
     refusal: "Could not change that workspace's repositories on this system.",
     payload: { ...WORKSPACE, repository: "acme/relay", added: true },
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT,
+  WORKSPACE_GITHUB_CONNECT: {
     refusal: "Could not connect GitHub to that workspace on this system.",
     payload: WORKSPACE,
     byHand: true,
   },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL,
+  WORKSPACE_SENTRY_INSTALL: {
     refusal: "Could not install Sentry for that workspace on this system.",
     payload: WORKSPACE,
     byHand: true,
   },
-];
+};
+
+/** Each declared act, with its kind and its row. */
+const ACTS = Object.values(WORKSPACE_ACTS).map((act) => ({
+  kind: act.kind,
+  ...REFUSAL_ROWS[act.name],
+}));
 
 /** What the host sent the service on an act's behalf: every request but the reads it opens on its own, which only read. */
 function asksSent<Request extends { readonly method: string }>(requests: readonly Request[]) {
