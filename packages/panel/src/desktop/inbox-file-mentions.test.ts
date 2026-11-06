@@ -18,7 +18,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { useSidePanel } from "../tasks/use-side-panel.js";
@@ -207,10 +207,14 @@ async function inbox() {
 
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
-  const chip = [
-    ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
-  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent === name);
-  assert.ok(chip, `no chip says ${name}`);
+  // Note that the item's words stand once the account's inbox read reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
+      ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent === name) ??
+      assert.fail(`no chip says ${name}`),
+  );
   act(() => {
     chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });

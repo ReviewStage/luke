@@ -1898,18 +1898,22 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chips = [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
+  const chipsNow = () => [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
 
-  assert.deepEqual(
-    chips.map((chip) => [
-      chip.dataset.kind,
-      chip.querySelector(".ui-inline-ref-label")?.textContent,
-    ]),
-    [
-      ["file", "store.ts"],
-      ["folder", "src"],
-    ],
+  // Note that the agent's words stand once its transcript reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chipsNow().map((chip) => [
+        chip.dataset.kind,
+        chip.querySelector(".ui-inline-ref-label")?.textContent,
+      ]),
+      [
+        ["file", "store.ts"],
+        ["folder", "src"],
+      ],
+    ),
   );
+  const chips = chipsNow();
   const [fileChip, folderChip] = chips;
   assert.ok(fileChip && folderChip);
   restOn(fileChip);
@@ -1960,8 +1964,12 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chips = [...page.querySelectorAll(".agent-page [data-mention-ref]")];
-  assert.equal(chips.length, 2, "the pull request and its files are chips");
+  const chipsNow = () => [...page.querySelectorAll(".agent-page [data-mention-ref]")];
+  // Note that the agent's words stand once its transcript reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(chipsNow().length, 2, "the pull request and its files are chips"),
+  );
+  const chips = chipsNow();
 
   for (const chip of chips) {
     restOn(chip);

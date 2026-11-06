@@ -745,7 +745,10 @@ test("a sign-out leaves nothing of one account's integrations to the next accoun
     for (const listener of listeners) listener({ ...deliveryOf(next), version: 2 });
   });
   await settle();
-  assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+  // Note that the page draws the last account's sign-in until the next account reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] }),
+  );
 });
 
 test("a Cancel that lands after the sign-in finished leaves the provider connected", async () => {

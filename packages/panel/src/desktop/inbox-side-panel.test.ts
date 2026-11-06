@@ -326,12 +326,16 @@ async function settle(): Promise<void> {
 
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
-  const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>(
-      "[data-inbox-message-text] [data-mention-ref]",
-    ),
-  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name));
-  assert.ok(chip, `no chip says ${name}`);
+  // Note that the item's words stand once the account's inbox read reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[data-inbox-message-text] [data-mention-ref]",
+        ),
+      ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name)) ??
+      assert.fail(`no chip says ${name}`),
+  );
   act(() => chip.click());
   await settle();
 }
