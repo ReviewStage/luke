@@ -1035,6 +1035,27 @@ test("two new shells asked for at once open two shells, each ask its own", async
   assert.equal(tab.registry.get(localShellsAsked(AGENT.id)), 0);
 });
 
+test("a new shell asked for while the tab is hidden on a shell that ended opens one shell once shown, letting the ended one go", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "exited", code: 0 });
+  await tab.render(false);
+  const before = main.sent.length;
+  act(() => {
+    tab.registry.update(localShellsAsked(AGENT.id), (asked) => asked + 1);
+  });
+  await tab.render(true);
+  assert.deepEqual(tab.kinds(before), [
+    "macShell.close",
+    "macShell.mirror",
+    "macShell.open",
+    "macShell.attach",
+  ]);
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["dev server", "Terminal 1"],
+  );
+});
+
 test("a new shell asked for after the shown shell ended lets the ended one go and opens it, as a key would", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "exited", code: 0 });

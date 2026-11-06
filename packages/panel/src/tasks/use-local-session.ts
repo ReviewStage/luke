@@ -517,12 +517,18 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
   }, [agentId]);
 
   // Connected only while shown, and only once there is a screen to draw on.
+  // Note that a shell that ended with a new one asked for is left to the
+  // ask's own effect below, which lets the ended one go first, because
+  // connecting here as well would open a shell beside the one asked for.
   useEffect(() => {
     if (!shown || handle === undefined) return;
     handle.focus();
-    void connect();
+    const replacing =
+      live.current.state.kind === TERMINAL_STATE.EXITED &&
+      registry.get(localShellsAsked(agentId)) > 0;
+    if (!replacing) void connect();
     return letGo;
-  }, [shown, handle, connect, letGo]);
+  }, [shown, handle, agentId, connect, letGo, registry]);
 
   // A new shell asked for while a shell is attached opens at once, each ask
   // its own shell; one asked for while the shown shell ended is the key
