@@ -23,7 +23,7 @@ import { runnerLine } from "@repo/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { Effect, Layer } from "effect";
-import { runnerTag } from "../agents/machine/vercel-machine.js";
+import { agentTag } from "../agents/machine/vercel-machine.js";
 import type { NetworkPolicy } from "../agents/vercel-sandbox-api.js";
 import {
   commandAnswered,
@@ -478,9 +478,8 @@ export function runnerSandboxApi() {
         id: id("cmd"),
         sandboxSessionId: sessionId,
         ...(asUser === undefined ? undefined : { user: asUser.user }),
-        agentId: runnerTag(
+        agentId: agentTag(
           sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags,
-          "AGENT",
         ),
         command: asUser?.command ?? asked.command,
         args: asUser?.args ?? asked.args,

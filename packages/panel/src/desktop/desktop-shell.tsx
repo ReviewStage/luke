@@ -48,8 +48,6 @@ import type { AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { FIND_PAGE, PageFind } from "../find-in-tab.js";
-import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { NewWorkspaceSteps } from "../onboarding/new-workspace-steps.js";
 import { SETUP_GATE } from "../onboarding/setup-model.js";
@@ -62,11 +60,7 @@ import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-place.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
-import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  type TasksControl,
-} from "../tasks/use-tasks-tab.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   appStateQuery,
   selectAdminAccess,
@@ -103,17 +97,6 @@ import { awayBack } from "./task-pane-switcher.js";
 import { useSummaryPin } from "./task-summary.js";
 import { TasksPagesHeld } from "./tasks-page-held.js";
 import { useWindowTitle } from "./window-title.js";
-
-/**
- * The Automations pages, loaded as a chunk of their own the first time
- * they open, as Settings is and for the same reason: the renderer bundle is
- * parsed at every window open, and the pages, their editor and its triggers
- * among them, are opened seldom. What stands while
- * the chunk loads is the pages' own empty frame, for a frame.
- */
-const AUTOMATIONS_ROUTE = lazyRoute(() =>
-  import("./automations-page.js").then((loaded) => loaded.AutomationsPage),
-);
 
 /** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
 function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
@@ -557,14 +540,10 @@ function usePlaceCommands(
     APP_COMMAND.ADMIN,
     pastGate && tasks.signedIn && adminOn ? () => tasks.adminView.onOpen() : undefined,
   );
+  // Note that the Automations pages are the router's place, which its navigation stands from wherever the window stands.
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,
-    pastGate && tasks.signedIn
-      ? () => {
-          onTabChange(PANEL_TAB.TASKS);
-          tasks.automationsView.onOpen();
-        }
-      : undefined,
+    pastGate && tasks.signedIn ? () => tasks.automationsView.onOpen() : undefined,
   );
   const { onReopenClosedTab } = tasks;
   useAppCommand(
@@ -624,11 +603,6 @@ function titleSubject(
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
   return { signedIn, subject: shownTask.name, workspace };
-}
-
-/** Where on the Automations page a find stands: its list, a new automation, or one automation's editor, each a place of its own. */
-function automationsPlaceKey(place: AutomationsPlace): string {
-  return place.kind === AUTOMATIONS_PAGE.EDIT ? place.automationId : place.kind;
 }
 
 /**
@@ -1188,7 +1162,7 @@ export function ShellPlaces(): React.JSX.Element {
 
 /**
  * What a place the window's state says draws in the places' content slot:
- * a task, an agent's page, the Automations pages, a workspace not there for
+ * a task, an agent's page, a workspace not there for
  * the reader, or nothing where the Inbox, kept beside every place's route
  * (`ShellPlaces`), stands. Every route not yet moved onto the router draws
  * this one component, so moving between them keeps it drawn.
@@ -1198,7 +1172,6 @@ export function StatePlace(): React.JSX.Element | null {
   const { account } = settings;
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
-  const automationsOpen = tasks.automationsView.open;
   const unknownWorkspace = tasks.unknownWorkspace.open;
   return inboxOpen ? null : pageAgent !== undefined ? (
     // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
@@ -1208,18 +1181,6 @@ export function StatePlace(): React.JSX.Element | null {
       agentId={pageAgent}
       away={room === SHELL_ROOM.NARROW ? away : undefined}
     />
-  ) : automationsOpen ? (
-    <PageFind
-      page={FIND_PAGE.AUTOMATIONS}
-      at={automationsPlaceKey(tasks.automationsView.place)}
-      active={tasks.shown}
-    >
-      <Suspense
-        fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />}
-      >
-        <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
-      </Suspense>
-    </PageFind>
   ) : unknownWorkspace ? (
     // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
     <ReplayUnmask>
@@ -1252,6 +1213,12 @@ export function BoardRouteLoading(): React.JSX.Element | null {
   const { tasks, room } = useShellPlaces();
   if (mobileBarShown(room, tasks)) return null;
   return <TasksLoading onExit={tasks.boardView.onClose} />;
+}
+
+/** The Automations pages' frame while their chunk loads. */
+export function AutomationsRouteLoading(): React.JSX.Element {
+  const { tasks, room } = useShellPlaces();
+  return <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />;
 }
 
 /** A person's page's frame while its chunk loads. */

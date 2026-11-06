@@ -4,7 +4,7 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import { countWords, orList, readingWords } from "@repo/features/words";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { EVERY_WORKSPACE } from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import {
@@ -178,12 +178,33 @@ type DeadEnd = (typeof DEAD_END)[keyof typeof DEAD_END];
 /** How many owners and admins a member's row names before it counts the rest. */
 const NAMED_OWNERS = 3;
 
+/** Who a member asks when none of the workspace's owners and admins is named. */
+export const ANY_OWNER = "an owner or admin";
+
+/** The words counting the owners and admins past those named: "2 others". */
+export function otherOwnersWords(rest: number): string {
+  return countWords(rest, { one: "other", many: "others" });
+}
+
 /**
- * A member's way out of a dead end: the GitHub row, ending in the
- * workspace's owners and admins by name, who alone can mend it, read while
- * the row stands. Until the read answers, or if it never does, it says an
- * owner or admin without names, since a name is only ever a help.
+ * Who a member asks to mend a workspace's GitHub: its owners and admins, the
+ * first few named and the rest counted, read while the asker stands; none
+ * named until the read answers, or if it never does, since a name is only
+ * ever a help.
  */
+export function useOwnersToAsk(workspaceId: string | undefined): {
+  readonly named: readonly WorkspaceMember[];
+  readonly rest: number;
+} {
+  const members = useQuery(workspaceMembersQuery(workspaceId)).data?.members;
+  const owners = (members ?? []).filter(
+    (each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN,
+  );
+  const named = owners.slice(0, NAMED_OWNERS);
+  return { named, rest: owners.length - named.length };
+}
+
+/** A member's way out of a dead end: the GitHub row, ending in whom to ask (`useOwnersToAsk`), who alone can mend it. */
 function AskOwnersRow({
   workspaceId,
   ask,
@@ -191,14 +212,10 @@ function AskOwnersRow({
   workspaceId: string | undefined;
   ask: DeadEnd["ask"];
 }): React.JSX.Element {
-  const members = useQuery(workspaceMembersQuery(workspaceId)).data?.members;
-  const owners = (members ?? [])
-    .filter((each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN)
-    .map((each) => each.name);
-  const named = owners.slice(0, NAMED_OWNERS);
-  const rest = owners.length - named.length;
-  const others = rest > 0 ? [countWords(rest, { one: "other", many: "others" })] : [];
-  const whom = owners.length === 0 ? "an owner or admin" : orList([...named, ...others]);
+  const { named, rest } = useOwnersToAsk(workspaceId);
+  const others = rest > 0 ? [otherOwnersWords(rest)] : [];
+  const whom =
+    named.length === 0 ? ANY_OWNER : orList([...named.map((each) => each.name), ...others]);
   return (
     <MenuNoteRow
       glyph={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}

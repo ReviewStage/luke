@@ -37,9 +37,13 @@
  * on the command line rather than by the API, as our other commands are
  * run (`../vercel-sandbox-api.ts`).
  *
- * A place is found again by the session's tag, and its runner by the tags a
- * launch writes beside it: the command, the sandbox session it runs in, and
- * the launch's first event number and fingerprint (`RUNNER_TAG`). The
+ * A place is found again by the session's tag, and its runner by the record
+ * a launch writes in our store under the agent's runner lease
+ * (`@repo/database/models/agent-runner-record`): the command, the sandbox
+ * session it runs in, and the launch's first event number and fingerprint.
+ * Note that none of it rides in a tag, because Vercel's tags are labels,
+ * each write replacing a sandbox's whole set, so the tags name only the
+ * session and its agent, as the sandbox is created. The
  * firewall is the sandbox session's network policy, composed whole at each
  * write from its sources and the swaps its launch keeps
  * (`../sandbox-firewall.ts`), a stop is the session's, and a
@@ -58,6 +62,12 @@ import {
   SHARED_FILES_DIRECTORY,
 } from "@repo/agent-runner/pins";
 import type { DatabaseServices } from "@repo/database/core/query";
+import {
+  type AgentRunnerRecord,
+  forgetAgentRunnerRecord,
+  readAgentRunnerRecord,
+  writeAgentRunnerRecord,
+} from "@repo/database/models/agent-runner-record";
 import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
@@ -127,6 +137,7 @@ import {
   type MachinePlace,
   type MachineRunning,
   PLACE_RESUME,
+  type RecordedRunner,
   RUNNER_RECORD,
   type RunnerHandle,
   type RunnerMark,
@@ -134,49 +145,25 @@ import {
 } from "./agent-machine.js";
 
 /**
- * The tags a sandbox we open carries beside its session's: its agent, and
- * the runner it runs, so a later call finds both. Note that Vercel refuses a
- * sandbox more than five tags, the session's among them, so a launch's
- * fingerprint rides in its launch tag rather than a tag of its own.
+ * The tag a sandbox we open carries beside its session's: the agent it was
+ * opened for, so a later call and the sweep tell whose it is. Its runner is
+ * recorded in our store instead (`@repo/database/models/agent-runner-record`).
  */
-export const RUNNER_TAG = {
-  AGENT: "agentId",
-  SANDBOX_SESSION: "agentRunnerSession",
-  COMMAND: "agentRunnerCommand",
-  /**
-   * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
-   * the launch was started with that a warm runner cannot take up later
-   * (`launchFingerprint`). A tag written before ends in the mark and
-   * `lines`, which the read leaves aside.
-   */
-  LAUNCH: "agentRunnerLaunch",
-} as const;
+export const AGENT_TAG = "agentId";
 
 /**
- * The tags' names before the product's rename, read after `RUNNER_TAG`'s and
- * never written. Note that each write replaces a sandbox's whole set of
- * tags, so a sandbox carries one name of a tag or the other, and one made
- * before carries the old names until its next launch or halt writes the
- * new; they can go once Vercel lists no sandbox named
- * `SANDBOX_NAME_BEFORE_RENAME`, since only such a sandbox can carry them.
+ * The agent tag's name before the product's rename, read after `AGENT_TAG`'s
+ * and never written. Note that a sandbox's tags are written only as it is
+ * created, so one made before carries the old name for as long as it lives;
+ * it can go once Vercel lists no sandbox named `SANDBOX_NAME_BEFORE_RENAME`,
+ * since only such a sandbox can carry it.
  */
-const RUNNER_TAG_BEFORE_RENAME = {
-  AGENT: "lukeAgent",
-  SANDBOX_SESSION: "lukeRunnerSession",
-  COMMAND: "lukeRunnerCommand",
-  LAUNCH: "lukeRunnerLaunch",
-} as const satisfies Record<keyof typeof RUNNER_TAG, string>;
+const AGENT_TAG_BEFORE_RENAME = "lukeAgent";
 
-/** A runner tag of a sandbox, under its name or the one it had before the rename. */
-export function runnerTag(
-  tags: Readonly<Record<string, string>> | undefined,
-  tag: keyof typeof RUNNER_TAG,
-): string | undefined {
-  return tags?.[RUNNER_TAG[tag]] ?? tags?.[RUNNER_TAG_BEFORE_RENAME[tag]];
+/** The agent a sandbox's tags name, under the tag's name or the one it had before the rename. */
+export function agentTag(tags: Readonly<Record<string, string>> | undefined): string | undefined {
+  return tags?.[AGENT_TAG] ?? tags?.[AGENT_TAG_BEFORE_RENAME];
 }
-
-/** What parts a launch tag's first event number from its fingerprint. */
-const LAUNCH_FINGERPRINT_MARK = "-";
 
 /**
  * Where a message's files that the harness takes no block of are written
@@ -347,93 +334,108 @@ function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession 
   return { userId, name: place.name, sandboxSessionId: place.running };
 }
 
-/** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
-export interface TaggedRunner {
-  readonly sandboxSessionId: string;
-  readonly commandId: string;
-  readonly firstSequence: number;
-  /** None for a launch from before fingerprints were tagged. */
-  readonly fingerprint?: string;
-}
-
-/** The launch tag read: its first event number, and its fingerprint where it has one, of a launch that reads its lines, as every sandbox's does; none where the tag is missing or unreadable. */
-function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
-  const [sequence = "", fingerprint] = (runnerTag(tags, "LAUNCH") ?? "").split(
-    LAUNCH_FINGERPRINT_MARK,
-  );
-  const firstSequence = Number(sequence);
-  if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }), linesRead: true };
-}
-
-/** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
-export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
-  const tags = sandbox.tags ?? {};
-  const sandboxSessionId = runnerTag(tags, "SANDBOX_SESSION");
-  const commandId = runnerTag(tags, "COMMAND");
-  const launch = taggedLaunch(tags);
-  if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
-    return undefined;
-  }
-  return { sandboxSessionId, commandId, ...launch };
-}
-
-/** The launch tag's value for the mark given. */
-function launchTagOf(mark: RunnerMark): string {
-  if (mark.fingerprint === undefined) return String(mark.firstSequence);
-  return [mark.firstSequence, mark.fingerprint].join(LAUNCH_FINGERPRINT_MARK);
-}
-
-/** The tags a sandbox carries for the record given, beside its session's and its agent's. */
-function recordTags(session: string, agentId: string, record: RunnerRecord) {
-  const place = { [SESSION_TAG]: session, [RUNNER_TAG.AGENT]: agentId };
-  if (record.kind === RUNNER_RECORD.NONE) return place;
-  if (record.kind === RUNNER_RECORD.LAUNCHED) {
-    return { ...place, [RUNNER_TAG.LAUNCH]: launchTagOf(record.mark) };
-  }
+/** The launch a record tells of: its first event number and fingerprint, of a launch that reads its lines, as every sandbox's does. */
+function markOf(record: AgentRunnerRecord): RunnerMark {
   return {
-    ...place,
-    [RUNNER_TAG.SANDBOX_SESSION]: record.runner.handle.running,
-    [RUNNER_TAG.COMMAND]: record.runner.handle.command,
-    [RUNNER_TAG.LAUNCH]: launchTagOf(record.runner.mark),
+    firstSequence: record.firstSequence,
+    ...(record.fingerprint === null ? {} : { fingerprint: record.fingerprint }),
+    linesRead: true,
   };
 }
 
-/** The runner the sandbox's tags name, where the sandbox is up in the session it was started in, whether or not it has exited since. */
-function runnerInSession(session: string, sandbox: ListedSandbox) {
-  const runner = taggedRunner(sandbox);
+/** The record a place keeps for the runner record given, under the sandbox named; none for one that tells of no launch. */
+function storedRecord(
+  name: string,
+  agentId: string,
+  record: RunnerRecord,
+): AgentRunnerRecord | undefined {
+  if (record.kind === RUNNER_RECORD.NONE) return undefined;
+  const mark = record.kind === RUNNER_RECORD.LAUNCHED ? record.mark : record.runner.mark;
+  const runner = record.kind === RUNNER_RECORD.RUNNING ? record.runner.handle : undefined;
+  return {
+    agentId,
+    sandboxName: name,
+    firstSequence: mark.firstSequence,
+    fingerprint: mark.fingerprint ?? null,
+    sandboxSessionId: runner?.running ?? null,
+    commandId: runner?.command ?? null,
+  };
+}
+
+/** The place's record of its runner written in our store under the account given, or deleted where it tells of no launch. */
+function recordedIn(
+  place: {
+    readonly session: string;
+    readonly name: string;
+    readonly userId: string;
+    readonly agentId: string;
+  },
+  record: RunnerRecord,
+) {
+  const stored = storedRecord(place.name, place.agentId, record);
+  return stored === undefined
+    ? forgetAgentRunnerRecord(place.userId, place.session, place.name)
+    : writeAgentRunnerRecord(place.userId, place.session, stored);
+}
+
+/** The runner a record names, where the sandbox is up in the session that runner was started in, whether or not it has exited since. */
+function runnerInSession(
+  session: string,
+  sandbox: ListedSandbox,
+  record: AgentRunnerRecord,
+): RecordedRunner | undefined {
+  const { sandboxSessionId, commandId } = record;
   if (
-    runner === undefined ||
+    sandboxSessionId === null ||
+    commandId === null ||
     sandbox.status !== SANDBOX_STATUS.RUNNING ||
-    sandbox.currentSessionId !== runner.sandboxSessionId
+    sandbox.currentSessionId !== sandboxSessionId
   ) {
     return undefined;
   }
-  const { sandboxSessionId, commandId, ...mark } = runner;
   return {
     handle: { ...vercelPlace(session, sandbox.name, sandboxSessionId), command: commandId },
-    mark,
+    mark: markOf(record),
   };
 }
 
-/** A listed sandbox as the place a later call finds, under our session given. */
-function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
-  const tags = sandbox.tags ?? {};
+/** What a place this machine found keeps for its own later calls: the account its record is kept under. */
+interface KeptPlace {
+  readonly userId: string;
+}
+
+/** A listed sandbox as the place a later call finds, under the account's session given, with the session's record where it was written for this sandbox. */
+function foundOf(
+  userId: string,
+  session: string,
+  sandbox: ListedSandbox,
+  record: Option.Option<AgentRunnerRecord>,
+): FoundPlace {
+  const own = Option.getOrUndefined(
+    Option.filter(record, (each) => each.sandboxName === sandbox.name),
+  );
   const running =
     sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined
       ? vercelPlace(session, sandbox.name, sandbox.currentSessionId)
       : undefined;
+  const kept: KeptPlace = { userId };
   return {
     machine: AGENT_MACHINE.VERCEL,
     session,
-    agentId: runnerTag(tags, "AGENT"),
+    agentId: agentTag(sandbox.tags),
     name: nameOfSandbox(sandbox.name),
     running,
-    runner: runnerInSession(session, sandbox),
-    launch: taggedLaunch(tags),
-    // SAFETY: the listing is this machine's own; no caller reads it.
-    kept: sandbox as unknown as MachineKept,
+    runner: own === undefined ? undefined : runnerInSession(session, sandbox, own),
+    launch: own === undefined ? undefined : markOf(own),
+    // SAFETY: what is kept is this machine's own to read back in `discard`; no caller reads it.
+    kept: kept as unknown as MachineKept,
   };
+}
+
+/** What a found place keeps, which `foundOf` kept. */
+function keptOf(found: FoundPlace): KeptPlace {
+  // SAFETY: a place this machine found keeps what `foundOf` kept.
+  return found.kept as unknown as KeptPlace;
 }
 
 /**
@@ -521,13 +523,16 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
     });
 
   return {
-    findPlaces: (session) =>
-      Effect.map(api.listTagged(session), (sandboxes) =>
-        sandboxes.map((sandbox) => foundOf(session, sandbox)),
+    findPlaces: (userId, session) =>
+      Effect.map(
+        Effect.all([api.listTagged(session), readAgentRunnerRecord(userId, session)], {
+          concurrency: "unbounded",
+        }),
+        ([sandboxes, record]) =>
+          sandboxes.map((sandbox) => foundOf(userId, session, sandbox, record)),
       ),
 
-    recordRunner: (place, record) =>
-      api.updateTags(place.name, recordTags(place.session, place.agentId, record)),
+    recordRunner: recordedIn,
 
     firewall: {
       write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
@@ -551,7 +556,11 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
     stop: (place) =>
       Effect.flatMap(api.session(sessionOfPlace(place)), (session) => session.stop()),
 
-    discard: (found) => api.deleteSandbox(found.name),
+    discard: (found) =>
+      Effect.andThen(
+        api.deleteSandbox(found.name),
+        forgetAgentRunnerRecord(keptOf(found).userId, found.session, found.name),
+      ),
 
     writeFiles: (place, files) =>
       Effect.flatMap(api.session(sessionOfPlace(place)), (session) => session.writeFiles(files)),
@@ -611,7 +620,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     api.create({
       name: `${SANDBOX_NAME}${randomUUID()}`,
       from,
-      tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
+      tags: { [SESSION_TAG]: sessionId, [AGENT_TAG]: agent.id },
       timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
       vcpus: sandboxVcpus(agent.repository),
       keepLastSnapshots: {
@@ -894,8 +903,8 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       }),
 
     // The sandbox is readied as root once the caller's steps are done, since the readying shares
-    // the checkout they finish, and the runner is started as `agent` after it. The runner is kept in
-    // the sandbox's tags before it reads anything, so a later call finds it. A runner started but
+    // the checkout they finish, and the runner is started as `agent` after it. The runner is recorded
+    // in our store before it reads anything, so a later call finds it. A runner started but
     // never configured is ended, and the caller undoes what it recorded of it, so the next message
     // relaunches whole rather than writing to a runner that waits for its config.
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
@@ -943,12 +952,14 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         const handle: RunnerHandle = { ...place, command: commandId };
         yield* Effect.gen(function* () {
           const { lines, mark } = yield* launch.firstLines(ready, handle);
-          yield* api.updateTags(
-            launch.name,
-            recordTags(place.session, launch.agentId, {
-              kind: RUNNER_RECORD.RUNNING,
-              runner: { handle, mark },
-            }),
+          yield* recordedIn(
+            {
+              session: place.session,
+              name: launch.name,
+              userId: launch.userId,
+              agentId: launch.agentId,
+            },
+            { kind: RUNNER_RECORD.RUNNING, runner: { handle, mark } },
           );
           yield* session
             .writeStdin(commandId, lines)

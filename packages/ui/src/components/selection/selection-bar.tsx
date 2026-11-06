@@ -1,10 +1,8 @@
 import { SELECTION_WORDS, selectedWords } from "@repo/features/words";
-import { type FocusEvent, type KeyboardEvent, useId, useLayoutEffect, useRef } from "react";
-import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
+import { useId } from "react";
 import { Button } from "../button/button.js";
 import { Menu, type MenuAction, useMenu } from "../menu/menu.js";
-import { focusRovingStop, ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
-import { focusChoosable } from "./list-selection.js";
+import { useSelectionKeys } from "./selection-keys.js";
 
 /**
  * selection-bar.tsx -- the bar over a list while some of its rows are chosen: how many ("3 selected"), the acts that take them all at once, and Clear.
@@ -18,12 +16,8 @@ import { focusChoosable } from "./list-selection.js";
  * of choices where the act is one of several (a status, a section); Clear,
  * last, chooses none, as Esc does in the list and in the bar alike.
  *
- * The bar is a toolbar (`useRovingKeys`): Tab stops on it once, ←→ walk
- * its buttons. It names the list it acts on (`controls`), and where the
- * bar held the focus as the last row left the selection, by Clear, Esc,
- * or an act that took the rows away, it hands the focus to that list's
- * Tab stop, or a `SelectionRegion`'s first row, rather than let it fall to
- * the page as its buttons go.
+ * The bar is a toolbar whose keys, focus, and announcement are every
+ * selection toolbar's (`selection-keys.ts`).
  *
  * It is drawn in the Tailwind theme's utilities: one line inside a hairline
  * on the ground a menu floats on (`bg-popover`), the count in the label's type
@@ -93,46 +87,14 @@ export function SelectionBar({
   /** The id of the list whose rows it acts on (`List`'s `id`), which takes the focus once the bar goes. */
   controls: string;
 }): React.JSX.Element | null {
-  const roving = useRovingKeys<HTMLDivElement>({ orientation: ROVING_ORIENTATION.HORIZONTAL });
   const countId = useId();
-  useAnnounce(ANNOUNCE.POLITE, count > 0 ? selectedWords(count) : "");
-  // Whether the focus stands in the bar, or stood there as its buttons went.
-  const holding = useRef(false);
-  useLayoutEffect(() => {
-    if (count > 0 || !holding.current) return;
-    holding.current = false;
-    // Note that only a focus fallen to the page is handed on, never one something else took.
-    const fell = document.activeElement === null || document.activeElement === document.body;
-    const list = document.getElementById(controls);
-    // Note that a region of the app's own rows keeps no roving Tab stop, so its first row takes the focus instead.
-    if (fell && list !== null && !focusRovingStop(list)) focusChoosable(list);
-  }, [count, controls]);
+  const keys = useSelectionKeys({ count, controls, onClear });
   if (count <= 0) return null;
-  const onFocus = (event: FocusEvent<HTMLDivElement>) => {
-    holding.current = true;
-    roving.onFocus(event);
-  };
-  // Note that a button taken away blurs with nowhere to go, so only a focus moved somewhere lets go.
-  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
-    const to = event.relatedTarget;
-    if (to instanceof Node && !event.currentTarget.contains(to)) holding.current = false;
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (roving.onKeyDown(event) || event.defaultPrevented) return;
-    if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    event.stopPropagation();
-    onClear();
-  };
   return (
     <div
-      {...roving}
-      onKeyDown={onKeyDown}
-      onFocus={onFocus}
-      onBlur={onBlur}
+      {...keys}
       role="toolbar"
       aria-labelledby={countId}
-      aria-controls={controls}
       className="ui-selection-bar box-border flex min-w-0 items-center gap-control-gap rounded-control border border-border bg-popover py-tight-gap pr-tight-gap pl-list-inset font-ui text-foreground"
     >
       <span

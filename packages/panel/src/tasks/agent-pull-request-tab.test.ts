@@ -3128,7 +3128,7 @@ test("auto-merge is offered while checks run, and turned off once on; a merge qu
   }
 });
 
-test("while a merge's change is out its press stands busy, a second press sends nothing, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
+test("while a merge's change is out its press stands busy, a second press sends nothing, nor does a review submitted from the Review panel, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
   changeAnswer = {
@@ -3145,13 +3145,21 @@ test("while a merge's change is out its press stands busy, a second press sends 
   // A second change while the first is out is dropped, from any control of the pull request.
   const [press] = mergePresses(tab);
   await act(async () => press?.click());
-  assert.equal(changes.length, 1, "one change went");
+  writeReview(openReview(tab), "Looks right.");
+  await submitReview(tab.querySelector<HTMLElement>('[role="dialog"]') ?? tab, "Approve");
   resolve();
   await vi.waitFor(() =>
     assert.equal(
       tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
       "GitHub refused this change.\nGitHub said: “Pull request is not mergeable.”",
     ),
+  );
+  await settle();
+  // Note that the review is read once the merge has settled, since one waiting its turn would go then.
+  assert.deepEqual(
+    changes.map(([, change]) => change.action),
+    [PULL_REQUEST_ACTION.MERGE],
+    "the merge alone went",
   );
 });
 
@@ -5891,7 +5899,10 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   await settle();
   await frames();
 
-  assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
+  // Note that the Conversation is chosen through the route a Query notification later than the press.
+  await vi.waitFor(() =>
+    assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true"),
+  );
   assert.deepEqual(listReveals, [], "no file is scrolled to");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
   assert.equal(card.hasAttribute("data-landed"), true, "the thread is shown where it stays");

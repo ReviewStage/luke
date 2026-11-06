@@ -157,6 +157,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
   const place = places[accountId] ?? start;
   const { audience, team } = place;
+  const personal = tasks.newTask.workspaces.find((workspace) => workspace.personal === true)?.id;
   const move = (change: Partial<SetupPlace>) =>
     changePlaces((kept) => ({
       ...kept,
@@ -168,7 +169,12 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
       kept[accountId] === undefined ? { ...kept, [accountId]: start } : kept,
     );
   }, [accountId, changePlaces, start]);
-  const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
+  // A team's workspace made stands listed only while setup is for the team, so Just me goes back to the account's own.
+  const setAudience = (chosen: SetupAudience) => {
+    move({ audience: chosen });
+    const listed = chosen === SETUP_AUDIENCE.TEAM ? team : personal;
+    if (team !== undefined && listed !== undefined) tasks.onChooseWorkspace(listed);
+  };
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
   const [reached, setReached] = useState(false);
@@ -191,7 +197,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const back = at === 0 ? undefined : () => setAt(at - 1);
   // A team's workspace made and then left for Just me is not the one GitHub is installed on.
   const workspaceId =
-    (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
+    (audience === SETUP_AUDIENCE.TEAM ? team : personal) ?? tasks.newTask.workspaceId;
   // Note that a skippable step offers Skip until done and Continue after it; the team's draws its own foot.
   const foot = (done: boolean, label = "Continue", skippable = false) => (
     <AuthStepFoot

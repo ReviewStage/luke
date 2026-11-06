@@ -213,7 +213,9 @@ function mount(
       ? SHELL_AT.SETTINGS
       : overrides.adminView?.open === true
         ? SHELL_AT.ADMIN
-        : undefined;
+        : overrides.automationsView?.open === true
+          ? SHELL_AT.AUTOMATIONS
+          : undefined;
   act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
   return container;
 }
@@ -1025,6 +1027,10 @@ test("while the Automations pages are still loading their frame stands the list 
     {},
     registry,
   );
+  // The router goes to the pages, whose frame stands while their chunk is read.
+  await act(async () => {
+    await Promise.resolve();
+  });
   const loading = page.querySelector("section[aria-label=Automations]");
   assert.ok(loading, "the pages' frame stands");
   assert.equal(loading.querySelector("h1")?.textContent, "Automations");
@@ -1096,6 +1102,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
 
   handState({});
   const page = mount(false, overrides);
+  await act(() => routed().settled());
   await settle();
   assert.ok(page.querySelector("section[aria-label=Automations]"));
   assert.equal(document.title, "Automations — Acme");

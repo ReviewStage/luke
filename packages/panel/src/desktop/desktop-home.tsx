@@ -17,6 +17,7 @@ import { useInboxRowDrafts } from "../composer-drafts.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { NOTICE_LOOK } from "../tasks/connect-agent-banner.js";
 import { InboxItemRow, inboxRowDraft } from "../tasks/inbox-list.js";
 import { type InboxListed, needsYou } from "../tasks/inbox-model.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
@@ -36,9 +37,11 @@ import { RecentTasks } from "./recent-tasks.js";
  * greeting as its title, and at the top of its content New task's composer
  * (`new-task-composer.tsx`) in place of a New task button, drawn as the
  * dialog draws it, so the page opens on a prompt box the way Codex's and
- * ChatGPT's do; then Inbox, every open item of the listed workspace waiting
- * on the reader, as the Inbox's own row draws it, a press opening the Inbox
- * on it; then Recent, the listed workspace's tasks with the latest activity,
+ * ChatGPT's do, but that what holds a start, no agent connected, or the
+ * workspace having no repositories yet, stands over it as cards rather than
+ * the dialog's line, since Home is where a new account first looks; then
+ * Inbox, every open item of the listed workspace waiting on the reader, as
+ * the Inbox's own row draws it, a press opening the Inbox on it; then Recent, the listed workspace's tasks with the latest activity,
  * each the Tasks page's row as a person's page lists it (`recent-tasks.tsx`),
  * a press opening it. Its sections are a person's page's (`person-frame.tsx`),
  * whose voice was Home's to begin with. Inbox stands only while something
@@ -249,6 +252,7 @@ function HomeComposer({
         onLeave={letGoOfFocus}
         takesFocus={takesFocus}
         listSide={MENTION_MENU_SIDE.BELOW}
+        notices={NOTICE_LOOK.CARD}
       />
     </div>
   );
