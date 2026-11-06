@@ -49,7 +49,6 @@ import {
   readVisibleAgentWorkspace,
 } from "@repo/database/models/agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
-import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@repo/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@repo/database/models/workspace-store";
@@ -85,7 +84,7 @@ import {
 import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { archivedAgent, changedAgent } from "./agent-change.js";
-import { controlsAgent, reachedAgentById } from "./agent-reach.js";
+import { reachedAgentById } from "./agent-reach.js";
 import {
   askedPullRequest,
   githubReadRefusal,
@@ -130,7 +129,7 @@ import { memoryOnFor } from "./memory-tools.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import type { SandboxStopReach } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
-import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
+import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
 import { listedPage } from "./workspace-agents.js";
 import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
 
@@ -207,51 +206,9 @@ const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return txid === undefined ? { agent } : { agent, txid };
 });
 
-/**
- * The agent the path names, still standing: its conversation, which a
- * sandbox's lease is held on, and the eve session its sandbox is tagged
- * with, or none where the agent has not run yet. An archived agent
- * is gone, as its tab is, and one on its starter's own GitHub token gives its
- * sandbox to its starter alone.
- */
-const reachedAgentSession = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  id: string,
-): Effect.fn.Return<
-  { readonly conversationId: string; readonly sessionId: string | undefined },
-  HostedRefusal,
-  DatabaseServices
-> {
-  const { agent } = yield* reachedAgentById(userId, id);
-  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-  const [session] = yield* hostedStoreOrUnavailable(
-    standingSessionsOf(agent.userId, [agent.conversationId]),
-  );
-  return { conversationId: agent.conversationId, sessionId: session?.sessionId };
-});
-
 /** The eve session alone of the agent the path names, as `reachedAgentSession` reads it. */
 const reachedSession = (userId: string, id: string) =>
   Effect.map(reachedAgentSession(userId, id), ({ sessionId }) => sessionId);
-
-/**
- * A sandbox Vercel could not be asked about, as the upstream's refusal a
- * caller may retry, apart from the store's own unavailable, so the tab can
- * say it was the agent's sandbox that did not answer: Vercel Sandbox's API,
- * or tmux in a sandbox that API answered for. The log names the status
- * Vercel answered, where it answered one.
- */
-function sandboxOrUpstream<A, R>(
-  effect: Effect.Effect<A, SandboxUnavailable, R>,
-): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(effect, (failure) =>
-    Effect.andThen(
-      Effect.logWarning(`a terminal's sandbox call failed: ${failure.message}`),
-      Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR),
-    ),
-  );
-}
 
 /** Why a shell could not be had, as the refusal the route answers. */
 function shellRefusal(refusal: ShellRefusal): HostedRefusal {

@@ -61,6 +61,8 @@ export interface FakeSandbox {
   createdAt: number;
   /** The snapshot it resumes from, which its last snapshot made; none before one is taken. */
   currentSnapshotId?: string;
+  /** The drives its create mounted, by path, as the create's body carried them. */
+  mounts?: Record<string, { readonly drive: string; readonly mode: string }>;
 }
 
 export interface FakeCommand {
@@ -184,6 +186,30 @@ export function runnerSandboxApi() {
     runExit?: ((args: readonly string[]) => number) | undefined;
     onRun?: ((env: Readonly<Record<string, string>>) => Promise<void>) | undefined;
   } = {};
+  /** The drives standing, by name. */
+  const drives = new Set<string>();
+  /** The live running sandbox a drive is mounted in, which Vercel refuses the drive's delete and a second mount for. */
+  const mountedIn = (drive: string) =>
+    sandboxes.find(
+      (each) =>
+        !each.deleted &&
+        each.status === "running" &&
+        Object.values(each.mounts ?? {}).some((mount) => mount.drive === drive),
+    );
+  const driveFound = (name: string) => ({
+    drive: {
+      id: `drv_${name}`,
+      name,
+      projectId: PROJECT,
+      region: "iad1",
+      maxSizeBytes: 2 ** 40,
+      createdAt: 1,
+      updatedAt: 1,
+      ...(mountedIn(name) === undefined
+        ? undefined
+        : { currentSandboxName: mountedIn(name)?.name }),
+    },
+  });
   /** The snapshots taken, in order. */
   const snapshots: string[] = [];
   /** The expiration each snapshot was asked with, by its id, as the API's body carried it. */
@@ -216,7 +242,7 @@ export function runnerSandboxApi() {
     if (method === "POST" && path === "/api/v3/sandboxes") {
       const asked = await body();
       assert.equal(asked.projectId, PROJECT);
-      assert.equal(asked.persistent, true);
+      assert.equal(typeof asked.persistent, "boolean");
       // As Vercel answers a create from a snapshot it no longer holds (the SDK's `isSnapshotNotFoundError`).
       if (goneSnapshots.has(asked.source.snapshotId)) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
@@ -227,6 +253,13 @@ export function runnerSandboxApi() {
       }
       const tagsRefused = sandboxTagsRefusal(asked.tags);
       if (tagsRefused !== undefined) return tagsRefused;
+      const mounts: Record<string, { drive: string; mode: string }> = asked.mounts ?? {};
+      for (const mount of Object.values(mounts)) {
+        if (!drives.has(mount.drive)) return new Response(null, { status: 404 });
+        if (mountedIn(mount.drive) !== undefined) {
+          return Response.json({ error: { code: "conflict" } }, { status: 409 });
+        }
+      }
       const sandbox: FakeSandbox = {
         name: asked.name,
         status: "running",
@@ -237,6 +270,7 @@ export function runnerSandboxApi() {
         createdAt: sandboxes.length + 1,
         timeout: asked.timeout,
         resumedWith: [],
+        ...(asked.mounts === undefined ? undefined : { mounts }),
       };
       sandboxes.push(sandbox);
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
@@ -256,6 +290,21 @@ export function runnerSandboxApi() {
         (each) => !each.deleted && key !== undefined && each.tags[key] === value,
       );
       return Response.json({ sandboxes: found.map(listed) });
+    }
+    const drive = /^\/api\/v2\/sandboxes\/drives\/([^/]+)$/u.exec(path);
+    if (drive !== null) {
+      const name = decodeURIComponent(drive[1] ?? "");
+      if (method === "POST") drives.add(name);
+      if (!drives.has(name)) return new Response(null, { status: 404 });
+      if (method === "DELETE") {
+        if (mountedIn(name) !== undefined) {
+          return Response.json({ error: { code: "drive_attached" } }, { status: 409 });
+        }
+        const found = driveFound(name);
+        drives.delete(name);
+        return Response.json(found);
+      }
+      return Response.json(driveFound(name));
     }
     const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path);
     if (named !== null) {
@@ -451,6 +500,7 @@ export function runnerSandboxApi() {
     respond,
     policyAtStart,
     sandboxes,
+    drives,
     commands,
     goneSnapshots,
     snapshots,

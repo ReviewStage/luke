@@ -1,1 +1,1 @@
-ALTER TABLE "sandbox_firewall" ADD COLUMN "agent_id" text;
+ALTER TABLE "sandbox_firewall" ADD COLUMN IF NOT EXISTS "agent_id" text;

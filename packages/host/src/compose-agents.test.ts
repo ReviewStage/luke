@@ -609,6 +609,9 @@ function fakeService() {
         asked.push(`forAgents:${change.kind}:${String(change.forAgents)}`);
         return { keys: [] };
       }),
+    startChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    pollChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    cancelChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readGitHubToken: () =>
       Effect.sync(() => {
         asked.push("token");

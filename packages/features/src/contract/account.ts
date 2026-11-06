@@ -35,6 +35,9 @@ import {
 } from "../memory-wire.js";
 import {
   chatGptCredentialsSaveRequestSchema,
+  chatGptDeviceLoginRequestSchema,
+  chatGptDevicePollAnswerSchema,
+  chatGptDeviceStartAnswerSchema,
   chatGptHostAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
@@ -55,6 +58,9 @@ const MEMORY_SAVE_BODY_BYTES = 4_096;
 
 /** A ChatGPT sign-in's save is three tokens of at most 16 KiB each and a few ids, so a body past this is not one. */
 const CHATGPT_CREDENTIALS_BODY_BYTES = 64 * 1_024;
+
+/** A device-code login's poll or cancel is one login id of at most 64 characters, so a body past this is not one. */
+const CHATGPT_DEVICE_LOGIN_BODY_BYTES = 512;
 
 export const accountContract = {
   delete: hostedProcedure
@@ -146,4 +152,24 @@ export const accountContract = {
     )
     .input(exactInput(chatGptCredentialsSaveRequestSchema))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
+  startChatGptDeviceLogin: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_DEVICE }))
+    .output(EffectSchema.flip(chatGptDeviceStartAnswerSchema)),
+  pollChatGptDeviceLogin: hostedProcedure
+    .meta(bodyCap(CHATGPT_DEVICE_LOGIN_BODY_BYTES))
+    .meta(
+      openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_DEVICE_POLL }),
+    )
+    .input(exactInput(chatGptDeviceLoginRequestSchema))
+    .output(EffectSchema.flip(chatGptDevicePollAnswerSchema)),
+  cancelChatGptDeviceLogin: hostedProcedure
+    .meta(bodyCap(CHATGPT_DEVICE_LOGIN_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_DEVICE_CANCEL,
+      }),
+    )
+    .input(exactInput(chatGptDeviceLoginRequestSchema))
+    .output(EffectSchema.flip(chatGptDevicePollAnswerSchema)),
 };
