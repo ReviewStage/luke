@@ -730,7 +730,12 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   const tab = await draw(controlAnswering());
 
   assert.equal(standing(tab), "Open");
-  assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-branches")?.textContent,
+      "main ← luke/expiry-job",
+    ),
+  );
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
   const merge = mergeControl(tab) ?? assert.fail("an open pull request has a merge control");
   assert.equal(merge.querySelector(".ui-badge")?.textContent, "Conflicts");
@@ -2404,7 +2409,7 @@ test("until the pull request's own read lands, the line under the title draws wh
   const control = controlAnswering({ pullRequest: held<never>().read });
   const tab = await draw({ ...control, workspaceId: workspace.id });
 
-  assert.deepEqual(waiting(tab), ["Reading description"]);
+  await vi.waitFor(() => assert.deepEqual(waiting(tab), ["Reading description"]));
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.match(tab.querySelector(".pull-request-opened")?.textContent ?? "", /opened/u);
 });
@@ -2925,7 +2930,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
   ] as const;
   for (const [name, control, expected] of cases) {
     const tab = await draw(control);
-    assert.deepEqual(mergeShown(tab), expected, name);
+    await vi.waitFor(() => assert.deepEqual(mergeShown(tab), expected, name));
     act(() => root?.unmount());
     root = undefined;
   }
@@ -3518,10 +3523,12 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
     undefined,
     (link) => links.push(link),
   );
-  const button =
-    tab.querySelector<HTMLButtonElement>(
-      '.pull-request-branch-row button[aria-label="Stack, 3 of 5"]',
-    ) ?? assert.fail("the stack stands beside the branches");
+  const button = await vi.waitFor(
+    () =>
+      tab.querySelector<HTMLButtonElement>(
+        '.pull-request-branch-row button[aria-label="Stack, 3 of 5"]',
+      ) ?? assert.fail("the stack stands beside the branches"),
+  );
   assert.equal(button.textContent, "Stack 3/5");
   const items = () => [
     ...document.querySelectorAll<HTMLButtonElement>(
@@ -3578,10 +3585,12 @@ test("a pull request of the stack GitHub's merge queue holds says Queued in the 
     }),
     PULL_REQUEST_VIEW.CONVERSATION,
   );
-  const button =
-    tab.querySelector<HTMLButtonElement>(
-      '.pull-request-branch-row button[aria-label="Stack, 2 of 2"]',
-    ) ?? assert.fail("the stack stands beside the branches");
+  const button = await vi.waitFor(
+    () =>
+      tab.querySelector<HTMLButtonElement>(
+        '.pull-request-branch-row button[aria-label="Stack, 2 of 2"]',
+      ) ?? assert.fail("the stack stands beside the branches"),
+  );
 
   act(() => button.click());
   const items = [
@@ -3603,7 +3612,9 @@ test("a pull request in no stack draws no stack", async () => {
       pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, stack: [] } }),
     }),
   );
-  assert.ok(tab.querySelector(".pull-request-header .pull-request-branches") !== null);
+  await vi.waitFor(() =>
+    assert.ok(tab.querySelector(".pull-request-header .pull-request-branches") !== null),
+  );
   assert.equal(tab.querySelector(".pull-request-stack"), null);
 });
 
@@ -3693,6 +3704,7 @@ test("the reviewer picker lists the repository's teams then its people, the auth
     tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Reviewer"]') ??
     assert.fail("the reviewer picker stands beside the reviewers");
 
+  await vi.waitFor(picker);
   act(() => picker().click());
   await settle();
   await vi.waitFor(() =>

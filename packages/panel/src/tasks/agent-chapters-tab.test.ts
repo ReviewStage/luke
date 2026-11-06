@@ -883,9 +883,11 @@ test("a generation that failed says why with Retry, chapters someone else is mak
       chapters: answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false),
     }),
   );
-  assert.match(
-    unavailable.textContent ?? "",
-    /Save an API key in Agents settings to generate chapters\./u,
+  await vi.waitFor(() =>
+    assert.match(
+      unavailable.textContent ?? "",
+      /Save an API key in Agents settings to generate chapters\./u,
+    ),
   );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some((each) =>
@@ -914,6 +916,7 @@ async function narrowChapters(): Promise<HTMLElement> {
   document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   layContainersAt({ "side-panel": 500 });
   const tab = await draw(controlAnswering({ chapters: answering(ready()) }));
+  await vi.waitFor(() => railToggle(tab));
   assert.equal(floatedRail(tab), null, "the rail is away until its toggle is pressed");
   return tab;
 }
