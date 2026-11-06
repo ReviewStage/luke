@@ -515,6 +515,7 @@ const StartedFromColumnSchema = Schema.NullOr(
     steps: Schema.Number,
     totalSteps: Schema.Number,
     branch: Schema.optionalKey(Schema.String),
+    drive: Schema.optionalKey(Schema.String),
   }),
 );
 /** An author as the agent's row holds it. */

@@ -567,12 +567,12 @@ test("a dropped connection shows its bar, and its action asks for the shell agai
   assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
 });
 
-test("after five idle minutes the bar says so, and any key reconnects to the same shell", async () => {
+test("a connection the host ended says so in the bar, and any key reconnects to the same shell", async () => {
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · disconnected");
-  assert.equal(tab.bar(), "Disconnected after 5 min without typing. Press any key to reconnect.");
+  assert.equal(tab.bar(), "Disconnected. Press any key to reconnect.");
   const before = main.sent.length;
   await tab.type("q", 81);
   assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
@@ -1220,7 +1220,7 @@ test("an idle close is the shown shell's alone: one said on a shell no longer sh
   await tab.choose("dev server");
   const shown = main.post(NEWER);
   shown.say({ type: "state", state: "attached" });
-  // The relay closes each terminal on its own five idle minutes: the one no longer shown first.
+  // The host ends each terminal on its own: the one no longer shown first.
   first.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · connected");
   shown.say({ type: "state", state: "idle" });

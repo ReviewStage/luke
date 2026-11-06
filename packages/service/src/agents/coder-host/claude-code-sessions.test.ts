@@ -44,6 +44,7 @@ import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { nextSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { storeWriter } from "@repo/database/models/writer";
+import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -472,7 +473,12 @@ function sighting(wanted: (sent: SentToGitHub) => boolean) {
 }
 
 /** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
-const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
+const anotherAgent = (
+  userId: string,
+  agent: Agent,
+  startBranch?: string,
+  startedFrom?: StoredStartedFrom,
+) =>
   Effect.gen(function* () {
     assert.ok(agent.taskId !== null);
     const started = yield* createAgent(userId, {
@@ -484,6 +490,7 @@ const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
       ...(startBranch === undefined ? undefined : { startBranch }),
+      ...(startedFrom === undefined ? undefined : { startedFrom }),
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     return Option.getOrThrow(started).agent;
@@ -2717,6 +2724,50 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         const ownPolicies = api.policies.filter((each) => each.session === own?.currentSessionId);
         assert.ok(JSON.stringify(ownPolicies.at(-1)?.policy).includes(writeHeader));
+      }),
+  );
+
+  it.effect(
+    "an agent continued from another opens on a fork of its source's drive, and clones, fetches, and installs nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const kept = keptAfterResponse();
+        const first = yield* sessions
+          .open(message(agent, "Fix the relay."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        yield* kept.run;
+        assert.ok(first.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const source = agentDriveName(first.sessionId);
+        const continued = yield* anotherAgent(userId, agent, undefined, {
+          agentId: agent.id,
+          steps: 0,
+          totalSteps: 0,
+          drive: source,
+        });
+
+        const opened = yield* sessions
+          .open(message(continued, "Go on."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const own = sandboxOfAgent(api, continued);
+        const drive = agentDriveName(opened.sessionId);
+        assert.equal(own?.mounts?.[AGENT_DRIVE.MOUNT_PATH]?.drive, drive);
+        assert.equal(api.driveForks.get(drive), source);
+        const ownRuns = api.runs.filter((run) => run.session === own?.currentSessionId);
+        assert.deepEqual(
+          [
+            ownRuns.filter(isClone).length,
+            ownRuns.filter(isRefresh).length,
+            ownRuns.filter(isInstall).length,
+          ],
+          [0, 0, 0],
+        );
       }),
   );
 

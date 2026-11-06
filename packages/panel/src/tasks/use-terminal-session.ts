@@ -67,9 +67,9 @@ import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
  * reloaded. While the tab shows no shell, its screen is the find's own, so
  * a stopped sandbox's bar takes Return there as it does over a shell.
  *
- * What each state asks of the developer is what a terminal asks: after five
- * minutes without typing any key reconnects, a shell that ended takes any
- * key for a new one, and the bar's action (its click, or Return) retries a
+ * What each state asks of the developer is what a terminal asks: after a
+ * disconnect any key reconnects, a shell that ended takes any key
+ * for a new one, and the bar's action (its click, or Return) retries a
  * dropped connection or resumes a stopped sandbox, which nothing but that
  * resumes. While the agent has not opened its sandbox the tab lists again
  * every few seconds, and once a shell's port is open the host waits on the

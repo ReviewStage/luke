@@ -24,7 +24,7 @@ export const TERMINAL_STATE = {
   ATTACHED: "attached",
   /** The socket dropped and the host is reconnecting by itself. */
   RECONNECTING: "reconnecting",
-  /** Closed after five minutes without typing; a key reconnects. */
+  /** Ended by the host, as a sign-out ends it; a key reconnects. */
   IDLE: "idle",
   /** The sandbox is stopped; only the developer's click resumes it. */
   STOPPED: "stopped",
@@ -159,7 +159,7 @@ export function terminalLook(state: TerminalState): TerminalLook {
       return {
         words: "disconnected",
         bar: {
-          words: "Disconnected after 5 min without typing. Press any key to reconnect.",
+          words: "Disconnected. Press any key to reconnect.",
           busy: false,
           late: false,
         },

@@ -169,11 +169,16 @@ export function selectedWords(count: number): string {
   return `${formatCount(count)} selected`;
 }
 
-/** What a selection says of a row in it, the selection bar's Clear, and the name that Clear is heard by. */
+/** What a selection says of a row in it, the selection bar's Clear, the name that Clear is heard by, and the head's box and the menu beside it. */
 export const SELECTION_WORDS = {
   SELECTED: "Selected",
   CLEAR: "Clear",
   CLEAR_SELECTION: "Clear selection",
+  SELECT_ALL: "Select all",
+  SELECT_NONE: "Select none",
+  SELECT: "Select",
+  ALL: "All",
+  NONE: "None",
 } as const;
 
 /** An Inbox item as a count of arrivals names it: "1 new item", "2 new items". */

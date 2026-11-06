@@ -16,6 +16,16 @@
  * A sandbox opened before agents had drives mounts none, and resumes as it
  * always did until its snapshot lapses.
  *
+ * An agent continued or forked from another starts on a fork of its
+ * source's drive instead, named at the Start (`StoredStartedFrom`'s
+ * `drive`) and forked at its own first open, so it takes up the source's
+ * checkout as it stands, what it never committed included, without waking
+ * the source's sandbox. A fork copies the drive's files alone: the new
+ * sandbox is created as any other, its firewall and the harness's state
+ * its own, so nothing of the source's credentials comes with it. A source
+ * mid-turn may still be writing: the fork holds what its drive held at
+ * that moment, a file half written or a git command's lock among it.
+ *
  * The drive outlives each sandbox of its session: a sandbox thrown away for
  * its lapsed snapshot leaves it, as an archive's stop does. It is deleted
  * once the session is let go of for good, at a task's, an agent's, or an
@@ -38,8 +48,13 @@ export const AGENT_DRIVE = {
   MOUNT_PATH: BASE_DRIVE.MOUNT_PATH,
 } as const;
 
-/** How the session's drive came to be mounted: kept from an earlier sandbox of the session, forked from the base drive, or made empty. */
-export const AGENT_DRIVE_FROM = { KEPT: "kept", FORKED: "forked", EMPTY: "empty" } as const;
+/** How the session's drive came to be mounted: kept from an earlier sandbox of the session, forked from the drive of the agent it was started from, forked from the base drive, or made empty. */
+export const AGENT_DRIVE_FROM = {
+  KEPT: "kept",
+  SOURCE: "source",
+  FORKED: "forked",
+  EMPTY: "empty",
+} as const;
 
 export type AgentDriveFrom = (typeof AGENT_DRIVE_FROM)[keyof typeof AGENT_DRIVE_FROM];
 
@@ -55,19 +70,34 @@ export function agentDriveName(sessionId: string): string {
   return `${AGENT_DRIVE.NAME_PREFIX}${digest.slice(0, 32)}`;
 }
 
+/** The session's drive where it stands; none for a session from before drives, or one whose drive was deleted. */
+export const standingAgentDrive = Effect.fn("web/standingAgentDrive")(function* (
+  api: VercelSandboxApi,
+  sessionId: string,
+) {
+  const name = agentDriveName(sessionId);
+  return (yield* api.getDrive(name)) === undefined ? undefined : name;
+});
+
 /**
  * The session's drive: the one standing, kept from an earlier sandbox of
- * the session; else a fork of the base drive given, where it is filled;
- * else made empty.
+ * the session; else a fork of the drive of the agent it was started from,
+ * where the Start named one; else a fork of the base drive given, where it
+ * is filled; else made empty.
  */
 export const agentDrive = Effect.fn("web/agentDrive")(function* (
   api: VercelSandboxApi,
   sessionId: string,
   base: BaseDriveOf | undefined,
+  source: string | undefined,
 ) {
   const name = agentDriveName(sessionId);
   if ((yield* api.getDrive(name)) !== undefined) {
     return { name, from: AGENT_DRIVE_FROM.KEPT } satisfies AgentDrive;
+  }
+  if (source !== undefined) {
+    yield* api.forkDrive(source, name);
+    return { name, from: AGENT_DRIVE_FROM.SOURCE } satisfies AgentDrive;
   }
   if (base !== undefined && (yield* baseDriveFilled(api, base))) {
     yield* api.forkDrive(baseDriveName(base), name);
