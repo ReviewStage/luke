@@ -16,7 +16,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -127,10 +127,12 @@ async function drawn(
         ),
       ),
     );
-  const settle = () =>
-    act(async () => {
+  const settle = async () => {
+    await act(async () => {
       for (let tick = 0; tick < 24; tick += 1) await Promise.resolve();
     });
+    await settleQueries();
+  };
   draw(reveal);
   await settle();
   return {

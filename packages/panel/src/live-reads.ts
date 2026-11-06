@@ -62,9 +62,11 @@ import {
 import {
   type AgentInboxScope,
   type AgentPullRequestReadParams,
+  type AgentTranscriptKey,
   agentInboxScopeSchema,
   PULL_REQUEST_PART,
   type PullRequestPart,
+  TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
@@ -83,6 +85,7 @@ import {
   HOST_READ_SLICE,
   KEYS_ON,
   OWN_PULL_REQUEST,
+  OWN_TRANSCRIPT,
   READ_KEYS,
 } from "@repo/host/app-state";
 import { type Query, type QueryClient, queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -189,6 +192,13 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
   [LIVE_READ.REVIEW_OPTIONS]: pullRequestPartFollow(PULL_REQUEST_PART.REVIEW_OPTIONS),
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: ([agentId, number]) =>
     askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId: String(agentId), number: Number(number) }),
+  [LIVE_READ.TRANSCRIPT]: ([agentId = "", callId]) =>
+    askAct(
+      ACT_KIND.AGENTS_TRANSCRIPT,
+      transcriptOf(String(agentId), callId === undefined ? undefined : String(callId)),
+    ),
+  [LIVE_READ.HISTORY]: ([taskId = ""]) =>
+    askAct(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId: String(taskId) }),
 };
 
 /** A pull request part's ids from its path: the agent, then the number, or `OWN_PULL_REQUEST` for the agent's own. */
@@ -212,6 +222,14 @@ const LIVE_KEY_IDS: {
   [LIVE_READ.REVIEW_OPTIONS]: pullRequestPartIds,
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: ([agentId = "", number = ""]) => [agentId, Number(number)],
 };
+
+/** The transcript a transcript's ids name: the agent's own, or its worker's by the call that started it. */
+function transcriptOf(agentId: string, callId: string | undefined): AgentTranscriptKey {
+  const kind = TRANSCRIPT_KIND.AGENT;
+  return callId === undefined || callId === OWN_TRANSCRIPT
+    ? { kind, agentId }
+    : { kind, agentId, callId };
+}
 
 /** Every live read moved here, by its name, which `use-host-read.ts` reads no more. */
 const LIVE_QUERY_READS = [
@@ -237,6 +255,8 @@ const LIVE_QUERY_READS = [
   LIVE_READ.PULL_REQUEST_VIEWED,
   LIVE_READ.REVIEW_OPTIONS,
   LIVE_READ.PULL_REQUEST_CHAPTERS,
+  LIVE_READ.TRANSCRIPT,
+  LIVE_READ.HISTORY,
 ] as const satisfies readonly LiveReadName[];
 
 /** A live read moved here, by its name. */
@@ -428,6 +448,18 @@ export const linkStandingQuery = (link: LinkStandingKey | undefined) =>
     LIVE_READ.LINK_STANDINGS,
     link === undefined ? undefined : [link.workspaceId, link.address],
   );
+/** One agent's or worker's transcript, by the agent and then the worker's call or the agent's own, which its tab holds while it shows. */
+export const transcriptQuery = (transcript: AgentTranscriptKey | undefined) =>
+  liveReadQuery(
+    LIVE_READ.TRANSCRIPT,
+    transcript === undefined
+      ? undefined
+      : [transcript.agentId, transcript.callId ?? OWN_TRANSCRIPT],
+  );
+
+/** One task's plan history, by the task, which its version history holds while it shows. */
+export const historyQuery = (taskId: string | undefined) =>
+  liveReadQuery(LIVE_READ.HISTORY, taskId === undefined ? undefined : [taskId]);
 
 /** One task's pages, or one agent's on no task, by its place; none offers Try again, since the host reads them again on its own. */
 export const pagesQuery = (place: PagePlace | undefined) =>
@@ -541,6 +573,12 @@ export const pullRequestPartRetryMutation = () =>
 
 /** Try again on a pull request's chapters. */
 export const pullRequestChaptersRetryMutation = () => actMutation(ACT_KIND.CHAPTERS_RETRY);
+
+/** Try again on a transcript. */
+export const transcriptRetryMutation = () => actMutation(ACT_KIND.AGENTS_TRANSCRIPT_RETRY);
+
+/** Try again on a plan's history. */
+export const historyRetryMutation = () => actMutation(ACT_KIND.TASKS_HISTORY_RETRY);
 
 /**
  * Writes what each push lays of a live read into its query: the rows of

@@ -18,7 +18,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
@@ -118,6 +118,7 @@ async function drawnTurn(status: AgentStatus): Promise<HTMLElement> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   return (
     container.querySelector<HTMLElement>(`.is-assistant[data-message-id="${TURN}"]`) ??
     assert.fail("the turn is drawn")

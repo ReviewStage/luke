@@ -54,7 +54,8 @@ import {
   VirtualRows,
   type VirtualRowsHandle,
 } from "@repo/ui/virtual-rows";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -453,6 +454,14 @@ function SectionsSkeleton(): React.JSX.Element {
   );
 }
 
+/** An older page of versions the read did not lay. */
+class OlderVersionsUnread extends Error {
+  constructor() {
+    super("The older versions could not be read.");
+    this.name = "OlderVersionsUnread";
+  }
+}
+
 /**
  * The foot of the list while an older page stands: how many older versions
  * wait, read a page of them on its press, and a failed read said above it
@@ -467,22 +476,16 @@ function EarlierRow({
   before: number;
   onRead: () => Promise<boolean>;
 }): React.JSX.Element {
-  const [reading, setReading] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // The read of the older page as a mutation, whose pending and failed states the row draws; one that did not land is its failure.
+  const older = useMutation({
+    mutationFn: async () => {
+      if (!(await onRead())) throw new OlderVersionsUnread();
+    },
+  });
+  const reading = older.isPending;
+  const failed = older.isError;
   const read = () => {
-    if (reading) return;
-    setReading(true);
-    setFailed(false);
-    onRead().then(
-      (landed) => {
-        setReading(false);
-        setFailed(!landed);
-      },
-      () => {
-        setReading(false);
-        setFailed(true);
-      },
-    );
+    if (!reading) older.mutate();
   };
   return (
     <div className="version-earlier mx-0 mt-control-gap mb-0 px-row-inset py-row-inset text-caption text-muted-foreground">
