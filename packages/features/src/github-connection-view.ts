@@ -1,12 +1,14 @@
 import { Schema as EffectSchema } from "effect";
 
 /**
- * github-connection-view.ts -- whether the account has a GitHub account linked, as the view and the wire both read it.
+ * github-connection-view.ts -- whether the account has a GitHub account linked, as the window reads it.
  *
- * Its own module, so the tasks view, which the window reads, takes it
- * without `github-connection-wire.ts`'s claim vocabulary, and the GitHub
- * contract takes it without the tasks view, which reads the workspace
- * failures derived from the contracts (`workspace-call.ts`).
+ * The view's copy of the connection the service answers, declared apart from
+ * `github-connection-wire.ts`, which takes it from here, because the window
+ * reads it and that one's claim vocabulary has no business in the window's
+ * bundle; and apart from `tasks-view.ts`, which carries it, because the
+ * contract tree reads it through the wire and `tasks-view.ts` reads the
+ * contract tree.
  */
 
 /** Whether the account has a GitHub account linked, and its login where the service holds one. */
