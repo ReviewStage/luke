@@ -546,7 +546,7 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 });
 
-test("an element of a page beside the Inbox opens its comment in the item's box's editor, its words a quote block rather than a line of plain text", async () => {
+test("an element of a page beside the Inbox opens its comment in the item's box's editor under the element's words, which stand as its quote line rather than in its words", async () => {
   const { container } = await inbox();
   await pressChip(container, "Invite funnel");
   const panel = container.querySelector('aside[aria-label="Panel"]') ?? assert.fail();
@@ -581,9 +581,12 @@ test("an element of a page beside the Inbox opens its comment in the item's box'
     true,
     "no plain field stands in the editor's place",
   );
-  // The editor mounts once its bundle lands, and draws the words picked as the boxes' quote block.
-  const quote = await vi.waitFor(
-    () => started.querySelector(".composer-quote") ?? assert.fail("the quote stands as a block"),
+  assert.equal(
+    started.querySelector(".comment-quote")?.textContent,
+    "Totals",
+    "the element's words stand over the field as the thread's quote line",
   );
-  assert.equal(quote.textContent, "Totals");
+  // The editor mounts once its bundle lands, its words the writer's own alone.
+  await vi.waitFor(() => started.querySelector(".ProseMirror") ?? assert.fail("the editor stands"));
+  assert.equal(started.querySelector(".composer-quote"), null, "the words do not repeat the quote");
 });
