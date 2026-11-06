@@ -8,8 +8,9 @@ import {
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { useAct } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { useGitHubConnection } from "./github-connect.js";
 import type { IntegrationStatuses } from "./integration-statuses.js";
 
@@ -51,7 +52,9 @@ export function grantedBySignIn(provider: IntegrationProvider): boolean {
 
 /** Begins a grant: GitHub's through the account's GitHub connect, any other's through Vercel Connect. */
 export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationGrant {
-  const { act } = useAct();
+  const { mutateAsync: connectIntegration } = useMutation(
+    actMutation(ACT_KIND.INTEGRATIONS_CONNECT),
+  );
   const { connect } = useGitHubConnection();
   const { signInBegun } = statuses;
 
@@ -72,12 +75,10 @@ export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationG
 
   const add = useCallback(
     async (provider: IntegrationProvider): Promise<GrantOutcome> => {
-      const answer = await act(ACT_KIND.INTEGRATIONS_CONNECT, { provider, add: true }).catch(
-        () => undefined,
-      );
+      const answer = await connectIntegration({ provider, add: true }).catch(() => undefined);
       return outcomeOf(answer, provider);
     },
-    [act, outcomeOf],
+    [connectIntegration, outcomeOf],
   );
 
   const begin = useCallback(
@@ -93,13 +94,13 @@ export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationG
         signInBegun(provider);
         return GRANT_OUTCOME.BEGUN;
       }
-      const answer = await act(ACT_KIND.INTEGRATIONS_CONNECT, {
+      const answer = await connectIntegration({
         provider,
         ...(server === provider ? undefined : { connection: server }),
       }).catch(() => undefined);
       return outcomeOf(answer, server);
     },
-    [act, connect, signInBegun, outcomeOf, add, statuses],
+    [connectIntegration, connect, signInBegun, outcomeOf, add, statuses],
   );
 
   return { begin, add };

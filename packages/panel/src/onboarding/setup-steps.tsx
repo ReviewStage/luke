@@ -14,9 +14,10 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
@@ -158,7 +159,8 @@ interface SetupStepsProps {
 
 /** The step setup stands at. */
 function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { mutate: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
+  const { mutateAsync: signOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
@@ -192,7 +194,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const finish = () => {
     // Finished, the account's place is let go of, as setup stands no more on any machine.
     // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
-    tell(ACT_KIND.SETTING_UPDATE, { field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
+    updateSetting({ field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
     keepFinished((finished) => [...finished, accountId]);
     changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
@@ -216,7 +218,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     label: "Sign out",
     onPress: () =>
       void signOutSayingFailure(async () => {
-        await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+        await signOut();
       }),
   };
   const teamForm = useTeamForm({
