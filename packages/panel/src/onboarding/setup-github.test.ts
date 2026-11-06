@@ -15,7 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdGitHubToken, holdRepositoryLists } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { GitHubSetup } from "./setup-github.js";
 
 /**
@@ -41,10 +41,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 test("a workspace reached through the App draws the App's card checked, its done line naming the owners", async () => {
