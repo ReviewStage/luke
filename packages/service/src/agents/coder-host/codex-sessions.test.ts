@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
+  CODEX_PLAN_BACKEND,
   type CodexConfig,
   INPUT_LINE,
   type InputLine,
@@ -48,7 +49,12 @@ import { DateTime, Effect, Layer, Option, Redacted, Result, Schema } from "effec
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import {
+  CHATGPT_OAUTH,
+  CODEX_DEVICE_OAUTH,
+  sealChatGptCredentials,
+  sealCodexDeviceCredentials,
+} from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { sweepCodexPlanSwaps } from "../../maintenance/codex-plan-sweep.js";
@@ -107,6 +113,8 @@ const ISSUED_CLIENT = "oaiapp_test_client";
 const THREAD = "019a0b1c-2d3e-7f40-8a5b-6c7d8e9f0a1b";
 const TOKEN_URL = "https://app.test/api/agents/runner-token";
 const MINUTE = 60 * 1000;
+/** The ChatGPT workspace a device-code login's ID token names. */
+const WORKSPACE = "chatgpt-workspace-fixture";
 
 function ring(): KeyRing {
   const parsed = parseKeyRing(Redacted.make(KEK));
@@ -115,15 +123,21 @@ function ring(): KeyRing {
 }
 
 /**
- * OpenAI's token endpoint as a renewal reaches it: each renewal rotates the
- * refresh token and answers the next access token, good for an hour.
+ * OpenAI's token endpoint as a renewal reaches it, a third-party sign-in's
+ * as a form and a device-code login's as Codex's JSON: each renewal rotates
+ * the refresh token and answers the next access token, good for an hour.
  */
 function openAi() {
   const state = { renewals: 0 };
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
-    assert.equal(url, CHATGPT_OAUTH.TOKEN_URL, `an unexpected call to OpenAI: ${url}`);
-    const form = new URLSearchParams(await new Response(init.body).text());
-    assert.equal(form.get("refresh_token"), `refresh-${state.renewals}`);
+    const body = await new Response(init.body).text();
+    const refreshToken =
+      url === CODEX_DEVICE_OAUTH.TOKEN_URL
+        ? (JSON.parse(body) as { readonly refresh_token?: string }).refresh_token
+        : url === CHATGPT_OAUTH.TOKEN_URL
+          ? new URLSearchParams(body).get("refresh_token")
+          : assert.fail(`an unexpected call to OpenAI: ${url}`);
+    assert.equal(refreshToken, `refresh-${state.renewals}`);
     state.renewals += 1;
     return Response.json({
       access_token: `access-${state.renewals}`,
@@ -232,6 +246,31 @@ const signIn = (userId: string, minutesLeft: number) =>
     );
   });
 
+/** The account's plan connected through Codex's device-code login, its access token `access-0` good for the minutes given. */
+const signInThroughDevice = (userId: string, minutesLeft: number) =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const accessExpiresAt = new Date(now.getTime() + minutesLeft * MINUTE);
+    const { sealed, hint } = sealCodexDeviceCredentials(ring(), userId, {
+      accessToken: "access-0",
+      refreshToken: "refresh-0",
+      idToken: "id-token-0",
+      accountId: "chatgpt-subject",
+      chatgptAccountId: WORKSPACE,
+      accessExpiresAt,
+    });
+    yield* saveProviderKey(
+      userId,
+      PROVIDER_KEY_PROVIDER.OPENAI,
+      PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+      sealed,
+      hint,
+      null,
+      now,
+      accessExpiresAt,
+    );
+  });
+
 function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
   const options: CodexSessionsOptions = {
     userId,
@@ -246,12 +285,12 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
   return codexSessions(options);
 }
 
-/** What the newest policy the sandbox's firewall was sent sets on OpenAI's API. */
-const openAiRules = (api: ReturnType<typeof runnerSandboxApi>) => {
+/** What the newest policy the sandbox's firewall was sent sets on the host given: OpenAI's API, unless another is named. */
+const openAiRules = (api: ReturnType<typeof runnerSandboxApi>, host = "api.openai.com") => {
   const policy = api.policies.at(-1)?.policy as
     | { readonly allow?: Readonly<Record<string, unknown>> }
     | undefined;
-  return policy?.allow?.["api.openai.com"];
+  return policy?.allow?.[host];
 };
 
 /** The swap the firewall carries for a credential: its bearer set where a request carries the placeholder's. */
@@ -377,6 +416,17 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           assert.equal(plan.stored.includes(secret), false, "a secret in the row in the clear");
         }
         assert.equal(JSON.stringify(plan.secrets).includes("access-0"), false);
+
+        // Connected again through Codex's device-code login: the runner is told Codex's ChatGPT backend and the workspace, and still handed no token.
+        yield* signInThroughDevice(userId, 60);
+        const device = yield* launched(yield* localAgent(AGENT_PAYER.CHATGPT_SUBSCRIPTION));
+        assert.deepEqual(device.secrets.env, {
+          [RUNNER_ENV.CODEX_PLAN_BACKEND]: CODEX_PLAN_BACKEND.CHATGPT,
+          [RUNNER_ENV.CHATGPT_ACCOUNT_ID]: WORKSPACE,
+          [RUNNER_ENV.BEARER]: device.secrets.env[RUNNER_ENV.BEARER],
+        });
+        assert.equal(device.config.tokenUrl, TOKEN_URL);
+        assert.equal(JSON.stringify(device.secrets).includes("access-0"), false);
       }),
   );
 
@@ -407,6 +457,9 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.match(command.args[1] ?? "", /exec setpriv --reuid=agent --regid=agent/u);
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        // A third-party sign-in's launch names no backend, so the runner sends to OpenAI's API as it always has.
+        assert.equal(command.env[RUNNER_ENV.CODEX_PLAN_BACKEND], undefined);
+        assert.equal(command.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID], undefined);
         // App-server and its token command hold the placeholder, which the firewall standing as the
         // runner started swaps on our host for the bearer whose digest the agent's row records.
         const placeholder = command.env[RUNNER_ENV.BEARER];
@@ -459,6 +512,31 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           assert.equal(visible.includes(secret), false, "a secret outside the environment");
         }
         assert.equal(JSON.stringify(command.env).includes(bearer), false);
+      }),
+  );
+
+  it.effect(
+    "a plan connected through Codex's device-code login launches toward Codex's ChatGPT backend and its workspace, its token held at the firewall on chatgpt.com alone",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        yield* signInThroughDevice(userId, 60);
+        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api)));
+
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [command] = api.commands;
+        assert.ok(command !== undefined);
+        assert.equal(command.env[RUNNER_ENV.CODEX_PLAN_BACKEND], CODEX_PLAN_BACKEND.CHATGPT);
+        assert.equal(command.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID], WORKSPACE);
+        const tokenPlaceholder = command.env[RUNNER_ENV.CODEX_TOKEN];
+        assert.ok(tokenPlaceholder !== undefined && tokenPlaceholder.length > 20);
+        assert.deepEqual(openAiRules(api, "chatgpt.com"), [swapRule(tokenPlaceholder, "access-0")]);
+        assert.equal(openAiRules(api), undefined);
+        assert.equal(JSON.stringify([command.args, api.sandboxes]).includes("access-0"), false);
       }),
   );
 
@@ -850,6 +928,40 @@ it.layer(getTestDB())("the scheduled renewal of a Codex plan's token", (it) => {
         yield* TestClock.adjust("1 minute");
         assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
         assert.equal(openai.state.renewals, 1);
+      }),
+  );
+});
+
+// A database of its own too, so the sweep reads this launch's firewall record alone.
+it.layer(getTestDB())("the scheduled renewal of a device-code plan's token", (it) => {
+  it.effect(
+    "a device-code plan's swap is renewed on chatgpt.com, and left once the plan is connected again through the third party, whose token that host would refuse",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const openai = openAi();
+        const { userId, agent } = yield* openAgent;
+        yield* signInThroughDevice(userId, 60);
+        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
+        const swept = Effect.flatMap(DateTime.nowAsDate, (now) =>
+          sweepCodexPlanSwaps(NO_KEYS.providerKeyEncryptionKeys, now).pipe(
+            Effect.provide(services(api, openai)),
+          ),
+        );
+
+        yield* TestClock.adjust("20 minutes");
+        assert.deepEqual(yield* swept, { renewed: 1, failed: 0 });
+        assert.deepEqual(openAiRules(api, "chatgpt.com"), [swapRule(placeholder, "access-1")]);
+
+        const sent = api.policies.length;
+        yield* signIn(userId, 60);
+        assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
+        assert.equal(api.policies.length, sent);
+        assert.deepEqual(openAiRules(api, "chatgpt.com"), [swapRule(placeholder, "access-1")]);
       }),
   );
 });
