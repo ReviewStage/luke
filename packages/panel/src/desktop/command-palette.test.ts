@@ -3039,7 +3039,6 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
     card?.querySelector(".ui-hover-card-name")?.textContent,
     "Which webhook secret should rotate?",
   );
-  assert.match(card?.textContent ?? "", /Rotate the Stripe signing secret today\./u);
 });
 
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {

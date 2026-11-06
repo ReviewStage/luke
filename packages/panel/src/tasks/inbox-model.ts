@@ -928,12 +928,6 @@ export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
 }
 
-/** What an item's hover card reads of its thread: the agent's latest words, plain. */
-export function inboxCardWords(item: InboxItem): string {
-  const said = (item.thread ?? []).findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
-  return said === undefined ? "" : plainWords(said.text);
-}
-
 /**
  * The steps of an item's open to-do its row shows ticked, as its box
  * shows them (`shownTicks`): every one while Mark done is pressed in its

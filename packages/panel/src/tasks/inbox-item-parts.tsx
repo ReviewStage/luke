@@ -24,7 +24,6 @@ import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
-  HoverCardNote,
   HoverCardRow,
   HoverCardRule,
   HoverCardSkeleton,
@@ -61,7 +60,6 @@ import {
   type InboxHolder,
   type InboxLineKind,
   type InboxListed,
-  inboxCardWords,
   inboxLineKind,
   inboxSettledStanding,
   inboxSettledWords,
@@ -232,9 +230,10 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
  * it, its title, where it stands, waiting on the reader, on a teammate, or
  * settled, and when it last moved; then what holds it, a task as its key
  * and its chip, which wears its status, or an automation by its name;
- * how it ended, once it has; and the agent's latest words, three lines at
- * most. Note that it draws no open ask's options or steps, because a card
- * takes no press and they would read as controls; the item's box answers. The agent that asked
+ * and how it ended, once it has. Note that it draws no message of the
+ * thread, which the row's own second line already previews, and no open
+ * ask's options or steps, because a card takes no press and they would
+ * read as controls; the item's box answers. The agent that asked
  * stands at its foot, the loading spinner beside it while it works.
  */
 export function InboxItemCard({
@@ -254,7 +253,6 @@ export function InboxItemCard({
   const { needsYou, starter, nameOf } = useInboxStanding(listed, readerId);
   const settled = inboxSettledWords(item, nameOf);
   const subject = itemSubject(holder, item.agentId, models, readerId);
-  const words = inboxCardWords(item);
   // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
   const line =
     holder.kind === INBOX_HOLDER.TASK
@@ -277,7 +275,6 @@ export function InboxItemCard({
           label={settled}
         />
       )}
-      {words === "" ? null : <HoverCardNote>{words}</HoverCardNote>}
       <HoverCardRule />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
