@@ -544,6 +544,42 @@ it.effect(
 );
 
 it.effect(
+  "a launch whose claim's answer was lost is not settled by a beat before its claim is asked again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Note that the line is claimed at the fourteenth second and its answer lost, so the beat at the fifteenth hears the service hold it before the claim is asked again at the sixteenth; the service answers that claim only while it still holds the line, as it does once the line is settled.
+        let landed: string | undefined;
+        const { service, spawned, settled, beats } = yield* followingDevice(() => Effect.void, {
+          linesAfter: Duration.seconds(14),
+          claim: (
+            token,
+          ): Effect.Effect<DeviceAgentClaimedLine | { readonly claimed: false } | undefined> =>
+            Effect.sync(() => {
+              if (landed === undefined) {
+                landed = token;
+                service.held.add(LINE_ID);
+                return undefined;
+              }
+              return token === landed && service.held.has(LINE_ID)
+                ? LAUNCH
+                : { claimed: false as const };
+            }),
+        });
+        yield* until(() => beats.length > 0);
+        yield* TestClock.adjust(Duration.seconds(14));
+        yield* until(() => landed !== undefined);
+        yield* TestClock.adjust(Duration.seconds(2));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
   "a launch whose repository could not be made is settled unstarted and lets go of the GitHub token it was handed",
   () =>
     Effect.scoped(

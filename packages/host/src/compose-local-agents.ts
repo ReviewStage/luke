@@ -1098,8 +1098,9 @@ export function composeLocalAgents(
          * hand-over are uninterruptible, because a line the service granted
          * is this Mac's alone to deliver, and its token is let go of in the
          * same step, so no line is handed over twice. Both hold `claiming`,
-         * so a beat never settles a launch whose claim is unanswered; none is
-         * asked once the device has paused its claims to switch releases.
+         * and a beat leaves a line whose token is kept, so it never settles a
+         * launch whose claim is unanswered; none is asked once the device has
+         * paused its claims to switch releases.
          */
         const lineTaken = (id: string) =>
           Effect.uninterruptible(
@@ -1199,10 +1200,14 @@ export function composeLocalAgents(
             const unknown = [...open].filter((id) => !heard.knew.has(id));
             if (unknown.length === 0) return;
             // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
+            // Note too that a line whose claim's answer was lost keeps its token until it is asked again, so it is left for that claim to deliver.
             yield* claiming.withPermit(
               Effect.forEach(
                 unknown,
-                (id) => (starting.has(id) || runningLaunches().has(id) ? Effect.void : settle(id)),
+                (id) =>
+                  starting.has(id) || runningLaunches().has(id) || claimTokens.has(id)
+                    ? Effect.void
+                    : settle(id),
                 { discard: true },
               ),
             );
