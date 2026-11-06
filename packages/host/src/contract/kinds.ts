@@ -122,7 +122,7 @@ export const AGENT_ACT_KIND = {
    * The models a coding agent may run on as the account is offered them,
    * and its devices, held for the window while it holds the stream open and
    * a while after among those let go lately, asked again as a window comes
-   * forward, as the provider keys move, and every `MODEL_CATALOG_TTL`: what
+   * forward and as the provider keys move: what
    * it holds reaches the panel on app state (`LIVE_READ.MODELS`), so the
    * stream carries nothing.
    */

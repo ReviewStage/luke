@@ -63,7 +63,7 @@ import {
 } from "@repo/features/inbox-writes";
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
-import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
+import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
@@ -795,7 +795,6 @@ function fetchedReads(
       path: (userId) => [userId],
       gate,
       focus,
-      every: MODEL_CATALOG_TTL,
       fetch: (userId) =>
         userId === accountId()
           ? Effect.map(asked(client.models()), (answer) =>
