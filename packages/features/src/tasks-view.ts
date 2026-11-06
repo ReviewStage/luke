@@ -9,6 +9,7 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
+import { githubContract } from "./contract/github.js";
 import { repositoryPinsContract } from "./contract/repository-pins.js";
 import { taskFilesContract } from "./contract/task-files.js";
 import { taskSectionsContract } from "./contract/task-sections.js";
@@ -410,6 +411,12 @@ const declaredTaskCalls = {
   files: taskFilesContract,
   sections: taskSectionsContract,
   pins: repositoryPinsContract,
+  repositories: githubContract.repositories,
+  repositoryFile: githubContract.repositoryFile,
+  repositoryTree: githubContract.repositoryTree,
+  repositorySkills: githubContract.repositorySkills,
+  repositoryPullRequest: githubContract.repositoryPullRequest,
+  repositoryIssue: githubContract.repositoryIssue,
 };
 
 /** Every failure those procedures may end with, as the domain spells it. */
