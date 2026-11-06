@@ -30,7 +30,9 @@
  * write; one that read the plan's swap before a renewal sends the token it
  * read, which still has the renewal's margin left; and a clone's token
  * stands only in its own writes, so another writer landing during a clone
- * takes it off. A clear is made ahead of a stop, so whether to write is the
+ * takes it off, though the clone goes on under the agent's own credential
+ * that writer carries, minted afresh, which reaches every repository the
+ * agent clones. A clear is made ahead of a stop, so whether to write is the
  * caller's to read.
  *
  * A placeholder swap is how a secret leaves the sandbox: the process that
