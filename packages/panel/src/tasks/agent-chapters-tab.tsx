@@ -194,11 +194,11 @@ const CHAPTERS_WORDS = {
     runsOn === undefined
       ? "No chapters yet."
       : `No chapters yet. Generating them runs on your ${API_KEY_WORDS[runsOn.provider]}.`,
-  /** The Generate, naming the model it would run on where the read says. */
+  /** The Generate, naming the model it would run on where the read says, short enough that an empty state's width holds it whole. */
   generate: (runsOn: ChaptersRunsOn | undefined) =>
     runsOn === undefined
       ? "Generate chapters"
-      : `Generate chapters (${chaptersModelLabel(runsOn.model)})`,
+      : `Generate with ${chaptersModelLabel(runsOn.model)}`,
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",

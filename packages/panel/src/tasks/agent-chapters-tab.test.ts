@@ -600,7 +600,7 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters on
     ["Conversation", "Checks", "Chapters", "Files"],
   );
   // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
-  const generate = await vi.waitFor(() => button(tab, "Generate chapters (GPT-6 Luna)"));
+  const generate = await vi.waitFor(() => button(tab, "Generate with GPT-6 Luna"));
   assert.match(tab.textContent ?? "", /Generating them runs on your OpenAI API key\./u);
   act(() => generate.click());
   await settle();
@@ -864,7 +864,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
   );
 
   // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
-  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  const generate = await vi.waitFor(() => button(tab, "Generate with Haiku 5.5"));
   act(() => generate.click());
   await settle();
   assert.equal(heading(tab), "Read the expiry");
@@ -931,7 +931,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some((each) =>
-      each.textContent?.startsWith("Generate chapters"),
+      each.textContent?.startsWith("Generate"),
     ),
     false,
   );
