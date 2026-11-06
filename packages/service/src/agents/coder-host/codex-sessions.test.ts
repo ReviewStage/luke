@@ -115,6 +115,8 @@ const TOKEN_URL = "https://app.test/api/agents/runner-token";
 const MINUTE = 60 * 1000;
 /** The ChatGPT workspace a device-code login's ID token names. */
 const WORKSPACE = "chatgpt-workspace-fixture";
+/** The paths of Codex's ChatGPT backend, the one place on chatgpt.com a device-code plan's token is set. */
+const CODEX_BACKEND_PATH = "/backend-api/codex/";
 
 function ring(): KeyRing {
   const parsed = parseKeyRing(Redacted.make(KEK));
@@ -293,9 +295,10 @@ const openAiRules = (api: ReturnType<typeof runnerSandboxApi>, host = "api.opena
   return policy?.allow?.[host];
 };
 
-/** The swap the firewall carries for a credential: its bearer set where a request carries the placeholder's. */
-const swapRule = (placeholder: string, credential: string) => ({
+/** The swap the firewall carries for a credential: its bearer set where a request carries the placeholder's, under the path given where one is. */
+const swapRule = (placeholder: string, credential: string, startsWith?: string) => ({
   match: {
+    ...(startsWith === undefined ? undefined : { path: { startsWith } }),
     headers: [{ key: { exact: "authorization" }, value: { exact: `Bearer ${placeholder}` } }],
   },
   transform: [{ headers: { authorization: `Bearer ${credential}` } }],
@@ -534,7 +537,9 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(command.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID], WORKSPACE);
         const tokenPlaceholder = command.env[RUNNER_ENV.CODEX_TOKEN];
         assert.ok(tokenPlaceholder !== undefined && tokenPlaceholder.length > 20);
-        assert.deepEqual(openAiRules(api, "chatgpt.com"), [swapRule(tokenPlaceholder, "access-0")]);
+        assert.deepEqual(openAiRules(api, "chatgpt.com"), [
+          swapRule(tokenPlaceholder, "access-0", CODEX_BACKEND_PATH),
+        ]);
         assert.equal(openAiRules(api), undefined);
         assert.equal(JSON.stringify([command.args, api.sandboxes]).includes("access-0"), false);
       }),
@@ -955,13 +960,17 @@ it.layer(getTestDB())("the scheduled renewal of a device-code plan's token", (it
 
         yield* TestClock.adjust("20 minutes");
         assert.deepEqual(yield* swept, { renewed: 1, failed: 0 });
-        assert.deepEqual(openAiRules(api, "chatgpt.com"), [swapRule(placeholder, "access-1")]);
+        assert.deepEqual(openAiRules(api, "chatgpt.com"), [
+          swapRule(placeholder, "access-1", CODEX_BACKEND_PATH),
+        ]);
 
         const sent = api.policies.length;
         yield* signIn(userId, 60);
         assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
         assert.equal(api.policies.length, sent);
-        assert.deepEqual(openAiRules(api, "chatgpt.com"), [swapRule(placeholder, "access-1")]);
+        assert.deepEqual(openAiRules(api, "chatgpt.com"), [
+          swapRule(placeholder, "access-1", CODEX_BACKEND_PATH),
+        ]);
       }),
   );
 });
