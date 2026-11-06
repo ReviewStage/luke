@@ -129,10 +129,7 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
   ],
-  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [
-    GATEWAY_METHOD.PORT_FORWARDS_READ,
-    GATEWAY_METHOD.PORT_FORWARDS_SET,
-  ],
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [GATEWAY_METHOD.PORT_FORWARDS_SET],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 
 /** The table a platform concern's composer answers: every method it names, and no other. */

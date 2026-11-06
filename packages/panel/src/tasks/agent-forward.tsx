@@ -1,7 +1,5 @@
-import { useAtomValue } from "@effect/atom-react";
 import { AGENT_MACHINE, type AgentSummary } from "@repo/features/agent-wire";
 import { PORT_FORWARD_STATE, type PortForwardingAnswer } from "@repo/features/port-forward-acts";
-import { FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import {
@@ -17,13 +15,9 @@ import {
   useMenu,
 } from "@repo/ui";
 import { PlugIcon } from "@repo/ui/icons";
-import { Clock, Duration, Option, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useState } from "react";
-import { askAct, toastActFailure } from "../act.js";
+import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
-import { rendererRuntime } from "../renderer-runtime.js";
-import { useCapability } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
 
 /**
  * agent-forward.tsx -- the Forward chip an agent's message box wears beside its Cloud chip: whether the agent's cloud ports are forwarded to this Mac's localhost, and the menu that turns it on and opens them.
@@ -36,19 +30,14 @@ import { useCapability } from "../use-app-state.js";
  * A press raises a menu with the Forward to localhost switch and, while it
  * is on, one row per port, "3000 → localhost:3000", whose press opens that
  * address in the default browser; "No ports detected" where none listens,
- * and "Sandbox not running" while the sandbox is stopped. The host pushes
- * nothing, so the chip reads the agent's forwarding as it mounts and every
- * few seconds while it stands. Every word it draws is the app's own, port
+ * and "Sandbox not running" while the sandbox is stopped. The host keeps
+ * how forwarding stands in app state (`portForwarding`), following the
+ * sandbox's ports itself, so the chip only reads it. Every word it draws is the app's own, port
  * numbers among them, so a screen recording shows them as they read.
  */
 
-/** How often the chip reads the agent's forwarding while it stands. */
-const READ_EVERY = Duration.seconds(3);
-
-/** A tick each `READ_EVERY`, which runs only while a chip reads it. */
-const readTickAtom = rendererRuntime.atom(
-  Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(READ_EVERY)),
-);
+/** What an agent forwarding is off for reads. */
+const OFF: PortForwardingAnswer = { on: false, running: false, ports: [] };
 
 /** What the chip and its menu say. */
 const WORDS = {
@@ -97,54 +86,22 @@ function portRows(answer: PortForwardingAnswer, onOpen: (localPort: number) => v
   );
 }
 
-/** The agent's forwarding as last read, read again each tick, and turned on or off. */
-function usePortForwarding(agentId: string): {
-  answer: PortForwardingAnswer | undefined;
-  onTurn: (on: boolean) => void;
-} {
-  const tick = Option.getOrUndefined(AsyncResult.value(useAtomValue(readTickAtom)));
-  const [read, setRead] = useState<{ agentId: string; answer: PortForwardingAnswer }>();
-  useEffect(() => {
-    // Note that the tick is read so each one reads again.
-    void tick;
-    let standing = true;
-    askAct(ACT_KIND.PORT_FORWARD_READ, { agentId }).then(
-      (answer) => {
-        if (standing) setRead({ agentId, answer });
-      },
-      () => undefined,
-    );
-    return () => {
-      standing = false;
-    };
-  }, [agentId, tick]);
-  const onTurn = (on: boolean) => {
-    const payload = { agentId, on };
-    askAct(ACT_KIND.PORT_FORWARD_SET, payload).then(
-      (answer) => setRead({ agentId, answer }),
-      (cause: unknown) =>
-        toastActFailure({
-          surface: FAILURE_SURFACE.ACT,
-          act: ACT_KIND.PORT_FORWARD_SET,
-          cause,
-          about: failureAboutOf(payload),
-        }),
-    );
-  };
-  return { answer: read?.agentId === agentId ? read.answer : undefined, onTurn };
+/** The agent's forwarding as the host keeps it: off for any agent but the one forwarded. */
+function useForwarding(agentId: string): PortForwardingAnswer {
+  const forwarding = useAppSlice(APP_SLICE.PORT_FORWARDING);
+  return forwarding?.agentId === agentId ? forwarding : OFF;
 }
 
-/** The chip and its menu, once the agent's forwarding is first read. */
+/** The chip and its menu. */
 function ForwardControl({
   agentId,
   narrow,
 }: {
   agentId: string;
   narrow: boolean;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const menu = useMenu(true);
-  const { answer, onTurn } = usePortForwarding(agentId);
-  if (answer === undefined) return null;
+  const answer = useForwarding(agentId);
   const words = forwardChipWords(answer);
   const glyph = answer.on ? (
     <StatusGlyph tone={STATUS_TONE.COMPLETE} label={WORDS.FORWARDING}>
@@ -158,7 +115,7 @@ function ForwardControl({
     checked: answer.on,
     mark: MENU_ITEM_MARK.SWITCH,
     stays: true,
-    onSelect: () => onTurn(!answer.on),
+    onSelect: () => void pressAct(ACT_KIND.PORT_FORWARD_SET, { agentId, on: !answer.on }),
   };
   const ports = portRows(answer, (localPort) =>
     appPlatform().openWeb(`http://${localAddress(localPort)}`),
