@@ -5,9 +5,10 @@
  * can spell these kinds in `ACT_KIND` without resolving the contract behind
  * them, and so the lint rule `anti-slop/no-follow-outside-host-read` can
  * load this file as it stands to read `PORT_ACT_USE`: that is why each
- * kind's use is declared here rather than on its procedure. A kind here is
- * the key of its procedure in `actContract`, so the panel's act door calls a
- * kind by its own name.
+ * kind's use is declared here rather than on its procedure, and why a
+ * declared act (`declared-act.ts`) reads its kind and use from here by its
+ * name rather than restating them. A kind here is the key of its procedure
+ * in `actContract`, so the panel's act door calls a kind by its own name.
  */
 
 /** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, the account deleted, and its grant of support access. */

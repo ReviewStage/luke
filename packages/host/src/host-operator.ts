@@ -85,30 +85,10 @@ import {
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptOlderAnswerSchema,
-  type ChatGptDeviceLoginParams,
-  type ChatGptDevicePollAnswerView,
-  type ChatGptDeviceStartAnswerView,
-  type ChatGptDeviceWaitParams,
-  chatGptDevicePollAnswerViewSchema,
-  chatGptDeviceStartAnswerViewSchema,
-  type DictationTranscribeAnswerView,
-  type DictationTranscribeParams,
-  dictationTranscribeAnswerViewSchema,
-  type GitHubTokenAnswerView,
-  type GitHubTokenSaveParams,
-  githubTokenAnswerViewSchema,
   type HostDoneAnswerView,
   hostDoneAnswerViewSchema,
-  type MemoriesAnswerView,
   type MemoriesFollowParams,
-  type MemoryForgetParams,
-  memoriesAnswerViewSchema,
-  type ProviderKeyForAgentsParams,
-  type ProviderKeyRemoveParams,
-  type ProviderKeySaveParams,
-  type ProviderKeysAnswerView,
   type PullRequestPartParams,
-  providerKeysAnswerViewSchema,
   type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
@@ -877,18 +857,6 @@ export interface HostOperator {
   providerKeysRetry(): Effect.Effect<void>;
   /** The account's provider keys the host holds for the windows, whole, each time any of them moves. */
   onProviderKeysChanged(listener: (held: AppProviderKeys) => void): () => void;
-  /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
-  providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
-  providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
-  providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
-  chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
-  /** A device-code login waited on until it settles or an ask after it goes unanswered; the keys as they then stand once it connected. */
-  chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
-  /** A device-code login withdrawn; how it then stands. */
-  chatGptDeviceCancel(params: ChatGptDeviceLoginParams): Effect.Effect<ChatGptDevicePollAnswerView>;
   /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
   githubTokenFollow(): Effect.Effect<void>;
   /** The member's GitHub token let go by the windows. */
@@ -897,10 +865,6 @@ export interface HostOperator {
   githubTokenRetry(): Effect.Effect<void>;
   /** The member's GitHub token the host holds for the windows, whole, each time it moves. */
   onGitHubTokenChanged(listener: (held: AppGitHubTokens) => void): () => void;
-  /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
-  githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
-  /** The member's GitHub token removed; none then stands. */
-  githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
   /** The memories our agents kept in a workspace, held for the windows from now until let go and followed live; what they hold is heard through `onMemoriesChanged`. */
   memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
   /** A workspace's memories let go by the windows. */
@@ -909,12 +873,6 @@ export interface HostOperator {
   memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
   /** Every workspace's memories the host holds for the windows, whole, each time any of them moves. */
   onMemoriesChanged(listener: (held: AppMemories) => void): () => void;
-  /** One memory forgotten for good, drawn gone at once over the held memories; the workspace's memories as they then stand, or why they are unchanged. */
-  memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
-  /** One dictated clip, carried once; its words, or why there are none. */
-  dictationTranscribe(
-    params: DictationTranscribeParams,
-  ): Effect.Effect<DictationTranscribeAnswerView>;
   /** One task's or agent's inbox held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHolderInboxesChanged`. */
   agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go by the windows: it stays followed among those let go lately until later ones push it out. */
@@ -2342,50 +2300,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppProviderKeys>(payload) : undefined),
         listener,
       ),
-    providerKeySave: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
-          provider: params.provider,
-          ...(params.kind === undefined ? undefined : { kind: params.kind }),
-          key: params.key,
-        }),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    providerKeyRemove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
-          provider: params.provider,
-          ...(params.kind === undefined ? undefined : { kind: params.kind }),
-        }),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    providerKeyForAgents: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS, {
-          provider: params.provider,
-          kind: params.kind,
-          forAgents: params.forAgents,
-        }),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptDeviceStart: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_START),
-        answerOf(chatGptDeviceStartAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptDeviceWait: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_WAIT, {
-          loginId: params.loginId,
-          intervalSeconds: params.intervalSeconds,
-        }),
-        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptDeviceCancel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL, { loginId: params.loginId }),
-        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
     githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
     githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
@@ -2395,16 +2309,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held token is the host's own, handed over in this process, so it is passed on as built, as the held keys are.
         (payload) => (isRecord(payload) ? answered<AppGitHubTokens>(payload) : undefined),
         listener,
-      ),
-    githubTokenSave: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: params.token }),
-        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    githubTokenRemove: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
-        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
     memoriesFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: params.workspaceId })),
@@ -2418,23 +2322,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held memories are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppMemories>(payload) : undefined),
         listener,
-      ),
-    memoryForget: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MEMORIES_FORGET, {
-          workspaceId: params.workspaceId,
-          id: params.id,
-        }),
-        answerOf(memoriesAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    dictationTranscribe: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
-          audio: params.audio,
-          durationMs: params.durationMs,
-          keywords: [...params.keywords],
-        }),
-        answerOf(dictationTranscribeAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentInboxFollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id })),

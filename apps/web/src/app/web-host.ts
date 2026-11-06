@@ -320,6 +320,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    acts: operator.acts,
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
@@ -421,6 +422,7 @@ const composedWeb = (
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
+        acts: assembly.acts,
         nodes: assembly.nodes,
         node: { openExternal: async (url) => tabs.open(url) },
         state,

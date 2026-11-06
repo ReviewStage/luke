@@ -480,18 +480,6 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_UNFOLLOW: "providerKeys.unfollow",
   /** The account's held provider keys asked again at once, as Try again asks; answered once the ask has landed. */
   PROVIDER_KEYS_RETRY: "providerKeys.retry",
-  /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
-  PROVIDER_KEYS_SAVE: "providerKeys.save",
-  /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
-  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
-  /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
-  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
-  CHATGPT_DEVICE_START: "chatGpt.device.start",
-  /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
-  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
-  /** A device-code login withdrawn, by its login id; how it then stands. */
-  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * The member's own GitHub token as its login, hint, and status, never the
    * token, held for a window from now until it is let go, asked of the
@@ -505,10 +493,6 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_UNFOLLOW: "githubToken.unfollow",
   /** The member's held GitHub token asked again at once, as Try again asks; answered once the ask has landed. */
   GITHUB_TOKEN_RETRY: "githubToken.retry",
-  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept, which is laid on its held read too. */
-  GITHUB_TOKEN_SAVE: "githubToken.save",
-  /** The member's GitHub token removed on the service; none then stands, which is laid on its held read too. */
-  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * The memories our agents kept in one workspace, held for a window from
    * now until it is let go, followed on the service's live read, and a while
@@ -521,10 +505,6 @@ export const GATEWAY_METHOD = {
   MEMORIES_UNFOLLOW: "memories.unfollow",
   /** One workspace's held memories read again at once, as Try again asks; answered once the ask has landed. */
   MEMORIES_RETRY: "memories.retry",
-  /** One memory forgotten on the service for good, drawn gone at once over the workspace's held memories; the workspace's memories as they then stand. */
-  MEMORIES_FORGET: "memories.forget",
-  /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
-  DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
    * One plan's inbox, or one agent's, held followed for a window from now
    * until it is let go, over Neon Realtime, and a while after among the
