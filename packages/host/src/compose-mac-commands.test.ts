@@ -549,6 +549,7 @@ it.effect("Deny answers the call as not run, declined, and runs nothing", () =>
         assert.deepEqual(built.asks(), []);
         // An answer after the ask went runs nothing (below).
         yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
+        yield* settled;
       }),
     );
     const answered = service.settledResults.get(COMMAND.id);
@@ -684,6 +685,7 @@ it.effect(
           yield* settled;
           assert.deepEqual(built.asks(), []);
           yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
+          yield* settled;
         }),
       );
       assert.deepEqual(spawner.spawned, []);
