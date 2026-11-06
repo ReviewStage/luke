@@ -1428,6 +1428,7 @@ function DescriptionDocument({
                             onOpenLocal={terminalDoors.onOpenLocal}
                             onOpenBrowser={phone ? openBrowser : undefined}
                             onShown={phone ? setShownAgentTab : undefined}
+                            onOpenAgent={openAgentColumn}
                             waiting={waitingOf}
                           />
                         </TaskTabsRow>
