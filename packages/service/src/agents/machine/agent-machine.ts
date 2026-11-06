@@ -37,6 +37,7 @@
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
+import type { FirewallOwner } from "@repo/database/models/provider-key-seal";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect, type Redacted } from "effect";
@@ -169,9 +170,10 @@ export interface ResumedPlace {
 /**
  * A running place's firewall, the account whose agent it is named beside
  * it: the whole policy written from the sources given and the swaps of the
- * launch kept for it; a launch's swaps kept ahead of its first write; or
- * that launch deleted ahead of a stop, the policy left as it stands (`../sandbox-firewall.ts`). A machine with no
- * firewall of ours does nothing.
+ * launch kept for it; a launch's swaps kept ahead of its first write;
+ * that launch deleted ahead of a stop, the policy left as it stands
+ * (`../sandbox-firewall.ts`); or a standing launch's renewed credential set
+ * afresh, as the sweep does. A machine with no firewall of ours does nothing.
  */
 interface MachineFirewall {
   readonly write: (
@@ -187,7 +189,52 @@ interface MachineFirewall {
   readonly clear: (
     place: MachinePlace,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  /**
+   * The swap a standing launch holds for a renewed credential set afresh,
+   * at the firewall of the sandbox session its owner names
+   * (`SwapRenewalAsk`): the launch kept for the session read, the fresh
+   * value asked only where the launch holds the slot, its swap renewed
+   * behind the same placeholder where it stands on the target's host and
+   * does not set that value already, and the session's whole policy written
+   * with the agent's repository credential minted afresh, since every write
+   * is whole. What failed short of the write answers how it came out
+   * (`SWAP_RENEWAL`), and the read of the kept launch or the write failing
+   * fails the call. A machine with no firewall of ours leaves it.
+   */
+  readonly renew: <E extends { readonly _tag: string }, R>(
+    owner: FirewallOwner,
+    ask: SwapRenewalAsk<E, R>,
+  ) => Effect.Effect<SwapRenewal, SandboxUnavailable, R | CheckoutServices>;
 }
+
+/** A renewal of a standing launch's swap: the slot, where the credential is sent and behind which scheme, as its launch declared it, and the read answering its fresh value, without its scheme, or none where there is none to set. */
+export interface SwapRenewalAsk<E, R> {
+  readonly credential: Pick<RunnerCredential, "slot" | "target" | "scheme">;
+  readonly fresh: Effect.Effect<Redacted.Redacted<string> | undefined, E, R>;
+}
+
+/** How a renewal of a launch's swap came out (`MachineFirewall`'s `renew`). */
+export const SWAP_RENEWAL = {
+  /** The fresh value set behind the swap's placeholder, and the session's policy written. */
+  RENEWED: "renewed",
+  /** Nothing to set: no launch holds the slot, its swap sets the fresh value already, or no sandbox runs the session any more. */
+  LEFT: "left",
+  /** The swap stands on another host than the credential's target, which the fresh value is never sent to. */
+  ELSEWHERE: "elsewhere",
+  /** The fresh read answered none. */
+  UNANSWERED: "unanswered",
+  /** The fresh read, the sandbox's lookup, or the repository credential failed, by the failure's tag. */
+  FAILED: "failed",
+} as const;
+
+export type SwapRenewal =
+  | {
+      readonly outcome: Exclude<
+        (typeof SWAP_RENEWAL)[keyof typeof SWAP_RENEWAL],
+        typeof SWAP_RENEWAL.FAILED
+      >;
+    }
+  | { readonly outcome: typeof SWAP_RENEWAL.FAILED; readonly failure: string };
 
 /** Whether the service renews a runner's credential while its launch stands. */
 export const CREDENTIAL_RENEWAL = {

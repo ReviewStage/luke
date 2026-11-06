@@ -133,6 +133,7 @@ import {
   type RunnerCredential,
   type RunnerHandle,
   type RunnerLaunch,
+  SWAP_RENEWAL,
 } from "./agent-machine.js";
 
 export const MAC_MACHINE = {
@@ -491,6 +492,7 @@ function deviceMachineOver(
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
       clear: () => Effect.void,
+      renew: () => Effect.succeed({ outcome: SWAP_RENEWAL.LEFT }),
     },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
