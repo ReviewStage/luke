@@ -28,7 +28,6 @@ import {
   List,
   ListMotion,
   ListRow,
-  type ListRowLead,
   motionRows,
   NOTE_LINE_LOOK,
   NoteLine,
@@ -63,7 +62,7 @@ import {
   useResizeEdge,
   useRovingKeys,
 } from "@repo/ui";
-import { type Actor, actorName, personActor } from "@repo/ui/actor-model";
+import { actorName, personActor } from "@repo/ui/actor-model";
 import { CheckCheckIcon, GLYPH, InboxIcon, SlidersHorizontalIcon, UsersIcon } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
@@ -138,7 +137,6 @@ import {
   INBOX_SHOW,
   INBOX_WHOSE,
   type InboxCounts,
-  type InboxHolder,
   type InboxListed,
   type InboxListView,
   type InboxShow,
@@ -199,10 +197,7 @@ import { cardTitle } from "./tool-call-model.js";
  * task lists every item it holds, open and settled, addressed to anyone,
  * with no view's menu, and names the task in a chip over the list, its ×
  * listing every task's items again under the view kept. Every row, in the window's Inbox and a
- * task's own alike, names its task on its first line, over its title, but
- * in a list standing inside its holder's own room, an agent's card, which
- * heads the list with its way back and its own name in a bar title's type
- * and leaves the task unsaid (`within`).
+ * task's own alike, names its task on its first line, over its title.
  * Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
  * view that holds something, as a mail app's empty unread view does; the
@@ -429,25 +424,6 @@ interface InboxHeadSelecting {
 }
 
 /**
- * A row's first line: what holds the item, its glyph and name, and whom its
- * agent addressed it to after them, since its task's assignee may be
- * someone else; whom alone where the holder goes unsaid, and no line where
- * neither is said.
- */
-function rowLead(
-  holder: InboxHolder | undefined,
-  addressedTo: { readonly userId: string; readonly name: string } | undefined,
-  addressee: Actor,
-): ListRowLead | undefined {
-  const whom = addressedTo === undefined ? undefined : addressedWords(addressee);
-  if (holder === undefined) return whom === undefined ? undefined : { icon: null, label: whom };
-  return {
-    icon: <HolderGlyph holder={holder} />,
-    label: whom === undefined ? holderName(holder) : `${holderName(holder)} · ${whom}`,
-  };
-}
-
-/**
  * One item as a `ListRow` of three lines, as a mail app lists a thread,
  * one thing to a line so nothing is cut short to make room for another:
  * what holds it, its task's status and whole name, and whom its agent
@@ -504,7 +480,6 @@ export const InboxItemRow = memo(function InboxItemRow({
   face = true,
   muted = false,
   needsYouShown = false,
-  holderShown = true,
   ref,
   selectKey,
   onChoose,
@@ -534,8 +509,6 @@ export const InboxItemRow = memo(function InboxItemRow({
   muted?: boolean;
   /** Whether the row stands under a name that already says Needs you, the scope's or a section's, so it leaves the words unsaid. */
   needsYouShown?: boolean;
-  /** Whether the row's first line names what holds the item, which a list standing inside its holder's own room leaves unsaid, naming only whom it is addressed to. */
-  holderShown?: boolean;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
@@ -595,7 +568,14 @@ export const InboxItemRow = memo(function InboxItemRow({
           </span>
         }
         describedAs={heard}
-        lead={rowLead(holderShown ? holder : undefined, addressedTo, addressee)}
+        lead={{
+          icon: <HolderGlyph holder={holder} />,
+          // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
+          label:
+            addressedTo === undefined
+              ? holderName(holder)
+              : `${holderName(holder)} · ${addressedWords(addressee)}`,
+        }}
         leadAt={LIST_ROW_LEAD.ABOVE}
         meta={
           <InboxItemMarks
@@ -1037,8 +1017,8 @@ function ListHead({
   /** The items chosen in the list, which the head stands for while any is; none while none is. */
   selecting?: InboxHeadSelecting | undefined;
 }): React.JSX.Element {
-  const { shown, view, within } = head;
-  const title = within?.title ?? INBOX_TITLE;
+  const { shown, view } = head;
+  const title = INBOX_TITLE;
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
   // A task's own Inbox tab hands the open item's link to the tab's ⋯.
@@ -1163,10 +1143,10 @@ function ListHead({
         <PaneBar mark={all} title={heading} titleReplayUnmasked actions={actions} />
       ) : (
         <Toolbar
-          lead={all ?? within?.lead}
+          lead={all ?? head.lead}
           title={barTitle}
           titleReplayUnmasked
-          quiet={within !== undefined}
+          quiet={head.lead !== undefined}
           actions={actions}
           end={TOOLBAR_INSET.COLUMN}
         />
@@ -1352,23 +1332,16 @@ export interface InboxListHead {
   /** The task the window's Inbox is narrowed to, which a chip over the list names and clears; none where it lists every task's items. */
   readonly task?: InboxTaskHead | undefined;
   /**
-   * Where the list stands inside its holder's own room, an agent's card in
-   * its task's column (`agent-threads.tsx`): the way back that leads the
-   * head, and the list's own name beside it, set in a bar title's type
-   * rather than a page's, since the card's tab and the task's topbar already
-   * say where it stands; its rows name no holder over their titles, for the
-   * same reason. None on the window's Inbox. Note that select-all stands in
-   * the way back's place while rows are chosen, because a list as narrow as
-   * the Inbox's has no room for both beside the selection's acts, and
-   * choosing is a passing mode its × and Escape end.
+   * What leads the head's title: an agent's card's way back to its
+   * transcript (`agent-threads.tsx`), beside which the Inbox's name takes a
+   * bar title's type rather than a page's (`Toolbar`'s `quiet`), since the
+   * list stands inside the card, under the window's own bar; none on the
+   * window's Inbox. Note that
+   * select-all stands in its place while rows are chosen, because a list as
+   * narrow as the Inbox's has no room for both beside the selection's acts,
+   * and choosing is a passing mode its × and Escape end.
    */
-  readonly within?: InboxListWithin | undefined;
-}
-
-/** A list standing inside its holder's own room: the way back leading its head, and its own name. */
-export interface InboxListWithin {
-  readonly lead: React.ReactNode;
-  readonly title: string;
+  readonly lead?: React.ReactNode | undefined;
 }
 
 /** The task the window's Inbox is narrowed to, as the chip over its list names it: its name and its status, none while it is not listed yet, and the × that clears it. */
@@ -1677,7 +1650,6 @@ export function InboxList({
       readerId={readerId}
       muted={isDone(listed.item)}
       needsYouShown={needsYouListed(head)}
-      holderShown={head.within === undefined}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}

@@ -1586,18 +1586,6 @@ function PhoneHolder({
 }
 
 /**
- * Where the pane stands inside the room of what holds the item, an agent's
- * card in its task's column (`agent-threads.tsx`): its way back names the
- * list it goes back to, and its bar names neither the task nor the agent,
- * which the card's tab and the task's topbar already name, so it holds the
- * item's title alone, once its heading has scrolled away.
- */
-export interface InboxPaneWithin {
-  /** The way back's words, and the place its hint names. */
-  readonly back: { readonly label: string; readonly place: string };
-}
-
-/**
  * One item at reading size, as a comment thread: under the pane's crumbs,
  * the item's title alone as the thread's subject, then every message of
  * its thread, oldest first, the reader's plain replies on their way after
@@ -1646,8 +1634,14 @@ export function InboxPane({
   phone?: InboxPanePhone | undefined;
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
-  /** Where the pane stands inside the room of what holds the item, an agent's card (`InboxPaneWithin`); none in the window's Inbox. */
-  within?: InboxPaneWithin | undefined;
+  /**
+   * Whether the pane stands inside the room of what holds the item, an
+   * agent's card in its task's column (`agent-threads.tsx`): its bar names
+   * neither the task nor the agent, which the card's tab and the task's
+   * topbar already name, holding the item's title alone, in a bar title's
+   * type, once its heading has scrolled away.
+   */
+  within?: boolean | undefined;
 }): React.JSX.Element {
   const connected = useConnected();
   const now = useMinute();
@@ -1819,22 +1813,18 @@ export function InboxPane({
           place="inbox-item"
           // Note that a bar inside the item's holder's room that leads with no way back starts on the title it picks up, words rather than crumbs.
           start={
-            within !== undefined && onBack === undefined ? TOOLBAR_INSET.PAGE : TOOLBAR_INSET.COLUMN
+            within === true && onBack === undefined ? TOOLBAR_INSET.PAGE : TOOLBAR_INSET.COLUMN
           }
           wrapHeading
           lead={
             onBack === undefined ? undefined : (
               <ReplayUnmask>
-                <BackButton
-                  label={within?.back.label ?? "Inbox"}
-                  place={within?.back.place ?? INBOX_PLACE}
-                  onBack={onBack}
-                />
+                <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
               </ReplayUnmask>
             )
           }
           title={
-            within === undefined ? (
+            within === true ? undefined : (
               <Crumbs
                 holder={holder}
                 by={by}
@@ -1842,12 +1832,10 @@ export function InboxPane({
                 title={cardTitle(item.title)}
                 titleShown={headingAway}
               />
-            ) : undefined
+            )
           }
-          pickUp={
-            within === undefined ? undefined : { name: cardTitle(item.title), shown: headingAway }
-          }
-          quiet={within !== undefined}
+          pickUp={within === true ? { name: cardTitle(item.title), shown: headingAway } : undefined}
+          quiet={within === true}
           actions={
             <>
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
