@@ -1280,12 +1280,22 @@ export function composeLocalAgents(
          * service would only retire past their window. A runner at work
          * skips the line, and is asked again at the next beat; one that ends
          * settles its launch as any exit does, and the service's next message
-         * relaunches it on the new release.
+         * relaunches it on the new release. Asked under `claiming`, and only
+         * where no line is claimed or waits to be delivered, so no message
+         * this device took lands on a runner's stdin behind the line; one the
+         * service writes as the runner ends is not fenced here, and its turn
+         * reads failed past `CODER.LINE_GRACE`.
          */
-        const retiredWarm = Effect.forEach(
-          runners.values(),
-          (runner) => Queue.offer(runner.stdin, RETIRE_LINE),
-          { discard: true },
+        const retiredWarm = claiming.withPermit(
+          Effect.suspend(() =>
+            claimTokens.size > 0 || undelivered > 0
+              ? Effect.void
+              : Effect.forEach(
+                  [...runners.values()],
+                  (runner) => Queue.offer(runner.stdin, RETIRE_LINE),
+                  { discard: true },
+                ),
+          ),
         );
 
         /** A beat's answer converged to (`reconciledBeat`), its release handed to the host's update, and, while one waits, the warm runners retired and the switch made where the device is idle. */

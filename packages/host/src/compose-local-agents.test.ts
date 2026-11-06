@@ -930,12 +930,16 @@ it.effect(
       const stdin = spawned.find((each) => each.program === RUNNER)?.stdin;
       assert.ok(typeof stdin === "object" && "stream" in stdin && Stream.isStream(stdin.stream));
       const retire = JSON.stringify({ type: INPUT_LINE.RETIRE });
-      const written = yield* (stdin.stream as Stream.Stream<Uint8Array>).pipe(
+      const retireWritten = (stdin.stream as Stream.Stream<Uint8Array>).pipe(
         Stream.decodeText(),
         Stream.takeUntil((text) => text.includes(retire)),
         Stream.runCollect,
       );
+      const written = yield* retireWritten;
       assert.ok(written.at(-1)?.includes(retire), "the runner is asked to end where it is warm");
+      yield* beatsOn(1);
+      const writtenAgain = yield* retireWritten;
+      assert.ok(writtenAgain.at(-1)?.includes(retire), "and asked again at a later beat");
 
       service.held.delete(LINE_ID);
       yield* beatsOn(2);
