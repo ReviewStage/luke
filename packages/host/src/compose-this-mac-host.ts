@@ -23,6 +23,7 @@ import type { ChildProcessSpawner } from "effect/process";
 import { type AppThisMacHost, type AppThisMacHosts, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { deviceLeft } from "./daemon/host-leave.js";
 import { Reporter, ThisMacHost } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import { type HostDevice, readHostDevice, writeHostDevice } from "./host-device-record.js";
@@ -271,16 +272,28 @@ export function composeThisMacHost(
       ),
     );
 
-    /** This Mac turned off: the install's own uninstall run, which takes the host out of the account and off this Mac; whether it ran. */
+    /**
+     * This Mac turned off: the install's own uninstall run, which takes the
+     * host off this Mac, and then its record's device left on its own secret,
+     * read before the uninstall deleted it. Note that the app leaves as well,
+     * because a host release from before uninstall left the account itself
+     * deletes the secret without, and a leave the service already took
+     * answers as gone. Whether the uninstall ran.
+     */
     const turnedOff = oneAtATime(
       Effect.gen(function* () {
         if (!host.runsHost) return false;
+        const record = yield* ownServiceRecord;
         const removed = yield* host.uninstall;
         if (Result.isFailure(removed)) {
           report(`this Mac's host could not be removed: ${removed.failure}`);
           return false;
         }
         report("this Mac's host was removed");
+        if (HOST_RELEASE !== undefined && Option.isSome(record) && record.value.refused !== true) {
+          const left = yield* deviceLeft(record.value, HOST_RELEASE.VERSION);
+          if (!left) report("this Mac's host could not leave the account, so it stays listed");
+        }
         return true;
       }),
     );

@@ -3,7 +3,7 @@ import { HOST_WIRE } from "@repo/features/host-wire";
 import { Effect, Option } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { readHostDevice } from "../host-device-record.js";
+import { type HostDevice, readHostDevice } from "../host-device-record.js";
 
 /**
  * host-leave.ts -- a box removing itself from its account on its own device secret, as `vespin-host uninstall` does before it deletes that secret.
@@ -35,23 +35,26 @@ export interface HostLeaveInput {
   readonly version: string;
 }
 
+/** The device given removed from its account on its own secret, the version given on the call; whether it is gone. */
+export const deviceLeft = (device: HostDevice, version: string) =>
+  new HostedDeviceAgentClient({
+    serviceBaseUrl: device.serviceOrigin,
+    credential: { authorization: () => Effect.succeed(`Bearer ${device.deviceSecret}`) },
+  })
+    .leave(device.deviceId)
+    .pipe(
+      Effect.updateService(
+        HttpClient.HttpClient,
+        HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
+      ),
+    );
+
 /** The box removed from its account on its record's secret, its daemon's version on the call; how it went. */
 export const leaveHostDevice = Effect.fnUntraced(function* (input: HostLeaveInput) {
   const record = yield* readHostDevice(input.stateRoot);
   if (Option.isNone(record)) return HOST_LEAVE_OUTCOME.NOT_CONNECTED;
   const device = record.value;
   if (device.refused === true) return HOST_LEAVE_OUTCOME.LEFT;
-  const client = new HostedDeviceAgentClient({
-    serviceBaseUrl: device.serviceOrigin,
-    credential: { authorization: () => Effect.succeed(`Bearer ${device.deviceSecret}`) },
-  });
-  const left = yield* client
-    .leave(device.deviceId)
-    .pipe(
-      Effect.updateService(
-        HttpClient.HttpClient,
-        HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, input.version)),
-      ),
-    );
+  const left = yield* deviceLeft(device, input.version);
   return left ? HOST_LEAVE_OUTCOME.LEFT : HOST_LEAVE_OUTCOME.UNANSWERED;
 });
