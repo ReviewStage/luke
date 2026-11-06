@@ -93,7 +93,9 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Until when the reader snoozed the item, in epoch milliseconds, while nothing has changed on it since; null where they did not or a change woke it, and absent from a service before snoozing. */
+  /** When the reader's reminder on the item comes due, in epoch milliseconds, while nothing has changed on it since; null where they set none or a change ended it, and absent from a service before reminders. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** `remindAt` under the key a desktop from before the rename reads, which the service still fills and no client reads: the key goes with the minimum supported desktop version. */
   snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
@@ -149,7 +151,9 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, as a task's item says it, and on the same terms. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Until when the reader snoozed the item, as a task's item says it, and on the same terms. */
+  /** When the reader's reminder on the item comes due, as a task's item says it, and on the same terms. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** `remindAt` under the key a desktop from before the rename reads, as a task's item carries it, and on the same terms. */
   snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 

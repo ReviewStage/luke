@@ -152,7 +152,7 @@ import {
   sentStamp,
 } from "./inbox-model.js";
 import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
-import type { InboxSnoozer } from "./inbox-snooze.js";
+import type { InboxReminder } from "./inbox-remind.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { REPLY_SCOPE, ReplyDoorProvider } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
@@ -1169,7 +1169,7 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U, and Snooze, naming H; and, while the
+ * agent; Mark as read or unread, naming U, and Remind me, naming H; and, while the
  * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
@@ -1179,14 +1179,14 @@ function InboxItemMenu({
   shown,
   onMark,
   onClose,
-  onSnooze,
+  onRemind,
   lead = NO_LEAD,
   heading,
 }: {
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
-  onSnooze?: InboxSnoozer | undefined;
+  onRemind?: InboxReminder | undefined;
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -1200,7 +1200,7 @@ function InboxItemMenu({
     onMark,
     onAskClose: close.ask,
     keyed: true,
-    snooze: onSnooze === undefined ? undefined : { onSnooze },
+    remind: onRemind === undefined ? undefined : { onRemind },
   });
   // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read here as the menu is drawn rather than as the lead was made.
   const groups = itemGroups(lead === NO_LEAD ? lead : [...lead, ...phoneFindGroups()]);
@@ -1366,8 +1366,8 @@ export interface InboxPaneDoors {
   readonly code: InboxCodeDoors;
   /** Marks the item read or unread, from the bar's ⋯ menu; none where the pane offers no mark. */
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
-  /** Snoozes the item from its ⋯ menu, or ends its snooze; none where the pane offers no snooze. */
-  readonly onSnooze?: InboxSnoozer | undefined;
+  /** Sets the item's reminder from its ⋯ menu, or cancels it; none where the pane offers no reminder. */
+  readonly onRemind?: InboxReminder | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
 }
@@ -1734,7 +1734,7 @@ export function InboxPane({
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
-              onSnooze={doors.onSnooze}
+              onRemind={doors.onRemind}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1780,7 +1780,7 @@ export function InboxPane({
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
-                onSnooze={doors.onSnooze}
+                onRemind={doors.onRemind}
                 onClose={doors.onClose}
               />
             </>

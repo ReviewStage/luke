@@ -46,7 +46,7 @@ function toDoByTask(
  * each standing task's open items main lists as theirs, and every open item
  * from an agent with no task of that workspace (`listedIn`) that waits on
  * them (`waitsOnReader`), a question or a notice alike, as Needs you lists
- * them, less those the developer snoozed until after `now`, which Needs you
+ * them, less those whose reminder the developer set for after `now`, which Needs you
  * leaves out until they come back. Note that a notice counts until it is opened, because opening it
  * settles it as Got it does; a teammate's thread and a settled one never
  * count, and one the reader settles leaves main's read the moment it is
@@ -62,7 +62,7 @@ function waitingThreads(tasks: TasksControl, now: number): readonly AppInboxWait
     (each) => waitsOnReader(each, tasks.me) && listedIn(each, tasks.workspace?.id),
   );
   return [...ofTasks, ...taskless].filter(
-    (item) => item.snoozedUntil === undefined || item.snoozedUntil <= now,
+    (item) => item.remindAt === undefined || item.remindAt <= now,
   );
 }
 

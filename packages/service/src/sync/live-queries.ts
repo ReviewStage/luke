@@ -389,7 +389,7 @@ function instantParam(param: string): Date {
  * as for the account's inbox: either shows at the hold's end. The settled
  * items it carries are those changed since `settledSince`, which its
  * procedure binds from the clock, since a live statement reads none, and
- * those the reader snoozed and has not read since.
+ * those the reader set a reminder on and has not read since.
  *
  * A reader past a sync id is answered the items that moved alone, each
  * whole (`accountItemsDeltaStatements`), taking the moved rows its

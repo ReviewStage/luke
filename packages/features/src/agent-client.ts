@@ -1687,15 +1687,15 @@ export class HostedAgentClient {
     );
   }
 
-  /** One item snoozed for the account until `until`, in epoch milliseconds, or its snooze ended where `until` is null, whether it is read standing as it was, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
-  snoozeInboxItem(
+  /** One item's reminder set for the account for `until`, in epoch milliseconds, or canceled where `until` is null, whether it is read standing as it was, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
+  remindInboxItem(
     itemId: string,
     until: number | null,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(
-        this.#hosted.inbox.snoozeItem,
+        this.#hosted.inbox.remindItem,
         { params: { id: itemId }, body: { until } },
         HOSTED_DEADLINE.USUAL,
         key,
