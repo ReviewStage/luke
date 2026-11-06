@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "a4c42291-4bb4-4353-9014-0e7cd3ca9d8e",
-  "prevIds": ["7ed21d73-d6a0-408e-a423-1ff91fd05d7e", "e65de6f5-1819-4ca9-b5f6-26ae8615f9a7"],
+  "id": "1b2190a4-79d8-4120-b5a6-552b88c19f39",
+  "prevIds": ["a2e14864-92b5-4670-9c8c-ea33e38c2038"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -6716,7 +6716,20 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "snoozed_until",
+      "name": "remind_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "inbox_item_read"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "remind_through",
       "entityType": "columns",
       "schema": "public",
       "table": "inbox_item_read"

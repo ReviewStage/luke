@@ -381,7 +381,7 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     durationMs: number,
   ) => Effect.Effect<SessionLifetime, SandboxUnavailable>;
-  /** Sets the running sandbox session's network policy whole; every writer of ours goes through `sandbox-firewall.ts`, which composes it from what stands. */
+  /** Sets the running sandbox session's network policy whole; every writer of ours goes through `sandbox-firewall.ts`, which composes it whole from its sources. */
   readonly updateNetworkPolicy: (
     sandboxSessionId: string,
     policy: NetworkPolicy,

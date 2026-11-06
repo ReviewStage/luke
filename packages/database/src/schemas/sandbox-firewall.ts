@@ -14,9 +14,9 @@ import { user } from "./auth.js";
  * session is, naming the agent, with the swaps as the service sealed them
  * under the deployment's key ring, bound to that account and session
  * (`../models/sandbox-firewall-store.ts`, `@repo/service`'s
- * `agents/sandbox-firewall.ts`). The row goes as its launch ends or the session is cleared ahead of its stop,
- * and the scheduled sweep drops a row left past the longest a session can
- * run. Every row goes with its account.
+ * `agents/sandbox-firewall.ts`). The row goes as its launch ends or the
+ * session is cleared ahead of its stop, and the scheduled sweep drops a row
+ * left past the longest a session can run. Every row goes with its account.
  */
 export const sandboxFirewall = pgTable(
   "sandbox_firewall",
