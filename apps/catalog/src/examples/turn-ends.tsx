@@ -1,7 +1,7 @@
 /**
  * turn-ends.tsx -- the line an agent's turn ends on: failed with Try again
  * on its row, failed with Continue in new agent, failed on a refused key
- * with its remedy inside the line, stopped, a failure too long to share its
+ * with Connect Claude on its row, stopped, a failure too long to share its
  * row in a narrow column, and the row centered as an empty tab's column is.
  */
 
@@ -53,11 +53,11 @@ function TurnEnds(): React.JSX.Element {
           </TurnEnd>
         </div>
       </CatalogSection>
-      <CatalogSection id="turn-end-remedy" title="Failed on a refused key, its remedy in the line">
+      <CatalogSection id="turn-end-remedy" title="Failed on a refused key, with Connect Claude">
         <div className="catalog-frame">
           <TurnEnd
             failure={CATALOG_FAILURE}
-            remedy={
+            press={
               <Button variant={BUTTON_VARIANT.OUTLINE} onClick={stay}>
                 Connect Claude
               </Button>

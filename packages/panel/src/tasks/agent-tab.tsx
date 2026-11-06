@@ -1766,7 +1766,9 @@ function useTurnEndSaid(ended: EndLineParts | undefined, pageRuns: boolean): voi
  * The line a transcript ends on once its turn was stopped or failed, and
  * the press on its row (`TurnEnd`): a failure reported under its cause, a
  * stop's words alone. A turn failed on the reader's own refused key offers
- * its harness's row in Settings after the words, inside the line.
+ * its harness's row in Settings as the row's press, where no other press
+ * stands, since a key the reader mends offers neither Continue nor Try
+ * again.
  */
 function AgentEndRow({
   ended,
@@ -1787,7 +1789,7 @@ function AgentEndRow({
   /** Whether it stands in the empty state's own centered column, centered as its column is. */
   centered?: boolean;
 }): React.JSX.Element {
-  // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
+  // Note that a key refused is mended at its harness's row in Settings, so its row offers that row as its press.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
       ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words, provider: keyProvider })
@@ -1805,14 +1807,15 @@ function AgentEndRow({
   return (
     <TurnEnd
       failure={failure}
-      remedy={
-        remedy === undefined ? undefined : (
+      press={
+        remedy === undefined ? (
+          press
+        ) : (
           <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
             {remedy}
           </Button>
         )
       }
-      press={press}
       centered={centered}
     >
       {ended.words}
