@@ -10,7 +10,6 @@ import {
   createActPortHandler,
   macShellProcedures,
   type PlatformActProcedures,
-  portForwardProcedures,
   terminalProcedures,
 } from "@repo/host/act-port";
 import type { AppStateSnapshot } from "@repo/host/app-state";
@@ -141,7 +140,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         execFile("/usr/bin/open", ["-a", "Terminal", folder], () => undefined),
       exists: (folder) => fs.existsSync(folder),
     }),
-    ...portForwardProcedures<WebContents>({ host: operator.host }),
     ...terminalProcedures<WebContents>({
       host: operator.host,
       ports: {
@@ -225,7 +223,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         chapters: { host: operator.host },
         installedSkills: { host: operator.host },
         integrations: { host: operator.host },
-        macCommands: { host: operator.host },
         pushes: windowPushes,
         settings: {
           host: operator.host,

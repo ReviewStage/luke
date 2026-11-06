@@ -15,7 +15,7 @@ import {
   type MacShellResult,
 } from "@repo/features/mac-command-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { carried, GATEWAY_EVENT } from "@repo/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
 import {
   Clock,
@@ -33,7 +33,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { MAC_COMMAND_ACTS } from "./contract/index.js";
 import { Environment, Reporter } from "./effect/seams.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
 import { decodedLiveRows, LIVE_RESTART, waitOrRegained } from "./live-follow.js";
@@ -41,7 +43,6 @@ import {
   MAC_COMMAND_DECISION,
   type MacCommandAsk,
   type MacCommandDecision,
-  macCommandAnswerSchema,
 } from "./mac-command-ask.js";
 import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
@@ -142,7 +143,9 @@ export interface MacCommandsDependencies {
   client: MacCommandClient;
 }
 
-export type MacCommandsComposer = Composer;
+export interface MacCommandsComposer extends Composer {
+  readonly acts: HostActTable<typeof MAC_COMMAND_ACTS>;
+}
 
 /** What a command taken as the setting was switched off, or the account signed out, answers. */
 const SWITCHED_OFF: MacShellResult = {
@@ -477,21 +480,16 @@ export function composeMacCommands(
       yield* Effect.forkScoped(Effect.forever(guarded));
     });
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.MAC_COMMANDS> = {
-      /** The developer's answer to one ask, by its id; one no longer waiting, answered or timed out, is told so. */
-      [GATEWAY_METHOD.MAC_COMMAND_ANSWER]: (params) =>
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.MAC_COMMANDS> = {};
+    const acts: HostActTable<typeof MAC_COMMAND_ACTS> = {
+      /** The developer's answer to one ask, by its id; one no longer waiting, answered or timed out, is answered all the same, since the prompt goes with it. */
+      MAC_COMMAND_ANSWER: ({ id, decision }) =>
         Effect.gen(function* () {
-          const read = yield* readParams(
-            macCommandAnswerSchema,
-            params,
-            "an answer names an ask and a decision",
-          );
-          const held = asks.get(read.id);
-          if (held === undefined) return carried({ answered: false });
-          yield* Deferred.succeed(held.decided, read.decision);
-          return carried({ answered: true });
+          const held = asks.get(id);
+          if (held === undefined) return;
+          yield* Deferred.succeed(held.decided, decision);
         }),
     };
-    return { methods, lifetime } satisfies MacCommandsComposer;
+    return { methods, acts, lifetime } satisfies MacCommandsComposer;
   });
 }
