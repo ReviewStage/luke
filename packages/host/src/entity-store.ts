@@ -874,6 +874,7 @@ const databaseKey = Effect.fn("host/entityDatabaseKey")(function* (
         ),
       );
   if (opened !== undefined && KEY_PATTERN.test(opened)) return opened;
+  // Note that a key that reads but will not open is lost for good: a store opens only once the account is signed in, so the same cipher opened the account's tokens this launch, and the system's key it holds no longer asks the Keychain; what it cannot open was sealed under another key, or is damaged.
   yield* databaseRemoved(directory);
   const key = hexOf(crypto.getRandomValues(new Uint8Array(KEY_BYTES)));
   const sealed = yield* Effect.try(() => Base64.encode(cipher.encrypt(key))).pipe(
