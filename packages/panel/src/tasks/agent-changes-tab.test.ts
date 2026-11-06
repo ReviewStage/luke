@@ -1326,6 +1326,10 @@ async function standNearView(path: string): Promise<HTMLElement> {
   document.body.append(slot);
   comeIntoView();
   await flush();
+  // Note that a picture's read reaches React a tick after it lands, as the window's queries hand it on.
+  await vi.waitFor(() =>
+    assert.equal((slot.textContent ?? "").includes("Reading the picture"), false),
+  );
   return slot;
 }
 
@@ -1474,10 +1478,9 @@ test("an image side whose read did not land offers Retry, which reads it again a
 
   refusing.clear();
   act(() => retry?.click());
-  await flush();
 
+  await vi.waitFor(() => assert.equal(slot.querySelector("img")?.alt, "Added"));
   assert.deepEqual(asked, [after, after]);
-  assert.equal(slot.querySelector("img")?.alt, "Added");
 });
 
 test("an SVG moved with its contents unchanged offers no source, having no lines to show", async () => {

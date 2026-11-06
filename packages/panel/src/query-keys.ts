@@ -45,4 +45,6 @@ export const QUERY_ROOT = {
   TERMINAL_LIST: "terminal-list",
   /** One version of a plan, as its version history draws it (`tasks/use-plan-history.ts`). */
   TASK_REVISION: "task-revision",
+  /** A picture the window reads (`picture-query.ts`'s `pictureQuery`), by what it belongs to and its id there. */
+  PICTURE: "picture",
 } as const;

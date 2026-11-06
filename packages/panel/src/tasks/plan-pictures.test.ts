@@ -6,16 +6,16 @@ import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { forgetPictures } from "@repo/ui/picture-cache";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
+import { forgetPictures } from "../picture-query.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { viewerPlace } from "../testing/viewer-place.js";
@@ -55,10 +55,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** Waits until no picture drawn is still being read, as the window's queries hand each read to React a tick after it lands. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.picture-block[data-state="reading"]') === null, true),
+  );
 }
 
 /** The host as the window reaches it: the pictures it holds by id, those it cannot answer for now, and every other read refused. */
@@ -286,11 +287,12 @@ test("once the window lets go of its pictures, as an account change asks, each i
   assert.ok(view.querySelector(".picture-block img"));
 
   standHost(new Set(), []);
-  act(() => forgetPictures());
-  await settle();
+  await act(() => forgetPictures(testQueryClientNow()));
 
-  assert.equal(view.querySelector(".picture-block img"), null);
-  assert.equal(view.querySelector(".picture-block")?.textContent, "Invite email · not available");
+  await vi.waitFor(() =>
+    assert.equal(view.querySelector(".picture-block")?.textContent, "Invite email · not available"),
+  );
+  assert.equal(view.querySelector(".picture-block img") === null, true);
 });
 
 test("a picture whose read went unanswered says it could not be read, with Retry, and the picture drawn in its place next is read", async () => {
@@ -360,13 +362,14 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
   assert.deepEqual(asked, [], "a closed card reads nothing");
 
   act(() => view.querySelector<HTMLElement>("[data-origin-plan] > summary")?.click());
-  await settle();
 
   const card = view.querySelector("[data-origin-plan]");
-  const images = [...(card?.querySelectorAll(".picture-block img") ?? [])];
-  assert.equal(images[0]?.getAttribute("src"), `data:image/png;base64,${PNG_BASE64}`);
+  const images = () => [...(card?.querySelectorAll(".picture-block img") ?? [])];
+  await vi.waitFor(() =>
+    assert.equal(images()[0]?.getAttribute("src"), `data:image/png;base64,${PNG_BASE64}`),
+  );
   assert.deepEqual(
-    images.map((image) => image.getAttribute("alt")),
+    images().map((image) => image.getAttribute("alt")),
     ["Invite email", "Members page"],
   );
   assert.deepEqual(
