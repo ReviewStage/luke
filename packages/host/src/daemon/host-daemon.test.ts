@@ -467,6 +467,7 @@ describe("a host waiting on its record", () => {
       Effect.gen(function* () {
         const { stateRoot } = yield* box;
         const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(stateRoot, { recursive: true });
         const waiting = yield* hostDeviceWhen(stateRoot, Option.isSome).pipe(Effect.forkScoped);
         yield* elapsed(Duration.seconds(30));
         yield* fileSystem.remove(stateRoot, { recursive: true });
