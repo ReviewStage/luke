@@ -138,8 +138,6 @@ export function composePortForwards(
     const socketOrigin = webSocketOrigin(kernel.hostedServiceBaseUrl);
     const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
     let forwarding: Forwarding | undefined;
-    /** The agent the latest request asked to forward; none once the latest request turned it off. */
-    let wanted: string | undefined;
     let toldText = JSON.stringify(null);
 
     /** How the forwarded agent's forwarding stands, told to the windows where it moved since it was last told. */
@@ -309,8 +307,6 @@ export function composePortForwards(
         if (started === undefined) {
           return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
         }
-        // Note that the start may take seconds while the sandbox wakes, so a later request, off or for another agent, wins over it.
-        if (wanted !== agentId) return;
         yield* turnOff;
         const current: Forwarding = {
           agentId,
@@ -354,12 +350,10 @@ export function composePortForwards(
             "turning forwarding names the agent, and whether it is on",
           );
           if (!on) {
-            if (wanted === agentId) wanted = undefined;
             if (forwarding?.agentId === agentId) yield* turnOff;
             return carried(standing(agentId));
           }
           if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
-          wanted = agentId;
           yield* turnOn(agentId);
           return carried(standing(agentId));
         }),
