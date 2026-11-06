@@ -355,7 +355,10 @@ export function usePlanHistory(input: {
   );
   const onRetry = history.retry;
   // Note that the sections stay open, since they are drawn from the very version this reads again.
-  const onRetryVersion = useCallback(() => void readAgain(), [readAgain]);
+  // Note that no version is read before the list names one, so there is nothing to read again until it does.
+  const onRetryVersion = useCallback(() => {
+    if (seq !== undefined) void readAgain();
+  }, [seq, readAgain]);
   // A version whose read failed, or is still out and may have been sent while the connection was gone, is read again as the app reaches the service again, as its Try again reads it.
   useRegained(() => {
     if (chosen === undefined) return;

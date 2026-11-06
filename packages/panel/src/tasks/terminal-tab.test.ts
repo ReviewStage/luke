@@ -1223,6 +1223,11 @@ test("a read of the shells that went out before a rename lands nowhere, so the n
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
   await settle();
+  // A read asked after the rename, while the one from before it is still out, is a read of its own.
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
   // The read from before the rename lands now, holding the old name.
   for (const release of main.held.splice(0)) release();
   await settle();

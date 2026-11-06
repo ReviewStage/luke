@@ -403,6 +403,16 @@ export function useTerminalSession(
     [sendAttach, agentId, enter],
   );
 
+  // Each read of the shells is its own: one still out may predate a change the tab made since, a
+  // rename or a shell ending, so it is cancelled rather than joined, and lands nowhere.
+  const readList = useCallback(async () => {
+    const listing = terminalListQueryOptions(agentId);
+    if (queryClient.isFetching({ queryKey: listing.queryKey }) > 0) {
+      await queryClient.cancelQueries({ queryKey: listing.queryKey }, { revert: false });
+    }
+    return queryClient.fetchQuery(listing);
+  }, [queryClient, agentId]);
+
   const connect = useCallback(async () => {
     letGo();
     const generation = live.current.generation;
@@ -421,10 +431,7 @@ export function useTerminalSession(
       });
     };
     try {
-      // Note that a reread still out may predate what made the tab connect, a shell ending among them, so it gives way to a read of its own.
-      const listing = terminalListQueryOptions(agentId);
-      await queryClient.cancelQueries({ queryKey: listing.queryKey });
-      const listed = await queryClient.fetchQuery(listing);
+      const listed = await readList();
       if (!current()) return;
       if ("refused" in listed) return wait(refusedState(listed.refused));
       setListed(listed);
@@ -444,7 +451,7 @@ export function useTerminalSession(
     } catch {
       if (current()) enter(SERVICE_UNREACHED);
     }
-  }, [queryClient, sendCreate, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
+  }, [readList, sendCreate, attach, enter, letGo, relistLater, setAsked, setListed]);
 
   // The list as an answer says it, every read since let go.
   const writeList = useCallback(
@@ -461,12 +468,12 @@ export function useTerminalSession(
   const reread = useCallback(async () => {
     const seen = live.current.listMoves;
     try {
-      const answer = await queryClient.fetchQuery(terminalListQueryOptions(agentId));
+      const answer = await readList();
       if (!("refused" in answer) && live.current.listMoves === seen) writeList(answer);
     } catch {
       // The next read, a few seconds on, asks again.
     }
-  }, [queryClient, agentId, writeList]);
+  }, [readList, writeList]);
 
   // Note that a shell shown on the same screen as another starts from a
   // clear screen, which its tmux session then redraws.
