@@ -30,8 +30,9 @@ import { CatalogSection } from "../section";
  * the one shown, one unavailable, one unread; a place whose ⋯ comes in
  * over its count under the pointer; an account's menu trigger;
  * links with addresses of their own; long names in a narrow column;
- * steps read in order, their names on two lines over a meta line; and
- * rows while the places they list are read.
+ * steps read in order, their names on two lines over a meta line; a
+ * search's rows nested under the page holding them; and rows while the
+ * places they list are read.
  */
 
 /** A chord as an app draws one, hidden from a reader since the row names it. */
@@ -166,6 +167,34 @@ function Steps(): React.JSX.Element {
   );
 }
 
+/** A search's finds: each page by its glyph, the rows it holds nested under it, one found row the place shown. */
+function Nested(): React.JSX.Element {
+  const [shown, setShown] = useState("theme");
+  const find = (id: string) => ({
+    current: shown === id ? NAV_CURRENT.LOCATION : undefined,
+    onClick: () => setShown(id),
+  });
+  return (
+    <div className="catalog-narrow">
+      <NavItem icon={<GearIcon />} {...find("appearance")}>
+        Appearance
+      </NavItem>
+      <NavItem nested {...find("theme")}>
+        Theme
+      </NavItem>
+      <NavItem nested {...find("font")}>
+        Font size
+      </NavItem>
+      <NavItem icon={<InboxIcon />} {...find("inbox")}>
+        Inbox
+      </NavItem>
+      <NavItem nested icon={<FolderIcon />} {...find("folders")}>
+        Folders
+      </NavItem>
+    </div>
+  );
+}
+
 function NavItems(): React.JSX.Element {
   return (
     <>
@@ -193,6 +222,9 @@ function NavItems(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="nav-item-steps" title="Steps read in order, over a meta line">
         <Steps />
+      </CatalogSection>
+      <CatalogSection id="nav-item-nested" title="Rows nested under the page holding them">
+        <Nested />
       </CatalogSection>
     </>
   );
