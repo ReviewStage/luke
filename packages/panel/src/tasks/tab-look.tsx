@@ -3,7 +3,7 @@ import type { ModelProvider } from "@repo/features/models-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { localLabelOf, pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { AppWindowIcon, BotIcon, GitPullRequestIcon, GlobeIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
@@ -103,12 +103,14 @@ export type TabSubject =
       readonly kind: typeof TAB_KIND.TERMINAL;
       /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
+      /** The terminal's name ("Cloud 1"), which names the tab. */
+      readonly title: string;
     }
   | {
       readonly kind: typeof TAB_KIND.LOCAL;
       /** Where the agent whose mirror it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
-      /** The terminal's name, which the tab is named by after its kind's word. */
+      /** The terminal's name ("Local 1"), which names the tab. */
       readonly title: string;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
@@ -244,12 +246,11 @@ export function tabLook(subject: TabSubject): KindLook {
             ? TAB_WORDS.PULL_REQUEST
             : pullRequestLabelOf(subject.pullRequest),
       };
+    // Note that the agent's name is not the label, because the tab says
+    // which terminal it is first; each place drawing it names the agent beside it.
     case TAB_KIND.TERMINAL:
-      // Note that the agent's name is not the label, because the tab says
-      // what it is first; each place drawing it names the agent beside it.
-      return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
     case TAB_KIND.LOCAL:
-      return { icon: <AgentGlyph agent={subject.agent} />, label: localLabelOf(subject) };
+      return { icon: <AgentGlyph agent={subject.agent} />, label: subject.title };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);

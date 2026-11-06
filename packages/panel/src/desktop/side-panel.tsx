@@ -65,7 +65,6 @@ import {
   isTerminalTab,
   isTranscriptTab,
   type LocalStripTab,
-  localLabelOf,
   type PageStripTab,
   type StripTab,
   type SubagentStripTab,
@@ -135,7 +134,6 @@ import {
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
-import { LocalStanding, LocalTab } from "../tasks/local-tab.js";
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -150,8 +148,8 @@ import {
   tabLook,
 } from "../tasks/tab-look.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
-import { TerminalStanding } from "../tasks/terminal-shells.js";
-import { TerminalTab } from "../tasks/terminal-tab.js";
+import { TERMINAL_KIND, type TerminalKind } from "../tasks/terminal-session.js";
+import { TerminalCount, TerminalTab } from "../tasks/terminal-tab.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import {
   agentTranscript,
@@ -161,7 +159,6 @@ import {
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl, HeldPeople } from "../tasks/use-agents.js";
 import { useDescriptionComments } from "../tasks/use-description-comments.js";
-import { useOpenLocal } from "../tasks/use-local-session.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
   DRAWN_KINDS,
@@ -186,6 +183,7 @@ import {
   type SidePanelTab,
   sameHolder,
 } from "../tasks/use-side-panel.js";
+import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
@@ -390,14 +388,16 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 const NO_LOCALS: readonly LocalStripTab[] = [];
 
-/** The key each agent's Local row in the "+" is drawn under, by agent, made the first time it is asked for, apart from its Terminal row's and its tabs'. */
-const localRowKeys = new Map<string, string>();
+/** The key each agent's cloud and Local rows in the "+" are drawn under, by kind and then by agent, made the first time it is asked for, apart from the agent's own row's. */
+const terminalRowKeys = new Map<TerminalKind, Map<string, string>>();
 
-function localRowKey(agentId: string): string {
-  const held = localRowKeys.get(agentId);
+function terminalRowKey(kind: TerminalKind, agentId: string): string {
+  const ofKind = terminalRowKeys.get(kind) ?? new Map<string, string>();
+  terminalRowKeys.set(kind, ofKind);
+  const held = ofKind.get(agentId);
   if (held !== undefined) return held;
   const made = crypto.randomUUID();
-  localRowKeys.set(agentId, made);
+  ofKind.set(agentId, made);
   return made;
 }
 
@@ -466,8 +466,8 @@ const NO_SUBAGENTS: readonly string[] = [];
 export const ADD_SECTION = {
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
-  TERMINAL: "Terminal",
-  LOCAL: "Local",
+  CLOUD: "Cloud Terminal",
+  LOCAL: "Local Terminal",
   BROWSER: "Browser",
 } as const;
 
@@ -847,27 +847,25 @@ export function panelEntries(input: {
           }),
     onPick: () => panel.onChoose({ page: page.id }),
   }));
-  // A terminal's row adds a shell to its agent's sandbox, as New terminal
-  // does; its words after the name say how the agent and its sandbox stand.
-  // Note that it is named by the key its tab is drawn under, because the
-  // agent's id names the agent's own row where the summary lists them.
+  // A cloud row opens a new terminal in its agent's sandbox, its own tab, as New terminal does;
+  // its words after the name count the agent's terminals. Note that it is named by a key of its
+  // own, because the agent's id names the agent's own row where the summary lists them.
   const terminalRows = (input.terminals?.offers ?? []).map(({ agent, label, showsOnChord }) => ({
     row: {
-      id: tabKey({ terminal: agent.id }),
+      id: terminalRowKey(TERMINAL_KIND.CLOUD, agent.id),
       ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-      detail: <TerminalStanding agent={agent} />,
+      detail: <TerminalCount kind={TERMINAL_KIND.CLOUD} agentId={agent.id} />,
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
-      section: ADD_SECTION.TERMINAL,
+      section: ADD_SECTION.CLOUD,
       replayMasked: true,
     },
-    // Note that the row hangs its Terminal tab's card: its agent's, saying under a rule whose sandbox its shells run in.
+    // Note that the row hangs its tab's card: its agent's, saying under a rule whose sandbox its shell runs in.
     endMark: agentEndMark(agent, true),
     card:
       cards === undefined
         ? undefined
         : hungCard({
             kind: TAB_KIND.TERMINAL,
-            agentId: agent.id,
             subject: agentSubject(
               cards.agents,
               agent.id,
@@ -878,12 +876,12 @@ export function panelEntries(input: {
           }),
     onPick: () => input.terminals?.onNew(agent.id),
   }));
-  // A Local row opens a new terminal on this Mac in its cloud agent's mirror, its own tab, beside its Terminal row.
+  // A Local row opens a new terminal on this Mac in its cloud agent's mirror, its own tab, beside its cloud row.
   const localRows = (input.locals?.offers ?? []).map(({ agent, label }) => ({
     row: {
-      id: localRowKey(agent.id),
+      id: terminalRowKey(TERMINAL_KIND.LOCAL, agent.id),
       ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-      detail: <LocalStanding agentId={agent.id} />,
+      detail: <TerminalCount kind={TERMINAL_KIND.LOCAL} agentId={agent.id} />,
       section: ADD_SECTION.LOCAL,
       replayMasked: true,
     },
@@ -1173,16 +1171,16 @@ function stripTabs(input: {
     }),
     close: () => panel.onClose(tab),
   }));
-  // A Terminal tab wears its agent's glyph and name, and hangs its agent's
-  // card, saying under a rule whose sandbox its shells run in.
+  // A cloud terminal tab is named by its terminal, wears its agent's glyph and name, and hangs its
+  // agent's card, saying under a rule whose sandbox its shell runs in.
   const terminalTabs = terminals.map((tab) => {
     const subject = agentSubject(agentsOf(tab.terminal), tab.terminal, held, false);
     return {
       tab,
       look: look(tab, {
-        ...tabLook({ kind: TAB_KIND.TERMINAL, agent: subject.agent }),
+        ...tabLook({ kind: TAB_KIND.TERMINAL, agent: subject.agent, title: tab.title }),
         detail: subject.name,
-        card: hungCard({ kind: TAB_KIND.TERMINAL, agentId: tab.terminal, subject, models }),
+        card: hungCard({ kind: TAB_KIND.TERMINAL, subject, models }),
       }),
       close: () => panel.onClose(tab),
     };
@@ -2000,7 +1998,6 @@ function TabContent({
   onCloseTab,
   pullRequestViews,
   onPullRequestView,
-  shellsList,
   cloudBrowsers,
   cloudDrafts,
   transcript,
@@ -2048,8 +2045,6 @@ function TabContent({
   pullRequestViews: SidePanelControl["pullRequestViews"];
   /** Chooses what an agent's Pull request tab shows. */
   onPullRequestView: SidePanelControl["onPullRequestView"];
-  /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
-  shellsList: { readonly open: boolean; readonly onToggle: () => void };
   /** The holder's cloud Browser tabs, which a cloud Browser tab reads its tab from. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
   /** Lands on the tab a draft opened, the draft let go of; or discards a draft. */
@@ -2090,28 +2085,16 @@ function TabContent({
       />
     );
   }
-  if (isTerminalTab(tab)) {
+  if (isTerminalTab(tab) || isLocalTab(tab)) {
+    const agentId = isTerminalTab(tab) ? tab.terminal : tab.local;
     return (
       <TerminalTab
-        key={tab.terminal}
-        agentId={tab.terminal}
-        agents={agentsOf(tab.terminal)}
-        shown={shown}
-        onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.terminal })}
-        onClose={() => onCloseTab(tab)}
-        shells={shellsList}
-      />
-    );
-  }
-  if (isLocalTab(tab)) {
-    return (
-      <LocalTab
         key={tab.shell}
-        agentId={tab.local}
-        shell={tab.shell}
-        agents={agentsOf(tab.local)}
+        tab={tab}
+        agents={agentsOf(agentId)}
         shown={shown}
-        onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.local })}
+        onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId })}
+        onClose={() => onCloseTab(tab)}
       />
     );
   }
@@ -2586,13 +2569,6 @@ export function SidePanel({
     }),
     [fileTreeOpen, treeWidth, onTreeResize],
   );
-  // Whether a Terminal tab's shells list is open, for every one of them alike
-  // and for the window's life, as the File tabs' tree is.
-  const [shellsOpen, setShellsOpen] = useState(true);
-  const shellsList = useMemo(
-    () => ({ open: shellsOpen, onToggle: () => setShellsOpen((was) => !was) }),
-    [shellsOpen],
-  );
   // The subagents with a tab open, in the strip's order: a delegated worker's tab stands while its agent's does.
   const { held: drawnTranscripts, standings } = views;
   const subagents = drawnSubagents(panel.subagents, standings, drawnTranscripts, {
@@ -2738,13 +2714,11 @@ export function SidePanel({
               ? changesLook(tab, agentsOf(tab.changes)).label
               : isPageTab(tab)
                 ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
-                : isTerminalTab(tab)
-                  ? TAB_WORDS.TERMINAL
-                  : isLocalTab(tab)
-                    ? localLabelOf(tab)
-                    : isCloudBrowserTab(tab)
-                      ? cloudBrowserLabel(tab.cloudBrowser)
-                      : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                : isTerminalTab(tab) || isLocalTab(tab)
+                  ? tab.title
+                  : isCloudBrowserTab(tab)
+                    ? cloudBrowserLabel(tab.cloudBrowser)
+                    : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   // A page or a file of another task than the panel's own names that task under the bar, and Open task goes
   // there with the tab still chosen, the panel standing as it is.
   const ownTask = holder === SIDE_PANEL_HOLDER.AGENT || onAgent ? undefined : taskId;
@@ -2774,7 +2748,7 @@ export function SidePanel({
   const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
-  const openLocal = useOpenLocal(panel, noFocusMove);
+  const openLocal = useOpenTerminalTab(TERMINAL_KIND.LOCAL, panel, noFocusMove);
   const offeredChanges = panel.changes;
   const changesPeople = useChangesPeopleOf(
     useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
@@ -2956,7 +2930,6 @@ export function SidePanel({
                 onCloseTab={panel.onClose}
                 pullRequestViews={panel.pullRequestViews}
                 onPullRequestView={panel.onPullRequestView}
-                shellsList={shellsList}
                 cloudBrowsers={cloudBrowsers}
                 cloudDrafts={cloudDrafts}
                 transcript={transcript}

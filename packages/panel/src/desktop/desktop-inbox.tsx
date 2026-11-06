@@ -73,6 +73,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useCloudTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
@@ -844,6 +845,7 @@ function InboxSidePanel({
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
+  const cloudTerminalTab = useCloudTerminalTab();
   const terminals =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
     true;
@@ -949,7 +951,7 @@ function InboxSidePanel({
                 // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
                 onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
                 onOpenTerminal: terminals
-                  ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
+                  ? (agentId) => tasks.onShowPanelTab(taskId, cloudTerminalTab(agentId))
                   : undefined,
               }
         }

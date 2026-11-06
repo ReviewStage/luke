@@ -53,7 +53,7 @@ export const SERVICE_UNREACHED: TerminalState = {
 };
 
 /** A shell opened, or the state the tab is left in where none could be. */
-export type ShellOpened = { readonly terminalId: string } | { readonly state: TerminalState };
+type ShellOpened = { readonly terminalId: string } | { readonly state: TerminalState };
 
 /** What an attach answered: asked, so the port is on its way, or the state the tab is left in. */
 export type ShellAttached = { readonly asked: true } | { readonly state: TerminalState };

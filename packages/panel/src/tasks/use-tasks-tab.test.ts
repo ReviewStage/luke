@@ -2831,7 +2831,9 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
     PULL_REQUEST_VIEW.CHECKS,
   );
   assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
-  assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
+  const cloud = terminal.control().sidePanel.tab;
+  assert.ok(cloud instanceof Object && "terminal" in cloud);
+  assert.deepEqual([cloud.terminal, cloud.title], [FIXTURE_AGENT_ID, "Cloud 1"]);
   // Note that the page is held on the task's pages, whose read reaches its query a moment after the document.
   await vi.waitFor(() =>
     assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE }),

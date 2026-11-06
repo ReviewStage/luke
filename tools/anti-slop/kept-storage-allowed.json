@@ -8,6 +8,6 @@
   "packages/panel/src/desktop/section-icon-picker.tsx": "The section icons last chosen on this Mac, offered first as Recent: a history of picks, no view choice.",
   "packages/panel/src/last-sign-in.ts": "The provider last signed in with, offered first at the next sign-in: credential handling.",
   "packages/panel/src/settings/agent-auth-section.tsx": "Whether the first sign-in's notice was seen, which a refused read counts as seen: a notice's memory, no view choice.",
-  "packages/panel/src/tasks/local-held.ts": "The shells this window opened on the Mac for a cloud agent's Local tab, by id and name, kept for its session so a reload attaches to them again: data main holds, no view choice.",
+  "packages/panel/src/tasks/terminal-held.ts": "The terminals this window opened for an agent, cloud or Local, by id and name, kept for its session so a reload opens their tabs again: data the shells hold, no view choice.",
   "packages/panel/src/update-toast.ts": "The version whose update the toast last announced: a notice's memory, no view choice."
 }

@@ -19,6 +19,13 @@ const OTHER_TASK = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
 const BARE_TASK = "6c8e0a2b-4d6f-4b8c-8e2a-3c5d7e9f1a2b";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER_AGENT = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
+/** A cloud terminal tab of each agent. */
+const CLOUD = { terminal: AGENT, shell: "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10", title: "Cloud 1" };
+const OTHER_CLOUD = {
+  terminal: OTHER_AGENT,
+  shell: "3a7f1d2b-6c4e-4d9f-8b2a-8e3c5f7b9d21",
+  title: "Cloud 1",
+};
 
 const roots: Root[] = [];
 
@@ -121,11 +128,11 @@ test("a record kept before tasks had their name holds each task's choices under 
 
 test("a Changes tab closed stays closed across a launch, and closing the chosen one chooses the tab viewed before it", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
-  act(() => first.control().onChoose({ terminal: AGENT }));
+  act(() => first.control().onChoose(CLOUD));
   act(() => first.control().onChoose({ changes: AGENT }));
   act(() => first.control().onClose({ changes: AGENT }));
   assert.deepEqual(first.control().changes, []);
-  assert.deepEqual(first.control().tab, { terminal: AGENT });
+  assert.deepEqual(first.control().tab, CLOUD);
   first.quit();
 
   // Note that a Terminal tab is kept across no launch, so nothing stands to choose.
@@ -136,11 +143,11 @@ test("a Changes tab closed stays closed across a launch, and closing the chosen 
 
 test("an agent's Terminal tab opens once at the strip's end and chosen, stands only on its agent's plan, and is kept across no launch", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => first.control().onChoose({ terminal: AGENT }));
-  act(() => first.control().onChoose({ terminal: AGENT }));
-  assert.deepEqual(first.control().terminals, [{ terminal: AGENT }], "opened once, chosen again");
-  assert.deepEqual(first.control().strip.at(-1), { terminal: AGENT });
-  assert.deepEqual(first.control().tab, { terminal: AGENT });
+  act(() => first.control().onChoose(CLOUD));
+  act(() => first.control().onChoose(CLOUD));
+  assert.deepEqual(first.control().terminals, [CLOUD], "opened once, chosen again");
+  assert.deepEqual(first.control().strip.at(-1), CLOUD);
+  assert.deepEqual(first.control().tab, CLOUD);
 
   // Another task never draws it, its agents read or not.
   first.render({ task: OTHER_TASK, taskAgents: undefined });
@@ -151,11 +158,11 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
 
   // Back on its task it stands as it was; closed, no tab stands.
   first.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  assert.deepEqual(first.control().tab, { terminal: AGENT });
-  act(() => first.control().onClose({ terminal: AGENT }));
+  assert.deepEqual(first.control().tab, CLOUD);
+  act(() => first.control().onClose(CLOUD));
   assert.deepEqual(first.control().terminals, []);
   assert.equal(first.control().tab, undefined);
-  act(() => first.control().onChoose({ terminal: OTHER_AGENT }));
+  act(() => first.control().onChoose(OTHER_CLOUD));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
@@ -277,8 +284,8 @@ test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, a
 test("the agent whose Terminal tab was shown last on a plan is the plan's own, which ⌘J goes to among several", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.equal(panel.control().lastTerminal, undefined);
-  act(() => panel.control().onChoose({ terminal: AGENT }));
-  act(() => panel.control().onChoose({ terminal: OTHER_AGENT }));
+  act(() => panel.control().onChoose(CLOUD));
+  act(() => panel.control().onChoose(OTHER_CLOUD));
   act(() => panel.control().onChoose({ changes: AGENT }));
   assert.equal(panel.control().lastTerminal, OTHER_AGENT);
   panel.render({ task: OTHER_TASK, taskAgents: [] });
@@ -309,11 +316,11 @@ test('closing the last tab shuts the panel and leaves full screen, and the toggl
 test("a new stop starts with the panel shut, whatever its strip holds, unless a tab was asked for there, as a pin or a link opens one, and a plan whose strip holds no tab draws none", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT] });
   // Note that the agent works on both tasks, so its Terminal tab stands on each.
-  act(() => panel.control().onChoose({ terminal: AGENT }));
+  act(() => panel.control().onChoose(CLOUD));
   assert.equal(panel.control().open, true);
 
   panel.render({ task: OTHER_TASK, taskAgents: [AGENT] });
-  assert.deepEqual(panel.control().strip, [{ terminal: AGENT }]);
+  assert.deepEqual(panel.control().strip, [CLOUD]);
   assert.equal(
     panel.control().open,
     false,
@@ -322,7 +329,7 @@ test("a new stop starts with the panel shut, whatever its strip holds, unless a 
   panel.render({ task: TASK, taskAgents: [AGENT] });
   assert.equal(panel.control().open, false, "and coming back does not open it");
 
-  act(() => panel.control().onShow(OTHER_TASK, { terminal: AGENT }));
+  act(() => panel.control().onShow(OTHER_TASK, CLOUD));
   panel.render({ task: OTHER_TASK, taskAgents: [AGENT] });
   assert.equal(panel.control().open, true, "a tab asked for on the stop arrived at stands");
   panel.render({ task: TASK, taskAgents: [AGENT] });
@@ -689,7 +696,7 @@ test("an archived agent's Pull request tab is drawn as a live agent's, while its
   const drawn = { taskAgents: ["live"], heldAgents: ["live", "archived"] };
   assert.equal(drawsChanges({ changes: "archived" }, drawn), true);
   assert.equal(drawsChanges({ changes: "other" }, drawn), false);
-  assert.equal(drawsTerminal({ terminal: "archived" }, drawn), false);
+  assert.equal(drawsTerminal({ ...CLOUD, terminal: "archived" }, drawn), false);
   // A place that names no held agents draws Pull request tabs by its live ones, as before.
   assert.equal(drawsChanges({ changes: "archived" }, { taskAgents: ["live"] }), false);
 });
