@@ -96,8 +96,8 @@ moving edges over time in a headless run with CDP sampling.
 `scripts/evidence.sh` cannot stand in for that: it captures still frames of
 the fixture with every duration zeroed, so it shows where a motion lands,
 never the motion. The claim to check is always the same: nothing that holds
-text changes size mid-motion, and each move runs as
-one transition. Chromium serializes `inset()` with collapsed components;
+text changes size mid-motion, the site bar's float aside, and each move runs
+as one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
 Review holds this contract: the generated brand art and motion tokens match
