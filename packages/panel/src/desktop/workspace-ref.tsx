@@ -30,33 +30,34 @@ export const WORKSPACE_REF_SIZE = {
 type WorkspaceRefSize = (typeof WORKSPACE_REF_SIZE)[keyof typeof WORKSPACE_REF_SIZE];
 
 /**
- * How far apart each size stands its tile and its name: a line's and the
- * head's at their own gaps, a row's a step wider than a line's; a name with
- * a line under it stands as far from its tile as the head's does.
+ * How far apart each size stands its tile and its name: a line's at its own
+ * gap, a row's a step wider, and the head's a glyph's gap, as a sidebar row
+ * stands its glyph from its name; a name with a line under it stands a block's
+ * gap from its tile.
  */
 const GAP_OF_SIZE = {
   [WORKSPACE_REF_SIZE.INLINE]: "gap-tight-gap",
   [WORKSPACE_REF_SIZE.ROW]: "gap-item-gap",
-  [WORKSPACE_REF_SIZE.HEAD]: "gap-block-gap",
+  [WORKSPACE_REF_SIZE.HEAD]: "gap-icon-gap",
 } as const;
 
 /**
  * The name at each size: in a line of words it sits on the line's baseline,
  * as an actor's does, standing at least the tile's height so the tile stays
- * centered on it; at the sidebar's head it takes the head's weight.
+ * centered on it; at the sidebar's head it takes the primary ink and the
+ * heavier weight in the row's own size.
  */
 const NAME_OF_SIZE = {
   [WORKSPACE_REF_SIZE.INLINE]: "self-baseline py-workspace-ref-lift",
   [WORKSPACE_REF_SIZE.ROW]: undefined,
-  [WORKSPACE_REF_SIZE.HEAD]:
-    "text-foreground text-section-size font-ui-semibold tracking-workspace-head",
+  [WORKSPACE_REF_SIZE.HEAD]: "text-foreground font-ui-semibold",
 } as const;
 
 /** The tile each size of ref draws. */
 const TILE_OF_SIZE = {
   [WORKSPACE_REF_SIZE.INLINE]: TILE_SIZE.INLINE,
   [WORKSPACE_REF_SIZE.ROW]: TILE_SIZE.ROW,
-  [WORKSPACE_REF_SIZE.HEAD]: TILE_SIZE.HEAD,
+  [WORKSPACE_REF_SIZE.HEAD]: TILE_SIZE.SIDEBAR,
 } as const;
 
 type NamedWorkspace = Pick<Workspace, "id" | "name" | "photoVersion" | "pictureUrl">;

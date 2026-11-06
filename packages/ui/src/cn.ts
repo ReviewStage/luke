@@ -165,8 +165,6 @@ const CONTENT_TEXT = {
  * dot), by the group tailwind-merge reads each in.
  */
 const PANEL_WINDOW = {
-  text: ["section-size"],
-  tracking: ["workspace-head"],
   spacing: [
     "actor-badge",
     "actor-badge-glyph",
@@ -184,7 +182,6 @@ const PANEL_WINDOW = {
     "sidebar-row-repository",
     "sidebar-slot-start",
     "workspace-ref-lift",
-    "workspace-shared-glyph",
   ],
   shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
   container: ["section-icon-picker"],
@@ -442,7 +439,6 @@ const merge = extendTailwindMerge({
         "tag",
         ...FEEDBACK_DISPLAY.text,
         ...CONTENT_TEXT.text,
-        ...PANEL_WINDOW.text,
         ...ROWS_NAVIGATION.text,
         ...CHIPS_MEDIA.text,
         ...PAGE_PATTERNS.text,
@@ -462,12 +458,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT["font-weight"],
         ...PAGE_PATTERNS["font-weight"],
       ],
-      tracking: [
-        "title",
-        ...PANEL_SHELL.tracking,
-        ...PANEL_WINDOW.tracking,
-        ...TASK_SURFACES.tracking,
-      ],
+      tracking: ["title", ...PANEL_SHELL.tracking, ...TASK_SURFACES.tracking],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,

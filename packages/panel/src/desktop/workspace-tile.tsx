@@ -25,10 +25,11 @@ import { workspacePhotoQuery } from "../live-reads.js";
  * from a screen reader, since the row beside it already says the name.
  */
 
-/** The tile's sizes: a line of words', a row's glyph, a mark a step smaller under a row, or the sidebar's head and Settings › Workspace's first row. */
+/** The tile's sizes: a line of words', a row's glyph, a mark a step smaller under a row, the sidebar's head, or a card's and Settings › Workspace's first row. */
 export const TILE_SIZE = {
   INLINE: "inline",
   ROW: "row",
+  SIDEBAR: "sidebar",
   HEAD: "head",
   NESTED: "nested",
 } as const;
@@ -39,6 +40,7 @@ type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];
 const AVATAR_OF = {
   [TILE_SIZE.INLINE]: AVATAR_SIZE.MARK,
   [TILE_SIZE.ROW]: AVATAR_SIZE.INLINE,
+  [TILE_SIZE.SIDEBAR]: AVATAR_SIZE.ROW,
   [TILE_SIZE.HEAD]: AVATAR_SIZE.CARD,
   [TILE_SIZE.NESTED]: AVATAR_SIZE.STACK,
 } as const satisfies Record<TileSize, (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE]>;
