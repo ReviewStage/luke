@@ -1,24 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { INPUT_LINE } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
 import { claimAgentRunnerLease } from "@repo/database/models/agent-runner-lease";
 import { createAgent } from "@repo/database/models/agent-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { user } from "@repo/database/schemas/auth";
-import { runnerLine } from "@repo/database/schemas/runner-line";
 import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
-import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, ErrorReporter, Layer, Option, Redacted } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { RUNNER_TAG } from "../agents/machine/vercel-machine.js";
 import { LAUNCH_SWAP, placeholderSwap, sandboxFirewall } from "../agents/sandbox-firewall.js";
 import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
 import { GitHubApp } from "../github/github-app.js";
@@ -291,7 +287,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         assert.deepEqual(outcome, {
           stopped: 0,
-          retired: 0,
           held: 0,
           failed: 0,
           deferred: 0,
@@ -391,7 +386,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const stoppable = [sessionOf(ended.id), sessionOf(codexEnded.id)].sort();
         assert.deepEqual(outcome, {
           stopped: 2,
-          retired: 0,
           held: 1,
           failed: 0,
           deferred: 0,
@@ -494,7 +488,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         assert.deepEqual(first, {
           stopped: NATIVE_SANDBOX_SWEEP.MAX_STOPS,
-          retired: 0,
           held: 0,
           failed: 0,
           deferred: 2,
@@ -503,7 +496,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         assert.equal(stoppedFirst, NATIVE_SANDBOX_SWEEP.MAX_STOPS);
         assert.deepEqual(second, {
           stopped: 2,
-          retired: 0,
           held: 0,
           failed: 0,
           deferred: 0,
@@ -544,7 +536,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         assert.equal(pagesAsked, NATIVE_SANDBOX_SWEEP.MAX_PAGES);
         assert.deepEqual(outcome, {
           stopped: 0,
-          retired: 0,
           held: 0,
           failed: 0,
           deferred: 0,
@@ -558,7 +549,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         );
         assert.deepEqual(nextMinute, {
           stopped: 1,
-          retired: 0,
           held: 0,
           failed: 0,
           deferred: 0,
@@ -638,7 +628,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
       assert.deepEqual(outcome, {
         stopped: 0,
-        retired: 0,
         held: 0,
         failed: 0,
         deferred: 0,
@@ -679,7 +668,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         assert.deepEqual(outcome, {
           stopped: 3,
-          retired: 0,
           held: 0,
           failed: 0,
           deferred: 0,
@@ -719,65 +707,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
   );
 
   it.effect(
-    "a runner still up past its warm window and the grace is asked to retire, its sandbox left for its END to stop, and one whose run ended within them stays up",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel();
-        // Note that the window may be zero, so a runner launched warm before it was lowered goes once the grace does.
-        const idle = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(
-            Duration.toMinutes(
-              Duration.max(CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL], NATIVE_SANDBOX_SWEEP.GRACE),
-            ) + 1,
-          ),
-        });
-        const recent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: new Date(NOW.getTime() - GRACE_MS + 1),
-        });
-        api.commands.set("cmd_idle", { id: "cmd_idle", exitCode: null });
-        api.commands.set("cmd_recent", { id: "cmd_recent", exitCode: null });
-        const retiring = nativeSandbox(idle.id, "cmd_idle");
-        const warm = nativeSandbox(recent.id, "cmd_recent");
-        api.sandboxes.push(retiring, warm);
-
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
-        assert.deepEqual(outcome, {
-          stopped: 0,
-          retired: 1,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        // The retire is queued for the runner to read, as every line of a sandbox's runner is.
-        const queuedFor = (agentId: string) =>
-          Effect.map(
-            Effect.flatMap(Database, (db) =>
-              db
-                .select({ text: runnerLine.text })
-                .from(runnerLine)
-                .where(eq(runnerLine.agentId, agentId)),
-            ),
-            (rows) => rows.map((row): unknown => JSON.parse(row.text)),
-          );
-        assert.deepEqual(yield* queuedFor(idle.id), [{ type: INPUT_LINE.RETIRE }]);
-        assert.deepEqual(yield* queuedFor(recent.id), []);
-        assert.deepEqual([retiring.status, warm.status], ["running", "running"]);
-        // The retired runner is no longer told of, so a message sent while it ends relaunches it.
-        assert.equal(retiring.tags[RUNNER_TAG.COMMAND], undefined);
-        assert.equal(warm.tags[RUNNER_TAG.COMMAND], "cmd_recent");
-        assert.deepEqual([api.stopped, api.policies], [[], []]);
-      }),
-  );
-
-  it.effect(
     "a sandbox whose credential would not come off the firewall is left running for the next sweep",
     () =>
       Effect.gen(function* () {
@@ -797,7 +726,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         assert.deepEqual(outcome, {
           stopped: 0,
-          retired: 0,
           held: 0,
           failed: 1,
           deferred: 0,

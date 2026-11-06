@@ -15,12 +15,9 @@
  * END's stop does), and on which no developer's Terminal holds a lease.
  * eve's sandboxes are never looked at past their name, and a run still
  * going, or waiting on a wakeup (whose turn stays running), keeps its
- * sandbox. A runner still up after its run ended
- * is warm (the sandbox's `CODER.RUNNER_WARM`), or a newer launch a message started since:
- * once the run has stood idle past the warm window, the sweep asks it to end
- * (`retireWarmRunner`), which a runner that took a message since declines,
- * and its END stops the sandbox. The stop is as the END's: the repository's credential taken off the firewall,
- * then the session stopped, its filesystem kept for a later resume; where the
+ * sandbox, as does a runner still up after its run ended, a newer launch a
+ * message started since, whose own END stops it. The stop is as the END's:
+ * the repository's credential taken off the firewall, then the session stopped, its filesystem kept for a later resume; where the
  * credential would not come off, the sandbox is left for the next sweep. One
  * a Terminal holds keeps running with the credentials only its exited runner
  * sent taken off, where its launch is still kept at the firewall: a runner a
@@ -61,15 +58,12 @@ import {
 } from "@repo/database/models/agent-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
-import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { redactCredentials } from "@repo/features/credential-redaction";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { CODER } from "../agents/coder-host/bounds.js";
 import { firewallSourcesAfterLaunch } from "../agents/coder-host/checkout.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
-import { retireWarmRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { describeFailure } from "../agents/machine/agent-machine.js";
 import {
@@ -111,10 +105,9 @@ export const NATIVE_SANDBOX_SWEEP = {
   CONCURRENCY: 5,
 } as const;
 
-/** What one sweep of the running native sandboxes came to: sandboxes stopped, warm runners retired, ones a Terminal holds, ones whose stop Vercel did not confirm, ones left for the next minute past the bound, and ones whose runner died mid-turn, its turn settled failed. */
+/** What one sweep of the running native sandboxes came to: sandboxes stopped, ones a Terminal holds, ones whose stop Vercel did not confirm, ones left for the next minute past the bound, and ones whose runner died mid-turn, its turn settled failed. */
 export interface NativeSandboxSweepOutcome {
   stopped: number;
-  retired: number;
   held: number;
   failed: number;
   deferred: number;
@@ -123,7 +116,6 @@ export interface NativeSandboxSweepOutcome {
 
 const NOTHING_SWEPT: NativeSandboxSweepOutcome = {
   stopped: 0,
-  retired: 0,
   held: 0,
   failed: 0,
   deferred: 0,
@@ -132,8 +124,6 @@ const NOTHING_SWEPT: NativeSandboxSweepOutcome = {
 
 const SANDBOX_ENDING = {
   STOPPED: "stopped",
-  /** Its runner was warm past the sandbox's `CODER.RUNNER_WARM`, and was asked to end, which its END's stop follows. */
-  RETIRED: "retired",
   HELD: "held",
   FAILED: "failed",
   /** Its run goes on, or ended within the grace, or it is no native agent's the store knows. */
@@ -172,7 +162,7 @@ function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
 const RUNNER_STANDING = {
   /** The sandbox is gone, down, or in another session; Vercel not answering counts as this. */
   MOVED_ON: "moved_on",
-  /** Its runner still runs: warm past its run's turn, or a newer launch a message started since. */
+  /** Its runner still runs: a newer launch a message started since. */
   RUNNING: "running",
   /** Its runner exited, or none is tagged in its session. */
   EXITED: "exited",
@@ -337,15 +327,14 @@ const goingOf = (standing: Option.Option<NativeRunStanding>): Option.Option<stri
     ? Option.some(standing.value.conversationId)
     : Option.none();
 
-/** The run where it ended longer ago than the wait given, the grace where none is: its conversation and its starter. */
+/** The run where it ended longer ago than the grace: its conversation and its starter. */
 const endedOf = (
   standing: Option.Option<NativeRunStanding>,
   now: Date,
-  wait: Duration.Duration = NATIVE_SANDBOX_SWEEP.GRACE,
 ): Option.Option<NativeRunStanding> => {
   if (Option.isNone(standing)) return Option.none();
   const { endedAt } = standing.value;
-  const endedBefore = now.getTime() - Duration.toMillis(wait);
+  const endedBefore = now.getTime() - Duration.toMillis(NATIVE_SANDBOX_SWEEP.GRACE);
   return endedAt === null || endedAt.getTime() > endedBefore ? Option.none() : standing;
 };
 
@@ -356,31 +345,6 @@ const runGoesOn = (sandbox: NativeSandbox) =>
 /** The run of the sandbox's agent where it ended past the grace, read from the store again. */
 const runEnded = (sandbox: NativeSandbox, now: Date) =>
   Effect.map(readNativeRunStanding(sandbox.agentId), (standing) => endedOf(standing, now));
-
-/**
- * A runner still up after its run ended, asked to end once the run has
- * stood idle past the sandbox's `CODER.RUNNER_WARM`, and left warm before that.
- * `retireWarmRunner` reads the runner again under its lease, and the runner
- * ends only where it is still warm, so a message sent since keeps it. A
- * retire Vercel did not take is left for the next sweep.
- */
-const retiredPastWarm = (
-  sandbox: NativeSandbox,
-  standing: Option.Option<NativeRunStanding>,
-  now: Date,
-) =>
-  Effect.gen(function* () {
-    const ended = endedOf(standing, now, CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL]);
-    if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
-    const retired = yield* Effect.result(
-      retireWarmRunner({ ...sandbox, userId: ended.value.userId }),
-    );
-    if (Result.isFailure(retired)) {
-      yield* Effect.logWarning(`a warm native runner was not retired: ${retired.failure._tag}`);
-      return SANDBOX_ENDING.FAILED;
-    }
-    return retired.success ? SANDBOX_ENDING.RETIRED : SANDBOX_ENDING.LEFT;
-  });
 
 /**
  * The credentials only a runner sends taken off a sandbox a Terminal keeps up
@@ -482,10 +446,8 @@ const endSandbox = (
       return SANDBOX_ENDING.LOST;
     }
     if (Option.isNone(endedOf(standing, now))) return SANDBOX_ENDING.LEFT;
-    const runner = yield* runnerStanding(api, sandbox);
-    if (runner === RUNNER_STANDING.MOVED_ON) return SANDBOX_ENDING.LEFT;
-    if (runner === RUNNER_STANDING.RUNNING) {
-      return yield* retiredPastWarm(sandbox, standing, now);
+    if ((yield* runnerStanding(api, sandbox)) !== RUNNER_STANDING.EXITED) {
+      return SANDBOX_ENDING.LEFT;
     }
     return yield* stoppedUnderLease(api, sandbox, now, budget);
   });
@@ -532,7 +494,6 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
     const count = (ending: SandboxEnding) => endings.filter((each) => each === ending).length;
     return {
       stopped: count(SANDBOX_ENDING.STOPPED),
-      retired: count(SANDBOX_ENDING.RETIRED),
       held: count(SANDBOX_ENDING.HELD),
       failed: count(SANDBOX_ENDING.FAILED),
       deferred: count(SANDBOX_ENDING.DEFERRED),

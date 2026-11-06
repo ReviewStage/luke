@@ -325,7 +325,7 @@ it.effect(
           sbs_capped: { status: "running", createdAt: 0, timeout: CODER.SANDBOX_MAX_LIFETIME_MS },
         },
       );
-      yield* TestClock.adjust(Duration.millis(nearCap - 20 * MINUTE));
+      yield* TestClock.adjust(Duration.millis(nearCap - 5 * MINUTE));
 
       const extended = yield* keepAliveFor(SESSION).pipe(Effect.provide(api.layer));
 

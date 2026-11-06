@@ -53,7 +53,6 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { RUN_EVENT, type RunEvent, TURN_ORIGIN } from "../../core.js";
-import type { GitHubApp } from "../../github/github-app.js";
 import { afterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -220,12 +219,12 @@ export interface RunnerEventsOptions<R = never> {
    * transaction: the sandbox's own lifecycle (P08's `runnerEnded`), which
    * stops nothing for a launch since replaced. Nothing where left out.
    */
-  readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices | R>;
+  readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
   /**
    * Told once a batch that holds a launch's IDLE, and no END after it, has
-   * landed, after its transaction: the warm runner retired at once where
-   * its machine's warm window is zero, or its device waits to update
-   * (`sandboxAtRunnerIdle`). Nothing where left out.
+   * landed, after its transaction: the device's warm runner retired at once
+   * where its device waits to update (`sandboxAtRunnerIdle`). Nothing where
+   * left out.
    */
   readonly idled?: (idled: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
   /**
@@ -263,35 +262,37 @@ export function sandboxKeptAlive(alive: RunnerAlive): Effect.Effect<void> {
 }
 
 /**
- * A launch's end as the sandbox hears it (`../coder-host/claude-code-sessions.ts`'s
- * `runnerEnded`): stopped, unless a developer's Terminal holds it or a newer
- * launch replaced this one, or a message the launch never took waits, which
- * the harness's sessions hand to a launch of their own once the answer has
- * left (`deliverWaiting`), so the ended runner's last post never waits on
- * it. A stop that fails is said in the log and passed over, because the
- * sandbox then stops at its own timeout or when the Terminal lease's sweep
- * finds it, and the events it ended are already kept.
+ * A launch's end as the sandbox hears it (`../coder-host/runner-sessions.ts`'s
+ * `runnerEnded`), once the ended runner's last post has its answer, so that
+ * post never waits on the runner lease or on Vercel's stop, which holds its
+ * call until the sandbox's snapshot is taken: stopped, unless a developer's
+ * Terminal holds it or a newer launch replaced this one, or a message the
+ * launch never took waits, which the harness's sessions then hand to a
+ * launch of their own (`deliverWaiting`). A stop that fails is said in the
+ * log and passed over, because the sandbox then stops at its own timeout,
+ * and the events it ended are already kept.
  */
 export function sandboxAtRunnerEnd(
   ended: RunnerEnded,
-): Effect.Effect<void, never, DatabaseServices | GitHubApp> {
+): Effect.Effect<void, never, DatabaseServices> {
   const { sessionId } = ended;
   if (sessionId === undefined) return Effect.void;
-  return runnerEnded({
-    target: ended.target,
-    sessionId,
-    sequence: ended.sequence,
-    reason: ended.reason,
-  }).pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.flatMap((left) =>
-      left === RUNNER_ENDED.LINES_WAITING
-        ? afterResponse("a launch's waiting lines", waitingHandedOn(ended, sessionId))
-        : Effect.void,
-    ),
-    Effect.catch((failure) =>
-      Effect.logWarning(
-        `runner-events: the sandbox was not stopped at its launch's end: ${failure._tag}`,
+  return afterResponse(
+    "a launch's end",
+    runnerEnded({
+      target: ended.target,
+      sessionId,
+      sequence: ended.sequence,
+      reason: ended.reason,
+    }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.flatMap((left) =>
+        left === RUNNER_ENDED.LINES_WAITING ? waitingHandedOn(ended, sessionId) : Effect.void,
+      ),
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `runner-events: the sandbox was not stopped at its launch's end: ${failure._tag}`,
+        ),
       ),
     ),
   );
@@ -316,14 +317,13 @@ const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
   });
 
 /**
- * A launch's IDLE as the sandbox or the device hears it: the warm runner
- * retired at once where its machine's warm window is zero
- * (`CODER.RUNNER_WARM`), as a sandbox's is, or where its device waits to
- * switch release (`../coder-host/runner-sessions.ts`'s `runnerIdled`), so
- * its END stops the sandbox; a device's runner otherwise stays warm, and
- * the sweep retires it past the window. A retire that fails is said in the
- * log and passed over, because the sweep retires the runner once its grace
- * passes.
+ * A launch's IDLE as the device hears it: the warm runner retired at once
+ * where its device waits to switch release
+ * (`../coder-host/runner-sessions.ts`'s `runnerIdled`); it otherwise stays
+ * warm, and the sweep retires it past the window. A sandbox's runner is
+ * launched to end at its turn's end, so it posts no IDLE. A retire that
+ * fails is said in the log and passed over, because the sweep retires the
+ * runner once its grace passes.
  */
 export function sandboxAtRunnerIdle(
   idled: RunnerEnded,
