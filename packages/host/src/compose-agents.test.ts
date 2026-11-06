@@ -366,6 +366,11 @@ function fakeService() {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
+    writeChaptersProvider: (provider) =>
+      Effect.sync(() => {
+        asked.push(`chapters-provider:${provider}`);
+        return { provider };
+      }),
     // SAFETY: the hosts' read is the one live read the client is asked for by its declaration.
     liveRead: ((
       read: { readonly name: string },
@@ -1214,6 +1219,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } },
     );
+    assert.deepEqual(
+      yield* acts.AGENTS_CHAPTERS_PROVIDER_WRITE({ provider: MODEL_PROVIDER.OPENAI }),
+      { provider: MODEL_PROVIDER.OPENAI },
+    );
     assert.deepEqual(yield* acts.AGENTS_LIST({ taskId: TASK_ID }), {
       agents: [AGENT],
     });
@@ -1446,6 +1455,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
 
     assert.deepEqual(asked, [
       "default:openai/gpt-6.1-sol:xhigh",
+      `chapters-provider:${MODEL_PROVIDER.OPENAI}`,
       `list:${TASK_ID}`,
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",

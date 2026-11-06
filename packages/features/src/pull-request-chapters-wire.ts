@@ -112,6 +112,13 @@ export const pullRequestChaptersAnswerSchema = EffectSchema.Struct({
       generatable: EffectSchema.Boolean,
       /** What the asker's Generate would run on; absent where they can generate none, and from a service older than it. */
       runsOn: EffectSchema.optionalKey(chaptersRunsOnSchema),
+      /**
+       * Every model the asker's Generate may run on, one for each provider
+       * whose API key of theirs opens, in the providers' own order, which
+       * the Chapters tab offers to choose from; absent where they hold
+       * fewer than two, and from a service older than it.
+       */
+      runsOnChoices: EffectSchema.optionalKey(EffectSchema.Array(chaptersRunsOnSchema)),
       chapters: pullRequestChaptersStateSchema,
     }),
   ),

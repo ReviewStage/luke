@@ -45,6 +45,7 @@ import {
   type AgentReviewOptionsAnswerView,
   type AgentWorkspaceListParams,
   type AgentWorkspaceToolsAnswerView,
+  type ChaptersProviderAnswer,
   type ChatGptDeviceLoginParams,
   type ChatGptDevicePollAnswerView,
   type ChatGptDeviceStartAnswerView,
@@ -89,6 +90,12 @@ import {
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./agent-wire.js";
+import {
+  CHAPTERS_MODEL,
+  CHAPTERS_PICK_LIST,
+  chaptersModelOn,
+  chaptersProviderOf,
+} from "./chapters-model-choice.js";
 import type { AgentChangeRequest } from "./contract/agents.js";
 import {
   credentialMissingDataSchema,
@@ -483,6 +490,19 @@ function defaultOf(
   return read.txid === undefined ? { choice } : { choice, txid: read.txid };
 }
 
+const readChaptersPick = Schema.decodeUnknownOption(Schema.Literals(CHAPTERS_PICK_LIST));
+
+/** The chapters provider as a write answered it, read off the model it kept, with the transaction it committed in; unanswered where the answer named none the window can read. */
+function chaptersProviderAnswer(
+  read: AccountPreferencesAnswerWire | Failed,
+): ChaptersProviderAnswer {
+  if ("failure" in read) return read;
+  const kept = Option.getOrUndefined(readChaptersPick(read.chaptersModel));
+  if (kept === undefined) return UNANSWERED;
+  const provider = chaptersProviderOf(kept);
+  return read.txid === undefined ? { provider } : { provider, txid: read.txid };
+}
+
 /**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
@@ -585,6 +605,21 @@ export class HostedAgentClient {
     return Effect.map(
       hostedCall(this.#hosted.account.writePreferences, admitted, { as: AGENT_RENAMES }),
       defaultOf,
+    );
+  }
+
+  /** Whose API key the account's chapters run on where it saved both, written on its own as the account's chapters model, its provider's model of Haiku's tier, answering it as kept with the transaction it committed in. */
+  writeChaptersProvider(
+    provider: ModelProvider,
+  ): Effect.Effect<ChaptersProviderAnswer, never, HttpClient.HttpClient> {
+    return Effect.map(
+      hostedAnswer(
+        askHosted(this.#hosted.account.writePreferences, {
+          chaptersModel: chaptersModelOn(provider, CHAPTERS_MODEL.HAIKU),
+        }),
+        DEFAULT_REFUSALS,
+      ),
+      chaptersProviderAnswer,
     );
   }
 

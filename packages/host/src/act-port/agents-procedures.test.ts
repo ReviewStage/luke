@@ -60,6 +60,8 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 /** Each kind's refusal, as the window drew it before the kinds were declared. */
 const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: "Could not change the default model on this system.",
+  [AGENT_ACT_KIND.AGENTS_CHAPTERS_PROVIDER_WRITE]:
+    "Could not change which key chapters run on on this system.",
   [AGENT_ACT_KIND.HOSTS_REMOVE]: "Could not remove the host on this system.",
   [AGENT_ACT_KIND.HOSTS_THIS_MAC_SET]: "Could not change this Mac on this system.",
   [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: "Could not read the code on this system.",
@@ -94,6 +96,7 @@ const REFUSAL = {
 /** A payload each declared act's schema takes, so a window refused it was refused for who it is alone. */
 const PAYLOAD: { readonly [Name in keyof typeof AGENT_ACTS]: WireBoundaryInput } = {
   AGENTS_DEFAULT_WRITE: { model: "anthropic/claude-opus-5.5", effort: "high" },
+  AGENTS_CHAPTERS_PROVIDER_WRITE: { provider: "openai" },
   HOSTS_REMOVE: { id: HOST_ID },
   HOSTS_THIS_MAC_SET: { on: true },
   HOSTS_PAIRING_READ: { code: PAIRING_CODE },

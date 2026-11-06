@@ -103,7 +103,11 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
+import {
+  agentDefaultWritten,
+  chaptersProviderWritten,
+  heldAccountPreferences,
+} from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -255,6 +259,7 @@ export type AgentClient = Pick<
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
+  | "writeChaptersProvider"
   | "liveRead"
   | "devicePresence"
   | "removeHost"
@@ -1374,6 +1379,13 @@ function composed(
     AGENTS_DEFAULT_WRITE: declaredWrite(
       dependencies.pool,
       agentDefaultWritten((choice) => asked(client.writeDefault(choice)), dependencies.accountId),
+    ),
+    AGENTS_CHAPTERS_PROVIDER_WRITE: declaredWrite(
+      dependencies.pool,
+      chaptersProviderWritten(
+        (provider) => asked(client.writeChaptersProvider(provider)),
+        dependencies.accountId,
+      ),
     ),
     // A removal is drawn gone over the held hosts the moment it is asked.
     HOSTS_REMOVE: declaredWrite(

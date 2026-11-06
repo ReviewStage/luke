@@ -1179,7 +1179,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       const { agent } = yield* reachedAgentById(context.userId, input.id);
       // Note that an agent with no repository is answered as its rows stand, none, as it keeps no chapters.
-      const { runsOn } = yield* agentChaptersAdmission(context.userId, agent);
+      const { generator } = yield* agentChaptersAdmission(context.userId, agent);
       const sealed = yield* liveQueryParts(
         pullRequestChaptersLive,
         {
@@ -1190,11 +1190,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         },
         input,
       );
-      return {
-        ...sealed,
-        generatable: runsOn !== undefined,
-        ...(runsOn === undefined ? {} : { runsOn }),
-      };
+      return { ...sealed, ...generator };
     }),
     integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

@@ -338,6 +338,12 @@ function chaptersOf(answer: Answer): PullRequestChaptersAnswer {
 
 const refused = (status: number, error: string) => ({ status, body: { error } });
 
+/** What a member who saved both keys may generate on, Anthropic's first as the providers' own order puts it. */
+const BOTH_CHOICES = [
+  { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+  { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+];
+
 it.layer(getTestDB())("a pull request's chapters", (it) => {
   it.effect(
     "an unsigned caller is refused as unauthenticated on both procedures, before the agent or a body is read",
@@ -370,7 +376,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a read before any Generate answers no chapters, and what the reader's Generate would run on, Haiku on their Anthropic key where they saved both, asking GitHub for no pull request: nothing where they saved no API key, since Vespin's own key tells no chapters",
+    "a read before any Generate answers no chapters, and what the reader's Generate would run on, Haiku on their Anthropic key where they saved both with both offered, asking GitHub for no pull request: nothing where they saved no API key, since Vespin's own key tells no chapters",
     () =>
       Effect.gen(function* () {
         const { owner, github, ask } = yield* standing();
@@ -379,6 +385,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
             number: NUMBER,
             generatable: true,
             runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            runsOnChoices: BOTH_CHOICES,
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
@@ -408,6 +415,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
             number: NUMBER,
             generatable: true,
             runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            runsOnChoices: BOTH_CHOICES,
             chapters: ready,
           },
         });
@@ -492,6 +500,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
             number: NUMBER,
             generatable: true,
             runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            runsOnChoices: BOTH_CHOICES,
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
@@ -547,6 +556,36 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
         assert.equal("model" in chapters ? chapters.model : undefined, CHAPTERS_MODEL.HAIKU);
         assert.deepEqual(chaptersOf(yield* ask(owner, { number: NUMBER })), answer);
+      }),
+  );
+
+  it.effect(
+    "a member who saved both keys and last picked OpenAI's is offered both and told their Generate runs on OpenAI's model, and it does, while one who picked OpenAI's but saved only an Anthropic key runs on Anthropic's with nothing to pick",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* standing();
+        yield* writeAccountPreferences(owner, { chaptersModel: "gpt-6-luna" });
+        const read = chaptersOf(yield* ask(owner, { number: NUMBER }));
+        assert.deepEqual(read.pullRequest?.runsOn, {
+          provider: MODEL_PROVIDER.OPENAI,
+          model: "gpt-6-luna",
+        });
+        assert.deepEqual(read.pullRequest?.runsOnChoices, BOTH_CHOICES);
+        const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
+        const chapters = answer.pullRequest?.chapters;
+        assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
+        assert.equal("model" in chapters ? chapters.model : undefined, "gpt-6-luna");
+
+        const anthropicOnly = yield* standing({ keys: [PROVIDER_KEY_PROVIDER.ANTHROPIC] });
+        yield* writeAccountPreferences(anthropicOnly.owner, { chaptersModel: "gpt-6-luna" });
+        const fallen = chaptersOf(
+          yield* anthropicOnly.ask(anthropicOnly.owner, { number: NUMBER }),
+        );
+        assert.deepEqual(fallen.pullRequest?.runsOn, {
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          model: CHAPTERS_MODEL.HAIKU,
+        });
+        assert.equal(fallen.pullRequest?.runsOnChoices, undefined, "one key offers no choice");
       }),
   );
 
