@@ -395,11 +395,17 @@ export function useTextRoom({
   }, [held, room, placing]);
 }
 
-/** The block an editor closed from by the keyboard takes the keyboard back, once. */
+/**
+ * The block an editor closed from by the keyboard takes the keyboard back,
+ * once. Note that a block drawn only later, the placeholder once an emptied
+ * description's save lands, takes nothing where the keyboard went somewhere
+ * of its own meanwhile, since the editor gone leaves it on the page's body.
+ */
 function useSelectedOnClose(editing: DescriptionEditing, key: EditorHost, take: () => void): void {
   useEffect(() => {
     if (editing.editor !== undefined || editing.selecting !== key) return;
-    take();
+    const focused = document.activeElement;
+    if (focused === null || focused === document.body) take();
     editing.selected();
   });
 }
