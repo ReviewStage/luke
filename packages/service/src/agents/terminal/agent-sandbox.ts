@@ -13,7 +13,10 @@
  *
  * The ports a server listens on are read the same way, from the kernel's
  * socket tables in the running session (`listening-ports.ts`), and never
- * from a sandbox that is not running.
+ * from a sandbox that is not running. Turning forwarding on is the one
+ * read that wakes a stopped sandbox, the developer having asked for the
+ * app, and starts the repository's run command (`run-command.ts`) where no
+ * port listens in it yet.
  *
  * The GitHub credential the firewall carries for the agent is set here in
  * the agent's own GitHub slot, in the shape its own session and a copy of
@@ -25,7 +28,10 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import type { ListeningPortsAnswer } from "@repo/features/listening-ports-wire";
+import type {
+  ForwardingStartAnswer,
+  ListeningPortsAnswer,
+} from "@repo/features/listening-ports-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
@@ -52,6 +58,7 @@ import {
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
 import { listeningPortsOf, readSocketTables } from "./listening-ports.js";
+import { readRunConfig, runCommandOf, startRunCommand } from "./run-command.js";
 import {
   holdsTerminal,
   killTerminal,
@@ -107,6 +114,10 @@ export interface AgentSandboxService {
   readonly listeningPorts: (
     sessionId: string,
   ) => Effect.Effect<ListeningPortsAnswer, SandboxUnavailable>;
+  /** The agent's sandbox woken where it was stopped, and the repository's run command started there where no port listens. */
+  readonly startForwarding: (
+    sessionId: string,
+  ) => Effect.Effect<ForwardingStartAnswer, SandboxUnavailable>;
   /** A new shell in the agent's running sandbox, under the id given, named where the developer named it. */
   readonly start: (
     sessionId: string,
@@ -189,6 +200,16 @@ function agentSandboxOver(
       ),
     );
 
+  /** The sandbox's running session, woken from its snapshot where it was stopped; none where it was never opened. */
+  const woken = (sessionId: string) =>
+    Effect.gen(function* () {
+      const { sandbox, running } = yield* standing(sessionId);
+      if (sandbox === undefined || running !== undefined) return running;
+      // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+      yield* capSandboxTimeout(api, sandbox);
+      return (yield* api.resume(sandbox.name)).currentSessionId;
+    });
+
   return {
     terminals: (sessionId) =>
       Effect.gen(function* () {
@@ -207,6 +228,17 @@ function agentSandboxOver(
         // Tables the kernel could not be read for are an outage, never a sandbox with no servers.
         if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
         return { running: true, ports };
+      }),
+    startForwarding: (sessionId) =>
+      Effect.gen(function* () {
+        const running = yield* woken(sessionId);
+        if (running === undefined) return { started: false };
+        const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
+        if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        const command = runCommandOf(yield* api.run(running, readRunConfig()));
+        if (ports.length > 0 || command === undefined) return { started: false };
+        yield* api.start(running, { ...startRunCommand(command), sudo: false });
+        return { started: true };
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>

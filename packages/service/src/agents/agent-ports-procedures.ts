@@ -11,14 +11,23 @@
  * forwarding is on. A sandbox that is not running, stopped or never opened,
  * is never woken here, and answers so with no ports; an agent on a Mac has
  * no sandbox, and answers the same.
+ *
+ * Turning forwarding on is the one call that wakes a stopped sandbox, and
+ * starts the repository's run command in it where no port listens yet
+ * (`terminal/run-command.ts`); it answers at once, and the desktop's polling
+ * finds the port once the command listens. The sandbox is held for the
+ * tunnel's idle bound first, as a tunnel holds it, so one woken for an app
+ * that never listens is stopped by the lease sweep.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { Effect, type Layer } from "effect";
+import { Clock, Duration, Effect, type Layer } from "effect";
 import type { HttpClient } from "effect/http";
-import type { UserIdResolver } from "../http/http-effect.js";
+import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { TUNNEL_RELAY_BOUNDS } from "../tunnel/relay.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
 import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
 
@@ -28,7 +37,7 @@ export interface AgentPortsProcedureSeams {
   readonly sandbox: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient | DatabaseServices>;
 }
 
-/** The agent ports resource: its one read, to a signed-in caller. */
+/** The agent ports resource: its read, and forwarding turned on, to a signed-in caller. */
 export function agentPortsProcedures(seams: AgentPortsProcedureSeams) {
   const signedIn = hosted.agentPorts.use(accountMiddleware(seams.resolveUserId));
   return {
@@ -42,6 +51,25 @@ export function agentPortsProcedures(seams: AgentPortsProcedureSeams) {
         Effect.gen(function* () {
           const sandbox = yield* AgentSandbox;
           return yield* sandboxOrUpstream(sandbox.listeningPorts(sessionId));
+        }),
+        seams.sandbox,
+      );
+    }),
+    /** The sandbox woken and the repository's run command started where no port listens, answered at once. */
+    startForwarding: signedIn.startForwarding.effect(function* ({ input, context }) {
+      const { conversationId, sessionId, machine } = yield* reachedAgentSession(
+        context.userId,
+        input.id,
+      );
+      if (machine === AGENT_MACHINE.DEVICE || sessionId === undefined) return { started: false };
+      const now = yield* Clock.currentTimeMillis;
+      yield* hostedStoreOrUnavailable(
+        holdSandbox(conversationId, new Date(now + Duration.toMillis(TUNNEL_RELAY_BOUNDS.IDLE))),
+      );
+      return yield* Effect.provide(
+        Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          return yield* sandboxOrUpstream(sandbox.startForwarding(sessionId));
         }),
         seams.sandbox,
       );

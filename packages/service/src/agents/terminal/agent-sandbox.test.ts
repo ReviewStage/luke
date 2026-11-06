@@ -255,6 +255,77 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   );
 
   it.effect(
+    "turning forwarding on wakes a stopped sandbox and starts the repository's run command in its checkout without capabilities, and starts nothing where a port listens",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const header =
+          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid";
+        const listener =
+          "   0: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002";
+        /** Vercel with the session's sandbox in the status given, its tables printing the rows given, and the checkout's `.vespin.json` naming `pnpm dev`. */
+        const forwarding = (status: string, rows: readonly string[]) => {
+          const started: { readonly url: URL; readonly body: Record<string, unknown> }[] = [];
+          const resumed: URL[] = [];
+          const layer = Layer.provide(
+            agentSandboxLayer,
+            Layer.merge(
+              LOCAL_AGENT_ENVIRONMENT,
+              fakeHttpClientLayer(async (url, init) => {
+                const parsed = new URL(url);
+                if (parsed.pathname.endsWith("/cmd")) {
+                  const body = JSON.parse(await new Response(init.body).text());
+                  if (body.attachStdin === true) {
+                    started.push({ url: parsed, body });
+                    return Response.json({ command: { id: "cmd_run", exitCode: null } });
+                  }
+                  const [file] = body.args;
+                  return file === "/workspace/repository/.vespin.json"
+                    ? commandStream(0, '{ "run": "pnpm dev" }')
+                    : commandStream(0, [header, ...rows].join("\n"));
+                }
+                if (init.method === "PATCH") return Response.json({ sandbox: { name: SANDBOX } });
+                if (parsed.searchParams.get("resume") === "true") {
+                  resumed.push(parsed);
+                  return Response.json({
+                    sandbox: { name: SANDBOX, status: "running" },
+                    session: { id: "sbs_resumed", status: "running" },
+                  });
+                }
+                return Response.json({
+                  sandboxes: [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
+                });
+              }),
+            ),
+          );
+          return { layer, started, resumed };
+        };
+        const stopped = forwarding("stopped", []);
+        const serving = forwarding("running", [listener]);
+
+        const woken = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.startForwarding(SESSION),
+        ).pipe(Effect.provide(stopped.layer));
+        const listening = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.startForwarding(SESSION),
+        ).pipe(Effect.provide(serving.layer));
+
+        assert.deepEqual(woken, { started: true });
+        assert.equal(stopped.resumed[0]?.pathname, `/api/v2/sandboxes/${SANDBOX}`);
+        const [run] = stopped.started;
+        assert.ok(run !== undefined);
+        assert.equal(run.url.pathname, "/api/v2/sandboxes/sessions/sbs_resumed/cmd");
+        assert.equal(run.body.command, "setpriv");
+        assert.equal(run.body.cwd, "/workspace/repository");
+        assert.equal(run.body.sudo, false);
+        assert.ok((run.body.args as readonly string[]).includes("pnpm dev"));
+        assert.deepEqual(listening, { started: false });
+        assert.deepEqual(serving.started, []);
+        assert.deepEqual(serving.resumed, []);
+      }),
+  );
+
+  it.effect(
     "a shell starts in the running sandbox under the id given and is read back, and one tmux does not hold is not found",
     () =>
       Effect.gen(function* () {
