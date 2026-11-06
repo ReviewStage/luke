@@ -206,7 +206,7 @@ export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
 }
 
 /**
- * An item's own glyph, as its chip wears it and its card leads with it:
+ * An item's own glyph, as its chip wears it:
  * what it asks, as its row's second line leads with it (`inboxLineGlyph`),
  * or the thread's glyph where it asks nothing.
  */
@@ -226,9 +226,9 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
 /**
  * An Inbox row's card, hung beside the row as a sidebar task's row hangs
  * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with the item's glyph, what it asks as its chip wears
- * it, its title, where it stands, waiting on the reader, on a teammate, or
- * settled, and when it last moved; then what holds it, a task as its key
+ * thread. It leads with its title, wearing no glyph, where it stands,
+ * waiting on the reader, on a teammate, or settled, and when it last
+ * moved; then what holds it, a task as its key
  * and its chip, which wears its status, or an automation by its name;
  * and how it ended, once it has. Note that it draws no message of the
  * thread, which the row's own second line already previews, and no open
@@ -262,7 +262,6 @@ export function InboxItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}
         sub={<span>{standingWords(item, needsYou, starter)}</span>}
         corner={<Time at={item.updatedAt} now={now} hint={false} />}
@@ -296,7 +295,7 @@ export function InboxItemCard({
 
 /**
  * What holds an item, as its card says it under the head, a quieter row
- * on the name's column: a task by its key, as the task's own card says it
+ * flush with the name, which wears no glyph: a task by its key, as the task's own card says it
  * (`TaskKey`), and by its chip as a mention of it is drawn (`HolderRef`),
  * which wears the task's status as its mark, so the card says no status in
  * words; an automation, or the agents no automation names, by their chip
@@ -318,7 +317,6 @@ function HolderDetail({
   return (
     <HoverCardRow
       look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={null}
       label={
         <span className={cn(TASK_CARD_STANDING, "flex-nowrap")} data-holder-detail="">
           {holder.kind === INBOX_HOLDER.TASK ? (
