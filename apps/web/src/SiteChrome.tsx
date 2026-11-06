@@ -25,8 +25,12 @@ export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
 /** The newest release's version-free DMG, named for the product as the Release workflow names it. */
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/${PRODUCT_NAME}.dmg`;
 
-/** The user docs, which Mintlify builds from `apps/docs` and serves on their own subdomain. */
-export const DOCS_URL = "https://docs.vespin.dev";
+/**
+ * The user docs, which Mintlify builds from `apps/docs`; the root
+ * `vercel.json` passes `/docs` and Mintlify's asset paths on to it, so they
+ * stand beside the changelog on this origin.
+ */
+export const DOCS_URL = "/docs";
 
 /** Where the web app opens, the one address the site and the invitation page send a reader to. */
 export const WEB_APP_URL = PANEL_PATH;
