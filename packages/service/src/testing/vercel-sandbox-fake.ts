@@ -10,8 +10,7 @@
  * where it returns anything.
  */
 
-import { Effect, Layer } from "effect";
-import { onTestFinished, vi } from "vitest";
+import { Layer } from "effect";
 import { SandboxFetch } from "../agents/vercel-sandbox-api.js";
 
 const TEAM = "team_fixture";
@@ -242,37 +241,9 @@ export function snapshotOf(snapshot: {
 /** A fake's responder as `fetch`. */
 type Responder = (url: string, init: RequestInit) => Response | Promise<Response>;
 
-/**
- * Points the firewall's policy write, which names a session by its id
- * alone, at the responder for the rest of the test. Note that these are
- * stubs of the whole process, because the SDK builds that write's client
- * itself, on `globalThis.fetch` and the token its OIDC read finds
- * (`vercel-sandbox-api.ts`'s `sessionHandle`), and a suite calls it long
- * after the layer it built its service under was released.
- */
-function sessionsSendThrough(send: typeof globalThis.fetch): void {
-  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-  const spied = vi.spyOn(globalThis, "fetch").mockImplementation(send);
-  onTestFinished(() => {
-    spied.mockRestore();
-    vi.unstubAllEnvs();
-  });
-}
-
-/**
- * `@vercel/sandbox`'s `fetch` over a fake's responder, which the `HttpClient`
- * the fake stands behind answers through too. Note that the policy write by
- * id is pointed at it as the layer is built rather than made, so of two
- * fakes in one test the one whose service was built last answers it.
- */
+/** `@vercel/sandbox`'s `fetch` over a fake's responder, which the `HttpClient` the fake stands behind answers through too. */
 export function sandboxFetchOver(respond: Responder): Layer.Layer<never> {
   const send: typeof globalThis.fetch = (input, init) =>
     Promise.resolve(respond(input instanceof Request ? input.url : String(input), init ?? {}));
-  return Layer.effect(
-    SandboxFetch,
-    Effect.sync(() => {
-      sessionsSendThrough(send);
-      return send;
-    }),
-  );
+  return Layer.succeed(SandboxFetch, send);
 }

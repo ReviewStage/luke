@@ -45,6 +45,7 @@ import {
 } from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/agent-origin-live";
+import { AGENT_CURSOR_START } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
@@ -958,11 +959,18 @@ const askTranscript = (options: {
   readonly path?: string;
   /** The account the read names, the bearer's own where none is named. */
   readonly forUser?: string;
+  readonly poll?: boolean;
+  /** The digest the reader last saw, which holds the poll until the rows move past it. */
+  readonly after?: string;
+  /** Where the reader holds the newest messages, past which its cursor parts are answered. */
+  readonly cursor?: string;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
+      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
@@ -974,6 +982,9 @@ const askTranscript = (options: {
     );
     url.searchParams.set("id", options.agentId);
     if (options.call !== undefined) url.searchParams.set("call", options.call);
+    if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
+    if (options.after !== undefined) url.searchParams.set(LIVE_POLL.AFTER, options.after);
+    if (options.cursor !== undefined) url.searchParams.set(LIVE_POLL.CURSOR, options.cursor);
     const response = yield* hostedAnswer(
       { live: procedures },
       services,
@@ -1049,6 +1060,51 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             agentId: "not-an-agent",
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+
+  it.effect(
+    "a poll from a host that follows the window's rows, which drops the count of its messages, is held over an idle transcript rather than answered at once",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const started = yield* createAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        assert.ok(Option.isSome(started));
+        const agentId = started.value.agent.id;
+        const first = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+          (yield* askTranscript({ bearer: owner, agentId, cursor: AGENT_CURSOR_START })).body,
+        );
+        const cursor = first.queries.window.cursor?.next;
+        assert.ok(cursor !== undefined);
+        // As the host sends it (`transcript-follow.ts`'s `followedRead`): its read without the count of its messages.
+        const { messages: _, ...followed } = first.queries;
+        const after = liveDigestOf(followed);
+        assert.ok(after !== undefined);
+
+        const unchanged = yield* Effect.forkChild(
+          askTranscript({ bearer: owner, agentId, poll: true, after, cursor }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+          (yield* Fiber.join(unchanged)).body,
+        );
+        assert.deepEqual(
+          Object.entries(held.queries)
+            .filter(([, query]) => query?.rows !== undefined)
+            .map(([part]) => part),
+          [],
+          "unchanged carries no rows",
         );
       }),
   );

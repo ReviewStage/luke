@@ -44,10 +44,11 @@ import {
   UNREAD,
 } from "@repo/host/app-state";
 import { TASKS_ACT_KIND } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -55,12 +56,7 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
-import {
-  type FixedSidePanelTab,
-  PULL_REQUEST_VIEW,
-  SIDE_PANEL_TAB,
-  type SidePanelTab,
-} from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
@@ -71,9 +67,10 @@ import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { askKept } from "../act.js";
-import { handHostReads, handMembers } from "../testing/app-state.js";
+import { handHostReads, handMembers, handState, registryWith } from "../testing/app-state.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
+import type { SummaryPin } from "./task-summary.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -93,10 +90,18 @@ afterEach(() => {
 });
 
 /** The side panel shown on the plan's comments beside it. */
+/** A File tab of the task, which the panel draws in these tests. */
+const NOTES = { file: "docs/notes.md" };
+
+/** The file the File tab shows, opened on the task. */
+const NOTES_OPENED = { path: NOTES.file, range: undefined, opened: 0, browsedOn: TASK.id };
+
 const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
   ...tasksControl().sidePanel,
   open: true,
-  tab: SIDE_PANEL_TAB.COMMENTS,
+  strip: [NOTES],
+  files: [NOTES_OPENED],
+  tab: NOTES,
 };
 
 test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
@@ -160,6 +165,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
   };
   const held: TasksCommentsFollow[] = [];
   fakeAppBridge({});
+  handState(experimentsOn(EXPERIMENT.PLANS));
   const reads = handHostReads({});
   fakeActPort({
     [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: (subject) => {
@@ -183,7 +189,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
         tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK.id, region }),
       }),
     );
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
 
@@ -245,7 +251,7 @@ test("a task with no agent tab draws a new agent's draft", () => {
   assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
 });
 
-test("a wide plan with no agent offers New agent at its head, which opens the draft the + menu's New agent opens", async () => {
+test("a wide task's details with no agent offer New agent at their head, which opens a draft as the way back to the agents does", async () => {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
   fakeActPort({});
@@ -256,7 +262,7 @@ test("a wide plan with no agent offers New agent at its head, which opens the dr
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -280,19 +286,22 @@ test("a wide plan with no agent offers New agent at its head, which opens the dr
     ) ?? assert.fail("New agent is offered");
 
   act(() => newAgent(container.querySelector(".plan-agents [aria-label='Agents']")).click());
-  const plus =
-    container.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]') ??
-    assert.fail("the + stands");
-  await act(async () => plus.click());
-  act(() => newAgent(container.querySelector(".ui-searchable-menu")).click());
+  const back =
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document button")].find(
+      (each) => each.textContent === "Agents",
+    ) ?? assert.fail("the way back to the agents stands");
+  act(() => back.click());
 
   assert.deepEqual(chosen, [{ draft: "draft" }, { draft: "draft" }], "both open a draft alike");
   act(() => root.unmount());
   container.remove();
 });
 
+/** A draft agent's tab, which a page beside its side panel shows. */
+const DRAFT_TAB = { draft: "draft" };
+
 /** The task's page with the side panel open on `tab`, as markup. */
-function panelTab(tab: FixedSidePanelTab): HTMLElement {
+function panelTab(): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -301,7 +310,13 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
         page: TASKS_PAGE.DOCUMENT,
         activeTaskId: TASK.id,
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        sidePanel: { ...tasksControl().sidePanel, open: true, tab },
+        // Note that the panel stands beside an agent's tab, since the task's details take its room.
+        mainTabs: {
+          ...tasksControl().mainTabs,
+          tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
+          tab: DRAFT_TAB,
+        },
+        sidePanel: DOCUMENT_PANEL,
       }),
     }),
   );
@@ -311,7 +326,7 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
 }
 
 test("the panel's tab panel is labeled by its chosen tab, which controls it", () => {
-  const side = panelTab(SIDE_PANEL_TAB.COMMENTS).querySelector("aside[aria-label='Panel']");
+  const side = panelTab().querySelector("aside[aria-label='Panel']");
   const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
   const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
   assert.ok(panel && chosen, "the panel shows its chosen tab");
@@ -412,7 +427,7 @@ async function _narrowTaskInbox(
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -527,7 +542,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
+test("a plan's document, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -549,7 +564,7 @@ test("a plan's document opens on its path, its repository as plain words, then i
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -572,6 +587,11 @@ test("a plan's document opens on its path, its repository as plain words, then i
   const byline = first?.nextElementSibling;
 
   assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
+  assert.equal(
+    container.querySelector(".desktop-document .task-details-back")?.textContent,
+    "Agents",
+    "the way back to the agents is pinned in the card",
+  );
   assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
   assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
   assert.equal(
@@ -613,7 +633,7 @@ test("a sub-task's row opens the task as a sidebar row does, never a link to its
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => linked.push(link) },
@@ -668,7 +688,7 @@ test("opening another task draws only its own title and sub-tasks, none of the t
   const listed = [subTask("t-2", 2, TASK.id), subTask("t-3", 3, other.id)];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const open = (task: Task) =>
     act(() =>
       root.render(
@@ -751,7 +771,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -836,16 +856,20 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 });
 
 /** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
-function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
+function panelPage(
+  tab: SidePanelTab,
+  overrides: Partial<TasksControl> = {},
+  summary: SummaryPin = UNPINNED_SUMMARY,
+) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
     act(() =>
       root.render(
         onRegistry(
-          AtomRegistry.make(),
+          registryWith(experimentsOn(EXPERIMENT.PLANS)),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
+            summary,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -880,16 +904,16 @@ test("the plan stays drawn, hidden, while an agent's tab of the column is shown,
       openAgents: [agentId],
     },
   });
-  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
+  const page = panelPage(NOTES, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
   assert.ok(document, "the plan is drawn on Overview");
   assert.equal(document.hasAttribute("hidden"), false);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS, column({ agent: agentId }));
+  page.draw(NOTES, column({ agent: agentId }));
   assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
   assert.equal(document.hasAttribute("hidden"), true);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
+  page.draw(NOTES, column(MAIN_TAB.OVERVIEW));
   assert.equal(page.container.querySelector(".desktop-document"), document);
   assert.equal(document.hasAttribute("hidden"), false);
   page.unmount();
@@ -901,20 +925,26 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   );
   const closed: string[] = [];
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, {
-    mainTabs: {
-      ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
-      tab: MAIN_TAB.OVERVIEW,
-      onClose: () => closed.push("column"),
+  const page = panelPage(
+    NOTES,
+    {
+      mainTabs: {
+        ...tasksControl().mainTabs,
+        tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+        tab: { agent: agentId },
+        onClose: () => closed.push("column"),
+      },
+      sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
+      pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
     },
-    sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
-  });
+    // The summary stands pinned beside the document, since the rail draws the panel's kinds alone.
+    { ...UNPINNED_SUMMARY, pinned: true },
+  );
   act(() => relayout());
-  const row = [
-    ...page.container.querySelectorAll<HTMLButtonElement>(".task-summary li button"),
-  ].find((each) => each.getAttribute("aria-label") === "Comments");
-  assert.ok(row, "the summary offers the Comments tab");
+  const row = [...document.querySelectorAll<HTMLButtonElement>("li button")].find((each) =>
+    each.textContent?.includes("Invite funnel"),
+  );
+  assert.ok(row, "the summary offers the page's tab");
   act(() => row.click());
   act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
 
@@ -938,7 +968,7 @@ function standingPageMounted(keeps: boolean) {
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(
           Fragment,
           null,

@@ -20,6 +20,8 @@ export const EXPERIMENT = {
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
   /** Several repositories: an agent started in the cloud works in other repositories beside its own, each cloned beside its checkout. */
   SEVERAL_REPOSITORIES: "several-repositories",
+  /** Plans: a task's plan document, its comments and version history, and the tools and instructions its coding agents write it and answer its comments with. */
+  PLANS: "plans",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -43,6 +45,14 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.PLANS,
+    name: "Plans",
+    detail:
+      "Give each task a plan its agents write down as they go, with comments on it and its version history.",
+    owner: "Dean",
+    since: "2026-11-05",
+  },
   {
     key: EXPERIMENT.SEVERAL_REPOSITORIES,
     name: "Several repositories",

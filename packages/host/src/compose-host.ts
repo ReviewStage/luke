@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import {
   HostedAdminClient,
   HostedAgentClient,
+  HostedAgentPortsClient,
   HostedAutomationClient,
   HostedDeviceAgentClient,
   HostedGitHubConnectionClient,
@@ -31,10 +32,10 @@ import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAgents } from "./compose-agents.js";
 import { composeAutomations } from "./compose-automations.js";
-import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
+import { composePortForwards, type PortForwardsComposer } from "./compose-port-forwards.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
@@ -47,9 +48,9 @@ import {
   AccountSource,
   type AppIdentity,
   type Environment,
+  LoopbackListener,
   Reporter,
   ShutdownSignal,
-  SignInConsent,
   TerminalSocket,
   type ThisMacHost,
 } from "./effect/seams.js";
@@ -104,7 +105,7 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
-  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: LoopbackListener | TerminalSocket;
 }
 
 /**
@@ -382,17 +383,20 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           )
         : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
-    const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
+    const portForwards: PortForwardsComposer = platform.has(HOST_PLATFORM_CONCERN.PORT_FORWARDS)
       ? yield* served(
-          composeChatGptSignIn({
+          composePortForwards({
             kernel,
             account,
-            client: agentClient,
-            openConsent: (yield* SignInConsent).open,
-            keysAnswered: agents.keysAnswered,
+            client: new HostedAgentPortsClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              credential: account.credential,
+            }),
+            openSocket: yield* TerminalSocket,
+            listen: yield* LoopbackListener,
           }),
         )
-      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS), reset: Effect.void };
 
     /**
      * The signed-in account's store opened where none stands: only where the
@@ -460,7 +464,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* automations.reset;
       yield* installedSkills.reset;
       yield* terminals.reset;
-      yield* chatGptSignIn.reset;
+      yield* portForwards.reset;
       yield* settings.emitSettings();
     });
 
@@ -488,7 +492,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.THIS_MAC_HOST]: thisMacHost,
       [HOST_CONCERN.TERMINALS]: terminals,
-      [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
+      [HOST_CONCERN.PORT_FORWARDS]: portForwards,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);

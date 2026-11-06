@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { BLOCK_MENU_GROUP } from "@repo/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -11,8 +13,12 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { type PlanEditorHandle, SLASH_INSERT } from "../plan-editor/contract.js";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
+import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * markdown-editor.test.ts -- the plan's editor mounted by a document that

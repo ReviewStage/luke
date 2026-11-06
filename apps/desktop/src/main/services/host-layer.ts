@@ -15,6 +15,7 @@ import {
   hostAssemblyLayer,
   hostKernelLayer,
   IdSource,
+  LoopbackListener,
   oauthAccountSourceLayer,
   RunMode,
   reporterLayer,
@@ -24,7 +25,7 @@ import {
   StateRoot,
   TerminalSocket,
 } from "@repo/host/effect";
-import { openTerminalSocketOverWs } from "@repo/host/node";
+import { listenOnLoopbackOverNet, openTerminalSocketOverWs } from "@repo/host/node";
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
@@ -59,12 +60,12 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
+    // A forwarded cloud port is listened on at 127.0.0.1 alone, over `node:net`.
+    Layer.succeed(LoopbackListener, listenOnLoopbackOverNet),
     thisMacHostLayer(),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
-    // cipher. Every sign-in's consent is a loopback on this Mac: the browser
-    // hands the code back to a `node:http` listener on 127.0.0.1, the
-    // account's and ChatGPT's alike.
-    consent,
+    // cipher. Its consent is a loopback on this Mac: the browser hands the
+    // code back to a `node:http` listener on 127.0.0.1.
     Layer.provide(
       oauthAccountSourceLayer,
       Layer.merge(Layer.succeed(SecretCipher, cipher), consent),

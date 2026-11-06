@@ -19,6 +19,7 @@ import {
   AppIdentity,
   Environment,
   IdSource,
+  LoopbackListener,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -91,44 +92,39 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for an agent's terminals and a ChatGPT sign-in, and which concerns it says it runs. */
+/** What a standing host answers for an agent's terminals, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
   const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
-  const chatGptSignIn = yield* gateway.call(GATEWAY_METHOD.CHATGPT_SIGN_IN);
-  return { concerns, terminals, chatGptSignIn };
+  return { concerns, terminals };
 });
 
 describe("the host's platform concerns", () => {
-  it.effect(
-    "left out, need no spawner, terminal socket or sign-in consent, and refuse their methods",
-    () =>
-      Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
-        // Note that nothing here provides a `ChildProcessSpawner`, a
-        // `TerminalSocket`, or a `SignInConsent`. The layer's type, narrowed to the concerns chosen,
-        // asks for neither, and a build that reached for one anyway would die
-        // here on the missing service.
-        const browser = hostStandingLayer.pipe(
-          Layer.provideMerge(hostAssemblyLayer([])),
-          Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
-        );
+  it.effect("left out, need no spawner or terminal socket, and refuse their methods", () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
+      // Note that nothing here provides a `ChildProcessSpawner` or a
+      // `TerminalSocket`. The layer's type, narrowed to the concerns chosen,
+      // asks for neither, and a build that reached for one anyway would die
+      // here on the missing service.
+      const browser = hostStandingLayer.pipe(
+        Layer.provideMerge(hostAssemblyLayer([])),
+        Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
+      );
 
-        const asked = yield* Effect.provide(askedOfStandingHost, browser);
+      const asked = yield* Effect.provide(askedOfStandingHost, browser);
 
-        const notHere = {
-          ok: false,
-          error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
-        };
-        assert.deepEqual(asked.terminals, notHere);
-        assert.deepEqual(asked.chatGptSignIn, notHere);
-        assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.CHATGPT_SIGN_IN), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
-        assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
-      }).pipe(Effect.provide(NodeFileSystem.layer)),
+      const notHere = {
+        ok: false,
+        error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
+      };
+      assert.deepEqual(asked.terminals, notHere);
+      assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
+      assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
+      assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
+      assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 
   it.effect("all chosen, as the desktop chooses them, answer", () =>
@@ -142,13 +138,14 @@ describe("the host's platform concerns", () => {
             desktopAccountSource,
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
-            Layer.succeed(SignInConsent, { open: loopbackConsent }),
+            Layer.succeed(LoopbackListener, () => Effect.succeed(undefined)),
             Layer.succeed(ThisMacHost, {
               stateRoot,
               runsHost: false,
               loaded: Effect.succeed(false),
               install: () => Effect.succeed(Result.fail("no install in a fixture")),
               stop: Effect.succeed(Result.fail("no launchd in a fixture")),
+              uninstall: Effect.succeed(Result.fail("no install in a fixture")),
               machine: Effect.succeed({
                 name: "Studio",
                 platform: DEVICE_PLATFORM.DARWIN,
@@ -166,15 +163,13 @@ describe("the host's platform concerns", () => {
         ok: false,
         error: { code: GATEWAY_ERROR.REFUSED, message: "signed out" },
       });
-      // The ChatGPT sign-in answers too, unanswered behind the closed account gate, and opens no browser.
-      assert.deepEqual(asked.chatGptSignIn, { ok: true, result: { failure: "unanswered" } });
       for (const concern of ALL_HOST_PLATFORM_CONCERNS)
         assert.equal(asked.concerns.has(concern), true);
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.TERMINALS,
-        HOST_CAPABILITY.CHATGPT_SIGN_IN,
+        HOST_CAPABILITY.PORT_FORWARDS,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
       assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
@@ -183,8 +178,8 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.PORT_FORWARDS,
         HOST_CAPABILITY.CLI_INSTALL,
-        HOST_CAPABILITY.CHATGPT_SIGN_IN,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);
     }).pipe(Effect.provide(NodeFileSystem.layer)),

@@ -25,14 +25,6 @@ export const HOSTED_SERVICE_PATH = {
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
-  /**
-   * The account's ChatGPT sign-in for our hosted runtime, as the desktop
-   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
-   * its kind. The answer is the provider keys' and never carries a token.
-   */
-  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
-  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for our hosted runtime under (GET). */
-  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /** A ChatGPT plan's connection through Codex's device-code login begun (POST): the code to enter, and the login to poll. */
   ACCOUNT_CHATGPT_DEVICE: "/api/account/chatgpt/device",
   /** One check of a device-code connection (POST), by its login. */

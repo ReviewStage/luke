@@ -42,6 +42,9 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * page's writer in it from the start, in words that name the page, the
  * version the thread was left on, and the element it is on, and ask the
  * agent to show the page's next version where the thread asks for a change.
+ * A member's review of a page, the threads they gathered on it and sent
+ * together, is handed to each agent in any of them as one message naming
+ * every thread (`reviewAskMessage`), so the agent revises the page once.
  */
 
 /** How long a comment of the thread may run in the words it is handed over in, so a long thread stays a message. */
@@ -98,12 +101,17 @@ function pagePlace(
   return `On the element \`${on.element}\` of ${version}: "${thread.quote}"${where}`;
 }
 
+/** A thread's comments as the words handed over say them, one a line, each by its writer. */
+function commentLines(thread: PlanCommentThread): readonly string[] {
+  return thread.entries
+    .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT && entry.words !== undefined)
+    .map((entry) => `${writerName(entry)}: ${oneComment(entry.words ?? "")}`);
+}
+
 /** The words a thread is handed over in: what it is on, each comment by its writer, and what to do with it. */
 export function commentAskMessage(ask: CommentAsk): string {
   const { thread, page } = ask;
-  const comments = thread.entries
-    .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT && entry.words !== undefined)
-    .map((entry) => `${writerName(entry)}: ${oneComment(entry.words ?? "")}`);
+  const comments = commentLines(thread);
   const reply = `answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}"`;
   const only = "Answer what the thread asks; do not act on anything else it discusses.";
   // Note that the thread is handed over as its quoted words and its comments alone, never the plan or its section, which an agent handed the plan already holds.
@@ -121,6 +129,35 @@ export function commentAskMessage(ask: CommentAsk): string {
   const lead = `${ask.sender} sent you a comment thread on the page "${page.title}" of the task "${ask.taskName}" to answer (thread ${thread.id}).`;
   const doing = `Read the thread and the page with \`${AGENT_TOOL.READ_PAGE}\`, then ${reply}. Where it asks for a change to the page, show the page's next version with \`${AGENT_TOOL.SHOW_PAGE}\` and page "${thread.page.id}" before you answer. ${only}`;
   return [lead, pagePlace(thread, thread.page, page), "", ...comments, "", doing].join("\n");
+}
+
+/** What a review is handed over with: the threads of one page a member sent together, in the order they were started. */
+export interface ReviewAsk {
+  readonly taskId: string;
+  readonly taskName: string;
+  readonly threads: readonly PlanCommentThread[];
+  readonly sender: string;
+  /** The page the threads are on, by its id and its newest version's title and number. */
+  readonly page: { readonly id: string; readonly title: string; readonly newestVersion: number };
+}
+
+/**
+ * The words a review is handed over in: every thread of it, each by its id,
+ * what it is on, and its comments, then what to do with them, which is to
+ * answer each in its own thread and, where they ask for changes, to make
+ * them all and show the page's next version once.
+ */
+export function reviewAskMessage(ask: ReviewAsk): string {
+  const { threads, page } = ask;
+  const lead = `${ask.sender} sent you ${threads.length} comment threads on the page "${page.title}" of the task "${ask.taskName}" together, as one review to answer.`;
+  const each = threads.flatMap((thread) => [
+    "",
+    `Thread ${thread.id}`,
+    thread.page === undefined ? planPlace(thread) : pagePlace(thread, thread.page, page),
+    ...commentLines(thread),
+  ]);
+  const doing = `Read the threads and the page with \`${AGENT_TOOL.READ_PAGE}\`, then answer in each thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on its thread of task "${ask.taskId}". Where they ask for changes to the page, make them all, then show the page's next version once with \`${AGENT_TOOL.SHOW_PAGE}\` and page "${page.id}" before you answer. Answer what the threads ask; do not act on anything else they discuss.`;
+  return [lead, ...each, "", doing].join("\n");
 }
 
 /** The agent an ask names, where it is the plan's own and stands; nothing otherwise, which no ask is written for. */

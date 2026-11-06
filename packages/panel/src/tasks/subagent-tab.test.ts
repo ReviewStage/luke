@@ -12,6 +12,7 @@ import { afterEach, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { heardWords } from "../testing/heard-words.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
@@ -150,7 +151,8 @@ test("a worker still working draws its run of calls under one line, open on its 
   ]);
 
   const group = container.querySelector("[data-turn-fold] > summary");
-  assert.equal(group?.textContent, "2 tool calls");
+  assert.ok(group !== null);
+  assert.equal(heardWords(group), "2 tool calls");
   assert.equal(group?.getAttribute("aria-expanded"), "true");
   assert.deepEqual(callRows(container), ["Searched toCsv", "Ran pnpm test"]);
 });

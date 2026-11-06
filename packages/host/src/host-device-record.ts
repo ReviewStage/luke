@@ -65,6 +65,13 @@ export const writeHostDevice = Effect.fnUntraced(function* (stateRoot: string, d
   yield* fileSystem.rename(written, file);
 });
 
+/** The record removed, as an uninstall removes it with the state, so the machine reads as never enrolled. */
+export const removeHostDevice = Effect.fnUntraced(function* (stateRoot: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  yield* fileSystem.remove(path.join(stateRoot, DEVICE_FILE), { force: true });
+});
+
 /** The record marked refused, where it still holds the secret given, so a record enrolled again since is left alone. */
 export const markHostDeviceRefused = Effect.fnUntraced(function* (
   stateRoot: string,

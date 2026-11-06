@@ -11,7 +11,6 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
-  ensureChatGptHostId,
   listAccountProviderKeyRows,
   listEveryProviderKeyRow,
   listProviderKeyRows,
@@ -296,41 +295,6 @@ it.layer(getTestDB())("the provider key store", (it) => {
         yield* connect(owner, "again");
         assert.deepEqual(yield* forAgents(owner), [true]);
       }),
-  );
-
-  it.effect("an account's ChatGPT host id is minted once, its own, and outlives the sign-in", () =>
-    Effect.gen(function* () {
-      const { owner, other } = yield* openAccounts;
-      const first = yield* ensureChatGptHostId(owner, "urn:uuid:first", new Date(1));
-      yield* saveProviderKey(
-        owner,
-        PROVIDER_KEY_PROVIDER.OPENAI,
-        PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-        sealed("signin"),
-        "ChatGPT",
-        null,
-        new Date(2),
-        new Date(3),
-      );
-      yield* removeProviderKey(
-        owner,
-        PROVIDER_KEY_PROVIDER.OPENAI,
-        PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-      );
-      const racing = yield* Effect.all(
-        [
-          ensureChatGptHostId(owner, "urn:uuid:second", new Date(4)),
-          ensureChatGptHostId(other, "urn:uuid:other", new Date(4)),
-          ensureChatGptHostId(other, "urn:uuid:other-again", new Date(4)),
-        ],
-        { concurrency: "unbounded" },
-      );
-
-      assert.equal(first, "urn:uuid:first");
-      assert.equal(racing[0], "urn:uuid:first");
-      assert.equal(racing[1], racing[2]);
-      assert.notEqual(racing[1], first);
-    }),
   );
 
   it.effect(

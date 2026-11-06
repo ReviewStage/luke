@@ -11,6 +11,7 @@ import {
   Tooltip,
   useDisclosureFinding,
 } from "@repo/ui";
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
@@ -27,7 +28,6 @@ import {
 } from "react";
 import { useAppCommand } from "./app-commands.js";
 import {
-  FIND_SKIP_ATTRIBUTE,
   type FindPainting,
   findRanges,
   matchFrom,

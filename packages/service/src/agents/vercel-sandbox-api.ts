@@ -19,10 +19,7 @@
  * on a command in it, through the session the documented way reaches it
  * (`Sandbox.get` by the sandbox's name, without resuming it, then
  * `currentSession`), looked up once and held for one operation's calls and
- * polls (`session`). The firewall's policy write alone still names a
- * session by its id (`sessionHandle`), since the firewall's record keeps no
- * sandbox's name; its handle resolves the deployment's token through the
- * SDK's own OIDC read and sends on `globalThis.fetch`.
+ * polls (`session`).
  *
  * Every sandbox eve opens carries its session's id as a tag, so a session's
  * sandbox is found by the tag alone; a session has one, so the first page is
@@ -41,7 +38,7 @@ import {
   Drive,
   Sandbox,
   type NetworkPolicy as SdkNetworkPolicy,
-  Session,
+  type Session,
   Snapshot,
   StreamError,
 } from "@vercel/sandbox";
@@ -75,16 +72,21 @@ export const NOT_FOUND_STATUS = 404;
 
 /**
  * Vercel's answer for a resume or a create whose snapshot is gone: expired
- * past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted, its body naming
- * `snapshot_not_found`, as the SDK's own check reads it. Note that Vercel
- * answers the same status for a call to a stopped sandbox
- * (`sandbox_stopped`), which a resume mends, so the code is what says the
- * snapshot is gone.
+ * past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. Vercel's body
+ * names it `snapshot_not_found`, as the SDK's own check reads it.
  */
-const SNAPSHOT_GONE = { STATUS: 410, CODE: "snapshot_not_found" } as const;
+const SNAPSHOT_GONE_STATUS = 410;
 
 /** Vercel's answer for a create whose name another sandbox already holds. */
 const NAME_TAKEN_STATUS = 409;
+
+/**
+ * The code Vercel's body names a snapshot gone by. Note that Vercel answers
+ * 410 for a call to a stopped sandbox too (`sandbox_stopped`), which a resume
+ * mends, and that a body that could not be read names no code, so only a 410
+ * that names this code says the snapshot is gone.
+ */
+const SNAPSHOT_GONE_CODE = "snapshot_not_found";
 
 /**
  * Vercel's answer for a call to a session that is stopping, or being
@@ -185,12 +187,12 @@ export function sessionEnding(failure: { readonly _tag: string }): boolean {
   );
 }
 
-/** Whether a resume or a create failed because the snapshot it opens from is gone. */
+/** Whether a call failed because the snapshot its sandbox resumes or opens from is gone: one no retry mends, the sandbox's saved files lost with it. */
 export function snapshotGone(failure: { readonly _tag: string }): boolean {
   return (
     failure instanceof SandboxUnavailable &&
-    failure.status === SNAPSHOT_GONE.STATUS &&
-    failure.code === SNAPSHOT_GONE.CODE
+    failure.status === SNAPSHOT_GONE_STATUS &&
+    failure.code === SNAPSHOT_GONE_CODE
   );
 }
 
@@ -400,6 +402,11 @@ export interface SandboxSessionApi {
   readonly snapshot: (expiresAfter: Duration.Duration) => Effect.Effect<string, SandboxUnavailable>;
   /** Writes the files into the running sandbox session, as the sandbox's default user. */
   readonly writeFiles: (files: readonly SandboxFile[]) => Effect.Effect<void, SandboxUnavailable>;
+  /**
+   * Sets the running session's network policy whole; every writer of ours
+   * goes through `sandbox-firewall.ts`, which composes it from what stands.
+   */
+  readonly updateNetworkPolicy: (policy: NetworkPolicy) => Effect.Effect<void, SandboxUnavailable>;
   /** Starts a detached command with its stdin held open; answers the command's id. */
   readonly start: (ask: DetachedCommandAsk) => Effect.Effect<string, SandboxUnavailable>;
   /** Appends the text to a detached command's stdin, after whatever it already took. */
@@ -460,16 +467,6 @@ export interface VercelSandboxApi {
    * call as Vercel answers a session it no longer holds.
    */
   readonly session: (ref: SessionRef) => Effect.Effect<SandboxSessionApi, SandboxUnavailable>;
-  /**
-   * Sets the running sandbox session's network policy whole; every writer of
-   * ours goes through `sandbox-firewall.ts`, which composes it from what
-   * stands. Note that this one call is still made by the session's id alone
-   * (`sessionHandle`), because the firewall's record keeps no sandbox's name.
-   */
-  readonly updateNetworkPolicy: (
-    sandboxSessionId: string,
-    policy: NetworkPolicy,
-  ) => Effect.Effect<void, SandboxUnavailable>;
   /**
    * Opens a sandbox from the snapshot named, persistent unless it says not,
    * on the open internet; answers it with the session it runs. Where the name is taken,
@@ -537,9 +534,7 @@ export interface VercelSandboxApi {
  * The `fetch` the SDK sends on: the platform's own, and a suite's fake of
  * Vercel where a test provides one. Note that the default looks
  * `globalThis.fetch` up at each request rather than once, because a
- * reference keeps the default it first computed for the process's life. The
- * firewall's policy write by id sends on `globalThis.fetch` whatever this
- * names, since the SDK builds that handle's client itself (`sessionHandle`).
+ * reference keeps the default it first computed for the process's life.
  */
 export const SandboxFetch = Context.Reference<typeof globalThis.fetch>(
   "@repo/service/SandboxFetch",
@@ -790,42 +785,6 @@ function openedOf(sandbox: Sandbox): OpenedSandbox {
   };
 }
 
-/** A session as the SDK's `Session` holds what it read of one. */
-type SessionSnapshot = Extract<
-  ConstructorParameters<typeof Session>[0],
-  { snapshot: unknown }
->["snapshot"];
-
-/**
- * What a session's handle holds beside its id: nothing the calls we make of
- * it read, since each sends the id alone. Note that `cwd` is where the SDK
- * resolves a relative path a file write names, and every path we write is
- * absolute.
- */
-const UNREAD_SESSION: Omit<SessionSnapshot, "id"> = {
-  memory: 0,
-  vcpus: 0,
-  region: "",
-  timeout: 0,
-  status: SANDBOX_STATUS.RUNNING,
-  requestedAt: 0,
-  createdAt: 0,
-  cwd: "/",
-  updatedAt: 0,
-};
-
-/**
- * The SDK's handle on a sandbox session we know by its id alone, built from
- * the SDK's exported `Session` without a call, for the firewall's policy
- * write, whose record keeps no sandbox's name. Note that every other call
- * reaches a session the documented way (`Sandbox.get`, then
- * `currentSession`), and that this handle resolves the deployment's token
- * through the SDK's own OIDC read and sends on `globalThis.fetch`.
- */
-function sessionHandle(sandboxSessionId: string): Session {
-  return new Session({ routes: [], snapshot: { ...UNREAD_SESSION, id: sandboxSessionId } });
-}
-
 /**
  * The fetch given, sending a list with Vercel's own filter to running
  * sandboxes. Note that the filter is added here, because the SDK's list
@@ -937,6 +896,10 @@ function sessionCallsOf(current: Option.Option<Session>): SandboxSessionApi {
           files.map((file) => ({ path: file.path, content: file.contents, mode: file.mode })),
           { signal },
         ),
+      ),
+    updateNetworkPolicy: (policy) =>
+      on(SANDBOX_CALL.NETWORK_POLICY, (session, signal) =>
+        session.update({ networkPolicy: sdkPolicyOf(policy) }, { signal }),
       ),
     start: (ask) =>
       on(SANDBOX_CALL.CMD, (session, signal) =>
@@ -1066,17 +1029,6 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
     ) =>
       Effect.flatMap(credentials(call), (under) => sdkCall(call, (signal) => run(signal, under)));
 
-    /** The firewall's policy write on the running session named, through its handle by id (`sessionHandle`). */
-    const onSessionById = <A>(
-      call: SandboxCall,
-      sandboxSessionId: string,
-      run: (session: Session, signal: AbortSignal) => Promise<A>,
-    ) =>
-      Effect.andThen(
-        credentials(call),
-        sdkCall(call, (signal) => run(sessionHandle(sandboxSessionId), signal)),
-      );
-
     /** The named sandbox as it stands, without resuming it. */
     const found = (call: SandboxCall, name: string) =>
       asked(call, (signal, under) => Sandbox.get({ ...under, name, resume: false, signal }));
@@ -1148,10 +1100,6 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           }),
           Effect.catchIf(isGone, () => Effect.succeed(Option.none<Session>())),
           Effect.map(sessionCallsOf),
-        ),
-      updateNetworkPolicy: (sandboxSessionId, policy) =>
-        onSessionById(SANDBOX_CALL.NETWORK_POLICY, sandboxSessionId, (session, signal) =>
-          session.update({ networkPolicy: sdkPolicyOf(policy) }, { signal }),
         ),
       create: (ask) =>
         asked(SANDBOX_CALL.CREATE, (signal, under) =>
@@ -1238,7 +1186,7 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
         ).pipe(
           Effect.map((snapshot) => !SNAPSHOT_UNUSABLE.has(snapshot.status)),
           Effect.catchIf(
-            (failure) => isGone(failure) || failure.status === SNAPSHOT_GONE.STATUS,
+            (failure) => isGone(failure) || failure.status === SNAPSHOT_GONE_STATUS,
             () => Effect.succeed(false),
           ),
         ),

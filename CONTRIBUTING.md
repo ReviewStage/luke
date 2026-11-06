@@ -111,7 +111,6 @@ packages/
 tools/
   anti-slop/      the repository's oxlint rules
   claude-code-probe/  proves Claude Code runs inside a Vespin sandbox
-  codex-probe/    proves Codex runs inside a Vespin sandbox
   demo-postgres/  a throwaway Postgres for the local demo
   polish/         screenshots every scene of the app, in both themes and three widths, for a design review
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks

@@ -157,11 +157,9 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
             yield* shortenSnapshotRetention(api, sandbox, snapshotExpiry);
           // The credentials come off first, as at a launch's end and in the sweeps, because a stopped
           // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
-          yield* sandboxFirewall(api).clear(running);
-          yield* Effect.flatMap(
-            api.session({ name: sandbox.name, sessionId: running }),
-            (session) => session.stop(),
-          );
+          const session = { name: sandbox.name, sessionId: running };
+          yield* sandboxFirewall(api).clear(session);
+          yield* Effect.flatMap(api.session(session), (held) => held.stop());
           stopped += 1;
         }
         return stopped;

@@ -121,7 +121,7 @@ export const stopWithinBudget = (
     // The credentials come off first, and a sandbox they would not come off is left up for the next sweep rather than stopped with them.
     const stopped = yield* Effect.result(
       Effect.andThen(
-        sandboxFirewall(api).clear(running.sessionId),
+        sandboxFirewall(api).clear(running),
         Effect.flatMap(api.session(running), (session) => session.stop()),
       ),
     );

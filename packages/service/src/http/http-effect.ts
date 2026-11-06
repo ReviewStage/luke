@@ -64,6 +64,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: HOSTED_HTTP_STATUS.BAD_REQUEST,
@@ -177,6 +178,8 @@ export const HOSTED_REFUSAL = {
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
+  /** The coding agent's sandbox can never resume, its snapshot and saved files gone; nothing was resumed. */
+  SANDBOX_SNAPSHOT_GONE: { error: HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE },
   /** A skill of that name is already installed in the scope asked; nothing was installed. */
   SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
   /** A skill's files were refused; nothing was installed. */

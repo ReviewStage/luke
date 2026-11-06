@@ -314,6 +314,8 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on, This Mac enrolled, or off, its host removed; done, or why not. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
@@ -484,10 +486,6 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** A ChatGPT sign-in for our hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
   /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
   CHATGPT_DEVICE_START: "chatGpt.device.start",
   /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
@@ -649,6 +647,14 @@ export const GATEWAY_METHOD = {
   BROWSER_LIVE_CONNECT: "browserLive.connect",
   BROWSER_LIVE_SEND: "browserLive.send",
   BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
+  /**
+   * A coding agent's cloud ports forwarded to this Mac's `127.0.0.1`
+   * (`@repo/features/port-forward-acts`), for one agent at a time: how its
+   * forwarding stands, read, and forwarding turned on or off. What a
+   * forwarded connection carries never crosses the Gateway.
+   */
+  PORT_FORWARDS_READ: "portForwards.read",
+  PORT_FORWARDS_SET: "portForwards.set",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

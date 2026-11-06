@@ -588,6 +588,87 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
+    "a review of a page hands nothing over while its comments are held, then hands the page's writer every thread of it in one message once it is sent, each thread saying who was asked",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
+        const page = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            taskPageOwner(taskId),
+            { title: "Invite funnel", html: "<h1>Invites</h1><p>12 sent</p>" },
+            { kind: PAGE_SHOWER.AGENT, agentId },
+          ),
+        );
+        const on = { id: page.id, version: page.version };
+        const before = opened.length;
+
+        const held = threadIn(
+          yield* answer(
+            "comments",
+            request(
+              commentsPath(taskId),
+              teammate,
+              {},
+              {
+                clientKey: randomUUID(),
+                page: on,
+                element: { path: "body > h1", quote: "Invites", section: "Invites" },
+                words: "Say who it goes to.",
+                held: true,
+              },
+            ),
+          ),
+        );
+        assert.equal(opened.length, before, "a held comment hands over nothing");
+        const sent = threadIn(
+          yield* answer(
+            "comments",
+            request(
+              commentsPath(taskId),
+              teammate,
+              {},
+              {
+                clientKey: randomUUID(),
+                page: on,
+                element: { path: "body > p", quote: "12 sent", section: "Invites" },
+                words: "Is this a week's worth?",
+                along: [held.id],
+              },
+            ),
+          ),
+        );
+
+        const handed = opened.slice(before);
+        assert.equal(handed.length, 1, "the review reached the page's writer as one message");
+        const words = JSON.stringify(handed[0]?.message);
+        assert.ok(words.includes("2 comment threads"), words);
+        for (const said of [held.id, sent.id, "Say who it goes to.", "Is this a week's worth?"]) {
+          assert.ok(words.includes(said), said);
+        }
+        const threads = threadsIn(
+          yield* answer("comments", request(commentsPath(taskId), teammate, { page: page.id })),
+        );
+        assert.deepEqual(
+          threads.map((thread) =>
+            thread.entries.map((entry) => [entry.kind, entry.asked?.agentId]),
+          ),
+          [
+            [
+              [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+              [PLAN_COMMENT_ENTRY.ASKED, agentId],
+            ],
+            [
+              [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+              [PLAN_COMMENT_ENTRY.ASKED, agentId],
+            ],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a thread started, or a reply, that mentions the task's Vespin hands no one the thread and writes nothing as Vespin, since no task has a Vespin of its own",
     () =>
       Effect.gen(function* () {

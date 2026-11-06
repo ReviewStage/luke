@@ -487,12 +487,15 @@ function boundTitle(element: HTMLElement): void {
  * refused rename puts the saved name back here and everywhere, unless words
  * were typed since it was asked for, which are the newest and are kept for
  * the next pause to ask for again. Each Rename chosen from the title's ⋯
- * puts the caret at its end, as ↑ from the text's first line does.
+ * puts the caret at its end, as ↑ from the text's first line does. Over
+ * no text, as while Plans is off, Return and ↓ save it and select it as Esc
+ * does, since there is no text to go into.
  */
 export function EditableTitle({
   name,
   entry,
   editing,
+  alone = false,
   renaming = 0,
   actions,
   onRename,
@@ -502,6 +505,8 @@ export function EditableTitle({
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: PlanEditing;
+  /** Whether no text stands under the title to go into. */
+  alone?: boolean;
   /** How many times Rename was chosen; each change is an ask of its own. */
   renaming?: number;
   /** The title's ⋯, at the end of its line. */
@@ -639,7 +644,7 @@ export function EditableTitle({
               onBlur={(event) => save(event.currentTarget)}
               onLeave={(way, heading) => {
                 save(heading);
-                if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
+                if (way === EDITABLE_HEADING_LEAVE.BACK || alone) block.current?.focus();
                 else editing.open();
               }}
             />

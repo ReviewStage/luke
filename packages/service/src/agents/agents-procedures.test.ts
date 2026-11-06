@@ -77,6 +77,7 @@ function scriptedSandbox(state: SandboxState) {
         const running = state === SANDBOX_STATE.RUNNING;
         return { running, ports: running ? PORTS : [] };
       }),
+    startForwarding: () => Effect.die("the routes start no run command"),
     start: (sessionId, terminalId) =>
       Effect.sync(() => {
         asked.push({ what: "start", sessionId });
@@ -433,6 +434,31 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
           assert.equal(answer.status, 502);
           assert.deepEqual(answer.body, { error: HOSTED_API_ERROR.UPSTREAM_ERROR });
         }
+      }),
+  );
+
+  it.effect(
+    "a resume whose snapshot is gone is refused as that, and a sandbox that only stopped under a call is not",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent } = yield* openAgent;
+        const gone = new SandboxUnavailable({ status: 410, code: "snapshot_not_found" });
+        // Vercel answers 410 for a call to a sandbox that stopped under it too, which a resume mends.
+        const stopped = new SandboxUnavailable({ status: 410, code: "sandbox_stopped" });
+        const sandbox = Layer.succeed(AgentSandbox, {
+          ...scriptedSandbox(SANDBOX_STATE.STOPPED).service,
+          resume: () => Effect.fail(gone),
+          terminals: () => Effect.fail(stopped),
+        });
+        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox);
+
+        const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
+        const listed = yield* call(terminalsOf(agent.id), "Bearer owner");
+
+        assert.equal(resumed.status, 409);
+        assert.deepEqual(resumed.body, { error: HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE });
+        assert.equal(listed.status, 502);
+        assert.deepEqual(listed.body, { error: HOSTED_API_ERROR.UPSTREAM_ERROR });
       }),
   );
 

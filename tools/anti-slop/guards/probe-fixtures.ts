@@ -3,17 +3,19 @@ import { isDeepStrictEqual } from "node:util";
 import { loadModule, type RepositoryGuard, readText } from "./guard.ts";
 
 /**
- * probe-fixtures.ts -- the probes' committed recordings pass the probes' own leak guards, whoever edited them last.
+ * probe-fixtures.ts -- the committed recordings of Claude Code and Codex pass their own leak guards, whoever edited them last.
  *
- * Each probe scrubs a live run before it writes a fixture and refuses to
- * write one its leak guard still names something in. A fixture edited by
- * hand, or recorded by an older probe, skips that door; this is the only
- * scan that reads what is committed (root AGENTS.md's "Never": no
+ * Claude Code's probe scrubs a live run before it writes a fixture and
+ * refuses to write one its leak guard still names something in, and Codex's
+ * app-server recording is held to the leak guard the runner's tests keep
+ * beside it (`packages/agent-runner/src/testing/sanitize.ts`). A fixture
+ * edited by hand, or recorded by an older probe, skips that door; this is
+ * the only scan that reads what is committed (root AGENTS.md's "Never": no
  * credential in a fixture).
  */
 
 const CLAUDE_PROBE = "tools/claude-code-probe";
-const CODEX_PROBE = "tools/codex-probe";
+const CODEX_SANITIZER = "packages/agent-runner/src/testing/sanitize.ts";
 const CLAUDE_FIXTURES = [`${CLAUDE_PROBE}/fixtures/claude-code-stream.jsonl`];
 const CODEX_FIXTURES = ["packages/agent-runner/src/testing/app-server.jsonl"];
 
@@ -55,11 +57,11 @@ function fixturesOf(root: string, files: readonly string[]) {
 
 async function probeProblems(root: string): Promise<readonly string[]> {
   const claude = await loadModule(root, `${CLAUDE_PROBE}/src/sanitize.ts`);
-  const codex = await loadModule(root, `${CODEX_PROBE}/src/sanitize.ts`);
+  const codex = await loadModule(root, CODEX_SANITIZER);
   if (typeof claude.fixtureLeaks !== "function" || typeof claude.sanitizer !== "function")
     throw new Error(`${CLAUDE_PROBE}'s sanitize.ts no longer exports fixtureLeaks and sanitizer`);
   if (typeof codex.findLeaks !== "function")
-    throw new Error(`${CODEX_PROBE}'s sanitize.ts no longer exports findLeaks`);
+    throw new Error(`${CODEX_SANITIZER} no longer exports findLeaks`);
   const scrub = (claude.sanitizer as (options: object) => Scrub)({ secrets: [], replacements: [] });
   return [
     ...fixtureProblems(fixturesOf(root, CLAUDE_FIXTURES), claude.fixtureLeaks as FindLeaks, scrub),

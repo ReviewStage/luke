@@ -50,7 +50,7 @@ import type { EveHostTurn } from "../eve-host/bounds.js";
 import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
 import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
-import { FIREWALL_SLOT, newPlaceholder, placeholderSwap } from "../sandbox-firewall.js";
+import { LAUNCH_SWAP, newPlaceholder, placeholderSwap } from "../sandbox-firewall.js";
 import { BEARER_PREFIX } from "../workspace-mcp/bearer.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -102,7 +102,7 @@ function launchCredential(
     env: {},
     held: {
       env: { [sent.variable]: Redacted.value(placeholder) },
-      slot: FIREWALL_SLOT.CLAUDE,
+      kind: LAUNCH_SWAP.CLAUDE,
       entry: placeholderSwap({
         domain: ANTHROPIC_API,
         header: sent.header,
@@ -276,8 +276,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         // Note that a host's older runner, bundled before Claude Code's command sandbox was removed, refuses a config without domains.
         allowedDomains: [],
         installedSkills: layout.installedSkills,
-        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
-        warm: true,
       };
       return written;
     });

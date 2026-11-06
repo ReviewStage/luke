@@ -21,23 +21,21 @@ export const CODER = {
   /**
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
-   * end (`sandbox-keep-alive.ts`). An idle sandbox is stopped by what knows it
-   * idle rather than by this: a native runner keeps its sandbox
-   * alive by its heartbeat for as long as it runs, and its end stops it,
-   * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,
-   * or two minutes into a wait on wakeups alone (`@repo/agent-runner`'s `RUNNER_RELEASE`,
-   * whose process table tells the harness's own processes from the
-   * agent's). A shorter timeout would stop none of those sooner, so this is
-   * only the backstop for one nothing stopped, which bills its memory until
-   * then: at the default size, 4 GB for an hour, where the
-   * platform's 24-hour maximum billed 96 GB-hours. An hour, because a live
-   * turn shows use far more often than that: a native
-   * runner posts its events as its harness emits them, and a terminal or a
-   * watched browser closes after five idle minutes. Each of them keeps it
-   * alive at most every `SANDBOX_KEEP_ALIVE_EVERY`, which leaves fifty
-   * minutes of margin for the longest quiet stretch inside a turn.
+   * end (`sandbox-keep-alive.ts`). A native runner keeps its sandbox alive by
+   * its heartbeat for as long as it runs, and its end at the agent's turn's
+   * end stops it, or two minutes into a wait on wakeups alone
+   * (`@repo/agent-runner`'s `RUNNER_RELEASE`, whose process table tells the
+   * harness's own processes from the agent's). What its end leaves up, as a
+   * developer's Terminal holds it, is stopped by this timeout once nothing
+   * keeps it alive, its snapshot taken as at any stop, so this is how an
+   * idle sandbox ends, and it bills its memory until then: at the default
+   * size, 4 GB for twenty minutes. Twenty, because a live turn shows use far
+   * more often than that: a native runner posts at least every heartbeat
+   * (`RUNNER_HEARTBEAT`, five minutes), and a terminal or a watched browser
+   * closes after five idle minutes. Each of them keeps it alive at most every
+   * `SANDBOX_KEEP_ALIVE_EVERY`.
    */
-  SANDBOX_TIMEOUT_MS: 60 * 60 * 1_000,
+  SANDBOX_TIMEOUT_MS: 20 * 60 * 1_000,
   /**
    * The longest a Vercel Sandbox session may live in all, however often it is
    * kept alive: the platform's maximum on Pro and Enterprise, past which it
@@ -47,11 +45,14 @@ export const CODER = {
   /**
    * How often a live turn, a terminal, or a watched browser keeps the
    * sandbox alive: one lookup and at most one extension each time, so a
-   * step's start or an event batch costs nothing more between them. Ten
-   * minutes, a sixth of the timeout, so a check that fails once leaves the
-   * next several to land before the sandbox would stop.
+   * step's start or an event batch costs nothing more between them, and an
+   * extension only once less than the timeout less this is left
+   * (`keepAliveExtension`). Five minutes, a quarter of the timeout, so a
+   * keep-alive that found no extension due, and the heartbeat's five minutes
+   * before the next sign of use past this, still land before the sandbox
+   * would stop.
    */
-  SANDBOX_KEEP_ALIVE_EVERY: Duration.minutes(10),
+  SANDBOX_KEEP_ALIVE_EVERY: Duration.minutes(5),
   /**
    * The sandbox's vCPUs, each with 2 GB of memory, where its repository asks
    * for no more (`SANDBOX_VCPUS_BY_REPOSITORY`); also the size the image's
@@ -192,17 +193,20 @@ export const CODER = {
    * How long a native agent's runner stays warm once its turn is over, for
    * the next message to reach it as a line rather than through a relaunched
    * CLI, one window per machine: read by the machine the runner's place is on
-   * (`FoundPlace.machine`), never by a flag. Past its window, a sweep retires
-   * the runner (`retireWarmRunner`): a sandbox's in
-   * `../../maintenance/native-sandbox-sweep.ts`, whose END then stops the
-   * sandbox, and a device's in `../../maintenance/device-warm-sweep.ts`.
+   * (`FoundPlace.machine`), never by a flag. A runner is launched warm only
+   * on a machine whose window is not zero (`runner-sessions.ts`'s launch),
+   * and past its window a sweep retires it (`retireWarmRunner`,
+   * `../../maintenance/device-warm-sweep.ts`).
    *
-   * The sandbox's is zero, so the events route retires its runner as its
-   * IDLE lands (`runnerIdled`), under the runner lease, and its sweep retries
-   * only a retire that failed. Zero because ten warm minutes kept a 4 vCPU,
-   * 8 GB sandbox up for up to 62 sandbox-hours a day over Oct 23–24, about
-   * $5–10 a day, for the 636 of 1,536 finished turns a follow-up reached
-   * within three minutes. Those now resume from the stop's snapshot.
+   * The sandbox's is zero, so its runner is launched to end at its turn's
+   * end, and its END stops the sandbox, as Vercel advises: an idle sandbox
+   * bills its memory. Ten warm minutes kept a 4 vCPU, 8 GB sandbox up for up
+   * to 62 sandbox-hours a day over Oct 23–24, about $5–10 a day, for the 636
+   * of 1,536 finished turns a follow-up reached within three minutes. Those
+   * resume from the stop's snapshot. A message sent while the runner ends is
+   * queued for it to read, and a runner that ends without reading it leaves
+   * it waiting, which its END hands on (`runner-sessions.ts`'s
+   * `LINES_WAITING`).
    *
    * The device's is thirty minutes, because nothing is billed on a host, and
    * every message within it goes into the running session rather than
@@ -213,15 +217,8 @@ export const CODER = {
    * whose stdin a message its host writes in that instant is lost on: the
    * sweep retires it past the window, a message sent past it ends the
    * runner and relaunches whether or not the sweep ran (`sendHolding`), and
-   * a host waiting to switch release has its runner retired at its IDLE.
-   *
-   * Note that the runner is launched warm and retired rather than launched
-   * to end on its own, because a runner ending by itself stops reading its
-   * stdin while its END is still posted, and a message written then would be
-   * taken as delivered and never run; a runner that reads its lines from
-   * the service leaves such a message waiting instead, and its END hands it on
-   * (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line here:
-   * raise it, and its sweep retires runners past it.
+   * a host waiting to switch release has its runner retired at its IDLE
+   * (`runnerIdled`).
    */
   RUNNER_WARM: {
     [AGENT_MACHINE.VERCEL]: Duration.zero,
@@ -263,6 +260,16 @@ export const CODER = {
    * (`TURN_ABANDON.CANCEL_AFTER_MS`).
    */
   STOP_CONFIRM: Duration.seconds(10),
+  /**
+   * How a resume past a message's answer that meets its sandbox still
+   * stopping or being snapshotted (Vercel's 422 `sandbox_stopping` or
+   * `sandbox_snapshotting`) is tried again: every `SPACING`, at most `TRIES`
+   * times, about a minute, which a turn's stop and its snapshot end within,
+   * and well under the five minutes work past an answer may run. A resume
+   * inside a request tries once more at once instead, since a wait there
+   * would outlast the store's dispatch deadline.
+   */
+  RESUME_WHILE_ENDING: { SPACING: Duration.seconds(2), TRIES: 30 },
 } as const;
 
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */

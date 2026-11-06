@@ -7,9 +7,12 @@ import { getTestDB } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { SANDBOX_STATE } from "@repo/features/terminal-wire";
 import { Effect, Layer, Redacted, Result } from "effect";
+import { afterEach, vi } from "vitest";
 import { LOCAL_AGENT_ENVIRONMENT } from "../../testing/local-agent.js";
 import {
+  commandAnswered,
   commandRunStreamed,
+  fixtureToken,
   sandboxDeleted,
   sandboxesListed,
   sandboxFetchOver,
@@ -49,18 +52,26 @@ interface Asked {
   readonly args?: readonly string[];
 }
 
-/** A sandbox session of its own, under an account of its own, whose firewall a credential is set at. */
+/** The running session of the fixture's sandbox, under an account of its own, whose firewall a credential is set at. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
-  return { userId, sandboxSessionId: `sbs_${randomUUID()}` };
+  return { userId, name: SANDBOX, sandboxSessionId: RUNNING_SESSION };
 });
 
-/** A command's stream as Vercel answers a waited run in the running session: the command, what it printed, and its end. */
-const commandStream = (exitCode: number, stdout = "") =>
-  commandRunStreamed({ id: "cmd_1", sessionId: RUNNING_SESSION }, { exitCode, stdout, stderr: "" });
+/** A command's stream as Vercel answers a waited run in the session given, the running one unless named: the command, what it printed, and its end. */
+const commandStream = (exitCode: number, stdout = "", sessionId = RUNNING_SESSION) =>
+  commandRunStreamed({ id: "cmd_1", sessionId }, { exitCode, stdout, stderr: "" });
+
+/** The session a command was asked of, as its path names it. */
+const sessionOfCommand = (url: URL) =>
+  /\/sessions\/([^/]+)\/cmd$/u.exec(url.pathname)?.[1] ?? RUNNING_SESSION;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /**
  * Vercel as the scenario has it: the session's sandbox in the status given,
@@ -76,6 +87,8 @@ function vercel(
   shellCheckExit: number = TMUX_EXIT.NO_SESSION,
   timeout?: number,
 ) {
+  // The layer asks under the deployment's own token, read where the platform hands it.
+  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const policies: unknown[] = [];
   const updates: unknown[] = [];
@@ -236,6 +249,83 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const run = api.asked.find((call) => call.args !== undefined);
         assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
         assert.ok(outage instanceof SandboxUnavailable);
+      }),
+  );
+
+  it.effect(
+    "turning forwarding on wakes a stopped sandbox and starts the repository's run command in its checkout without capabilities, and starts nothing where a port listens",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const header =
+          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid";
+        const listener =
+          "   0: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002";
+        /** Vercel with the session's sandbox in the status given, its tables printing the rows given, and the checkout's `.vespin.json` naming `pnpm dev` where no row listens. */
+        const forwarding = (status: string, rows: readonly string[]) => {
+          const started: { readonly url: URL; readonly body: Record<string, unknown> }[] = [];
+          const resumed: URL[] = [];
+          let listed = { name: SANDBOX, status, currentSessionId: RUNNING_SESSION, createdAt: 0 };
+          const layer = Layer.provide(
+            agentSandboxLayer,
+            Layer.merge(
+              LOCAL_AGENT_ENVIRONMENT,
+              sandboxFetchOver(async (url, init) => {
+                const parsed = new URL(url);
+                if (parsed.pathname.endsWith("/cmd")) {
+                  const sessionId = sessionOfCommand(parsed);
+                  const body = JSON.parse(await new Response(init.body).text());
+                  if (body.attachStdin === true) {
+                    started.push({ url: parsed, body });
+                    return Response.json(
+                      commandAnswered({ id: "cmd_run", sessionId, exitCode: null }),
+                    );
+                  }
+                  const [file] = body.args;
+                  if (file !== "/workspace/repository/.vespin.json") {
+                    return commandStream(0, [header, ...rows].join("\n"), sessionId);
+                  }
+                  // Where a port listens the file is never read, so a read there fails the call.
+                  return rows.length > 0
+                    ? Response.json({ error: { code: "bad_request" } }, { status: 400 })
+                    : commandStream(0, '{ "run": "pnpm dev" }', sessionId);
+                }
+                if (init.method === "PATCH") return Response.json(sandboxDeleted(listed));
+                if (parsed.searchParams.get("resume") === "true") {
+                  resumed.push(parsed);
+                  listed = { ...listed, status: "running", currentSessionId: "sbs_resumed" };
+                }
+                if (parsed.pathname === `/api/v2/sandboxes/${SANDBOX}`) {
+                  return Response.json(sandboxFound(listed));
+                }
+                return sandboxListRefusal(parsed) ?? Response.json(sandboxesListed([listed]));
+              }),
+            ),
+          );
+          return { layer, started, resumed };
+        };
+        const stopped = forwarding("stopped", []);
+        const serving = forwarding("running", [listener]);
+
+        const woken = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.startForwarding(SESSION),
+        ).pipe(Effect.provide(stopped.layer));
+        const listening = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.startForwarding(SESSION),
+        ).pipe(Effect.provide(serving.layer));
+
+        assert.deepEqual(woken, { started: true });
+        assert.equal(stopped.resumed[0]?.pathname, `/api/v2/sandboxes/${SANDBOX}`);
+        const [run] = stopped.started;
+        assert.ok(run !== undefined);
+        assert.equal(run.url.pathname, "/api/v2/sandboxes/sessions/sbs_resumed/cmd");
+        assert.equal(run.body.command, "setpriv");
+        assert.equal(run.body.cwd, "/workspace/repository");
+        assert.equal(run.body.sudo, false);
+        assert.ok((run.body.args as readonly string[]).includes("pnpm dev"));
+        assert.deepEqual(listening, { started: false });
+        assert.deepEqual(serving.started, []);
+        assert.deepEqual(serving.resumed, []);
       }),
   );
 

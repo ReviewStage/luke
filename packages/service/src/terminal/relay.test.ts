@@ -112,6 +112,7 @@ function world(options: {
   const sandbox: AgentSandboxService = {
     terminals: () => Effect.die("the relay lists nothing"),
     listeningPorts: () => Effect.die("the relay lists no ports"),
+    startForwarding: () => Effect.die("the relay starts no run command"),
     start: () => Effect.die("the relay starts nothing"),
     rename: () => Effect.die("the relay renames nothing"),
     kill: () => Effect.die("the relay kills nothing"),
@@ -130,6 +131,7 @@ function world(options: {
         return state === SANDBOX_STATE.RUNNING
           ? {
               state,
+              sandboxName: "sandbox-relay",
               sandboxSessionId: SANDBOX_SESSION,
               shell: { url: "wss://pty.test", token: Redacted.make("pty-token") },
             }

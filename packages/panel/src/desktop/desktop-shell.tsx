@@ -1127,6 +1127,11 @@ export function DesktopShell({
         </MentionedAgents>
       </main>
       {barShown ? <MobileBar tasks={tasks} /> : null}
+      {/* Note that the floating sidebar's title-bar row is claimed back from the work's drag strips here, after the work,
+          because a later drag region wins and the sidebar comes before the work, so its Back and Forward keep their presses. */}
+      {sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED && room === SHELL_ROOM.WIDE ? (
+        <div className="sidebar-float-claim" />
+      ) : null}
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&

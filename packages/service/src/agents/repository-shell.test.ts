@@ -87,7 +87,7 @@ const world = Effect.acquireRelease(
         });
         return { exitCode: ran.status ?? 1, stdout: ran.stdout, stderr: ran.stderr };
       },
-      firewall: { set: () => Effect.void, withdraw: () => Effect.void },
+      firewall: { write: () => Effect.void },
     };
     return { root, remote, checkout: join(workspace, "repository"), sandbox };
   }),

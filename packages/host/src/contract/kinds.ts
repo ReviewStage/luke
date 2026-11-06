@@ -41,15 +41,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
-   * Settings › Coding agents › Codex: Sign in with ChatGPT for our hosted
-   * runtime, run by the host through the developer's browser, and the one
-   * waiting withdrawn. Nothing crosses from the renderer but the press, and
-   * the answer is the keys as the service then holds them: the sign-in's
-   * tokens go from the host to the service and never reach a window.
-   */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
-  /**
    * Settings › Agents › Codex › Connect: Codex's device-code login, run by
    * the service, begun, waited on while the host asks after it on its
    * interval, and withdrawn. Nothing crosses from the renderer but the
@@ -163,6 +154,8 @@ export const AGENT_ACT_KIND = {
   /** The beats a window holds asked again now, as the window comes back online. */
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on or off, from This Mac's row in Settings › Hosts; only the desktop answers it. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
   HOSTS_PAIRING_DENY: "hosts.pairingDeny",
@@ -574,6 +567,18 @@ export const MAC_COMMAND_ACT_KIND = {
 } as const;
 
 /**
+ * A coding agent's cloud ports forwarded to this Mac's localhost
+ * (`@repo/features/port-forward-acts`), for one agent at a time: how its
+ * forwarding stands, read, and turned on or off, answered by the platform
+ * shell, whose host listens on the Mac's loopback. What a forwarded
+ * connection carries never travels on an act.
+ */
+export const PORT_FORWARD_ACT_KIND = {
+  PORT_FORWARD_READ: "portForward.read",
+  PORT_FORWARD_SET: "portForward.set",
+} as const;
+
+/**
  * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
  * started, named, and ended, its sandbox resumed on the developer's click,
  * and a shell attached and detached. What a shell prints travels on the port
@@ -755,6 +760,7 @@ export const PORT_ACT_KIND = {
   ...MAC_COMMAND_ACT_KIND,
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PORT_FORWARD_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
@@ -792,7 +798,8 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * host follows the list from the account gate opening and only a press asks
  * it again; `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
  * FETCHes, though each answers what stands now, because each is asked again
- * whenever it is shown and nothing keeps it, as is `AGENTS_MESSAGES`, Copy
+ * whenever it is shown and nothing keeps it, as is `PORT_FORWARD_READ`, asked
+ * every few seconds while forwarding is shown, as is `AGENTS_MESSAGES`, Copy
  * transcript's read on its press; `AGENTS_TRANSCRIPT_OLDER` is a WRITE,
  * because it lays an older page on the held transcript and answers only
  * whether it landed, or why it was not read; and `HOSTS_PAIRING_READ` is a FETCH, read once as a
@@ -811,8 +818,6 @@ export const PORT_ACT_USE = {
   PROVIDER_KEYS_SAVE: ACT_USE.WRITE,
   PROVIDER_KEYS_REMOVE: ACT_USE.WRITE,
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
-  CHATGPT_SIGN_IN: ACT_USE.WRITE,
-  CHATGPT_SIGN_IN_CANCEL: ACT_USE.WRITE,
   CHATGPT_DEVICE_START: ACT_USE.WRITE,
   CHATGPT_DEVICE_WAIT: ACT_USE.WRITE,
   CHATGPT_DEVICE_CANCEL: ACT_USE.WRITE,
@@ -834,6 +839,7 @@ export const PORT_ACT_USE = {
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
   HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
+  HOSTS_THIS_MAC_SET: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.FETCH,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
   HOSTS_PAIRING_DENY: ACT_USE.WRITE,
@@ -927,6 +933,9 @@ export const PORT_ACT_USE = {
   MAC_SHELL_CLOSE: ACT_USE.WRITE,
 
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
+
+  PORT_FORWARD_READ: ACT_USE.FETCH,
+  PORT_FORWARD_SET: ACT_USE.WRITE,
 
   SETTING_UPDATE: ACT_USE.WRITE,
   SETTINGS_RESET: ACT_USE.WRITE,
@@ -1054,6 +1063,7 @@ export const PLATFORM_PORT_ACT_KIND = {
   ...CLI_ACT_KIND,
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PORT_FORWARD_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,

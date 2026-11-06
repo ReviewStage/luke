@@ -21,8 +21,13 @@ import {
   repositorySnapshotName,
   sweepRepositorySnapshots,
 } from "./repository-snapshot.js";
-import { composePolicy, type FirewallEntry, type FirewallSlot } from "./sandbox-firewall.js";
-import { NAME_TAKEN, type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
+import { composePolicy } from "./sandbox-firewall.js";
+import {
+  NAME_TAKEN,
+  sessionOnFirstUse,
+  type VercelSandboxApi,
+  vercelSandboxApi,
+} from "./vercel-sandbox-api.js";
 
 const IMAGE = "snap_fixture_image";
 const TOKEN = "ghs_fixtureRepositorySnapshotToken";
@@ -41,17 +46,15 @@ const fixture = Effect.gen(function* () {
   return { fake, api };
 });
 
-/** The build's sandbox as the clone reaches it: each run straight to the API, and each policy composed from what stands at its firewall. */
+/** The build's sandbox as the clone reaches it: each run straight to the API, and each policy composed from the sources its write names. */
 function opener(api: VercelSandboxApi) {
   return ({ name, running }: { name: string; running: string }): RepositorySandbox => {
-    const standing = new Map<FirewallSlot, FirewallEntry>();
-    const composed = () =>
-      Effect.suspend(() => api.updateNetworkPolicy(running, composePolicy(standing)));
+    const session = sessionOnFirstUse(api, { name, sessionId: running });
     return {
       run: (ask) =>
         Effect.runPromise(
-          Effect.flatMap(api.session({ name, sessionId: running }), (session) =>
-            session.run({
+          Effect.flatMap(session, (held) =>
+            held.run({
               command: "bash",
               args: ["-c", ask.command],
               ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
@@ -60,15 +63,9 @@ function opener(api: VercelSandboxApi) {
           ),
         ),
       firewall: {
-        set: (slot, entry) =>
-          Effect.andThen(
-            Effect.sync(() => standing.set(slot, entry)),
-            composed(),
-          ),
-        withdraw: (slot) =>
-          Effect.andThen(
-            Effect.sync(() => standing.delete(slot)),
-            composed(),
+        write: (sources) =>
+          Effect.flatMap(session, (held) =>
+            held.updateNetworkPolicy(composePolicy(sources, new Map())),
           ),
       },
     };

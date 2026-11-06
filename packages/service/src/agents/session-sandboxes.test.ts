@@ -3,7 +3,9 @@ import { it } from "@effect/vitest";
 import { getTestDB } from "@repo/database/testing";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
+import { afterEach, vi } from "vitest";
 import {
+  fixtureToken,
   sandboxDeleted,
   sandboxesListed,
   sandboxFetchOver,
@@ -58,6 +60,8 @@ function namedIn(sandboxes: readonly NamedSandbox[], path: string): NamedSandbox
 
 /** Vercel answering the list with the sandboxes given and every stop with the status given, keeping what it was asked. */
 function vercel(sandboxes: readonly NamedSandbox[], stopStatus = 200) {
+  // The layer asks under the deployment's own token, read where the platform hands it.
+  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const updates: unknown[] = [];
   const layer = Layer.provide(
@@ -89,6 +93,10 @@ function vercel(sandboxes: readonly NamedSandbox[], stopStatus = 200) {
   );
   return { layer, asked, updates };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /** The session's sandboxes stopped, the firewall's record kept in a database of the call's own. */
 const stopFor = (sessionId: string, snapshotExpiry?: Duration.Duration) =>
@@ -189,6 +197,7 @@ function vercelSessions(
   extendStatus?: number,
   snapshots: Record<string, readonly { readonly id: string; readonly status: string }[]> = {},
 ) {
+  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const extensions: { readonly session: string; readonly duration: number }[] = [];
   const updates: { readonly name: string; readonly body: unknown }[] = [];
@@ -347,7 +356,7 @@ it.effect(
           sbs_capped: { status: "running", createdAt: 0, timeout: CODER.SANDBOX_MAX_LIFETIME_MS },
         },
       );
-      yield* TestClock.adjust(Duration.millis(nearCap - 20 * MINUTE));
+      yield* TestClock.adjust(Duration.millis(nearCap - 5 * MINUTE));
 
       const extended = yield* keepAliveFor(SESSION).pipe(Effect.provide(api.layer));
 

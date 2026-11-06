@@ -66,6 +66,7 @@ function agents() {
   const sandbox: AgentSandboxService = {
     terminals: unused,
     listeningPorts: unused,
+    startForwarding: unused,
     start: unused,
     rename: unused,
     kill: unused,

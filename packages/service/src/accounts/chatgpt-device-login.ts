@@ -1,9 +1,8 @@
 /**
  * chatgpt-device-login.ts -- connecting an account's ChatGPT plan through Codex's own device-code login, run by the service one step at a time as the panel asks.
  *
- * OpenAI offers its third-party Sign in with ChatGPT on personal plans
- * alone; Codex's device-code login works on every plan that has Codex,
- * Business included. The service runs it as Codex runs it: a start asks
+ * Codex's device-code login works on every plan that has Codex, Business
+ * included. The service runs it as Codex runs it: a start asks
  * OpenAI for a user code under Codex's client, and the account enters it
  * at OpenAI's verification page; each poll asks OpenAI once whether the
  * code was entered (a 403 or a 404 is still pending), and once it was,

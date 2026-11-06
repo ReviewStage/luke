@@ -41,8 +41,9 @@
  * A place is found again by the session's tag, and its runner by the tags a
  * launch writes beside it: the command, the sandbox session it runs in, and
  * the launch's first event number and fingerprint (`RUNNER_TAG`). The
- * firewall is the sandbox session's network policy, composed whole from
- * what stands at it (`../sandbox-firewall.ts`), a stop is the session's, and a
+ * firewall is the sandbox session's network policy, composed whole at each
+ * write from its sources and the swaps its launch keeps
+ * (`../sandbox-firewall.ts`), a stop is the session's, and a
  * resume opens the sandbox's last snapshot, its timeout lowered first, so
  * the session it opens lives a launch's timeout and not an old sandbox's
  * day; a snapshot expired is a place gone for good.
@@ -76,6 +77,7 @@ import {
   type AgentRepositoryRead,
   agentDeepenPlan,
   agentExtraReads,
+  agentFirewallSources,
   agentRepositoryRead,
   CHECKOUT_DEPTH,
   CheckoutRefused,
@@ -96,7 +98,11 @@ import {
   readRepositorySnapshot,
 } from "../repository-snapshot.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
-import { type FirewallSession, sandboxFirewall } from "../sandbox-firewall.js";
+import {
+  type FirewallSession,
+  type FirewallSources,
+  sandboxFirewall,
+} from "../sandbox-firewall.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   type ListedSandbox,
@@ -371,6 +377,11 @@ function sessionOfPlace(place: OpenedPlace): SessionRef {
   return { name: place.name, sessionId: place.running };
 }
 
+/** The same session as its firewall names it, with the account whose agent it is. */
+function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession {
+  return { userId, name: place.name, sandboxSessionId: place.running };
+}
+
 /** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
 export interface TaggedRunner {
   readonly sandboxSessionId: string;
@@ -488,16 +499,17 @@ const diedAtStart = (session: SandboxSessionApi, commandId: string, secrets: rea
     );
   });
 
-/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account, over the store the machine was made on. */
+/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account and to what stands beside the checkout's own, over the store the machine was made on. */
 function repositoryFirewallOver(
   api: VercelSandboxApi,
   context: Context.Context<DatabaseServices>,
   session: FirewallSession,
+  beside: FirewallSources,
 ): RepositoryFirewall {
   const firewall = sandboxFirewall(api);
   return {
-    set: (slot, entry) => Effect.provideContext(firewall.set(session, slot, entry), context),
-    withdraw: (slot) => Effect.provideContext(firewall.withdraw(session, slot), context),
+    write: (sources) =>
+      Effect.provideContext(firewall.write(session, { ...beside, ...sources }), context),
   };
 }
 
@@ -570,11 +582,12 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       api.updateTags(place.name, recordTags(place.session, place.agentId, record)),
 
     firewall: {
-      set: (place, userId, slot, entry) =>
-        firewall.set({ userId, sandboxSessionId: place.running }, slot, entry),
-      withdraw: (place, userId, slot) =>
-        firewall.withdraw({ userId, sandboxSessionId: place.running }, slot),
-      clear: (place) => firewall.clear(place.running),
+      write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
+      keepLaunch: (place, userId, launch) =>
+        firewall.keepLaunch(firewallSessionOf(place, userId), launch),
+      endLaunch: (place, userId, sources) =>
+        firewall.endLaunch(firewallSessionOf(place, userId), sources),
+      clear: (place) => firewall.clear(sessionOfPlace(place)),
     },
 
     // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
@@ -624,22 +637,23 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
 /** The machine over the API given, its checkout run through the edge's runner. */
 export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
-  /** The sandbox session as the checkout reaches it, its firewall the account's given, its record kept in the store given. */
+  /** The sandbox session as the checkout reaches it, its firewall the account's given, with what stands beside the checkout's own, its launch read from the store given. */
   const checkoutOver = (
     context: Context.Context<DatabaseServices>,
     sandbox: OpenedPlace,
     userId: string,
+    beside: FirewallSources = {},
   ) =>
     repositorySandboxOver(
       sessionOnFirstUse(api, sessionOfPlace(sandbox)),
       run,
-      repositoryFirewallOver(api, context, { userId, sandboxSessionId: sandbox.running }),
+      repositoryFirewallOver(api, context, firewallSessionOf(sandbox, userId), beside),
     );
 
-  /** The same, its record kept in the caller's store. */
-  const checkoutIn = (sandbox: OpenedPlace, userId: string) =>
+  /** The same, its launch read from the caller's store. */
+  const checkoutIn = (sandbox: OpenedPlace, userId: string, beside: FirewallSources = {}) =>
     Effect.map(Effect.context<DatabaseServices>(), (context) =>
-      checkoutOver(context, sandbox, userId),
+      checkoutOver(context, sandbox, userId, beside),
     );
 
   /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
@@ -945,13 +959,15 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // undoes what it recorded of it, so the next message relaunches whole rather than writing to a
     // runner that waits for its config.
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
-    // so only a repository added since the place opened is cloned here.
+    // so only a repository added since the place opened is cloned here. A runner already running
+    // keeps its repository credential through the clone, minted afresh, since each write is whole.
     checkOutExtras: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
-        yield* cloneAgentExtras(yield* checkoutIn(place, agent.userId), reads);
+        const beside = shared ? yield* agentFirewallSources(target, agent) : {};
+        yield* cloneAgentExtras(yield* checkoutIn(place, agent.userId, beside), reads);
         if (!shared) return;
         const session = yield* api.session(sessionOfPlace(place));
         const commandId = yield* session.start({

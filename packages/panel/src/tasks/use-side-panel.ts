@@ -52,12 +52,13 @@ import {
  * subagent's tab opened from an agent's transcript opens it too. Not to be
  * confused with "the panel", which in this renderer is the app's whole surface.
  *
- * A fixed tab stands in the strip only once the open task has used it: a
- * comment was left on its plan. The plan's own tab once stood here on every
- * task, and the task's Inbox on a task where an item waited; neither is
- * drawn or offered now, since the column's Overview holds the plan and a
- * task's threads open in the window's Inbox, and what
- * an earlier version kept of either reads and opens nothing
+ * No fixed tab stands in the strip now. The plan's own tab once stood here
+ * on every task, the task's Inbox on a task where an item waited, and the
+ * plan's Comments once a comment was left on it; none is drawn or offered
+ * now, since the column's Overview holds the plan, a task's threads open
+ * in the window's Inbox, and the plan lists its own comments in its
+ * margin's place (`plan-comments.tsx`'s `PlanCommentList`), and what an
+ * earlier version kept of any of them reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. Beside the window's Inbox the panel
@@ -184,7 +185,12 @@ export const SIDE_PANEL_TAB = {
    * it, and a pin naming it opens the window's Inbox instead.
    */
   INBOX: "inbox",
-  /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
+  /**
+   * The plan's comment threads, which the plan lists in its margin's place
+   * now (`plan-comments.tsx`'s `PlanCommentList`). Note that it is kept
+   * here, drawn and offered nowhere (`DRAWN_KINDS`), because what an earlier
+   * version kept and pinned names it.
+   */
   COMMENTS: "comments",
 } as const;
 
@@ -300,10 +306,18 @@ export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
 
-/** The kinds the panel draws, every one but the plan's, which the column's Overview holds, and the Inbox's, whose threads the window's Inbox holds. */
+/** The kinds of old that are chosen and shown nowhere: the Inbox's, whose threads the window's Inbox holds, and Comments, which the plan lists itself. */
+const RETIRED_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS];
+
+/** The kinds the panel draws: none of the plan's, which the column's Overview holds, nor the retired ones. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN && kind !== SIDE_PANEL_TAB.INBOX,
+  (kind) => kind !== SIDE_PANEL_TAB.PLAN && !RETIRED_KINDS.includes(kind),
 );
+
+/** Whether a tab is of a retired kind, which nothing chooses, shows, or reopens. */
+function retiredKind(tab: SidePanelTab): boolean {
+  return RETIRED_KINDS.some((kind) => kind === tab);
+}
 
 /** Whether a tab is one of the fixed kinds. */
 function isFixedTab(tab: SidePanelTab): tab is FixedSidePanelTab {
@@ -1768,7 +1782,7 @@ function carriedPin(pin: KeptPin): pin is CarriedPin {
  */
 function heldPin(pin: KeptPin): PinnedTab[] {
   const { tab } = pin;
-  if (isAgentTab(tab) || !currentPin(tab) || tab === SIDE_PANEL_TAB.INBOX) return [];
+  if (isAgentTab(tab) || !currentPin(tab) || retiredKind(tab)) return [];
   const { label, at, position } = pin;
   const fields = position === undefined ? { tab, label, at } : { tab, label, at, position };
   return ["task" in pin ? { ...fields, task: pin.task } : { ...fields, agent: pin.agent }];
@@ -1931,8 +1945,8 @@ function shownTab(
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
-/** The kinds whose first hold keeps the tab shown as it stood (`arrived`): every kind but the retired Inbox. */
-const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX);
+/** The kinds whose first hold keeps the tab shown as it stood (`arrived`): every kind but the retired ones. */
+const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => !retiredKind(tab));
 
 /** Whether two reads of what a task holds say the same of every kind. */
 function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
@@ -2160,7 +2174,7 @@ export function useSidePanel(
   const onToggleAskedAnswered = useCallback(() => setToggleAskedOn(undefined), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
-      if (tab === SIDE_PANEL_TAB.INBOX) return;
+      if (retiredKind(tab)) return;
       setAsked(undefined);
       update((held) => ({
         ...withPagePlaced(
@@ -2178,15 +2192,15 @@ export function useSidePanel(
     },
     [update, drawn, taskId, pagePlace],
   );
-  // Note that the Inbox's kind of old, which a step of the history or a pin
-  // an earlier version kept may still name, is never chosen nor shown: a
-  // task's threads open in the window's Inbox. A tab shown on another task
+  // Note that the retired kinds, which a step of the history or a pin an
+  // earlier version kept may still name, are never chosen nor shown: a
+  // task's threads open in the window's Inbox, and the plan lists its comments. A tab shown on another task
   // is not counted viewed on the open one, because the task it is viewed on is the one about to open, whose
   // strip is not drawn yet; it goes to that strip's end only where it is
   // sure to stand in none of it (`withTabLastOn`).
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
-      if (tab === SIDE_PANEL_TAB.INBOX) return;
+      if (retiredKind(tab)) return;
       setAsked({ task: on, tab, carry: on !== taskId || stop !== taskId });
       setOpened((was) => was + 1);
       update((held) => {
@@ -2332,6 +2346,7 @@ export function useSidePanel(
   // the strip the tab is placed in draws it from the moment it stands again.
   const onReopen = useCallback(
     (tab: SidePanelTab, at: number, file: OpenFile | undefined) => {
+      if (retiredKind(tab)) return;
       setAsked(undefined);
       update((held) => {
         // A file stands in one tab at most, so the record kept with the tab

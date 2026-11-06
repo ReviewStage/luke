@@ -13,6 +13,7 @@ import {
   type TasksEditAnswer,
 } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
 import { keepPictureRead } from "@repo/ui/picture-cache";
 import { ImagePlusIcon } from "lucide-react";
@@ -20,6 +21,7 @@ import { useMemo } from "react";
 import { unreachedAs, useAct } from "../act.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -120,16 +122,20 @@ async function edited(
 
 /**
  * The viewer's Add to plan, for a transcript drawn on a plan's page; none
- * where it is drawn off one, as an agent with no plan's is.
+ * where it is drawn off one, as an agent with no plan's is, nor while the
+ * account has Plans off.
  */
 export function useAddToPlan(): ViewerAction | undefined {
+  const plansOn = useExperiment(EXPERIMENT.PLANS);
   const page = useTaskMentions();
   const { act } = useAct();
   const toast = useToast();
   const working = useWorkingToast();
   return useMemo(() => {
     const taskId = holderTaskId(page?.holder);
-    if (page === undefined || taskId === undefined || page.workspace === "") return undefined;
+    if (!plansOn || page === undefined || taskId === undefined || page.workspace === "") {
+      return undefined;
+    }
     const { workspace } = page;
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
       act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
@@ -205,5 +211,5 @@ export function useAddToPlan(): ViewerAction | undefined {
       icon: <ImagePlusIcon aria-hidden="true" />,
       onPress: (chip: FileChip) => void add(chip),
     };
-  }, [act, page, toast, working]);
+  }, [plansOn, act, page, toast, working]);
 }

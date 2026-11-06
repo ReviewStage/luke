@@ -8,7 +8,7 @@ import {
   type AdminCostAccount,
   type AdminCostModel,
 } from "@repo/features/admin-cost-wire";
-import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCompact, formatCount, formatUsd } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { readFailedWords } from "@repo/features/words";
@@ -23,8 +23,10 @@ import {
   Text,
 } from "@repo/ui";
 import { formatTrendMove } from "@repo/ui/admin-format";
+import { useQuery } from "@tanstack/react-query";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminCostQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { CostChart, CostChartSkeleton } from "../charts/cost-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
@@ -34,7 +36,6 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
-import { useAdminRead } from "../use-admin-read.js";
 
 const COST_ERROR = readFailedWords("cost");
 
@@ -306,12 +307,9 @@ export function CostScreen({
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();
   const query = windowedReadQuery(hideAdmins, windowDays);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.COST, query: query },
-    (signal) => reads.cost(query, signal),
-    COST_ERROR,
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminCostQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const controls = (
     <AdminViewOptions
       windowDays={windowDays}
@@ -322,7 +320,7 @@ export function CostScreen({
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

@@ -28,6 +28,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { heardWords } from "../testing/heard-words.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -388,7 +389,8 @@ test("a run of calls folds under a line that says it is open", () => {
     true,
   );
   const group = container.querySelector("[data-turn-fold] > summary");
-  assert.equal(group?.textContent, "2 tool calls");
+  assert.ok(group !== null);
+  assert.equal(heardWords(group), "2 tool calls");
   assert.equal(group?.getAttribute("aria-expanded"), "true", "the group says it is open");
 });
 

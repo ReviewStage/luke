@@ -52,6 +52,7 @@ import {
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
   pullRequestPartParamsSchema,
+  thisMacHostSetParamsSchema,
 } from "@repo/features/agent-view";
 import {
   hostPairingApproveViewSchema,
@@ -118,6 +119,9 @@ export const agentActsContract = {
     .output(EffectSchema.Void),
   [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
     .input(exactInput(hostIdParamsSchema))
+    .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_THIS_MAC_SET]: actProcedure("Could not change this Mac on this system.")
+    .input(exactInput(thisMacHostSetParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actProcedure("Could not read the code on this system.")
     .input(exactInput(hostPairingParamsSchema))
