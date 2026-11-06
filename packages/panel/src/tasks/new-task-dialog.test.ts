@@ -1018,6 +1018,10 @@ test("a recent default the workspace's GitHub turns out not to list gives way to
       },
     });
   const unlisted = await mount(undefined, undefined, { list: listing });
+  // Note that we wait for the listing to reach the chip, because it lands on Query's timing.
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector(".repository-chip")?.textContent, "acme/api"),
+  );
   await unlisted.key("Enter", { metaKey: true });
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
