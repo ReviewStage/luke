@@ -14,7 +14,7 @@ import { Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { answerInboxAsk, postInboxThread } from "../inbox/inbox-store.js";
 import { SlackBot, type SlackFileTransfer, type SlackWebApi, slackBotOver } from "./slack-bot.js";
-import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js";
+import { dmThreadPost, rewriteThreadDm, settleThreadDms, threadStandsOpen } from "./thread-dms.js";
 
 /**
  * A thread an agent posts, written by our Slack bot to the member it waits
@@ -200,9 +200,14 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           (call) => call.method === "chat.update",
         );
         assert.deepEqual(again, []);
-        // The title DM says the open ask while it waits, and the title alone once it is answered.
+        // The title DM says the open ask with its own buttons while it waits, and the title alone once it is answered.
         assert.equal(asking?.args.ts, "1700000000.000101");
-        assert.deepEqual(blocksOf(asking), [header, words, open]);
+        const [askingHeader, askingWords, askingActions, ...askingMore] = blocksOf(asking);
+        assert.deepEqual([askingHeader, askingWords, askingMore], [header, words, []]);
+        assert.deepEqual(
+          askingActions.elements.map((element: { text: { text: string } }) => element.text.text),
+          ["Mark done", "Couldn't do it", "Open in Vespin"],
+        );
         assert.equal(untitled?.args.ts, "1700000000.000101");
         assert.deepEqual(blocksOf(untitled), [header, open]);
         assert.equal(answered?.args.channel, "D0001");
@@ -243,34 +248,83 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           [undefined, "1700000000.000101", "1700000000.000101"],
         );
         assert.deepEqual(blocksOf(posted[2])[0], { type: "markdown", text: "Or a month?" });
-        // The title DM is never rewritten as a reply: it says the title and the ask now open.
+        // The title DM is never rewritten as a reply: it says the title, the ask now open, and its options.
         const updated = calls.filter((call) => call.method === "chat.update");
         assert.deepEqual(
-          updated.map((call) => [call.args.ts, blocksOf(call)]),
+          updated.map((call) => call.args.ts),
+          ["1700000000.000101"],
+        );
+        const [header, words, actions, ...more] = blocksOf(updated[0]);
+        assert.deepEqual(
+          [header, words, more],
           [
-            [
-              "1700000000.000101",
-              [
-                {
-                  type: "header",
-                  text: { type: "plain_text", text: "📥 How long should an invitation last?" },
-                },
-                { type: "markdown", text: "Or a month?" },
-                {
-                  type: "actions",
-                  elements: [
-                    {
-                      type: "button",
-                      text: { type: "plain_text", text: "Open in Vespin" },
-                      url: `https://vespin.dev/${slug}/inbox/${item.id}`,
-                    },
-                  ],
-                },
-              ],
-            ],
+            {
+              type: "header",
+              text: { type: "plain_text", text: "📥 How long should an invitation last?" },
+            },
+            { type: "markdown", text: "Or a month?" },
+            [],
           ],
         );
+        assert.deepEqual(
+          actions.elements.map((element: { text: { text: string } }) => element.text.text),
+          ["A week", "A month", "Open in Vespin"],
+        );
+        assert.equal(actions.elements.at(-1).url, `https://vespin.dev/${slug}/inbox/${item.id}`);
       }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls, true), fakeFiles([]))));
+    },
+  );
+
+  it.effect(
+    "a press on the title DM after its ask settled draws the title again, not a reply",
+    () => {
+      const calls: SlackCall[] = [];
+      return Effect.gen(function* () {
+        const { agent, organizationId, slug } = yield* openConnectedAgent;
+        const ask = {
+          key: "invite-expiry",
+          title: "How long should an invitation last?",
+          body: "A week?",
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "A week" }, { label: "A month" }] },
+          needsReply: true,
+        };
+        const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+        yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
+        const message = item.thread?.find((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
+        assert.ok(message !== undefined);
+        yield* answerInboxAsk(agent.userId, item.id, {
+          answers: { ask: message.id, reply: INBOX_REPLY.CHOSE, choices: ["A week"] },
+          text: "",
+          clientKey: randomUUID(),
+        });
+        yield* settleThreadDms(item.id);
+        // The same press again, as Slack sends one twice, from the title DM rather than the reply.
+        const before = calls.length;
+        const title = { channel: "D0001", ts: "1700000000.000101" };
+        yield* rewriteThreadDm(title, item.id, message, "You chose A week");
+
+        const [redrawn, ...more] = calls
+          .slice(before)
+          .filter((call) => call.method === "chat.update");
+        assert.deepEqual(more, []);
+        assert.equal(redrawn?.args.ts, title.ts);
+        assert.deepEqual(blocksOf(redrawn), [
+          {
+            type: "header",
+            text: { type: "plain_text", text: "📥 How long should an invitation last?" },
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: { type: "plain_text", text: "Open in Vespin" },
+                url: `https://vespin.dev/${slug}/inbox/${item.id}`,
+              },
+            ],
+          },
+        ]);
+      }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles([]))));
     },
   );
 
