@@ -1017,6 +1017,7 @@ export const PlanBody = memo(function PlanBody({
   standing: taskStanding,
   head,
   titleActions = true,
+  shown = true,
 }: {
   task: Task;
   onShowHistory?: ShowHistory;
@@ -1040,6 +1041,8 @@ export const PlanBody = memo(function PlanBody({
   head?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
+  /** Whether the plan is the tab its column shows, rather than kept hidden behind another; shown unless said. */
+  shown?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
   // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
@@ -1395,6 +1398,7 @@ export const PlanBody = memo(function PlanBody({
             <PlanCommentLayer
               body={body}
               scroller={scroller}
+              shown={shown}
               unitClass={UNIT_CLASS}
               sections={drawnSections}
               text={task.document.body}
