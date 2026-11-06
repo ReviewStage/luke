@@ -9,7 +9,6 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
-import { type BrowserTabsPlace, browserTabsPlaceId } from "./agent-browser-tab-wire.js";
 import { startRefusedAs } from "./agent-client.js";
 import type { AgentAgentAnswer } from "./agent-view.js";
 import type { LocalAgentRefusal } from "./agent-wire.js";
@@ -19,7 +18,6 @@ import {
   DESCRIPTION_ATTACHMENT_REFUSAL,
   descriptionAttachmentTypeSchema,
 } from "./description-attachment-wire.js";
-import type { TaskCommentsLiveAnswer } from "./description-comment-live.js";
 import {
   type DescriptionCommentActionRequest,
   type DescriptionCommentStart,
@@ -37,7 +35,7 @@ import type {
   GitHubRepositoryIssueAnswer,
   GitHubRepositoryPullRequestAnswer,
 } from "./github-repositories-wire.js";
-import { hostedCall } from "./hosted-call.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
   askHosted,
   askLive,
@@ -49,16 +47,9 @@ import {
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import { WRITE_UNTAKEN, type WriteUntaken, writeUntakenOf } from "./keyed-write.js";
-import {
-  LIVE_POLL,
-  LIVE_SIGNED_OUT,
-  LIVE_USER_QUERY,
-  type TaskBrowserTabsLiveAnswer,
-  type TaskHistoryLiveAnswer,
-  type TaskPagesLiveAnswer,
-  type TaskRecordLiveAnswer,
-} from "./live-wire.js";
-import { type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
+import { LIVE_POLL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import type { PagePlace, PageVersion } from "./page-wire.js";
 import {
   descriptionAttachmentPath,
   type RepositoryPlace,
@@ -127,7 +118,6 @@ import {
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksCommentAnswer,
-  type TasksCommentsFollow,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
 } from "./tasks-view.js";
@@ -653,117 +643,9 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Where one task's description and pages stand, sealed for following over Neon
-   * Realtime, or with `poll` their rows inline, for a reader polling while
-   * Realtime fails them, for the account `userId` names: not found where the
-   * account reaches no such task, signed out where the session is another's,
-   * unanswered for anything else, which the caller answers by sealing again.
-   */
-  recordLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskRecordLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.taskRecord, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /**
-   * One task's pages, or one coding agent's on no task, each at its newest
-   * version, sealed for following over Neon Realtime, or with `poll` their
-   * rows inline at the poll address, on the terms a task's record's is.
-   */
-  pagesLive(
-    place: PagePlace,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskPagesLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const procedure =
-      "taskId" in place ? this.#hosted.live.taskPages : this.#hosted.live.agentPages;
-    return hostedResult(
-      askLive(procedure, { id: pagePlaceId(place), [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /** One agent's Browser tabs, or a task's agents' together, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
-  browserTabsLive(
-    place: BrowserTabsPlace,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskBrowserTabsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(
-        "taskId" in place ? this.#hosted.live.taskBrowserTabs : this.#hosted.live.agentBrowserTabs,
-        { id: browserTabsPlaceId(place), [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /** One task's comments, its description's own threads or one page's where `subject` names one, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
-  commentsLive(
-    subject: TasksCommentsFollow,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskCommentsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const page = subject.pageId === undefined ? undefined : { page: subject.pageId };
-    return hostedResult(
-      askLive(
-        this.#hosted.live.taskComments,
-        { id: subject.taskId, ...page, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /** One task's newest page of description history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
-  historyLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskHistoryLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(
-        this.#hosted.live.taskHistory,
-        { id: taskId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      LIVE_REFUSALS,
-    );
+  /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
   /**

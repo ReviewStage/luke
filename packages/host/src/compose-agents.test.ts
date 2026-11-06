@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { CALL_FAULT, ServiceReach } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
+import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
@@ -374,9 +375,15 @@ function fakeService() {
     // SAFETY: the hosts' read is the one live read the client is asked for by its declaration.
     liveRead: ((
       read: { readonly name: string },
-      _params: unknown,
+      params: { readonly id?: string },
       poll?: { readonly after?: string | undefined },
     ) => {
+      if (read.name === AGENT_ORIGIN_READ.name) {
+        if (poll === undefined) asked.push(`agent-origin-live:${params.id}`);
+        return poll === undefined
+          ? Effect.succeed(live.origin.first())
+          : live.origin.poll(poll.after);
+      }
       assert.equal(read.name, HOSTS_READ.name);
       return Effect.map(
         poll === undefined ? Effect.succeed(live.hosts.first()) : live.hosts.poll(poll.after),
@@ -559,10 +566,6 @@ function fakeService() {
         return CHANGES;
       }),
     pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    agentOriginLive: (agentId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`agent-origin-live:${agentId}`);
-      return poll === true ? live.origin.poll(after) : Effect.succeed(live.origin.first());
-    },
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);

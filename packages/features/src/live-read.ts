@@ -11,9 +11,13 @@
  * match each part's row and whose order is the part's own.
  *
  * A param is the reader's account (`LIVE_PARAM.USER`), which the service
- * admits only for the session's own and binds from it, or a text the query
+ * admits only for the session's own and binds from it, a text the query
  * names (`LIVE_PARAM.TEXT`), read as text so one of no shape is answered as
- * not found rather than refused. The mode adds the fields a reader polls
+ * not found rather than refused, or may leave out (`LIVE_PARAM.OPTIONAL_TEXT`),
+ * bound as empty then, the id of a row it names (`LIVE_PARAM.ID`) or may
+ * leave out (`LIVE_PARAM.OPTIONAL_ID`), read as text and bound as the id it
+ * spells, or not found where it spells none, or a value the service binds itself and no query
+ * names (`LIVE_PARAM.SERVED`), such as an instant read from its clock. The mode adds the fields a reader polls
  * with (`LIVE_POLL`): every read takes `poll` and `after`, and a cursor read
  * `cursor` too.
  *
@@ -42,16 +46,29 @@ export const ORDER = { ASC: "asc", DESC: "desc" } as const;
 
 type Order = (typeof ORDER)[keyof typeof ORDER];
 
-/** What a live read's param is bound to: the reader's own account, or a text its query names. */
-export const LIVE_PARAM = { USER: "user", TEXT: "text" } as const;
+/** What a live read's param is bound to: the reader's own account, a text its query names or may leave out, or a value the service binds itself. */
+export const LIVE_PARAM = {
+  USER: "user",
+  TEXT: "text",
+  OPTIONAL_TEXT: "optionalText",
+  SERVED: "served",
+  ID: "id",
+  OPTIONAL_ID: "optionalId",
+} as const;
 
 type LiveParam = (typeof LIVE_PARAM)[keyof typeof LIVE_PARAM];
 
-/** A param's field in the read's query: the account as text the service checks, or the text the reader names. */
+/** A param's field in the read's query: the account as text the service checks, or the text the reader names or may leave out. A served param has none. */
 const PARAM_FIELD = {
   [LIVE_PARAM.USER]: Schema.optionalKey(Schema.String),
   [LIVE_PARAM.TEXT]: Schema.String,
+  [LIVE_PARAM.OPTIONAL_TEXT]: Schema.optionalKey(Schema.String),
+  [LIVE_PARAM.ID]: Schema.String,
+  [LIVE_PARAM.OPTIONAL_ID]: Schema.optionalKey(Schema.String),
 } as const;
+
+/** A param the read's query names. */
+type AskedParam = Exclude<LiveParam, typeof LIVE_PARAM.SERVED>;
 
 /** The fields a reader polls with, by the read's mode (`LIVE_POLL`). */
 const MODE_FIELDS = {
@@ -94,7 +111,9 @@ type LiveParams = Readonly<Record<string, LiveParam>>;
 
 /** The read's query: its params' fields and its mode's. */
 type InputFields<Params extends LiveParams, Mode extends LiveMode> = {
-  readonly [Key in keyof Params]: (typeof PARAM_FIELD)[Params[Key]];
+  readonly [Key in keyof Params as Params[Key] extends AskedParam
+    ? Key
+    : never]: (typeof PARAM_FIELD)[Params[Key] & AskedParam];
 } & (typeof MODE_FIELDS)[Mode];
 
 /** The read's answer: the address it was sealed at, each part's sealed statement, and the fields beside them. */
@@ -176,6 +195,24 @@ export type LiveReadParams<Read extends AnyLiveRead> = Readonly<
   Record<keyof Read["params"] & string, string>
 >;
 
+/** The params a read's query may leave out. */
+type OptionalParam = typeof LIVE_PARAM.OPTIONAL_TEXT | typeof LIVE_PARAM.OPTIONAL_ID;
+
+/** The params a reader asks a read with, each as text: every one but those the service binds itself, and those its query may leave out left out where it does. */
+export type LiveReadAsked<Read extends AnyLiveRead> = Readonly<
+  {
+    [Key in keyof Read["params"] & string as Read["params"][Key] extends
+      | typeof LIVE_PARAM.SERVED
+      | OptionalParam
+      ? never
+      : Key]: string;
+  } & {
+    [Key in keyof Read["params"] & string as Read["params"][Key] extends OptionalParam
+      ? Key
+      : never]?: string;
+  }
+>;
+
 /** A read's answer as the service hands it and the client reads it. */
 export type LiveReadAnswer<Read extends AnyLiveRead> = Read["answer"]["Type"];
 
@@ -223,7 +260,11 @@ export function liveRead<
   // SAFETY: an absent `beside` and `refuses` are the empty records their defaults name.
   const beside = (spec.beside ?? {}) as Beside;
   const own = (spec.refuses ?? {}) as Refuses;
-  const params = mapped<string, LiveParam, Schema.Top>(spec.params, (param) => PARAM_FIELD[param]);
+  const params = Object.fromEntries(
+    Object.entries<LiveParam>(spec.params).flatMap(([key, param]) =>
+      param === LIVE_PARAM.SERVED ? [] : [[key, PARAM_FIELD[param]]],
+    ),
+  );
   const queries = mapped(spec.parts, () => sealedLiveQuerySchema);
   return {
     name: spec.name,

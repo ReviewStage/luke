@@ -1,4 +1,5 @@
 import type { HostedAgentClient } from "@repo/features";
+import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -254,7 +255,6 @@ const AGENT_QUEUED_WRITE = {
 export type AgentClient = Pick<
   HostedAgentClient,
   | "pullRequestChaptersLive"
-  | "agentOriginLive"
   | "generateChapters"
   | "models"
   | "accountPreferencesLive"
@@ -548,7 +548,9 @@ export function composeAgents(
     });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
-        asked(client.agentOriginLive(agentId, userId, poll, after)),
+        asked(
+          client.liveRead(AGENT_ORIGIN_READ, { id: agentId, userId }, poll ? { after } : undefined),
+        ),
       accountId: dependencies.accountId,
       gate,
       tell: (held: AppAgentOrigins) =>

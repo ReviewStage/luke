@@ -8,11 +8,11 @@ import { listPages, writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
-import { pagesOfLiveRows, taskPagesLiveRowsSchema } from "@repo/features/live-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { pagesOfLiveRows, TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { agentPagesLiveStatements, taskPagesLiveStatements } from "./task-pages-live.js";
+import { agentPagesRead, taskPagesRead } from "./pages.js";
 
 /**
  * A task's pages as Realtime would deliver them, over the real migrations on
@@ -61,7 +61,7 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
 /** The pages as Realtime would deliver them to `reader`, as the desktop orders them. */
 const liveRowsOf = (statement: LiveStatement) =>
   Effect.gen(function* () {
-    const rows = yield* Schema.decodeUnknownEffect(taskPagesLiveRowsSchema)({
+    const rows = yield* Schema.decodeUnknownEffect(TASK_PAGES_READ.rows)({
       pages: yield* runLive(statement),
     });
     return pagesOfLiveRows(rows);
@@ -69,11 +69,11 @@ const liveRowsOf = (statement: LiveStatement) =>
 
 /** The task's pages as Realtime would deliver them to `reader`, as the desktop orders them. */
 const livePagesOf = (reader: string, taskId: string) =>
-  liveRowsOf(Option.getOrThrow(taskPagesLiveStatements(reader, taskId)).pages);
+  liveRowsOf(Option.getOrThrow(taskPagesRead.statements({ userId: reader, id: taskId })).pages);
 
 /** The agent's own pages as Realtime would deliver them to `reader`. */
 const liveAgentPagesOf = (reader: string, agentId: string) =>
-  liveRowsOf(Option.getOrThrow(agentPagesLiveStatements(reader, agentId)).pages);
+  liveRowsOf(Option.getOrThrow(agentPagesRead.statements({ userId: reader, id: agentId })).pages);
 
 it.layer(getTestDB())("a task's pages followed live", (it) => {
   it.effect(

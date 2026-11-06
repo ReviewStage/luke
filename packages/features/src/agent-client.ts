@@ -13,7 +13,6 @@ import {
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
 import type { AccountPreferencesLiveAnswer } from "./account-preferences-live.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
-import type { AgentOriginLiveAnswer } from "./agent-origin-live.js";
 import {
   AGENT_CALL_FAILURE,
   AGENT_RENAMES,
@@ -137,7 +136,7 @@ import {
   inboxReadAllRequestSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
-import type { AnyLiveRead, LiveReadParams } from "./live-read.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
 import {
   type AccountInboxItemsLiveAnswer,
   type AccountInboxLiveAnswer,
@@ -546,7 +545,7 @@ export class HostedAgentClient {
   }
 
   /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
-  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadParams<Read>, poll?: HostedPoll) {
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
     return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
@@ -1387,30 +1386,6 @@ export class HostedAgentClient {
     const read = { id: agentId, number: String(number), [LIVE_USER_QUERY]: userId };
     return Effect.catchIf(
       askLive(this.#hosted.live.pullRequestChapters, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
-  /**
-   * The run of an automation that started one agent, sealed for following,
-   * on the terms an agent's inbox is: the agent's page holds it while it
-   * stands rather than reading the agent whole.
-   */
-  agentOriginLive(
-    agentId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AgentOriginLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.agentOrigin, read, poll, after),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),
