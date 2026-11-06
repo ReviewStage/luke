@@ -28,12 +28,20 @@ import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
-import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
 import type { DescriptionEditMutation } from "./description-edit-mutation.js";
+import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
 
 /**
  * use-description-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
@@ -48,7 +56,9 @@ import type { DescriptionEditMutation } from "./description-edit-mutation.js";
  * lost: a toast that stands until it is dismissed says so, its action saving
  * them through that task's door, and coming back to the task opens the
  * editor on them again. Unsaved words live in this window's memory alone and
- * are never written to disk. The editor itself is `description-document-editor.tsx`.
+ * are never written to disk, and are the account's that wrote them: another
+ * signing in lets go of them (`useDescriptionWordsOwner`), so no Retry or
+ * return saves them as an account that did not write them. The editor itself is `description-document-editor.tsx`.
  */
 
 /** How long the developer pauses before what they typed is saved. */
@@ -64,6 +74,9 @@ type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
 const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
+
+/** The account signed in as the window last said, which words a task is left with belong to. */
+const wordsOwnerAtom = Atom.keepAlive(Atom.make<string | undefined>(undefined));
 
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
 const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
@@ -101,9 +114,10 @@ const LEFT_UNSAVED = {
   KEEP_MINE: "Keep mine",
 } as const;
 
-/** What a task's words are saved through once it is left: its id, its save, who its conflict is named for, and where they are kept and said. */
+/** What a task's words are saved through once it is left: its id, the account that wrote them, its save, who its conflict is named for, and where they are kept and said. */
 interface LeftTask {
   readonly taskId: string;
+  readonly owner: string | undefined;
   readonly save: LeftSave;
   readonly place: EditPlace;
   readonly registry: AtomRegistry.AtomRegistry;
@@ -135,7 +149,8 @@ function failureOf(answered: object): object | undefined {
  */
 function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: unknown): void {
   const { taskId, registry } = left;
-  const kept = editorLeft(now);
+  // Note that a save answered after another account signed in keeps nothing, because its words are no longer the account's signed in.
+  const kept = registry.get(wordsOwnerAtom) === left.owner ? editorLeft(now) : undefined;
   const held = new Map(registry.get(leftUnsavedAtom));
   if (kept === undefined) held.delete(taskId);
   else held.set(taskId, kept);
@@ -249,6 +264,24 @@ export interface DescriptionEditing {
  */
 export function useDescriptionWordsUnsaved(): boolean {
   return useAtomValue(descriptionWordsUnsavedAtom);
+}
+
+/**
+ * Tells the descriptions' words which account is signed in: once another
+ * signs in, the words its tasks were left with go, and the toasts over them,
+ * because they are the words of the account that wrote them and a Retry or a
+ * return would save them as the next. The window calls it once, with the key
+ * of the account signed in, none while none is.
+ */
+export function useDescriptionWordsOwner(account: string | undefined): void {
+  const registry = useContext(RegistryContext);
+  const withdrawToast = useWithdrawToast();
+  useLayoutEffect(() => {
+    if (registry.get(wordsOwnerAtom) === account) return;
+    registry.set(wordsOwnerAtom, account);
+    for (const taskId of registry.get(leftUnsavedAtom).keys()) withdrawToast(taskId);
+    registry.set(leftUnsavedAtom, new Map());
+  }, [registry, withdrawToast, account]);
 }
 
 /**
@@ -385,6 +418,7 @@ export function useDescriptionEditing(
       const leaving = new MutationObserver(queryClient, writes.current);
       const left: LeftTask = {
         taskId,
+        owner: registry.get(wordsOwnerAtom),
         save: (request) => leaving.mutate(request),
         place: drawnPlace.current,
         registry,

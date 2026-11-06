@@ -80,8 +80,11 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
+import {
+  useDescriptionWordsOwner,
+  useDescriptionWordsUnsaved,
+} from "./tasks/use-description-editing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { useDescriptionWordsUnsaved } from "./tasks/use-description-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { ToastHost } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
@@ -251,6 +254,8 @@ function AppWindow(): React.JSX.Element {
   }, [queryClient, accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
+  // So are the description words a task was left with: another account signing in lets go of them.
+  useDescriptionWordsOwner(accountKey);
   // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
   const [launched] = useState(() => {
     const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);

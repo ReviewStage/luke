@@ -16,11 +16,11 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@repo/features/tasks-vi
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import {
   type DescriptionCommentsControl,
   DescriptionCommentsProvider,
 } from "@repo/ui/description-comments";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
@@ -28,12 +28,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
-  FINISH,
-  PLACEMENT_END,
-  type PlacedWords,
   type DescriptionEditorModule,
   type DescriptionEditorPlacement,
   type DescriptionEditorProps,
+  FINISH,
+  PLACEMENT_END,
+  type PlacedWords,
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";
@@ -47,7 +47,7 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
-import { useDescriptionWordsUnsaved } from "./use-description-editing.js";
+import { useDescriptionWordsOwner, useDescriptionWordsUnsaved } from "./use-description-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../description-editor/`),
@@ -73,6 +73,9 @@ let wordsLine: (() => number) | undefined;
 
 /** The words the stand-in's caret stands in as it closes, as a laid-out editor answers; none unless a test lays them out. */
 let caretOn: PlacedWords | undefined;
+
+/** The account the window says is signed in, which a test switches and draws again. */
+let signedIn = "account-charles";
 
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: DescriptionEditorModule = {
@@ -152,6 +155,7 @@ afterEach(async () => {
   releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
+  signedIn = "account-charles";
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a description left as it went answer before its atoms go.
@@ -218,6 +222,12 @@ function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
 }
 
+/** The account signed in, told to the descriptions' words as the window tells them. */
+function WordsOwner(): null {
+  useDescriptionWordsOwner(signedIn);
+  return null;
+}
+
 /** Whether the window says a description holds words not saved. */
 function unsavedWords(container: HTMLElement): boolean {
   return (
@@ -265,13 +275,20 @@ function mount(
               commented(page),
               createElement(ToastHost),
               createElement(UnsavedWords),
+              createElement(WordsOwner),
             ),
           ),
         ),
       ),
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    draw(createElement(DescriptionBody, { task, edit: descriptionEditMutation(task.id, door), onRename }));
+    draw(
+      createElement(DescriptionBody, {
+        task,
+        edit: descriptionEditMutation(task.id, door),
+        onRename,
+      }),
+    );
   /** The description as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
@@ -933,6 +950,29 @@ test("words whose save is refused as the developer leaves the description are ke
   assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
   assert.equal(newestToastSays(), undefined, "the toast goes once the words are back");
   assert.equal(sent.length, 1, "nothing saves them on its own");
+});
+
+test("words a description was left with go once another account signs in, so neither Retry nor coming back saves them as it", async () => {
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+  const retry = newestToastAction();
+
+  signedIn = "account-teammate";
+  render(other);
+  await settle();
+  act(() => retry?.click());
+  await settle();
+  render(DOCUMENT_TASK);
+  await settle();
+
+  assert.equal(newestToastSays(), undefined, "the toast over them goes with them");
+  assert.equal(sent.length, 1, "nothing saves them as the account now signed in");
+  assert.equal(container.querySelector(".description-document-editor"), null);
+  assert.equal(unsavedWords(container), false);
 });
 
 test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {
