@@ -18,7 +18,7 @@ import { PlugIcon } from "@repo/ui/icons";
 import { useQuery } from "@tanstack/react-query";
 import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
-import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectCapability, selectPortForwarding } from "../use-app-state.js";
 
 /**
  * agent-forward.tsx -- the Forward chip an agent's message box wears beside its Cloud chip: whether the agent's cloud ports are forwarded to this Mac's localhost, and the menu that turns it on and opens them.
@@ -89,7 +89,7 @@ function portRows(answer: PortForwardingAnswer, onOpen: (localPort: number) => v
 
 /** The agent's forwarding as the host keeps it: off for any agent but the one forwarded. */
 function useForwarding(agentId: string): PortForwardingAnswer {
-  const forwarding = useAppSlice(APP_SLICE.PORT_FORWARDING);
+  const forwarding = useQuery({ ...appStateQuery, select: selectPortForwarding }).data;
   return forwarding?.agentId === agentId ? forwarding : OFF;
 }
 

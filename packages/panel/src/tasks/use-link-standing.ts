@@ -17,11 +17,11 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type Mention, type NumberedTaskIdOf } from "@repo/features/mention-link";
 import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
-import type { AppLinkStanding } from "@repo/host/app-state";
+import type { AppLinkStanding, AppStateSnapshot } from "@repo/host/app-state";
 import { repositoryParts } from "@repo/ui/task-list-model";
-import * as Atom from "effect/reactivity/Atom";
+import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo } from "react";
-import { APP_SLICE, appStateNow, useAppSlice } from "../use-app-state.js";
+import { appStateNow, appStateQuery } from "../use-app-state.js";
 import { useHostRead } from "../use-host-read.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
@@ -239,12 +239,15 @@ type WorkspacePlaces = Pick<TasksView, "workspaces" | "tasks">;
  * either moves, so a transcript of chips is not drawn again for each word an
  * agent streams into the slice beside them.
  */
-const workspacePlacesAtom: Atom.Atom<WorkspacePlaces | undefined> = Atom.withEquality(
-  Atom.map(APP_SLICE.TASKS, (planning) =>
-    planning === undefined ? undefined : { workspaces: planning.workspaces, tasks: planning.tasks },
-  ),
-  (held, next) => held?.workspaces === next?.workspaces && held?.tasks === next?.tasks,
-);
+const selectWorkspacePlaces = (state: AppStateSnapshot): WorkspacePlaces => ({
+  workspaces: state.tasks.workspaces,
+  tasks: state.tasks.tasks,
+});
+
+/** The workspaces and tasks of the document (`selectWorkspacePlaces`); none before the first read. */
+function useWorkspacePlaces(): WorkspacePlaces | undefined {
+  return useQuery({ ...appStateQuery, select: selectWorkspacePlaces }).data;
+}
 
 /** The workspace of the task given, else the one named by its id; none where neither is listed. */
 function workspaceOf(
@@ -286,7 +289,7 @@ export function useNumberedTaskId(
   workspace: string,
   number: number | undefined,
 ): string | undefined {
-  const planning = useAppSlice(workspacePlacesAtom);
+  const planning = useWorkspacePlaces();
   return number === undefined ? undefined : numberedTaskIdIn(planning, { workspace, number });
 }
 
@@ -307,7 +310,7 @@ export const numberedTaskIdNow: NumberedTaskIdOf = (task) =>
 
 /** How the id of the task a link names by its number is found among the tasks the window lists (`useNumberedTaskId`), for words pasted. */
 export function useNumberedTaskIdOf(): NumberedTaskIdOf {
-  const planning = useAppSlice(workspacePlacesAtom);
+  const planning = useWorkspacePlaces();
   return (task) => numberedTaskIdIn(planning, task);
 }
 
@@ -340,14 +343,13 @@ function numberedPlaceIn(
 
 /** How a place's link is written by its task's number where the window lists one (`numberedPlaceIn`), as Copy link writes it. */
 export function useNumberedPlace(): (place: LinkPlace, workspace: string) => LinkPlace {
-  const planning = useAppSlice(workspacePlacesAtom);
+  const planning = useWorkspacePlaces();
   return (place, workspace) => numberedPlaceIn(planning, place, workspace);
 }
 
 /** The id of the workspace the words a chip stands in are of (`wordsWorkspace`); none where they name none. */
 export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
-  return wordsWorkspace(useAppSlice(workspacePlacesAtom), where, useContext(WordsWorkspaceContext))
-    ?.id;
+  return wordsWorkspace(useWorkspacePlaces(), where, useContext(WordsWorkspaceContext))?.id;
 }
 
 /**
@@ -382,11 +384,7 @@ function useStandingAt(
 
 /** What GitHub holds of the page a link mention names, through the workspace `where` stands in (`useStandingAt`). */
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
-  const workspace = wordsWorkspace(
-    useAppSlice(workspacePlacesAtom),
-    where,
-    useContext(WordsWorkspaceContext),
-  );
+  const workspace = wordsWorkspace(useWorkspacePlaces(), where, useContext(WordsWorkspaceContext));
   return useStandingAt(workspace, githubAddressOf(mention));
 }
 
@@ -395,10 +393,6 @@ export function usePlaceStanding(
   place: { readonly taskId: string | null; readonly workspaceId?: string | undefined },
   address: string | undefined,
 ): LinkStanding | undefined {
-  const workspace = workspaceOf(
-    useAppSlice(workspacePlacesAtom),
-    place.taskId ?? undefined,
-    place.workspaceId,
-  );
+  const workspace = workspaceOf(useWorkspacePlaces(), place.taskId ?? undefined, place.workspaceId);
   return useStandingAt(workspace, address);
 }

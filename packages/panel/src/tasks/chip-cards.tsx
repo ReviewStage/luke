@@ -4,6 +4,7 @@ import type { PagePlace } from "@repo/features/page-wire";
 import { planSections } from "@repo/features/plan-document";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
+import { useQuery } from "@tanstack/react-query";
 import { HashIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref.js";
@@ -13,7 +14,7 @@ import {
   useAutomationsLanded,
 } from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectWorkspaces } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHeldRows, useHostRead } from "../use-host-read.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useMentionedReader } from "./mentioned-place.js";
@@ -204,7 +205,7 @@ export function PageChipCard({
 
 /** The workspace a link was written under, by its slug, one it stood under before, or its id where it has none, as the account holds it; none where it holds no such workspace. */
 function useLinkWorkspace(written: string): Workspace | undefined {
-  const workspaces = useAppSlice(APP_SLICE.TASKS)?.workspaces;
+  const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data;
   return workspaces === undefined ? undefined : workspaceOfSlug(workspaces, written);
 }
 
@@ -341,7 +342,7 @@ export function AutomationChipCard({
   fallback: ReactNode;
 }): ReactNode {
   const named = useLinkWorkspace(slug);
-  const words = useAppSlice(APP_SLICE.TASKS)?.workspaces.find(
+  const words = useQuery({ ...appStateQuery, select: selectWorkspaces }).data?.find(
     (each) => each.id === wordsWorkspaceId,
   );
   const workspace = named ?? words;

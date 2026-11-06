@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { TranscriptWords } from "./tasks/transcript-blocks.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
@@ -23,7 +24,9 @@ test("a reply is drawn only once the parser has landed, its HTML parsed", async 
   const words = createElement(TranscriptWords, { text: "Press <kbd>K</kbd> to search." });
   // Note that the render is synchronous, so nothing the parser's import resolves has run yet.
   act(() =>
-    root.render(createElement(RegistryContext.Provider, { value: rendererRegistry }, words)),
+    root.render(
+      withQueryClient(createElement(RegistryContext.Provider, { value: rendererRegistry }, words)),
+    ),
   );
   assert.equal(container.textContent, "");
   await act(() => Effect.runPromise(markdownHtmlParserLanded));

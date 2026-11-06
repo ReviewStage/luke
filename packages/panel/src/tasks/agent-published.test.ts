@@ -5,6 +5,7 @@ import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { BranchChip, LinesChanged, type PublishedDoors, PublishedRow } from "./agent-published.js";
 
@@ -57,7 +58,7 @@ function doorsAsked(withPanel: boolean) {
 function drawn(element: React.ReactElement): HTMLElement | null {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(element));
+  act(() => root?.render(withQueryClient(element)));
   return container.querySelector<HTMLElement>("a, button");
 }
 
