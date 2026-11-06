@@ -806,6 +806,41 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
+test("⇧⌘T passes over a closed tab opened again another way since, and opens the one closed before it", async () => {
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
+  await settle();
+  const panel = () => tab.control().sidePanel;
+  const column = () => tab.control().mainTabs;
+  const agent = agentTab(AGENT_ID);
+  act(() => panel().onChoose(PULLS));
+  act(() => panel().onClose(PULLS));
+  act(() => column().onClose(agent));
+  // The column's "+" opens the agent's tab again, which leaves the stack alone.
+  act(() => column().onChoose(agent));
+
+  act(() => tab.control().onReopenClosedTab?.());
+  assert.deepEqual(panel().strip, [PULLS], "the tab closed before the agent's opens");
+  assert.deepEqual(column().tab, agent, "and the agent's tab stays as it stands");
+  assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed is left to open");
+});
+
+test("⇧⌘T asks first while a page stands unsaved work, and reopens once the developer leaves", async () => {
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
+  await settle();
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(PULLS));
+  act(() => panel().onClose(PULLS));
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
+
+  act(() => tab.control().onReopenClosedTab?.());
+  assert.deepEqual(panel().strip, [], "nothing reopens while the ask stands");
+  act(() => asked[0]?.());
+  assert.deepEqual(panel().strip, [PULLS]);
+});
+
 test("a task none of whose tabs was viewed shows its agents' last tab, opens on its agents again across a launch though left on its details, and shows the tab viewed before its last agent's once that closes", async () => {
   const listed = withAgents([RUNNING_AGENT]);
   const tab = mount({ shown: true, tasks: listed });
@@ -1919,20 +1954,24 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
   act(() => panel().onClose(SIDE_PANEL_TAB.DESCRIPTION));
-  for (let close = 0; close < 20; close += 1) {
-    act(() => panel().onOpenFile(FILE_REF));
-    act(() => panel().onClose(FILE));
+  // Note that each close is of a file of its own, since a tab standing open again is passed over.
+  const files = Array.from({ length: 20 }, (_, at) => ({ ...FILE_REF, path: `src/file-${at}.ts` }));
+  for (const ref of files) {
+    act(() => panel().onOpenFile(ref));
+    act(() => panel().onClose(fileTab(ref.path)));
   }
 
-  let reopened = 0;
+  const reopened: unknown[] = [];
   for (let reopen = tab.control().onReopenClosedTab; reopen !== undefined; ) {
     act(() => reopen?.());
-    assert.deepEqual(panel().tab, FILE);
-    reopened += 1;
+    reopened.push(panel().tab);
     reopen = tab.control().onReopenClosedTab;
   }
-  assert.equal(reopened, 20);
-  assert.deepEqual(panel().strip, [FILE], "the description's tab, closed first, is not kept");
+  assert.deepEqual(
+    reopened,
+    files.toReversed().map((ref) => fileTab(ref.path)),
+    "the latest first, the description's tab, closed first, not kept",
+  );
 });
 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {

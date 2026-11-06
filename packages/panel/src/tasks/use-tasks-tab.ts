@@ -3930,13 +3930,24 @@ export function useTasksTab(input: {
   // and a subagent's or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
+  // A tab opened again another way since, from the "+", a link, a resume, or a
+  // wake, stands already, so it is passed over too, since opening it would only
+  // move it. The side panel's strip is the task's only while nothing stands in
+  // the task's place.
   // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
   // known before its task opens: the retired Inbox and Comments draw on none.
   const drawsOnAnyTask = (closed: ClosedTab): boolean =>
     closed.strip !== CLOSED_TAB_STRIP.SIDE_PANEL ||
     typeof closed.tab !== "string" ||
     DRAWN_KINDS.some((kind) => kind === closed.tab);
+  const standsOpen = (closed: ClosedTab): boolean =>
+    closed.strip === CLOSED_TAB_STRIP.COLUMN
+      ? mainTabs.tabs.some((each) => sameTab(each, closed.tab))
+      : inboxView === undefined &&
+        pageAgents === undefined &&
+        sidePanel.strip.some((each) => sameTab(each, closed.tab));
   const drawsAgain = (closed: ClosedTab): boolean =>
+    !standsOpen(closed) &&
     stripTabDrawsAgain(closed.tab, {
       agents: agents.agentIds,
       openAgents: mainTabs.openAgents,
@@ -4291,7 +4302,7 @@ export function useTasksTab(input: {
       open: standIn?.kind === STAND_IN.UNKNOWN_WORKSPACE,
       onClose: guard(() => setStandIn(undefined)),
     },
-    onShowFile: showFile,
+    onShowFile: guard(showFile),
     // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
     // A task named by an Inbox item or a call's row opens on its agents.
@@ -4343,7 +4354,7 @@ export function useTasksTab(input: {
       mainTabs.onShow(pin.task, tab);
     }),
     chosenPin: chosenPinOf(chosen, boundFor, agentView?.agentId),
-    onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
+    onReopenClosedTab: reopenable.length === 0 ? undefined : guard(reopenClosedTab),
     repositories,
     repositoryMenu,
     relationMenu,
