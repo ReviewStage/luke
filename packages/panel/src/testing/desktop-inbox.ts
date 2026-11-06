@@ -1595,8 +1595,9 @@ export async function mountThread(shown: InboxItem): Promise<HTMLElement> {
     [INVITES.id, [EXPIRY]],
   ]);
   const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, shown.title).click());
+  // Note that the item's row stands once the Inbox's reads have each landed, which may take more notifications than a settle waits out.
+  const row = await vi.waitFor(() => rowNamed(page, shown.title));
+  act(() => row.click());
   await settle();
   return itemPane(page);
 }
