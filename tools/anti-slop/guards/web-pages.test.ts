@@ -60,6 +60,9 @@ describe("the site's pages", () => {
     expect(
       cardProblems("bare.html", CARD.replaceAll(/<meta \S+="\S+:image" [^>]*>/gu, "")),
     ).toEqual(["bare.html: carries no og:image"]);
+    expect(
+      cardProblems("empty.html", CARD.replaceAll('content="/card.png"', 'content=""')),
+    ).toEqual(["empty.html: carries no og:image"]);
   });
 
   it("name a card whose title opens lowercase once iMessage drops the site's name", () => {

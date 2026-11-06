@@ -98,8 +98,8 @@ export function cardProblems(page: string, html: string): readonly string[] {
   const problems: string[] = [];
   if (tags.get("twitter:card") !== "summary_large_image")
     problems.push(`${page}: twitter:card is not summary_large_image`);
-  // Note that a card missing both images would pass the twins' check below, each side as absent as the other.
-  if (tags.get("og:image") === undefined) problems.push(`${page}: carries no og:image`);
+  // Note that a card missing both images, or naming both empty, would pass the twins' check below.
+  if (!tags.get("og:image")) problems.push(`${page}: carries no og:image`);
   for (const [og, twitter] of TWITTER_TWINS) {
     if (tags.get(twitter) !== tags.get(og))
       problems.push(`${page}: ${twitter} is ${tags.get(twitter) ?? "missing"}, not its ${og}`);
