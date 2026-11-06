@@ -108,7 +108,7 @@ const taskOf = (
     );
     if (Option.isNone(stored)) return undefined;
     const threads = Option.getOrElse(comments, () => []);
-    const key = taskKey(stored.value, threads);
+    const key = taskKey(stored.value, threads, plansOn);
     const opening = since === undefined;
     const saved =
       plansOn &&
@@ -118,7 +118,12 @@ const taskOf = (
         since,
         agent.id,
       );
-    if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
+    // Note that Plans gone off leaves the words handed as they were but the plan, so it hands nothing again, and keeps the key Plans going back on is told apart by.
+    const unchanged =
+      key === handed.task || (!plansOn && taskKey(stored.value, threads) === handed.task);
+    if (!saved && (opening || unchanged)) {
+      return { key: opening ? handed.task : key, text: undefined };
+    }
     const clock = { now, timeZone: admitted.timeZone };
     const text = taskWithLead(standingContext(stored.value, clock, threads, plansOn));
     return { key, text };

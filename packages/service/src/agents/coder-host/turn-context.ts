@@ -64,11 +64,19 @@ function contentKey(text: string): string {
  * thread's own fields, hands the task again no sooner. Note that the saved
  * document and the agents' notes are left out, because every save of the plan
  * changes them, the agent's own among them; whether someone
- * else saved is read from the plan's revisions (`savedByAnotherSince`).
+ * else saved is read from the plan's revisions (`savedByAnotherSince`). A key
+ * handed with Plans off is its own, so Plans turned on hands the task, its
+ * plan among it, on the next turn.
  */
-export function taskKey(stored: StoredTask, comments: readonly PlanCommentThread[]): string {
+export function taskKey(
+  stored: StoredTask,
+  comments: readonly PlanCommentThread[],
+  plansOn = true,
+): string {
   const { name } = stored.task;
-  return contentKey(JSON.stringify([name, stored.brief ?? null, openThreadsText(comments)]));
+  const handed = [name, stored.brief ?? null, openThreadsText(comments)];
+  // Note that a key with Plans on reads as it did before Plans was gated, so no session hands its task again for it.
+  return contentKey(JSON.stringify(plansOn ? handed : [...handed, { plansOn }]));
 }
 
 /** The line a turn opens with after a spoken one, whose call's words still stand in the history. */

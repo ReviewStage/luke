@@ -10,7 +10,7 @@ import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
 import { sessionKey } from "@repo/runtime/vocabulary";
 import { EXPERIMENT } from "@repo/settings";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS, RUN_EVENT, TURN_ORIGIN, unparsedWire } from "../../core.js";
 import { saveNotes } from "../../tasks/plan-notes.js";
@@ -199,6 +199,14 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
         assert.equal(yield* typedAt(nextTurn), undefined);
+
+        // A turn runs after that save, and Plans goes back on: the next turn is handed the plan it was not.
+        yield* TestClock.adjust("1 minute");
+        yield* ranTurn(admitted, nextTurn, yield* Clock.currentTimeMillis);
+        yield* TestClock.adjust("1 minute");
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: true } });
+        const back = (yield* typedAt(randomUUID())) ?? "";
+        assert.ok(back.includes("Only admins withdraw invites."), back);
       }),
   );
 });
