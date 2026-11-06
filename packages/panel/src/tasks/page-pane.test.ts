@@ -950,3 +950,115 @@ test("a reply held in a review stands Pending as its thread's last comment, and 
     { start: "That's all.", along: [thread.id] },
   ]);
 });
+
+test("Discard after a send that stopped part way deletes a reply it posted already, its own entry in its thread", async () => {
+  const starts: DescriptionCommentStart[] = [];
+  const acted: [string, unknown][] = [];
+  // A thread already posted, holding the reply the stopped send made, as the service holds it.
+  const posted: DescriptionCommentThread = {
+    id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e81",
+    scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
+    quote: "Invites sent",
+    page: { id: FUNNEL.id, version: 3, element: "body > p:nth-of-type(1)" },
+    section: "",
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
+    entries: [
+      {
+        id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e82",
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u-theo", name: "Theo" } },
+        words: "Per week?",
+        at: 1,
+      },
+      {
+        id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e83",
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u-dean", name: "Dean" } },
+        words: "Weekly, yes.",
+        at: 2,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 2,
+    revision: 2,
+  };
+  const control: DescriptionCommentsControl = {
+    planId: TASK,
+    threads: [posted],
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async (start) => {
+      starts.push(start);
+      // Note that the service takes the held comment and refuses the summary that sends the review.
+      if (start.words === "That's all.") return { note: "The service is unavailable." };
+      return {
+        thread: {
+          id: start.clientKey,
+          scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
+          quote: "Totals",
+          section: "",
+          status: DESCRIPTION_COMMENT_STATUS.OPEN,
+          entries: [],
+          createdAt: 1,
+          updatedAt: 1,
+          revision: 1,
+        },
+      };
+    },
+    act: async (threadId, action) => {
+      acted.push([threadId, action]);
+      return true;
+    },
+  };
+  const { container, press } = holdOnElement(control, "Per week?");
+  await press("Show comments");
+  const column = container.querySelector<HTMLElement>(".page-comments-column") ?? assert.fail();
+  const field =
+    column.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]') ?? assert.fail();
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      "Weekly, yes.",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonLabeled(column, "Add to review").click());
+  await press("Review, 2 pending comments");
+  const panel = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
+  const summary = await vi.waitFor(
+    () =>
+      panel.querySelector<TiptapEditorHTMLElement>(
+        `${EDITOR_ROOT_SELECTOR}[aria-label="Review comment"]`,
+      )?.editor ?? assert.fail("the panel takes a summary"),
+  );
+  act(() => {
+    summary.commands.setContent("That's all.", { contentType: "markdown" });
+  });
+  await act(async () => buttonNamed(panel, "Send review").click());
+  await vi.waitFor(() => assert.match(panel.textContent ?? "", /could not be sent/u));
+
+  await act(async () => buttonNamed(panel, "Discard").click());
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Discard asks first");
+  await act(async () => buttonNamed(question, "Discard review").click());
+
+  // The reply went held before the summary was refused; Discard takes it back with the thread started.
+  assert.deepEqual(
+    acted.filter(
+      ([, action]) => (action as { action: string }).action !== DESCRIPTION_COMMENT_ACTION.REPLY,
+    ),
+    [
+      [starts[0]?.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD }],
+      [
+        posted.id,
+        {
+          action: DESCRIPTION_COMMENT_ACTION.DELETE,
+          entry: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e83",
+        },
+      ],
+    ],
+  );
+});

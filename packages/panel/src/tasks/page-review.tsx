@@ -3,6 +3,7 @@ import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_BOUNDS,
+  DESCRIPTION_COMMENT_ENTRY,
   type DescriptionCommentStart,
 } from "@repo/features/description-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -220,6 +221,33 @@ async function sendReview(
   return sendHeld(control, last, along.length === 0 ? {} : { along });
 }
 
+/**
+ * Deletes a held comment a stopped send posted already: the thread it
+ * started, under its key, which is the thread's id; or, where it is a
+ * reply, its own entry in its thread, the reader's latest of its words.
+ * Answers whether it is gone; a reply no thread holds any more is.
+ */
+async function deletePosted(
+  control: DescriptionCommentsControl | undefined,
+  comment: HeldComment,
+): Promise<boolean> {
+  if (control === undefined) return false;
+  const { reply } = comment;
+  if (reply === undefined) {
+    return control.act(comment.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD });
+  }
+  const entry = control.threads
+    .find((thread) => thread.id === reply.threadId)
+    ?.entries.findLast(
+      (each) => each.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT && each.words === comment.words,
+    );
+  if (entry === undefined) return true;
+  return control.act(reply.threadId, {
+    action: DESCRIPTION_COMMENT_ACTION.DELETE,
+    entry: entry.id,
+  });
+}
+
 /** A page's review as its pane draws and presses it. */
 export interface PageReviewControl {
   /** The comments held on the page, in the order they were held. */
@@ -343,15 +371,13 @@ export function usePageReview(
     remove,
     discard: () => {
       setFailed(false);
-      // Note that a thread a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says; one the service would not delete stays held, for the next Discard to try again.
+      // Note that what a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says; what the service would not delete stays held, for the next Discard to try again.
       const posted = held.filter((comment) => comment.landed === true);
       drop((comment) => !heldOn(comment, planId, pageId) || comment.landed === true);
       for (const comment of posted) {
-        void control
-          ?.act(comment.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD })
-          .then((deleted) => {
-            if (deleted) drop((each) => each.clientKey !== comment.clientKey);
-          });
+        void deletePosted(control, comment).then((deleted) => {
+          if (deleted) drop((each) => each.clientKey !== comment.clientKey);
+        });
       }
     },
     send,
