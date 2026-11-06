@@ -125,9 +125,10 @@ if (mode !== MODE.WRITE && mode !== MODE.CHECK) {
   throw new Error(`usage: shortcuts-docs.ts ${MODE.WRITE} | ${MODE.CHECK}`);
 }
 
-if (mode === MODE.WRITE) await writeFile(PAGE, pageSource());
-
-if ((await readFile(PAGE, "utf8").catch(() => "")) !== pageSource()) {
+const expected = pageSource();
+if (mode === MODE.WRITE) {
+  await writeFile(PAGE, expected);
+} else if ((await readFile(PAGE, "utf8").catch(() => "")) !== expected) {
   console.error("stale: apps/docs/shortcuts.mdx");
   console.error("run `pnpm --filter @repo/settings docs:shortcuts` to regenerate it");
   exit(1);
