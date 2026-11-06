@@ -703,7 +703,7 @@ export function AppCard({
 const SOMEONE_NOTES = {
   [SOMEONE_REASON.FORMER]: "No longer in this workspace",
   [SOMEONE_REASON.UNNAMED]: "Who made this change isn't known.",
-  [SOMEONE_REASON.EARLIER]: "The plan before its history began",
+  [SOMEONE_REASON.EARLIER]: "The description before its history began",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */

@@ -14,8 +14,9 @@ import {
 } from "@repo/ui";
 import type { ShownError } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import { type Ref, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { useWorkspacePhotoPick } from "../workspace-photo.js";
 
 /**
@@ -28,7 +29,7 @@ import { useWorkspacePhotoPick } from "../workspace-photo.js";
  */
 
 /** The addresses typed into the invite field, each once. */
-export function addressesOf(words: string): readonly string[] {
+function addressesOf(words: string): readonly string[] {
   return [...new Set(words.split(/[\s,;]+/u).filter((one) => one.includes("@")))];
 }
 
@@ -68,7 +69,9 @@ export function useTeamForm({
   onCreated: (workspaceId: string) => void;
   onDone: (refused: readonly string[]) => void;
 }): TeamFormState {
-  const { act } = useAct();
+  const { mutateAsync: createWorkspace } = useMutation(actMutation(ACT_KIND.WORKSPACE_CREATE));
+  const { mutateAsync: setWorkspacePhoto } = useMutation(actMutation(ACT_KIND.WORKSPACE_PHOTO_SET));
+  const { mutateAsync: invite } = useMutation(actMutation(ACT_KIND.WORKSPACE_INVITE));
   const [name, setName] = useState("");
   const [emails, setEmails] = useState("");
   const [busy, setBusy] = useState(false);
@@ -82,7 +85,7 @@ export function useTeamForm({
     setRefusal(undefined);
     let workspaceId: string;
     try {
-      workspaceId = (await act(ACT_KIND.WORKSPACE_CREATE, { name: trimmed })).id;
+      workspaceId = (await createWorkspace({ name: trimmed })).id;
     } catch (refused) {
       setBusy(false);
       setRefusal((refused as Error).message);
@@ -92,12 +95,12 @@ export function useTeamForm({
     // Note that the photo and the invitations follow the workspace made, and one refused leaves the rest standing.
     const refused: string[] = [];
     if (photo !== undefined) {
-      await act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo }).catch((why: Error) =>
+      await setWorkspacePhoto({ workspaceId, photo }).catch((why: Error) =>
         refused.push(why.message),
       );
     }
     for (const email of addressesOf(emails)) {
-      await act(ACT_KIND.WORKSPACE_INVITE, {
+      await invite({
         workspaceId,
         email,
         role: INVITATION_ROLE.MEMBER,

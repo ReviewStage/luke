@@ -70,7 +70,10 @@ test("an empty text says the placeholder it was given, and the plan's own withou
     given.element.querySelector("p")?.getAttribute("data-placeholder"),
     "Add a description…",
   );
-  assert.equal(plan.element.querySelector("p")?.getAttribute("data-placeholder"), "Write the plan");
+  assert.equal(
+    plan.element.querySelector("p")?.getAttribute("data-placeholder"),
+    "Write the description",
+  );
 });
 
 test("an editor opened on the words a click landed on stands its caret in them, in their section, as many alike in, at the offset", () => {

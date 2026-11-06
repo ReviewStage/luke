@@ -1,5 +1,4 @@
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
-import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   CHATGPT_DEVICE_FAILURE_MESSAGE,
   CHATGPT_DEVICE_LOGIN,
@@ -13,12 +12,9 @@ import {
   Button,
   ButtonLink,
   COPY_FIELD_WIDTH,
-  COPY_LOOK,
-  CopyButton,
   CopyField,
   DIALOG_SIZE,
   Dialog,
-  DialogHead,
   ErrorLine,
   GAP,
   Inline,
@@ -32,7 +28,7 @@ import {
   WaitingLine,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { refusedShown } from "../failure-report.js";
@@ -42,9 +38,9 @@ import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
  * connect-codex-dialog.tsx -- Connect Codex: a ChatGPT plan connected through Codex's device-code login, which the service runs, on the desktop and the web alike.
  *
  * Opening the dialog asks the service for a code (`CHATGPT_DEVICE_START`)
- * and says the three steps that use it: turn device code authorization on
- * in ChatGPT, copy the code, and enter it at the verification page, which
- * opens outside the window. Under them it waits on Codex
+ * and says the two steps that use it: turn device code authorization on
+ * in ChatGPT, then sign in and enter the code, which it shows to copy, at
+ * the verification page, which opens outside the window. Under them it waits on Codex
  * (`CHATGPT_DEVICE_WAIT`), one answer the host gives once the login
  * settles, asking after it on the interval the service named on a
  * `Schedule` of its own. Connected, it tells its
@@ -52,7 +48,7 @@ import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
  * holds them, so the row says the plan is connected as the dialog goes.
  * Expired, refused, or canceled, it says the service's fixed sentence and
  * offers Try again, which starts afresh, as an ask that went unanswered
- * does. Back, close, Escape, or the window
+ * does. Close, Escape, or the window
  * going away withdraw a login still waiting (`CHATGPT_DEVICE_CANCEL`), as
  * does a code that lands after the dialog closed or started over, so no
  * login stands that no dialog asks after.
@@ -64,17 +60,14 @@ import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 const WORDS = {
   TITLE: "Connect Codex",
   SUBTITLE: "Use your own subscription for this provider's models",
-  BACK: "Back",
   CLOSE: "Close",
   TURN_ON: "In ChatGPT Settings → Security, turn on device code authorization for Codex",
   TURN_ON_HINT:
-    "If your workspace hides the switch, ask your workspace owner to enable device code authentication for Codex CLI",
-  COPY_CODE: "Copy this code",
+    "If you don't see this option, ask your workspace admin to enable device code authentication for Codex CLI",
   CODE: "Code",
-  ENTER_CODE: "Sign in to ChatGPT, select your workspace if prompted, and enter the code",
+  ENTER_CODE: "Sign in to ChatGPT, select your workspace if prompted, and enter the code:",
   VERIFICATION_PAGE: "Verification page",
   WAITING: "Waiting for Codex",
-  WAITING_HINT: `Only continue if you started this login in ${PRODUCT_NAME}`,
   GETTING_CODE: "Getting a code",
   START_FAILED: "Couldn't reach ChatGPT for a code. Try again.",
   WAIT_FAILED: "Couldn't reach ChatGPT to finish connecting. Try again.",
@@ -180,31 +173,29 @@ function useDeviceLogin(
   return { standing, retry: start };
 }
 
-/** The three steps over a code handed out, and the wait on Codex under them. */
+/** The two steps over a code handed out, and the wait on Codex under them, at the card's own gap. */
 function Steps({ login }: { login: ChatGptDeviceStartAnswer }): React.JSX.Element {
   const openLink = useOpenLink();
   const url = login.verificationUrl;
   return (
-    <Stack gap={GAP.SECTION}>
+    <>
       <NumberedSteps>
         <NumberedStep number={1} title={WORDS.TURN_ON}>
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {WORDS.TURN_ON_HINT}
           </Text>
         </NumberedStep>
-        <NumberedStep number={2} title={WORDS.COPY_CODE}>
+        <NumberedStep number={2} title={WORDS.ENTER_CODE}>
           <ReplayMask>
             <CopyField
               label={WORDS.CODE}
               value={login.userCode}
               what="code"
               copy={copyThroughShell}
-              width={COPY_FIELD_WIDTH.FULL}
+              width={COPY_FIELD_WIDTH.HUG}
             />
           </ReplayMask>
-        </NumberedStep>
-        <NumberedStep number={3} title={WORDS.ENTER_CODE}>
-          <Inline gap={GAP.CONTROL}>
+          <Inline>
             <ButtonLink
               href={url}
               variant={BUTTON_VARIANT.OUTLINE}
@@ -213,53 +204,40 @@ function Steps({ login }: { login: ChatGptDeviceStartAnswer }): React.JSX.Elemen
             >
               {WORDS.VERIFICATION_PAGE}
             </ButtonLink>
-            <CopyButton look={COPY_LOOK.BUTTON} text={url} what="link" copy={copyThroughShell} />
           </Inline>
         </NumberedStep>
       </NumberedSteps>
-      <WaitingLine hint={WORDS.WAITING_HINT}>{WORDS.WAITING}</WaitingLine>
-    </Stack>
+      <WaitingLine>{WORDS.WAITING}</WaitingLine>
+    </>
   );
 }
 
 /**
- * Connect Codex over the window while `open`: its head with back and close,
- * which both withdraw the login, then the code's steps, the wait, or why it
+ * Connect Codex over the window while `open`: its title, a line under it,
+ * and close, which withdraws the login, then the code's steps, the wait, or why it
  * ended with Try again. `onConnected` hears the plan connected; its owner
  * closes the dialog then.
  */
 export function ConnectCodexDialog({
   open,
-  backTo,
   onClose,
   onConnected,
 }: {
   open: boolean;
-  /** Where back leads, as a sentence names it mid-way: the surface Connect was pressed on. */
-  backTo: string;
   onClose: () => void;
   onConnected: () => void;
 }): React.JSX.Element {
-  const titleId = useId();
   const { standing, retry } = useDeviceLogin(open, onConnected);
   return (
     <Dialog
       open={open}
-      labelledBy={titleId}
+      title={WORDS.TITLE}
+      subtitle={WORDS.SUBTITLE}
+      closeLabel={WORDS.CLOSE}
       size={DIALOG_SIZE.WIDE}
       replayUnmasked
       onDismiss={onClose}
     >
-      <DialogHead
-        titleId={titleId}
-        title={WORDS.TITLE}
-        subtitle={WORDS.SUBTITLE}
-        backLabel={WORDS.BACK}
-        backTo={backTo}
-        closeLabel={WORDS.CLOSE}
-        onBack={onClose}
-        onClose={onClose}
-      />
       {standing.kind === STANDING.STARTING ? (
         <SpinnerRegion label={WORDS.GETTING_CODE} />
       ) : standing.kind === STANDING.WAITING ? (

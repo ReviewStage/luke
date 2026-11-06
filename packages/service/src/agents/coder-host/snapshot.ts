@@ -51,7 +51,6 @@ import {
   type RepositoryCredential,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
@@ -278,8 +277,6 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     const up = UP_STATUSES.has(sandbox.status ?? "");
     // Note that the stop is registered ahead of the wake, so a wake cut short by the bound is stopped too.
     if (!up) yield* Effect.addFinalizer(() => stopWoken(api, ask));
-    // Lowered ahead of a wake, so a woken session a terminal or a turn keeps up lives the timeout, not an old sandbox's day.
-    if (!up) yield* capSandboxTimeout(api, sandbox);
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
     const owner = { userId: ask.userId, name: sandbox.name, sandboxSessionId: session };
     const credential = yield* ask.credential;

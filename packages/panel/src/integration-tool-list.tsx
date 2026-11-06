@@ -36,7 +36,8 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
-import { cloneElement, createContext, type ReactNode, useContext } from "react";
+import type { VirtualRowPlace, VirtualRowsHandle } from "@repo/ui/virtual-rows";
+import { cloneElement, createContext, type ReactNode, type RefObject, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
 
@@ -52,7 +53,10 @@ import { Highlighted } from "./search-field.js";
  * highlighted, and a press on a row opens it; where the owner keeps the
  * keys in a field of its own, as the MCP popover's filter does, a press
  * keeps the focus there (`keepFocus`), and otherwise the list is one stop
- * for Tab that ↑↓ walk (`List`), the owner following the focus. Where the owner opens
+ * for Tab that ↑↓ walk (`List`), the owner following the focus. The list
+ * draws only the rows near the view of its owner's scroller (`List`'s
+ * `run`), so a server of hundreds of tools draws as quickly as one of a
+ * few; the owner brings a row it moves to into view through `handle`. Where the owner opens
  * nothing, each row is its words alone, with no press and no chevron.
  *
  * A tool's page is its head, the title and the name in the code face after
@@ -160,12 +164,17 @@ function HintWords({
   );
 }
 
+/** How tall a tool's row is taken to stand before it is measured, its name over a line of what it does, in pixels. */
+const TOOL_ESTIMATE_PX = 48;
+
 /** Whether a tool's name stands beside its title, which it does only where the title is not the name. */
 function namedApart(tool: IntegrationTool): boolean {
   return toolTitle(tool) !== tool.name;
 }
 
 export function IntegrationToolList({
+  scroller,
+  handle,
   server,
   toolWordsShown = false,
   tools,
@@ -178,6 +187,10 @@ export function IntegrationToolList({
   keepFocus = false,
   rowRef,
 }: {
+  /** The element that scrolls the list, which its rows stand in. */
+  scroller: RefObject<HTMLElement | null>;
+  /** What the owner asks of the list's run, bringing in a row not drawn. */
+  handle?: RefObject<VirtualRowsHandle | null> | undefined;
   /** The integration's name, which the badges' titles and the list's name say. */
   server: string;
   /** Whether its tools' names and words are a catalog integration's, which a screen recording shows as they read; a server a member set up keeps them masked. */
@@ -201,68 +214,77 @@ export function IntegrationToolList({
   /** Each row's press as it is drawn and taken away, so an owner can hand it the focus. */
   rowRef?: (tool: IntegrationTool, press: HTMLElement | null) => void;
 }): React.JSX.Element {
-  return (
-    <List label={`${server} tools`} density={LIST_DENSITY.COMPACT}>
-      {tools.map((tool) => {
-        const isCurrent = tool.name === current;
-        return (
-          <RowHighlight.Provider
-            key={tool.name}
-            value={onCurrent === undefined || isCurrent ? undefined : () => onCurrent(tool)}
-          >
-            <ListRow
-              id={idOf?.(tool)}
-              ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
-              title={
-                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.ui-quiet-words]:flex-none [&>.ui-quiet-words]:self-center">
-                  <OneLine
-                    className={
-                      namedApart(tool)
-                        ? "integration-tool-title flex-initial"
-                        : "integration-tool-title integration-tool-code flex-initial font-mono text-caption-inline"
-                    }
-                    words={toolTitle(tool)}
-                  >
-                    <ToolWords shown={toolWordsShown}>
-                      <Highlighted text={toolTitle(tool)} tokens={tokens} />
-                    </ToolWords>
-                  </OneLine>
-                  {namedApart(tool) ? (
-                    <OneLine
-                      className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-ui-regular text-muted-foreground"
-                      words={tool.name}
-                    >
-                      <ToolWords shown={toolWordsShown}>
-                        <Highlighted text={tool.name} tokens={tokens} />
-                      </ToolWords>
-                    </OneLine>
-                  ) : null}
-                  <ToolBadge tool={tool} />
-                </span>
-              }
-              description={
-                tool.description === "" ? undefined : (
+  const row = (index: number, place: VirtualRowPlace) => {
+    const tool = tools[index];
+    if (tool === undefined) return null;
+    const isCurrent = tool.name === current;
+    return (
+      <RowHighlight.Provider
+        value={onCurrent === undefined || isCurrent ? undefined : () => onCurrent(tool)}
+      >
+        <ListRow
+          place={place}
+          id={idOf?.(tool)}
+          ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
+          title={
+            <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.ui-quiet-words]:flex-none [&>.ui-quiet-words]:self-center">
+              <OneLine
+                className={
+                  namedApart(tool)
+                    ? "integration-tool-title flex-initial"
+                    : "integration-tool-title integration-tool-code flex-initial font-mono text-caption-inline"
+                }
+                words={toolTitle(tool)}
+              >
+                <ToolWords shown={toolWordsShown}>
+                  <Highlighted text={toolTitle(tool)} tokens={tokens} />
+                </ToolWords>
+              </OneLine>
+              {namedApart(tool) ? (
+                <OneLine
+                  className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-ui-regular text-muted-foreground"
+                  words={tool.name}
+                >
                   <ToolWords shown={toolWordsShown}>
-                    <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
+                    <Highlighted text={tool.name} tokens={tokens} />
                   </ToolWords>
-                )
-              }
-              current={isCurrent ? LIST_ROW_CURRENT.ITEM : undefined}
-              chevron={onOpen !== undefined}
-              keepFocus={keepFocus}
-              tabbable={keepFocus ? true : undefined}
-              onPress={onOpen === undefined ? undefined : () => onOpen(tool)}
-              onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
-              hint={
-                onCurrent === undefined
-                  ? undefined
-                  : { Hint: PointerHighlight, label: toolTitle(tool) }
-              }
-            />
-          </RowHighlight.Provider>
-        );
-      })}
-    </List>
+                </OneLine>
+              ) : null}
+              <ToolBadge tool={tool} />
+            </span>
+          }
+          description={
+            tool.description === "" ? undefined : (
+              <ToolWords shown={toolWordsShown}>
+                <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
+              </ToolWords>
+            )
+          }
+          current={isCurrent ? LIST_ROW_CURRENT.ITEM : undefined}
+          chevron={onOpen !== undefined}
+          keepFocus={keepFocus}
+          tabbable={keepFocus ? true : undefined}
+          onPress={onOpen === undefined ? undefined : () => onOpen(tool)}
+          onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
+          hint={
+            onCurrent === undefined ? undefined : { Hint: PointerHighlight, label: toolTitle(tool) }
+          }
+        />
+      </RowHighlight.Provider>
+    );
+  };
+  return (
+    <List
+      label={`${server} tools`}
+      density={LIST_DENSITY.COMPACT}
+      run={{
+        scroller,
+        keys: tools.map((tool) => tool.name),
+        estimate: TOOL_ESTIMATE_PX,
+        handle,
+        row,
+      }}
+    />
   );
 }
 

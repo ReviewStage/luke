@@ -1,12 +1,9 @@
 import type { Agent } from "@repo/database/models/agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@repo/features/agent-tools";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { inboxSandboxPicturePaths } from "@repo/features/inbox-attachment-link";
 import { WireValueSchema } from "@repo/wire";
 import { verbatimJsonSchema } from "@repo/wire/effect";
 import type { ToolSet } from "ai";
-import { Option, Schema } from "effect";
-import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
@@ -141,14 +138,15 @@ export function macToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<MacTool> 
 /** What of an agent decides which tools eve offers it. */
 export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on. */
+/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it has Plans on (`../plans-on.ts`). */
 export interface OfferedBeside {
   readonly memoryOn: boolean;
+  readonly plansOn: boolean;
 }
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, machine, or Memory withholds. Note that
+ * agent's repository, machine, Memory, or Plans withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
  * plan's notes, pictures, and comments any task of its workspace, and a
@@ -160,14 +158,16 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   CODER_TOOL.SAVE_MEMORY,
   CODER_TOOL.SEARCH_MEMORY,
+  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.LOOK_AT_PICTURE,
 ]);
 
 /**
  * Every tool eve offered the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
- * repository or where it runs offers it, `run_on_mac` among them, and
- * `save_memory` and `search_memory` where
- * its starter has Memory on, the same rules eve's tool files read as each
+ * repository or where it runs offers it, `run_on_mac` among them,
+ * `save_memory` and `search_memory` where its starter has Memory on, and
+ * `edit_plan` and `look_at_picture` where it has Plans on, the same rules eve's tool files read as each
  * turn started; an eve agent's MCP popover reads it (`../workspace-tools.ts`).
  */
 export function offeredCoderTools(
@@ -179,6 +179,7 @@ export function offeredCoderTools(
     ...machineToolsOf(agent),
     ...macToolsOf(agent),
     ...(beside.memoryOn ? [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY] : []),
+    ...(beside.plansOn ? [CODER_TOOL.EDIT_PLAN, CODER_TOOL.LOOK_AT_PICTURE] : []),
   ]);
   return [...toolsOf(AGENT_ROLE.CODER)].filter(
     (tool) => !NARROWED_CODER_TOOLS.has(tool) || offered.has(tool),
@@ -232,64 +233,6 @@ export const RETIRED_CODER_TOOL = {
   REOPEN_THREAD: RETIRED_TOOL.REOPEN_THREAD,
 } as const;
 
-/**
- * The tools whose every call runs in the agent's sandbox, which is what
- * tells the host a sandbox was opened. A delegation is not among them: a
- * worker opens the agent's sandbox only when it reads the checkout, and a
- * refused or web-only delegation opens none, so counting it would have the
- * turn's end open a sandbox, checkout and all, only to stop it. A sandbox a
- * worker opened is stopped at the end of the first turn in which the agent
- * runs a sandbox tool of its own, which a turn that edits always does.
- */
-const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
-  CODER_TOOL.BASH,
-  CODER_TOOL.READ_FILE,
-  CODER_TOOL.WRITE_FILE,
-  CODER_TOOL.GLOB,
-  CODER_TOOL.GREP,
-  CODER_TOOL.APPLY_PATCH,
-  CODER_TOOL.SHOW_IMAGE,
-  // The browser runs in the sandbox, which its call opens first.
-  CODER_TOOL.BROWSER,
-]);
-
-/** What a thread post's input is read for here: its body, whose pictures name files in the sandbox. */
-const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.String }));
-
-/**
- * Whether an event of the agent's session opened its sandbox: a request for
- * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, or for a thread post
- * whose body draws one by a path naming no
- * scheme, each read from a file in the sandbox, or a message
- * received with files, which eve stages in the sandbox before the
- * turn opens, opening it to do so.
- */
-export function opensSandbox(event: MessageStreamEvent): boolean {
-  switch (event.type) {
-    case "actions.requested":
-      return event.data.actions.some(
-        (action) =>
-          action.kind === "tool-call" &&
-          (SANDBOX_TOOLS.has(action.toolName) ||
-            (action.toolName === CODER_TOOL.SHOW_PAGE && "path" in action.input) ||
-            (action.toolName === CODER_TOOL.EDIT_PLAN &&
-              Array.isArray(action.input.pictures) &&
-              action.input.pictures.length > 0) ||
-            (action.toolName === CODER_TOOL.POST_THREAD &&
-              Option.exists(
-                readPostedBody(action.input),
-                ({ body }) => inboxSandboxPicturePaths(body).length > 0,
-              ))),
-      );
-    case "message.received":
-      return event.data.parts?.some((part) => part.type === "file") ?? false;
-    default:
-      return false;
-  }
-}
-
-/** A call's input as the row keeps it: one JSON object, whose fields are eve's own tool's to read. */
 const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,

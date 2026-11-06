@@ -175,12 +175,18 @@ export type ComboboxOptionEngineProps = Omit<
  * where a list engine of the app's (cmdk) owns the item, handed through the
  * engine's `asChild`: the engine's role, names, handlers, and ref pass
  * through, and no class or style does, so the row is drawn only as here.
- * One that cannot be chosen now passes no press on to the engine.
+ * One that cannot be chosen now passes no press on to the engine. An option
+ * in a run drawing only the options near the view (`VirtualRows`) wears its
+ * place there (`place`), which stands it where the run places it.
  */
 export function ComboboxOptionItem({
   option,
+  place,
   ...engine
-}: { option: ComboboxOption } & ComboboxOptionEngineProps): React.JSX.Element {
+}: {
+  option: ComboboxOption;
+  place?: VirtualRowPlace | undefined;
+} & ComboboxOptionEngineProps): React.JSX.Element {
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the field or the engine reads the keys and names this option active.
     <div
@@ -189,6 +195,7 @@ export function ComboboxOptionItem({
       tabIndex={-1}
       aria-disabled={option.disabled === true ? "true" : undefined}
       aria-current={option.current === true ? "true" : undefined}
+      {...place}
       {...engine}
       // Note that an option that cannot be chosen now takes no press, whatever the engine handed it.
       onClick={
@@ -196,7 +203,7 @@ export function ComboboxOptionItem({
       }
       {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
       className={cn("ui-combobox-option", COMBOBOX_ITEM)}
-      style={undefined}
+      style={place?.style}
     >
       {option.lead === undefined ? null : (
         <span
@@ -271,7 +278,7 @@ function OptionRow({
 }): React.JSX.Element {
   const row = (
     <ComboboxOptionItem
-      {...place}
+      place={place}
       id={id}
       option={option}
       aria-selected={active}

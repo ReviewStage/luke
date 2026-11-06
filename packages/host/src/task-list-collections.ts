@@ -6,9 +6,12 @@
  * the signed-in session. The list is built from them as the held read built
  * it (`@repo/features/task-list-live`), at the host's own instant, because
  * an agent's status moves with the clock alone and a live query reads no
- * clock. So it is built again each time either moves, and at the nearest
- * instant the clock alone moves it (`taskListGraceEdge`): the one clock
- * left here, armed only while such an agent stands.
+ * clock. So it is drawn again each time either moves, and at the nearest
+ * instant the clock alone moves it (the drawing's `edge`): the one clock
+ * left here, armed only while such an agent stands. One drawer stands for
+ * the scope (`taskListDrawer`), so each drawing builds again only the plans
+ * and agents a moved row or that instant reaches, and every other is the
+ * object drawn before.
  *
  * A write to one row, a plan's or an agent's, is a write the pool draws over
  * it at once (`compose-tasks.ts` and `compose-agents.ts` declare them),
@@ -22,15 +25,7 @@
  */
 
 import type { ListedAgent } from "@repo/features/agent-wire";
-import {
-  agentPullRequestsOfLiveRows,
-  type TaskListLiveRows,
-  taskAgentPinsOfLiveRows,
-  taskAgentsOfLiveRows,
-  taskListGraceEdge,
-  taskListOfLiveRows,
-  taskPullRequestsOfLiveRows,
-} from "@repo/features/task-list-live";
+import { type TaskListLiveRows, taskListDrawer } from "@repo/features/task-list-live";
 import type {
   ListedPullRequest,
   TaskAgentPin,
@@ -130,19 +125,13 @@ export function taskListCollections(
     });
     const agents: HeldRows<AgentRow> = yield* pool.stand(AGENT, { redraw, confirmation });
 
+    const drawing = taskListDrawer();
     /** Draws the list as it stands now, what every standing write drew among it, and arms its next edge. */
     const drawn: Effect.Effect<void> = yield* drawnAtEdges((at) => {
       if (!open) return undefined;
-      const rows = { plans: plans.rows(), agents: agents.rows() };
-      dependencies.draw({
-        list: taskListOfLiveRows(rows, at),
-        taskAgents: taskAgentsOfLiveRows(rows, at),
-        taskPullRequests: taskPullRequestsOfLiveRows(rows),
-        agentPullRequests: agentPullRequestsOfLiveRows(rows),
-        taskAgentPins: taskAgentPinsOfLiveRows(rows),
-        pendingTasks: plans.pending(),
-      });
-      return taskListGraceEdge(rows, at);
+      const { edge, ...list } = drawing({ plans: plans.rows(), agents: agents.rows() }, at);
+      dependencies.draw({ ...list, pendingTasks: plans.pending() });
+      return edge;
     });
 
     return {

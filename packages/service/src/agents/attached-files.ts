@@ -24,7 +24,6 @@ import { imageDimensions, sniffImageType } from "@repo/features/image-signature"
 import { MENTION_KIND, memberMentionOf } from "@repo/features/mention-link";
 import type { FileUIPart, UserContent } from "ai";
 import { Effect, Option } from "effect";
-import type { MessageReceivedPart } from "eve/client";
 
 /**
  * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@repo/database/models/attached-file-parts`.
@@ -211,6 +210,16 @@ function keptOnto(image: FileUIPart, text: string): FileUIPart | undefined {
   const url = "id" in kept ? "" : image.url;
   return { ...image, url, providerMetadata: keptImageMetadata(kept) };
 }
+
+/** One part of a message as its receipt lists it: words, or a file staged by its name and type with no bytes. */
+export type MessageReceivedPart =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "file";
+      readonly mediaType: string;
+      readonly filename?: string;
+      readonly url?: string;
+    };
 
 /**
  * eve's receipt of a message read back. Its parts joined, each image and

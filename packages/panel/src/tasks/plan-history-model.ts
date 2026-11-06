@@ -139,7 +139,7 @@ export function revisionSummary(line: PlanRevisionLine): string {
   if (line.restoredFrom !== undefined) {
     return `Restored the version from ${dayAndTimeText(line.restoredFrom.at)}`;
   }
-  if (line.lastEdit.actor === PLAN_ACTOR.EARLIER) return "The plan before its history began";
+  if (line.lastEdit.actor === PLAN_ACTOR.EARLIER) return "The description before its history began";
   return line.changes === 1 ? "1 change" : `${line.changes} changes`;
 }
 

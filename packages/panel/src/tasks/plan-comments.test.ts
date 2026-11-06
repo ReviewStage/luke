@@ -37,7 +37,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT } from "../testing/desktop-inbox.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -48,7 +48,7 @@ import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./plan-comment
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * A plan's comments on its own page: each open thread's words marked where
@@ -203,7 +203,7 @@ function drawn(
     ...(view === "list" && agents !== undefined ? { agents } : undefined),
   });
   // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const treeOf = (value: PlanCommentsControl) =>
     createElement(
       PlanCommentsProvider,
@@ -1310,17 +1310,19 @@ async function caretInThread() {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        PlanCommentsProvider,
-        { value: control },
-        createElement(CommentFocusScope, {
-          reveal: undefined,
-          children: createElement(PlanBody, {
-            task: PLAN,
-            sectionLinks: PAGE_LINKS,
-            onEdit: () => Promise.resolve({ saved: true } as const),
+      withQueryClient(
+        createElement(
+          PlanCommentsProvider,
+          { value: control },
+          createElement(CommentFocusScope, {
+            reveal: undefined,
+            children: createElement(PlanBody, {
+              task: PLAN,
+              sectionLinks: PAGE_LINKS,
+              onEdit: () => Promise.resolve({ saved: true } as const),
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );
@@ -1467,7 +1469,7 @@ function Keymap(): null {
 test("⌥⌘M starts a thread on the words selected, as the bubble over them does, and nothing with none selected", async () => {
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(keys);
-  act(() => keys.render(createElement(Keymap)));
+  act(() => keys.render(withQueryClient(createElement(Keymap))));
   const { container, started } = wide(() => drawn("page", []));
   const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
   const pressComment = () =>
@@ -1533,7 +1535,7 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
 test("words selected in a plan whose tab is then hidden take the bubble and ⌥⌘M with them, and bring them back as it is shown again", async () => {
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(keys);
-  act(() => keys.render(createElement(Keymap)));
+  act(() => keys.render(withQueryClient(createElement(Keymap))));
   const { container } = wide(() => drawn("page", []));
   const words = "withdraw an invite";
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
@@ -1946,7 +1948,7 @@ test("a thread resolved fades out of a page's column where its row stood, out of
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+    const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
     const draw = (threads: readonly PlanCommentThread[]) =>
       act(() =>
         root.render(

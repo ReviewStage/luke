@@ -67,7 +67,6 @@ import {
   runnerTook,
 } from "../../testing/runner-sandbox-fake.js";
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
-import { AgentSandboxImage } from "../agent-sandbox-image.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -79,8 +78,8 @@ import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
+import { AgentImage } from "./agent-image.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
-import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -96,7 +95,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * opening nothing. Synthetic accounts, tokens, and snapshot ids throughout.
  */
 
-const SNAPSHOT = "snap_fixture_image";
+const IMAGE = "agent-image:fixture";
 const EVENTS_URL = "https://app.test/api/agents/runner-events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
 const MCP_URL = "https://app.test/api/agents/mcp";
@@ -106,7 +105,6 @@ const SERVICE_HOST = "app.test";
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
 const INSTRUCTIONS = "You are a Vespin coding agent.";
-const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const KEK = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const THREAD = "019a0b1c-2d3e-7f40-8a5b-6c7d8e9f0a1b";
 const TOKEN_URL = "https://app.test/api/agents/runner-token";
@@ -163,7 +161,7 @@ function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
   }).pipe(Layer.provide(http));
 }
 
-/** Everything but the store: Vercel and OpenAI behind one client, the agent's machine, the image and the bundle. */
+/** Everything but the store: Vercel and OpenAI behind one client, the agent's machine, and the image. */
 function services(
   api: ReturnType<typeof runnerSandboxApi>,
   openai: ReturnType<typeof openAi> = openAi(),
@@ -181,12 +179,7 @@ function services(
     machineOver(http),
     GITHUB_APP_WITH_TOKENS,
     Layer.succeed(HostedEnvironment, NO_KEYS),
-    Layer.succeed(AgentSandboxImage, {
-      snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
-      snapshotGone: () => Effect.void,
-      prepared: Effect.succeed(true),
-    }),
-    Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
+    Layer.succeed(AgentImage, { reference: Effect.succeed(IMAGE) }),
   );
 }
 
@@ -413,8 +406,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         const [command] = api.commands;
         assert.ok(command !== undefined);
-        assert.equal(command.sudo, true);
-        assert.match(command.args[1] ?? "", /exec setpriv --reuid=agent --regid=agent/u);
+        assert.equal(command.user, "agent");
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.equal(command.env[RUNNER_ENV.CODEX_PLAN_BACKEND], CODEX_PLAN_BACKEND.CHATGPT);
@@ -460,7 +452,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           command.args,
           yield* launchLines(command),
           api.sandboxes,
-          [...(api.uploads[0]?.values() ?? [])],
+          api.uploads.flatMap((upload) => [...upload.values()]),
         ]);
         for (const secret of [
           "access-0",

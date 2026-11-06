@@ -347,7 +347,7 @@ function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
   // While Plans is off there is no plan to copy, so the chord is an agent's alone.
   useAppCommand(
     APP_COMMAND.COPY_CONTENT,
-    useExperiment(EXPERIMENT.PLANS) ? copy.onPress : undefined,
+    useExperiment(EXPERIMENT.DESCRIPTIONS) ? copy.onPress : undefined,
   );
   return null;
 }
@@ -415,7 +415,7 @@ function PlanDocument({
     agents: tasks.agents,
   });
   // The task's comments are held from its open while it is shown, for its plan's margin and list, so its first ready frame marks them; none are read while Plans is off.
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const commentsTaskId = tasks.shown && plansOn ? tasks.activeTaskId : undefined;
   const comments = usePlanComments(
     useMemo(
@@ -1142,6 +1142,7 @@ function PlanDocument({
         standing={standing}
         head={planHead}
         titleActions={!phone}
+        shown={overviewShown}
       />
     </Fill>
   );

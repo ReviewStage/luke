@@ -3,7 +3,10 @@
  *
  * It keeps every sandbox, command, stdin, upload, network policy, and run it
  * was asked for, opens and resumes sandboxes as Vercel does, and answers a
- * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`).
+ * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`). A
+ * command `@vercel/sandbox` starts as a user (`asUser`) is kept as that user's
+ * command, its environment read back off `sudo`'s command line, where the SDK
+ * writes it.
  * Beside it, the lines a launch reads from our store (`runner_line`),
  * read back the way a test reads a command's stdin, and stamped taken as a
  * runner's ACCEPTED would, which no fake runner posts. Synthetic team,
@@ -40,12 +43,21 @@ import {
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 
+/** The user and group the image runs the API's commands as, which `@vercel/sandbox` reads off `id` before it makes a user. */
+const DEFAULT_USER = "ubuntu";
+
+/** What `@vercel/sandbox` runs to read the default user and its group. */
+const DEFAULT_USER_READ = "id -un; id -gn";
+
 export interface FakeSandbox {
   name: string;
   status: string;
   currentSessionId: string;
   tags: Record<string, string>;
-  snapshotId: string;
+  /** The image it was created from, where it was. */
+  image?: string;
+  /** The snapshot it was created from, where it was. */
+  snapshotId?: string;
   deleted: boolean;
   /** The timeout each session of the sandbox opens with, as its create or a later update set it. */
   timeout: number;
@@ -64,6 +76,8 @@ export interface FakeSandbox {
 export interface FakeCommand {
   readonly id: string;
   readonly sandboxSessionId: string;
+  /** The user `@vercel/sandbox` started the command as (`asUser`); none for one the API started as its own. */
+  readonly user?: string;
   /** The agent the command's sandbox was tagged for as it started, whose queued lines a launch reads. */
   readonly agentId: string | undefined;
   readonly command: string;
@@ -143,6 +157,30 @@ function untar(archive: Uint8Array): Map<string, string> {
   return files;
 }
 
+/**
+ * A command `@vercel/sandbox`'s `asUser` started, as it wrote it:
+ * `sudo -u <user> -- bash -c <cd and exec> bash <cwd> [env K=V…] <command> <args…>`,
+ * read back as the user's command, its folder, and its environment; none for
+ * a command written any other way.
+ */
+function asUserCommand(command: string, args: readonly string[]) {
+  const [flag, user, dashes, shell, , script, , cwd, ...rest] = args;
+  if (command !== "sudo" || flag !== "-u" || dashes !== "--" || shell !== "bash") return undefined;
+  if (user === undefined || script === undefined || cwd === undefined) return undefined;
+  const env: Record<string, string> = {};
+  let at = 0;
+  if (rest[0] === "env") {
+    at = 1;
+    for (; at < rest.length; at += 1) {
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/su.exec(rest[at] ?? "");
+      if (match === null) break;
+      env[match[1] ?? ""] = match[2] ?? "";
+    }
+  }
+  const [run = "", ...runArgs] = rest.slice(at);
+  return { user, cwd, env, command: run, args: runArgs };
+}
+
 /** Vercel Sandbox's REST API, as a store of the sandboxes and commands it was asked for. */
 export function runnerSandboxApi() {
   const sandboxes: FakeSandbox[] = [];
@@ -190,7 +228,7 @@ export function runnerSandboxApi() {
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
     runExit?: ((args: readonly string[]) => number) | undefined;
-    onRun?: ((env: Readonly<Record<string, string>>) => Promise<void>) | undefined;
+    onRun?: ((env: Readonly<Record<string, string>>, command: string) => Promise<void>) | undefined;
   } = {};
   /** The drives standing, by name. */
   const drives = new Set<string>();
@@ -250,7 +288,7 @@ export function runnerSandboxApi() {
       assert.equal(asked.projectId, PROJECT);
       assert.equal(typeof asked.persistent, "boolean");
       // As Vercel answers a create from a snapshot it no longer holds (the SDK's `isSnapshotNotFoundError`).
-      if (goneSnapshots.has(asked.source.snapshotId)) {
+      if (asked.source !== undefined && goneSnapshots.has(asked.source.snapshotId)) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
       }
       // A name a sandbox still holds is refused, which is what makes a name a lock.
@@ -271,7 +309,9 @@ export function runnerSandboxApi() {
         status: "running",
         currentSessionId: mintSession(),
         tags: asked.tags,
-        snapshotId: asked.source.snapshotId,
+        ...(asked.source === undefined
+          ? { image: asked.image }
+          : { snapshotId: asked.source.snapshotId }),
         deleted: false,
         createdAt: sandboxes.length + 1,
         timeout: asked.timeout,
@@ -428,29 +468,31 @@ export function runnerSandboxApi() {
       }
       return Response.json({});
     }
+    if (rest === "fs/mkdir") return Response.json({});
     if (rest === "cmd") {
       const asked = await body();
       if (asked.wait === true) {
-        await hooks.onRun?.(asked.env ?? {});
+        await hooks.onRun?.(asked.env ?? {}, asked.command);
         runs.push({ session: sessionId, args: asked.args, env: asked.env ?? {} });
         const exitCode = hooks.runExit?.(asked.args) ?? 0;
-        return commandRunStreamed(
-          { id: id("cmd"), sessionId },
-          { exitCode, stdout: "", stderr: "" },
-        );
+        const stdout =
+          asked.args[1] === DEFAULT_USER_READ ? `${DEFAULT_USER}\n${DEFAULT_USER}\n` : "";
+        return commandRunStreamed({ id: id("cmd"), sessionId }, { exitCode, stdout, stderr: "" });
       }
       assert.equal(asked.attachStdin, true);
+      const asUser = asUserCommand(asked.command, asked.args);
       const command: FakeCommand = {
         id: id("cmd"),
         sandboxSessionId: sessionId,
+        ...(asUser === undefined ? undefined : { user: asUser.user }),
         agentId: runnerTag(
           sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags,
           "AGENT",
         ),
-        command: asked.command,
-        args: asked.args,
-        cwd: asked.cwd,
-        env: asked.env,
+        command: asUser?.command ?? asked.command,
+        args: asUser?.args ?? asked.args,
+        cwd: asUser?.cwd ?? asked.cwd,
+        env: asUser?.env ?? asked.env,
         sudo: asked.sudo,
         policiesBefore: policies.length,
         stdin: "",

@@ -317,6 +317,10 @@ function post(
   });
 }
 
+/** Turns Plans on for an agent's starter, whose agents are offered the plan's tools only then. */
+const plansOn = (userId: string) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+
 /** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
 const SERVED_TOOLS = [
   "post_thread",
@@ -589,7 +593,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         yield* writeAccountPreferences(agent.userId, {
-          experiments: { [EXPERIMENT.MEMORY]: true },
+          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
         });
         const client = yield* connected(fetch, agent.bearer);
 
@@ -630,7 +634,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       withheld: ["browser", "run_on_mac"],
     },
   ])(
-    "tools/list leaves out what eve offers no agent $why, and the memory where its starter has Memory off",
+    "tools/list leaves out what eve offers no agent $why, and the memory and the plan's tools where its starter has Memory and Plans off",
     ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -640,7 +644,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const left = [...withheld, "save_memory", "search_memory"];
+        const left = [...withheld, "save_memory", "search_memory", "edit_plan", "look_at_picture"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !left.includes(name)).sort(),
@@ -654,6 +658,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentInSandbox;
+        yield* plansOn(agent.userId);
         const runTurn = Database.use((db) =>
           db.insert(turns).values({
             userId: agent.userId,
@@ -782,6 +787,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        yield* plansOn(agent.userId);
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
@@ -828,6 +834,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        yield* plansOn(agent.userId);
         const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, PICTURE);
         if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT)
           return assert.fail("the picture was not kept");
@@ -856,6 +863,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        yield* plansOn(agent.userId);
         const video: Picture = {
           contentType: PICTURE_MEDIA_TYPE.WEBM,
           bytes: webmBytes(1280, 800),

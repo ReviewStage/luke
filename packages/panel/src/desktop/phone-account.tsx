@@ -5,7 +5,6 @@ import { MessageSquareIcon } from "@repo/ui/icons";
 import { runAppCommand } from "../app-commands.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
-import { useNewWorkspaceDialog } from "./new-workspace-dialog.js";
 import { AccountAvatar, AccountHeading, useAccountMenuGroups } from "./sidebar-foot.js";
 import { workspaceMenuGroups } from "./workspace-switcher.js";
 
@@ -34,10 +33,6 @@ export function PhoneAccount({
   onSettings: () => void;
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
-  const naming = useNewWorkspaceDialog(tasks.onCreateWorkspace, {
-    signedIn: tasks.signedIn,
-    surfaceOpen: tasks.shown,
-  });
   const menu = useMenu(tasks.shown);
   const accountGroups = useAccountMenuGroups(account, onSignOut);
   // The foot's two buttons, which a phone draws no foot for.
@@ -50,8 +45,7 @@ export function PhoneAccount({
     },
   ];
   const listed = tasks.workspace;
-  const workspaceGroups =
-    listed === undefined ? [] : workspaceMenuGroups(listed, tasks, naming.ask);
+  const workspaceGroups = listed === undefined ? [] : workspaceMenuGroups(listed, tasks);
   return (
     <>
       <IconButton
@@ -73,7 +67,6 @@ export function PhoneAccount({
           onClose={menu.close}
         />
       )}
-      {naming.dialog}
     </>
   );
 }

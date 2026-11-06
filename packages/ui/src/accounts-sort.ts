@@ -1,4 +1,3 @@
-import { accountLabel } from "./account-initials.js";
 import { SORT_DIRECTION, type SortDirection } from "./sort-direction.js";
 
 /**
@@ -30,7 +29,7 @@ export const ACCOUNTS_SORT_KEY = {
 export type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
 
 /** A column's first press: names read forward, counts and dates largest first. */
-const ACCOUNTS_SORT_FIRST_DIRECTION = {
+export const ACCOUNTS_SORT_FIRST_DIRECTION = {
   [ACCOUNTS_SORT_KEY.ACCOUNT]: SORT_DIRECTION.ASCENDING,
   [ACCOUNTS_SORT_KEY.JOINED]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
@@ -42,20 +41,6 @@ const ACCOUNTS_SORT_FIRST_DIRECTION = {
 } satisfies Record<AccountsSortKey, SortDirection>;
 
 /**
- * What each shared column orders by. An account sorts by the name its row
- * shows, falling back to the email exactly as the cell does. A detail
- * column's ordering rides the column itself, because its fields exist only
- * on the rows of the surface that draws it.
- */
-const SHARED_SORT_VALUE = new Map<
-  AccountsSortKey,
-  (row: AccountsTableRow) => string | number | null
->([
-  [ACCOUNTS_SORT_KEY.ACCOUNT, (row) => accountLabel(row).toLowerCase()],
-  [ACCOUNTS_SORT_KEY.ACTIVE_DAYS, (row) => row.activeDays],
-]);
-
-/**
  * A column one surface adds beside the shared ones — the roster's Joined,
  * Last seen, and Last active, the overview's per-feature counts. It carries its own cell and ordering because
  * its fields exist only on that surface's rows; the shared columns are fixed
@@ -65,56 +50,11 @@ export interface AccountsDetailColumn<Row> {
   key: AccountsSortKey;
   label: string;
   cell: (row: Row) => React.ReactNode;
+  /** What the column orders by; an account with none sits below the rest in either direction. */
   sortValue: (row: Row) => string | number | null;
 }
 
 export interface AccountsSort {
   key: AccountsSortKey;
   direction: SortDirection;
-}
-
-/** Where a header's press takes the order: its own first direction, then the flip. */
-export function nextSort(current: AccountsSort | undefined, key: AccountsSortKey): AccountsSort {
-  if (current?.key !== key) return { key, direction: ACCOUNTS_SORT_FIRST_DIRECTION[key] };
-  return {
-    key,
-    direction:
-      current.direction === SORT_DIRECTION.ASCENDING
-        ? SORT_DIRECTION.DESCENDING
-        : SORT_DIRECTION.ASCENDING,
-  };
-}
-
-/**
- * Orders the rows for one sort. Starred rows stand above everything first —
- * the star marks the accounts the admin actually watches, so no column order
- * may bury them — and the sort chosen orders each tier on its own. No sort
- * keeps the server's order — most recently active first — and ties keep it
- * too, since the sort is stable. An account with no active day yet sits below
- * the dated rows of its tier in either direction: it has no place in a
- * chronology, and flipping one should not bury the answer under the blanks.
- * A stored key naming a column this table does not draw reads as no sort at
- * all.
- */
-export function sortAccountsRows<Row extends AccountsTableRow>(
-  rows: readonly Row[],
-  sort: AccountsSort | undefined,
-  detailColumns: readonly AccountsDetailColumn<Row>[],
-  starred: ((row: Row) => boolean) | undefined,
-): readonly Row[] {
-  const detail = sort ? detailColumns.find((column) => column.key === sort.key) : undefined;
-  const value = sort ? (detail?.sortValue ?? SHARED_SORT_VALUE.get(sort.key)) : undefined;
-  if (value === undefined && starred === undefined) return rows;
-  const flip = sort?.direction === SORT_DIRECTION.DESCENDING ? -1 : 1;
-  return [...rows].sort((a, b) => {
-    if (starred && starred(a) !== starred(b)) return starred(a) ? -1 : 1;
-    if (value === undefined) return 0;
-    const left = value(a);
-    const right = value(b);
-    if (left === null) return right === null ? 0 : 1;
-    if (right === null) return -1;
-    if (left < right) return -flip;
-    if (left > right) return flip;
-    return 0;
-  });
 }

@@ -59,7 +59,6 @@ import {
 import { andList } from "@repo/features/words";
 import { causeKind } from "@repo/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
-import type { SessionAuth } from "eve/context";
 import type { GitHubApp } from "../../github/github-app.js";
 import { githubOffered } from "../../integrations/github-integration.js";
 import {
@@ -101,9 +100,6 @@ type ServerAdmission = Effect.Effect<
   QueryError | Schema.SchemaError,
   DatabaseServices
 >;
-
-/** How an agent's edge reads the standing for one session: its own admission and policy, run where the edge runs effects. */
-export type ServerStandingRead = (auth: SessionAuth, sessionId: string) => Promise<ServerStanding>;
 
 /**
  * The servers mentioned since the agent's last turn started, taken by the

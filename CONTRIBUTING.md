@@ -114,7 +114,7 @@ tools/
   demo-postgres/  a throwaway Postgres for the local demo
   polish/         screenshots every scene of the app, in both themes and three widths, for a design review
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
-docs/             design, tasks, and style; a plan lives on its task, never in a document here
+docs/             design, tasks, and style; a description lives on its task, never in a document here
 ```
 
 Application logic lives in `packages/`; an app holds only what is specific to

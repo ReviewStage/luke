@@ -13,9 +13,14 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, type ReactElement } from "react";
 import { afterEach, beforeEach } from "vitest";
 
-/** A client as the Testing guide makes one: a failed read is not tried again. */
+/** A client as the Testing guide makes one, a failed read not tried again, sending as the window's does whatever the online mark says. */
 function freshQueryClient(): QueryClient {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return new QueryClient({
+    defaultOptions: {
+      queries: { networkMode: "always", retry: false },
+      mutations: { networkMode: "always" },
+    },
+  });
 }
 
 let testQueryClient = freshQueryClient();
@@ -28,14 +33,15 @@ afterEach(() => {
   testQueryClient.clear();
 });
 
+/** `element` under the test's Query client alone, for a surface that reads the renderer's own registry. */
+export function withQueryClient(element: ReactElement): ReactElement {
+  return createElement(QueryClientProvider, { client: testQueryClient }, element);
+}
+
 /** `element` under `registry` and the test's Query client, as the window's root provides its own. */
 export function onRegistry(
   registry: AtomRegistry.AtomRegistry,
   element: ReactElement,
 ): ReactElement {
-  return createElement(
-    RegistryContext.Provider,
-    { value: registry },
-    createElement(QueryClientProvider, { client: testQueryClient }, element),
-  );
+  return createElement(RegistryContext.Provider, { value: registry }, withQueryClient(element));
 }

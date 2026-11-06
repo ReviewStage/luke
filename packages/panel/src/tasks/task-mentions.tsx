@@ -6,6 +6,7 @@ import { planSections } from "@repo/features/plan-document";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { TASKS_READ } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
@@ -16,9 +17,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
+import { askAct, useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { useHeldRows } from "../use-host-read.js";
 import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
@@ -32,6 +34,7 @@ import type {
 import type { AgentsControl } from "./use-agents.js";
 import { useOpenTask } from "./use-open-link.js";
 import { useWorkspaceAgents } from "./use-workspace-agents.js";
+import { workspaceAgentSearchQueryOptions } from "./workspace-agent-search.js";
 
 /**
  * task-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
@@ -248,10 +251,31 @@ export function heldTaskMentions(
   };
 }
 
-/** The words of a task's plan as last read. */
-interface SavedPlanRead {
-  readonly taskId: string;
-  readonly text: string;
+/**
+ * The words of a task's newest revision as saved by `savedAt`, which a
+ * save moves, so a revision read under one stamp never goes stale: read
+ * through the version history's acts, the page then the revision. A read
+ * refused answers none, so no chip is judged against sections never read,
+ * and a plan with no revision yet answers no words.
+ */
+function newestRevisionQueryOptions(taskId: string | undefined, savedAt: number | undefined) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.TASK_NEWEST_REVISION, taskId, savedAt],
+    queryFn:
+      taskId === undefined || savedAt === undefined ? skipToken : () => newestRevisionText(taskId),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
+/** The words of the task's newest revision; none where a read was refused, and no words where it has no revision yet. */
+async function newestRevisionText(taskId: string): Promise<string | null> {
+  const page = await askAct(ACT_KIND.TASKS_REVISIONS, { taskId });
+  if (!("revisions" in page)) return null;
+  const newest = page.revisions[0];
+  if (newest === undefined) return "";
+  const answer = await askAct(ACT_KIND.TASKS_REVISION, { taskId, seq: newest.seq });
+  return "revision" in answer ? answer.revision.document.body : null;
 }
 
 /**
@@ -265,37 +289,18 @@ interface SavedPlanRead {
 export function useSavedPlanText(
   task: Pick<TaskSummary, "id" | "updatedAt"> | undefined,
 ): string | undefined {
-  const { act } = useAct();
   const held = useHeldRows(LIVE_READ.PLAN_DOCUMENT, task?.id);
   const openText = held !== undefined && "task" in held ? held.task.document.body : undefined;
-  const [read, setRead] = useState<SavedPlanRead>();
   const reading = openText === undefined ? task?.id : undefined;
   const savedAt = task?.updatedAt;
-  useEffect(() => {
-    if (reading === undefined || savedAt === undefined) return;
-    let live = true;
-    act(ACT_KIND.TASKS_REVISIONS, { taskId: reading })
-      .then((page) => {
-        if (!("revisions" in page)) return undefined;
-        const newest = page.revisions[0];
-        if (newest === undefined) return "";
-        return act(ACT_KIND.TASKS_REVISION, { taskId: reading, seq: newest.seq }).then((answer) =>
-          "revision" in answer ? answer.revision.document.body : undefined,
-        );
-      })
-      .then(
-        (text) => {
-          if (live && text !== undefined) setRead({ taskId: reading, text });
-        },
-        // Note that a read refused leaves the words unread, so no chip is judged against sections never read.
-        () => undefined,
-      );
-    return () => {
-      live = false;
-    };
-  }, [act, reading, savedAt]);
+  const revision = useQuery({
+    ...newestRevisionQueryOptions(reading, savedAt),
+    // Note that the words last read stand while a save's are read, and only the same task's.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === reading ? previous : undefined,
+  });
   if (openText !== undefined) return openText;
-  return read !== undefined && read.taskId === task?.id ? read.text : undefined;
+  return reading === undefined ? undefined : (revision.data ?? undefined);
 }
 
 /**
@@ -356,7 +361,8 @@ export function useMentionAgentsReader(
   tasks: readonly { readonly id: string; readonly name: string }[],
   models: readonly CatalogModel[] | undefined,
 ): MentionAgentsReader | undefined {
-  const { act, tell } = useAct();
+  const { tell } = useAct();
+  const queryClient = useQueryClient();
   const newest = useWorkspaceAgents(workspaceId, null);
   const listFailed = newest !== undefined && "failed" in newest;
   const carried = newest !== undefined && !listFailed;
@@ -381,16 +387,14 @@ export function useMentionAgentsReader(
         }
         return Promise.resolve(carried ? offered(naming.current.newest) : NO_AGENTS);
       }
-      return act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
-        workspaceId,
-        words,
-        includeArchived: true,
-      }).then((answer) => {
-        if ("failure" in answer) throw new Error(answer.failure);
-        return offered(answer.agents);
-      });
+      return queryClient
+        .fetchQuery(workspaceAgentSearchQueryOptions(workspaceId, words, { includeArchived: true }))
+        .then((answer) => {
+          if ("failure" in answer) throw new Error(answer.failure);
+          return offered(answer.agents);
+        });
     },
-    [act, tell, workspaceId, listFailed, carried],
+    [queryClient, tell, workspaceId, listFailed, carried],
   );
   return workspaceId === undefined ? undefined : read;
 }

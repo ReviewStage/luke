@@ -117,7 +117,7 @@ type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 
 /** What the brief's heading calls it: the plan an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
-  PLAN: "Plan",
+  PLAN: "Description",
   PROMPT: "Prompt",
   SUBAGENT_TASK: "Subagent task",
 } as const;

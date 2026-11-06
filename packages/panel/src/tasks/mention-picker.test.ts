@@ -63,7 +63,9 @@ function mounted() {
   document.body.append(page);
   root = createRoot(page);
   act(() =>
-    root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Picker))),
+    root?.render(
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Picker)),
+    ),
   );
   return {
     picker: (): MentionPicker => {
@@ -151,7 +153,9 @@ async function mountedOnPlan(chosen: MentionNode[]) {
   document.body.append(page);
   root = createRoot(page);
   act(() =>
-    root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Picker))),
+    root?.render(
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Picker)),
+    ),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -195,7 +199,7 @@ const task = (id: string, workspaceId: string, number: number, name: string) => 
 });
 
 test("on a plan, a task's key typed whole leads the @ list with that task, its key beside it, a pick written as its mention; the plan's own key leads with the plan, and another workspace's tasks are not offered", async () => {
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     tasks: {
       ...IDLE_TASKS_VIEW,
       workspaces: [
@@ -221,7 +225,7 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
   act(() => picker().onTrigger(word("STAG-1")));
   assert.deepEqual(
     detailedRows(page)[0],
-    "Ship the palette · The whole plan",
+    "Ship the palette · The whole description",
     "the plan's own key leads with the plan's own row, not another task's",
   );
   act(() => picker().onTrigger(word("acme")));
@@ -311,7 +315,7 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
   act(() =>
     boxRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(MentionNodeChip, {
           mention: picked,
           doors: {

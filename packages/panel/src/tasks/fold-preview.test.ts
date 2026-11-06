@@ -158,22 +158,22 @@ function handedPlan(text: string) {
 
 test("the plan card's head previews the plan's first line while closed, reads Plan alone while open, and previews it again once closed", () => {
   const drawing = drawn(handedPlan(`# ${PLAN_LINE}\n\nSay so on the page.`));
-  assert.equal(line(drawing).trim(), `Plan · ${PLAN_LINE}`);
+  assert.equal(line(drawing).trim(), `Description · ${PLAN_LINE}`);
 
   press(drawing);
-  assert.equal(line(drawing).trim(), "Plan");
+  assert.equal(line(drawing).trim(), "Description");
   assert.match(
     drawing.querySelector(".plan-card-body")?.textContent ?? "",
     new RegExp(PLAN_LINE, "u"),
   );
 
   press(drawing);
-  assert.equal(line(drawing).trim(), `Plan · ${PLAN_LINE}`);
+  assert.equal(line(drawing).trim(), `Description · ${PLAN_LINE}`);
 });
 
 test("the plan card's head reads Plan alone while a find draws the plan hidden", () => {
   const drawing = drawn(handedPlan(`${PLAN_LINE}\n\nSay so on the page.`), true);
-  assert.equal(line(drawing).trim(), "Plan");
+  assert.equal(line(drawing).trim(), "Description");
 });
 
 test("the to-do dock keeps its count open and drops the item it is at, which the list shows", () => {

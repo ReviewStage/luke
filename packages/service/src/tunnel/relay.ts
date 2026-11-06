@@ -4,7 +4,10 @@
  * A connection reaches its agent through the one rule every agent route
  * keeps, as a Terminal's does, then opens a PTY only on a sandbox that is
  * running: a stopped one is never woken here, since whatever the tunnel
- * would reach stopped with it, and one never opened is not running either.
+ * would reach stopped with it, but for a mirror that asks to wake, which
+ * the Mac asks only while its copy has no worktree to open in yet: that
+ * sandbox is resumed as the Terminal's resume wakes it, the same named
+ * sandbox the agent's next turn resumes. One never opened is not running.
  * The bridge the socket asked for starts in that PTY (`bridge.ts`), and
  * once it says it is ready each channel frame the desktop sends goes to it
  * as one line and each line it writes comes back as one frame. A frame is
@@ -24,7 +27,7 @@
  * tunnel's state (`@repo/features/sandbox-tunnel-wire`'s `TUNNEL_CLOSE`).
  */
 
-import { TUNNEL_CLOSE, tunnelFrameSchema } from "@repo/features/sandbox-tunnel-wire";
+import { TUNNEL_CLOSE, TUNNEL_KIND, tunnelFrameSchema } from "@repo/features/sandbox-tunnel-wire";
 import { SANDBOX_STATE } from "@repo/features/terminal-wire";
 import { readEither } from "@repo/wire/effect";
 import {
@@ -91,6 +94,8 @@ export interface TunnelDependencies {
   ) => Effect.Effect<Option.Option<TunnelAgent>, unknown>;
   /** A PTY minted on the running sandbox the eve session is tagged with, or where it stands; never a resume. */
   readonly open: (sessionId: string) => Effect.Effect<SandboxOpen, SandboxUnavailable>;
+  /** The stopped sandbox the eve session is tagged with resumed, as the Terminal's resume wakes it; one running is left as it is. */
+  readonly resume: (sessionId: string) => Effect.Effect<unknown, SandboxUnavailable>;
   /** Opens the PTY's socket for the connection's scope. */
   readonly connect: (
     shell: InteractiveShell,
@@ -216,7 +221,10 @@ export function relayTunnel(
     const agent = reached.success.value;
     const { sessionId } = agent;
     if (sessionId === undefined) return yield* device.close(TUNNEL_CLOSE.NOT_RUNNING);
-    const opened = yield* Effect.result(deps.open(sessionId));
+    const wakes = ask.bridge.kind === TUNNEL_KIND.MIRROR && ask.bridge.wake;
+    const opened = yield* Effect.result(
+      wakes ? Effect.andThen(deps.resume(sessionId), deps.open(sessionId)) : deps.open(sessionId),
+    );
     if (Result.isFailure(opened)) return yield* device.close(TUNNEL_CLOSE.UNAVAILABLE);
     const sandbox = opened.success;
     if (sandbox.state !== SANDBOX_STATE.RUNNING)

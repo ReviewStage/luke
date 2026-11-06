@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { isComposingKey } from "../../composing-key.js";
+import { GLYPH } from "../../icons/glyph-registry.js";
 import { motionHeld } from "../../motion-timing.js";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
@@ -19,7 +20,8 @@ import { ReplayWords } from "../../session-replay-marks.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { trappedTab } from "../../trapped-tab.js";
 import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
-import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
+import { IconButton } from "../button/button.js";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import {
   DIALOG_ANSWERS,
   DIALOG_FOOT,
@@ -95,7 +97,12 @@ import { useHeldFocus } from "./held-focus.js";
  * it), so its title and its answers stay on screen however short the
  * window is. A picture's card opened from its tile grows from the tile
  * and goes back into it (`expand`), in place of the fade and rise every other
- * card opens with. A dialog whose head is more than words (a picture's bar, a title
+ * card opens with. A dialog with no answers at its foot, one that stands
+ * waiting on something done elsewhere, may stand a close glyph at its title's
+ * end (`closeLabel`), which puts it away as Escape does, and a line under its
+ * title may say what it is for (`subtitle`), so its head is still the card's
+ * own, at the card's inset, its words on the edge every other dialog's stand
+ * on. A dialog whose head is more than that (a picture's bar, a title
  * holding a chip) draws its own and names the card by it (`labelledBy`).
  */
 
@@ -132,10 +139,16 @@ type DialogName =
   | {
       /** The card's title, drawn at its head in the dialog's type. */
       title: string;
+      /** A line under the title saying what the card is for, in the caption's muted ink, which describes the card where nothing else is said to. */
+      subtitle?: string | undefined;
+      /** The name of a close glyph at the title's end, for a card with no answers to put it away by; none draws none. */
+      closeLabel?: string | undefined;
       labelledBy?: undefined;
     }
   | {
       title?: undefined;
+      subtitle?: undefined;
+      closeLabel?: undefined;
       /** The id of the card's title, where the dialog draws its own head. */
       labelledBy: string;
     };
@@ -173,7 +186,7 @@ const DISMISSAL: ReadonlySet<DialogRoot.ChangeEventReason> = new Set([
  */
 const CARD_LOOK = [
   "ui-dialog focus:outline-none",
-  "data-[size=wide]:w-dialog-wide data-[size=wide]:gap-3",
+  "data-[size=wide]:w-dialog-wide data-[size=wide]:gap-block-gap",
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
@@ -236,6 +249,59 @@ export function DialogCard({
       data-hug={hug}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * The head of a card whose title has a line under it or a close at its end:
+ * the title, the line under it at the tight gap a label's own parts keep,
+ * and the close in a slot one title line tall at their end, centered on that
+ * line, so a close taller than the line neither moves the title nor holds the
+ * line under it further off.
+ */
+function DialogHead({
+  titleId,
+  subtitleId,
+  title,
+  subtitle,
+  closeLabel,
+  replayUnmasked,
+  titleReplayMasked,
+  onClose,
+}: {
+  titleId: string;
+  subtitleId: string;
+  title: string;
+  subtitle: string | undefined;
+  closeLabel: string | undefined;
+  replayUnmasked: boolean;
+  titleReplayMasked: boolean;
+  onClose: () => void;
+}): React.JSX.Element {
+  const words = (
+    <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+      <ReplayWords unmasked={replayUnmasked} masked={titleReplayMasked}>
+        {title}
+      </ReplayWords>
+    </Text>
+  );
+  if (subtitle === undefined && closeLabel === undefined) return words;
+  return (
+    <div className="ui-dialog-head flex items-start gap-control-gap">
+      <div className="flex min-w-0 flex-1 flex-col gap-tight-gap">
+        {words}
+        {subtitle === undefined ? null : (
+          <Text id={subtitleId} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            <ReplayWords unmasked={replayUnmasked}>{subtitle}</ReplayWords>
+          </Text>
+        )}
+      </div>
+      {closeLabel === undefined ? null : (
+        <span className="flex h-lh flex-none items-center text-dialog">
+          <IconButton icon={<GLYPH.CLOSE />} label={closeLabel} onClick={onClose} />
+        </span>
+      )}
     </div>
   );
 }
@@ -519,6 +585,8 @@ export function Dialog({
   role = DIALOG_ROLE.DIALOG,
   size = DIALOG_SIZE.CONFIRM,
   title,
+  subtitle,
+  closeLabel,
   labelledBy,
   describedBy,
   replayUnmasked = false,
@@ -547,6 +615,7 @@ export function Dialog({
   // for it to stand.
   const [drawn, setDrawn] = useState(false);
   const titleId = useId();
+  const subtitleId = useId();
   // Whether a draft has already held the card back once, which the next
   // dismissal goes through; a card opened again holds its draft afresh.
   const [held, setHeld] = useState(false);
@@ -670,7 +739,7 @@ export function Dialog({
         role={role}
         aria-modal="true"
         aria-labelledby={labelledBy ?? titleId}
-        aria-describedby={describedBy}
+        aria-describedby={describedBy ?? (subtitle === undefined ? undefined : subtitleId)}
         aria-busy={busy}
         tabIndex={-1}
         initialFocus={() => (busy ? card.current : (initialFocus?.current ?? card.current))}
@@ -697,11 +766,16 @@ export function Dialog({
         }}
       >
         {title === undefined ? null : (
-          <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-            <ReplayWords unmasked={replayUnmasked} masked={titleReplayMasked}>
-              {title}
-            </ReplayWords>
-          </Text>
+          <DialogHead
+            titleId={titleId}
+            subtitleId={subtitleId}
+            title={title}
+            subtitle={subtitle}
+            closeLabel={closeLabel}
+            replayUnmasked={replayUnmasked}
+            titleReplayMasked={titleReplayMasked}
+            onClose={dismiss}
+          />
         )}
         <div
           data-slot="dialog-body"

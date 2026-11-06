@@ -43,7 +43,7 @@ const RUNNING_SANDBOX = {
 /** A create of the fixture's sandbox, with a secret in its environment, and what a taken name does. */
 const createAsk = (whenNameTaken: NameTaken) => ({
   name: NAME,
-  snapshotId: "snap_fixture",
+  from: { snapshotId: "snap_fixture" },
   tags: {},
   timeoutMs: 60_000,
   vcpus: 2,

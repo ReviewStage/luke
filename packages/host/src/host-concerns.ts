@@ -33,6 +33,7 @@ export const HOST_CONCERN = {
   THIS_MAC_HOST: "thisMacHost",
   TERMINALS: "terminals",
   PORT_FORWARDS: "portForwards",
+  MIRRORS: "mirrors",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -43,6 +44,7 @@ export const HOST_PLATFORM_CONCERN = {
   THIS_MAC_HOST: HOST_CONCERN.THIS_MAC_HOST,
   TERMINALS: HOST_CONCERN.TERMINALS,
   PORT_FORWARDS: HOST_CONCERN.PORT_FORWARDS,
+  MIRRORS: HOST_CONCERN.MIRRORS,
 } as const;
 
 export type HostPlatformConcern =
@@ -129,10 +131,8 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
   ],
-  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [
-    GATEWAY_METHOD.PORT_FORWARDS_READ,
-    GATEWAY_METHOD.PORT_FORWARDS_SET,
-  ],
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [GATEWAY_METHOD.PORT_FORWARDS_SET],
+  [HOST_PLATFORM_CONCERN.MIRRORS]: [GATEWAY_METHOD.MIRRORS_ENSURE],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 
 /** The table a platform concern's composer answers: every method it names, and no other. */

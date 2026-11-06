@@ -4,10 +4,7 @@ import {
   type GitHubAccess,
   type GitHubRepository,
 } from "@repo/features/github-repositories-wire";
-import {
-  GITHUB_TOKEN_CREATE_URL,
-  type GitHubTokenRejection,
-} from "@repo/features/github-token-wire";
+import { GITHUB_TOKEN_CREATE_URL } from "@repo/features/github-token-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -31,8 +28,9 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
   AddTokenRepository,
@@ -51,7 +49,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * are added. The token stands on its own, needing no GitHub account linked
  * first. The step is done once the workspace
  * reaches a repository, which is read again whenever the window is focused,
- * so a trip finished in the browser lands on its own.
+ * so a trip finished in the browser lands on its own, its done line naming
+ * the owners the repositories stand on.
  */
 
 /** What setup says over GitHub's cards, which setup lets be skipped: agents work in the account's repositories. */
@@ -72,10 +71,42 @@ function CardWords({ children }: { children: React.ReactNode }): React.JSX.Eleme
   );
 }
 
-/** How many repositories the workspace reaches, and through which route, as the done card says it. */
-function reachedWords(count: number, route: GitHubAccess): string {
+/** The most owners the done line names before it counts the rest. */
+const OWNERS_NAMED = 3;
+
+/** The owners the workspace's repositories stand on, each once, in the order the read lists them, the most recently updated first. */
+function ownersOf(repositories: readonly GitHubRepository[]): string {
+  const owners = [...new Set(repositories.map(({ owner }) => owner))];
+  const named = owners.slice(0, OWNERS_NAMED);
+  const rest = owners.length - named.length;
+  return new Intl.ListFormat("en", { type: "conjunction" }).format(
+    rest > 0 ? [...named, `${rest} more`] : named,
+  );
+}
+
+/**
+ * What the done line says: how many repositories the workspace reaches, the
+ * owners they stand on, so a developer sees which GitHub account or
+ * organization was connected, and the route they are reached through.
+ * Note that the owners are a person's words and stay masked in a screen
+ * recording.
+ */
+function ReachedWords({
+  repositories,
+  route,
+}: {
+  repositories: readonly GitHubRepository[];
+  route: GitHubAccess;
+}): React.JSX.Element {
+  const count = repositories.length;
   const counted = count === 1 ? "1 repository" : `${count} repositories`;
-  return `${counted} ${ROUTE_WORDS[route]}`;
+  return (
+    <>
+      {`${counted} on `}
+      <ReplayMask>{ownersOf(repositories)}</ReplayMask>
+      {` ${ROUTE_WORDS[route]}`}
+    </>
+  );
 }
 
 /**
@@ -90,16 +121,9 @@ function reachedRoute(repositories: readonly GitHubRepository[]): GitHubAccess {
 
 /** The App's card: one press sends the browser to GitHub's install page. */
 function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
-  const { act } = useAct();
-  const [opening, setOpening] = useState(false);
-  const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const install = () => {
-    setOpening(true);
-    setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId })
-      .catch((refused: Error) => setRefusal(refused.message))
-      .finally(() => setOpening(false));
-  };
+  const connectGitHub = useMutation(actMutation(ACT_KIND.WORKSPACE_GITHUB_CONNECT));
+  const refusal = connectGitHub.error?.message;
+  const install = () => connectGitHub.mutate({ workspaceId });
   return (
     <>
       <ProviderButton
@@ -108,7 +132,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
         words="Install on GitHub"
         size={PROVIDER_BUTTON_SIZE.GATE}
         primary
-        busy={opening}
+        busy={connectGitHub.isPending}
         busyLabel="Opening GitHub"
         onPress={install}
       />
@@ -123,7 +147,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
 
 /** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to. */
 function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
-  const { act } = useAct();
+  const saveToken = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
   const openLink = useOpenLink();
   const repositories = useTokenRepositories(workspaceId);
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
@@ -131,26 +155,22 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
   // Note that a token read that failed is taken for none, so the card offers a paste rather than waiting.
   const token = held.status === HOST_READ_STATUS.FAILED ? null : held.rows?.token;
   const [pasted, setPasted] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [rejection, setRejection] = useState<GitHubTokenRejection | undefined>(undefined);
-  const [failed, setFailed] = useState(false);
+  const saved = saveToken.data;
+  const saving = saveToken.isPending;
+  const failed = saveToken.isError || (saved !== undefined && "failure" in saved);
+  const rejection = saved === undefined || "failure" in saved ? undefined : saved.rejected;
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const save = () => {
     const typed = pasted.trim();
     if (typed === "" || saving) return;
-    setSaving(true);
-    setRejection(undefined);
-    setFailed(false);
-    act(ACT_KIND.GITHUB_TOKEN_SAVE, { token: typed })
-      .then(
-        (answer) => {
-          if ("failure" in answer) return setFailed(true);
-          setRejection(answer.rejected);
-          if (answer.rejected === undefined) setPasted("");
+    saveToken.mutate(
+      { token: typed },
+      {
+        onSuccess: (answer) => {
+          if (!("failure" in answer) && answer.rejected === undefined) setPasted("");
         },
-        () => setFailed(true),
-      )
-      .finally(() => setSaving(false));
+      },
+    );
   };
   if (token !== undefined && token !== null) {
     return (
@@ -234,7 +254,7 @@ export function GitHubSetup({
   const done =
     reached > 0 ? (
       <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-        {reachedWords(reached, route)}
+        <ReachedWords repositories={repositories ?? []} route={route} />
       </SettingsRowStateLine>
     ) : null;
   const options: readonly ChoiceOption<GitHubAccess>[] = [

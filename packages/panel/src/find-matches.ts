@@ -33,7 +33,6 @@
  */
 
 import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
-import { askScroll } from "@repo/ui/scroll-asked";
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
 const FIND_HIGHLIGHT = {
@@ -312,7 +311,6 @@ function scrollToRange(range: Range, root: Element): void {
     const box = element.getBoundingClientRect();
     const target = range.getBoundingClientRect();
     if (scrollsAlong(element, "y") && (target.top < box.top || target.bottom > box.bottom)) {
-      askScroll(element);
       element.scrollTop += target.top - box.top - (box.height - target.height) / 2;
     }
     if (scrollsAlong(element, "x") && (target.left < box.left || target.right > box.right)) {

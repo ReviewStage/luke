@@ -1,19 +1,14 @@
 import { formatCount } from "@repo/features/number-format";
+import { BUTTON_VARIANT, Button, GAP, Stack, TEXT_TONE, Text } from "@repo/ui";
 import {
-  BUTTON_VARIANT,
-  Button,
+  createDataTableColumnHelper,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
-  type DataTableColumn,
-  type DataTableSort,
-  GAP,
-  Stack,
-  TEXT_TONE,
-  Text,
-} from "@repo/ui";
-import { SORT_DIRECTION } from "@repo/ui/sort-direction";
-import { useState } from "react";
+  type DataTableColumns,
+  type SortingState,
+} from "@repo/ui/data-table";
+import { useMemo, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -30,8 +25,6 @@ interface Run {
   readonly minutes: number;
   readonly lastRun: string;
 }
-
-type RunKey = "name" | "owner" | "minutes" | "lastRun";
 
 const RUNS: readonly Run[] = [
   {
@@ -57,71 +50,81 @@ const RUNS: readonly Run[] = [
   },
 ];
 
-const COLUMNS: readonly DataTableColumn<Run, RunKey>[] = [
-  { key: "name", label: "Run", sortable: true, cell: (run) => run.name },
-  { key: "owner", label: "Owner", cell: (run) => run.owner },
-  {
-    key: "minutes",
-    label: "Minutes",
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    sortable: true,
-    cell: (run) => formatCount(run.minutes),
-  },
-  {
-    key: "lastRun",
-    label: "Last run",
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (run) => run.lastRun,
-  },
-];
+const column = createDataTableColumnHelper<Run>();
 
-/** What a run sorts by in each sortable column. */
-const SORT_VALUE = {
-  name: (run: Run) => run.name,
-  owner: (run: Run) => run.owner,
-  minutes: (run: Run) => run.minutes,
-  lastRun: (run: Run) => run.lastRun,
-} satisfies Record<RunKey, (run: Run) => string | number>;
+/** The runs' columns, the name a button that opens its run where `onOpen` is given. */
+function runColumns(onOpen?: (run: Run) => void): DataTableColumns<Run> {
+  return column.columns([
+    column.accessor((run) => run.name, {
+      id: "name",
+      header: "Run",
+      sortFn: "text",
+      sortDescFirst: true,
+      cell: ({ row: { original: run } }) =>
+        // Note that the run's name is a button, so a keyboard opens the row the pointer presses.
+        onOpen ? (
+          <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onOpen(run)}>
+            {run.name}
+          </Button>
+        ) : (
+          run.name
+        ),
+    }),
+    column.display({
+      id: "owner",
+      header: "Owner",
+      cell: ({ row: { original: run } }) => run.owner,
+    }),
+    column.accessor((run) => run.minutes, {
+      id: "minutes",
+      header: "Minutes",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      sortFn: "basic",
+      sortDescFirst: true,
+      cell: ({ getValue }) => formatCount(getValue()),
+    }),
+    column.display({
+      id: "lastRun",
+      header: "Last run",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: run } }) => run.lastRun,
+    }),
+  ]);
+}
+
+/** A table that sorts nothing: its columns with no accessor. */
+const STATIC_COLUMNS = column.columns([
+  column.display({ id: "name", header: "Run", cell: ({ row: { original: run } }) => run.name }),
+  column.display({ id: "owner", header: "Owner", cell: ({ row: { original: run } }) => run.owner }),
+  column.display({
+    id: "minutes",
+    header: "Minutes",
+    meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+    cell: ({ row: { original: run } }) => formatCount(run.minutes),
+  }),
+  column.display({
+    id: "lastRun",
+    header: "Last run",
+    meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+    cell: ({ row: { original: run } }) => run.lastRun,
+  }),
+]);
+
+/** The longest runs first. */
+const LONGEST_FIRST: SortingState = [{ id: "minutes", desc: true }];
 
 function SortedRuns(): React.JSX.Element {
-  const [sort, setSort] = useState<DataTableSort<RunKey>>({
-    key: "minutes",
-    direction: SORT_DIRECTION.DESCENDING,
-  });
   const [opened, setOpened] = useState<string>("none yet");
-  const value = SORT_VALUE[sort.key];
-  const flip = sort.direction === SORT_DIRECTION.ASCENDING ? 1 : -1;
-  const rows = [...RUNS].sort((a, b) => (value(a) < value(b) ? -flip : flip));
+  const columns = useMemo(() => runColumns((run) => setOpened(run.name)), []);
   return (
     <Stack gap={GAP.CONTROL}>
       <DataTable
         label="Runs"
-        columns={COLUMNS.map((column) =>
-          // Note that the run's name is a button, so a keyboard opens the row the pointer presses.
-          column.key === "name"
-            ? {
-                ...column,
-                cell: (run: Run) => (
-                  <Button variant={BUTTON_VARIANT.QUIET} onClick={() => setOpened(run.name)}>
-                    {run.name}
-                  </Button>
-                ),
-              }
-            : column,
-        )}
-        rows={rows}
-        rowKey={(run) => run.id}
+        columns={columns}
+        rows={RUNS}
+        getRowId={(run) => run.id}
         empty="No runs yet."
-        sort={sort}
-        onSort={(key) =>
-          setSort({
-            key,
-            direction:
-              sort.key === key && sort.direction === SORT_DIRECTION.DESCENDING
-                ? SORT_DIRECTION.ASCENDING
-                : SORT_DIRECTION.DESCENDING,
-          })
-        }
+        initialSorting={LONGEST_FIRST}
         onRowPress={(run) => setOpened(run.name)}
       />
       <Text tone={TEXT_TONE.MUTED}>Opened: {opened}</Text>
@@ -136,14 +139,20 @@ function DataTables(): React.JSX.Element {
         <SortedRuns />
       </CatalogSection>
       <CatalogSection id="data-table-static" title="A table that sorts nothing">
-        <DataTable label="Runs" columns={COLUMNS} rows={RUNS} rowKey={(run) => run.id} empty="" />
+        <DataTable
+          label="Runs"
+          columns={STATIC_COLUMNS}
+          rows={RUNS}
+          getRowId={(run) => run.id}
+          empty=""
+        />
       </CatalogSection>
       <CatalogSection id="data-table-empty" title="No rows">
         <DataTable
           label="Runs"
-          columns={COLUMNS}
+          columns={STATIC_COLUMNS}
           rows={[]}
-          rowKey={(run) => run.id}
+          getRowId={(run) => run.id}
           empty="No runs recorded in this window yet."
         />
       </CatalogSection>
@@ -151,9 +160,9 @@ function DataTables(): React.JSX.Element {
         <div className="catalog-narrow">
           <DataTable
             label="Runs"
-            columns={COLUMNS}
+            columns={STATIC_COLUMNS}
             rows={RUNS}
-            rowKey={(run) => run.id}
+            getRowId={(run) => run.id}
             empty=""
             minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
           />

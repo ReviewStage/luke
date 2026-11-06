@@ -14,6 +14,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles } from "../testing/side-bundles.js";
@@ -68,7 +69,7 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
       return landing.promise;
     },
   });
-  await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
+  await act(async () => root.render(withQueryClient(onSideBundles(bundles, createElement(Box)))));
 
   const field = container.querySelector<HTMLElement>(".agent-composer-input");
   assert.equal(field?.getAttribute("aria-busy"), "true", "the field stands inert");
@@ -103,7 +104,7 @@ test("a key pressed in the box is timed under the message box's keystroke span, 
   const root = createRoot(container);
   roots.push(root);
   const bundles = sideBundles({ planEditor: () => Promise.resolve(planEditor) });
-  await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
+  await act(async () => root.render(withQueryClient(onSideBundles(bundles, createElement(Box)))));
   await settle();
 
   keyPressed(composerEditor(container), {

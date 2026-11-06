@@ -410,9 +410,13 @@ export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 /** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory withholds. */
+/** The plan's notes and pictures, offered only where the agent's starter has Plans on (`plansOnFor`). */
+const PLAN_TOOLS: readonly string[] = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.LOOK_AT_PICTURE];
+
+/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory or Plans withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
+  ...PLAN_TOOLS,
   ...repositoryToolsOf({ repository: "any" }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }),
@@ -422,7 +426,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
  * repository, where it runs, and, beside its row, whether its starter has
- * Memory on (`beside`), the same rules eve's tool files read
+ * Memory and Plans on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
  * a tool left off the list still runs when called, so each narrowed tool's
@@ -434,6 +438,7 @@ export function offeredWorkspaceMcpTool(
 ): (name: string) => boolean {
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
+    ...(beside.plansOn ? PLAN_TOOLS : []),
     ...repositoryToolsOf(agent),
     ...machineToolsOf(agent),
     ...macToolsOf(agent),

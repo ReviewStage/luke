@@ -364,7 +364,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
             token: Redacted.make("pty-token"),
           }),
       }),
-    updateTimeout: () => Effect.die("a sandbox the scenario opened is already within the timeout"),
   };
   return { api, ran };
 }

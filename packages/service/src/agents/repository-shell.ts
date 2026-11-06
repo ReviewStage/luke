@@ -5,7 +5,6 @@ import {
 } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Data, Duration, Effect, type Redacted } from "effect";
-import type { SandboxSession } from "eve/sandbox";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import type { FirewallSources } from "./sandbox-firewall.js";
@@ -180,22 +179,28 @@ export interface RepositoryFirewall {
   readonly write: (sources: FirewallSources) => Effect.Effect<void, SandboxUnavailable>;
 }
 
-/**
- * The sandbox as the shell reaches it: one command run, and, where the
- * provider has a firewall, that firewall. eve's common handle declares no
- * firewall, and a Vercel Sandbox's has one; a sandbox with none cannot
- * carry the checkout's credential and checks nothing out.
- */
-export interface RepositorySandbox {
-  readonly run: SandboxSession["run"];
-  readonly firewall?: RepositoryFirewall;
+/** One command run in the sandbox: its line, and where and with what environment it runs. */
+export interface SandboxRunOptions {
+  readonly command: string;
+  readonly workingDirectory?: string;
+  readonly env?: Record<string, string>;
 }
 
 /** What a command answered: its exit code and its two outputs, each cut to the bound. */
-interface CommandResult {
+export interface CommandResult {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
+}
+
+/**
+ * The sandbox as the shell reaches it: one command run, and, where the
+ * provider has a firewall, that firewall; a sandbox with none cannot carry
+ * the checkout's credential and checks nothing out.
+ */
+export interface RepositorySandbox {
+  readonly run: (options: SandboxRunOptions) => PromiseLike<CommandResult>;
+  readonly firewall?: RepositoryFirewall;
 }
 
 /** Why the checkout could not be reached or read, as the reason the tool that asked words for the model; a coding agent's checkout answers the same word. */
@@ -243,7 +248,7 @@ function gitRefusal(failed: CommandResult): RepositoryRefusal {
 /** One run in the sandbox as an effect; a run that threw is the sandbox gone, which is the refusal given, with what it threw. */
 export function runInSandbox(
   sandbox: RepositorySandbox,
-  options: Parameters<SandboxSession["run"]>[0],
+  options: SandboxRunOptions,
   refusal: string,
 ) {
   return Effect.tryPromise({

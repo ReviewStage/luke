@@ -1,7 +1,8 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomSubscribe, useAtomValue } from "@effect/atom-react";
 import { Clock, Duration, Layer, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
+import { useCallback } from "react";
 
 /**
  * time-clock.ts -- the ticks the window moves on: the minute a row's age and a call's day are said from, the second a run's length counts in, and the beat a working mark steps on.
@@ -62,10 +63,19 @@ export function useSecond(): number {
 }
 
 /**
- * The beat every working mark steps on together, moved on five times a
- * second while any mark reads it, so the window draws a frame only when a
- * pixel moves. It stands at zero until the first beat lands.
+ * Calls `onBeat` with the beat every working mark steps on together, five
+ * times a second while any mark listens, so marks side by side step in
+ * phase. Note that it renders nothing, because a mark writes its pixels'
+ * `transform`s itself and a beat that re-rendered every mark would run React
+ * five times a second for as long as an agent works. `onBeat` must keep its
+ * identity across renders, or each render listens again.
  */
-export function useBeat(): number {
-  return AsyncResult.getOrElse(useAtomValue(beatAtom), () => 0);
+export function useOnBeat(onBeat: (beat: number) => void): void {
+  const listen = useCallback(
+    (result: Atom.Type<typeof beatAtom>) => {
+      if (AsyncResult.isSuccess(result)) onBeat(result.value);
+    },
+    [onBeat],
+  );
+  useAtomSubscribe(beatAtom, listen, { immediate: true });
 }

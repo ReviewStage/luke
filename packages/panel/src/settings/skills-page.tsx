@@ -47,10 +47,12 @@ import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { SkillOption } from "@repo/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { type ActResult, askAct, useAct } from "../act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
@@ -161,6 +163,27 @@ type ContentRead =
   | { readonly kind: typeof LIST.FAILED; readonly line: string }
   | { readonly kind: typeof LIST.READ; readonly content: InstalledSkillContent };
 
+/** A skill read whole for View, asked as View opens and again on Try again: answered at once on a failure, never tried again on its own. */
+function installedSkillQueryOptions(skillId: string) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.INSTALLED_SKILL, skillId],
+    queryFn: () => askAct(ACT_KIND.INSTALLED_SKILLS_READ, { skillId }),
+    retry: false,
+  });
+}
+
+/** Where View's read stands, a failed read being read again shown as reading. */
+function contentRead(
+  content: UseQueryResult<ActResult<typeof ACT_KIND.INSTALLED_SKILLS_READ>>,
+): ContentRead {
+  if (content.isPending || (content.isFetching && (content.isError || "failure" in content.data))) {
+    return READING;
+  }
+  if (content.isError) return { kind: LIST.FAILED, line: SKILLS_LINE.VIEW_FAILED };
+  if ("failure" in content.data) return { kind: LIST.FAILED, line: failureLine(content.data) };
+  return { kind: LIST.READ, content: content.data };
+}
+
 /** View: a skill's `SKILL.md` drawn as written, and every file it carries with its size. */
 function SkillFileDialog({
   open,
@@ -174,26 +197,8 @@ function SkillFileDialog({
   onClose: () => void;
   onExited: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const [read, setRead] = useState<ContentRead>(READING);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let current = true;
-    setRead(READING);
-    void act(ACT_KIND.INSTALLED_SKILLS_READ, { skillId: skill.id })
-      .catch(() => undefined)
-      .then((answer) => {
-        if (!current) return;
-        if (answer === undefined)
-          return setRead({ kind: LIST.FAILED, line: SKILLS_LINE.VIEW_FAILED });
-        if ("failure" in answer) return setRead({ kind: LIST.FAILED, line: failureLine(answer) });
-        setRead({ kind: LIST.READ, content: answer });
-      });
-    return () => {
-      current = false;
-    };
-  }, [act, skill.id, attempt]);
+  const content = useQuery(installedSkillQueryOptions(skill.id));
+  const read = contentRead(content);
 
   return (
     <Dialog
@@ -213,7 +218,7 @@ function SkillFileDialog({
       ) : read.kind === LIST.FAILED ? (
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.SKILL_READ)}
-          onRetry={() => setAttempt((count) => count + 1)}
+          onRetry={() => void content.refetch()}
         >
           <ReplayMask>{read.line}</ReplayMask>
         </ErrorState>

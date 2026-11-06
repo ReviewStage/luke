@@ -7,7 +7,6 @@ import { type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
-import type { ToolModelOutput } from "eve/tools";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
@@ -34,18 +33,12 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  *
  * A plan may hold a video an agent recorded, which no model is handed in any
  * form: a look at one is refused, pointing the model at its alt text and
- * caption, and both of the model's views, eve's here and the MCP door's,
- * hand on a look only of an image's type, turning any other into that
- * refusal (`lookNamedOnly`), so a video could not reach a model even were
- * it answered, as an image nor as its base64 spelled out.
+ * caption, and the MCP door hands on a look only of an image's type,
+ * turning any other into that refusal (`lookNamedOnly`), so a video could
+ * not reach a model even were it answered, as an image nor as its base64
+ * spelled out.
  *
- * An image reaches the model as an image (`pictureLookModelOutput`),
- * never as its base64 spelled out as text, and stays out of the
- * conversation's stored messages (`storedPictureLookOutput`), which keep
- * only that the model looked: what the model saw once is no record of the
- * plan, and the plan keeps the picture already.
- *
- * The result and its two views name a picture and nothing of a plan, so a
+ * The result and its view name a picture and nothing of a plan, so a
  * look at any other picture we keep answers in the same words.
  */
 
@@ -62,6 +55,7 @@ export const PICTURE_LOOK_REFUSAL = {
   VIDEO:
     "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the plan's text say what it shows.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
+  OFF: "Not looked: your developer has Plans off, so no plan's picture is shown.",
 } as const;
 
 export const PICTURE_LOOK_STATUS = {
@@ -171,26 +165,4 @@ export function lookNamedOnly(output: UnparsedWireValue): UnparsedWireValue {
   return isLookedStatus(output) && !isLooked(output)
     ? unparsedWire(pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO))
     : output;
-}
-
-/**
- * What the model is shown of a call's result: a look's picture as an image,
- * and anything else as the JSON it is. Note that the output is eve's literal
- * shape, spelled here rather than built with eve's helpers, because this
- * module is in every function's bundle and eve's runtime belongs in none.
- */
-export function pictureLookModelOutput(output: UnparsedWireValue): ToolModelOutput {
-  if (!isLooked(output)) return { type: "json", value: lookNamedOnly(output) };
-  return {
-    type: "content",
-    value: [
-      { type: "text", text: "The picture you asked to see:" },
-      { type: "file", data: { type: "data", data: output.image }, mediaType: output.mediaType },
-    ],
-  };
-}
-
-/** A call's result as the conversation keeps it: a look's status without its picture. */
-export function storedPictureLookOutput(output: UnparsedWireValue): UnparsedWireValue {
-  return isLookedStatus(output) ? unparsedWire({ status: output.status }) : output;
 }

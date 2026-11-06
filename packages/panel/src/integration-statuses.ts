@@ -22,11 +22,12 @@ import {
 } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { useMutation } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useContext, useEffect, useState } from "react";
-import { useAct } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
@@ -225,7 +226,7 @@ function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
  * is what every other draws at once.
  */
 export function useIntegrationStatuses(): IntegrationStatuses {
-  const { act } = useAct();
+  const { mutateAsync: cancelIntegration } = useMutation(actMutation(ACT_KIND.INTEGRATIONS_CANCEL));
   const registry = useContext(RegistryContext);
   const owner = useAppSlice(ownerAtom);
   const held = useHostRead(LIVE_READ.INTEGRATIONS, owner ?? undefined);
@@ -321,7 +322,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       );
       const canceled: IntegrationStatusView | undefined = byGitHub(server)
         ? { status: INTEGRATION_STATUS.DISCONNECTED }
-        : await act(ACT_KIND.INTEGRATIONS_CANCEL, {
+        : await cancelIntegration({
             provider,
             ...(server === provider ? undefined : { connection: server }),
           }).catch(() => undefined);
@@ -343,7 +344,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       }
       return true;
     },
-    [act, registry, shared, now, change, ledger],
+    [cancelIntegration, registry, shared, now, change, ledger],
   );
 
   /**

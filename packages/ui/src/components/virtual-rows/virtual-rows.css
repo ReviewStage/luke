@@ -1,13 +1,13 @@
 /* A run of rows drawing only those near the view (virtual-rows.tsx): the
-   rows not drawn are the spacers before and after those drawn, the block's
-   padding, which the component sets as it draws, and each
-   row holds its children's margins, so the height it measures is the room
-   it takes; a run of the caller's own list items sets the gap between them
-   as it sets the gap between its own rows. The browser's own scroll
-   anchoring is left out of the run, because the virtualizer holds the
-   reader's place itself, and both would move the scroll twice. */
+   block is as tall as every row would stand, which the virtualizer writes,
+   and each row is placed in it absolutely, its top the virtualizer's, as
+   TanStack Virtual's docs place one; each row holds its children's
+   margins, so the height it measures is the room it takes. The browser's
+   own scroll anchoring is left out of the run, because the virtualizer
+   holds the reader's place itself, and both would move the scroll twice. */
 @layer components {
   .ui-virtual-rows {
+    position: relative;
     overflow-anchor: none;
   }
 
@@ -17,12 +17,7 @@
 
   .ui-virtual-items {
     margin: 0;
-    padding-inline: 0;
+    padding: 0;
     list-style: none;
-  }
-
-  .ui-virtual-row + .ui-virtual-row,
-  .ui-virtual-items > * + * {
-    margin-block-start: var(--ui-virtual-gap);
   }
 }

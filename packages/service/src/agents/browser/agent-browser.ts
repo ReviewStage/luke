@@ -58,7 +58,6 @@ import type { HttpClient } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
 import { jsonOf } from "../../http/http-effect.js";
 import type { RelaySocket } from "../../terminal/relay.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
@@ -437,8 +436,7 @@ export function browserSessionOf(session: {
 }
 
 /** The calls of Vercel Sandbox's API the browser makes: a sandbox found and resumed, and its session run in and its PTY minted. */
-export interface BrowserSandboxApi
-  extends Pick<VercelSandboxApi, "listTagged" | "resume" | "updateTimeout"> {
+export interface BrowserSandboxApi extends Pick<VercelSandboxApi, "listTagged" | "resume"> {
   readonly session: (
     ref: SessionRef,
   ) => Effect.Effect<Pick<SandboxSessionApi, "run" | "openInteractive">, SandboxUnavailable>;
@@ -461,8 +459,6 @@ export function agentBrowserOver(
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
       // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
       // gone is the one refusal answered at once, since no later try finds it again.
-      // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
-      yield* capSandboxTimeout(api, sandbox);
       const resumed = api.resume(sandbox.name).pipe(
         Effect.mapError((error) =>
           snapshotGone(error)

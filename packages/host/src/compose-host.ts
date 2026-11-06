@@ -35,6 +35,7 @@ import { composeAutomations } from "./compose-automations.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
+import { composeMirrors } from "./compose-mirrors.js";
 import { composePortForwards, type PortForwardsComposer } from "./compose-port-forwards.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
@@ -49,6 +50,7 @@ import {
   type AppIdentity,
   type Environment,
   LoopbackListener,
+  MirrorPlatform,
   Reporter,
   ShutdownSignal,
   TerminalSocket,
@@ -85,6 +87,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
   HOST_CONCERN.THIS_MAC_HOST,
+  HOST_CONCERN.MIRRORS,
 ];
 
 /** What every assembly asks for, whichever platform concerns it was built with. */
@@ -106,6 +109,10 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: LoopbackListener | TerminalSocket;
+  [HOST_PLATFORM_CONCERN.MIRRORS]:
+    | ChildProcessSpawner.ChildProcessSpawner
+    | TerminalSocket
+    | MirrorPlatform;
 }
 
 /**
@@ -261,6 +268,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ),
       }),
     );
+    /** An agent as the task list holds it now, on a plan or with none; none where it lists no such agent. */
+    const agentListed = (agentId: string) => {
+      const { taskAgents = [], tasklessAgents = [] } = tasks.snapshot();
+      const onTask = taskAgents.find((agent) => agent.id === agentId);
+      if (onTask !== undefined) return onTask;
+      const taskless = tasklessAgents.find((agent) => agent.id === agentId);
+      if (taskless === undefined) return undefined;
+      // Note that an agent no automation started names none, which a summary leaves out rather than nulls.
+      const { automationId, ...agent } = taskless;
+      return automationId === null ? agent : { ...agent, automationId };
+    };
     const agents = yield* served(
       composeAgents({
         kernel,
@@ -278,16 +296,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         listed: tasks.listed,
         pullRequestListings: tasks.pullRequestListings,
         pool,
-        agentListed: (agentId) => {
-          const { taskAgents = [], tasklessAgents = [] } = tasks.snapshot();
-          const onTask = taskAgents.find((agent) => agent.id === agentId);
-          if (onTask !== undefined) return onTask;
-          const taskless = tasklessAgents.find((agent) => agent.id === agentId);
-          if (taskless === undefined) return undefined;
-          // Note that an agent no automation started names none, which a summary leaves out rather than nulls.
-          const { automationId, ...agent } = taskless;
-          return automationId === null ? agent : { ...agent, automationId };
-        },
+        agentListed,
         repositoriesMoved: tasks.repositoriesMoved,
       }),
     );
@@ -383,6 +392,16 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           )
         : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
+    const mirrors = platform.has(HOST_PLATFORM_CONCERN.MIRRORS)
+      ? yield* composeMirrors({
+          kernel,
+          account,
+          openSocket: yield* TerminalSocket,
+          platform: yield* MirrorPlatform,
+          agentListed,
+          listings: tasks.pullRequestListings,
+        })
+      : unavailableConcern(HOST_PLATFORM_CONCERN.MIRRORS);
     const portForwards: PortForwardsComposer = platform.has(HOST_PLATFORM_CONCERN.PORT_FORWARDS)
       ? yield* served(
           composePortForwards({
@@ -493,6 +512,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.THIS_MAC_HOST]: thisMacHost,
       [HOST_CONCERN.TERMINALS]: terminals,
       [HOST_CONCERN.PORT_FORWARDS]: portForwards,
+      [HOST_CONCERN.MIRRORS]: mirrors,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);

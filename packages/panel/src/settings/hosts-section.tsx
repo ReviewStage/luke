@@ -8,35 +8,28 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   ANNOUNCE,
-  BUTTON_VARIANT,
-  Button,
   Checkbox,
-  CODE_CARD_TITLE,
   CONFIRM_LOSS,
-  CodeCard,
+  COPY_FIELD_PROMPT,
+  COPY_FIELD_WIDTH,
   ConfirmDialog,
-  DIALOG_SIZE,
-  Dialog,
+  CopyField,
   type DialogConfirm,
   ErrorState,
-  GAP,
-  PlusIcon,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  SettingsRowMark,
   type SettingsRowSkeletonShape,
   type SettingsRowState,
   SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSection,
-  SPINNER_SIZE,
-  SpinnerRing,
   STATUS_TONE,
-  Stack,
   Switch,
   TEXT_TONE,
   Text,
@@ -45,9 +38,9 @@ import {
   useSecond,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
@@ -58,9 +51,9 @@ import {
   type ListedMachine,
   machineName,
   THIS_MAC,
-  type ThisMac,
   useThisMac,
 } from "../machine-name.js";
+import { DeviceGlyph } from "../tasks/runs-on.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
@@ -68,24 +61,32 @@ import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command and waits for the hosts it adds.
+ * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add a host, which shows the install command and names each host it adds as it joins.
+ *
+ * The page is drawn as its siblings that connect something are, the MCP
+ * page above all: a titled list of what is connected, and a titled step that
+ * connects one more, its command in the copy field every command on these
+ * pages stands in. An account with no host yet is led to add one, so the
+ * step stands first until a host does.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@repo/features/host-wire`): a Linux server or a Mac that ran the install
  * command, or a Mac its desktop enrolled. The list names each as every list
- * of machines does (`machine-name.ts`), This Mac among them, and says what
- * it is by its platform (`DEVICE_PLATFORM_NAME`) after Online, Offline, or
- * Updating… while its update runs, held against the window's own clock as
- * a Mac's label is, and no standing while it cannot be told yet. Nothing
- * else: a host restarts and sets itself up again by itself, and one below
- * the service's floor is refused and reads offline. Remove, on the row,
- * refuses that machine at once, after asking; the host removes itself from
- * the machine as it hears so, at once or, for one that reads offline, once
- * it is online again. The question still shows the command that removes it
- * by hand, since the list names no host's release, and one from before
- * hosts removed themselves does not until it updates. A host removed on its
- * machine by `vespin-host uninstall` leaves the list by itself. Adding takes a Linux server and a
- * Mac alike, through one command.
+ * of machines does (`machine-name.ts`), This Mac among them, leads with its
+ * platform's glyph as Runs on does (`DeviceGlyph`), and says what it is by
+ * its platform (`DEVICE_PLATFORM_NAME`) after Online, Offline, or Updating…
+ * while its update runs, held against the window's own clock as a Mac's
+ * label is, and no standing while it cannot be told yet. A host that joined
+ * while the page stands reads Setting up… rather than Offline until its
+ * first beat, since it has not gone anywhere. Nothing else: a host restarts
+ * and sets itself up again by itself, and one below the service's floor is
+ * refused and reads offline. Remove, in the row's ⋯ as an integration's
+ * Disconnect is, refuses that machine at once, after asking; the host
+ * removes itself from the machine as it hears so, at once or, for one that
+ * reads offline, once it is online again, and for that one the question
+ * also shows the command that removes it by hand, in case it never is. A
+ * host removed on its machine by `vespin-host uninstall` leaves the list by
+ * itself. Adding takes a Linux server and a Mac alike, through one command.
  *
  * In the desktop app, This Mac always stands first, with Run agents on this
  * Mac in Remove's place: a switch that reads whether this Mac's host
@@ -94,54 +95,48 @@ import { MenuRow } from "./menu-row.js";
  * folders off this Mac. While on it says the host's standing, and offline
  * until the service lists it. A Mac removed from anywhere else reads off,
  * since nothing enrolls it again unasked. A browser tab has no This Mac, so
- * it draws none, and with no host says what one is above Add hosts.
+ * it draws none.
  *
  * The list is the host's (`LIVE_READ.HOSTS`): followed live while the page
  * stands and a while after, so a host joining, leaving, renamed, or moving
  * through an update draws as the service carries it, with no read of the
  * page's own, and a removal draws the host gone the moment it is asked.
  *
- * Add hosts shows the install command, public and the same for every
- * member, which pairs a box with a code the member approves, and waits.
- * While it stands, the dialog names each host the list holds that it did
- * not hold as the dialog opened. A host so named is approved, since the
- * service lists no box before its approve, so the dialog never names one
- * that is not. A pairing's link opened in this window stands its dialog
- * over the page, Add hosts among it (`host-connect-dialog.tsx`), and once
- * Connect makes the host the list carries it, so an open Add hosts names it
- * and moves on by itself. The page
- * stands only while the Bring your own host
+ * Add a host shows the install command, public and the same for every
+ * member, which pairs a box with a code the member approves. A host the
+ * list holds that its first read for the account did not is one that just
+ * joined: its row lights once as it lands, and the step says it is
+ * connected, as Connect an agent says of an agent. A host so named is
+ * approved, since the service lists no box before its approve. A pairing's
+ * link opened in this window stands its dialog over the page
+ * (`host-connect-dialog.tsx`), and once Connect makes the host the list
+ * carries it. The page stands only while the Bring your own host
  * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
  * off nothing here is drawn, read, or turned on.
  */
 
-/**
- * A size containment: the command does not wrap, so without it its width
- * widens the dialog's grid track past a phone's and puts its card off the
- * screen. It scrolls inside its card instead.
- */
-const COMMAND = "contain-inline-size";
+const SECTION_TITLE = {
+  HOSTS: "Your hosts",
+  ADD: "Add a host",
+} as const;
 
 const WORDS = {
-  ADD: "Add hosts",
-  NONE: "No hosts yet. A host is a Mac or Linux server of yours that runs your agents instead of the cloud.",
+  NONE: "No hosts yet.",
   ONLINE: "Online",
   OFFLINE: "Offline",
+  SETTING_UP: "Setting up…",
   UPDATING: "Updating…",
-  INSTALL_TITLE: "Run this on each host",
-  INSTALL_NEXT: "Then open the link it prints, and approve its code.",
-  MAC_SESSION: "A Mac host runs your agents only while its user is logged in.",
-  WAITING: "Waiting for approval",
-  CLOSE: "Close",
+  INSTALL_LABEL: "Run this on a Mac or Linux server",
+  INSTALL_NEXT:
+    "Then open the link it prints, and approve its code. A Mac runs your agents only while its user is logged in.",
+  INSTALL_FIELD: "Install command",
+  CONNECTED: "is connected.",
 } as const;
 
 /** The row that stands while the machines are read: a machine with its ⋯. */
 const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
 ];
-
-/** Add hosts' own line under the list, the button stretched to the rows' width. */
-const ADD_LINE = "grid";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** A remove the service did not take, said in the dialog that asked. */
@@ -158,18 +153,23 @@ function machineOf(host: HostLine): ListedMachine {
 /**
  * What a host's line leads with, and its tint: updating plain while the host
  * says it is, whatever its beat, because it restarts on purpose to update and
- * is quiet meanwhile; online after the finished session's dot; offline
- * tinted; and none while its standing cannot be told.
+ * is quiet meanwhile; online after the finished session's dot; setting up
+ * plain for a host that just joined and has not beaten yet; offline tinted;
+ * and none while its standing cannot be told.
  */
 function standingOf(
   host: HostLine,
   book: PresenceBook,
+  joined: boolean,
 ): { readonly words: string; readonly state: SettingsRowState } | undefined {
   if (host.update === HOST_UPDATE.UPDATING) {
     return { words: WORDS.UPDATING, state: SETTINGS_ROW_STATE.PLAIN };
   }
+  const beat = presenceStanding(book, host.id);
+  if (beat === undefined && joined)
+    return { words: WORDS.SETTING_UP, state: SETTINGS_ROW_STATE.PLAIN };
   // Note that a host the read does not name, though it is the account's own, is gone.
-  const standing = presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
+  const standing = beat ?? DEVICE_STANDING.OFFLINE;
   if (standing === DEVICE_STANDING.OFFLINE) {
     return { words: WORDS.OFFLINE, state: SETTINGS_ROW_STATE.ATTENTION };
   }
@@ -183,10 +183,19 @@ function standingOf(
  * inside the dot's line, because words after it sit off the dot's baseline,
  * and a tinted one tints its standing alone.
  */
-function StandingLine({ host, book }: { host: HostLine; book: PresenceBook }): React.JSX.Element {
+function StandingLine({
+  host,
+  book,
+  joined,
+}: {
+  host: HostLine;
+  book: PresenceBook;
+  /** Whether the host joined while the page stands. */
+  joined: boolean;
+}): React.JSX.Element {
   // Note that a service older than platforms listed only Linux servers.
   const kind = DEVICE_PLATFORM_NAME[host.platform ?? DEVICE_PLATFORM.LINUX];
-  const standing = standingOf(host, book);
+  const standing = standingOf(host, book, joined);
   if (standing === undefined) return <>{kind}</>;
   if (standing.state === SETTINGS_ROW_STATE.CONNECTED) {
     const line = `${standing.words} · ${kind}`;
@@ -197,6 +206,15 @@ function StandingLine({ host, book }: { host: HostLine; book: PresenceBook }): R
       <SettingsRowStateLine state={standing.state}>{standing.words}</SettingsRowStateLine>
       {` · ${kind}`}
     </>
+  );
+}
+
+/** A machine's mark, by its platform, as Runs on draws it. */
+function MachineMark({ platform }: { platform: HostLine["platform"] }): React.JSX.Element {
+  return (
+    <SettingsRowMark>
+      <DeviceGlyph device={{ platform: platform ?? DEVICE_PLATFORM.LINUX }} />
+    </SettingsRowMark>
   );
 }
 
@@ -226,21 +244,16 @@ function deleteFoldersWords(count: number): { readonly label: string; readonly d
 /** What Remove says goes, whatever the machine: the host removes itself from the machine as it hears so (`apps/host`'s `removeItself`). */
 const REMOVED = `It stops taking agents now, and ${PRODUCT_NAME} removes itself from the machine, its agents' folders included. Their tasks and transcripts stay in ${PRODUCT_NAME}.`;
 
-/** What Remove adds for a host that reads offline, which hears it was removed only once it is online again. */
-const REMOVED_OFFLINE = "It's offline, so it does that the next time it's online.";
+/** What Remove adds for a host that reads offline, which hears it was removed only once it is online again, and the command for one that never is. */
+const REMOVED_OFFLINE =
+  "It's offline, so it does that the next time it's online. If it won't be, run this on it:";
 
-/**
- * The title of the uninstall command Remove shows every machine, for one
- * that does not remove itself: a host on a release from before it would,
- * until it updates, or one that never comes online again.
- */
-const UNINSTALL_TITLE = "If it's still installed, run this on it";
-
-/** One machine's row: what it is called, whether it is online and what it is, and its Remove. */
+/** One machine's row: its mark, what it is called, whether it is online and what it is, and its ⋯ holding Remove. */
 function HostRow({
   host,
   label,
   book,
+  joined,
   onRemove,
   locked,
 }: {
@@ -248,6 +261,8 @@ function HostRow({
   /** What the list calls the machine (`machineName`). */
   label: string;
   book: PresenceBook;
+  /** Whether the host joined while the page stands, which lights its row once. */
+  joined: boolean;
   /** Asks the section's Remove question of this machine. */
   onRemove: () => void;
   /** Whether a removal is out, which every Remove waits out. */
@@ -256,7 +271,6 @@ function HostRow({
   return (
     <MenuRow
       thing={label}
-      alone
       actions={[
         {
           label: "Remove",
@@ -267,8 +281,10 @@ function HostRow({
         },
       ]}
       row={{
+        leading: <MachineMark platform={host.platform} />,
         label: <ReplayMask>{label}</ReplayMask>,
-        description: <StandingLine host={host} book={book} />,
+        description: <StandingLine host={host} book={book} joined={joined} />,
+        landed: joined,
       }}
     />
   );
@@ -300,10 +316,15 @@ function ThisMacRow({
       {WORDS.OFFLINE}
     </SettingsRowStateLine>
   ) : (
-    <StandingLine host={host} book={book} />
+    <StandingLine host={host} book={book} joined={false} />
   );
   return (
-    <SettingsRow label={THIS_MAC} description={description} labelsControl>
+    <SettingsRow
+      leading={<MachineMark platform={DEVICE_PLATFORM.DARWIN} />}
+      label={THIS_MAC}
+      description={description}
+      labelsControl
+    >
       {(control) => (
         <Switch
           id={control.controlId}
@@ -325,7 +346,7 @@ interface RemoveAsked {
   readonly offline: boolean;
 }
 
-/** Remove's question over the machine it was asked of, which removes itself from the machine once it hears so, and the command for one that does not. */
+/** Remove's question over the machine it was asked of, which removes itself from the machine once it hears so, and for one that reads offline the command that removes it by hand. */
 function RemoveHostDialog({
   asked,
   confirm,
@@ -347,86 +368,64 @@ function RemoveHostDialog({
         titleReplayMasked: true,
       }}
     >
-      {asked?.offline === true ? <Text tone={TEXT_TONE.MUTED}>{REMOVED_OFFLINE}</Text> : null}
-      <CodeCard
-        title={UNINSTALL_TITLE}
-        titleIs={CODE_CARD_TITLE.WORDS}
-        code={HOST_UNINSTALL_COMMAND}
-        copy={copyThroughShell}
-      />
+      {asked?.offline === true ? (
+        <>
+          <Text tone={TEXT_TONE.MUTED}>{REMOVED_OFFLINE}</Text>
+          <CopyField
+            label="Uninstall command"
+            value={HOST_UNINSTALL_COMMAND}
+            what="command"
+            copy={copyThroughShell}
+            width={COPY_FIELD_WIDTH.FULL}
+            prompt={COPY_FIELD_PROMPT.SHELL}
+          />
+        </>
+      ) : null}
     </ConfirmDialog>
   );
 }
 
 /**
- * The dialog Add hosts opens: the install command, what comes after it, and
- * the hosts that joined since it opened, each by what the list calls it and
- * what it is, or a wait until one does; a reader is told as each joins. Its
- * one answer is a quiet Close, which only closes: nothing waits on it, since
- * the dialog moves on by itself whether or not it is pressed.
+ * Add a host: the install command and what comes after it, and the host
+ * that just joined, once one has; a reader is told as it does.
  */
-function AddHostsDialog({
-  known,
-  hosts,
-  thisMac,
+function AddHostSection({
   installScriptUrl,
-  onClose,
+  joined,
 }: {
-  /** The ids of the account's hosts as the dialog opened, which it never names as joined. */
-  known: ReadonlySet<string>;
-  hosts: readonly HostLine[];
-  thisMac: ThisMac;
   installScriptUrl: string;
-  onClose: () => void;
+  /** What the list calls the host that joined last while the page stands; none before one has. */
+  joined: string | undefined;
 }): React.JSX.Element {
-  const listed = hosts.map(machineOf);
-  const joined = hosts
-    .filter((host) => !known.has(host.id))
-    .map((host) => ({ host, label: machineName(machineOf(host), listed, thisMac) }));
-  useAnnounce(ANNOUNCE.POLITE, joined.map(({ label }) => label).join(" "));
+  useAnnounce(ANNOUNCE.POLITE, joined === undefined ? "" : `${joined} ${WORDS.CONNECTED}`);
   return (
-    <Dialog
-      open
-      title={WORDS.ADD}
-      size={DIALOG_SIZE.WIDE}
-      replayUnmasked
-      onDismiss={onClose}
-      actions={
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-          <ReplayUnmask>{WORDS.CLOSE}</ReplayUnmask>
-        </Button>
-      }
-    >
-      <div className={COMMAND}>
-        <CodeCard
-          title={WORDS.INSTALL_TITLE}
-          titleIs={CODE_CARD_TITLE.WORDS}
-          code={hostInstallCommand(installScriptUrl)}
-          copy={copyThroughShell}
-        />
-      </div>
-      <Stack gap={GAP.TIGHT}>
-        <Text>{WORDS.INSTALL_NEXT}</Text>
-        <Text tone={TEXT_TONE.MUTED}>{WORDS.MAC_SESSION}</Text>
-      </Stack>
-      <SettingsSection>
-        {joined.length === 0 ? (
-          <SettingsRow leading={<SpinnerRing size={SPINNER_SIZE.INLINE} />} label={WORDS.WAITING} />
-        ) : (
-          joined.map(({ host, label }) => (
-            <SettingsRow
-              key={host.id}
-              label={<ReplayMask>{label}</ReplayMask>}
-              description={DEVICE_PLATFORM_NAME[host.platform ?? DEVICE_PLATFORM.LINUX]}
-            />
-          ))
+    <SettingsSection title={SECTION_TITLE.ADD} anchor={SETTINGS_SEARCH_ROW.ADD_HOSTS}>
+      <SettingsRow
+        label={WORDS.INSTALL_LABEL}
+        description={WORDS.INSTALL_NEXT}
+        below={() => (
+          <CopyField
+            label={WORDS.INSTALL_FIELD}
+            value={hostInstallCommand(installScriptUrl)}
+            what="command"
+            copy={copyThroughShell}
+            width={COPY_FIELD_WIDTH.FULL}
+            prompt={COPY_FIELD_PROMPT.SHELL}
+          />
         )}
-      </SettingsSection>
-    </Dialog>
+      />
+      {joined === undefined ? null : (
+        <SettingsLine>
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+            <ReplayMask>{joined}</ReplayMask> {WORDS.CONNECTED}
+          </SettingsRowStateLine>
+        </SettingsLine>
+      )}
+    </SettingsSection>
   );
 }
 
-/** The Hosts page's one group, untitled under the page's own title: the member's machines as the host holds them, or why they cannot be drawn, and Add hosts under them. */
+/** The Hosts page: the member's machines as the host holds them, or why they cannot be drawn, and Add a host, first while there is none. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const { act } = useAct();
   // Note that the clock only redraws the rows as a beat ages, since each standing is read off the book's own monotonic clock.
@@ -437,22 +436,19 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const installScriptUrl = read.rows?.installScriptUrl;
   // Note that each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
   const book = useDevicePresence(signedIn);
-  // The ids of the account's hosts as Add hosts opened, by the account it opened for, while its dialog stands.
-  const [adding, setAdding] = useState<
-    { readonly accountId: string | undefined; readonly known: ReadonlySet<string> } | undefined
+  // The ids of the hosts the first read for the account listed, so one that joins while the page stands is told apart as just connected.
+  const [known, setKnown] = useState<
+    { readonly accountId: string | undefined; readonly ids: ReadonlySet<string> } | undefined
   >(undefined);
-  // Note that Add hosts does not outlive the account it opened for, since every host of the next would read as joined.
-  if (adding !== undefined && adding.accountId !== accountId) setAdding(undefined);
+  if (hosts !== undefined && (known === undefined || known.accountId !== accountId)) {
+    setKnown({ accountId, ids: new Set(hosts.map((host) => host.id)) });
+  }
+  const joinedNow = (host: HostLine) =>
+    known !== undefined && known.accountId === accountId && !known.ids.has(host.id);
   const thisMac = useThisMac();
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
   useEffect(() => closeConnect, [closeConnect]);
-
-  // Note that Add hosts waits for the list, since the dialog names only the hosts the list did not hold as it opened, and its command names the script the list's answer does.
-  const add = useCallback(() => {
-    if (hosts !== undefined) setAdding({ accountId, known: new Set(hosts.map((host) => host.id)) });
-  }, [hosts, accountId]);
-  const closeAdd = useCallback(() => setAdding(undefined), []);
 
   // Note that Remove asks over the section rather than its row, because the host draws a removal gone on the list the moment it is asked, so the row is gone before a refusal comes back to be said.
   const [asked, setAsked] = useState<RemoveAsked | undefined>(undefined);
@@ -467,7 +463,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
   );
   const askRemove = (host: HostLine, label: string) => {
-    const offline = standingOf(host, book)?.words === WORDS.OFFLINE;
+    const offline = standingOf(host, book, joinedNow(host))?.words === WORDS.OFFLINE;
     setAsked({ accountId, host, label, offline });
     removing.ask();
   };
@@ -525,55 +521,71 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         );
   const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
   const others = hosts?.filter((host) => host !== listedMac) ?? [];
+  const lastJoined = others.findLast(joinedNow);
+  const empty = others.length === 0 && thisMac === undefined;
+  const list = (
+    <SettingsSection
+      title={SECTION_TITLE.HOSTS}
+      anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}
+    >
+      {!signedIn ? (
+        <SettingsLine>{SIGNED_OUT_WORDS}</SettingsLine>
+      ) : loaded && empty ? (
+        <SettingsLine>{WORDS.NONE}</SettingsLine>
+      ) : loaded ? (
+        <>
+          {thisMac === undefined ? null : (
+            <ThisMacRow host={listedMac} book={book} on={thisMacOn} onChange={switchThisMac} />
+          )}
+          {others.map((host) => {
+            const label = machineName(machineOf(host), listed, naming);
+            return (
+              <HostRow
+                key={host.id}
+                host={host}
+                label={label}
+                book={book}
+                joined={joinedNow(host)}
+                onRemove={() => askRemove(host, label)}
+                locked={removing.busy}
+              />
+            );
+          })}
+        </>
+      ) : read.status === HOST_READ_STATUS.FAILED ? (
+        <SettingsLine>
+          <ErrorState failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)} onRetry={read.retry}>
+            {readFailedWords("your hosts")}
+          </ErrorState>
+        </SettingsLine>
+      ) : (
+        <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
+      )}
+    </SettingsSection>
+  );
+  // Note that signed out the add step is not drawn, so the list holds its search anchor instead.
+  const add = loaded ? (
+    <AddHostSection
+      installScriptUrl={installScriptUrl}
+      joined={
+        lastJoined === undefined ? undefined : machineName(machineOf(lastJoined), listed, naming)
+      }
+    />
+  ) : null;
   return (
     <>
-      {/* Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member. */}
-      <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
-        {!signedIn ? (
-          <SettingsLine>{SIGNED_OUT_WORDS}</SettingsLine>
-        ) : loaded && others.length === 0 && thisMac === undefined ? (
-          <SettingsLine>{WORDS.NONE}</SettingsLine>
-        ) : loaded ? (
-          <>
-            {thisMac === undefined ? null : (
-              <ThisMacRow host={listedMac} book={book} on={thisMacOn} onChange={switchThisMac} />
-            )}
-            {others.map((host) => {
-              const label = machineName(machineOf(host), listed, naming);
-              return (
-                <HostRow
-                  key={host.id}
-                  host={host}
-                  label={label}
-                  book={book}
-                  onRemove={() => askRemove(host, label)}
-                  locked={removing.busy}
-                />
-              );
-            })}
-          </>
-        ) : read.status === HOST_READ_STATUS.FAILED ? (
-          <SettingsLine>
-            <ErrorState failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)} onRetry={read.retry}>
-              {readFailedWords("your hosts")}
-            </ErrorState>
-          </SettingsLine>
-        ) : (
-          <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
-        )}
-      </SettingsSection>
-      {signedIn ? (
-        <div className={ADD_LINE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.ADD_HOSTS)}>
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PlusIcon />}
-            disabled={!loaded}
-            onClick={add}
-          >
-            {WORDS.ADD}
-          </Button>
-        </div>
-      ) : null}
+      {/* Note that an account with no host yet is led to add one, rather than to an empty list. */}
+      {loaded && empty ? (
+        <>
+          {add}
+          {list}
+        </>
+      ) : (
+        <>
+          {list}
+          {add}
+        </>
+      )}
       <RemoveHostDialog asked={asked} confirm={removing} />
       <ConfirmDialog
         open
@@ -589,16 +601,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           />
         )}
       </ConfirmDialog>
-      {adding === undefined || !loaded ? null : (
-        <AddHostsDialog
-          known={adding.known}
-          hosts={hosts}
-          thisMac={thisMac}
-          installScriptUrl={installScriptUrl}
-          onClose={closeAdd}
-        />
-      )}
-      {/* Note that a pairing's dialog comes after Add hosts, so it stands over it where both are open. */}
       {connecting === undefined || !signedIn ? null : (
         <HostConnectDialog key={connecting} code={connecting} onClose={closeConnect} />
       )}

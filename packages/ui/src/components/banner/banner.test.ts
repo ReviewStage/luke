@@ -38,12 +38,12 @@ test("a banner is named by its words, and its glyph is not read", () => {
     createElement(Banner, {
       look: BANNER_LOOK.CARD,
       glyph: createElement("svg"),
-      children: "This plan is archived",
+      children: "This task is archived",
     }),
   );
   const region = view.querySelector("section") ?? assert.fail("a banner");
   const named = document.getElementById(region.getAttribute("aria-labelledby") ?? "");
-  assert.equal(named?.textContent, "This plan is archived");
+  assert.equal(named?.textContent, "This task is archived");
   assert.equal(view.querySelector("svg")?.parentElement?.getAttribute("aria-hidden"), "true");
   assert.deepEqual([...view.querySelectorAll("button")], []);
 });

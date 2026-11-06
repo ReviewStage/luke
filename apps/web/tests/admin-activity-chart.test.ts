@@ -61,7 +61,7 @@ test("the legend names every feature the stack draws, in the stack's order", () 
   const page = render([day("2026-10-14", [1, 2, 3, 4]), day("2026-10-15", [1, 0, 0, 0])]);
 
   expect(page.textContent).toContain(
-    "Agents startedPlan revisionsInbox items answeredAutomation runs",
+    "Agents startedDescription revisionsInbox items answeredAutomation runs",
   );
   expect(page.textContent).toContain("+50% 18 in the last 7 days, against 12 before");
 });
@@ -73,7 +73,7 @@ test("stepping through the days reads each feature's count that day", () => {
 
   act(() => surface.focus());
   expect(tooltipText(page)).toBe(
-    "Oct 14Agents started1Plan revisions2Inbox items answered3Automation runs4",
+    "Oct 14Agents started1Description revisions2Inbox items answered3Automation runs4",
   );
   act(() => {
     surface.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));

@@ -118,7 +118,9 @@ import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
+import { AgentForward } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -267,7 +269,6 @@ import {
   TranscriptWords,
 } from "./transcript-blocks.js";
 import { drawnMessageWords, drawnRowsWords } from "./transcript-copy.js";
-import { type FindRow, useTranscriptFind } from "./transcript-find.js";
 import { keptPieces, PIECE_ROWS, pieceKey, type TurnPiece, turnPieces } from "./turn-pieces.js";
 import {
   UndeliveredLines,
@@ -366,7 +367,7 @@ interface TranscriptLead {
 
 /** An agent's transcript: the plan it was handed, and the agent starting. */
 export const AGENT_LEAD: TranscriptLead = {
-  label: "Plan",
+  label: "Description",
   icon: <DocumentIcon />,
   plan: true,
   startingLine: "The agent is starting.",
@@ -2412,7 +2413,7 @@ function AgentTranscriptView({
     },
     [entries],
   );
-  useTranscriptFind({
+  useVirtualFind({
     root: log,
     rows: findRows,
     handle: rowsHandle,
@@ -3054,7 +3055,12 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
+            tools={(narrow) => (
+              <>
+                <AgentPlace agent={agent} narrow={narrow} />
+                <AgentForward agent={agent} narrow={narrow} />
+              </>
+            )}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its plan or
             // task, so the box takes a follow up even before the transcript is read.

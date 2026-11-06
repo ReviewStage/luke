@@ -12,8 +12,6 @@ import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
-import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
@@ -27,13 +25,10 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { sweepCodexPlanSwaps } from "./codex-plan-sweep.js";
 import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepDeviceWarmRunners } from "./device-warm-sweep.js";
-import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
-import { sweepSandboxRetention } from "./sandbox-retention-sweep.js";
-import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
 const SWEEP_MONITOR: CronMonitor = {
@@ -52,13 +47,9 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 const FIREWALL_RECORD_KEEP_MS = CODER.SANDBOX_MAX_LIFETIME_MS + 60 * 60 * 1_000;
 
 /**
- * The maintenance group: the scheduled sweep's one entry, called by Vercel's
- * cron on the cadence `vercel.json` fixes. The logic lives in
- * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
- * seams and the database queries behind them, each answering an Effect over
- * the group's own `SqlClient.SqlClient`. An automation's run reaches its
- * agent's session through `routedSessions` acting for the automation's
- * owner, never the bearer the cron called with.
+ * The scheduled sweep handed the deployment's real seams. An automation's run
+ * reaches its agent's session through `routedSessions` acting for the
+ * automation's owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
@@ -93,18 +84,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
-    sweepTerminalLeases: (now) =>
-      sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepNativeSandboxes: (now) =>
       sweepNativeSandboxes(new Date(now)).pipe(Effect.provideContext(startContext)),
-    sweepEveSandboxes: (now) =>
-      sweepEveSandboxes(new Date(now)).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      ),
-    sweepSandboxRetention: (now) =>
-      sweepSandboxRetention(new Date(now)).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      ),
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
@@ -119,11 +100,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         environment.providerKeyEncryptionKeys,
         new Date(now),
       ).pipe(Effect.provideContext(startContext)),
-    // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
-    sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
-    // A repository no agent starts on any more keeps no snapshot past its age.
-    sweepRepositorySnapshots: () =>
-      sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
     sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),

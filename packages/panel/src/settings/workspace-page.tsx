@@ -69,6 +69,7 @@ import {
   useConfirmDialog,
   useFilePicker,
   useMenu,
+  useSettingsPageScroll,
   wholeWordsHint,
 } from "@repo/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
@@ -85,8 +86,9 @@ import {
 } from "@repo/ui/icons";
 import { inputProblem } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { VIRTUAL_ROWS_ANCHOR, VirtualRows } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAccountPreferences } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
@@ -312,6 +314,9 @@ function refusedWith(refused: Error): ActionResult {
 
 /** The most rows that stand for the members while they are read, however many the workspace counts. */
 const MEMBERS_SKELETON_MOST = 5;
+
+/** How tall a member's row is taken to stand before it is measured, a face beside a name over an email, in pixels. */
+const MEMBER_ESTIMATE_PX = 60;
 
 /** A member's row while the members are read: their face at a card's size, the email under the name, the role and the ⋯. */
 const MEMBER_ROW_SKELETON: SettingsRowSkeletonShape = {
@@ -874,18 +879,48 @@ function TeamMembers({
         onRetry={onRetry}
       />
     );
+  return <MemberRows workspace={workspace} readerId={readerId} members={members.items} />;
+}
+
+/**
+ * The members' rows, drawing only those near the view (`VirtualRows`) in
+ * the page's own scroller, so a large workspace draws as quickly as a small
+ * one; the row whose ⋯ holds the keyboard stays drawn wherever the page is
+ * scrolled.
+ */
+function MemberRows({
+  workspace,
+  readerId,
+  members,
+}: {
+  workspace: Workspace;
+  readerId: string | undefined;
+  members: readonly WorkspaceMember[];
+}): React.JSX.Element {
+  const { scroller, sections } = useSettingsPageScroll();
+  const keys = useMemo(() => members.map((member) => member.userId), [members]);
   return (
-    <>
-      {members.items.map((member) => (
-        <MemberRow
-          key={member.userId}
-          workspace={workspace}
-          member={member}
-          readerId={readerId}
-          slotted={managesWorkspace(workspace)}
-        />
-      ))}
-    </>
+    <VirtualRows
+      scroller={scroller}
+      shiftedBy={sections}
+      keys={keys}
+      estimate={MEMBER_ESTIMATE_PX}
+      anchor={VIRTUAL_ROWS_ANCHOR.START}
+      holdsFocus
+      aria-label="Members"
+    >
+      {(index) => {
+        const member = members[index];
+        return member === undefined ? null : (
+          <MemberRow
+            workspace={workspace}
+            member={member}
+            readerId={readerId}
+            slotted={managesWorkspace(workspace)}
+          />
+        );
+      }}
+    </VirtualRows>
   );
 }
 

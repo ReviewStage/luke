@@ -597,7 +597,8 @@ function useMentionChips(
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
-const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
+const NO_EDIT: PlanEditDoor = () =>
+  Promise.reject(new Error("This description cannot be edited here."));
 
 /** Where a title's draft goes when nothing else names the task: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
@@ -682,7 +683,7 @@ function savedOver(
 }
 
 /** What a toast says where a tick or a date written from the plan at rest was not saved. */
-const PLAN_NOT_SAVED = "The plan could not be saved.";
+const PLAN_NOT_SAVED = "The description could not be saved.";
 
 /** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
 const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
@@ -1017,6 +1018,7 @@ export const PlanBody = memo(function PlanBody({
   standing: taskStanding,
   head,
   titleActions = true,
+  shown = true,
 }: {
   task: Task;
   onShowHistory?: ShowHistory;
@@ -1040,10 +1042,12 @@ export const PlanBody = memo(function PlanBody({
   head?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
+  /** Whether the plan is the tab its column shows, rather than kept hidden behind another; shown unless said. */
+  shown?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
   // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented = useExperiment(EXPERIMENT.PLANS);
+  const documented = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
@@ -1395,6 +1399,7 @@ export const PlanBody = memo(function PlanBody({
             <PlanCommentLayer
               body={body}
               scroller={scroller}
+              shown={shown}
               unitClass={UNIT_CLASS}
               sections={drawnSections}
               text={task.document.body}

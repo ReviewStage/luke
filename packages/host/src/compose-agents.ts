@@ -383,7 +383,7 @@ export interface AgentsDependencies {
   pool: EntityPool;
   /** The agent as the task list shows it now, which a rename or a pin waiting for the service answers its caller with; none where the list shows no such agent. */
   agentListed?: (agentId: string) => AgentSummary | undefined;
-  /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them (`TasksComposer.repositoriesMoved`); none asks nothing. */
+  /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them, answering once each has landed (`TasksComposer.repositoriesMoved`); none asks nothing. */
   repositoriesMoved?: Effect.Effect<void>;
 }
 
@@ -1235,9 +1235,12 @@ function composed(
 
   /**
    * A token's write answered whole to the window that asked; where the
-   * service took it, its answer laid on the held token for the account
-   * signed in, and the repositories every list holds asked again, since what
-   * the token reaches moved.
+   * service took it, the repositories every list holds asked again, since
+   * what the token reaches moved, and then its answer laid on the held token
+   * for the account signed in. Note that the lists land before the token,
+   * because a surface the token draws, setup's Add repository, would
+   * otherwise offer the list read before it, with none of its repositories;
+   * the write's press stays busy meanwhile.
    */
   const tokenWritten = (answer: GitHubTokenAnswerView) =>
     Effect.as(
@@ -1245,8 +1248,8 @@ function composed(
         if ("failure" in answer) return Effect.void;
         const userId = dependencies.accountId();
         return Effect.andThen(
-          userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
           dependencies.repositoriesMoved ?? Effect.void,
+          userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
         );
       }),
       carried<GitHubTokenAnswerView>(answer),

@@ -172,8 +172,10 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
+  type PortForwarding,
   type PortForwardingAnswer,
   portForwardingAnswerSchema,
+  portForwardingSchema,
 } from "@repo/features/port-forward-acts";
 import {
   type PullRequestChaptersAnswerView,
@@ -1022,13 +1024,13 @@ export interface HostOperator {
   onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
   /** A live view's socket closed, with its code, by its connection. */
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
-  /** How an agent's forwarding to this Mac's localhost stands; nothing where the host refused. */
-  portForwardRead(params: { agentId: string }): Effect.Effect<PortForwardingAnswer | undefined>;
   /** An agent's forwarding turned on or off, answering how it then stands; nothing where the host refused. */
   portForwardSet(params: {
     agentId: string;
     on: boolean;
   }): Effect.Effect<PortForwardingAnswer | undefined>;
+  /** The one agent forwarded to this Mac's localhost and how its forwarding stands, or none, each time it moves. */
+  onPortForwardingChanged(listener: (forwarding: PortForwarding) => void): () => void;
 }
 
 /**
@@ -2764,15 +2766,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
       ),
-    portForwardRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PORT_FORWARDS_READ, { agentId: params.agentId }),
-        answerOf(portForwardingAnswerSchema, undefined),
-      ),
     portForwardSet: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: params.agentId, on: params.on }),
         answerOf(portForwardingAnswerSchema, undefined),
+      ),
+    onPortForwardingChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PORT_FORWARDS_CHANGED,
+        (payload) => {
+          const read = readEither(portForwardingSchema)(payload);
+          return Result.isSuccess(read) ? { forwarding: read.success } : undefined;
+        },
+        ({ forwarding }) => listener(forwarding),
       ),
     onSessionReplayChanged: (listener) =>
       on(

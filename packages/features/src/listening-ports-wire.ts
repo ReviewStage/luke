@@ -18,10 +18,3 @@ export const listeningPortsAnswerSchema = EffectSchema.Struct({
 });
 
 export type ListeningPortsAnswer = typeof listeningPortsAnswerSchema.Type;
-
-/** Whether turning forwarding on started the repository's run command: only where no port listened and its `.vespin.json` names one. */
-export const forwardingStartAnswerSchema = EffectSchema.Struct({
-  started: EffectSchema.Boolean,
-});
-
-export type ForwardingStartAnswer = typeof forwardingStartAnswerSchema.Type;

@@ -21,6 +21,7 @@ import {
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -31,7 +32,7 @@ import { HISTORY_READ } from "./use-plan-history.js";
 import { VersionView } from "./version-view.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain
@@ -113,7 +114,9 @@ function drawn(node: ReactNode): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
+  act(() =>
+    root.render(withQueryClient(createElement(TaskMentions, { value: PAGE, children: node }))),
+  );
   return container;
 }
 
