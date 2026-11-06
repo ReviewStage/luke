@@ -1,12 +1,17 @@
 /**
  * agent-sandbox.ts -- a coding agent's sandbox as its Terminal tab reaches it: where it stands, its shells, and the developer's resume.
  *
- * The sandbox is found by the eve session the agent runs in, whose id it
+ * The sandbox is found by the session the agent runs in, whose id it
  * carries as a tag (`vercel-sandbox-api.ts`). Where it stands is read and
  * never changed by a read: a stopped sandbox stays stopped until the
- * developer's resume, which wakes the same named sandbox eve resumes for the
- * agent's next turn. A shell is started, named, and ended by a short tmux
- * command run in the sandbox's running session (`tmux.ts`), and the list is
+ * developer's resume, which opens it as the agent's next turn does, through
+ * the same `getOrCreate` (`../agent-sandbox-open.ts`): the one standing under
+ * its session's name is resumed, or made again on the session's drive, with
+ * the tags and the size it stood with, where its snapshot is gone. One
+ * opened before `getOrCreate`, under a UUID, is resumed by its own name, and
+ * stays as it stands once its snapshot is gone. A shell is started, named,
+ * and ended by a short tmux command run in the sandbox's running session
+ * (`tmux.ts`), and the list is
  * read back from tmux, so it is whatever the sandbox holds now. A shell
  * starts only in a running sandbox; asked of any other, the service answers
  * where the sandbox stands instead.
@@ -33,6 +38,8 @@ import {
   type TerminalsAnswer,
 } from "@repo/features/terminal-wire";
 import { Context, Effect, Layer, Result } from "effect";
+import { agentSandboxName, openAgentSandbox } from "../agent-sandbox-open.js";
+import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js";
 import {
   type FirewallSession,
   type RepositoryCredential,
@@ -115,7 +122,7 @@ export interface AgentSandboxService {
   readonly rename: (sessionId: string, terminalId: string, title: string) => ShellEffect<void>;
   /** A shell ended, with whatever it ran. */
   readonly kill: (sessionId: string, terminalId: string) => ShellEffect<void>;
-  /** The agent's sandbox resumed from its snapshot, answering where it stands after; one never opened stays starting. */
+  /** The agent's sandbox opened again, as its next turn opens it, answering where it stands after; one never opened stays starting. */
   readonly resume: (sessionId: string) => Effect.Effect<SandboxState, SandboxUnavailable>;
   /** A connection to the running sandbox's PTY, or where the sandbox stands; a stopped sandbox is never woken here. */
   readonly attach: (
@@ -150,10 +157,11 @@ function stateOf(sandbox: ListedSandbox | undefined): SandboxState {
   return STATE_OF_STATUS.get(sandbox.status ?? "") ?? SANDBOX_STATE.STOPPED;
 }
 
-/** The service over the calls `vercel-sandbox-api.ts` makes, and the store its firewall's launch is read from. */
+/** The service over the calls `vercel-sandbox-api.ts` makes, the store its firewall's launch is read from, and the agents' image a sandbox is made again from. */
 function agentSandboxOver(
   api: VercelSandboxApi,
   context: Context.Context<DatabaseServices>,
+  image: AgentImageService,
 ): AgentSandboxService {
   const firewall = sandboxFirewall(api);
   /**
@@ -271,16 +279,25 @@ function agentSandboxOver(
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);
         if (sandbox === undefined || state === SANDBOX_STATE.RUNNING) return state;
-        return stateOf(yield* api.resume(sandbox.name));
+        if (sandbox.name !== agentSandboxName(sessionId)) {
+          return stateOf(yield* api.resume(sandbox.name));
+        }
+        const opened = yield* openAgentSandbox(api, {
+          sessionId,
+          tags: { ...sandbox.tags },
+          vcpus: sandbox.vcpus,
+        }).pipe(Effect.provideService(AgentImage, image));
+        return stateOf(opened.sandbox);
       }),
   };
 }
 
-/** The service as the deployment runs it, on the function's own OIDC token. */
-export const agentSandboxLayer: Layer.Layer<AgentSandbox, never, DatabaseServices> = Layer.effect(
-  AgentSandbox,
-  Effect.gen(function* () {
-    const api = yield* vercelSandboxApi(deploymentOidcToken);
-    return agentSandboxOver(api, yield* Effect.context<DatabaseServices>());
-  }),
-);
+/** The service as the deployment runs it, on the function's own OIDC token and the agents' image its build names. */
+export const agentSandboxLayer: Layer.Layer<AgentSandbox, never, DatabaseServices | AgentImage> =
+  Layer.effect(
+    AgentSandbox,
+    Effect.gen(function* () {
+      const api = yield* vercelSandboxApi(deploymentOidcToken);
+      return agentSandboxOver(api, yield* Effect.context<DatabaseServices>(), yield* AgentImage);
+    }),
+  );

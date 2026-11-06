@@ -14,13 +14,14 @@ import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { Effect, Option } from "effect";
 import { HttpClient } from "effect/http";
 import { controlsAgent } from "../agents/agent-reach.js";
+import type { AgentImage } from "../agents/coder-host/agent-image.js";
 import { connectPty } from "../agents/sandbox-pty.js";
 import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
 import type { TunnelDependencies } from "./relay.js";
 
-/** What the tunnel's dependencies answer over. */
-export type TunnelServices = DatabaseServices | HttpClient.HttpClient;
+/** What the tunnel's dependencies answer over: the agents' image among it, which a sandbox is made again from. */
+export type TunnelServices = DatabaseServices | HttpClient.HttpClient | AgentImage;
 
 /** The tunnel's dependencies over the services the runtime holds now. */
 export const tunnelDependencies: Effect.Effect<TunnelDependencies, never, TunnelServices> =
