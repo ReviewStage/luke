@@ -15,11 +15,12 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 
 /**
  * A date chip in the plan's editor, pressed, opens its picker over the real
@@ -66,7 +67,7 @@ beforeEach(() => {
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a plan left as it went answer before its atoms go.
-  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.useRealTimers();
@@ -84,7 +85,9 @@ function drawn(): HTMLElement {
         ownRegistry(),
         createElement(PlanBody, {
           task: TASK,
-          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          edit: planEditMutation(TASK.id, () =>
+            Promise.reject(new Error("Nothing is saved in this test.")),
+          ),
           sectionLinks: {
             workspace: "acme",
             onOpen: () => undefined,
@@ -116,13 +119,13 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
             null,
             createElement(PlanBody, {
               task: plan,
-              onEdit: editable
-                ? (request: PlanEditRequest) => {
+              edit: editable
+                ? planEditMutation(plan.id, (request: PlanEditRequest) => {
                     saves.push(request);
                     return saving
                       ? Promise.resolve({ saved: true as const })
                       : Promise.reject(new Error("Nothing is saved in this test."));
-                  }
+                  })
                 : undefined,
               sectionLinks: {
                 workspace: "acme",

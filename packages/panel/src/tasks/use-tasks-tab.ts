@@ -17,7 +17,6 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
-import type { PlanEditRequest } from "@repo/features/plan-edit";
 import { planMarkdown } from "@repo/features/plan-markdown";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
@@ -48,7 +47,6 @@ import {
   TASK_CALL_FAILURE,
   TASK_PARENT_FAILURE,
   TASKS_READ,
-  type TasksEditAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
 import { managesWorkspace } from "@repo/features/workspace-role";
@@ -170,6 +168,7 @@ import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
 import type { SectionReveal } from "./plan-body.js";
+import { type PlanEditMutation, planEditMutation } from "./plan-edit-mutation.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { FixturePlace } from "./tasks-fixture.js";
@@ -683,8 +682,8 @@ export interface TasksControl {
   region: DocumentRegion;
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
-  /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
-  edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+  /** The writes to a plan's document, as each place writing them holds its own mutation (`planEditMutation`): saved, a conflict with the text as it stands now, or why not. */
+  planEdit: (taskId: string) => PlanEditMutation;
   /** The task's column's tabs: its agents' and its draft's, and which is shown. */
   mainTabs: MainTabsControl;
   /** The side panel beside the open task's column: shown or not, its tab, and its width. */
@@ -1413,7 +1412,6 @@ export function useTasksTab(input: {
   const { mutateAsync: sendParent } = useMutation(actMutation(ACT_KIND.TASKS_SET_PARENT));
   const { mutateAsync: sendRelation } = useMutation(actMutation(ACT_KIND.TASKS_CHANGE_RELATION));
   const { mutateAsync: sendMove } = useMutation(actMutation(ACT_KIND.TASKS_MOVE));
-  const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
   const { mutateAsync: sendRestore } = useMutation(actMutation(ACT_KIND.TASKS_RESTORE));
   const { mutateAsync: sendTaskStart } = useMutation(actMutation(ACT_KIND.TASKS_START));
   // Note that which agent is shown is told, quiet whatever comes back, since no person pressed for it.
@@ -2676,15 +2674,12 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
-  const edit = useCallback(
-    (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
-      if (fixture !== undefined) {
-        return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-      }
-      return sendEdit({ taskId, edit: request });
-    },
-    [fixture, sendEdit],
-  );
+  const planEdit = (taskId: string) =>
+    planEditMutation(taskId, (request) =>
+      fixture === undefined
+        ? sendAct(ACT_KIND.TASKS_EDIT, { taskId, edit: request })
+        : Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
   // opened first; the ask is counted so each press opens it again.
@@ -3814,7 +3809,7 @@ export function useTasksTab(input: {
     listRead: tasks.listStatus === TASKS_READ.READY,
     region,
     copy: { onPress: pressCopy },
-    edit,
+    planEdit,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,

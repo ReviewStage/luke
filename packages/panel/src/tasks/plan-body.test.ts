@@ -30,6 +30,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -489,7 +490,9 @@ test("a save that writes a section above the one the keyboard stands on leaves T
             readerId: undefined,
             children: createElement(PlanBody, {
               task,
-              onEdit: () => Promise.reject(new Error("Nothing is saved here.")),
+              edit: planEditMutation(task.id, () =>
+                Promise.reject(new Error("Nothing is saved here.")),
+              ),
             }),
           }),
         ),

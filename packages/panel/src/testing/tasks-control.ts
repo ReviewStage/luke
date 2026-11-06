@@ -24,6 +24,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
+import { planEditMutation } from "../tasks/plan-edit-mutation.js";
 import {
   AGENT_RENAME_SHAPE,
   type AgentsControl,
@@ -404,7 +405,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     listRead: true,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
-    edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    planEdit: (taskId) =>
+      planEditMutation(taskId, () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })),
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,

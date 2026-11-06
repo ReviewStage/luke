@@ -22,6 +22,7 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
 import { PlanBody } from "./plan-body.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -123,10 +124,10 @@ async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      onEdit: (request) => {
+      edit: planEditMutation(TASK.id, (request) => {
         saved.push(request.document.value);
         return Promise.resolve({ saved: true });
-      },
+      }),
       sectionLinks: SECTION_LINKS,
     }),
   );
