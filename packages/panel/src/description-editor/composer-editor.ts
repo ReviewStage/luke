@@ -105,7 +105,8 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  *
  * The bound is a transaction filter, so no keystroke, pick, or command
  * carries the words past it; a paste past it is cut to the room left, as a
- * textarea cuts one, and the owner is told it was (`onPasteCut`). Enter with no Shift is the owner's send, unless an
+ * textarea cuts one, and the owner is told it was (`onPasteCut`), unless the
+ * owner took the words as a file first (`onPasteText`). Enter with no Shift is the owner's send, unless an
  * input method is composing, when the key is the input method's. On a
  * coarse pointer, a phone's or a tablet's, Enter is a new line, since its
  * keyboard has no Shift+Enter to type one, and the visible Send beside the
@@ -707,7 +708,7 @@ function caretInCode(text: string, caret: number): boolean {
   return caret > 0 && text[caret - 1] !== NEWLINE && insideCode(text, caret - 1);
 }
 
-/** A paste taken: files the owner takes kept out of the words, and words past the bound cut to the room left, which the owner is told. */
+/** A paste taken: files the owner takes kept out of the words, words it takes as a file kept out too, and words past the bound cut to the room left, which the owner is told. */
 function pasted(
   view: EditorView,
   event: ClipboardEvent,
@@ -720,6 +721,7 @@ function pasted(
   if (state.input === COMPOSER_INPUT.READ_ONLY) return true;
   const { doc, selection, schema } = view.state;
   const words = fragmentText(slice.content);
+  if (props.onPasteText?.(words) === true) return true;
   // Note that what goes over is read off the words as the paste would leave them, since a selection inside a mark leaves its delimiters standing around what replaces it.
   const over = (pasting: string) =>
     textOf(view.state.tr.replaceSelection(sliceOf(schema, pasting, state)).doc).length -

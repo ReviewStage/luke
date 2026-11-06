@@ -172,13 +172,13 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(box.shown(), "and the next one");
 });
 
-test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
+test("a paste past the box's cap and too large for a file is cut to the room left and the note says so, until the words change", async () => {
   const box = await mounted();
   const cap = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
   const note = () => box.container.querySelector(".ui-composer-foot-note")?.textContent;
   assert.equal(note(), undefined);
 
-  pasteInComposer(box.container, "x".repeat(cap + 500));
+  pasteInComposer(box.container, "x".repeat(AGENT_BOUNDS.MAX_TEXT_BYTES + 1));
   assert.equal(box.shown().length, cap, "the box holds what fits");
   assert.equal(note()?.includes(pasteCutWords(cap)), true, "and says the rest was cut");
 
@@ -188,6 +188,27 @@ test("a paste past the box's cap is cut to the room left and the note says so, u
     editor.view.dispatch(editor.state.tr.delete(1, 2));
   });
   assert.equal(note(), undefined, "the note goes once the words change again");
+});
+
+test("a long paste lands as a text file, and its viewer puts the words back into the box", async () => {
+  const box = await mounted();
+  const log = Array.from({ length: 40 }, (_, line) => `error ${String(line)}`).join("\n");
+  pasteInComposer(box.container, log);
+  await settle();
+  assert.equal(box.shown(), "", "the words stay out of the box");
+  const chip = box.button("Open Pasted text 1.txt") ?? assert.fail("the paste stands as a chip");
+  assert.equal(chip.textContent?.includes("40 lines"), true);
+
+  act(() => chip.click());
+  await settle();
+  const putBack =
+    [...document.querySelectorAll("button")].find(
+      (each) => each.textContent === "Put back in message",
+    ) ?? assert.fail("the viewer offers the words back");
+  act(() => putBack.click());
+  await settle();
+  assert.equal(box.shown(), log.replaceAll("\n", ""), "the words are in the box");
+  assert.equal(box.button("Open Pasted text 1.txt"), null, "and the file is off");
 });
 
 test("a paste that fits the cap says nothing of a cut", async () => {

@@ -16,8 +16,9 @@ import { CatalogSection } from "../section";
 /**
  * attachment-chips.tsx -- a row of files coming along with a message:
  * pictures at their own shapes, a tall phone capture narrow and a panorama
- * cropped at the wide bound, files drawn by name and size, one with nothing
- * to open, a long name cut short, and the way off each, unavailable while busy,
+ * cropped at the wide bound, files drawn by name and size, a pasted text
+ * whose card peeks at its head, one with nothing to open, a long name cut
+ * short, and the way off each, unavailable while busy,
  * each file taken off scaling out under the row's `ListMotion`;
  * then the same chips in a narrow column, a call's pictures still read,
  * gone, and not kept, and files going up, at a share and with none, which
@@ -43,6 +44,7 @@ interface SampleFile {
   readonly name: string;
   readonly image?: string;
   readonly detail?: string;
+  readonly peek?: string;
   readonly openable: boolean;
 }
 
@@ -54,6 +56,12 @@ const FILES: readonly SampleFile[] = [
   {
     name: "quarterly-revenue-forecast-with-every-region-broken-out.csv",
     detail: "1.2 MB",
+    openable: true,
+  },
+  {
+    name: "Pasted text 1.txt",
+    detail: "48 lines",
+    peek: "TypeError: Cannot read properties of undefined (reading 'id')\n    at rowOf (inbox-model.ts:695)\n    at render (inbox-pane.tsx:407)",
     openable: true,
   },
   { name: "trace.txt", openable: false },
@@ -84,6 +92,7 @@ function AttachmentList({
           image={file.image}
           icon={<ImageIcon />}
           detail={file.detail}
+          peek={file.peek}
           onOpen={file.openable && !leaving ? () => onOpen(file.name) : undefined}
           onRemove={leaving ? undefined : () => onRemove(file)}
           removeDisabled={busy}

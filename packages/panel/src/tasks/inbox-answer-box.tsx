@@ -276,6 +276,8 @@ interface AnswerFormProps {
   readonly onEnter: () => void;
   /** Takes files pasted into the line, answering whether it took them; none where the box takes no files. */
   readonly onPasteFiles?: ((files: readonly File[]) => boolean) | undefined;
+  /** Takes long words pasted into the line as a file, answering whether it did; none where the box takes no files. */
+  readonly onPasteText?: ((words: string) => boolean) | undefined;
   /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
   readonly onPasteCut?: (() => void) | undefined;
   /** How a quote block the line holds is drawn; none where the box takes no quote. */
@@ -319,6 +321,7 @@ function AnswerForm({
   maxLength,
   onEnter,
   onPasteFiles,
+  onPasteText,
   onPasteCut,
   quote,
   tools,
@@ -360,6 +363,7 @@ function AnswerForm({
           {...pickers.field}
           onEnter={onEnter}
           onPasteFiles={onPasteFiles ?? takesNoFiles}
+          onPasteText={onPasteText}
           onPasteCut={onPasteCut}
           quote={quote}
         />
@@ -619,7 +623,16 @@ function AnswerCard({
         messages
         controls={asks ? controls : undefined}
         chips={
-          <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
+          <AttachedFileChips
+            files={attachmentChips(files.attachments)}
+            onRemove={files.remove}
+            putBack={{
+              room: INBOX_BOUNDS.MAX_MESSAGE_CHARS - draft.note.length - 2,
+              onPutBack: (index, words) => {
+                if (field.editor.current?.mark().insert(words) === true) files.remove(index);
+              },
+            }}
+          />
         }
         note={draft.note}
         onNote={(text) => {
@@ -637,6 +650,7 @@ function AnswerCard({
           if (room.current !== null) submitPromptInput(room.current);
         }}
         onPasteFiles={files.paste}
+        onPasteText={files.pasteText}
         quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
         tools={<AttachFilesButton onFiles={files.attach} />}
         says={

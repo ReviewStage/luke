@@ -9,18 +9,18 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useEditedLinksHost } from "../link-menu.js";
-import { type KeystrokeSpanName, PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerInput,
   ComposerQuote,
   ComposerTrigger,
+  DescriptionEditorModule,
   MentionNode,
   MentionNodeDoors,
-  DescriptionEditorModule,
 } from "../description-editor/contract.js";
+import { useEditedLinksHost } from "../link-menu.js";
+import { type KeystrokeSpanName, PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import { useSelectionToolbar } from "./selection-toolbar.js";
 
 /**
@@ -139,6 +139,7 @@ export function ComposerField({
   onKey,
   onEnter,
   onPasteFiles,
+  onPasteText,
   onPasteCut,
   onTrigger,
   chip,
@@ -166,6 +167,8 @@ export function ComposerField({
   onKey: (event: KeyboardEvent) => boolean;
   onEnter: () => void;
   onPasteFiles: (files: readonly File[]) => boolean;
+  /** Takes pasted words as a file before they are laid in, answering whether it did; a box that takes none lays every paste in. */
+  onPasteText?: ((words: string) => boolean) | undefined;
   /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
   onPasteCut?: (() => void) | undefined;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
@@ -212,6 +215,7 @@ export function ComposerField({
     onKey,
     onEnter,
     onPasteFiles,
+    onPasteText,
     onPasteCut,
     onTrigger,
     mentions,
@@ -226,6 +230,7 @@ export function ComposerField({
     onKey,
     onEnter,
     onPasteFiles,
+    onPasteText,
     onPasteCut,
     onTrigger,
     mentions,
@@ -259,6 +264,7 @@ export function ComposerField({
       onKey: (event) => latest.current.onKey(event),
       onEnter: () => latest.current.onEnter(),
       onPasteFiles: (files) => latest.current.onPasteFiles(files),
+      onPasteText: (words) => latest.current.onPasteText?.(words) === true,
       onPasteCut: () => latest.current.onPasteCut?.(),
       onTrigger: (trigger) => latest.current.onTrigger(trigger),
       drawChip: (element, drawnChip) => draw(element, drawnChip),

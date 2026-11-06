@@ -1,9 +1,12 @@
 import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
 import {
   ATTACHMENT_VIEW,
+  attachmentText,
   attachmentView,
   chipBase64,
   type FileChip,
+  linesLabel,
+  peekOf,
   sizeLabel,
 } from "@repo/features/attachment-model";
 import { keptPictureIdOf } from "@repo/features/conversation-picture-wire";
@@ -18,9 +21,10 @@ import {
   ListMotion,
   useLeaving,
 } from "@repo/ui";
+import { TextCursorInputIcon } from "@repo/ui/icons";
 import { isRecord, isWireString } from "@repo/wire";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
-import { AttachmentViewer } from "./attachment-viewer.js";
+import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
+import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
 /**
@@ -28,7 +32,10 @@ import { FileTypeIcon } from "./file-type-icon.js";
  *
  * An image is its thumbnail; any other file is its type's icon as the file
  * tree draws it (`file-type-icon.tsx`), its name, and its size, as every
- * chat app draws one. Both read the file's bytes from a `data:` URL, the one the
+ * chat app draws one, a text file its count of lines instead, with the head
+ * of its words in the card its chip hangs. A text file the message box holds
+ * opens with a way to put its words back into the box where they fit
+ * (`putBack`), as a long paste the box took as a file (`use-attached-files.ts`). Both read the file's bytes from a `data:` URL, the one the
  * message box made or the one the service kept on the developer's row, so a
  * transcript read back after a restart draws the same row. A press on a chip
  * opens its file over the window (`attachment-viewer.tsx`), walking the
@@ -55,6 +62,9 @@ import { FileTypeIcon } from "./file-type-icon.js";
 
 /** How the AI SDK spells a file part's type. */
 const FILE_PART = "file";
+
+/** The viewer's way to put a text file's words back into the message box. */
+const PUT_BACK_LABEL = "Put back in message";
 
 /** The chip drawn for each file a message box holds, so the box's row follows a file by its chip. */
 const BOX_CHIPS = new WeakMap<AgentAttachment, FileChip>();
@@ -109,13 +119,20 @@ function FileChipOf({
   uploading?: boolean;
 }): React.JSX.Element {
   const base64 = chipBase64(file);
-  const thumbnail = base64 !== "" && attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  const view = base64 === "" ? ATTACHMENT_VIEW.OTHER : attachmentView(file);
+  const thumbnail = view === ATTACHMENT_VIEW.IMAGE;
+  // Note that a text file's words are read once for its file, since a chip draws again on every keystroke of the box it stands in.
+  const text = useMemo(
+    () => (view === ATTACHMENT_VIEW.TEXT ? attachmentText(base64) : undefined),
+    [view, base64],
+  );
   return (
     <AttachmentChip
       name={file.name}
       image={thumbnail ? file.url : undefined}
       icon={<FileTypeIcon name={file.name} />}
-      detail={base64 === "" ? undefined : sizeLabel(base64)}
+      detail={base64 === "" ? undefined : text === undefined ? sizeLabel(base64) : linesLabel(text)}
+      peek={text === undefined ? undefined : peekOf(text)}
       onOpen={base64 === "" ? undefined : onOpen}
       onRemove={onRemove}
       motionKey={motionKey}
@@ -200,14 +217,42 @@ function BoxFileChips({
   );
 }
 
+/** How a message box takes a text file's words back: the characters it has room for, and what takes them, by the file's place. */
+export interface PutBack {
+  readonly room: number;
+  readonly onPutBack: (index: number, words: string) => void;
+}
+
+/** The viewer's Put back in message: offered for a text file whose words fit the box's room, closing the viewer before the file leaves the row it walks. */
+function putBackAction(
+  files: readonly FileChip[],
+  putBack: PutBack,
+  close: () => void,
+): ViewerAction {
+  const words = (file: FileChip) => attachmentText(chipBase64(file));
+  return {
+    label: PUT_BACK_LABEL,
+    icon: <TextCursorInputIcon aria-hidden="true" />,
+    offeredFor: (file) =>
+      attachmentView(file) === ATTACHMENT_VIEW.TEXT && words(file).length <= putBack.room,
+    onPress: (file) => {
+      close();
+      putBack.onPutBack(files.indexOf(file), words(file));
+    },
+  };
+}
+
 export function AttachedFileChips({
   files,
   onRemove,
+  putBack,
   uploading = false,
 }: {
   files: readonly FileChip[];
   /** Takes one file off the message, by its place; nothing in the transcript, whose files are sent. */
   onRemove?: ((index: number) => void) | undefined;
+  /** Takes a text file's words back into the message box; nothing where the box takes none. */
+  putBack?: PutBack | undefined;
   /** Whether the files are on their way up with the line they came on. */
   uploading?: boolean;
 }): ReactNode {
@@ -215,13 +260,15 @@ export function AttachedFileChips({
   const [viewing, setViewing] = useState<number | undefined>(undefined);
   const openable = files.filter((file) => chipBase64(file) !== "");
   const open = (file: FileChip) => setViewing(openable.indexOf(file));
+  const close = () => setViewing(undefined);
   const viewer =
     viewing === undefined ? null : (
       <AttachmentViewer
         files={openable}
         at={viewing}
         onAt={setViewing}
-        onClose={() => setViewing(undefined)}
+        onClose={close}
+        action={putBack === undefined ? undefined : putBackAction(files, putBack, close)}
       />
     );
   if (onRemove !== undefined) {
