@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "sender_automation_id" uuid;

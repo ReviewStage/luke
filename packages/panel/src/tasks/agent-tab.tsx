@@ -205,6 +205,7 @@ import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
+import { DescriptionPictures } from "./description-pictures.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
@@ -226,7 +227,6 @@ import {
 } from "./message-links.js";
 import { useMoveToCloud } from "./move-agent.js";
 import { PilotComposerNote } from "./pilot-note.js";
-import { DescriptionPictures } from "./description-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyDoorProvider, ReplyToSelection } from "./reply-to-selection.js";
@@ -1386,8 +1386,41 @@ function agentOrigin(input: {
   };
 }
 
+/** The automation whose run started the agent whose transcript is drawn, by its id and the name the run kept; none for an agent started by hand. */
+const TranscriptAutomation = createContext<
+  { readonly id: string; readonly name: string | undefined } | undefined
+>(undefined);
+
+/**
+ * An automation that sent a line: the automation, hanging its card and
+ * opening its page where the window knows it, as the run's prompt names it
+ * (`AutomationSender`), and named plainly where it does not. A line kept
+ * before its automation's id was names it by name alone, which is read as
+ * the agent's own automation where the names agree.
+ */
+function AutomationLineSender({
+  actor,
+}: {
+  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AUTOMATION }>;
+}): React.JSX.Element {
+  const own = useContext(TranscriptAutomation);
+  const automationId =
+    actor.automationId ?? (own !== undefined && own.name === actor.name ? own.id : undefined);
+  const known = useAutomation(automationId);
+  return known === undefined ? (
+    <ActorRef actor={actor} />
+  ) : (
+    <ActorRef
+      actor={automationActor(known.automation)}
+      card={<AutomationCard automation={known.automation} workspaceName={known.workspaceName} />}
+      onOpen={known.onOpen}
+    />
+  );
+}
+
 /** Who wrote or said a message: their mark and their name, hanging their card. */
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
+  if (actor.kind === ACTOR_KIND.AUTOMATION) return <AutomationLineSender actor={actor} />;
   return actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
     <SendingAgent actor={actor} agentId={actor.agentId} />
   ) : (
@@ -2913,6 +2946,10 @@ function AgentTabView({
     // Note that the agent is read for how it was briefed alone, which these name.
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
+  const ownAutomation = useMemo(
+    () => (automationId === undefined ? undefined : { id: automationId, name: automationName }),
+    [automationId, automationName],
+  );
   return (
     <AgentTabFrame ref={tab} label={name}>
       <MacOwnerProvider value={macOwner}>
@@ -2922,87 +2959,90 @@ function AgentTabView({
               <UndeliveredLines value={marks}>
                 <RewindProvider value={rewind}>
                   <ReplyDoorProvider value={replies ? replyThroughBox : undefined}>
-                    <AgentTranscriptView
-                      messages={lines}
-                      brief={agent.brief}
-                      briefSender={starter === undefined ? undefined : starterActor}
-                      origin={origin}
-                      readerId={readerId}
-                      agentId={agent.id}
-                      taskId={agent.planId ?? undefined}
-                      replay={replay}
-                      delegation={{
-                        models,
-                        own: { model: agent.model, effort: agent.effort },
-                        starts:
-                          delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                        onOpen: openSubagent,
-                        onOpenTarget: openTarget,
-                        cards,
-                        standings: transcript.subagents,
-                      }}
-                      reading={transcript.reading || holding}
-                      holding={holding}
-                      failed={transcript.failed}
-                      failedWith={transcript.failedWith}
-                      // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
-                      working={working || composer.rewinding}
-                      pageRuns={pageRuns}
-                      rewindOut={composer.rewindOut}
-                      sessionStarting={agent.status === AGENT_STATUS.STARTING}
-                      starting={
-                        transcript.launch === undefined
-                          ? undefined
-                          : {
-                              launch: transcript.launch,
-                              host: agent.mac?.name,
-                              runtime: agent.runtime,
-                            }
-                      }
-                      // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
-                      startedAt={
-                        !counts
-                          ? undefined
-                          : composer.rewinding
-                            ? composer.rewoundAt
-                            : (agentWorkingSince(lines) ?? startedAt)
-                      }
-                      ended={
-                        // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
-                        transcript.pages === 0 ||
-                        transcript.pageStatus === undefined ||
-                        agentStillWriting(transcript.pageStatus) ||
-                        lineGoing
-                          ? undefined
-                          : endLineParts(
-                              agent.status,
-                              transcript.failure,
-                              starter,
-                              continuable,
-                              transcript.hostLost,
-                              transcript.launchStopped === undefined
-                                ? undefined
-                                : {
-                                    step: transcript.launchStopped,
-                                    runtime: agent.runtime,
-                                    unstarted: transcript.launchUnstarted,
-                                  },
-                            )
-                      }
-                      endReason={endLineReason(transcript.failure, starter)}
-                      keyProvider={keyProvider}
-                      onOpenApiKeys={
-                        onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
-                      }
-                      endPress={endPress}
-                      endTrail={endTrail}
-                      signIn={signIn}
-                      onRetry={transcript.onRetry}
-                      onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
-                      olderFailed={transcript.olderFailed}
-                      overComposer
-                      bringIn={bringIn}
-                    />
+                    <TranscriptAutomation value={ownAutomation}>
+                      <AgentTranscriptView
+                        messages={lines}
+                        brief={agent.brief}
+                        briefSender={starter === undefined ? undefined : starterActor}
+                        origin={origin}
+                        readerId={readerId}
+                        agentId={agent.id}
+                        taskId={agent.planId ?? undefined}
+                        replay={replay}
+                        delegation={{
+                          models,
+                          own: { model: agent.model, effort: agent.effort },
+                          starts:
+                            delegationStarts &&
+                            workerStarts(delegationStarts, transcript.subagents),
+                          onOpen: openSubagent,
+                          onOpenTarget: openTarget,
+                          cards,
+                          standings: transcript.subagents,
+                        }}
+                        reading={transcript.reading || holding}
+                        holding={holding}
+                        failed={transcript.failed}
+                        failedWith={transcript.failedWith}
+                        // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
+                        working={working || composer.rewinding}
+                        pageRuns={pageRuns}
+                        rewindOut={composer.rewindOut}
+                        sessionStarting={agent.status === AGENT_STATUS.STARTING}
+                        starting={
+                          transcript.launch === undefined
+                            ? undefined
+                            : {
+                                launch: transcript.launch,
+                                host: agent.mac?.name,
+                                runtime: agent.runtime,
+                              }
+                        }
+                        // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
+                        startedAt={
+                          !counts
+                            ? undefined
+                            : composer.rewinding
+                              ? composer.rewoundAt
+                              : (agentWorkingSince(lines) ?? startedAt)
+                        }
+                        ended={
+                          // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
+                          transcript.pages === 0 ||
+                          transcript.pageStatus === undefined ||
+                          agentStillWriting(transcript.pageStatus) ||
+                          lineGoing
+                            ? undefined
+                            : endLineParts(
+                                agent.status,
+                                transcript.failure,
+                                starter,
+                                continuable,
+                                transcript.hostLost,
+                                transcript.launchStopped === undefined
+                                  ? undefined
+                                  : {
+                                      step: transcript.launchStopped,
+                                      runtime: agent.runtime,
+                                      unstarted: transcript.launchUnstarted,
+                                    },
+                              )
+                        }
+                        endReason={endLineReason(transcript.failure, starter)}
+                        keyProvider={keyProvider}
+                        onOpenApiKeys={
+                          onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
+                        }
+                        endPress={endPress}
+                        endTrail={endTrail}
+                        signIn={signIn}
+                        onRetry={transcript.onRetry}
+                        onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                        olderFailed={transcript.olderFailed}
+                        overComposer
+                        bringIn={bringIn}
+                      />
+                    </TranscriptAutomation>
                   </ReplyDoorProvider>
                 </RewindProvider>
               </UndeliveredLines>

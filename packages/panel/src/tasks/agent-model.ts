@@ -363,7 +363,12 @@ export function lineSender(
     case AGENT_SENDER.APP:
       return APP_ACTOR;
     case AGENT_SENDER.AUTOMATION:
-      return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
+      return {
+        kind: ACTOR_KIND.AUTOMATION,
+        ...(sentBy.automationId === undefined ? undefined : { automationId: sentBy.automationId }),
+        name: sentBy.name,
+        state: ACTOR_STATE.REST,
+      };
     case AGENT_SENDER.GITHUB:
       return githubLoginActor(sentBy.name);
     case AGENT_SENDER.FORMER:

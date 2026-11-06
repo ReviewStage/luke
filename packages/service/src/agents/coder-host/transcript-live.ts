@@ -250,6 +250,7 @@ export function transcriptWindowLiveStatements(
           memberName: user.name,
           agentId: sendingAgent.id,
           agentTaskId: sendingAgent.taskId,
+          automationId: messages.senderAutomationId,
           journalId: takingJournal.id,
           afterStep: messages.takenAfterStep,
           // No line the voice said is folded under a turn any more; a released desktop still decodes the keys.
