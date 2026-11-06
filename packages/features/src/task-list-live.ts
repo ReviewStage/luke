@@ -354,7 +354,10 @@ function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
   return {
     total: newest.length,
     working: working.length,
-    failed: standingFailures(newest.map(({ row, line }) => ({ createdAt: row.createdAt, line }))),
+    failed: standingFailures(
+      newest.map(({ row, line }) => ({ createdAt: row.createdAt, line })),
+      Math.max(...rows.map((row) => row.createdAt)),
+    ),
     ...(rows.length === 0 ? undefined : { activityAt: Math.max(...rows.map(activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)

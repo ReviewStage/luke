@@ -54,15 +54,17 @@ function markedPullRequest(
 }
 
 /**
- * How many of a task's unarchived agents failed with no agent started on the
- * task since, each failing when its last turn settled, or as it started where
- * it ran none. Note that this is how the held and live reads both count
- * `TaskAgentsSummary.failed`, so the two agree.
+ * How many of a task's unarchived `agents` failed with no agent started on
+ * the task since `latestStart`, each failing when its last turn settled, or
+ * as it started where it ran none. Note that `latestStart` counts the
+ * archived agents too, because archiving the agent that took over from a
+ * failure must not bring the failure back. The held and live reads both
+ * count `TaskAgentsSummary.failed` here, so the two agree.
  */
 export function standingFailures(
   agents: readonly { readonly createdAt: number; readonly line: TaskAgentLine }[],
+  latestStart: number,
 ): number {
-  const latestStart = Math.max(...agents.map((agent) => agent.createdAt));
   return agents.filter(
     ({ createdAt, line }) =>
       line.status === AGENT_STATUS.FAILED && (line.at ?? createdAt) >= latestStart,

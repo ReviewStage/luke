@@ -152,7 +152,7 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   return {
     total: agents.length,
     working: working.length,
-    failed: standingFailures(agents),
+    failed: standingFailures(agents, Math.max(...read.map((agent) => agent.createdAt))),
     ...(read.length === 0
       ? undefined
       : { activityAt: Math.max(...read.map((agent) => agent.activityAt)) }),
