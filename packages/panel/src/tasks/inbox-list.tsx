@@ -1098,27 +1098,33 @@ function ListHead({
         onChange={choosing.onAll}
       />
     );
-  const acts =
-    choosing === undefined ? null : (
-      <SelectionToolbar
-        count={choosing.count}
-        acts={choosing.acts}
-        onClear={choosing.onClear}
-        controls={choosing.controls}
-      />
+  // Note that the toolbar stays mounted while none is chosen, drawing nothing, so a focus it held as the last row went is handed back to the list.
+  const actions =
+    selecting === undefined ? (
+      options
+    ) : (
+      <>
+        <SelectionToolbar
+          count={selecting.count}
+          acts={selecting.acts}
+          onClear={selecting.onClear}
+          controls={selecting.controls}
+        />
+        {choosing === undefined ? options : null}
+      </>
     );
   const heading = choosing === undefined ? title : selectedWords(choosing.count);
   return (
     <>
       {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
       {head.tab === true ? (
-        <PaneBar mark={all} title={heading} titleReplayUnmasked actions={acts ?? options} />
+        <PaneBar mark={all} title={heading} titleReplayUnmasked actions={actions} />
       ) : (
         <Toolbar
           lead={all}
           title={heading}
           titleReplayUnmasked
-          actions={acts ?? options}
+          actions={actions}
           end={TOOLBAR_INSET.COLUMN}
         />
       )}
@@ -1570,7 +1576,14 @@ export function InboxList({
     onMark,
     onClose,
     onRemindMany: onRemind === undefined ? undefined : remindMany,
-    onPick: onRemind === undefined ? undefined : reminding.onPick,
+    // Note that the picker hangs from the first item chosen whose row is drawn, since a run draws only the rows near the view.
+    onPick:
+      onRemind === undefined
+        ? undefined
+        : (chosen, onAt) => {
+            const anchor = chosen.find((item) => rows.find(item.id) !== undefined) ?? chosen[0];
+            if (anchor !== undefined) reminding.onPick(anchor, onAt);
+          },
   });
   // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
   const several: InboxChosen | undefined =

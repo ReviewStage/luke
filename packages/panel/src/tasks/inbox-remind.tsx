@@ -242,7 +242,8 @@ export function useInboxReminding({
   // Note that the picker opens on the row of `item`, setting its reminder unless `onAt` takes the time picked, as several items chosen together do.
   const onPick = useCallback(
     (item: InboxItem, onAt?: (at: number) => void) => {
-      const row = rowOf(item.id);
+      // Note that a time for several items chosen hangs from the list's room where none of their rows is drawn.
+      const row = rowOf(item.id) ?? (onAt === undefined ? undefined : (room.current ?? undefined));
       if (row === undefined || onRemind === undefined) return;
       open({
         at: row,

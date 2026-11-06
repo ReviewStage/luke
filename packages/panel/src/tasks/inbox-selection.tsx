@@ -73,8 +73,8 @@ export function useInboxSelection({
   onClose?: InboxCloser | undefined;
   /** Sets or clears the reminder of several items; none where the list offers no reminder. */
   onRemindMany?: InboxRemindMany | undefined;
-  /** Opens the date picker on an item's row for a time of the reader's own, handing it to `onAt`. */
-  onPick?: ((item: InboxItem, onAt: (at: number) => void) => void) | undefined;
+  /** Opens the date picker by the items chosen for a time of the reader's own, handing it to `onAt`. */
+  onPick?: ((items: readonly InboxItem[], onAt: (at: number) => void) => void) | undefined;
 }): InboxSelection {
   const toast = useToast();
   // The open items Resolve asked about, at the revisions it asked on.
@@ -175,7 +175,7 @@ export function useInboxSelection({
               onPick === undefined
                 ? undefined
                 : () =>
-                    onPick(first, (at) => {
+                    onPick(items, (at) => {
                       onRemindMany(items, at);
                       onClear();
                     }),

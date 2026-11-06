@@ -316,8 +316,14 @@ test("Esc lets the selection go, in the list as in its bar", async () => {
   assert.equal(asked.closed, 0, "the key goes no further than the list");
 
   commandClick(page, expiry);
-  keyOn(barButton(page, "Clear selection"), "Escape");
+  const clear = barButton(page, "Clear selection");
+  act(() => clear.focus());
+  keyOn(clear, "Escape");
   assert.deepEqual(picked(page), [], "Esc in the bar chooses none");
+  assert.ok(
+    document.activeElement?.matches(".inbox-tasks button.ui-list-row-main"),
+    "the focus the bar held goes back to the list",
+  );
 });
 
 test("a plain click still opens its item, leaving what is chosen as it stands", async () => {
