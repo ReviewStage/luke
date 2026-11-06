@@ -178,6 +178,14 @@ body,
   border-right: 0;
 }
 
+/* A phone heads Settings' list and a version history's as it heads every
+   place (`phone-head.tsx`), so the head spans the list past its column's
+   inset, its corners where every other place's stand, as the sidebar's
+   does (`shell.css`). */
+:is(.settings-pages, .version-log) > :is(.settings-pages-head, .version-log-head) {
+  margin-inline: calc(-1 * var(--column-inset));
+}
+
 /* Settings' list standing alone leads with its one way back, Back to the
    tasks; the history's Back and Forward beside it would be a second. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
