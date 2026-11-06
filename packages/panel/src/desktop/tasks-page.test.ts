@@ -32,7 +32,7 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads, handMembers, stateWith } from "../testing/app-state.js";
+import { handHostReads, handMembers, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -792,32 +792,32 @@ test("a row wears the icon of the pull request its agents opened", async () => {
     ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
     agents: { total: 1, working: 0, pullRequestTotal: 1 },
   };
-  // Its pull request, as the list followed live holds it.
-  writeAppState(
-    stateWith(
-      {},
-      {
-        tasks: {
-          ...IDLE_TASKS_VIEW,
-          taskPullRequests: [
-            {
-              taskId: withPullRequest.id,
-              pullRequests: [
-                {
-                  number: 4222,
-                  title: "Rate limit search",
-                  state: "open",
-                  checks: "passing",
-                  additions: 10,
-                  deletions: 2,
-                },
-              ],
-            },
-          ],
-        },
+  // Its pull request, as the list followed live holds it, in the document the bridge hands and the one the window holds now.
+  const followed = stateWith(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        taskPullRequests: [
+          {
+            taskId: withPullRequest.id,
+            pullRequests: [
+              {
+                number: 4222,
+                title: "Rate limit search",
+                state: "open",
+                checks: "passing",
+                additions: 10,
+                deletions: 2,
+              },
+            ],
+          },
+        ],
       },
-    ),
+    },
   );
+  handState({}, followed);
+  writeAppState(followed);
   const page = await mountPage([withPullRequest, ...TASKS.slice(2)]);
   const agents = rowOf(page, "ACME-39").querySelector("[data-cell='agents']");
 

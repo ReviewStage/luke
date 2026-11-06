@@ -834,6 +834,22 @@ test("a task none of whose tabs was viewed shows its agents' last tab, opens on 
   assert.equal(again().tab, MAIN_TAB.OVERVIEW, "the tab viewed before it is shown");
 });
 
+test("a task last viewed on an agent's tab shows nothing until its agents are read, then that agent's tab, never its details or a draft in the meantime", async () => {
+  window.localStorage.setItem(
+    "app.mainTabs",
+    JSON.stringify({ closedAgents: [], tasks: { [TASK.id]: { recent: [{ agent: AGENT_ID }] } } }),
+  );
+  const listed = { ...OPEN, tasks: [row(TASK.id, 1)] };
+  const tab = mount({ shown: true, tasks: listed });
+  await settle();
+  assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
+  assert.equal(tab.control().mainTabs.tab, undefined, "nothing stands in the agent's place");
+
+  tab.stand({ tasks: { ...listed, taskAgents: [listedAgent(RUNNING_AGENT)] } });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID), "the agent once they are read");
+});
+
 test("a column kept while the plan, the Inbox, and the Call stood in it, and a side panel kept on its Plan and Comments tabs, read with each let go, the agents' order and the tab last viewed still standing", async () => {
   window.localStorage.setItem(
     "app.sidePanel",
