@@ -1150,10 +1150,32 @@ function composed(
     { readonly told: Deferred.Deferred<boolean>; readonly answered: Deferred.Deferred<void> }
   >();
   /**
+   * What a window decided of a held close before the close came to wait, by
+   * its key, with when: as an Undo pressed while an earlier write on the same
+   * item was still out, or while the close waited behind writes the service
+   * had not answered. The close reads it once it comes to be sent.
+   */
+  const decidedEarly = new Map<string, { readonly send: boolean; readonly at: number }>();
+  /** The held closes already let go, by key, with when, so an Undo that comes after hears it came too late. */
+  const letGoAt = new Map<string, number>();
+  /** Every early decision and let-go older than `HELD_CLOSE_BOUND` forgotten, since no window asks after one that old. */
+  const forgetStale = (now: number) => {
+    const bound = Duration.toMillis(HELD_CLOSE_BOUND);
+    for (const [key, { at }] of decidedEarly) if (now - at > bound) decidedEarly.delete(key);
+    for (const [key, at] of letGoAt) if (now - at > bound) letGoAt.delete(key);
+  };
+  /** The early decision on the close under `clientKey`, taken so it is read once; none where its window said nothing yet. */
+  const takeDecided = (clientKey: string): boolean | undefined => {
+    const early = decidedEarly.get(clientKey);
+    decidedEarly.delete(clientKey);
+    return early?.send;
+  };
+  /**
    * The held close under `clientKey`, `send` once its window lets it go,
    * once its Undo can no longer be pressed, or is; or, past
    * `HELD_CLOSE_BOUND` with no word from its window, as sent. What `send`
-   * answers, or `undone`, it answers.
+   * answers, or `undone`, it answers. Note that it is answered to a quit's
+   * flush however it ends, interrupted too, so the quit never waits on it.
    */
   const released = <Answer>(
     clientKey: string,
@@ -1166,19 +1188,16 @@ function composed(
         answered: yield* Deferred.make<void>(),
       };
       heldCloses.set(clientKey, held);
-      const heard = yield* Effect.timeoutOption(Deferred.await(held.told), HELD_CLOSE_BOUND);
-      heldCloses.delete(clientKey);
-      const goes = Option.getOrElse(heard, () => true);
-      return yield* (goes ? send : Effect.succeed(undone)).pipe(
-        Effect.ensuring(Deferred.succeed(held.answered, undefined)),
-      );
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          heldCloses.delete(clientKey);
-        }),
-      ),
-    );
+      const settled = Effect.sync(() => {
+        heldCloses.delete(clientKey);
+        letGoAt.set(clientKey, kernel.now());
+      }).pipe(Effect.andThen(Deferred.succeed(held.answered, undefined)));
+      return yield* Effect.gen(function* () {
+        const heard = yield* Effect.timeoutOption(Deferred.await(held.told), HELD_CLOSE_BOUND);
+        heldCloses.delete(clientKey);
+        return yield* Option.getOrElse(heard, () => true) ? send : Effect.succeed(undone);
+      }).pipe(Effect.ensuring(settled));
+    });
   // Note that the closes are read before they are told, since telling one takes it out of the map.
   const flushHeldCloses = Effect.suspend(() => {
     const held = [...heldCloses.values()];
@@ -1196,7 +1215,8 @@ function composed(
    * the service only once released, so an Undo takes back what was drawn
    * before the service, the agent, or another member hears of it. Note
    * that only its first attempt waits: one sent again from the writes that
-   * waited for the service was let go already.
+   * waited for the service goes by what its window decided meanwhile, if
+   * anything, as one its window decided before it came to be sent does.
    */
   const closed = inboxWrite<AgentInboxCloseParams, AgentInboxAnsweredView>(
     ({ itemId }) => [itemId],
@@ -1208,10 +1228,17 @@ function composed(
         item: (item) => (item.revision === revision ? closedNow(item, by, at) : undefined),
       };
     },
-    ({ itemId, held, ...request }, key, waited) => {
-      const send = asked(client.closeInbox(itemId, request, key));
-      return held !== true || waited ? send : released(request.clientKey, send, CLOSE_UNDONE);
-    },
+    ({ itemId, held, ...request }, key, waited) =>
+      Effect.suspend(() => {
+        const send = asked(client.closeInbox(itemId, request, key));
+        if (held !== true) return send;
+        // Note that a decision its window made before the close came to be sent is the one it goes by.
+        const decided = takeDecided(request.clientKey);
+        if (decided === undefined && !waited)
+          return released(request.clientKey, send, CLOSE_UNDONE);
+        letGoAt.set(request.clientKey, kernel.now());
+        return decided === false ? Effect.succeed(CLOSE_UNDONE) : send;
+      }),
     {
       name: GATEWAY_METHOD.AGENTS_INBOX_CLOSE,
       input: agentInboxCloseParamsSchema,
@@ -2056,8 +2083,14 @@ function composed(
         if (held !== undefined) {
           heldCloses.delete(clientKey);
           yield* Deferred.succeed(held.told, send);
+          return carried<AgentInboxCloseReleasedView>({ held: true });
         }
-        return carried<AgentInboxCloseReleasedView>({ held: held !== undefined });
+        if (letGoAt.has(clientKey)) return carried<AgentInboxCloseReleasedView>({ held: false });
+        // Note that a close not yet come to be sent, behind an earlier write on its item or among those waiting for the service, goes by this decision once it is.
+        const now = kernel.now();
+        forgetStale(now);
+        decidedEarly.set(clientKey, { send, at: now });
+        return carried<AgentInboxCloseReleasedView>({ held: true });
       }),
     [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(
       dependencies.pool,

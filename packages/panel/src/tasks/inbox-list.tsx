@@ -1,4 +1,4 @@
-import { type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -1625,7 +1625,9 @@ export function InboxList({
   const resolvable = picks.length > 0 ? picks : drawn.filter(({ item }) => item.id === chosen);
   useAppCommand(
     APP_COMMAND.RESOLVE,
-    head.shown && onClose !== undefined && resolvable.length > 0
+    head.shown &&
+      onClose !== undefined &&
+      resolvable.some(({ item }) => item.status === INBOX_STATUS.OPEN)
       ? () => {
           onClose(resolvable.map(({ item }) => item));
           unpick();

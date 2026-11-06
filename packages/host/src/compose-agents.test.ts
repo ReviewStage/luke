@@ -3591,6 +3591,44 @@ it.effect(
 );
 
 it.effect(
+  "an Undo pressed while its close waits behind a write the service has not answered is kept: the close, sent at last, is taken back and never reaches the service",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { call, asked, answerMarks } = yield* subject({ pool });
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+
+      answerMarks(false);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: false });
+      yield* settled;
+      assert.equal(pool.queued().length, 1, "the mark waits for the service");
+      const closing = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+          held: true,
+        }),
+      );
+      yield* settled;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
+          clientKey: "close-1",
+          send: false,
+        }),
+        { held: true },
+      );
+
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(closes(), []);
+      assert.deepEqual(pool.queued(), []);
+    }),
+);
+
+it.effect(
   "a close held for its Undo is sent, not dropped, when the host quits before its window lets it go",
   () =>
     Effect.gen(function* () {
