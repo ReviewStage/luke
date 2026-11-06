@@ -234,7 +234,29 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   return at.place.links({ tasks, at, listed, under });
 }
 
-/** The links of the place the window's state says: an agent's page, the home page, or the task. */
+/** The links of an agent's own page: the page's, under the workspace the page read its agent into, else the one listed, and the tab of the panel beside it with a link of its own, first where the panel holds the keys. */
+export function agentPageLinks(
+  tasks: TasksControl,
+  at: WindowAt,
+  listed: string,
+  agentId: string,
+): readonly LinkAtHand[] {
+  const page = at.pageWorkspace;
+  const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
+  const own: LinkAtHand = {
+    link: { workspace: home, place: { kind: LINK_PLACE.AGENT, agentId } },
+    thing: LINK_THING.AGENT,
+    step: true,
+  };
+  // A tab of the panel beside it with a link of its own, a page the agent showed, its Changes, or a worker's, is at hand under the agent's link.
+  const held = tasks.sidePanel.open ? panelTabPlace({ agentId }, tasks.sidePanel.tab) : undefined;
+  const thing = held === undefined ? undefined : panelThing(held);
+  if (held === undefined || thing === undefined) return [own];
+  const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
+  return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
+}
+
+/** The links of the place the window's state says: the home page, or the task. */
 function stateLinks(tasks: TasksControl, at: WindowAt, listed: string): readonly LinkAtHand[] {
   // `at_` writes the link of the step the window stands on.
   const at_ = (place: LinkPlace, thing: LinkThing, workspace = listed): LinkAtHand => ({
@@ -242,18 +264,6 @@ function stateLinks(tasks: TasksControl, at: WindowAt, listed: string): readonly
     thing,
     step: true,
   });
-  const { agentId } = tasks.agentView;
-  if (agentId !== undefined) {
-    const page = at.pageWorkspace;
-    const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
-    const own = at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home);
-    // A tab of the panel beside it with a link of its own, a page the agent showed, its Changes, or a worker's, is at hand under the agent's link, first where the panel holds the keys.
-    const held = tasks.sidePanel.open ? panelTabPlace({ agentId }, tasks.sidePanel.tab) : undefined;
-    const thing = held === undefined ? undefined : panelThing(held);
-    if (held === undefined || thing === undefined) return [own];
-    const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
-    return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
-  }
   // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
   if (tasks.unknownWorkspace.open) return [];
   // With no task bound for, the window stands on the home page.

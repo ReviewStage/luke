@@ -52,7 +52,7 @@ import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
-import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
+import { agentAt, SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -1360,6 +1360,7 @@ const PLACES = Object.values(PLACE);
 /** Where the router stands for a place it draws, Settings and a version history; none for a place the shell's props say. */
 function routedAt(place: Place): string | undefined {
   if (place === PLACE.SETTINGS) return SHELL_AT.SETTINGS;
+  if (place === PLACE.AGENT_PAGE) return agentAt("agent-page-1");
   return place === PLACE.VERSION_HISTORY ? SHELL_AT.VERSION_HISTORY : undefined;
 }
 

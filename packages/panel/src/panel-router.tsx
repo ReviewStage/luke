@@ -18,8 +18,8 @@
  * sidebar, under the pathless `places` layout, which stays drawn as the
  * window moves between them, and a task's version history takes the whole
  * window as Settings does. Settings, Admin, a workspace's Board, a
- * person's page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
- * on them, their routes draw them, as lazy routes but for the Inbox kept drawn beside them all, and each gate is a
+ * person's page, an agent's own page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
+ * on them, their routes draw them, as lazy routes but for an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`). Every other place
  * is still the window's state's, which its routes draw through one
@@ -46,6 +46,7 @@ import { useEffect, useRef } from "react";
 import { App } from "./app.js";
 import {
   AdminRouteLoading,
+  AgentPlace,
   AutomationsRouteLoading,
   BoardRouteLoading,
   InboxPlace,
@@ -226,10 +227,29 @@ const taskAgentMessageRoute = createRoute({
   path: "message/$messageId",
 });
 
+/**
+ * An agent's own page, the page of an agent on no task or of an archived
+ * one opened on its own, under the workspace its address names, of one of
+ * the reader's workspaces (`workspaceRouteStands`): an address naming none
+ * of theirs opens the same agent under the workspace listed, as a link to it
+ * does. Its route draws the page of the agent its address names
+ * (`AgentPlace`); the places under it, a worker, its Changes, a message, a
+ * page, or an Inbox item of it, are what a link to them names, which open in
+ * the panel beside the page.
+ */
 const agentRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "agent/$agentId",
-  component: StatePlace,
+  beforeLoad: ({ context, params }) => {
+    const { listed } = context.access;
+    if (workspaceRouteStands(params.workspace, context.access) || listed === undefined) return;
+    throw redirect({
+      to: "/$workspace/agent/$agentId",
+      params: { workspace: listed, agentId: params.agentId },
+      replace: true,
+    });
+  },
+  component: AgentPlace,
 });
 
 const agentIndexRoute = createRoute({ getParentRoute: () => agentRoute, path: "/" });

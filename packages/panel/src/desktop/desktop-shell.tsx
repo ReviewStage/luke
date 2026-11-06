@@ -76,7 +76,7 @@ import {
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { backPlaceOf } from "./back-place.js";
-import { DesktopAgentPage } from "./desktop-agent-page.js";
+import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -1155,26 +1155,23 @@ export function InboxPlace(): null {
   return null;
 }
 
+/** What an agent's own page's route draws in the places' content slot: the page of the agent its address names. */
+export function AgentPlace(): React.JSX.Element {
+  const { tasks, room, away } = useShellPlaces();
+  return <AgentRoutePage tasks={tasks} away={room === SHELL_ROOM.NARROW ? away : undefined} />;
+}
+
 /**
  * What a place the window's state says draws in the places' content slot:
- * a task, an agent's page, or a workspace not there for the reader. Every
- * route not yet moved onto the router draws this one component, so moving
- * between them keeps it drawn.
+ * a task, or a workspace not there for the reader. Every route not yet
+ * moved onto the router draws this one component, so moving between them
+ * keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
   const { tasks, room, sidebar, settings, looks, summary, away } = useShellPlaces();
   const { account } = settings;
-  const pageAgent = tasks.agentView.agentId;
   const unknownWorkspace = tasks.unknownWorkspace.open;
-  return pageAgent !== undefined ? (
-    // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-    <DesktopAgentPage
-      key={pageAgent}
-      tasks={tasks}
-      agentId={pageAgent}
-      away={room === SHELL_ROOM.NARROW ? away : undefined}
-    />
-  ) : unknownWorkspace ? (
+  return unknownWorkspace ? (
     // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
     <ReplayUnmask>
       <NotFound

@@ -69,6 +69,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { KEPT, type Kept } from "../act.js";
 import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
+import { useAgentRoute } from "../agent-route.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
@@ -382,6 +383,7 @@ function mount(
       // The Board and a person's page are the router's, which the test's window router stands, each left for a place with no link.
       boardView: useBoardRoute({ onClose: leaveRouted, onStay: () => undefined }),
       personView: usePersonRoute({ onClose: leaveRouted, onStay: () => undefined }),
+      agentView: useAgentRoute({ onClose: leaveRouted, onStay: () => undefined }),
       automationsView,
       versionHistoryView,
       inboxView,
@@ -4038,17 +4040,6 @@ it.effect(
       assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agentTab(AGENT_ID), agentTab(UNSEEN_ID)]);
     }),
 );
-
-test("an agent's page under Admin is off screen, so main hears no agent shown while Admin stands over it", async () => {
-  const tab = mount({ shown: true });
-  act(() => tab.control().agentView.onOpen("agent-under-admin"));
-  await settle();
-  assert.equal(tab.shownAgents.at(-1), "agent-under-admin");
-
-  tab.stand({ admin: true });
-  await settle();
-  assert.equal(tab.shownAgents.at(-1), null);
-});
 
 test("Admin opened while a page holds unsaved work waits on the leave question, and opens once it is answered", () => {
   const tab = mount({ shown: true });

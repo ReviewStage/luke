@@ -44,6 +44,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -406,6 +407,18 @@ function AgentMentions({
   children: React.ReactNode;
 }): React.ReactNode {
   return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
+}
+
+/** The page of the agent its route's address names (`panel-router.tsx`), keyed by it, so another agent's page is a page of its own, holding nothing of the last. */
+export function AgentRoutePage({
+  tasks,
+  away,
+}: {
+  tasks: TasksControl;
+  away?: TaskHeadBack | undefined;
+}): React.JSX.Element {
+  const { agentId } = useParams({ from: "/places/$workspace/agent/$agentId" });
+  return <DesktopAgentPage key={agentId} tasks={tasks} agentId={agentId} away={away} />;
 }
 
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */

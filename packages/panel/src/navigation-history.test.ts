@@ -792,7 +792,6 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
   const none = { workspaces: [], workspace: undefined };
   const places: TasksControl[] = [
     tasksControl({ ...none, inboxView: { ...tasksControl().inboxView, open: true } }),
-    tasksControl({ ...none, agentView: { ...tasksControl().agentView, agentId: "agent-1" } }),
   ];
   const addresses: string[] = [];
   for (const tasks of places) {

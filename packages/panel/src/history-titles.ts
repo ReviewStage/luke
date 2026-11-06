@@ -122,7 +122,6 @@ export function stepTitle(
 
 /** What the step of the place the window's state says is called. */
 function stateStepTitle(tasks: StepTitleTasks): StepTitle | undefined {
-  if (tasks.agentView.agentId !== undefined) return { label: "Agent" };
   if (tasks.boundFor === undefined) return { label: "Home" };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;

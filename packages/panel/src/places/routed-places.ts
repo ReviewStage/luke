@@ -35,6 +35,7 @@ import {
   VERSION_HISTORY_WORDS,
 } from "../history-titles.js";
 import {
+  agentPageLinks,
   inboxItemPlace,
   LINK_THING,
   type LinkAtHand,
@@ -299,6 +300,20 @@ export const ROUTED_PLACE = {
       historyTask === undefined
         ? []
         : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: historyTask }],
+  },
+  AGENT: {
+    routes: ["/places/$workspace/agent/$agentId"],
+    gate: workspaceGate,
+    stillThere: () => true,
+    overThePlan: true,
+    title: (tasks, under) => (tasks.agentView.agentId === undefined ? under() : { label: "Agent" }),
+    named: () => undefined,
+    links: ({ tasks, at, listed, under }) => {
+      const { agentId } = tasks.agentView;
+      return agentId === undefined ? under() : agentPageLinks(tasks, at, listed, agentId);
+    },
+    narrowList: undefined,
+    surfaces: (params) => [{ surface: PRODUCT_SURFACE.AGENT, of: params.agentId }],
   },
   INBOX: {
     routes: ["/places/$workspace/inbox"],

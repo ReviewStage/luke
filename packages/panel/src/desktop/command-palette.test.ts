@@ -1925,7 +1925,8 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
     });
   };
   for (const tasks of [onPage(true), onPage(false)]) {
-    openPalette(tasks);
+    // The agent's page is the router's, which offers the page's links (`places/routed-places.ts`).
+    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, ROUTED_PLACE.AGENT);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -2048,6 +2049,10 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
     }),
     undefined,
     { agentId: LINKED_AGENT, workspaceId: "workspace-beta" },
+    undefined,
+    undefined,
+    undefined,
+    ROUTED_PLACE.AGENT,
   );
   act(() => {
     runAppCommand(APP_COMMAND.COPY_LINK);
