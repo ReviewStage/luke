@@ -17,6 +17,12 @@
  *   failure, raises the FAILED toast `pressAct` raises, so a press never fails
  *   silently, and reports it by the act's kind and the ids its payload names.
  *
+ * Every factory sends in `networkMode: "always"`, as the docs' Network Mode
+ * guide has it for a mutation that does not reach the network itself: an act
+ * goes to the host, which holds what it cannot send while offline and says
+ * so (`offline-refused-toast.ts`), so the mutation never pauses for a
+ * browser's offline mark.
+ *
  * A setting written by a field named in place is `actMutation` over
  * `ACT_KIND.SETTING_UPDATE`; `settingMutation` is for a writer generic in
  * the field, such as a settings row.
@@ -33,6 +39,7 @@ import { type ActResult, type ActVariables, sendAct, toastActFailure } from "./a
 export function actMutation<Kind extends PortActKind>(kind: Kind) {
   return mutationOptions<ActResult<Kind>, Error, ActVariables<Kind>>({
     mutationKey: [kind],
+    networkMode: "always",
     mutationFn: (variables) => sendAct(kind, variables),
   });
 }
@@ -61,6 +68,7 @@ interface SettingWrite<Field extends AppSettingField = AppSettingField> {
 export function settingMutation() {
   return mutationOptions({
     mutationKey: [ACT_KIND.SETTING_UPDATE],
+    networkMode: "always",
     mutationFn: ({ field, value }: SettingWrite) =>
       // SAFETY: a value is read as its own field's, which a writer generic in the field cannot show the compiler.
       sendAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
