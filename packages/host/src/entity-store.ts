@@ -48,7 +48,9 @@
  * be reached, as the sync engine hands them out (`EntityPool.queued`) and
  * takes them back at the next launch (`requeue`): a row each (`queued_write`)
  * keyed by its idempotency key, holding the write's name and its input,
- * written as it is queued and deleted as the service takes it. They are the
+ * written as it is queued and deleted as the service takes it, but only
+ * once the composer says the pool holds those the store handed back
+ * (`requeued`), so a launch that lays them back late never deletes them. They are the
  * account's own, so they outlast a build of other row shapes where they still
  * read, and leave with the database at a sign-out.
  *
@@ -75,7 +77,19 @@ import {
 import { workspaceSchema } from "@repo/features/workspace-wire";
 import { reportUnexpected } from "@repo/runtime/effect";
 import type { QueuedEntry } from "@repo/sync";
-import { Data, Duration, Effect, Equal, Path, Result, Schema, type Scope, Semaphore } from "effect";
+import {
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Equal,
+  Path,
+  Result,
+  Schedule,
+  Schema,
+  type Scope,
+  Semaphore,
+} from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
@@ -298,6 +312,13 @@ export interface EntityStore {
   ) => Effect.Effect<void>;
   /** The row writes waiting for the service as the database held them when the store opened, oldest first. */
   readonly queue: readonly QueuedEntry[];
+  /**
+   * Says the pool holds `queue` again (`EntityPool.requeue`), its writes laid
+   * back behind any made since: until it is said, the store writes none of
+   * the pool's waiting writes, so a pool that has not taken them back yet
+   * never deletes them from disk.
+   */
+  readonly requeued: Effect.Effect<void>;
   /** Deletes the database and its key and keeps nothing more, as a sign-out does. */
   readonly forget: Effect.Effect<void>;
 }
@@ -311,7 +332,7 @@ export interface EntityStoreOptions {
   readonly driver: SqliteDriverSeam;
   /** The account signed in, whose lists alone the database may hold. */
   readonly accountId: string;
-  /** The row writes waiting for the service now, oldest first, which every write keeps beside the lists. */
+  /** The row writes waiting for the service now, oldest first, which every write after `requeued` keeps beside the lists; none keeps the queue as it opened. */
   readonly queued?: () => readonly QueuedEntry[];
 }
 
@@ -1188,6 +1209,9 @@ export function openEntityStore(
     }
 
     const queued = options.queued ?? (() => queue);
+    /** Done once the pool holds the waiting writes the store handed out (`requeued`), before which the pool's are not written; at once for a store keeping its own. */
+    const taken = yield* Deferred.make<void>();
+    if (options.queued === undefined) Deferred.doneUnsafe(taken, Effect.void);
     let reads: Partial<KeptRows> = { ...stored };
     /** The reads kept since the last write, and those kept where nothing moved but where they stand (`keepUnmoved`), which only a write of something that moved, or the last, writes. */
     const dirty = new Set<KeptRead>();
@@ -1199,7 +1223,7 @@ export function openEntityStore(
       lock.withPermits(1)(
         Effect.suspend(() => {
           if (forgotten || closed) return Effect.void;
-          const steps: Step[] = [...queueWrites(queued())];
+          const steps: Step[] = Deferred.isDoneUnsafe(taken) ? [...queueWrites(queued())] : [];
           const flushed = new Set(dirty);
           if (closing || steps.length > 0 || flushed.size > 0) {
             for (const read of unmoved) flushed.add(read);
@@ -1225,10 +1249,7 @@ export function openEntityStore(
           );
         }),
       );
-    // Note that the first write waits its interval, so the waiting writes the store hands back (`queue`) are laid back in the pool before the store compares the pool's against those it holds.
-    yield* Effect.forkScoped(
-      Effect.forever(Effect.andThen(Effect.sleep(FLUSH_EVERY), flush(false))),
-    );
+    yield* Effect.forkScoped(Effect.repeat(flush(false), Schedule.spaced(FLUSH_EVERY)));
     yield* Effect.addFinalizer(() =>
       Effect.andThen(
         flush(true),
@@ -1253,6 +1274,7 @@ export function openEntityStore(
     return {
       stored: (read) => stored[read],
       queue,
+      requeued: Deferred.succeed(taken, undefined).pipe(Effect.asVoid),
       keep: (kept, rows) =>
         Effect.sync(() => {
           laid(kept, rows);

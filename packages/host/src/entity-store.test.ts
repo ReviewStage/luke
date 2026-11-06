@@ -134,6 +134,7 @@ it.effect.each([
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("entity-store-");
     const first = yield* opened(directory, DANA, { queued: () => [RENAME] });
+    yield* first.store.requeued;
     yield* first.store.keep(KEPT_READ.TASK_LIST, LIST);
     yield* first.closed;
     if (otherShapes) {
@@ -181,7 +182,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("entity-store-");
-      yield* opened(directory, DANA, { queued: () => [RENAME] });
+      const { store } = yield* opened(directory, DANA, { queued: () => [RENAME] });
+      yield* store.requeued;
 
       yield* TestClock.adjust("1 second");
       const kept = yield* database(directory);
@@ -194,15 +196,25 @@ it.effect("the writes waiting at the last launch stay on disk until the pool tak
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("entity-store-");
     const first = yield* opened(directory, DANA, { queued: () => [RENAME] });
+    yield* first.store.requeued;
     yield* first.closed;
     let waiting: readonly QueuedEntry[] = [];
+    const queuedOnDisk = Effect.map(database(directory), (kept) =>
+      kept.prepare("SELECT key FROM queued_write").all(),
+    );
 
+    // The pool holds none yet, however long the launch takes to lay them back.
     const relaunched = yield* opened(directory, DANA, { queued: () => waiting });
-    const meanwhile = (yield* database(directory)).prepare("SELECT key FROM queued_write").all();
+    yield* TestClock.adjust("1 minute");
+    const meanwhile = yield* queuedOnDisk;
     waiting = relaunched.store.queue;
+    yield* relaunched.store.requeued;
     yield* TestClock.adjust("1 second");
 
-    assert.deepEqual(meanwhile, [{ key: RENAME.key }]);
+    assert.deepEqual(
+      [meanwhile, yield* queuedOnDisk],
+      [[{ key: RENAME.key }], [{ key: RENAME.key }]],
+    );
   }).pipe(Effect.provide(files)),
 );
 

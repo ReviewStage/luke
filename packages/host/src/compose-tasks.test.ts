@@ -1669,6 +1669,8 @@ it.effect(
       const quit = yield* Scope.make();
       const before = yield* Scope.provide(quit)(entityPool(options));
       const kept = yield* Scope.provide(quit)(opened(before));
+      // The pool holds no waiting writes from an earlier launch, as the composer says once it opens the store.
+      yield* kept.requeued;
       const first = yield* Scope.provide(quit)(subject(service, { entities: kept, pool: before }));
       yield* first.call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* first.listed();
@@ -1682,6 +1684,7 @@ it.effect(
       const entities = yield* opened(pool);
       const relaunched = yield* subject(service, { entities, pool });
       yield* pool.requeue(entities.queue, relaunched.tasks.queueable);
+      yield* entities.requeued;
       service.renameUntaken = undefined;
       yield* relaunched.call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* relaunched.listed();
@@ -1747,6 +1750,8 @@ it.effect(
       const quit = yield* Scope.make();
       const before = yield* Scope.provide(quit)(entityPool(options));
       const kept = yield* Scope.provide(quit)(opened(before));
+      // The pool holds no waiting writes from an earlier launch, as the composer says once it opens the store.
+      yield* kept.requeued;
       const first = yield* Scope.provide(quit)(subject(service, { entities: kept, pool: before }));
       yield* first.call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* first.listed();
@@ -1761,6 +1766,7 @@ it.effect(
       const entities = yield* opened(pool);
       const relaunched = yield* subject(service, { entities, pool });
       yield* pool.requeue(entities.queue, relaunched.tasks.queueable);
+      yield* entities.requeued;
       const made = { ...task(INVITES, "Invitation expiry", "", 30), createdAt: 3_000 };
       service.tasks = [...service.tasks, made];
       service.createAnswer = { ok: true, answer: { task: made } };

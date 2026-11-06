@@ -448,6 +448,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       entities = { store, scope };
       // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.
       yield* pool.requeue(store.queue, [...tasks.queueable, ...agents.queueable]);
+      yield* store.requeued;
     });
 
     /** The store forgotten, its files deleted, as a sign-out does; files no store stands over are deleted too. */
