@@ -3245,14 +3245,15 @@ test("with files open and nothing typed, Files lists them first, in the strip's 
     }),
   );
   chooseFilter("Files");
-  await act(async () => undefined);
 
-  assert.deepEqual(rows(), [
-    "remove.ts · src/members",
-    "invite.ts · src/members",
-    "README.md",
-    "package.json",
-    "index.ts · src",
-    "accept.ts · src/invites",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "remove.ts · src/members",
+      "invite.ts · src/members",
+      "README.md",
+      "package.json",
+      "index.ts · src",
+      "accept.ts · src/invites",
+    ]),
+  );
 });
