@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
 import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
 import { LandingWordmark } from "./landing-wordmark.js";
 
@@ -120,10 +120,11 @@ function float(header: HTMLElement, bar: Element, floating: boolean): void {
 /**
  * Floats the bar once the page has scrolled past the bar's own height. Note
  * that the page opens as it stands, so a reload part way down lands the bar
- * floating rather than playing the trip there.
+ * floating rather than playing the trip there, and before the first frame is
+ * drawn, so no frame shows it spanning the page.
  */
 function useFloatingBar(header: RefObject<HTMLElement | null>): void {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = header.current;
     const bar = element?.firstElementChild;
     if (element === null || element === undefined || bar === null || bar === undefined) return;
