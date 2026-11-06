@@ -197,9 +197,9 @@ export interface Agent {
   readonly model: string;
   readonly effort: string;
   readonly contextWindow: ContextWindow;
-  /** The plan text the agent was handed; null where it was handed a prompt instead. */
+  /** The description text the agent was handed; null where it was handed a prompt instead. */
   readonly descriptionSnapshot: string | null;
-  /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
+  /** The developer's words the agent was handed in the description's place; null where it was handed the description. */
   readonly prompt: string | null;
   /** The GitHub repository the agent works in, as `owner/name`; null for an agent with none, which does no repository work. */
   readonly repository: string | null;
@@ -230,7 +230,7 @@ export interface Agent {
 
 /**
  * One coding agent as a list line reads it (`AGENT_LINE_COLUMNS`):
- * the agent without what it was handed, the plan's text or the developer's
+ * the agent without what it was handed, the description's text or the developer's
  * prompt, and without the run that started it, which only its own page and
  * its own turns read; which of the two it was handed, or neither, which its
  * tab's brief is drawn from, and its automation's name stand in their place.
@@ -239,7 +239,7 @@ export interface AgentLine
   extends Omit<Agent, "automationOrigin" | "descriptionSnapshot" | "prompt"> {
   /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
   readonly automationName: string | null;
-  /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
+  /** What the agent was handed as its first message: the description, the developer's prompt, or nothing, for one started blank. */
   readonly brief: AgentBrief;
 }
 
@@ -283,7 +283,7 @@ export function hasRepository<A extends { readonly repository: string | null }>(
   return agent.repository !== null;
 }
 
-/** What a Start hands the agent as its first message: the plan's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
+/** What a Start hands the agent as its first message: the description's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
 export type AgentBriefText =
   | { readonly descriptionSnapshot: string; readonly prompt: null }
   | { readonly descriptionSnapshot: null; readonly prompt: string }
@@ -293,7 +293,7 @@ export type AgentBriefText =
  * Where a Start puts the agent: on a task, whose workspace it joins and
  * whose text or the developer's prompt it is handed, a coder or the task's
  * pilot; or in a workspace with no task, as an automation's run puts one,
- * handed a prompt, since there is no plan to hand it.
+ * handed a prompt, since there is no description to hand it.
  */
 export type AgentPlace =
   | (AgentBriefText & {
@@ -410,7 +410,7 @@ const AGENT_COLUMNS = {
 
 /**
  * The columns a list line projects (`AgentLine`): every one of
- * `AGENT_COLUMNS` but the plan's text, the prompt, and the run that
+ * `AGENT_COLUMNS` but the description's text, the prompt, and the run that
  * started the agent, whose prompt and webhook body it carries, with whether
  * a prompt was handed and the run's automation name read in their place.
  * Note that the lists read these, because they read every agent of every
@@ -451,7 +451,7 @@ const AGENT_LINE_COLUMNS = {
   deviceId: agentTable.deviceId,
 } as const;
 
-/** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
+/** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the description, else nothing. */
 export function agentBriefOf(agent: Pick<Agent, "descriptionSnapshot" | "prompt">): AgentBrief {
   if (agent.prompt !== null) return AGENT_BRIEF.PROMPT;
   return agent.descriptionSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.PLAN;
@@ -1041,7 +1041,7 @@ const markTurnFastRefused = SqlSchema.void({
     ),
 });
 
-/** The turn a reservation of plan notes is held against, as the subquery of the update names it apart from the row it updates. */
+/** The turn a reservation of description notes is held against, as the subquery of the update names it apart from the row it updates. */
 const runningTurn = alias(turns, "running_turn");
 
 const reserveTurnNotes = SqlSchema.findOneOption({
@@ -2350,7 +2350,7 @@ const markAgentUnread = SqlSchema.findOneOption({
 /**
  * The columns of an agent that a caller holding only its conversation most
  * often needs: who it is, who started it, its task, repository, title, and
- * archive. Note that these leave out the plan's text and the prompt, the bulk
+ * archive. Note that these leave out the description's text and the prompt, the bulk
  * of a row, since every tool call of ours an agent makes reads its agent.
  */
 const AGENT_HEADER_COLUMNS = {
@@ -2431,7 +2431,7 @@ const kindUnderLock = Effect.fnUntraced(function* (started: NewAgent) {
  * Starts an agent on a task of the account's workspace, or in a workspace
  * of the account's with no task: a `coding_agent` conversation of the
  * account's and the row that binds it to the task or the workspace, with
- * the plan text or the prompt, the repository, the automation whose run
+ * the description text or the prompt, the repository, the automation whose run
  * started it with that run, and the account's own agent whose `start_agent`
  * started it, as handed. A continue of a pilot takes over its agents in the
  * same transaction: the account's agents it started, or any pilot that
@@ -3178,14 +3178,14 @@ export function recordTurnFastRefused(userId: string, turnId: string): AgentStor
   return markTurnFastRefused({ userId, turnId });
 }
 
-/** A turn's count of plan notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
+/** A turn's count of description notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
 export interface TurnDescriptionNotes {
   readonly turnId: string;
   readonly taken: number;
 }
 
 /**
- * Reserves a call's plan notes against the conversation's running turn
+ * Reserves a call's description notes against the conversation's running turn
  * before its save goes out, and answers the turn and its count with them;
  * nothing where no turn of the conversation runs, or the account does not
  * hold it. Note that the count is raised in one statement, because a

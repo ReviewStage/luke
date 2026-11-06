@@ -27,11 +27,11 @@ import { InstantColumnSchema } from "./columns.js";
 import { taskReachableBy } from "./workspace-store.js";
 
 /**
- * description-revisions.ts -- a plan's history: every save kept as a revision under the writer who made it.
+ * description-revisions.ts -- a description's history: every save kept as a revision under the writer who made it.
  *
- * The plan's one write (`description-notes.ts`) records each save that changed the
- * plan here, inside the transaction that holds the task's row, so the plan
- * and its history never disagree. A revision is the plan's content after it,
+ * The description's one write (`description-notes.ts`) records each save that changed the
+ * description here, inside the transaction that holds the task's row, so the description
+ * and its history never disagree. A revision is the description's content after it,
  * its whole text, so reading one or going back to one is a read and never a
  * replay.
  * Saves the same writer makes one after another are one revision, moved on
@@ -39,16 +39,16 @@ import { taskReachableBy } from "./workspace-store.js";
  * while the revision's latest save is a few minutes old at most. A
  * revision names the member it was made for, the developer editing or the
  * one whose turn the notetaker wrote on, so two members' saves are never one
- * revision, and each reads the other's by name. A plan
+ * revision, and each reads the other's by name. A description
  * that was written before history began has no revision for that content, so
  * the first save that finds it records it first, under `earlier`, at the
- * plan's last save, and the save after it has something to differ from. The
+ * description's last save, and the save after it has something to differ from. The
  * developer restoring a revision is a save like any other, kept as a revision
  * of its own that names the one it brought back; it joins nothing before it,
  * and nothing after it joins it, so each restore stands in the history, and
  * a restore is undone by restoring the revision before it.
  * Who last changed each section is read off the newest revisions, each
- * against the one before it, rather than kept beside the plan.
+ * against the one before it, rather than kept beside the description.
  *
  * A save is recorded for a task id handed by a caller that already holds the
  * task's row under its lock; the history is read under the account's
@@ -74,7 +74,7 @@ export type DescriptionWriter =
   | { readonly actor: typeof DESCRIPTION_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof DESCRIPTION_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
-/** One save to record: the plan, its writer and the member who made it, its content before and after, and how many changes it made. */
+/** One save to record: the description, its writer and the member who made it, its content before and after, and how many changes it made. */
 export interface DescriptionSaveRecord {
   readonly taskId: string;
   readonly writer: DescriptionWriter;
@@ -83,12 +83,12 @@ export interface DescriptionSaveRecord {
    * turn the notetaker writes on. A coding agent's save names none.
    */
   readonly userId: string;
-  /** The plan's text before the save. */
+  /** The description's text before the save. */
   readonly before: string;
   /** Its text after it. */
   readonly after: string;
   readonly changes: number;
-  /** The plan's last save before this one, where it has been saved; none for a plan never written. */
+  /** The description's last save before this one, where it has been saved; none for a description never written. */
   readonly savedBefore: Option.Option<Date>;
 }
 
@@ -217,7 +217,7 @@ const RevisionLineRowSchema = Schema.Struct({
 type LastEditRow = typeof LastEditRowSchema.Type;
 
 /**
- * A page of the plan's revisions, the newest first, before the one
+ * A page of the description's revisions, the newest first, before the one
  * `before` names where it names one, with one past the page read to say
  * whether an older page stands.
  */
@@ -270,11 +270,11 @@ const findRevisionLines = SqlSchema.findAll({
 
 const RevisionContentRowSchema = Schema.Struct({
   seq: Schema.Number,
-  // Every revision is the plan's text since the backfill, so a row with none is the store breaking its own contract.
+  // Every revision is the description's text since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
 });
 
-/** The content of the plan at each revision named, with the task's name as it stands now. */
+/** The content of the description at each revision named, with the task's name as it stands now. */
 const findRevisionContents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -312,7 +312,7 @@ const SectionRevisionRowSchema = Schema.Struct({
 
 type SectionRevisionRow = typeof SectionRevisionRowSchema.Type;
 
-/** The plan's newest revisions with their text, newest first, with one past the bound read as the text the oldest changed. */
+/** The description's newest revisions with their text, newest first, with one past the bound read as the text the oldest changed. */
 const findSectionRevisions = SqlSchema.findAll({
   Request: Schema.String,
   Result: SectionRevisionRowSchema,
@@ -393,9 +393,9 @@ function joins(newest: RevisionRow, record: DescriptionSaveRecord, now: Date): b
 }
 
 /**
- * The revision a plan from before history stood at, recorded as the plan's
+ * The revision a description from before history stood at, recorded as the description's
  * first, so the first revision recorded after it has something to differ
- * from; nothing for a plan never written, whose first revision differs from
+ * from; nothing for a description never written, whose first revision differs from
  * the text it started as. Answers the number it took, zero where it took none.
  */
 function recordEarlier(
@@ -432,10 +432,10 @@ function writerOf(row: SectionRevisionRow): DescriptionSectionWriterWho {
 }
 
 /**
- * Records one save that changed the plan: the newest revision moved on where
+ * Records one save that changed the description: the newest revision moved on where
  * the same writer, for the same member, made it lately, a new revision
  * otherwise, kept under the member. Run inside the
- * transaction that holds the task's row, so two saves of one plan never take
+ * transaction that holds the task's row, so two saves of one description never take
  * one number. Answers the id of the transaction it was written in, which a
  * reader following the history over Realtime waits for.
  */
@@ -474,8 +474,8 @@ export function recordRevision(
 }
 
 /**
- * The plan's newest revision as its "Edited by" line reads it: who wrote it,
- * a coding agent named as its row names it now, and when; nothing for a plan
+ * The description's newest revision as its "Edited by" line reads it: who wrote it,
+ * a coding agent named as its row names it now, and when; nothing for a description
  * with no history yet.
  */
 export function readLastEdit(
@@ -485,11 +485,11 @@ export function readLastEdit(
 }
 
 /**
- * Who last changed each section of a plan, read off its newest revisions
- * (`sectionWritersOf`); none for a plan with no history yet. The oldest read
- * is only the text the next changed where it is past the bound or the plan
- * as it stood before history, `earlier`, which no writer wrote. The plan's
- * first revision is read against the empty text every plan starts as, where
+ * Who last changed each section of a description, read off its newest revisions
+ * (`sectionWritersOf`); none for a description with no history yet. The oldest read
+ * is only the text the next changed where it is past the bound or the description
+ * as it stood before history, `earlier`, which no writer wrote. The description's
+ * first revision is read against the empty text every description starts as, where
  * it is among those read.
  */
 export function readSectionWriters(
@@ -512,9 +512,9 @@ export function readSectionWriters(
 }
 
 /**
- * A page of the plan's revisions, the newest first, before the
+ * A page of the description's revisions, the newest first, before the
  * revision `before` names where it names one, and what the next older page
- * is read before where one stands; no revision for a plan with no history
+ * is read before where one stands; no revision for a description with no history
  * yet, and for a task id the account does not own.
  */
 export function listRevisions(
@@ -543,7 +543,7 @@ export function listRevisions(
   });
 }
 
-/** The plan's text at one revision; nothing where it has no such revision, or the account reaches no such task. */
+/** The description's text at one revision; nothing where it has no such revision, or the account reaches no such task. */
 export function readRevisionContent(
   userId: string,
   taskId: string,
@@ -555,9 +555,9 @@ export function readRevisionContent(
 }
 
 /**
- * One revision of the plan as the History tab shows it: the plan
+ * One revision of the description as the History tab shows it: the description
  * after it and before it, the first revision having nothing before it, each
- * its text as the document's body; nothing where the plan
+ * its text as the document's body; nothing where the description
  * has no such revision, or the account reaches no such task.
  */
 export function readRevision(

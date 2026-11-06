@@ -126,7 +126,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * runner's bearer digest, and who pays for it.
  * And the agent a conversation is, one at most, read by its header.
  * And an agent deleted for good by any member of its workspace, once it stands stopped.
- * And the plan notes a native agent's running turn holds reserved, its account's alone.
+ * And the description notes a native agent's running turn holds reserved, its account's alone.
  * And the account's own agent that started an agent, which no other account's agent stands for.
  *
  * Synthetic accounts and conversations throughout.
@@ -498,7 +498,7 @@ it.layer(getTestDB())("the coding-agent store's Fast refusals", (it) => {
   );
 });
 
-it.layer(getTestDB())("the coding-agent store's plan notes of a turn", (it) => {
+it.layer(getTestDB())("the coding-agent store's description notes of a turn", (it) => {
   it.effect(
     "notes are reserved against the conversation's running turn alone and settled back to what was taken, and another account reaches neither",
     () =>
@@ -1887,7 +1887,7 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
 });
 
 it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
-  /** Text the size of a long plan, which an agent may be handed and no line carries. */
+  /** Text the size of a long description, which an agent may be handed and no line carries. */
   const largeText = "Any member may invite a teammate by email.\n".repeat(6_000);
 
   /** What a line says of an agent, and which of the text columns it carries, which should be none. */
@@ -1905,7 +1905,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
     Option.getOrElse(answer, () => assert.fail("the start made no agent")).agent;
 
   it.effect(
-    "every list reads an agent handed a large plan, a prompt, or an automation's run as its line: its brief, its automation's name, and its source, with none of the text, for a member alone",
+    "every list reads an agent handed a large description, a prompt, or an automation's run as its line: its brief, its automation's name, and its source, with none of the text, for a member alone",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -2025,7 +2025,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's agent with no repository, started blank", (it) => {
   it.effect(
-    "an agent started on a task with no repository and handed nothing is read back by its workspace's members with no repository and neither plan nor prompt",
+    "an agent started on a task with no repository and handed nothing is read back by its workspace's members with no repository and neither description nor prompt",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
