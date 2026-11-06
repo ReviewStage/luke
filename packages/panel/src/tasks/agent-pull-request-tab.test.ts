@@ -4539,6 +4539,10 @@ test("Files changed draws each review thread under its line, its comments throug
   );
   assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
   await minimize();
+  // Note that the setting's write lands a moment after the press, and the chip with it.
+  await vi.waitFor(() =>
+    assert.equal(note.querySelector(".diff-thread-chip-row > summary") !== null, true),
+  );
   const chip =
     note.querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("a chip stands");
@@ -4641,7 +4645,9 @@ test("the pointer resting on a review thread in Files changed lights the lines i
       (each) => each.getAttribute("aria-label") === "Minimize inline comments",
     ) ?? assert.fail("the diff settings offer Minimize inline comments");
   act(() => minimize.click());
-  await settle();
+  await vi.waitFor(() =>
+    assert.equal(note.querySelector(".diff-thread-chip-row > summary") !== null, true),
+  );
   const chip =
     note.querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("the threads are minimized");
