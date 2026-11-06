@@ -12,6 +12,7 @@ import {
   type AgentInboxAnswerParams,
   type AgentInboxAttachmentView,
   type AgentInboxCloseParams,
+  type AgentInboxCloseReleasedView,
   type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
@@ -39,6 +40,7 @@ import {
   agentInboxAnswerParamsSchema,
   agentInboxAttachmentParamsSchema,
   agentInboxCloseParamsSchema,
+  agentInboxCloseReleaseParamsSchema,
   agentInboxItemHomeParamsSchema,
   agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
@@ -132,6 +134,7 @@ import {
 import type { WireRecord, WireValue } from "@repo/wire";
 import {
   Clock,
+  Deferred,
   Duration,
   Effect,
   FiberHandle,
@@ -390,6 +393,8 @@ export interface AgentsComposer extends Composer {
   readonly reset: Effect.Effect<void>;
   /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
   readonly queueable: readonly AnyWrite[];
+  /** Every close a window still holds for its Undo let go as sent, answering once each is answered, so a quit drops none. */
+  readonly flushHeldCloses: Effect.Effect<void>;
 }
 
 /** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
@@ -411,6 +416,17 @@ function gateClosed(by: string): GateClosed {
     cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: by },
   };
 }
+
+/**
+ * The longest a held close waits for the window that holds it to let it go
+ * before it goes by itself: well past the Undo toast's hold, which a pointer
+ * over the toast pauses, so it stands for a window that closed, or a tab
+ * reloaded, while its Undo stood.
+ */
+const HELD_CLOSE_BOUND = Duration.minutes(1);
+
+/** What a held close its window took back answers: refused, so the pool takes back what it drew and keeps nothing to send again, and the window that undid it reads nothing of it. */
+const CLOSE_UNDONE: AgentInboxAnsweredView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /** Whether a commit names a read, by the rule a File tab's read at a commit is held to. */
 const isCommitSha = Schema.is(commitShaSchema);
@@ -1073,7 +1089,7 @@ function composed(
   const inboxWrite = <Input, Answer extends Parameters<typeof writtenOf>[0]>(
     keys: (input: Input) => readonly string[],
     change: (input: Input) => InboxChange,
-    send: (input: Input, key: string | undefined) => Effect.Effect<Answer>,
+    send: (input: Input, key: string | undefined, waited: boolean) => Effect.Effect<Answer>,
     queue?: {
       readonly name: string;
       readonly input: Schema.Codec<Input, unknown>;
@@ -1086,8 +1102,8 @@ function composed(
       kind: INBOX_ITEM,
       keys,
       change,
-      send: (input, { key }) =>
-        Effect.map(send(input, key), (answer) => {
+      send: (input, { key, waited }) =>
+        Effect.map(send(input, key, waited), (answer) => {
           const answered = carried<Answer>(answer);
           if (keptAs === undefined || !("failure" in answer)) {
             return inboxSent(answered, writtenOf(answer));
@@ -1123,7 +1139,80 @@ function composed(
       queued: settledAs,
     },
   );
-  /** An open item closed without an answer, settling it. */
+  /** The closes windows hold for their Undo, by each close's key: told once whether it goes to the service, and answered once it has. */
+  const heldCloses = new Map<
+    string,
+    { readonly told: Deferred.Deferred<boolean>; readonly answered: Deferred.Deferred<void> }
+  >();
+  /**
+   * What a window decided of a held close before the close came to wait, by
+   * its key, with when: as an Undo pressed while an earlier write on the same
+   * item was still out, or while the close waited behind writes the service
+   * had not answered. The close reads it once it comes to be sent.
+   */
+  const decidedEarly = new Map<string, { readonly send: boolean; readonly at: number }>();
+  /** The held closes already let go, by key, with when, so an Undo that comes after hears it came too late. */
+  const letGoAt = new Map<string, number>();
+  /** Every early decision and let-go older than `HELD_CLOSE_BOUND` forgotten, since no window asks after one that old. */
+  const forgetStale = (now: number) => {
+    const bound = Duration.toMillis(HELD_CLOSE_BOUND);
+    for (const [key, { at }] of decidedEarly) if (now - at > bound) decidedEarly.delete(key);
+    for (const [key, at] of letGoAt) if (now - at > bound) letGoAt.delete(key);
+  };
+  /** The early decision on the close under `clientKey`, taken so it is read once; none where its window said nothing yet. */
+  const takeDecided = (clientKey: string): boolean | undefined => {
+    const early = decidedEarly.get(clientKey);
+    decidedEarly.delete(clientKey);
+    return early?.send;
+  };
+  /**
+   * The held close under `clientKey`, `send` once its window lets it go,
+   * once its Undo can no longer be pressed, or is; or, past
+   * `HELD_CLOSE_BOUND` with no word from its window, as sent. What `send`
+   * answers, or `undone`, it answers. Note that it is answered to a quit's
+   * flush however it ends, interrupted too, so the quit never waits on it.
+   */
+  const released = <Answer>(
+    clientKey: string,
+    send: Effect.Effect<Answer>,
+    undone: Answer,
+  ): Effect.Effect<Answer> =>
+    Effect.gen(function* () {
+      const held = {
+        told: yield* Deferred.make<boolean>(),
+        answered: yield* Deferred.make<void>(),
+      };
+      heldCloses.set(clientKey, held);
+      const settled = Effect.sync(() => {
+        heldCloses.delete(clientKey);
+        letGoAt.set(clientKey, kernel.now());
+      }).pipe(Effect.andThen(Deferred.succeed(held.answered, undefined)));
+      return yield* Effect.gen(function* () {
+        const heard = yield* Effect.timeoutOption(Deferred.await(held.told), HELD_CLOSE_BOUND);
+        heldCloses.delete(clientKey);
+        return yield* Option.getOrElse(heard, () => true) ? send : Effect.succeed(undone);
+      }).pipe(Effect.ensuring(settled));
+    });
+  // Note that the closes are read before they are told, since telling one takes it out of the map.
+  const flushHeldCloses = Effect.suspend(() => {
+    const held = [...heldCloses.values()];
+    heldCloses.clear();
+    return Effect.forEach(
+      held,
+      ({ told, answered }) =>
+        Effect.andThen(Deferred.succeed(told, true), Deferred.await(answered)),
+      { concurrency: "unbounded", discard: true },
+    );
+  });
+  /**
+   * An open item closed without an answer, settling it. A close the window
+   * holds for its Undo (`held`) is drawn at once like any other, and goes to
+   * the service only once released, so an Undo takes back what was drawn
+   * before the service, the agent, or another member hears of it. Note
+   * that only its first attempt waits: one sent again from the writes that
+   * waited for the service goes by what its window decided meanwhile, if
+   * anything, as one its window decided before it came to be sent does.
+   */
   const closed = inboxWrite<AgentInboxCloseParams, AgentInboxAnsweredView>(
     ({ itemId }) => [itemId],
     ({ itemId, revision }) => {
@@ -1134,7 +1223,17 @@ function composed(
         item: (item) => (item.revision === revision ? closedNow(item, by, at) : undefined),
       };
     },
-    ({ itemId, ...request }, key) => asked(client.closeInbox(itemId, request, key)),
+    ({ itemId, held, ...request }, key, waited) =>
+      Effect.suspend(() => {
+        const send = asked(client.closeInbox(itemId, request, key));
+        if (held !== true) return send;
+        // Note that a decision its window made before the close came to be sent is the one it goes by.
+        const decided = takeDecided(request.clientKey);
+        if (decided === undefined && !waited)
+          return released(request.clientKey, send, CLOSE_UNDONE);
+        letGoAt.set(request.clientKey, kernel.now());
+        return decided === false ? Effect.succeed(CLOSE_UNDONE) : send;
+      }),
     {
       name: GATEWAY_METHOD.AGENTS_INBOX_CLOSE,
       input: agentInboxCloseParamsSchema,
@@ -1910,6 +2009,26 @@ function composed(
           "closing an inbox item names the item, the revision it closes, the close's key, and the note it may carry",
         ),
     ),
+    [GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE]: (params) =>
+      Effect.gen(function* () {
+        const { clientKey, send } = yield* readParams(
+          agentInboxCloseReleaseParamsSchema,
+          params,
+          "letting a held close go names the close's key and whether it is sent",
+        );
+        const held = heldCloses.get(clientKey);
+        if (held !== undefined) {
+          heldCloses.delete(clientKey);
+          yield* Deferred.succeed(held.told, send);
+          return carried<AgentInboxCloseReleasedView>({ held: true });
+        }
+        if (letGoAt.has(clientKey)) return carried<AgentInboxCloseReleasedView>({ held: false });
+        // Note that a close not yet come to be sent, behind an earlier write on its item or among those waiting for the service, goes by this decision once it is.
+        const now = kernel.now();
+        forgetStale(now);
+        decidedEarly.set(clientKey, { send, at: now });
+        return carried<AgentInboxCloseReleasedView>({ held: true });
+      }),
     [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(
       dependencies.pool,
       messaged,
@@ -2050,5 +2169,6 @@ function composed(
       anyWrite(reminded),
       anyWrite(markedAll),
     ],
+    flushHeldCloses,
   };
 }

@@ -6,8 +6,12 @@
  * worker's session names as its root, since a worker works in its parent's
  * sandbox. The brain's
  * sandbox and a coding agent's are reached alike. Making sure of the
- * browser resumes a stopped sandbox, as an agent's own step would, waits for
- * it to run, and runs the start (`sandbox-browser.ts`), which attaches to a
+ * browser opens a stopped sandbox again as the agent's next turn does,
+ * through the same `getOrCreate` (`../agent-sandbox-open.ts`), which makes
+ * one standing under its session's name again on the session's drive, with
+ * the tags and the size it stood with, where its snapshot is gone, or
+ * resumes one opened before, under a UUID, by its own name; it waits for it
+ * to run, and runs the start (`sandbox-browser.ts`), which attaches to a
  * browser already running or starts one.
  *
  * A session opens the running sandbox session's PTY, as the Terminal tab
@@ -58,9 +62,12 @@ import type { HttpClient } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
 import { jsonOf } from "../../http/http-effect.js";
 import type { RelaySocket } from "../../terminal/relay.js";
+import { agentSandboxName, openAgentSandbox } from "../agent-sandbox-open.js";
+import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js";
 import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
+  type ListedSandbox,
   SANDBOX_STATUS,
   type SandboxSessionApi,
   type SandboxUnavailable,
@@ -435,19 +442,30 @@ export function browserSessionOf(session: {
   return session.parent?.rootSessionId ?? session.id;
 }
 
-/** The calls of Vercel Sandbox's API the browser makes: a sandbox found and resumed, and its session run in and its PTY minted. */
-export interface BrowserSandboxApi extends Pick<VercelSandboxApi, "listTagged" | "resume"> {
+/** The calls of Vercel Sandbox's API the browser makes: a sandbox found and opened again, and its session run in and its PTY minted. */
+export interface BrowserSandboxApi
+  extends Pick<VercelSandboxApi, "listTagged" | "resume" | "getOrCreate"> {
   readonly session: (
     ref: SessionRef,
   ) => Effect.Effect<Pick<SandboxSessionApi, "run" | "openInteractive">, SandboxUnavailable>;
 }
 
-/** The service over the calls `vercel-sandbox-api.ts` makes and the PTY the sandbox serves. */
+/** The service over the calls `vercel-sandbox-api.ts` makes, the PTY the sandbox serves, and the agents' image a sandbox is made again from. */
 export function agentBrowserOver(
   api: BrowserSandboxApi,
   pty: SandboxPtyService,
+  image: AgentImageService,
 ): AgentBrowserService {
-  /** The running session of the sandbox tagged with the session, resumed and waited for where it is not running. */
+  /** The sandbox opened again as the agent's next turn opens it, where it stands under its session's name, or resumed by its own name where it was opened before. */
+  const reopened = (sessionId: string, sandbox: ListedSandbox) =>
+    sandbox.name === agentSandboxName(sessionId)
+      ? openAgentSandbox(api, { sessionId, tags: { ...sandbox.tags }, vcpus: sandbox.vcpus }).pipe(
+          Effect.provideService(AgentImage, image),
+          Effect.map((opened) => opened.sandbox),
+        )
+      : api.resume(sandbox.name);
+
+  /** The running session of the sandbox tagged with the session, opened again and waited for where it is not running. */
   const runningSession = (sessionId: string) =>
     Effect.gen(function* () {
       const [sandbox] = yield* api.listTagged(sessionId).pipe(Effect.mapError(sandboxUnavailable));
@@ -455,11 +473,12 @@ export function agentBrowserOver(
       if (sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined) {
         return { name: sandbox.name, sessionId: sandbox.currentSessionId };
       }
-      // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
+      // Note that each try opens it again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
       // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
-      // gone is the one refusal answered at once, since no later try finds it again.
-      const resumed = api.resume(sandbox.name).pipe(
+      // gone, which only a sandbox opened before `getOrCreate` answers, is the one refusal answered at
+      // once, since no later try finds it again.
+      const resumed = reopened(sessionId, sandbox).pipe(
         Effect.mapError((error) =>
           snapshotGone(error)
             ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, error.status)
@@ -583,27 +602,30 @@ export function agentBrowserOver(
 }
 
 /**
- * The service as the deployment runs it, on the function's own OIDC token
- * and the PTY it reaches (`sandboxPtyLayer`), which the agent's `browser`
- * tool composes.
+ * The service as the deployment runs it, on the function's own OIDC token,
+ * the PTY it reaches (`sandboxPtyLayer`), and the agents' image its build
+ * names, which the agent's `browser` tool composes.
  * @public
  */
 export const agentBrowserLayer: Layer.Layer<
   AgentBrowser,
   never,
-  HttpClient.HttpClient | SandboxPty
+  HttpClient.HttpClient | SandboxPty | AgentImage
 > = Layer.effect(
   AgentBrowser,
   Effect.gen(function* () {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
-    return agentBrowserOver(api, yield* SandboxPty);
+    return agentBrowserOver(api, yield* SandboxPty, yield* AgentImage);
   }),
 );
 
 /**
  * The service over the PTY as the deployment reaches it, on the runtime's
- * HTTP client: what each eve root composes into its runtime over the
- * deployment's services, so the `browser` tool reaches the agent's browser.
+ * HTTP client and the agents' image the edge names: what each edge composes,
+ * so the `browser` tool and the tabs reach the agent's browser.
  */
-export const agentBrowserServices: Layer.Layer<AgentBrowser, never, HttpClient.HttpClient> =
-  agentBrowserLayer.pipe(Layer.provide(sandboxPtyLayer));
+export const agentBrowserServices: Layer.Layer<
+  AgentBrowser,
+  never,
+  HttpClient.HttpClient | AgentImage
+> = agentBrowserLayer.pipe(Layer.provide(sandboxPtyLayer));

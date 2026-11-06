@@ -64,6 +64,9 @@ import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
+  agentTab,
+  changesTab,
+  draftTab,
   isAgentTab,
   isChangesTab,
   isCloudBrowserTab,
@@ -74,9 +77,11 @@ import {
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
+  pageTab,
   pullRequestLabelOf,
   type StripTab,
   sameTab,
+  subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@repo/ui/task-sections-model";
 import {
@@ -1715,8 +1720,8 @@ export function useTasksTab(input: {
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
-    onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
-    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
+    onStarted: (agentId) => mainRef.current?.onChoose(agentTab(agentId)),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, draftTab(draftId)),
     keywords: dictationWords,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
@@ -2616,7 +2621,7 @@ export function useTasksTab(input: {
 
   // An agent that ended unseen marks its tab unread; main clears it once the
   // tab is shown.
-  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => ({ agent }));
+  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => agentTab(agent));
 
   // A fixture's repositories are read from nowhere, as its tasks are. The
   // chip lists the repositories of the workspace its task is in: the open
@@ -2938,7 +2943,7 @@ export function useTasksTab(input: {
     const narrow = input.room === SHELL_ROOM.NARROW;
     if (narrow) sidePanel.onSetOpen(false);
     const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
-    if (agentId !== undefined) mainTabs.onShow(taskId, { agent: agentId });
+    if (agentId !== undefined) mainTabs.onShow(taskId, agentTab(agentId));
     else if (narrow) mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
   // A task pressed anywhere opens on its agents, as one gone back to does; in a narrow room on
@@ -3159,7 +3164,7 @@ export function useTasksTab(input: {
         attachments: handed.attachments,
         sentAt,
       });
-      mainTabs.onShow(planId, { agent: started.agent.id });
+      mainTabs.onShow(planId, agentTab(started.agent.id));
       return;
     }
     // Note that the refusal keeps the answer that said it, so the draft's tab reports the service's word for it.
@@ -3167,7 +3172,7 @@ export function useTasksTab(input: {
     const refused = { ...agentStartFailureNote(answer, planId, device), cause: answer };
     const { idempotencyKey: id, ...words } = handed;
     agents.onHandDraft(planId, { id, ...words, refused });
-    mainTabs.onShow(planId, { draft: id });
+    mainTabs.onShow(planId, draftTab(id));
   };
 
   // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
@@ -3330,7 +3335,7 @@ export function useTasksTab(input: {
 
   // A version's Open lands where its writer wrote it: an agent's tab.
   const showSource = (taskId: string, source: RevisionSource) => {
-    showColumnTab(taskId, { agent: source.agentId });
+    showColumnTab(taskId, agentTab(source.agentId));
   };
 
   // A task named anywhere, by a chip, a link, an Inbox crumb, or a call's row, opens on its
@@ -3451,28 +3456,28 @@ export function useTasksTab(input: {
   const showOnTask = (planId: string, place: AgentPlace) => {
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         linkPanelTab(
           { ...place, planId },
-          { subagent: place.callId, delegation: { agent: place.agentId, task: "" } },
+          subagentTab(place.callId, { agent: place.agentId, task: "" }),
         );
         return;
       case LINK_PLACE.CHANGES:
-        linkPanelTab({ ...place, planId }, { changes: sharedChangesAgent(planId, place.agentId) });
+        linkPanelTab({ ...place, planId }, changesTab(sharedChangesAgent(planId, place.agentId)));
         return;
       // A review thread opens its agent's Pull request tab on the view the link names.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(planId, place.agentId);
-        sidePanel.onPullRequestView({ changes }, place.view);
-        linkPanelTab({ ...place, planId }, { changes });
+        sidePanel.onPullRequestView(changesTab(changes), place.view);
+        linkPanelTab({ ...place, planId }, changesTab(changes));
         revealThread(changes, place);
         return;
       }
       case LINK_PLACE.AGENT:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         return;
       case LINK_PLACE.MESSAGE:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         revealMessage(place);
         return;
     }
@@ -3484,17 +3489,14 @@ export function useTasksTab(input: {
     standInFor({ kind: STAND_IN.AGENT, agentId });
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        sidePanel.onShow(agentId, {
-          subagent: place.callId,
-          delegation: { agent: agentId, task: "" },
-        });
+        sidePanel.onShow(agentId, subagentTab(place.callId, { agent: agentId, task: "" }));
         return;
       case LINK_PLACE.CHANGES:
-        sidePanel.onShow(agentId, { changes: agentId });
+        sidePanel.onShow(agentId, changesTab(agentId));
         return;
       case LINK_PLACE.PULL_REQUEST_THREAD:
-        sidePanel.onPullRequestView({ changes: agentId }, place.view);
-        sidePanel.onShow(agentId, { changes: agentId });
+        sidePanel.onPullRequestView(changesTab(agentId), place.view);
+        sidePanel.onShow(agentId, changesTab(agentId));
         revealThread(agentId, place);
         return;
       case LINK_PLACE.AGENT:
@@ -3744,10 +3746,10 @@ export function useTasksTab(input: {
         // A page of an agent on no task opens on that agent's page, in its panel.
         if ("agentId" in place) {
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-          sidePanel.onShow(place.agentId, { page: place.pageId });
+          sidePanel.onShow(place.agentId, pageTab(place.pageId));
           return;
         }
-        linkPanelTab(place, { page: place.pageId });
+        linkPanelTab(place, pageTab(place.pageId));
         return;
       case LINK_PLACE.WORKER:
       case LINK_PLACE.CHANGES:

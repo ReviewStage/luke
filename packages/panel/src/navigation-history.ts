@@ -117,6 +117,7 @@ import {
   type StripTab,
   sameTab,
   tabKey,
+  taggedStripTab,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
@@ -987,10 +988,44 @@ type HistoryMove = Parameters<Parameters<RouterHistory["subscribe"]>[0]>[0]["act
 /** Each router history's trail, kept for as long as the history is. */
 const trails = new WeakMap<RouterHistory, WindowTrail>();
 
-/** The step saved in `location`'s entry; none in an entry no window wrote, or wrote before the router held its history. */
+/** A side panel's step with its tab tagged with its kind (`taggedStripTab`); none for a tab it cannot tell. */
+function taggedSide(side: SideStep): SideStep {
+  return side === null || side === undefined ? side : taggedStripTab(side);
+}
+
+/**
+ * A saved place with each of its tabs tagged with its kind: one a build
+ * before tabs carried their kind saved holds its tabs untagged, which the
+ * web tab keeps in its entries across a reload and a deploy. A place whose
+ * tabs were already tagged is the place itself.
+ */
+function taggedPlace(place: Place): Place {
+  switch (place.kind) {
+    case PLACE_KIND.TASK: {
+      const column = place.column === undefined ? undefined : taggedStripTab(place.column);
+      const side = taggedSide(place.side);
+      const panelTab = place.panel?.tab === undefined ? undefined : taggedStripTab(place.panel.tab);
+      if (column === place.column && side === place.side && panelTab === place.panel?.tab) {
+        return place;
+      }
+      const panel = place.panel === undefined ? undefined : { ...place.panel, tab: panelTab };
+      return { ...place, column, side, panel };
+    }
+    case PLACE_KIND.HOME:
+      return place;
+    default: {
+      const side = taggedSide(place.side);
+      return side === place.side ? place : { ...place, side };
+    }
+  }
+}
+
+/** The step saved in `location`'s entry, its tabs tagged with their kind; none in an entry no window wrote, or wrote before the router held its history. */
 function savedStepOf(location: HistoryLocation): SavedStep | undefined {
   const { step } = location.state;
-  return isSavedStep(step) ? step : undefined;
+  if (!isSavedStep(step)) return undefined;
+  const place = taggedPlace(step.place);
+  return place === step.place ? step : { ...step, place };
 }
 
 /** Whether `location`'s entry holds a step a window saved, which a page loaded or landed there reopens rather than opening its address as a link. */

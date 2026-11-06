@@ -1032,7 +1032,7 @@ export const INBOX_CLOSE_LEAD = "Thread closed";
  */
 export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">, note = ""): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
-  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Resolved without an answer.`;
   return note.trim() === "" ? header : `${header}\n\n${note.trim()}`;
 }
 

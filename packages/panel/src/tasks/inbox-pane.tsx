@@ -61,6 +61,7 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { isWireString } from "@repo/wire";
@@ -99,7 +100,6 @@ import {
   AskControls,
   bareKey,
   DraftQuestion,
-  DraftResolving,
   HeldControls,
   hasControls,
   INBOX_ASK_BOX,
@@ -113,7 +113,7 @@ import {
   WithdrawnWhy,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { closeAction, type InboxCloser, useInboxClose } from "./inbox-close.js";
+import { type InboxResolver, resolveAction } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
@@ -1226,10 +1226,9 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U, and Remind me, naming H; and, while the
- * item is open, Resolve without answering, asked first. It is keyed by its
- * item where it is drawn, so a question asked on one item never closes the
- * next, and the menu and the question go with the pane once it is hidden.
+ * agent; Mark as read or unread, naming U, Remind me, naming H, and, while the
+ * item is open, Resolve, naming E. It is keyed by its item where it is drawn,
+ * and the menu goes with the pane once it is hidden.
  */
 function InboxItemMenu({
   item,
@@ -1244,18 +1243,17 @@ function InboxItemMenu({
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
   onRemind?: InboxReminder | undefined;
-  onClose: InboxCloser | undefined;
+  onClose: InboxResolver | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
   /** Muted over the items, pressed by nothing: where the item stands in the list, on a phone. */
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const close = useInboxClose(item, onClose, shown);
   // Note that a time of the reader's own is picked from the item's row, whose list holds the picker, so this menu offers the times alone.
   const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
-    onAskClose: close.ask,
+    onResolve: onClose,
     keyed: true,
     remind: onRemind === undefined ? undefined : { onRemind },
   });
@@ -1275,46 +1273,33 @@ function InboxItemMenu({
           onClose={menu.close}
         />
       )}
-      {close.dialog}
     </>
   );
 }
 
 /**
- * The open question's ×, at its card's top end: Resolve without answering,
- * which asks nothing and only stages the resolve on the item's draft, the
- * box's Send doing it (`DraftResolving`), so the item's ⋯ keeps its own
- * close and the question it asks (`inbox-close.tsx`). It is keyed by its
- * item where it is drawn, so a resolve staged on one item never lands on
- * the next, and takes back the focus Undo had where it came of Undo's press.
+ * The open question's ×, at its card's top end: Resolve, as the item's ⋯
+ * offers it, resolving at once with Undo (`inbox-close.tsx`), so Send only
+ * ever sends an answer. Note that it wears ×, not Resolve's circle-check,
+ * because on the card it turns down the very question it sits on, which
+ * reads clearest as ×, and it takes no room from the options; its name and
+ * tooltip say Resolve.
  */
-function QuestionClose({
+function QuestionResolve({
   item,
-  closer,
-  takesFocus,
-  onStage,
+  resolver,
 }: {
   item: InboxItem;
-  closer: InboxCloser | undefined;
-  takesFocus: boolean;
-  /** Stages the resolve on the item's draft. */
-  onStage: () => void;
+  resolver: InboxResolver | undefined;
 }): React.JSX.Element | null {
-  const cross = useRef<HTMLButtonElement>(null);
-  // Note that only the mount reads it, so a question drawn as the item opens takes no focus from where the reader stands.
-  const focused = useRef(takesFocus);
-  useEffect(() => {
-    if (focused.current) cross.current?.focus();
-  }, []);
-  const close = closeAction(item, closer === undefined ? undefined : onStage);
-  return close === undefined ? null : (
-    <Tooltip label={close.label}>
+  const resolve = resolveAction([item], resolver);
+  return resolve === undefined ? null : (
+    <Tooltip label={resolve.label}>
       <IconButton
-        ref={cross}
-        icon={close.icon}
-        label={close.label}
+        icon={<GLYPH.CLOSE />}
+        label={resolve.label}
         size={BUTTON_SIZE.COMPACT}
-        onClick={close.onSelect}
+        onClick={resolve.onSelect}
       />
     </Tooltip>
   );
@@ -1425,8 +1410,8 @@ export interface InboxPaneDoors {
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Sets the item's reminder from its ⋯ menu, or cancels it; none where the pane offers no reminder. */
   readonly onRemind?: InboxReminder | undefined;
-  /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
-  readonly onClose?: InboxCloser | undefined;
+  /** Resolves open items without an answer, from the bar's ⋯ menu and the question card; none where the pane offers no resolve. */
+  readonly onClose?: InboxResolver | undefined;
 }
 
 /** What starts a new thread from an item's box instead of a reply, where the page offers one. */
@@ -1696,37 +1681,11 @@ export function InboxPane({
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
   // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
-  // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
-  const resolving = open && draft.resolving === true && doors.onClose !== undefined;
-  // Which of the × and Undo was pressed last, and on which item, so the one that takes its place takes its focus, and never on another item the pane goes on to show.
-  const [pressed, setPressed] = useState<
-    { readonly itemId: string; readonly which: "close" | "undo" } | undefined
-  >(undefined);
-  const pressedHere = pressed?.itemId === item.id ? pressed.which : undefined;
   const question =
-    openAsk === undefined || wordsAlone ? undefined : resolving ? (
-      <DraftResolving
-        takesFocus={pressedHere === "close"}
-        onUndo={() => {
-          setPressed({ itemId: item.id, which: "undo" });
-          onDraft({ ...draft, resolving: undefined });
-        }}
-      />
-    ) : (
+    openAsk === undefined || wordsAlone ? undefined : (
       <DraftQuestion
         pane={pane}
-        close={
-          <QuestionClose
-            key={item.id}
-            item={item}
-            closer={doors.onClose}
-            takesFocus={pressedHere === "undo"}
-            onStage={() => {
-              setPressed({ itemId: item.id, which: "close" });
-              onDraft({ ...draft, resolving: true });
-            }}
-          />
-        }
+        close={<QuestionResolve key={item.id} item={item} resolver={doors.onClose} />}
       >
         <AskControls
           ask={openAsk}
@@ -1746,7 +1705,6 @@ export function InboxPane({
           agent={by.subject.agent}
           thread={thread}
           controls={question}
-          resolver={resolving ? doors.onClose : undefined}
           skills={agents.readSkills}
           keywords={answerKeywords(holder, item)}
           replyScope={board}

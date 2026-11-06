@@ -34,6 +34,7 @@ import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
 import { experimentsOn, settingsView } from "@repo/settings/testing";
+import { agentTab, changesTab, fileTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -1753,7 +1754,7 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
     ...ON_AGENT_TAB,
     mainTabs: {
       ...ON_AGENT_TAB.mainTabs,
-      tabs: [{ agent: LINKED_AGENT }],
+      tabs: [agentTab(LINKED_AGENT)],
       openAgents: [LINKED_AGENT],
     },
   });
@@ -1820,7 +1821,7 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
   workspaces: [
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
   ],
-  mainTabs: { ...tasksControl().mainTabs, tab: { agent: LINKED_AGENT } },
+  mainTabs: { ...tasksControl().mainTabs, tab: agentTab(LINKED_AGENT) },
   agents: agentsControl({
     agents: [
       {
@@ -1908,7 +1909,7 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
     return tasksControl({
       ...listed,
       agentView: { ...base.agentView, agentId: LINKED_AGENT },
-      sidePanel: { ...base.sidePanel, open: true, fullScreen, tab: { page: pageId } },
+      sidePanel: { ...base.sidePanel, open: true, fullScreen, tab: pageTab(pageId) },
     });
   };
   for (const tasks of [onPage(true), onPage(false)]) {
@@ -1973,7 +1974,7 @@ test("with the side panel filling the window over an agent's tab, ⇧⌘C copies
         ...ON_AGENT_TAB.sidePanel,
         open: true,
         fullScreen: true,
-        tab: { changes: LINKED_AGENT },
+        tab: changesTab(LINKED_AGENT),
       },
     }),
   );
@@ -1994,7 +1995,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
   openPalette(
     tasksControl({
       ...ON_AGENT_TAB,
-      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: { changes: LINKED_AGENT } },
+      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: changesTab(LINKED_AGENT) },
     }),
   );
   type("copy link");
@@ -2613,7 +2614,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
   chooseFilter("This task");
   press(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`);
   const [page, terminal] = chosen;
-  assert.deepEqual(page, { page: "page-1" });
+  assert.deepEqual(page, pageTab("page-1"));
   assert.ok(terminal instanceof Object && "terminal" in terminal && "title" in terminal);
   assert.deepEqual([terminal.terminal, terminal.title], [agent.id, "Cloud 1"]);
 });
@@ -3044,13 +3045,13 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.ok(needs, "the item that needs you is listed");
   assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
-  assert.ok(needs.querySelector(".ui-combobox-option-hint .inbox-row-attention"), "it needs you");
-  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
-  assert.equal(
-    answered?.querySelector(".inbox-row-attention"),
-    null,
-    "an answered item needs no one",
+  assert.match(
+    needs.querySelector(".ui-combobox-option-hint")?.textContent ?? "",
+    /Needs you/u,
+    "it needs you",
   );
+  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
+  assert.doesNotMatch(answered?.textContent ?? "", /Needs you/u, "an answered item needs no one");
 
   restOn(needs);
   const card = document.querySelector(".ui-tooltip-card [data-inbox-item-card]");
@@ -3286,7 +3287,7 @@ test("with files open and nothing typed, Files lists them first, in the strip's 
         { path: moved, range: undefined, opened: 2, browsedOn: "plan-1" },
       ],
       // The later tab was moved before the earlier one in the strip, which leaves the files held as they were.
-      order: [{ file: moved }, { file: opened }],
+      order: [fileTab(moved), fileTab(opened)],
     },
   });
   const tree = ["README.md", "package.json", "src/index.ts", other, opened, moved];

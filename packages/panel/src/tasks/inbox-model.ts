@@ -102,8 +102,6 @@ export interface InboxDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going with the close as its note. */
-  readonly resolving?: true | undefined;
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
@@ -912,18 +910,19 @@ export function inboxPreviewHeard(
   return previewOf(line, nameOf, ticked, line.heard);
 }
 
-/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
+/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, a member's resolve, or words alone. */
 export const INBOX_LINE = {
   DECIDE: "decide",
   DO: "do",
   ANSWER: "answer",
   SETTLED: "settled",
+  RESOLVED: "resolved",
   SAID: "said",
 } as const;
 
 export type InboxLineKind = (typeof INBOX_LINE)[keyof typeof INBOX_LINE];
 
-/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, or none. */
+/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, Resolve's where a member resolved it, or none. */
 export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
 }
@@ -1078,8 +1077,20 @@ function itemLine(item: InboxItem): ItemLine {
   const thread = item.thread ?? [];
   const asking = openAskOf(thread);
   const last = thread.at(-1);
-  const line =
-    asking !== undefined && knownAsk(asking.ask)
+  // Note that a member's resolve says so in its own word, rather than the agent's last words, which would read as still waiting.
+  const resolved =
+    item.status === INBOX_STATUS.CLOSED &&
+    inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
+  const line: ItemLine = resolved
+    ? {
+        kind: INBOX_LINE.RESOLVED,
+        ask: undefined,
+        words: INBOX_SETTLED_STANDING.RESOLVED,
+        heard: INBOX_SETTLED_STANDING.RESOLVED,
+        byAgent: true,
+        member: undefined,
+      }
+    : asking !== undefined && knownAsk(asking.ask)
       ? {
           kind: ASK_LINE[asking.ask.type],
           ask: asking.ask,
@@ -1519,8 +1530,8 @@ export function waitsOnReader(
 
 /**
  * Whether an open item main lists holds an ask open rather than being a
- * notice: what the Inbox's number and the Dock's badge count. One from a
- * service before it, which says nothing, counts as asking, as every item did.
+ * notice. One from a service before it, which says nothing, counts as
+ * asking, as every item did.
  */
 export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
   return item.asking !== false;
@@ -1752,8 +1763,8 @@ export function isDone(item: InboxItem): boolean {
 
 /**
  * Whether a scope lists the item: Questions every question whose ask waits
- * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those with a reminder, a notice never; Open every
+ * on the reader (`threadNeedsReader`) but for those with a reminder, a
+ * notice never; Open every
  * thread the reader is not done with (`isDone`), one still open, one
  * answered since they last read it, or one closed without an answer that
  * they marked unread or that was written on since it closed, as a mail

@@ -3,6 +3,7 @@ import {
   type AgentTodoStatus,
   type AgentTodos,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import type { IntegrationProvider } from "@repo/features/integration-wire";
 import { readLink } from "@repo/features/link-grammar";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@repo/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { formatBytes } from "@repo/features/number-format";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -165,11 +165,11 @@ import {
 import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
+import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
-import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { cardTitle, type SentWords, todosCount } from "./tool-call-model.js";
@@ -1047,7 +1047,7 @@ const CALL_ICON = {
   [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
   [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
   [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
-  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
+  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.RESOLVED />,
   [CALL_KIND.REOPEN_THREAD]: () => <GLYPH.COMMENT />,
   [CALL_KIND.SEARCH_TOOLS]: () => <GLYPH.MCP_SERVER />,
   [CALL_KIND.MCP_TOOL]: () => <GLYPH.MCP_SERVER />,

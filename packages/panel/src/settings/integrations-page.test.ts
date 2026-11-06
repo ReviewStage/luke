@@ -613,7 +613,7 @@ test("Disconnect on a lone account says what goes before it disconnects", async 
   );
 });
 
-test("a sign-in that expired, and a connection its server refused, each show Reconnect on the row", async () => {
+test("a sign-in that expired, and a connection its server refused, each show Reconnect on the row and keep Disconnect in its ⋯", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) =>
       provider !== INTEGRATION_PROVIDER.NOTION && provider !== INTEGRATION_PROVIDER.SLACK,
@@ -627,14 +627,12 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   const expired = rowNamed(page, "Notion");
   const refused = rowNamed(page, "Slack");
 
-  assert.equal(
-    expired.querySelector(".ui-settings-row-state")?.textContent,
-    "Sign-in expired · Reconnect",
-  );
+  assert.equal(expired.querySelector(".ui-settings-row-state")?.textContent, "Sign-in expired");
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
+  assert.deepEqual(menuOf(expired), { items: ["Disconnect"], heading: undefined });
   assert.equal(
     refused.querySelector(".ui-settings-row-state")?.textContent,
-    "Slack refused the sign-in. · Reconnect",
+    "Slack refused the sign-in.",
   );
   assert.deepEqual(rowButtons(refused), ["Reconnect"]);
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
@@ -657,7 +655,7 @@ test("a server's own error stands quoted on a plain line under our sentence, nev
   );
 
   assert.deepEqual(lines, [
-    ["Slack could not be reached. · Reconnect", "attention"],
+    ["Slack could not be reached.", "attention"],
     ["Slack said: “App is not enabled for Slack MCP server access”", "plain"],
   ]);
 });
@@ -770,13 +768,16 @@ test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retr
   await readMoves();
   await vi.waitFor(() =>
     assert.deepEqual(granolaRow(page), {
-      line: "You canceled connecting Granola. · Retry",
+      line: "You canceled connecting Granola.",
       buttons: ["Retry"],
     }),
   );
   // The service names a failure once; the next read leaves the line as it stood.
   await readMoves();
-  assert.equal(granolaRow(page).line, "You canceled connecting Granola. · Retry");
+  assert.deepEqual(granolaRow(page), {
+    line: "You canceled connecting Granola.",
+    buttons: ["Retry"],
+  });
 });
 
 test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
@@ -794,7 +795,7 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
   await readMoves();
   await vi.waitFor(() =>
     assert.deepEqual(granolaRow(page), {
-      line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+      line: "Granola could not be connected.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
       buttons: ["Retry"],
     }),
   );
@@ -813,7 +814,7 @@ test("a sign-in the browser came back from without a grant says it could not con
   await readMoves();
   await vi.waitFor(() =>
     assert.deepEqual(granolaRow(page), {
-      line: "Granola could not be connected: the sign-in came back without access. · Retry",
+      line: "Granola could not be connected: the sign-in came back without access.",
       buttons: ["Retry"],
     }),
   );
@@ -834,7 +835,7 @@ it.effect(
       yield* TestClock.adjust(SIGN_IN_WAIT);
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
-        line: "Sign-in didn't finish. · Retry",
+        line: "Sign-in didn't finish.",
         buttons: ["Retry"],
       });
 
@@ -867,7 +868,7 @@ it.effect(
 
       yield* TestClock.adjust("1 minute");
       yield* Effect.promise(settle);
-      assert.equal(granolaRow(page).line, "Sign-in didn't finish. · Retry");
+      assert.equal(granolaRow(page).line, "Sign-in didn't finish.");
     }),
 );
 
@@ -887,7 +888,7 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* TestClock.adjust("1 minute");
     yield* Effect.promise(settle);
     assert.deepEqual(granolaRow(page), {
-      line: "Sign-in didn't finish. · Retry",
+      line: "Sign-in didn't finish.",
       buttons: ["Retry"],
     });
     assert.ok(

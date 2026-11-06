@@ -36,6 +36,7 @@ import {
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
+  RowCount,
   RowHint,
   RowHintOptions,
   SCROLL_SIZE,
@@ -54,7 +55,11 @@ import { ListIcon } from "@repo/ui/icons";
 import { ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   agentOfTab,
+  agentTab,
   type ChangesStripTab,
+  changesTab,
+  cloudBrowserTab,
+  fileTab,
   inTaskOrder,
   isChangesTab,
   isCloudBrowserTab,
@@ -66,9 +71,11 @@ import {
   isTranscriptTab,
   type LocalStripTab,
   type PageStripTab,
+  pageTab,
   type StripTab,
   type SubagentStripTab,
   sameTab,
+  subagentTab,
   TAB_WORDS,
   type TerminalStripTab,
   tabKey,
@@ -186,7 +193,7 @@ import {
 import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useFileTreeWidth } from "./folded-groups.js";
-import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
+import { AgentMenuTab } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming, pastRightEdge } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.js";
@@ -621,9 +628,9 @@ export function changesTabOf(
 ): ChangesStripTab {
   // A pull request named by its number that is the agent's own is its own tab, so it never stands in two.
   if (number !== undefined && agents.pullRequests.get(agentId)?.number !== number) {
-    return { changes: agentId, number };
+    return changesTab(agentId, number);
   }
-  return { changes: changesAgentOf(agents, agentId, open) };
+  return changesTab(changesAgentOf(agents, agentId, open));
 }
 
 /**
@@ -825,7 +832,7 @@ export function panelEntries(input: {
         replayMasked: true,
       },
       card,
-      onPick: () => panel.onChoose({ changes: agentId }),
+      onPick: () => panel.onChoose(changesTab(agentId)),
     };
   });
   const pageRows = pages.map((page) => ({
@@ -845,7 +852,7 @@ export function panelEntries(input: {
             name: page.title,
             page,
           }),
-    onPick: () => panel.onChoose({ page: page.id }),
+    onPick: () => panel.onChoose(pageTab(page.id)),
   }));
   // A cloud row opens a new terminal in its agent's sandbox, its own tab, as New terminal does;
   // its words after the name count the agent's terminals. Note that it is named by a key of its
@@ -973,11 +980,9 @@ export function panelOffers(input: {
     browsers: {
       agents: cloudOffers,
       onAgent: (agentId: string) =>
-        panel.onChoose({
-          cloudBrowser: startCloudDraft(holderPlaceOf(holder, taskId), agentId).id,
-        }),
+        panel.onChoose(cloudBrowserTab(startCloudDraft(holderPlaceOf(holder, taskId), agentId).id)),
       listed: input.listedBrowsers,
-      onOpen: (id: string) => panel.onChoose({ cloudBrowser: id }),
+      onOpen: (id: string) => panel.onChoose(cloudBrowserTab(id)),
     },
     plan: input.plan,
     cards,
@@ -1123,12 +1128,12 @@ function stripTabs(input: {
   });
   // A file's tab hangs the file's card, as every place naming the file does.
   const fileTabs = files.map(({ path }) => ({
-    tab: { file: path },
-    look: look(
-      { file: path },
-      { ...tabLook({ kind: TAB_KIND.FILE, path }), card: hungCard({ kind: TAB_KIND.FILE, path }) },
-    ),
-    close: () => panel.onClose({ file: path }),
+    tab: fileTab(path),
+    look: look(fileTab(path), {
+      ...tabLook({ kind: TAB_KIND.FILE, path }),
+      card: hungCard({ kind: TAB_KIND.FILE, path }),
+    }),
+    close: () => panel.onClose(fileTab(path)),
   }));
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
@@ -1573,9 +1578,7 @@ export function ActivityList({
                           {entry.look.detailTone === undefined ? (
                             entry.look.detail
                           ) : (
-                            <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
-                              {entry.look.detail}
-                            </span>
+                            <RowCount value={entry.look.detail} tone={entry.look.detailTone} />
                           )}
                         </ReplayWords>
                       )
@@ -1885,7 +1888,7 @@ export function taskCards(input: {
   const subjectOf = (opened: ToolTarget, name: string | undefined): CardSubject | undefined => {
     switch (opened.kind) {
       case TOOL_TARGET.AGENT: {
-        const subject = agentSubject(agents, opened.agent, held, chosen({ agent: opened.agent }));
+        const subject = agentSubject(agents, opened.agent, held, chosen(agentTab(opened.agent)));
         return { kind: TAB_KIND.AGENT, subject, models: agents.models };
       }
       case TOOL_TARGET.PAGE:
@@ -1933,13 +1936,7 @@ export function taskCards(input: {
         task,
         standsOn: pages,
         worker: ({ callId, task: job, status }) =>
-          card(
-            drawnSubagent(
-              { subagent: callId, delegation: { agent: agentId, task: job } },
-              status,
-              held,
-            ),
-          ),
+          card(drawnSubagent(subagentTab(callId, { agent: agentId, task: job }), status, held)),
       };
       byAgent.set(agentId, cards);
       return cards;
@@ -2588,7 +2585,7 @@ export function SidePanel({
         held: drawnTranscripts,
         chosen: (chosen) =>
           (chosenTab !== undefined && sameTab(chosen, chosenTab)) ||
-          (shownAgent !== undefined && sameTab(chosen, { agent: shownAgent })),
+          (shownAgent !== undefined && sameTab(chosen, agentTab(shownAgent))),
         pages: pagePlace,
       }),
     [agents, drawnTranscripts, chosenTab, shownAgent, pagePlace],
@@ -2667,7 +2664,7 @@ export function SidePanel({
   const cloudDrafts = {
     onOpened: (draftId: string, opened: AgentBrowserTab) => {
       discardCloudDraft(cloudPlace, draftId);
-      panel.onChoose({ cloudBrowser: opened.id });
+      panel.onChoose(cloudBrowserTab(opened.id));
     },
     onDiscard: (draftId: string) => discardCloudDraft(cloudPlace, draftId),
   };

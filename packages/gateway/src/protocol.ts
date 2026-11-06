@@ -520,6 +520,8 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
   AGENTS_INBOX_CLOSE: "agents.inboxClose",
+  /** A held close let go by its key, sent to the service or taken back as its Undo asks; whether it was still held. */
+  AGENTS_INBOX_CLOSE_RELEASE: "agents.inboxCloseRelease",
   /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
   AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */

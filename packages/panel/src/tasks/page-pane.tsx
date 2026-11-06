@@ -1,3 +1,7 @@
+import {
+  DESCRIPTION_COMMENT_SCOPE,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   PAGE_FIND_ACT,
@@ -17,10 +21,6 @@ import {
   pagePickAnswerSchema,
 } from "@repo/features/page-pick";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
-import {
-  DESCRIPTION_COMMENT_SCOPE,
-  type DescriptionCommentThread,
-} from "@repo/features/description-comment-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view";
 import { readingWords } from "@repo/features/words";
@@ -42,6 +42,7 @@ import {
   Tooltip,
   useResizeEdge,
 } from "@repo/ui";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -50,7 +51,7 @@ import {
   MessageSquarePlusIcon,
   RotateCwIcon,
 } from "@repo/ui/icons";
-import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
+import { pageTab } from "@repo/ui/tab-strip-model";
 import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import {
@@ -81,8 +82,6 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
-import { type HeldComment, PageReviewSection, usePageReview } from "./page-review.js";
-import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
   COMMENTS_FILTER,
   type CommentsFilter,
@@ -96,6 +95,8 @@ import {
   threadsByElement,
   withQuote,
 } from "./description-comments.js";
+import { type HeldComment, PageReviewSection, usePageReview } from "./page-review.js";
+import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import { pageSourceQueryOptions, pageSourcesKey } from "./repository-reads.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
@@ -854,7 +855,7 @@ export function PagePane({
     <FindScope
       className="page-view-find"
       active={findActive}
-      subject={{ task: pagePlaceId(place), tab: { page: page.id } }}
+      subject={{ task: pagePlaceId(place), tab: pageTab(page.id) }}
     >
       <Fill className="page-view file-view ph-no-capture">
         {phone ? (

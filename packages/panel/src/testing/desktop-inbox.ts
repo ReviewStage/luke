@@ -968,18 +968,11 @@ export function heardOf(ids: string | null): string {
     .join(" ");
 }
 
-/**
- * What marks a row as needing the developer: `*` where it says "Needs you"
- * to a reader and draws no attention mark, which its card says instead,
- * nothing where it does neither, and `?` where it draws the mark, so a mark
- * drawn on every open row again fails every listing.
- */
+/** What marks a row as needing the developer: `*` where it says "Needs you" to a reader, nothing where it does not. */
 export function needsYouMark(row: HTMLElement): string {
-  const mark = row.querySelector(".ui-list-row-meta .attention-mark") !== null;
   const said = [...row.querySelectorAll(".ui-list-row-meta .ui-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
-  if (mark) return "?";
   return said ? "*" : "";
 }
 
@@ -1057,43 +1050,70 @@ export function subjectOf(page: HTMLElement): string[] {
   return [...subject.children].map((child) => child.textContent ?? "");
 }
 
-/** Every close the Inbox sends, with the note's words where it carries one, answered as the service takes it: the item closed by the reader. */
-export function takenCloses(): { itemId: string; revision: number; text?: string }[] {
-  const sent: { itemId: string; revision: number; text?: string }[] = [];
+/**
+ * Every close that reaches the service, answered as the service takes it:
+ * the item closed by the reader. As the host does, a close the window holds
+ * for its Undo is drawn closed at once and reaches the service only once let
+ * go as sent (`letResolvesGo`); one let go as taken back stands open again
+ * and never reaches it.
+ */
+export function takenCloses(): { itemId: string; revision: number }[] {
+  const sent: { itemId: string; revision: number }[] = [];
+  const held = new Map<string, (send: boolean) => void>();
+  const early = new Map<string, boolean>();
+  const gone = new Set<string>();
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE) {
+        const { clientKey, send } = request.payload;
+        const release = held.get(clientKey);
+        held.delete(clientKey);
+        // Note that a release before its close comes to wait is kept for it, as the host keeps one.
+        if (release === undefined && !gone.has(clientKey)) early.set(clientKey, send);
+        release?.(send);
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: { held: !gone.has(clientKey) || release !== undefined },
+        });
+      }
       if (request.kind !== ACT_KIND.AGENTS_INBOX_CLOSE) return previous(request);
-      const { itemId, revision, text } = request.payload;
-      sent.push({ itemId, revision, ...(text === undefined ? undefined : { text }) });
-      const asked = [...world.inboxes.values()]
-        .flat()
-        .find((each) => each.id === request.payload.itemId);
+      const { itemId, revision, clientKey } = request.payload;
+      const asked = [...world.inboxes.values()].flat().find((each) => each.id === itemId);
       // The close withdraws the ask it leaves open, with no reason, and reads the item, as the service closes it.
       const closed = closedNow(asked ?? THRESHOLD, READER, 6_000);
       // Note that the host lands the item as the service answered it in every inbox it follows before the close answers.
       drawnByHost((each) => (each.id === closed.id ? closed : undefined));
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: { item: closed, taken: true },
-      });
+      const taken = (): FakeActAnswer => {
+        sent.push({ itemId, revision });
+        return { status: FAKE_ANSWER.DONE, value: { item: closed, taken: true } };
+      };
+      if (request.payload.held !== true) return Promise.resolve(taken());
+      const answer = Promise.withResolvers<FakeActAnswer>();
+      const settle = (send: boolean) => {
+        gone.add(clientKey);
+        if (send) {
+          answer.resolve(taken());
+          return;
+        }
+        drawnByHost((each) => (each.id === itemId && asked !== undefined ? asked : undefined));
+        answer.resolve({ status: FAKE_ANSWER.DONE, value: { failure: "unanswered" } });
+      };
+      const decided = early.get(clientKey);
+      early.delete(clientKey);
+      if (decided === undefined) held.set(clientKey, settle);
+      else settle(decided);
+      return answer.promise;
     },
   });
   return sent;
 }
 
-/** The question Resolve asks, answered by its act, Resolve item or Resolve items. */
-export async function confirmClose(): Promise<void> {
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
-    assert.fail("Resolve asks first");
-  assert.strictEqual(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
-  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
-    /^Resolve items?$/u.test(button.textContent ?? ""),
-  );
-  await act(async () => (resolve ?? assert.fail("the question offers Resolve item")).click());
+/** Lets every resolve the window holds for its Undo go as sent, as the window leaving does once its toast can no longer be pressed. */
+export async function letResolvesGo(): Promise<void> {
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
   await settle();
 }
 

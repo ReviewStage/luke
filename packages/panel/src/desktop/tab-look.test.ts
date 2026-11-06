@@ -12,7 +12,14 @@ import type { PageLine } from "@repo/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  changesTab,
+  draftTab,
+  pageTab,
+  TAB_WORDS,
+  terminalTab,
+} from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -147,19 +154,17 @@ async function mount(
     },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: WORKING.id }, { draft: DRAFT }],
-      tab: shown.main ?? { agent: WORKING.id },
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(WORKING.id), draftTab(DRAFT)],
+      tab: shown.main ?? agentTab(WORKING.id),
       openAgents: [WORKING.id],
     },
     sidePanel: {
       ...base.sidePanel,
       open: true,
       tab: shown.tab ?? SIDE_PANEL_TAB.COMMENTS,
-      changes: [{ changes: DONE.id }],
-      terminals: [
-        { terminal: WORKING.id, shell: "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10", title: "Cloud 1" },
-      ],
-      pages: [{ page: FUNNEL.id }],
+      changes: [changesTab(DONE.id)],
+      terminals: [terminalTab(WORKING.id, "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10", "Cloud 1")],
+      pages: [pageTab(FUNNEL.id)],
     },
     pages: [FUNNEL],
     agents: agentsControl({
@@ -257,7 +262,7 @@ test("the task's topbar names the task, as the list names it now, over a strip o
   // Note that the list renamed the task before its document was read again, so the topbar follows the list.
   const container = await mount({
     listed: { ...SUMMARY, name: "Expire invites after a week" },
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
   });
   const topbar = container.querySelector(".task-topbar .ui-toolbar");
   assert.ok(topbar, "the task's topbar");

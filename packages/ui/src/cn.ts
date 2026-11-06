@@ -273,7 +273,6 @@ const PANEL_SIDE = {
  */
 const PANEL_INBOX = {
   spacing: [
-    "attention-glyph-small",
     "inbox-earlier",
     "inbox-face-half",
     "inbox-field-short",

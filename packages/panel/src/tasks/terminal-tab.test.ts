@@ -21,6 +21,7 @@ import {
 } from "@repo/host/contract";
 import { timeRuntime } from "@repo/ui";
 import type { TerminalStripTab } from "@repo/ui/tab-strip-model";
+import { terminalTab } from "@repo/ui/tab-strip-model";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -66,11 +67,11 @@ const MADE = "5b3e7c9d-1f4a-4d8b-8c3e-5a7b9c1d3f42";
 const RUNNING_ON = "3f1c5a7b-9d2e-4b6f-8a1c-3e5f7a9b1d20";
 
 /** The tab drawn: the id the window minted its terminal under, and its name. */
-const TAB: TerminalStripTab = {
-  terminal: AGENT.id,
-  shell: "6c4f8d0e-2a5b-4e9c-9d4f-6b8c0d2e4a53",
-  title: "Cloud 1",
-};
+const TAB: TerminalStripTab = terminalTab(
+  AGENT.id,
+  "6c4f8d0e-2a5b-4e9c-9d4f-6b8c0d2e4a53",
+  "Cloud 1",
+);
 
 /** Keeps the window's cloud terminals for the agent, as a page before a reload left them in session storage. */
 function keep(shells: readonly HeldShell[]): void {

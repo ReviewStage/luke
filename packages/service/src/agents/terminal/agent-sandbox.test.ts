@@ -9,6 +9,7 @@ import { SANDBOX_STATE } from "@repo/features/terminal-wire";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { LOCAL_AGENT_ENVIRONMENT } from "../../testing/local-agent.js";
+import { runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
 import {
   commandRunStreamed,
   fixtureToken,
@@ -18,7 +19,10 @@ import {
   sandboxListRefusal,
   sessionAnswered,
 } from "../../testing/vercel-sandbox-fake.js";
-import { SandboxUnavailable } from "../vercel-sandbox-api.js";
+import { agentDriveName } from "../agent-drive.js";
+import { openAgentSandbox } from "../agent-sandbox-open.js";
+import { AgentImage } from "../coder-host/agent-image.js";
+import { SandboxUnavailable, vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
 
@@ -37,6 +41,7 @@ import { TMUX_EXIT } from "./tmux.js";
  */
 
 const SESSION = "wrun_fixture";
+const FIXTURE_IMAGE = "agent-image:fixture";
 const SANDBOX = "eve-sbx-vercel-fixture";
 const RUNNING_SESSION = "sbs_running";
 const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
@@ -84,8 +89,9 @@ function vercel(
   const policies: unknown[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
-    Layer.merge(
+    Layer.mergeAll(
       LOCAL_AGENT_ENVIRONMENT,
+      Layer.succeed(AgentImage, { reference: Effect.succeed(FIXTURE_IMAGE) }),
       sandboxFetchOver(async (url, init) => {
         const parsed = new URL(url);
         const method = init.method ?? "GET";
@@ -290,6 +296,49 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
       const woken = api.asked.find((call) => call.url.searchParams.get("resume") === "true");
       assert.equal(woken?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
     }),
+  );
+
+  it.effect(
+    "a resume of a sandbox under its session's name whose snapshot is gone makes it again under that name on the session's drive, with its tags, the agent's user in it, and answers it running",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const fake = runnerSandboxApi();
+        const image = Layer.succeed(AgentImage, { reference: Effect.succeed(FIXTURE_IMAGE) });
+        const tags = { sessionId: SESSION, agentId: "agent-fixture" };
+        const opened = yield* Effect.gen(function* () {
+          const api = yield* vercelSandboxApi(async () => fixtureToken());
+          yield* api.getOrCreateDrive(agentDriveName(SESSION));
+          return yield* openAgentSandbox(api, { sessionId: SESSION, tags, vcpus: undefined });
+        }).pipe(Effect.provide(Layer.merge(fake.layer, image)));
+        const [expired] = fake.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.status = "stopped";
+        expired.snapshotExpired = true;
+        const userMade = (run: { readonly args: readonly string[] }) =>
+          run.args.join(" ") === "-m -s /bin/bash agent";
+        const usersBefore = fake.runs.filter(userMade).length;
+
+        const resumed = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.resume(SESSION),
+        ).pipe(
+          Effect.provide(
+            Layer.provide(
+              agentSandboxLayer,
+              Layer.mergeAll(LOCAL_AGENT_ENVIRONMENT, image, fake.layer),
+            ),
+          ),
+        );
+
+        assert.equal(resumed, SANDBOX_STATE.RUNNING);
+        const remade = fake.sandboxes.at(-1);
+        assert.ok(remade !== undefined && remade !== expired);
+        assert.deepEqual(
+          [expired.deleted, remade.deleted, remade.name, remade.tags, remade.mounts],
+          [true, false, opened.sandbox.name, tags, expired.mounts],
+        );
+        assert.equal(fake.runs.filter(userMade).length, usersBefore + 1);
+      }),
   );
 
   it.effect("an attach mints the running session's PTY and never wakes a stopped sandbox", () =>
