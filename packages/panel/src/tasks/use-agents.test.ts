@@ -24,13 +24,15 @@ import type { PortActKind, PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@repo/wire";
+import { MutationObserver } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { ActedResult } from "../act.js";
 import { type FakeActPort, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { ToastHost } from "../toast.js";
 import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
@@ -1135,9 +1137,11 @@ test("an agent's page stands on the list's row of it: a delete reads nothing aga
   tab.answer(ACT_KIND.AGENTS_DELETE, { deleted: true });
   await tab.mount();
 
-  let result: Awaited<ReturnType<AgentsControl["onDelete"]>> | undefined;
+  let result: ActedResult | undefined;
   await act(async () => {
-    result = await tab.control().onDelete(AGENT);
+    result = await new MutationObserver(testQueryClientNow(), tab.control().deleteAgent).mutate(
+      AGENT,
+    );
   });
   assert.deepEqual(result, { status: ACTION_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(

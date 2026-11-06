@@ -58,7 +58,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, its page and its presses given by the window. */
 const SETTINGS: SettingsPanelProps = {
@@ -69,7 +69,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -385,7 +384,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
 
 test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {
   const page = await mount(UNDER_SPLIT, createElement(SettingsWindow, { link: undefined }));
-  assert.equal(the(page, ".desktop-shell").dataset["room"], "wide", "the stage is no phone's");
+  assert.equal(the(page, ".desktop-shell").dataset.room, "wide", "the stage is no phone's");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
   press(the(page, SETTINGS_COLUMNS.list), "Appearance");
