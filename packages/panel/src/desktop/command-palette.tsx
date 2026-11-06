@@ -161,7 +161,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { AssigneeFaceMark, AutomationCard } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -1641,9 +1640,12 @@ function OpenAgentArchive({
   /** How many times ⌘K asked for this agent, each new one run once. */
   asked: number;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   // Note that the agent is read again by its own id before a teammate's is archived, as its sidebar row reads it.
-  const control = { ...agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const control = {
+    ...agents,
+    readAgent: (agentId: string) => readAgentById(queryClient, agentId),
+  };
   const archive = useAgentArchive(agent, control, shown);
   const unarchive = useAgentUnarchive(agent.id, control);
   const action = agent.archivedAt === undefined ? archive.action : unarchive;

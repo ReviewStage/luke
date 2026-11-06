@@ -21,8 +21,8 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@repo/ui/a
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { agentRow, taskRowName } from "@repo/ui/task-list-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef } from "react";
-import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
@@ -167,7 +167,7 @@ export function SidebarAgent({
   }, []);
   const rowPlace = useRowPlace();
   const coarse = useCoarsePointer();
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   const reads = useAgentReadMarks();
   // Note that the row reads the account's mark rather than main's unseen dot, so every Mac and browser draws it alike,
   // and the agent on screen only by a mark by hand, since what it does lands before the reader's eyes.
@@ -175,7 +175,7 @@ export function SidebarAgent({
   // The agent's own actions, as its tab and its page offer them, read again by its own id before an archive.
   const actions = useAgentActions(
     agent,
-    { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
+    { ...agents, readAgent: (agentId) => readAgentById(queryClient, agentId) },
     { label: name, shown, terminals: { onOpenTerminal: undefined }, onDeleted },
   );
   const { archive } = actions.doors;

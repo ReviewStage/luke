@@ -35,4 +35,11 @@ export const QUERY_ROOT = {
   TASK_FILE: "task-file",
   TASK_TREE: "task-tree",
   PAGE_SOURCE: "page-source",
+  /** The one-off reads asked as a reader acts (`tasks/agent-reads.ts`). */
+  AGENT_PAGE: "agent-page",
+  INBOX_ITEM_HOME: "inbox-item-home",
+  TASK_BY_NUMBER: "task-by-number",
+  AGENT_MESSAGES: "agent-messages",
+  REPOSITORY_SKILLS: "repository-skills",
+  TERMINAL_LIST: "terminal-list",
 } as const;
