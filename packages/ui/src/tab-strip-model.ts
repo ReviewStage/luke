@@ -43,6 +43,11 @@ export const TAB_WORDS = {
   BROWSER: "Browser",
 } as const;
 
+/** A Local tab's name: the kind's word, then its terminal's. */
+export function localLabelOf(tab: Pick<LocalStripTab, "title">): string {
+  return `${TAB_WORDS.LOCAL} · ${tab.title}`;
+}
+
 /** A Pull request tab's name once its pull request is read: the pull request's number, then its title, as GitHub names it. */
 export function pullRequestLabelOf(pullRequest: {
   readonly number: number;
@@ -98,9 +103,16 @@ export interface TerminalStripTab {
   readonly terminal: string;
 }
 
-/** One cloud agent's Local tab, named by the agent whose files its shells on this Mac stand in. */
+/**
+ * One terminal on this Mac in a cloud agent's mirrored files, a tab of its
+ * own: named by the agent and the id the window minted the terminal under
+ * before main opened it, and carrying the terminal's name, which titles the
+ * tab and never changes.
+ */
 export interface LocalStripTab {
   readonly local: string;
+  readonly shell: string;
+  readonly title: string;
 }
 
 /** One page's tab, named by the page an agent wrote for the task. */
@@ -232,7 +244,7 @@ export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boole
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes && a.number === b.number;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
-  if (isLocalTab(a)) return isLocalTab(b) && a.local === b.local;
+  if (isLocalTab(a)) return isLocalTab(b) && a.local === b.local && a.shell === b.shell;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
   return a === b;
@@ -250,17 +262,6 @@ function terminalKey(agentId: string): string {
   if (held !== undefined) return held;
   const made = crypto.randomUUID();
   terminalKeys.set(agentId, made);
-  return made;
-}
-
-/** The key each agent's Local tab is drawn under, by agent, made the first time it is asked for, apart from its other tabs'. */
-const localKeys = new Map<string, string>();
-
-function localKey(agentId: string): string {
-  const held = localKeys.get(agentId);
-  if (held !== undefined) return held;
-  const made = crypto.randomUUID();
-  localKeys.set(agentId, made);
   return made;
 }
 
@@ -299,14 +300,14 @@ function numberedKey(agentId: string, number: number): string {
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
  * of the side panel, the one strip it stands in, is keyed by, one naming a
  * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
- * by a key made for its agent (`terminalKey`), a Local tab by another (`localKey`), a page's by the page's
+ * by a key made for its agent (`terminalKey`), a Local tab by the id its terminal was minted under, a page's by the page's
  * own id, and a cloud Browser tab's by the id the service keeps it under.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
-  if (isLocalTab(tab)) return localKey(tab.local);
+  if (isLocalTab(tab)) return tab.shell;
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) {
