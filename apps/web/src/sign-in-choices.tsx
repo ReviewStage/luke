@@ -1,6 +1,6 @@
 import type { SocialProvider } from "@repo/features/sign-in-provider";
+import { useMutation } from "@tanstack/react-query";
 import type { createAuthClient } from "better-auth/react";
-import { useState } from "react";
 
 /**
  * sign-in-choices.tsx -- the one social sign-in path a page on the browser's session takes: the Better Auth call behind the `@repo/ui` sign-in card's buttons.
@@ -31,26 +31,31 @@ const CURRENT_ADDRESS = () => `${window.location.pathname}${window.location.sear
 
 /**
  * A page's sign-in choices. A sign-in returns the browser to this address
- * once Better Auth has a session, and one opens at a time.
+ * once Better Auth has a session, and one opens at a time: a sign-in that
+ * started stays pending, since the browser is on its way to the provider.
+ * Better Auth answers a sign-in that cannot start as a result rather than a
+ * throw, so the refusal is thrown here, and the choices offer every provider
+ * again.
  */
 export function useSocialSignIn(
   client: SocialSignIn,
   { callbackURL = CURRENT_ADDRESS, onBegin, onStarted }: SocialSignInOptions = {},
 ): SocialSignInState {
-  const [pending, setPending] = useState<SocialProvider>();
-  const [failed, setFailed] = useState(false);
-  const begin = async (provider: SocialProvider) => {
-    if (pending) return;
-    setPending(provider);
-    setFailed(false);
-    onBegin?.();
-    const result = await client.signIn.social({ provider, callbackURL: callbackURL() });
-    if (!result.error) {
-      onStarted?.();
-      return;
-    }
-    setPending(undefined);
-    setFailed(true);
+  const opening = useMutation({
+    mutationFn: async (provider: SocialProvider) => {
+      const result = await client.signIn.social({ provider, callbackURL: callbackURL() });
+      if (result.error) throw new Error("The sign-in could not start.");
+    },
+    onMutate: () => onBegin?.(),
+    onSuccess: () => onStarted?.(),
+  });
+  const begin = (provider: SocialProvider) => {
+    if (opening.isPending || opening.isSuccess) return;
+    opening.mutate(provider);
   };
-  return { pending, failed, begin: (provider) => void begin(provider) };
+  return {
+    pending: opening.isPending || opening.isSuccess ? opening.variables : undefined,
+    failed: opening.isError,
+    begin,
+  };
 }

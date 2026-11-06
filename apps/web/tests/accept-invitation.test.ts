@@ -148,7 +148,10 @@ test("a valid invitation names its workspace and inviter and is accepted from it
       }),
   );
   await act(async () => buttonNamed(page, "Accept invitation").click());
-  expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
+  // Note that Query draws a mutation's pending state on its next scheduled tick.
+  await vi.waitFor(() =>
+    expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true"),
+  );
 
   // Note that accepting rereads the session on a timer, after which the route answers a member.
   offer = offerRead({ member: { workspaceName: "Atlas" } });
