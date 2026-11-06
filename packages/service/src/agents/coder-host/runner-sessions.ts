@@ -30,15 +30,15 @@
  * `held`, or one of its `credentials` its machine holds there) is kept there with the launch's swaps before
  * the runner starts, its placeholder in the environment in its place, and
  * sent with every write to the place's firewall while the launch stands
- * (`../sandbox-firewall.ts`); it comes off with every other credential at
- * the place's stop, or alone, the launch let go, at a launch's end that
- * leaves the place up, for a Terminal or for the launch that hands its lines
- * on. The launch declares the bearer as a credential its machine hands over
- * (`AgentMachineService`'s `deliverCredentials`): in a sandbox it goes no
- * further than its firewall either, the runner handed a placeholder for it,
- * which the firewall swaps for the bearer on requests to our host, kept and
- * let go on the same terms. The config line and the first message are its
- * first lines. The machine records the runner and the first event number of its launch
+ * (`../sandbox-firewall.ts`); it stays there, with every other credential,
+ * until the place stops or the next launch writes its own, a place a
+ * launch's end leaves up, for a Terminal or for the launch that hands its
+ * lines on, included. The launch declares the bearer as a credential its
+ * machine hands over (`AgentMachineService`'s `deliverCredentials`): in a
+ * sandbox it goes no further than its firewall either, the runner handed a
+ * placeholder for it, which the firewall swaps for the bearer on requests to
+ * our host, kept on the same terms. The config line and the first message
+ * are its first lines. The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
  * A message's words go as text and its images as image blocks; any other
@@ -2210,7 +2210,7 @@ export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(fu
 /** How a launch's end left its place. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",
-  /** A developer's Terminal holds the place, left up with every credential taken off, for its timeout to stop. */
+  /** A developer's Terminal holds the place, left up with its credentials, for its timeout to stop. */
   HELD: "held",
   /** The END is from a launch a newer one replaced, or the place is gone or already down. */
   STALE: "stale",
@@ -2225,13 +2225,11 @@ export const RUNNER_ENDED = {
 } as const;
 
 /**
- * A launch's end, as its END event tells it, for either harness: every
- * credential taken off the firewall, then the place stopped unless a
- * developer's Terminal holds it, which leaves it to its timeout; where a
- * message waits for the launch that hands it on, the place is left up with
- * the ended launch's swaps let go and nothing else sent, the launch that
- * hands it on setting its own; and nothing for an END older than the launch
- * its place runs now.
+ * A launch's end, as its END event tells it, for either harness: the place
+ * stopped, its kept launch deleted first, unless a developer's Terminal
+ * holds it, which leaves it up with its credentials to its timeout; where a message waits for the launch that hands it on, the
+ * place is left up as it stands, the launch that hands it on setting its own
+ * swaps; and nothing for an END older than the launch its place runs now.
  * Decided and stopped under the agent's runner lease, read again once it is
  * held, so a `send` relaunching the runner either finishes first, and its
  * newer launch makes this END stale, or starts after the stop and resumes
@@ -2315,27 +2313,16 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
     ending.reason !== RUNNER_END.FAILED &&
     (yield* linesWaitAt(ending.target.userId, agentId))
   ) {
-    // Note that credentials that would not come off are said and passed over, because the launch that
-    // hands the lines on keeps its own in their place, and an END that failed would hand nothing on.
-    yield* machine.firewall
-      .endLaunch(running, ending.target.userId, {})
-      .pipe(
-        Effect.catch((failure) =>
-          Effect.logWarning(
-            `an ended runner's credentials stayed on a place left up for its lines: ${keptFailureWords(failureWords(failure))}`,
-          ),
-        ),
-      );
     return RUNNER_ENDED.LINES_WAITING;
   }
-  // Every credential comes off first, and a place they would not come off is left up rather than
-  // stopped with them: the call fails, and the place stops at its own timeout.
-  yield* machine.firewall.clear(running);
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the
-  // place, which its timeout then stops once nothing keeps it alive.
+  // place, its credentials with it, which its timeout then stops once nothing keeps it alive.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
     return RUNNER_ENDED.HELD;
   }
+  // The launch kept for the place goes ahead of the stop, so no renewal writes to it again; its
+  // credentials stay on its firewall until the stop.
+  yield* machine.firewall.clear(running);
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });

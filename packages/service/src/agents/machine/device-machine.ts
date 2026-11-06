@@ -490,7 +490,6 @@ function deviceMachineOver(
     firewall: {
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
-      endLaunch: () => Effect.void,
       clear: () => Effect.void,
     },
 

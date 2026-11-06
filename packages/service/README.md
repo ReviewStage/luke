@@ -1501,7 +1501,7 @@ writes nothing twice; and it takes the developer's lines from
 `/api/agents/runner-lines` (`runner-lines-app.ts`), a held read woken through
 Sync. The runner is retired when its turn goes idle, and its end takes the
 credential off the firewall and stops the sandbox, unless a Terminal holds
-it. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
+it, which keeps the credential on until the sandbox stops on its timeout. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
 harness and handed to it at every launch) tell the agent to read `AGENTS.md`
 and `CLAUDE.md` first, reread the code the description names and say where it no
 longer fits, run the repository's checks, work on an `agent/<slug>` branch and

@@ -126,7 +126,7 @@ const firewallOver = (layer: Layer.Layer<never>) =>
 
 it.layer(getTestDB())("a sandbox session's firewall", (it) => {
   it.effect(
-    "each write carries what its writer names beside the launch's swaps, the kept launch holds no value in the clear, and its end and a clear take the swaps off",
+    "each write carries what its writer names beside the launch's swaps, the kept launch holds no value in the clear, and a clear deletes it and sends nothing",
     () =>
       Effect.gen(function* () {
         const session = yield* ownSession;
@@ -138,9 +138,6 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
           yield* firewall.write(session, { github: write });
           yield* firewall.write(session, { github: write, clone: read });
           const row = yield* readFirewallLaunch(session);
-          yield* firewall.endLaunch(session, { github: write });
-          yield* firewall.write(session, {});
-          yield* firewall.keepLaunch(session, bearerLaunch);
           yield* firewall.clear({ name: session.name, sessionId: session.sandboxSessionId });
           return row;
         }).pipe(services);
@@ -162,9 +159,6 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
               [SERVICE_HOST]: [BEARER_RULE],
             },
           },
-          { allow: { "*": [], "github.com": [WRITE_RULE], "api.github.com": [WRITE_RULE] } },
-          { mode: "allow-all" },
-          { mode: "allow-all" },
         ]);
         assert.ok(kept !== undefined);
         assert.equal(kept.agentId, "agent-fixture");

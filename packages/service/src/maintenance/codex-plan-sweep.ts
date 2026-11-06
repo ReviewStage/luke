@@ -15,10 +15,9 @@
  * repository credential minted afresh (`renewPlanSwap`), to the sandbox its
  * agent's session tag finds running that session. A swap that already
  * carries it is left, so a session is written, and its policy sent, only as
- * its account's token moves on, about every quarter hour. The swap stands no
- * longer than its runner: it is cleared ahead of its sandbox's stop, and let
- * go where a Terminal keeps the sandbox up past the runner's end, so a
- * launch's renewals end with it.
+ * its account's token moves on, about every quarter hour. Renewals end with
+ * the sandbox: its launch's row is deleted ahead of its stop, so the sweep
+ * reads it no more.
  *
  * Note that a swap is set with at least the margin left on its token, and
  * the window is as wide as reads every standing session within a quarter

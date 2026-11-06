@@ -584,8 +584,6 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
       keepLaunch: (place, userId, launch) =>
         firewall.keepLaunch(firewallSessionOf(place, userId), launch),
-      endLaunch: (place, userId, sources) =>
-        firewall.endLaunch(firewallSessionOf(place, userId), sources),
       clear: (place) => firewall.clear(sessionOfPlace(place)),
     },
 

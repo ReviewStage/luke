@@ -81,7 +81,7 @@ export interface SessionSandboxesService {
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /**
    * Stops every running sandbox tagged with the session, keeping its
-   * filesystem for a later resume; answers how many were stopped. Every credential at its firewall comes off first, its record with it
+   * filesystem for a later resume; answers how many were stopped. The launch kept for its firewall goes first
    * (`sandbox-firewall.ts`).
    */
   readonly stopFor: (
@@ -131,8 +131,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-          // The credentials come off first, as at a launch's end and in the sweeps, because a stopped
-          // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
+          // The kept launch goes first, as ahead of every other stop, so no renewal writes to it again.
           const session = { name: sandbox.name, sessionId: running };
           yield* sandboxFirewall(api).clear(session);
           yield* Effect.flatMap(api.session(session), (held) => held.stop());
