@@ -4,6 +4,7 @@ export type {
   AccountSourceSeam,
 } from "../account-source.js";
 export { hostAssemblyLayer } from "../compose-host.js";
+export type { ListenOnLoopback, LoopbackConnection } from "../compose-port-forwards.js";
 export type {
   OpenTerminalSocket,
   TerminalSocketArrival,
@@ -39,6 +40,7 @@ export {
   LocalAgentPlatform,
   type LocalAgentPlatformSeam,
   type LocalAgentRunner,
+  LoopbackListener,
   RunMode,
   reporterLayer,
   SecretCipher,

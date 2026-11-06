@@ -171,6 +171,10 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
+  type PortForwardingAnswer,
+  portForwardingAnswerSchema,
+} from "@repo/features/port-forward-acts";
+import {
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
@@ -1015,6 +1019,13 @@ export interface HostOperator {
   onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
   /** A live view's socket closed, with its code, by its connection. */
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
+  /** How an agent's forwarding to this Mac's localhost stands; nothing where the host refused. */
+  portForwardRead(params: { agentId: string }): Effect.Effect<PortForwardingAnswer | undefined>;
+  /** An agent's forwarding turned on or off, answering how it then stands; nothing where the host refused. */
+  portForwardSet(params: {
+    agentId: string;
+    on: boolean;
+  }): Effect.Effect<PortForwardingAnswer | undefined>;
 }
 
 /**
@@ -2744,6 +2755,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
         (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
+      ),
+    portForwardRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PORT_FORWARDS_READ, { agentId: params.agentId }),
+        answerOf(portForwardingAnswerSchema, undefined),
+      ),
+    portForwardSet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: params.agentId, on: params.on }),
+        answerOf(portForwardingAnswerSchema, undefined),
       ),
     onSessionReplayChanged: (listener) =>
       on(

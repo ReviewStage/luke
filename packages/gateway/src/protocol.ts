@@ -645,6 +645,14 @@ export const GATEWAY_METHOD = {
   BROWSER_LIVE_CONNECT: "browserLive.connect",
   BROWSER_LIVE_SEND: "browserLive.send",
   BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
+  /**
+   * A coding agent's cloud ports forwarded to this Mac's `127.0.0.1`
+   * (`@repo/features/port-forward-acts`), for one agent at a time: how its
+   * forwarding stands, read, and forwarding turned on or off. What a
+   * forwarded connection carries never crosses the Gateway.
+   */
+  PORT_FORWARDS_READ: "portForwards.read",
+  PORT_FORWARDS_SET: "portForwards.set",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

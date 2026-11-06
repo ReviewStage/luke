@@ -24,6 +24,11 @@ export {
   type HostedAgentClientOptions,
 } from "./agent-client.js";
 export {
+  HostedAgentPortsClient,
+  type HostedAgentPortsClientOptions,
+  portForwardAddress,
+} from "./agent-ports-client.js";
+export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
