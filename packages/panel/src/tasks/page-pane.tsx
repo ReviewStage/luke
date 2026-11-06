@@ -23,6 +23,7 @@ import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view
 import { readingWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
+  CornerCount,
   cn,
   cssCustomProperties,
   ERROR_STATE_PLACEMENT,
@@ -76,12 +77,12 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
-import { type HeldComment, PageReview, usePageReview } from "./page-review.js";
+import { type HeldComment, PageReviewSection, usePageReview } from "./page-review.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
   COMMENTS_FILTER,
   type CommentsFilter,
-  CommentWords,
+  HeldCommentCard,
   ownWordsIn,
   PAGE_COMMENT_WORDS,
   PageCommentLayer,
@@ -669,6 +670,7 @@ function useCommenting(place: PlanCommentPlace | undefined) {
     pending,
     open,
     toggleColumn: () => setColumn(!column),
+    showColumn: () => setColumn(true),
     startPick: () => {
       setOpen(undefined);
       setPicking(true);
@@ -756,7 +758,6 @@ export function PagePane({
   const room = useRef<HTMLDivElement>(null);
   const threads = comments?.control.threads;
   const review = usePageReview(comments?.control, page.id);
-  const [reviewOpen, setReviewOpen] = useState(false);
   const marks = useMemo(() => threadMarks(threads ?? [], review.held), [threads, review.held]);
   const [hinted, setHinted] = useState<string | undefined>(undefined);
   const shown = threads?.find((thread) => commenting.open?.includes(thread.id) === true)?.page
@@ -938,12 +939,6 @@ export function PagePane({
                 ) : null}
                 {comments === undefined ? null : (
                   <>
-                    <PageReview
-                      review={review}
-                      open={reviewOpen}
-                      onOpen={setReviewOpen}
-                      wordsOf={(held) => <CommentWords words={held.words} />}
-                    />
                     <Tooltip label={PAGE_COMMENT_WORDS.COMMENT}>
                       <IconButton
                         icon={<MessageSquarePlusIcon aria-hidden="true" />}
@@ -954,7 +949,12 @@ export function PagePane({
                     </Tooltip>
                     <Tooltip label={commentsLabel}>
                       <IconButton
-                        icon={<SidePanelIcon />}
+                        // Note that the column's toggle wears how many comments the reader holds in their review, which the column lists at its head.
+                        icon={
+                          <CornerCount count={review.held.length}>
+                            <SidePanelIcon />
+                          </CornerCount>
+                        }
                         label={commentsLabel}
                         aria-expanded={commenting.column}
                         onClick={commenting.toggleColumn}
@@ -1007,7 +1007,19 @@ export function PagePane({
                   onCancel={commenting.dismiss}
                   // Note that a phone draws no bar for the review's press, so its comments post at once.
                   review={
-                    phone ? undefined : { control: review, onOpen: () => setReviewOpen(true) }
+                    phone
+                      ? undefined
+                      : {
+                          // Note that holding a comment opens the column, where the review it joins is listed.
+                          control: {
+                            ...review,
+                            hold: (comment) => {
+                              review.hold(comment);
+                              commenting.showColumn();
+                            },
+                          },
+                          onOpen: commenting.showColumn,
+                        }
                   }
                 />
               )}
@@ -1035,6 +1047,14 @@ export function PagePane({
                 onFilter={setCommentsFilter}
                 onOpen={(thread) =>
                   commenting.setOpen(thread === undefined ? undefined : [thread.id])
+                }
+                lead={
+                  <PageReviewSection
+                    review={review}
+                    cardOf={(held, onRemove) => (
+                      <HeldCommentCard comment={held} onRemove={onRemove} />
+                    )}
+                  />
                 }
               />
             </aside>

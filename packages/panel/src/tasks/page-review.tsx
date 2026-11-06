@@ -8,33 +8,29 @@ import {
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
-  AnchoredPopover,
   BUTTON_VARIANT,
   Button,
   CONFIRM_LOSS,
   ConfirmDialog,
-  CornerCount,
   type DialogQuestion,
   FailureNote,
-  FoldingButton,
-  POPOVER_ALIGN,
-  PopoverPanel,
-  QuietWords,
-  TEXT_BUTTON_TONE,
-  TextButton,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   useConfirmDialog,
 } from "@repo/ui";
-import { GLYPH, MessageSquarePlusIcon } from "@repo/ui/icons";
+import { GLYPH } from "@repo/ui/icons";
 import type { PlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useId, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { heldLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 
 /**
- * page-review.tsx -- a member's review of a page: comments gathered on it and held in this window, unsent, until they send them together, and the Review press and panel that list, send, and discard them.
+ * page-review.tsx -- a member's review of a page: comments gathered on it and held in this window, unsent, until they send them together, and the section at the head of the page's comments column that lists, sends, and discards them.
  *
  * A comment on a page reaches the agent that wrote it the moment it is
  * posted, and each one wakes it again. A member with several things to say
@@ -58,26 +54,19 @@ import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 
 /** What the review's press, panel, and the field's presses say. */
 export const PAGE_REVIEW_WORDS = {
-  OPEN: "Review",
   TITLE: "Your review",
   START: "Start a review",
   ADD: "Add to review",
-  CLOSE: "Close",
   SEND: "Send",
   SENDING: "Sending",
   DISCARD: "Discard",
   REMOVE: "Remove",
+  PENDING: "Pending",
+  POSTED: "Posted",
   WHOLE_PAGE: "Whole page",
   NOT_SENT: "Some comments could not be sent.",
   NOT_REMOVED: "A comment already posted could not be deleted.",
   FULL: "Your review is full. Comments you write now post at once.",
-  /** What the panel says of the comments it holds, `posted` of them already standing for every member by a send that stopped part way. */
-  lead: (count: number, posted: number) =>
-    posted === 0
-      ? `${count} ${count === 1 ? "comment" : "comments"} only you can see. The agent hears them together when you send them.`
-      : `${count} ${count === 1 ? "comment" : "comments"}, ${posted} already posted for everyone to see. The agent hears them together when you send them.`,
-  /** The Review press's name to a reader, with the comments it holds. */
-  openWith: (count: number) => `Review, ${count} held ${count === 1 ? "comment" : "comments"}`,
   /** A held pin's name. */
   pin: (count: number) => `${count} ${count === 1 ? "comment" : "comments"} in your review`,
 } as const;
@@ -91,9 +80,6 @@ const DISCARD_QUESTION: DialogQuestion = {
   loss: CONFIRM_LOSS.IRREVERSIBLE,
   replayUnmasked: true,
 };
-
-/** The width the panel asks for; the side panel may narrow it. */
-const PANEL_WIDTH = 400;
 
 /** One comment held in a member's review of a page, unsent. */
 export interface HeldComment {
@@ -261,174 +247,89 @@ export function usePageReview(
   };
 }
 
-/** One held comment in the panel: its words, which open with the quote of the element it is on, or Whole page over them, and Remove. */
-function HeldRow({
-  comment,
-  words,
-  sending,
-  onRemove,
-}: {
-  comment: HeldComment;
-  /** Its words as every comment's are drawn. */
-  words: React.ReactNode;
-  /** Whether the review is on its way, which takes Remove away until it lands. */
-  sending: boolean;
-  onRemove: () => void;
-}): React.JSX.Element {
-  return (
-    <li className="page-review-row flex min-w-0 flex-col gap-tight-gap">
-      {comment.element === undefined ? (
-        <QuietWords>
-          <ReplayUnmask>{PAGE_REVIEW_WORDS.WHOLE_PAGE}</ReplayUnmask>
-        </QuietWords>
-      ) : null}
-      {words}
-      {sending ? null : (
-        <div>
-          <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
-            <ReplayUnmask>{PAGE_REVIEW_WORDS.REMOVE}</ReplayUnmask>
-          </TextButton>
-        </div>
-      )}
-    </li>
-  );
-}
-
 /**
- * The page bar's Review press, standing while the reader holds comments on
- * the page, with how many at its corner, and the panel it opens: each held
- * comment with Remove, then Discard, which asks first, and Send. Once sent,
- * the press goes with the comments it held.
+ * The reader's review at the head of a page's comments column, standing
+ * while they hold comments on the page: each held comment as a comment card
+ * marked Pending, or Posted where a stopped send posted it, with Remove
+ * (`cardOf`), then
+ * Discard, which asks first, and Send. Once sent, the section goes with the
+ * comments it held, which stand as threads in the list under it.
  */
-export function PageReview({
+export function PageReviewSection({
   review,
-  open,
-  onOpen,
-  wordsOf,
+  cardOf,
 }: {
   review: PageReviewControl;
-  /** Whether the panel stands, which a held pin's press opens too. */
-  open: boolean;
-  onOpen: (open: boolean) => void;
-  /** A held comment's words, drawn as every comment's are. */
-  wordsOf: (comment: HeldComment) => React.ReactNode;
+  /** A held comment drawn as a comment card, with its Remove; none while the review is on its way, since a start out may still post it. */
+  cardOf: (comment: HeldComment, onRemove: (() => void) | undefined) => React.ReactNode;
 }): React.JSX.Element | null {
-  const panelId = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const count = review.held.length;
-  const posted = review.held.filter((comment) => comment.posted).length;
   const discarding = useConfirmDialog(
-    { subject: count > 0, surfaceOpen: open },
+    { subject: count > 0, surfaceOpen: true },
     () => {
       review.discard();
-      onOpen(false);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
     confirmFailure(FAILURE_SURFACE.PLAN_COMMENT_DISCARD),
   );
   if (count === 0) return null;
-  const close = () => {
-    onOpen(false);
-    trigger.current?.focus();
-  };
   return (
-    <div className="page-review relative flex" ref={root}>
-      <FoldingButton
-        ref={trigger}
-        label={PAGE_REVIEW_WORDS.OPEN}
-        icon={
-          <CornerCount count={count}>
-            <MessageSquarePlusIcon aria-hidden="true" />
-          </CornerCount>
-        }
-        name={PAGE_REVIEW_WORDS.openWith(count)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={() => onOpen(!open)}
-      />
-      <AnchoredPopover
-        open={open}
-        align={POPOVER_ALIGN.END}
-        width={PANEL_WIDTH}
-        onPressAway={review.sending ? undefined : () => onOpen(false)}
-      >
-        <PopoverPanel
-          open={open}
-          id={panelId}
-          title={PAGE_REVIEW_WORDS.TITLE}
-          replayUnmasked
-          closeLabel={PAGE_REVIEW_WORDS.CLOSE}
-          onDismiss={close}
-          onLeave={(left) => {
-            // Note that a review on its way holds the panel open, as its answer is said in it.
-            if (review.sending) return;
-            if (!(left instanceof Node && root.current?.contains(left))) onOpen(false);
-          }}
+    <section
+      className="page-review flex min-w-0 flex-col gap-item-gap"
+      aria-label={PAGE_REVIEW_WORDS.TITLE}
+    >
+      {review.held.map((comment) => (
+        <Fragment key={comment.clientKey}>
+          {cardOf(comment, review.sending ? undefined : () => review.remove(comment.clientKey))}
+        </Fragment>
+      ))}
+      {review.full ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+          <ReplayUnmask>{PAGE_REVIEW_WORDS.FULL}</ReplayUnmask>
+        </Text>
+      ) : null}
+      {review.failed ? (
+        <FailureNote
+          onRetry={review.send}
+          failure={failureShown({
+            surface: FAILURE_SURFACE.PLAN_COMMENT_SEND,
+            cause: FAILURE_CONDITION.REFUSED,
+          })}
         >
-          <p className="m-0 -mt-ui-8 text-muted-foreground">
-            <ReplayUnmask>
-              {review.full
-                ? `${PAGE_REVIEW_WORDS.lead(count, posted)} ${PAGE_REVIEW_WORDS.FULL}`
-                : PAGE_REVIEW_WORDS.lead(count, posted)}
-            </ReplayUnmask>
-          </p>
-          <ul className="page-review-list m-0 flex list-none flex-col gap-item-gap p-0">
-            {review.held.map((comment) => (
-              <HeldRow
-                key={comment.clientKey}
-                comment={comment}
-                words={wordsOf(comment)}
-                sending={review.sending}
-                onRemove={() => review.remove(comment.clientKey)}
-              />
-            ))}
-          </ul>
-          {review.failed ? (
-            <FailureNote
-              onRetry={review.send}
-              failure={failureShown({
-                surface: FAILURE_SURFACE.PLAN_COMMENT_SEND,
-                cause: FAILURE_CONDITION.REFUSED,
-              })}
-            >
-              <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_SENT}</ReplayUnmask>
-            </FailureNote>
-          ) : null}
-          {review.unremoved ? (
-            <FailureNote
-              failure={failureShown({
-                surface: FAILURE_SURFACE.PLAN_COMMENT_DISCARD,
-                cause: FAILURE_CONDITION.REFUSED,
-              })}
-            >
-              <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_REMOVED}</ReplayUnmask>
-            </FailureNote>
-          ) : null}
-          <ReplayUnmask>
-            <div className={ACTS_AT_END_CLASS}>
-              <Button
-                variant={BUTTON_VARIANT.DANGER_OUTLINE}
-                icon={<GLYPH.DELETE />}
-                disabled={review.sending}
-                onClick={discarding.ask}
-              >
-                {PAGE_REVIEW_WORDS.DISCARD}
-              </Button>
-              <Button
-                variant={BUTTON_VARIANT.PRIMARY}
-                busy={review.sending}
-                busyLabel={PAGE_REVIEW_WORDS.SENDING}
-                onClick={review.send}
-              >
-                {`${PAGE_REVIEW_WORDS.SEND} ${count} ${count === 1 ? "comment" : "comments"}`}
-              </Button>
-            </div>
-          </ReplayUnmask>
-        </PopoverPanel>
-      </AnchoredPopover>
+          <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_SENT}</ReplayUnmask>
+        </FailureNote>
+      ) : null}
+      {review.unremoved ? (
+        <FailureNote
+          failure={failureShown({
+            surface: FAILURE_SURFACE.PLAN_COMMENT_DISCARD,
+            cause: FAILURE_CONDITION.REFUSED,
+          })}
+        >
+          <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_REMOVED}</ReplayUnmask>
+        </FailureNote>
+      ) : null}
+      <ReplayUnmask>
+        <div className={ACTS_AT_END_CLASS}>
+          <Button
+            variant={BUTTON_VARIANT.DANGER_OUTLINE}
+            icon={<GLYPH.DELETE />}
+            disabled={review.sending}
+            onClick={discarding.ask}
+          >
+            {PAGE_REVIEW_WORDS.DISCARD}
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            busy={review.sending}
+            busyLabel={PAGE_REVIEW_WORDS.SENDING}
+            onClick={review.send}
+          >
+            {`${PAGE_REVIEW_WORDS.SEND} ${count} ${count === 1 ? "comment" : "comments"}`}
+          </Button>
+        </div>
+      </ReplayUnmask>
       <ConfirmDialog open confirm={discarding} question={DISCARD_QUESTION} />
-    </div>
+    </section>
   );
 }

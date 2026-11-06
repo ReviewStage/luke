@@ -65,6 +65,7 @@ import {
   moreLabel,
   PaneBar,
   POPOVER_SIDE,
+  QuietWords,
   RectFloat,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
@@ -2790,9 +2791,12 @@ function ThreadsPane({
   list,
   className,
   onShowWords,
+  lead,
 }: {
   control: PlanCommentsControl;
   doors: ThreadDoors;
+  /** What stands over the threads in the list: the reader's review of a page; nothing elsewhere. */
+  lead?: ReactNode;
   filter: CommentsFilter;
   onFilter: (filter: CommentsFilter) => void;
   /** What the list says when it holds nothing, by its filter. */
@@ -2823,6 +2827,9 @@ function ThreadsPane({
           }
         />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+          {lead === undefined || lead === null ? null : (
+            <div className="box-border px-ui-16 pt-ui-16">{lead}</div>
+          )}
           <ThreadList
             key={filter}
             control={control}
@@ -2981,9 +2988,12 @@ export function PageComments({
   filter,
   onFilter,
   onOpen,
+  lead,
 }: {
   /** The page's threads, as `usePlanComments` holds them for the page. */
   control: PlanCommentsControl;
+  /** What stands over the threads: the reader's review of the page, while they hold one. */
+  lead?: ReactNode;
   doors: Omit<ThreadDoors, "control">;
   /** The threads whose element is outlined, by their ids. */
   open: readonly string[] | undefined;
@@ -3023,6 +3033,7 @@ export function PageComments({
       onFilter={onFilter}
       empty={NO_PAGE_COMMENTS}
       list={list}
+      lead={lead}
       className="page-comments relative h-full"
       onShowWords={(thread) =>
         thread.page?.element === undefined ? undefined : () => onOpen(thread)
@@ -3119,6 +3130,53 @@ function PagePin({
         )
       }
     />
+  );
+}
+
+/**
+ * A comment held in the reader's review, drawn in the comments column as a
+ * thread's first comment is, in their name and marked Pending, with Remove.
+ */
+export function HeldCommentCard({
+  comment,
+  onRemove,
+}: {
+  comment: HeldComment;
+  /** Takes it out of the review; none while the review is on its way. */
+  onRemove: (() => void) | undefined;
+}): React.JSX.Element {
+  const { readerId } = useMemberDirectory();
+  const reader = usePerson(readerId === undefined ? undefined : { userId: readerId, name: "" });
+  return (
+    <CommentCard place={THREAD_PLACE.LIST} open data-thread={comment.clientKey}>
+      <div className="flex min-w-0 flex-col gap-tight-gap">
+        <Comment
+          author={commentAuthor(reader)}
+          nameRef={<ActorRef actor={reader} nameOnly />}
+          trailing={
+            <QuietWords>
+              <ReplayUnmask>
+                {comment.posted ? PAGE_REVIEW_WORDS.POSTED : PAGE_REVIEW_WORDS.PENDING}
+              </ReplayUnmask>
+            </QuietWords>
+          }
+        >
+          {comment.element === undefined ? (
+            <QuietWords>
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.WHOLE_PAGE}</ReplayUnmask>
+            </QuietWords>
+          ) : null}
+          <CommentWords words={comment.words} />
+        </Comment>
+        {onRemove === undefined ? null : (
+          <div>
+            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.REMOVE}</ReplayUnmask>
+            </TextButton>
+          </div>
+        )}
+      </div>
+    </CommentCard>
   );
 }
 
