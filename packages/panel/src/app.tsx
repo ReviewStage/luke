@@ -783,13 +783,6 @@ function AppWindow(): React.JSX.Element {
                             tasks={tasks}
                             links={copyLink}
                             doors={settingsDoors}
-                            readFiles={(taskId) =>
-                              act(ACT_KIND.TASKS_TREE, {
-                                planId: taskId,
-                                path: "",
-                                recursive: true,
-                              })
-                            }
                           />
                           {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
                           <ShellRoomContext.Provider value={room}>

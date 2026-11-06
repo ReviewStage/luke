@@ -11,7 +11,7 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { createElement, type ReactElement } from "react";
+import { createElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach } from "vitest";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
@@ -54,7 +54,7 @@ afterEach(() => {
  * under into that client, as the window's root does: for a test drawing
  * under the registry React provides when none is given.
  */
-export function withQueryClient(element: ReactElement): ReactElement {
+export function withQueryClient(element: ReactNode): ReactElement {
   return createElement(
     QueryClientProvider,
     { client: testQueryClient },
