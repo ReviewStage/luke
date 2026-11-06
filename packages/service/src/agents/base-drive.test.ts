@@ -224,7 +224,7 @@ it.effect(
         ...counted,
         getOrCreateDrive: (name) =>
           Effect.andThen(
-            fillBaseDrive(counted, RELAY, IMAGE, CREDENTIAL, opener(api)),
+            Effect.orDie(fillBaseDrive(counted, RELAY, IMAGE, CREDENTIAL, opener(api))),
             api.getOrCreateDrive(name),
           ),
       };
