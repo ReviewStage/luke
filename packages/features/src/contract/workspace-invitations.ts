@@ -6,8 +6,9 @@
  *
  * Each declares the refusals its handler answers beyond any procedure's
  * (`packages/service/src/accounts/workspace-invitations-procedures.ts`): a
- * workspace or invitation not found, a role that does not allow it, and,
- * for the invite alone, an address already a member or invited. The offer
+ * workspace or invitation not found, a role that does not allow it, and an
+ * address already a member or invited, which the plugin may answer on any
+ * call through it. The offer
  * answers "no offer" as an answer, never a refusal.
  */
 
@@ -38,7 +39,13 @@ const invitationsQuerySchema = EffectSchema.Struct({
 
 export const workspaceInvitationsContract = {
   list: declaredProcedure
-    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.NOT_PERMITTED,
+        HOSTED_API_ERROR.ALREADY_INVITED,
+      ),
+    )
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS }))
     .input(invitationsQuerySchema)
     .output(EffectSchema.flip(workspaceInvitationsAnswerSchema)),
@@ -61,7 +68,13 @@ export const workspaceInvitationsContract = {
     .input(exactInput(workspaceInviteRequestSchema))
     .output(EffectSchema.flip(workspaceInvitationAnswerSchema)),
   cancel: declaredProcedure
-    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.NOT_PERMITTED,
+        HOSTED_API_ERROR.ALREADY_INVITED,
+      ),
+    )
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
