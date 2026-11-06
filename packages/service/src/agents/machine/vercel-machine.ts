@@ -68,6 +68,7 @@
 
 import {
   AGENT_USER,
+  CODEX_PIN,
   RUNNER_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
@@ -193,7 +194,8 @@ const SANDBOX_LAYOUT: MachineLayout = {
   attachments: ATTACHMENT_DIRECTORY,
   sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
-  codexExecutable: undefined,
+  codexExecutable: CODEX_PIN.LINK,
+  codexHome: CODEX_PIN.HOME,
   linesRead: true,
   transcriptsKept: true,
 };

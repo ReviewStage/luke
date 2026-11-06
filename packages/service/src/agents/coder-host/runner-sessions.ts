@@ -26,8 +26,8 @@
  * the runner's bearer and records its digest on the agent's row, and starts
  * the runner with the harness's credential and the bearer in its
  * environment and nowhere else: never in its argv, its config line, a file,
- * or a record. A credential the harness holds at the place's firewall
- * (`HarnessLaunch`'s `held`) is kept there with the launch's swaps before
+ * or a record. A credential held at the place's firewall (`HarnessLaunch`'s
+ * `held`, or one of its `credentials` its machine holds there) is kept there with the launch's swaps before
  * the runner starts, its placeholder in the environment in its place, and
  * sent with every write to the place's firewall while the launch stands
  * (`../sandbox-firewall.ts`); it comes off with every other credential at
@@ -172,6 +172,7 @@ import {
   AgentMachine,
   type AgentMachineService,
   CREDENTIAL_RENEWAL,
+  type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
   type MachineLayout,
@@ -248,8 +249,10 @@ export interface RunnerSessionsOptions {
 
 /** What a launch's command is started with of the harness's own. */
 export interface HarnessLaunch {
-  /** The variables beside the bearer: the harness's credential, and whatever else it reads. Never written anywhere but the command's environment. */
+  /** The variables beside the bearer and the declared credentials: whatever else the harness reads. Never written anywhere but the command's environment. */
   readonly env: Readonly<Record<string, string>>;
+  /** The harness's credentials, which its machine hands over beside the bearer (`AgentMachineService`'s `deliverCredentials`). */
+  readonly credentials?: readonly RunnerCredential[];
   /** The credential held at the place's firewall rather than handed to the command: the variables carrying the launch's placeholder, the swap kept for the launch before the runner starts, and what a fingerprint reads in the placeholder's place. */
   readonly held?: {
     readonly env: Readonly<Record<string, string>>;
@@ -277,9 +280,10 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   readonly runtime: (typeof SERVER_AGENT_HARNESS)[keyof typeof SERVER_AGENT_HARNESS];
   /** What a session id it mints begins with, before a fresh UUID. */
   readonly sessionPrefix: string;
-  /** The credential a launch starts with, read afresh for every launch. */
+  /** The credential a launch on a machine of the layout given starts with, read afresh for every launch. */
   readonly launch: (
     agent: Agent,
+    layout: MachineLayout,
   ) => Effect.Effect<HarnessLaunch, E | LaunchRefused, RunnerServices>;
   /** The config line of a launch on a machine of the layout given, resuming the harness's session where one is named, cut before the line a rewind dropped where one waits. */
   readonly config: (
@@ -502,23 +506,43 @@ function stopLine(launch: number): InputLine {
  * truncated, so the record carries nothing of the credential. Note that a
  * credential held at the firewall is read by its kind and its real value,
  * never its placeholder, which every launch mints afresh, under the key a
- * slot once named it by, so a digest reads as it did; and that a launch
- * holding none digests what it did before any was held.
+ * slot once named it by, so a digest reads as it did; that a declared
+ * credential its machine hands the runner itself is read among the
+ * variables, as one the harness set there itself once was; and that a
+ * launch holding none digests what it did before any was held.
  */
 function launchFingerprint(
   credential: HarnessLaunch,
+  delivered: DeliveredCredentials,
   integrations: readonly IntegrationServer[],
 ): string {
-  const env = Object.entries(credential.env).sort(([one], [other]) => one.localeCompare(other));
+  const declared = credential.credentials ?? [];
+  const isHeld = (each: RunnerCredential) => delivered.swaps.has(each.slot);
+  const handed = declared.flatMap((each) => {
+    const value = delivered.env[each.variable];
+    return isHeld(each) || value === undefined ? [] : [[each.variable, value] as const];
+  });
+  const env = [...Object.entries(credential.env), ...handed].sort(([one], [other]) =>
+    one.localeCompare(other),
+  );
   const names = integrations.map((each) => each.name).sort();
   const { held } = credential;
-  const swapped =
+  const slots =
     held === undefined
-      ? undefined
-      : {
-          slot: held.kind,
-          credential: held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
-        };
+      ? declared.filter(isHeld).map((each) => ({
+          slot: each.slot,
+          credential:
+            each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+        }))
+      : [
+          {
+            slot: held.kind,
+            credential:
+              held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
+          },
+        ];
+  // Note that one slot is digested alone, as the one a launch could hold before credentials were declared.
+  const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
   return createHash("sha256")
     .update(JSON.stringify({ env, names, held: swapped }))
     .digest("hex")
@@ -817,7 +841,10 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
-        const delivered = machine.deliverCredentials(agent, [runnerBearer(bearer, serviceHost)]);
+        const delivered = machine.deliverCredentials(agent, [
+          ...(credential.credentials ?? []),
+          runnerBearer(bearer, serviceHost),
+        ]);
         const swaps = launchSwaps(credential, delivered.swaps);
         // Kept before any write of this launch's, so the checkout's finish and the launch's own each send them.
         if (swaps.size > 0) {
@@ -924,7 +951,11 @@ export const runnerSessions = <
             Effect.gen(function* () {
               const mark: RunnerMark = {
                 firstSequence: made.firstSequence,
-                fingerprint: launchFingerprint(credential, yield* options.integrations(agent)),
+                fingerprint: launchFingerprint(
+                  credential,
+                  delivered,
+                  yield* options.integrations(agent),
+                ),
                 ...(layout.linesRead ? { linesRead: true } : undefined),
               };
               const opened = made.opening === undefined ? [] : [made.opening.line];
@@ -1182,7 +1213,7 @@ export const runnerSessions = <
           [
             machine.checkOutMissing(running, target, agent, false),
             readAgentRouting(userId, agent.id),
-            harness.launch(agent),
+            harness.launch(agent, layout),
           ],
           { concurrency: "unbounded" },
         );
@@ -1216,11 +1247,17 @@ export const runnerSessions = <
      * what it has, and one from before fingerprints were tagged is never
      * read as stale.
      */
-    const staleWarm = (agent: Agent, runner: RunnerMark, turnRunning: boolean) =>
+    const staleWarm = (
+      agent: Agent,
+      layout: MachineLayout,
+      runner: RunnerMark,
+      turnRunning: boolean,
+    ) =>
       Effect.gen(function* () {
         if (runner.fingerprint === undefined || turnRunning) return false;
-        const credential = yield* harness.launch(agent);
-        const now = launchFingerprint(credential, yield* options.integrations(agent));
+        const credential = yield* harness.launch(agent, layout);
+        const delivered = machine.deliverCredentials(agent, credential.credentials ?? []);
+        const now = launchFingerprint(credential, delivered, yield* options.integrations(agent));
         return now !== runner.fingerprint;
       });
 
@@ -1291,7 +1328,7 @@ export const runnerSessions = <
           if (
             pastWarmWindow(found.value.machine, turn, handedAt) ||
             (yield* stopWritten(machine, running)) ||
-            (yield* staleWarm(agent, running.mark, turnRunning))
+            (yield* staleWarm(agent, layout, running.mark, turnRunning))
           ) {
             yield* machine.kill(running.handle);
             yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
@@ -1420,7 +1457,7 @@ export const runnerSessions = <
           // standing for the next message to try again rather than retired; a delete that fails
           // leaves the expired one beside the fresh one, which `listTagged` lists after it as the
           // older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent));
+          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent, layout));
           yield* machine
             .discard(found.value)
             .pipe(
@@ -1637,7 +1674,13 @@ export const runnerSessions = <
           return place;
         }).pipe(Effect.retry(RESUME_WHILE_ENDING));
         if (resumed === PLACE_RESUME.GONE) {
-          yield* openedPlace(agent, sessionId, layout, undefined, yield* harness.launch(agent));
+          yield* openedPlace(
+            agent,
+            sessionId,
+            layout,
+            undefined,
+            yield* harness.launch(agent, layout),
+          );
           yield* Effect.ignore(machine.discard(found.value));
           return SERVER_HANDOFF_PATH.FRESH;
         }
@@ -1851,8 +1894,8 @@ export const runnerSessions = <
             const agent = yield* agentOf(message.conversationId);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
             return yield* Effect.gen(function* () {
-              const credential = yield* harness.launch(agent);
               const layout = yield* machine.layout(agent);
+              const credential = yield* harness.launch(agent, layout);
               const first = messageLine(message, layout);
               const withdrawn = layout.linesRead
                 ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
