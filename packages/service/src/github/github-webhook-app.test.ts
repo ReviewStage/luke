@@ -144,6 +144,7 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     cronSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
+    titleAnthropicApiKey: undefined,
   };
 }
 

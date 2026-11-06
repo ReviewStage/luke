@@ -1,24 +1,25 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
-import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
+import type { ModelProvider } from "@repo/features/models-wire";
 import type { LanguageModel } from "ai";
-import { Redacted } from "effect";
+import { Effect, Redacted } from "effect";
+import { HostedEnvironment } from "../../environment.js";
 
 /**
- * model.ts -- the model a call beside an account's agents runs on, reached at its provider directly on the account's own key.
+ * model.ts -- the model every title is generated on, reached at Anthropic directly on our own key, and the shape of an account's own key opened for a call beside its agents.
  *
- * An agent's title is one small call on a fixed cheap model at the
- * provider's own door, on the account's own key (`account-keys.ts`'s
- * `ownKeyOf`); nothing goes through AI Gateway and our own key is never
- * one. A key is revealed here alone, into the SDK client that puts it on
- * its requests.
+ * A title, an agent's, its task's, or an inbox thread's, is one small call
+ * on a fixed cheap model at Anthropic's own door, on the key the deployment
+ * holds for titles (`HostedEnvironment`'s `titleAnthropicApiKey`), whether
+ * or not the account saved one of its own, so an account on a subscription
+ * alone is named by a model too. Nothing goes through AI Gateway, and the
+ * account's own key never pays for a title. A deployment holding no such
+ * key gives no model, and the title is cut from its first words
+ * (`title.ts`). The key is revealed here alone, into the SDK client that
+ * puts it on its requests.
  */
 
-/** The one model an agent's title is generated on at each provider: the cheapest that names a task well, at the provider's own id. */
-const AGENT_TITLE_MODEL_ID = {
-  [MODEL_PROVIDER.ANTHROPIC]: "claude-haiku-5-5",
-  [MODEL_PROVIDER.OPENAI]: "gpt-6-luna",
-} as const;
+/** The one model every title is generated on: Anthropic's cheapest that names a task well, at its own id. */
+const TITLE_MODEL_ID = "claude-haiku-5-5";
 
 /** One provider's API key the account saved, opened, for a call beside its agents (`account-keys.ts`'s `ownKeyOf`). */
 export interface OwnKey {
@@ -26,15 +27,16 @@ export interface OwnKey {
   readonly key: Redacted.Redacted;
 }
 
-/** The model an agent's title is generated on: its provider's cheap title model, on the account's own key for that provider. */
-export function titleModel(own: OwnKey, fetch?: typeof globalThis.fetch): LanguageModel {
-  // The key is revealed here alone, into the SDK client that puts it on its requests.
-  const settings = {
-    apiKey: Redacted.value(own.key),
-    ...(fetch === undefined ? undefined : { fetch }),
-  };
-  const modelId = AGENT_TITLE_MODEL_ID[own.provider];
-  return own.provider === MODEL_PROVIDER.ANTHROPIC
-    ? createAnthropic(settings)(modelId)
-    : createOpenAI(settings).responses(modelId);
+/** The model a title is generated on: Anthropic's small title model on our own key, or none where the deployment holds no such key. */
+export function deploymentTitleModel(): Effect.Effect<
+  LanguageModel | undefined,
+  never,
+  HostedEnvironment
+> {
+  return Effect.gen(function* () {
+    const { titleAnthropicApiKey } = yield* HostedEnvironment;
+    if (titleAnthropicApiKey === undefined) return undefined;
+    // The key is revealed here alone, into the SDK client that puts it on its requests.
+    return createAnthropic({ apiKey: Redacted.value(titleAnthropicApiKey) })(TITLE_MODEL_ID);
+  });
 }

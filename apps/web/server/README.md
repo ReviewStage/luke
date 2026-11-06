@@ -924,7 +924,8 @@ port's), the Browser tab's live view, and the live reads' socket
 functions, each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
-keys. A native agent's runner reports to the deployment's own origin, its
+keys, and `TITLE_ANTHROPIC_API_KEY`, Vespin's own Anthropic API key, generates
+every title; without it each is cut from its opening's first words. A native agent's runner reports to the deployment's own origin, its
 production domain in production and its own host otherwise, unless
 `APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).
 No separate service is deployed.

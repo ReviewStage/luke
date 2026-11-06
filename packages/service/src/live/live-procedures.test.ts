@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
 import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
 import {
   type InstalledSkillOwner,
@@ -16,14 +17,13 @@ import {
 } from "@repo/database/models/integration-installation-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
-import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
-import { writePage } from "@repo/database/models/task-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
 import {
   linkSlackInstallation,
   writeSlackChannelRepository,
   writeSlackDefaultRepository,
 } from "@repo/database/models/slack-installation-store";
+import { writePage } from "@repo/database/models/task-pages";
 import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -49,6 +49,8 @@ import { AGENT_CURSOR_START } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { taskCommentsLiveAnswerSchema } from "@repo/features/description-comment-live";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import {
   hostsLiveAnswerSchema,
@@ -96,8 +98,6 @@ import {
   workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import { taskCommentsLiveAnswerSchema } from "@repo/features/description-comment-live";
-import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
@@ -1746,6 +1746,7 @@ const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 };
 
 /** The procedures answering an agent's pull request's chapters as `bearer`, over the store and GitHub. */
