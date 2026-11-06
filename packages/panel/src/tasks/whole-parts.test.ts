@@ -20,7 +20,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
@@ -116,10 +116,9 @@ declare global {
 
 /** Lets the window's promises settle. */
 async function settled(): Promise<void> {
-  // Note that each tick is a macrotask of its own act, since TanStack Query hands its answers to React on one and React draws them as an act ends.
-  for (let tick = 0; tick < 12; tick += 1) {
-    await act(() => new Promise<void>((done) => setTimeout(done, 0)));
-  }
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
 }
 
 /** The tab drawn over the cut turn, each part read whole answering as `answer` resolves, and the reads it was asked. */
@@ -187,15 +186,19 @@ test("a cut command output is read whole only as its fold opens, says it is read
   assert.deepEqual(asked, []);
 
   press(container.querySelector<HTMLElement>('[data-call-id="call-build"] summary'));
-  await settled();
-  assert.deepEqual(asked, [{ agentId: AGENT.id, messageId: JOURNAL_ID, index: 2 }]);
+  await vi.waitFor(() =>
+    assert.deepEqual(asked, [{ agentId: AGENT.id, messageId: JOURNAL_ID, index: 2 }]),
+  );
   const row = container.querySelector('[data-call-id="call-build"]');
   assert.match(row?.textContent ?? "", /Reading the whole output/u);
 
   land({ part: { ...COMMAND, output: WHOLE_OUTPUT } });
-  await settled();
-  const output = row?.querySelector("[data-tool-terminal]")?.textContent ?? "";
-  assert.match(output, /compiled the middle file/u);
+  await vi.waitFor(() =>
+    assert.match(
+      row?.querySelector("[data-tool-terminal]")?.textContent ?? "",
+      /compiled the middle file/u,
+    ),
+  );
   assert.doesNotMatch(row?.textContent ?? "", /Reading the whole output/u);
   assert.equal(row?.querySelector("summary")?.getAttribute("aria-expanded"), "true");
 });
@@ -208,11 +211,17 @@ test("a cut thought is read whole as its fold opens, and one whose read fails dr
   );
 
   press(container.querySelector<HTMLElement>(".reasoning > summary"));
-  await settled();
-  assert.match(container.querySelector(".reasoning")?.textContent ?? "", /middle of the thought/u);
+  await vi.waitFor(() =>
+    assert.match(
+      container.querySelector(".reasoning")?.textContent ?? "",
+      /middle of the thought/u,
+    ),
+  );
 
   press(container.querySelector<HTMLElement>('[data-call-id="call-build"] summary'));
-  await settled();
+  await vi.waitFor(() =>
+    assert.doesNotMatch(container.textContent ?? "", /Reading the whole output/u),
+  );
   assert.equal(asked.length, 2);
   const output =
     container.querySelector('[data-call-id="call-build"] [data-tool-terminal]')?.textContent ?? "";
@@ -229,7 +238,9 @@ test("a read that answers some other call than the one cut, as an index read acr
   );
 
   press(container.querySelector<HTMLElement>('[data-call-id="call-build"] summary'));
-  await settled();
+  await vi.waitFor(() =>
+    assert.doesNotMatch(container.textContent ?? "", /Reading the whole output/u),
+  );
   const output =
     container.querySelector('[data-call-id="call-build"] [data-tool-terminal]')?.textContent ?? "";
   assert.match(output, /compiled the first file/u);

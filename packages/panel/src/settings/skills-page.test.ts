@@ -23,7 +23,7 @@ import type { PortActKind } from "@repo/host/contract";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
@@ -31,6 +31,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
+import { SKILLS_LINE } from "./skills-model.js";
 import { SkillsPage } from "./skills-page.js";
 
 /**
@@ -275,10 +276,9 @@ afterEach(() => {
 });
 
 async function settle(): Promise<void> {
-  // Note that each tick is a macrotask of its own act, since TanStack Query hands its answers to React on one and React draws them as an act ends.
-  for (let tick = 0; tick < 8; tick += 1) {
-    await act(() => new Promise<void>((done) => setTimeout(done, 0)));
-  }
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
 }
 
 function workspace(extra: Partial<Workspace> = {}): Workspace {
@@ -374,9 +374,13 @@ const fieldOf = (label: string) =>
     (each) => each.labels?.[0]?.textContent === label,
   ) ?? assert.fail(`no ${label} field`);
 
+/** Whether the dialog still says it is reading what was pasted. */
+const previewReading = () => (document.body.textContent ?? "").includes(SKILLS_LINE.READING);
+
+/** Pastes `text` into the box and waits for its preview to land. */
 async function paste(text: string): Promise<void> {
   typeInto(document.querySelector("textarea") ?? assert.fail("no box"), text);
-  await settle();
+  await vi.waitFor(() => assert.equal(previewReading(), false));
 }
 
 /** The row a skill's name labels. */
@@ -694,7 +698,7 @@ test("a preview the service never answers says it could not be read, and Retry a
   assert.doesNotMatch(text, /Reading/u, "a failed preview is no longer being read");
 
   act(() => button("Retry").click());
-  await settle();
+  await vi.waitFor(() => assert.equal(checkboxOf("web-design-guidelines").checked, true));
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
     { workspaceId: "workspace-stage", text: COMMAND },
     { workspaceId: "workspace-stage", text: COMMAND },
