@@ -927,7 +927,7 @@ the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
 keys, and `TITLE_ANTHROPIC_API_KEY`, Vespin's own Anthropic API key, generates
 every title; without it each is cut from its opening's first words. On a
 Preview alone, `PREVIEW_ANTHROPIC_API_KEY` and `PREVIEW_OPENAI_API_KEY` stand in
-for an account's own key where it is missing or unreadable, as
+for a Vespin admin's own key where it is missing or unreadable, as
 `packages/service/README.md` describes. A native agent's runner reports to the deployment's own origin, its
 production domain in production and its own host otherwise, unless
 `APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).

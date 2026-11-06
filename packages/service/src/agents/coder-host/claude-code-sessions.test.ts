@@ -74,6 +74,7 @@ import {
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
+import { USER_ROLE } from "../../admin/admin-access.js";
 import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
@@ -1012,13 +1013,18 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "an agent its starter's API key pays for, whose saved key does not open under this deployment's ring, is refused as unreadable and starts nothing, but on a Preview launches on the Preview's stand-in key",
+    "an agent its starter's API key pays for, whose saved key does not open under this deployment's ring, is refused as unreadable and starts nothing, but on a Preview launches an admin's on the Preview's stand-in key",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
+          db.insert(user).values({
+            id: userId,
+            name: "Test User",
+            email: `${userId}@app.test`,
+            role: USER_ROLE.ADMIN,
+          }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
