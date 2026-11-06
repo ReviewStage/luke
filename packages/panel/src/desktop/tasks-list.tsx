@@ -1089,7 +1089,7 @@ export function TasksList({
   });
   const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
   // Note that only rows an open group lists stay chosen, so a task the filter or a fold took away is never acted on.
-  const selection = useTasksSelection(tasks, new Set(order));
+  const selection = useTasksSelection(tasks, new Set(order), frame.chosen);
   const { regionId, selected } = selection;
   // Note that the motion is handed what lays the rows out, so a draw that moved none measures none; a fold tells it of its own (`useListMotionReplay`).
   const laidOut = useMemo(() => ({ groups, properties }), [groups, properties]);

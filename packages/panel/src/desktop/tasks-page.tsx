@@ -38,6 +38,7 @@ import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { PhoneHead, PlaceMore, phoneFindGroups, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
+import type { TasksPageHeld } from "./tasks-page-held.js";
 import {
   FILTER,
   FILTERED,
@@ -71,7 +72,7 @@ import {
 const TASKS = "Tasks";
 
 /** The page's two views. */
-export const TASKS_VIEW = {
+const TASKS_VIEW = {
   LIST: "list",
   BOARD: "board",
 } as const;
@@ -182,9 +183,12 @@ function ViewSwitch({
 export function TasksPage({
   tasks,
   room,
+  held,
 }: {
   tasks: TasksControl;
   room: ShellRoom;
+  /** What the page holds across its visits, where something outlives it to hold it (`tasks-page-held.ts`). */
+  held?: TasksPageHeld | undefined;
 }): React.JSX.Element {
   const [view, keepView] = useKept(KEPT.VIEW, TASKS_VIEW.LIST);
   const [listDisplay, onListDisplay] = useKept(
@@ -325,10 +329,19 @@ export function TasksPage({
   );
   // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
   const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;
-  const frame = { toolbar, chips, filter, display, onDisplay, scroll: scroll.ref };
+  const frame = {
+    toolbar,
+    chips,
+    filter,
+    display,
+    onDisplay,
+    scroll: scroll.ref,
+    chosen: held?.chosenIn(view),
+    column: held?.column,
+  };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
-    <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
+    <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown} held={held?.find}>
       {/* A face names its assignee or its creator, and the Filter offers them, against the listed workspace's members. */}
       <ReplayUnmask>
         <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>

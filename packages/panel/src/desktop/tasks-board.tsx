@@ -114,8 +114,9 @@ import {
   type VirtualRowsHandle,
   type VirtualRuns,
 } from "@repo/ui/virtual-rows";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { SquareKanbanIcon } from "lucide-react";
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -930,7 +931,11 @@ export function TasksBoard({
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
   const crossing = useRovingColumns<HTMLDivElement>();
-  const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
+  // The column a narrow room shows, held across the page's visits where the page holds it.
+  const ownColumn = useCreateStore<string | undefined>(undefined);
+  const columnStore = frame.column ?? ownColumn;
+  const chosen = useSelector(columnStore) ?? FIRST_SHOWN;
+  const setChosen = (next: string) => columnStore.setState(() => next);
   const listed = tasks.listed.tasks;
   // Note that a card counts every sub-task listed, as the List's row does, whatever the filter leaves on the board.
   const subTasksOf = useMemo(() => childTaskCounts(listed), [listed]);
@@ -966,8 +971,8 @@ export function TasksBoard({
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
   const chosenStands = values.includes(chosen);
   useEffect(() => {
-    if (!chosenStands) setChosen(FIRST_SHOWN);
-  }, [chosenStands]);
+    if (!chosenStands) columnStore.setState(() => FIRST_SHOWN);
+  }, [chosenStands, columnStore]);
   const shown = chosenStands ? chosen : values.includes(FIRST_SHOWN) ? FIRST_SHOWN : values[0];
   const panelId = `${ids}panel`;
   // Note that the motion is handed what lays the cards out, so a draw that moved none measures none.
@@ -986,7 +991,7 @@ export function TasksBoard({
   // Note that the runs draw only the cards near the view, and every card while a find bar stands open over the page.
   const finding = useFindOpen();
   // Note that only cards a drawn column lists stay chosen, so a task the filter or another tab's column took away is never acted on.
-  const selection = useTasksSelection(tasks, new Set(order.flat()));
+  const selection = useTasksSelection(tasks, new Set(order.flat()), frame.chosen);
   const tabs =
     narrow && columns.length > 0 ? (
       <div className="tasks-board-tabs flex min-w-0 grow basis-full flex-col">

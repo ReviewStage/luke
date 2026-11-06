@@ -133,17 +133,18 @@ export function stepTitle(
 ): StepTitle | undefined {
   if (routed === ROUTED_PLACE.SETTINGS) return { label: "Settings" };
   if (routed === ROUTED_PLACE.ADMIN) return { label: "Admin" };
+  // Note that a person's page and the Board are routed places over the window's state, so they are named before it.
+  if (tasks.personView.userId !== undefined) {
+    return { label: tasks.personView.name ?? "Profile" };
+  }
+  if (tasks.boardView.open) return { label: "Tasks" };
   if (tasks.inboxView.open) {
     const { chosen } = tasks.inboxView;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     return { label: INBOX_WORDS, detail: taskName(tasks, holder) };
   }
   if (tasks.agentView.agentId !== undefined) return { label: "Agent" };
-  if (tasks.personView.userId !== undefined) {
-    return { label: tasks.personView.name ?? "Profile" };
-  }
   if (tasks.automationsView.open) return { label: "Automations" };
-  if (tasks.boardView.open) return { label: "Tasks" };
   if (tasks.boundFor === undefined) return { label: "Home" };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;

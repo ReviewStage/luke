@@ -26,7 +26,7 @@ import { type ReactNode, useRef } from "react";
  * header its blocks stand in one body, the root its lists move under
  * (`ListMotion`), so a row glides as its list changes, and one taken out of
  * a section and drawn in another, an agent done working, glides across. It stands outside the
- * page's chunk (`pages-on-demand.ts`), so what the window draws while that
+ * page's chunk (its lazy route, `panel-router.tsx`), so what the window draws while that
  * chunk loads draws through the same boxes.
  */
 

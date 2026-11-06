@@ -138,6 +138,7 @@ import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -329,6 +330,8 @@ interface PersonViewControl {
   /** Opens their page in `workspaceId`, the window listing it first where it lists another; in the listed workspace where none is named. */
   readonly onOpen: (userId: string, name?: string, workspaceId?: string) => void;
   readonly onClose: () => void;
+  /** Reads their page ahead of a press the pointer says is coming, in `workspaceId`, or the listed workspace where none is named. */
+  readonly onPreload: (userId: string, workspaceId?: string) => void;
 }
 
 /** The places that are an agent's own, which open on its task where it has one, else on its page. */
@@ -365,9 +368,7 @@ type TaskTabPlace =
 const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
-  PERSON: "person",
   AUTOMATIONS: "automations",
-  BOARD: "board",
   /** A workspace's Home or Board asked for under a step naming none of the reader's workspaces. */
   UNKNOWN_WORKSPACE: "unknown-workspace",
 } as const;
@@ -380,19 +381,11 @@ type StandIn =
     }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | {
-      readonly kind: typeof STAND_IN.PERSON;
-      readonly userId: string;
-      readonly name?: string;
-      /** The workspace the page is the person's in, which it gives way to another listed in its place. */
-      readonly workspaceId: string | undefined;
-    }
-  | {
       readonly kind: typeof STAND_IN.AUTOMATIONS;
       readonly place: AutomationsPlace;
       /** Whether an automation's runs stand alone over its setup, which only a narrow room draws apart; a page opened on a run's link does until said otherwise. */
       readonly runs?: boolean | undefined;
     }
-  | { readonly kind: typeof STAND_IN.BOARD }
   | { readonly kind: typeof STAND_IN.UNKNOWN_WORKSPACE };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
@@ -412,6 +405,8 @@ interface BoardViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
+  /** Reads the Board ahead of a press the pointer says is coming. */
+  readonly onPreload: () => void;
 }
 
 /** A workspace's address naming none of the reader's workspaces: whether its not-found state stands in the plan's place, and its way out. */
@@ -453,6 +448,11 @@ export function automationsTab(place: AutomationsPlace): boolean {
 
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
+
+/** The step a workspace's address names it by: its slug, or its id where an older service answered none, as `linkOf` writes it. */
+function stepOf(workspace: Pick<Workspace, "id" | "slug">): string {
+  return workspace.slug ?? workspace.id;
+}
 
 /** What a fixture run's profile stands in the task's place at launch: an Automations page; none for a place that is no stand-in. */
 function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
@@ -1340,6 +1340,10 @@ export function useTasksTab(input: {
   room: ShellRoom;
   /** Admin as the router stands it, which a link to it opens (`admin-route.ts`). */
   adminView: AdminViewControl;
+  /** The listed workspace's Board as the router stands it (`workspace-routes.ts`). */
+  boardView: BoardRoute;
+  /** A person's page as the router stands it (`workspace-routes.ts`). */
+  personView: PersonRoute;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1486,9 +1490,29 @@ export function useTasksTab(input: {
   }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
-  if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
-    setStandIn(undefined);
-  }
+  const personWorkspace =
+    input.personView.workspace === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.personView.workspace)?.id;
+  const personElsewhere =
+    input.personView.userId !== undefined &&
+    listedWorkspace !== undefined &&
+    personWorkspace !== listedWorkspace.id;
+  const closePerson = input.personView.onClose;
+  useEffect(() => {
+    if (personElsewhere) closePerson();
+  }, [personElsewhere, closePerson]);
+  // The Board is the listed workspace's, so another listed in its place stands its Board in the step's place.
+  const boardElsewhere =
+    input.boardView.open &&
+    listedWorkspace !== undefined &&
+    input.boardView.standingIn !== undefined &&
+    workspaceOfSlug(viewed.workspaces, input.boardView.standingIn)?.id !== listedWorkspace.id;
+  const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+  const turnBoard = input.boardView.onTurn;
+  useEffect(() => {
+    if (boardElsewhere && listedStep !== undefined) turnBoard(listedStep);
+  }, [boardElsewhere, listedStep, turnBoard]);
   const listedWorkspaceId = listedWorkspace?.id;
   const sidebar = useMemo(() => sidebarList(tasks.tasks), [tasks.tasks]);
   const listedSidebar = useMemo(
@@ -1828,8 +1852,11 @@ export function useTasksTab(input: {
   // shows something else; a fixture's staged agents are no one's to announce.
   // The window's Inbox stands in the column's place, showing the task whose item is chosen there.
   // Whether the column stands on screen, a fixture's among them.
-  // Note that Admin stands over the window's state, which stays as it was under it (`admin-route.ts`), so none of it is on screen then.
-  const stateShown = shown && !input.adminView.open;
+  // Note that a routed place beside the sidebar, Admin, the Board, or a person's page, stands over the window's state, which stays
+  // as it was under it (`admin-route.ts`, `workspace-routes.ts`), so none of it is on screen then.
+  const routedOver =
+    input.adminView.open || input.boardView.open || input.personView.userId !== undefined;
+  const stateShown = shown && !routedOver;
   const columnInView =
     stateShown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
@@ -2952,12 +2979,9 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    // Note that Home under Admin is no Home on screen, so its composer is no New task there (`admin-route.ts`).
+    // Note that Home under a routed place is no Home on screen, so its composer is no New task there (`admin-route.ts`).
     const atHome =
-      page === TASKS_PAGE.HOME &&
-      standIn === undefined &&
-      historyFor === undefined &&
-      !input.adminView.open;
+      page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined && !routedOver;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -3327,6 +3351,37 @@ export function useTasksTab(input: {
     }
   };
 
+  // The Board of `home`, the listed workspace where none is named, opened past whatever stood in the plan's place, which gives way to it.
+  const openBoard = (home: Pick<Workspace, "id" | "slug"> | undefined) => {
+    const shown = home ?? listedWorkspace;
+    if (shown === undefined) return;
+    setHistoryFor(undefined);
+    setStandIn(undefined);
+    input.boardView.onOpen(stepOf(shown));
+  };
+
+  /**
+   * A person's page in `home`, the listed workspace where none is named,
+   * listed first where another is, because the page reads the listed
+   * workspace's work, and only listed, as a link's place is: reopening its
+   * last plan behind the page would only hide it again.
+   */
+  const openPerson = (
+    userId: string,
+    name: string | undefined,
+    home: Pick<Workspace, "id" | "slug"> | undefined,
+  ) => {
+    const shown = home ?? listedWorkspace;
+    if (shown === undefined) return;
+    setHistoryFor(undefined);
+    setStandIn(undefined);
+    // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
+    // asked before it, answering late, lists nothing and leaves nothing over it.
+    navigations.current += 1;
+    if (shown.id !== listedWorkspace?.id) chooseListed(shown.id);
+    input.personView.onOpen(userId, name, stepOf(shown));
+  };
+
   // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
   const goHome = () => {
     setHistoryFor(undefined);
@@ -3359,7 +3414,7 @@ export function useTasksTab(input: {
         }
         listLinked(workspace);
         if (place.kind === LINK_PLACE.HOME) goHome();
-        else standInFor({ kind: STAND_IN.BOARD });
+        else openBoard(workspaceOfSlug(viewed.workspaces, workspace));
         return;
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
@@ -3408,11 +3463,7 @@ export function useTasksTab(input: {
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
         const home = workspaceOfSlug(viewed.workspaces, workspace);
         listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.PERSON,
-          userId: place.userId,
-          workspaceId: home?.id ?? listedWorkspace?.id,
-        });
+        openPerson(place.userId, undefined, home);
         return;
       }
       case LINK_PLACE.INBOX: {
@@ -3857,30 +3908,25 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // A person's page stands over the plan's place as an agent's does, so a version history there gives way.
+    // A person's page is the router's, which draws it in the plan's place (`workspace-routes.ts`); a version history there gives way.
     personView: {
-      userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
-      name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
-      workspaceId: standIn?.kind === STAND_IN.PERSON ? standIn.workspaceId : undefined,
+      userId: input.personView.userId,
+      name: input.personView.name,
+      workspaceId: personWorkspace,
       onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
-        setHistoryFor(undefined);
-        // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
-        // asked before it, answering late, lists nothing and leaves nothing over it.
-        navigations.current += 1;
-        // Note that the workspace is listed first, because the page reads the listed workspace's
-        // work, and only listed, as a link's place is: reopening its last plan behind the page
-        // would only hide it again, and a reopen refused would take the page with it.
-        if (workspaceId !== undefined && workspaceId !== listedWorkspace?.id) {
-          chooseListed(workspaceId);
-        }
-        const opened = {
-          kind: STAND_IN.PERSON,
+        openPerson(
           userId,
-          workspaceId: workspaceId ?? listedWorkspace?.id,
-        } as const;
-        setStandIn(name === undefined ? opened : { ...opened, name });
+          name,
+          workspaceId === undefined
+            ? undefined
+            : viewed.workspaces.find((each) => each.id === workspaceId),
+        );
       }),
-      onClose: guard(() => setStandIn(undefined)),
+      onClose: guard(input.personView.onClose),
+      onPreload: (userId: string, workspaceId?: string) => {
+        const home = viewed.workspaces.find((each) => each.id === workspaceId) ?? listedWorkspace;
+        if (home !== undefined) input.personView.onPreload(userId, stepOf(home));
+      },
     },
     // The Admin place is the router's, which draws it in the task's place (`admin-route.ts`).
     adminView: { ...input.adminView, onOpen: guard(input.adminView.onOpen) },
@@ -3901,14 +3947,14 @@ export function useTasksTab(input: {
         ),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // The Board stands over the plan's place as the Automations page does, each giving way to the others.
+    // The Board is the router's, which draws it in the plan's place (`workspace-routes.ts`).
     boardView: {
-      open: standIn?.kind === STAND_IN.BOARD,
-      onOpen: guard(() => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.BOARD });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
+      open: input.boardView.open,
+      onOpen: guard(() => openBoard(listedWorkspace)),
+      onClose: guard(input.boardView.onClose),
+      onPreload: () => {
+        if (listedWorkspace !== undefined) input.boardView.onPreload(stepOf(listedWorkspace));
+      },
     },
     unknownWorkspace: {
       open: standIn?.kind === STAND_IN.UNKNOWN_WORKSPACE,

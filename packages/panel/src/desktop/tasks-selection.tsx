@@ -17,7 +17,8 @@ import {
   workspaceSections,
 } from "@repo/ui/task-sections-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { createContext, useId, useMemo, useRef, useState } from "react";
+import { type Store, useCreateStore, useSelector } from "@tanstack/react-store";
+import { createContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { useSteadyDoor } from "../steady-door.js";
@@ -198,19 +199,38 @@ export interface TasksSelection {
   readonly dialog: React.JSX.Element;
 }
 
+/** The tasks a page has chosen, by id, as a store holds them. */
+export type ChosenTasksStore = Store<ReadonlySet<string>>;
+
 /**
  * The tasks a page has chosen of those it draws (`drawn`), and what its bar
  * and its chosen rows do to them all. Note that a task no longer drawn leaves
  * the selection for good, so one coming back is not chosen again unasked.
+ * The choice is held in `held` where the page hands a store that outlives
+ * it, as the Tasks page does so its choice stands when it is drawn again,
+ * and in a store of the hook's own otherwise.
  */
-export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string>): TasksSelection {
+export function useTasksSelection(
+  tasks: TasksControl,
+  drawn: ReadonlySet<string>,
+  held?: ChosenTasksStore,
+): TasksSelection {
   // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
   const regionId = useId();
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
+  const own = useCreateStore<ReadonlySet<string>>(new Set<string>());
+  const store = held ?? own;
+  const chosen = useSelector(store);
+  const setChosen = (
+    next: ReadonlySet<string> | ((was: ReadonlySet<string>) => ReadonlySet<string>),
+  ) => store.setState(typeof next === "function" ? next : () => next);
   const selected: ReadonlySet<string> = new Set([...chosen].filter((id) => drawn.has(id)));
-  if (selected.size !== chosen.size) setChosen(selected);
+  const stale = selected.size !== chosen.size;
+  // Note that the tasks no longer drawn are let go after the draw rather than during it, because a store's write redraws its readers.
+  useEffect(() => {
+    if (stale) store.setState((was) => new Set([...was].filter((id) => drawn.has(id))));
+  });
   const onClear = () => setChosen(new Set());
   const sections = useSectionDialogs(tasks, tasks.shown);
   // The tasks Permanently delete was asked of, held as it asks, so a selection changed meanwhile deletes none it never named.

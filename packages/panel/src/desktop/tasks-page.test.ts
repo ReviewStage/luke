@@ -212,7 +212,12 @@ async function mountPage(
       listRead: true,
       taskSections: sections,
       onSelect: (taskId) => opened.push(taskId),
-      boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
+      boardView: {
+        open: true,
+        onOpen: () => undefined,
+        onClose: () => (closed += 1),
+        onPreload: () => undefined,
+      },
       onSetTaskStanding: (taskId, standing) => {
         sent.push([taskId, standing]);
         return askKept(Promise.resolve(keeps));

@@ -13,10 +13,11 @@
  * The root draws `App`, whose shell draws the route standing through its
  * `Outlet` (`desktop-shell.tsx`). Every place but Settings stands beside the
  * sidebar, under the pathless `places` layout, which stays drawn as the
- * window moves between them. Settings and Admin are routed places: the
- * router alone says the window stands on them, their routes draw them as
- * lazy routes, and each gate is a `beforeLoad` over a predicate the
- * window's Back and Forward ask too (`route-gates.ts`). Every other place
+ * window moves between them. Settings, Admin, a workspace's Board, and a
+ * person's page are routed places: the router alone says the window stands
+ * on them, their routes draw them as lazy routes, and each gate is a
+ * `beforeLoad` over a predicate the window's Back and Forward ask too
+ * (`route-gates.ts`). Every other place
  * is still the window's state's, which its routes draw through one
  * component (`StatePlace`), so moving a place onto the router swaps its
  * route's component and deletes its place kind from `navigation-history.ts`.
@@ -37,10 +38,12 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { Schema } from "effect";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { App } from "./app.js";
 import {
   AdminRouteLoading,
+  BoardRouteLoading,
+  PersonRouteLoading,
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
@@ -50,14 +53,9 @@ import {
   type RouteAccess,
   routeAccessNow,
   settingsPageRouteStands,
+  useRouteAccess,
+  workspaceRouteStands,
 } from "./route-gates.js";
-import {
-  SETTINGS_HELD,
-  useAdminAccess,
-  useAdminAccessPending,
-  useAppSlice,
-  useExperimentChoices,
-} from "./use-app-state.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
 const taskSearchSchema = Schema.toStandardSchemaV1(
@@ -155,11 +153,24 @@ const homeRoute = createRoute({
   component: StatePlace,
 });
 
+/**
+ * A workspace's Board, the Tasks page, of one of the reader's workspaces
+ * (`workspaceRouteStands`): an address naming none of theirs gives way to
+ * that address's Home, which says the workspace is not there for them. Its
+ * page is a chunk of its own, read ahead as the pointer comes to its row,
+ * and once the signed-in window is idle; what stands while it loads is the
+ * page's own frame.
+ */
 const boardRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "tasks",
-  component: StatePlace,
-});
+  beforeLoad: ({ context, params }) => {
+    if (workspaceRouteStands(params.workspace, context.access)) return;
+    throw redirect({ to: "/$workspace", params: { workspace: params.workspace }, replace: true });
+  },
+  pendingComponent: BoardRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() => import("./desktop/board-route.lazy.js").then((loaded) => loaded.boardLazyRoute));
 
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
@@ -273,11 +284,21 @@ const automationRunRoute = createRoute({
   path: "run/$runId",
 });
 
+/**
+ * A person's page in one of the reader's workspaces, on the same terms as
+ * the Board: its page a chunk of its own, read ahead as the pointer comes
+ * to a person's name, its frame standing while it loads.
+ */
 const personRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "person/$userId",
-  component: StatePlace,
-});
+  beforeLoad: ({ context, params }) => {
+    if (workspaceRouteStands(params.workspace, context.access)) return;
+    throw redirect({ to: "/$workspace", params: { workspace: params.workspace }, replace: true });
+  },
+  pendingComponent: PersonRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() => import("./desktop/person-route.lazy.js").then((loaded) => loaded.personLazyRoute));
 
 /**
  * Admin, an admin's alone (`adminRouteStands`): an address of it loaded or
@@ -433,14 +454,7 @@ export type PanelRouter = ReturnType<typeof createPanelRouter>;
  * gate no longer lets stand gives way.
  */
 export function PanelRouterProvider({ router }: { router: PanelRouter }): React.JSX.Element {
-  const admin = useAdminAccess();
-  const adminPending = useAdminAccessPending();
-  const experiments = useExperimentChoices();
-  const experimentsRead = useAppSlice(SETTINGS_HELD);
-  const access = useMemo(
-    (): RouteAccess => ({ admin: admin || adminPending, experiments, experimentsRead }),
-    [admin, adminPending, experiments, experimentsRead],
-  );
+  const access = useRouteAccess();
   const asked = useRef(access);
   useEffect(() => {
     if (asked.current === access) return;

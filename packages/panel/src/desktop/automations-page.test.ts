@@ -911,6 +911,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         open: false,
         onOpen: leaveGuard.guard(() => boardOpens.push(1)),
         onClose: () => undefined,
+        onPreload: () => undefined,
       },
       workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],

@@ -49,6 +49,7 @@ import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/tes
 import { timeRuntime } from "@repo/ui";
 import { isAgentTab, isDraftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useRouter } from "@tanstack/react-router";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -92,6 +93,7 @@ import { ADMIN_AWAY, listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
+import { useBoardRoute, usePersonRoute } from "../workspace-routes.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
@@ -309,6 +311,8 @@ function mount(
   });
   function Probe() {
     const [held, setHeld] = useState(standing);
+    const router = useRouter();
+    const leaveRouted = () => void router.navigate({ to: "/app" });
     restand = setHeld;
     control = useTasksTab({
       acts: {
@@ -338,6 +342,9 @@ function mount(
         open: held.admin === true,
         onOpen: (view) => adminOpens.push(view),
       },
+      // The Board and a person's page are the router's, which the test's window router stands, each left for a place with no link.
+      boardView: useBoardRoute({ onClose: leaveRouted }),
+      personView: usePersonRoute({ onClose: leaveRouted }),
     });
     return held.history
       ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
@@ -2096,21 +2103,19 @@ test("a workspace's Board link opens in the workspace its step names, and one na
 
   assert.deepEqual(named, [ACME.id, true]);
   assert.deepEqual(
-    [
-      tab.control().workspace?.id,
-      tab.control().boardView.open,
-      tab.control().unknownWorkspace.open,
-    ],
-    [ACME.id, false, true],
+    [tab.control().workspace?.id, tab.control().unknownWorkspace.open],
+    [ACME.id, true],
   );
 });
 
-test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
+test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
   act(() => tab.control().personView.onOpen("user-charles", "Charles Pan"));
   const opened = tab.control().personView.userId;
   act(() => tab.control().onChooseWorkspace(ACME.id));
+  // The page gives way through the router, whose move lands once the page's own has.
+  await act(async () => undefined);
   const afterSwitch = tab.control().personView.userId;
   act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
 
@@ -2788,7 +2793,7 @@ function listRead(tasks: TasksView["tasks"]): TasksView {
 }
 
 test("while a page stands its ask, a way out asks instead of going, Leave goes where was asked, and once the ask is down the doors go at once", () => {
-  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+  const tab = mount({ shown: true, tasks: { ...listRead([listed()]), workspaces: [ACME] } });
   act(() => tab.control().inboxView.onOpen());
   const asked: (() => void)[] = [];
   const ask: LeaveAsk = (leave) => asked.push(leave);
@@ -2812,20 +2817,13 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
-test("the Board and the Inbox stand in the plan's place in turn: opening one puts the other away, and a plan's press puts the Board away", () => {
-  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+test("the Board stands in the plan's place over the Inbox, which it puts away", () => {
+  const tab = mount({ shown: true, tasks: { ...listRead([listed()]), workspaces: [ACME] } });
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().boardView.onOpen());
+
   assert.equal(tab.control().boardView.open, true);
   assert.equal(tab.control().inboxView.open, false);
-
-  act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().boardView.open, false);
-  assert.equal(tab.control().inboxView.open, true);
-
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().onSelect(TASK.id));
-  assert.equal(tab.control().boardView.open, false);
 });
 
 test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", async () => {

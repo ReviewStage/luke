@@ -168,7 +168,6 @@ import {
   useNestedRows,
 } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
-import { TASKS_ROUTE } from "./pages-on-demand.js";
 import { PhoneAccount } from "./phone-account.js";
 import { PhoneHead } from "./phone-head.js";
 import { useInboxWaiting } from "./places-waiting.js";
@@ -1515,13 +1514,16 @@ function SidebarTasksRow({
   current,
   disabled,
   onOpen,
+  onPreload,
 }: {
   current: boolean;
   disabled: boolean;
   onOpen: () => void;
+  /** Reads the Board's route ahead of a press, its chunk among it. */
+  onPreload: () => void;
 }): React.JSX.Element {
   useWhenIdle(() => {
-    if (!disabled) TASKS_ROUTE.prefetch();
+    if (!disabled) onPreload();
   }, IDLE_TIMEOUT_MS.PREFETCH);
   return (
     <NavItem
@@ -1530,7 +1532,7 @@ function SidebarTasksRow({
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.TASKS)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.TASKS].chord} />}
       disabled={disabled}
-      onPointerEnter={TASKS_ROUTE.prefetch}
+      onPointerEnter={onPreload}
       onClick={onOpen}
     >
       Tasks
@@ -2261,6 +2263,7 @@ function SidebarColumn({
             current={inBoard}
             disabled={!tasks.signedIn}
             onOpen={chosen(openBoard)}
+            onPreload={tasks.boardView.onPreload}
           />
         )}
         <SidebarAutomationsRow

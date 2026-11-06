@@ -90,7 +90,7 @@ import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark } from "./offline-mark.js";
-import { PERSON_PAGE, TASKS_ROUTE, VERSION_HISTORY } from "./pages-on-demand.js";
+import { VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneAccount } from "./phone-account.js";
@@ -101,6 +101,7 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
 import { useSummaryPin } from "./task-summary.js";
+import { TasksPagesHeld } from "./tasks-page-held.js";
 import { useWindowTitle } from "./window-title.js";
 
 /**
@@ -706,7 +707,8 @@ interface ShellPlacesInput {
   readonly planToggle: boolean;
   readonly standingIn: boolean;
   readonly inboxKept: boolean;
-  readonly boardKept: boolean;
+  /** What each workspace's Tasks page holds across its visits (`tasks-page-held.ts`). */
+  readonly tasksPagesHeld: TasksPagesHeld;
   readonly adminAccess: boolean;
   readonly adminPending: boolean;
   readonly setToggleRoom: ReturnType<typeof usePanelToggleRoom>;
@@ -785,7 +787,7 @@ export function DesktopShell({
   const keptStanding =
     !gated && tasks.signedIn && tab !== PANEL_TAB.SETTINGS && !tasks.history.open;
   const inboxKept = usePageKept(tasks.inboxView.open, tasks.workspace?.id, keptStanding);
-  const boardKept = usePageKept(tasks.boardView.open, tasks.workspace?.id, keptStanding);
+  const [tasksPagesHeld] = useState(() => new TasksPagesHeld());
   const focusHolder = useSettingsFocusHolder(tab === PANEL_TAB.SETTINGS);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
@@ -979,7 +981,7 @@ export function DesktopShell({
     planToggle,
     standingIn,
     inboxKept,
-    boardKept,
+    tasksPagesHeld,
     adminAccess,
     adminPending,
     setToggleRoom,
@@ -1017,6 +1019,8 @@ export function ShellPlaces(): React.JSX.Element {
     planToggle,
     setToggleRoom,
     focusHolder,
+    inboxKept,
+    phoneAccount,
   } = useShellPlaces();
   const { account } = settings;
   useFocusHandedBack(focusHolder);
@@ -1110,6 +1114,14 @@ export function ShellPlaces(): React.JSX.Element {
             <Outlet />
           </ChipCards>
         </MentionedAgents>
+        {/* Note that the Inbox kept stands after the place shown, so a lookup of the place's first box finds the place's,
+            and beside every place's route rather than in one, so a routed place standing, the Board or a person's page,
+            lets go of nothing it held. */}
+        {inboxOpen || inboxKept ? (
+          <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
+            <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
+          </KeptPage>
+        ) : null}
       </main>
       {barShown ? <MobileBar tasks={tasks} /> : null}
       {/* Note that the floating sidebar's title-bar row is claimed back from the work's drag strips here, after the work,
@@ -1175,116 +1187,76 @@ export function ShellPlaces(): React.JSX.Element {
 
 /**
  * What a place the window's state says draws in the places' content slot:
- * a task, an agent's or a person's page, the Automations pages, a workspace
- * not there for the reader, or nothing where the Inbox or the Tasks page,
- * kept beside it, stands. Every route not yet moved onto the router draws
+ * a task, an agent's page, the Automations pages, a workspace not there for
+ * the reader, or nothing where the Inbox, kept beside every place's route
+ * (`ShellPlaces`), stands. Every route not yet moved onto the router draws
  * this one component, so moving between them keeps it drawn.
  */
-export function StatePlace(): React.JSX.Element {
-  const {
-    tasks,
-    room,
-    sidebar,
-    settings,
-    looks,
-    summary,
-    away,
-    chipCards,
-    mentionedAgents,
-    phoneAccount,
-    inboxKept,
-    boardKept,
-  } = useShellPlaces();
+export function StatePlace(): React.JSX.Element | null {
+  const { tasks, room, sidebar, settings, looks, summary, away } = useShellPlaces();
   const { account } = settings;
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
-  const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
-  const boardOpen = tasks.boardView.open;
   const unknownWorkspace = tasks.unknownWorkspace.open;
-  // A phone's Tasks page is the sidebar's tree, pinned in the work's place, so it keeps no page of its own (`mobile-bar.tsx`).
-  const phoneTasks = mobileBarShown(room, tasks) && boardOpen;
-  return (
-    <>
-      {inboxOpen ? null : pageAgent !== undefined ? (
-        // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-        <DesktopAgentPage
-          key={pageAgent}
-          tasks={tasks}
-          agentId={pageAgent}
-          away={room === SHELL_ROOM.NARROW ? away : undefined}
-        />
-      ) : pagePerson !== undefined ? (
-        // Keyed by the person, so another person's page holds nothing of the last, its find among it.
-        <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={tasks.shown}>
-          <Suspense
-            fallback={
-              <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />
-            }
-          >
-            <PERSON_PAGE.Route
-              tasks={tasks}
-              userId={pagePerson}
-              name={tasks.personView.name}
-              staged={sidebar.staged}
-              away={room === SHELL_ROOM.NARROW ? away : undefined}
-            />
-          </Suspense>
-        </PageFind>
-      ) : boardOpen ? null : automationsOpen ? (
-        <PageFind
-          page={FIND_PAGE.AUTOMATIONS}
-          at={automationsPlaceKey(tasks.automationsView.place)}
-          active={tasks.shown}
-        >
-          <Suspense
-            fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />}
-          >
-            <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
-          </Suspense>
-        </PageFind>
-      ) : unknownWorkspace ? (
-        // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
-        <ReplayUnmask>
-          <NotFound
-            replayUnmasked
-            thing={NOT_FOUND_THING.WORKSPACE}
-            bar={
-              room === SHELL_ROOM.NARROW
-                ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
-                : {}
-            }
-            action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
-          />
-        </ReplayUnmask>
-      ) : (
-        <DesktopTasks
-          tasks={tasks}
-          looks={looks}
-          summary={summary}
-          room={room}
-          away={away}
-          accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-          staged={sidebar.staged}
-        />
-      )}
-      {/* Note that a page kept stands after the page shown in its place, so a lookup of the page's first box finds the page's,
-          and the Tasks page before the Inbox, so it is the first box while it is shown. */}
-      {(boardOpen || boardKept) && !phoneTasks ? (
-        <KeptPage shown={boardOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-          {/* The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board. */}
-          <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-            <TASKS_ROUTE.Route tasks={tasks} room={room} />
-          </Suspense>
-        </KeptPage>
-      ) : null}
-      {inboxOpen || inboxKept ? (
-        <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-          <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
-        </KeptPage>
-      ) : null}
-    </>
+  return inboxOpen ? null : pageAgent !== undefined ? (
+    // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+    <DesktopAgentPage
+      key={pageAgent}
+      tasks={tasks}
+      agentId={pageAgent}
+      away={room === SHELL_ROOM.NARROW ? away : undefined}
+    />
+  ) : automationsOpen ? (
+    <PageFind
+      page={FIND_PAGE.AUTOMATIONS}
+      at={automationsPlaceKey(tasks.automationsView.place)}
+      active={tasks.shown}
+    >
+      <Suspense
+        fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />}
+      >
+        <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
+      </Suspense>
+    </PageFind>
+  ) : unknownWorkspace ? (
+    // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
+    <ReplayUnmask>
+      <NotFound
+        replayUnmasked
+        thing={NOT_FOUND_THING.WORKSPACE}
+        bar={
+          room === SHELL_ROOM.NARROW
+            ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
+            : {}
+        }
+        action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
+      />
+    </ReplayUnmask>
+  ) : (
+    <DesktopTasks
+      tasks={tasks}
+      looks={looks}
+      summary={summary}
+      room={room}
+      away={away}
+      accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
+      staged={sidebar.staged}
+    />
   );
+}
+
+/** The Board's frame while its chunk loads; nothing on a phone, whose Tasks page is the sidebar's tree pinned in the work's place (`mobile-bar.tsx`). */
+export function BoardRouteLoading(): React.JSX.Element | null {
+  const { tasks, room } = useShellPlaces();
+  if (mobileBarShown(room, tasks)) return null;
+  return <TasksLoading onExit={tasks.boardView.onClose} />;
+}
+
+/** A person's page's frame while its chunk loads. */
+export function PersonRouteLoading(): React.JSX.Element {
+  const { tasks } = useShellPlaces();
+  return <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />;
 }
 
 /** Admin's frame, which stands while its chunk loads and while the account's access is still read. */

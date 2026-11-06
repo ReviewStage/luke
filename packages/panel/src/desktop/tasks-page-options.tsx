@@ -79,6 +79,7 @@ import {
   toggledFilter,
   valueCounts,
 } from "@repo/ui/tasks-page-model";
+import type { Store } from "@tanstack/react-store";
 import { Fragment, type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
@@ -93,6 +94,7 @@ import {
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { actionSearchPanel } from "./action-search-menu.js";
 import { type MenuAsk, useAskedMenu } from "./phone-head.js";
+import type { ChosenTasksStore } from "./tasks-selection.js";
 
 /**
  * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
@@ -130,6 +132,10 @@ export interface TasksViewFrame {
   readonly onDisplay: (display: TasksDisplay) => void;
   /** The page's scroller, whose position the page keeps for the view. */
   readonly scroll: RefCallback<HTMLDivElement>;
+  /** Where the view's chosen tasks are held across the page's visits; the view's own while nothing outlives it. */
+  readonly chosen?: ChosenTasksStore | undefined;
+  /** Where the column a narrow room's Columns view shows is held across the page's visits; the view's own otherwise. */
+  readonly column?: Store<string | undefined> | undefined;
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */

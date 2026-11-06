@@ -1622,7 +1622,7 @@ function shownToReader(element: Element): boolean {
   return true;
 }
 
-test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and come back as they stood", async () => {
+test("the Inbox left stays drawn, hidden from a reader, and comes back as it stood, and the Tasks page left comes back on the view it stood on", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -1639,6 +1639,15 @@ test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and co
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
+  // The Board is the router's place, which the window moves to as it opens and off as it is left.
+  const stand = async (open: { inbox: boolean; board: boolean }) => {
+    act(() => {
+      setOpen(open);
+      routed().go(open.board ? SHELL_AT.BOARD : SHELL_AT.PLACES);
+    });
+    await act(() => routed().settled());
+    await settle();
+  };
   act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
   const search = () =>
     container.querySelector<HTMLInputElement>('.inbox-tasks input[aria-label="Search inbox"]');
@@ -1650,35 +1659,23 @@ test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and co
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  act(() => setOpen({ inbox: false, board: true }));
+  await stand({ inbox: false, board: true });
   assert.equal(search(), input, "the Inbox left is the same Inbox, kept");
   assert.equal(shownToReader(input), false, "and hidden from a reader while the window is away");
-  // The Tasks page is a chunk of its own, read the first time it is drawn.
-  await act(async () => {
-    await import("./tasks-page.js");
-  });
-  await settle();
   const columns = () =>
     [...container.querySelectorAll<HTMLElement>('[aria-label="Tasks view"] [role="radio"]')].find(
       (each) => each.textContent?.trim() === "Columns",
     );
   act(() => columns()?.click());
-  const chosen = columns();
-  assert.ok(chosen, "the Tasks page offers Columns");
-  assert.equal(chosen.getAttribute("aria-checked"), "true", "and stands on it");
+  assert.equal(columns()?.getAttribute("aria-checked"), "true", "the Tasks page stands on Columns");
 
-  act(() => setOpen({ inbox: false, board: false }));
-  // Note that elements are compared by identity alone, since a failed comparison would print both whole.
-  assert.ok(columns() === chosen, "the Tasks page left is the same page, kept");
-  assert.equal(shownToReader(chosen), false, "and hidden from a reader");
+  await stand({ inbox: false, board: false });
+  assert.equal(columns(), undefined, "the Tasks page left is let go");
 
-  act(() => setOpen({ inbox: false, board: true }));
-  assert.ok(columns() === chosen, "the same page comes back");
-  assert.equal(shownToReader(chosen), true);
-  assert.equal(chosen.getAttribute("aria-checked"), "true", "its view as it stood");
+  await stand({ inbox: false, board: true });
+  assert.equal(columns()?.getAttribute("aria-checked"), "true", "and comes back on its view");
 
-  act(() => setOpen({ inbox: true, board: false }));
-  assert.equal(shownToReader(chosen), false);
+  await stand({ inbox: true, board: false });
   assert.equal(shownToReader(input), true);
-  assert.equal(search()?.value, "zzz", "its search as it stood");
+  assert.equal(search()?.value, "zzz", "the Inbox's search as it stood");
 });
