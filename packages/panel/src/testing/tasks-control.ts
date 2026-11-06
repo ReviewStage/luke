@@ -23,6 +23,7 @@ import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
+import type { AutomationsRoute } from "../automations-route.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
@@ -399,6 +400,20 @@ export const BOARD_AWAY: BoardRoute = {
   onClose: ignore,
   onTurn: ignore,
   onPreload: ignore,
+};
+
+/** The Automations route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const AUTOMATIONS_AWAY: AutomationsRoute = {
+  open: false,
+  place: { kind: AUTOMATIONS_PAGE.LIST },
+  runs: false,
+  standingIn: undefined,
+  deleted: new Set(),
+  setupAddress: undefined,
+  onOpen: ignore,
+  onRuns: ignore,
+  onClose: ignore,
+  onTurn: ignore,
 };
 
 /** A person's route standing nowhere, for a tasks tab drawn with no router to stand it. */

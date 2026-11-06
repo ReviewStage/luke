@@ -13,6 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import { useAdminRoute } from "./admin/admin-route.js";
 import { runAppCommand } from "./app-commands.js";
+import { type AutomationsRoute, useAutomationsRoute } from "./automations-route.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
   throughHistory,
@@ -87,15 +88,6 @@ interface Standing {
   };
   /** The coding agent whose page stands, while one does. */
   readonly agent: string | undefined;
-  /** Whether the automation's page stands, and its runs alone over its setup. */
-  readonly automation?:
-    | {
-        readonly open: boolean;
-        readonly runs: boolean;
-        /** The page standing, the automation's own as no link named a run where left out. */
-        readonly page?: AutomationsPlace | undefined;
-      }
-    | undefined;
   /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
   readonly unsaved?: boolean | undefined;
   /** How many times a door naming a thing opened it in the side panel, as the real one counts them. */
@@ -183,29 +175,6 @@ function tasksTab(
       return true;
     },
     leaveGuard,
-    automationsView: {
-      ...base.automationsView,
-      open: at.automation?.open === true,
-      place:
-        at.automation?.open === true
-          ? (at.automation.page ?? { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION })
-          : { kind: AUTOMATIONS_PAGE.LIST },
-      runs: at.automation?.runs === true,
-      // As the real one does, opening a page is a way out its guard asks first, and opening it on a run's link stands its runs.
-      onOpen: leaveGuard.guard((place: AutomationsPlace | undefined, runs?: boolean) => {
-        const linked = place?.kind === AUTOMATIONS_PAGE.EDIT && place.runId !== undefined;
-        patch((held) => ({
-          ...held,
-          automation: { open: true, runs: runs ?? linked, page: place },
-        }));
-      }),
-      onRuns: (runs) =>
-        patch((held) => ({
-          ...held,
-          automation: { open: true, runs, page: held.automation?.page },
-        })),
-      onClose: () => patch((held) => ({ ...held, automation: undefined })),
-    },
     agentView: {
       ...base.agentView,
       agentId: at.agent,
@@ -269,6 +238,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
   let restand: ((move: (held: Standing) => Standing) => void) | undefined;
   let settings: SettingsRoute | undefined;
   let admin: AdminViewControl | undefined;
+  let automations: AutomationsRoute | undefined;
   function Probe() {
     const [at, setAt] = useState(start);
     standing = at;
@@ -280,7 +250,23 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       narrow: room === SHELL_ROOM.NARROW,
     });
     admin = useAdminRoute({ listedSlug: () => ACME.slug, onClose: () => undefined });
-    const tasks = { ...tasksTab(at, setAt, room), adminView: admin };
+    automations = useAutomationsRoute({ onClose: () => undefined });
+    const tab = tasksTab(at, setAt, room);
+    const tasks: TasksControl = {
+      ...tab,
+      adminView: admin,
+      // As the real one does, opening a page is a way out its guard asks first.
+      automationsView: {
+        open: automations.open,
+        place: automations.place,
+        runs: automations.runs,
+        onOpen: tab.leaveGuard.guard((to = { kind: AUTOMATIONS_PAGE.LIST }) =>
+          automations?.onOpen(to, ACME.slug),
+        ),
+        onRuns: automations.onRuns,
+        onClose: automations.onClose,
+      },
+    };
     const copyLink = useCopyLink(
       tasks,
       settings.standing
@@ -296,6 +282,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       routed: useRoutedStanding(),
       settingsList: settings.listAddress,
       onSettingsList: settings.list,
+      automations,
       room,
       tasks,
     });
@@ -323,6 +310,10 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
     settings: () => settings ?? assert.fail("Settings stands"),
     /** Admin as the router stands it. */
     admin: () => admin ?? assert.fail("Admin stands"),
+    /** The Automations pages as the router stands them. */
+    automations: () => automations ?? assert.fail("the Automations route stands"),
+    /** Opens an Automations page by the router, as a link or a press does, past the leave guard as the page it leaves let go. */
+    openAutomation: (to: AutomationsPlace) => act(() => automations?.onOpen(to, ACME.slug)),
     /** Opens Settings where `link` names, as a Settings link does. */
     openSettings: (link: SettingsLink) => act(() => void settings?.open(link)),
     /** Moves the window as a door other than the history would. */
@@ -755,83 +746,67 @@ test("a reloaded window whose saved step is the Admin place opens it once the ac
 const AUTOMATION_PAGE: AutomationsPlace = { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION };
 const LINKED_RUN: AutomationsPlace = { ...AUTOMATION_PAGE, runId: "run-1" };
 
-/** The window on the automation's page over the task, its setup standing, with unsaved work in it. */
-const ON_AUTOMATION: Standing = {
-  ...ON_TASK,
-  automation: { open: true, runs: false },
-  unsaved: true,
-};
+/** The window on the task, a page holding unsaved work, as an automation's editor holds a draft. */
+const UNSAVED: Standing = { ...ON_TASK, unsaved: true };
 
-test("on a narrow stage an automation's runs chosen from its setup are a step, whose way back steps back to the setup without asking to leave its unsaved work", () => {
-  const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
+test("on a narrow stage an automation's runs chosen from its setup are a step, whose way back steps back to the setup without asking to leave its unsaved work", async () => {
+  const window = mount(SHELL_ROOM.NARROW, UNSAVED);
+  window.openAutomation(AUTOMATION_PAGE);
+  await settle();
   window.press(() => window.shown().automationsView.onRuns(true));
-  assert.equal(window.addresses().length, 2);
-  const runsAlone = (at: Standing) => at.automation?.runs;
-  backAndForth(window, runsAlone, false, true);
+  await settle();
+  assert.equal(window.automations().runs, true);
+  assert.equal(window.addresses().length, 3);
 
   window.press(() => window.shown().automationsView.onRuns(false));
-  assert.equal(runsAlone(window.at()), false);
-  assert.equal(window.addresses().length, 2, "the way back added no step");
+  await settle();
+  assert.equal(window.automations().runs, false);
+  assert.equal(window.addresses().length, 3, "the way back added no step");
   assert.equal(window.history().canGoForward, true, "the way back was a step back");
 });
 
-test("on a narrow stage a move the history makes by itself back from an automation's runs stands its setup without asking to leave its unsaved work", () => {
-  const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
-  window.press(() => window.shown().automationsView.onRuns(true));
-  window.moveHistory(-1);
-  assert.equal(window.at().automation?.runs, false);
-  assert.equal(window.history().canGoForward, true);
-});
-
-test("on a narrow stage an automation opened on its runs, as a run's link opens it, has no setup behind it, so the way back stands the setup in the runs' step", () => {
+test("on a narrow stage an automation opened on its runs, as a run's link opens it, has no setup behind it, so the way back stands the setup in the runs' step", async () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
-  window.move((held) => ({ ...held, automation: { open: true, runs: true } }));
+  window.openAutomation(LINKED_RUN);
+  await settle();
+  assert.equal(window.automations().runs, true);
   assert.equal(window.addresses().length, 2);
 
   window.press(() => window.shown().automationsView.onRuns(false));
-  assert.equal(window.at().automation?.runs, false);
-  assert.equal(window.addresses().length, 2, "the setup took the runs' step");
+  await settle();
+  assert.equal(window.automations().runs, false);
+  assert.deepEqual(window.addresses(), [
+    `/acme/task/${DOCUMENT_TASK.id}`,
+    `/acme/automation/${AUTOMATION}`,
+  ]);
   assert.equal(window.history().canGoForward, false);
 });
 
-test("on the desktop's width an automation's runs are no step", () => {
-  const window = mount(SHELL_ROOM.WIDE, ON_AUTOMATION);
-  window.press(() => window.shown().automationsView.onRuns(true));
-  assert.equal(window.addresses().length, 1);
-});
-
-test("on a narrow stage a step between an automation's setup and its runs a link opened on another run moves the window there without asking to leave its unsaved work", () => {
-  const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
-  // A run's link opens the same automation on its runs, as a door other than the history does.
-  window.move((held) => ({ ...held, automation: { open: true, runs: true, page: LINKED_RUN } }));
-  assert.equal(window.addresses().length, 2);
+test("on a narrow stage Back and Forward between an automation's setup and a run a link opened move the window there without asking to leave its unsaved work", async () => {
+  const window = mount(SHELL_ROOM.NARROW, UNSAVED);
+  window.openAutomation(AUTOMATION_PAGE);
+  await settle();
+  window.openAutomation(LINKED_RUN);
+  await settle();
 
   act(() => window.history().onBack());
-  assert.deepEqual(window.at().automation, { open: true, runs: false, page: AUTOMATION_PAGE });
+  await settle();
+  assert.deepEqual(window.automations().place, AUTOMATION_PAGE);
   act(() => window.history().onForward());
-  assert.deepEqual(window.at().automation, { open: true, runs: true, page: LINKED_RUN });
+  await settle();
+  assert.deepEqual(window.automations().place, LINKED_RUN);
 });
 
-test("on a narrow stage Back from an automation with unsaved work to another automation still asks, and stays where it is refused", () => {
-  const window = mount(SHELL_ROOM.NARROW, {
-    ...ON_AUTOMATION,
-    automation: {
-      open: true,
-      runs: false,
-      page: { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-2" },
-    },
-  });
-  window.move((held) => ({
-    ...held,
-    automation: { open: true, runs: false, page: AUTOMATION_PAGE },
-  }));
-  assert.equal(window.addresses().length, 2);
+test("on a narrow stage Back from an automation with unsaved work to another automation still asks, and stays where it is refused", async () => {
+  const window = mount(SHELL_ROOM.NARROW, UNSAVED);
+  window.openAutomation({ kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-2" });
+  await settle();
+  window.openAutomation(AUTOMATION_PAGE);
+  await settle();
 
   act(() => window.history().onBack());
-  assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "the draft's automation stands");
-  window.moveHistory(-1);
-  assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "and a browser's Back too");
-  assert.equal(window.held.at(), 1, "the history stands back on it");
+  await settle();
+  assert.deepEqual(window.automations().place, AUTOMATION_PAGE, "the draft's automation stands");
 });
 
 test("on a narrow stage another thing a link opens in the side panel standing over the plan is a step of its own, which Back shows again", () => {

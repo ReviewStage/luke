@@ -3,8 +3,7 @@ import { lazyRoute } from "../lazy-route.js";
 /**
  * pages-on-demand.ts -- the window's pages split off the bundle every window parses, each a chunk of its own read the first time it is drawn or hinted at.
  *
- * The Automations pages are split off where they are drawn
- * (`desktop-shell.tsx`), and Settings, Admin, the Board, and a person's page
+ * Settings, Admin, the Board, a person's page, and the Automations pages
  * are the router's lazy routes (`panel-router.tsx`); these are split here
  * instead because a hover elsewhere in the window reads them early
  * (`lazy-route.ts`): a plan's Version history item and a Pull request tab's

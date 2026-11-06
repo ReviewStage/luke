@@ -1844,10 +1844,10 @@ function SidebarColumn({
   });
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's or a person's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
-  // Note that Admin, the Board, and a person's page stand over the window's state, which stays as it was under them, so no place of that state is shown then.
+  // Note that Admin, the Board, a person's page, and the Automations pages stand over the window's state, which stays as it was under them, so no place of that state is shown then.
   const inAdmin = tasks.adminView.open;
   const inInbox = onTasks && !inAdmin && tasks.inboxView.open;
-  const inAutomations = onTasks && !inAdmin && tasks.automationsView.open;
+  const inAutomations = onTasks && tasks.automationsView.open;
   const inBoard = onTasks && !inAdmin && tasks.boardView.open;
   const inPerson = onTasks && !inAdmin && tasks.personView.userId !== undefined;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
@@ -1898,12 +1898,9 @@ function SidebarColumn({
     leaveRouted();
     tasks.inboxView.onOpen();
   };
-  // Note that the Board is the router's place, which its navigation stands from wherever the window stands, as Admin's does.
+  // Note that the Board and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
   const openBoard = () => tasks.boardView.onOpen();
-  const openAutomations = () => {
-    leaveRouted();
-    tasks.automationsView.onOpen();
-  };
+  const openAutomations = () => tasks.automationsView.onOpen();
   const openAdmin = () => tasks.adminView.onOpen();
   const goHome = () => {
     leaveRouted();

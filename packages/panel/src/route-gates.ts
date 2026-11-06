@@ -129,12 +129,13 @@ export function settingsPageRouteStands(page: string, access: RouteAccess): bool
   return settingsPageExperimentStands(view, access.experiments);
 }
 
-/** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, and a person's page. */
+/** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, a person's page, and the Automations pages. */
 export const ROUTED_PLACE = {
   SETTINGS: "settings",
   ADMIN: "admin",
   BOARD: "board",
   PERSON: "person",
+  AUTOMATIONS: "automations",
 } as const;
 
 export type RoutedPlace = (typeof ROUTED_PLACE)[keyof typeof ROUTED_PLACE];
@@ -146,6 +147,7 @@ const ROUTED_ROUTES = {
   "/places/$workspace/admin": ROUTED_PLACE.ADMIN,
   "/places/$workspace/tasks": ROUTED_PLACE.BOARD,
   "/places/$workspace/person/$userId": ROUTED_PLACE.PERSON,
+  "/places/$workspace/automation-pages": ROUTED_PLACE.AUTOMATIONS,
 } as const satisfies Partial<Record<RouteIds<RegisteredRouter["routeTree"]>, RoutedPlace>>;
 
 /** What a routed place's gate reads of a match: its route and the params it was matched with. */
@@ -167,7 +169,11 @@ export function routedPlaceOf(matches: readonly RouteMatchSeen[]): RoutedPlace |
 export function routedStands(matches: readonly RouteMatchSeen[], access: RouteAccess): boolean {
   const place = routedPlaceOf(matches);
   if (place === ROUTED_PLACE.ADMIN) return adminRouteStands(access);
-  if (place === ROUTED_PLACE.BOARD || place === ROUTED_PLACE.PERSON) {
+  if (
+    place === ROUTED_PLACE.BOARD ||
+    place === ROUTED_PLACE.PERSON ||
+    place === ROUTED_PLACE.AUTOMATIONS
+  ) {
     const workspace = matches.find((match) => match.params.workspace !== undefined)?.params
       .workspace;
     return workspace === undefined || workspaceRouteStands(workspace, access);

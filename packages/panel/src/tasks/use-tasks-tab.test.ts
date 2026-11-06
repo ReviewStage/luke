@@ -60,6 +60,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { KEPT, type Kept } from "../act.js";
 import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
+import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -277,13 +278,22 @@ function mount(
     fakeAppPlatform(QUIET_PANEL);
   }
   /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
-  function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
+  function WindowHistoryProbe({
+    tasks,
+    room,
+    automations,
+  }: {
+    tasks: TasksControl;
+    room: ShellRoom;
+    automations: AutomationsRoute;
+  }) {
     windowHistory = useWindowHistory({
       known: true,
       link: undefined,
       routed: undefined,
       settingsList: undefined,
       onSettingsList: () => undefined,
+      automations,
       room,
       tasks,
     });
@@ -318,6 +328,7 @@ function mount(
     const [held, setHeld] = useState(standing);
     const router = useRouter();
     const leaveRouted = () => void router.navigate({ to: "/app" });
+    const automationsView = useAutomationsRoute({ onClose: leaveRouted });
     restand = setHeld;
     control = useTasksTab({
       tasks: held.tasks,
@@ -344,9 +355,14 @@ function mount(
       // The Board and a person's page are the router's, which the test's window router stands, each left for a place with no link.
       boardView: useBoardRoute({ onClose: leaveRouted }),
       personView: usePersonRoute({ onClose: leaveRouted }),
+      automationsView,
     });
     return held.history
-      ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
+      ? createElement(WindowHistoryProbe, {
+          tasks: control,
+          room: held.room,
+          automations: automationsView,
+        })
       : null;
   }
   const container = document.createElement("div");
@@ -3342,7 +3358,7 @@ test("what the developer opened while New task's agent start was out, a page and
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: { ...OPEN, workspaces: [ACME] } },
     { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
   );
   act(() => tab.control().onNewTask());
@@ -3427,7 +3443,7 @@ test("New task's agent start refused after its page opened opens the card again 
 test("Create with an agent opens New task's card for an automation's agent over the Automations page, and a start refused after it closed opens the same card again, the page behind it", async () => {
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: { ...OPEN, workspaces: [ACME] } },
     { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
   );
   act(() => tab.control().automationsView.onOpen());
