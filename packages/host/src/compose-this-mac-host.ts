@@ -23,7 +23,6 @@ import type { ChildProcessSpawner } from "effect/process";
 import { type AppThisMacHost, type AppThisMacHosts, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import { deviceLeft } from "./daemon/host-leave.js";
 import { Reporter, ThisMacHost } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import {
@@ -286,13 +285,10 @@ export function composeThisMacHost(
 
     /**
      * This Mac turned off, its agents' folders deleted or kept as asked: the
-     * install's own uninstall run, which takes the host off this Mac, then the
-     * record's device left on its own secret, read before the uninstall
-     * deleted it, and the record removed where no install was there to
-     * remove it. Never another account's host. Note that the app leaves as
-     * well, because a host release from before uninstall left the account
-     * itself deletes the secret without, and a leave the service already took
-     * answers as gone; and that kept folders are kept by letting go of the
+     * install's own uninstall run, which takes the host off this Mac and out
+     * of the account, and the record removed where no install was there to
+     * remove it. Never another account's host. Note that kept folders are
+     * kept by letting go of the
      * record of which ones the host made, which every release's uninstall
      * reads to find them. Whether it is off.
      */
@@ -317,10 +313,6 @@ export function composeThisMacHost(
             return false;
           }
           report("this Mac's host was removed");
-          if (HOST_RELEASE !== undefined && Option.isSome(record)) {
-            const left = yield* deviceLeft(record.value, HOST_RELEASE.VERSION);
-            if (!left) report("this Mac's host could not leave the account, so it stays listed");
-          }
           yield* removeHostDevice(host.stateRoot);
           return true;
         }),

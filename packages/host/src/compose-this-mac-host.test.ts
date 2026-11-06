@@ -40,8 +40,6 @@ const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
 const SCRIPT = "#!/bin/sh\necho install\n";
 /** Where the fake service takes an enroll, so its responder reads the version the enroll carried. */
 const ENROLL_URL = `${SERVICE}/enroll`;
-/** Where a host leaves its account on its own secret (`deviceAgents.leave`). */
-const LEAVE_URL = `${SERVICE}/api/device-agents/devices/leave`;
 const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 /** The desktop's own window, as the Gateway hands a method its caller. */
 const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -134,10 +132,6 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
             if (url === ENROLL_URL) {
               version = new Headers(init.headers).get(HOST_WIRE.VERSION_HEADER);
               return new Response("{}");
-            }
-            if (url === LEAVE_URL) {
-              asked.push("leave");
-              return Response.json({ done: true });
             }
             assert.equal(url, `${SERVICE}${HOST_WIRE.INSTALL_SCRIPT_PATH}`);
             return new Response(SCRIPT);
@@ -333,7 +327,7 @@ it.effect(
 );
 
 it.effect(
-  "turning This Mac off runs the install's own uninstall, then leaves the account on the record it read before, and reads off until it is turned on again",
+  "turning This Mac off runs the install's own uninstall and reads off until it is turned on again",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -345,7 +339,7 @@ it.effect(
         assert.deepEqual(yield* mac.turn(false), { done: true });
         yield* nudged(Duration.minutes(1));
 
-        assert.deepEqual(mac.asked, ["uninstall", "leave"]);
+        assert.deepEqual(mac.asked, ["uninstall"]);
         assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false, agentFolders: 0 });
       }).pipe(Effect.provide(FILES)),
     ),
@@ -367,11 +361,7 @@ it.effect(
         assert.deepEqual(yield* mac.turn(false, false), { done: true });
 
         assert.equal(yield* fileSystem.exists(join(stateRoot, "owned-agents")), false);
-        assert.deepEqual(
-          mac.asked,
-          ["stop", "uninstall", "leave"],
-          "stopped, so it marks no folder after",
-        );
+        assert.deepEqual(mac.asked, ["stop", "uninstall"], "stopped, so it marks no folder after");
       }).pipe(Effect.provide(FILES)),
     ),
 );
