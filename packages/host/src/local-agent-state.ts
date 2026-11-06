@@ -1,5 +1,6 @@
-import { Effect, Path } from "effect";
+import { Effect, Path, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { folderMoves } from "./folder-moves.js";
 
 /**
  * local-agent-state.ts -- what a machine keeps of its local agents between runs: which agents' folders it made (`owned-agents` in its state), kept and read by the follower (`compose-local-agents.ts`).
@@ -24,6 +25,10 @@ export const keepOwnedAgent = (stateRoot: string, agentId: string) =>
     yield* fileSystem.makeDirectory(owned, { recursive: true, mode: 0o700 });
     yield* fileSystem.writeFileString(path.join(owned, agentId), "");
   }).pipe(Effect.ignore);
+
+/** A pulse each time the agents kept as ones whose folder this machine made may have moved, from the moment their folder stands. */
+export const ownedAgentsMoves = (stateRoot: string) =>
+  Stream.unwrap(Effect.map(Path.Path, (path) => folderMoves(path.join(stateRoot, OWNED_FOLDER))));
 
 /** The agents kept as ones whose folder this machine made, by id; none where the record cannot be read. */
 export const ownedAgents = (stateRoot: string) =>
