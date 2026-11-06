@@ -963,6 +963,7 @@ export function ListRow({
         // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
         if (rowMenu.open) rowMenu.close(false);
         if (choosable && selecting.press(selectKey, event)) return;
+        if (!choosable) selecting?.passOver(event);
         onPress(event);
       }}
       onKeyDown={(event) => {

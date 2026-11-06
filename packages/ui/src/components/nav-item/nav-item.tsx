@@ -1,9 +1,17 @@
-import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+  useContext,
+} from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
+import { ListSelectionContext } from "../selection/list-selection.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -303,6 +311,12 @@ export function NavItem({
 }: NavItemProps): React.JSX.Element {
   // Note that a row standing in a frame beside its ⋯ carries its menu on the frame, so a right-click on either opens it too.
   const framed = said(actions);
+  // Note that a place in a list that chooses rows is a row that cannot be chosen, so going there lets the set go where a plain press does; dropping a menu goes nowhere.
+  const selecting = useContext(ListSelectionContext);
+  const go = (event: MouseEvent<HTMLButtonElement>) => {
+    selecting?.passOver(event);
+    onClick?.(event);
+  };
   const press = (
     <button
       type="button"
@@ -325,7 +339,7 @@ export function NavItem({
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onFocus={props.onFocus}
       onBlur={props.onBlur}
-      onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
+      onClick={pulseOnPress(menu?.onClick ?? go, PRESS_PULSE.QUIET)}
       {...withContextMenu(framed ? undefined : props.contextMenu, {
         onPointerDown: props.onPointerDown,
       })}
