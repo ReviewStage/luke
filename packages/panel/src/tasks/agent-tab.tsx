@@ -226,7 +226,7 @@ import {
 } from "./message-links.js";
 import { useMoveToCloud } from "./move-agent.js";
 import { PilotComposerNote } from "./pilot-note.js";
-import { PlanPictures } from "./plan-pictures.js";
+import { DescriptionPictures } from "./description-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyDoorProvider, ReplyToSelection } from "./reply-to-selection.js";
@@ -376,7 +376,7 @@ export const AGENT_LEAD: TranscriptLead = {
 };
 
 /** The plan's own tab, which a task's name over its plan's card opens. */
-const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.DESCRIPTION };
 
 /** Whether Enter queues a message while the agent works, as Settings say; until the first document arrives it sends. */
 const selectEnterQueues = (state: AppStateSnapshot): boolean =>
@@ -928,7 +928,7 @@ const UNTITLED_PAGE = "Page";
  * calls by the plan's name and the pull request's number.
  */
 function madeLabel(target: ToolTarget, subject: string | undefined, href: string): string {
-  const bare = target.kind === TOOL_TARGET.PLAN || target.kind === TOOL_TARGET.PULL_REQUEST;
+  const bare = target.kind === TOOL_TARGET.DESCRIPTION || target.kind === TOOL_TARGET.PULL_REQUEST;
   return bare || subject === undefined || subject === "" ? href : subject;
 }
 
@@ -1140,7 +1140,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
  * the text's own first line gives way to the card's label while the text
  * is drawn under it, so an opened plan never says that line twice. Where the agent
  * works on a task, the plan's own pictures are drawn in the card as its
- * page draws them (`plan-pictures.tsx`), read only once the card is opened.
+ * page draws them (`description-pictures.tsx`), read only once the card is opened.
  */
 function PlanCard({
   text,
@@ -1175,7 +1175,7 @@ function PlanCard({
   const status = lead.plan ? (listed ?? handed) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
-      <Plan data-origin-plan="" aria-label={lead.label}>
+      <Plan data-origin-description="" aria-label={lead.label}>
         <PlanHeader>
           <PlanIcon>
             {status === undefined ? lead.icon : <TaskStatusMark status={status} />}
@@ -1188,9 +1188,9 @@ function PlanCard({
           {taskId === undefined ? (
             words
           ) : (
-            <PlanPictures taskId={taskId} text={text}>
+            <DescriptionPictures taskId={taskId} text={text}>
               {words}
-            </PlanPictures>
+            </DescriptionPictures>
           )}
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
@@ -3152,7 +3152,7 @@ export function StartingAgentTab({
     <AgentTabFrame>
       <AgentTranscriptView
         messages={messages}
-        brief={line === undefined ? AGENT_BRIEF.PLAN : AGENT_BRIEF.PROMPT}
+        brief={line === undefined ? AGENT_BRIEF.DESCRIPTION : AGENT_BRIEF.PROMPT}
         reading={false}
         failed={false}
         working

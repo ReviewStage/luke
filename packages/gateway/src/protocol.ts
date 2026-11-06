@@ -107,7 +107,7 @@ export const GATEWAY_METHOD = {
    * One task's plan held for a window from now until it is let go, and a
    * while after among those let go lately: the task's record followed over
    * the service's held poll, and its plan read again whenever its mark moves
-   * past the copy held. What it holds is heard as `PLAN_DOCUMENTS_CHANGED`
+   * past the copy held. What it holds is heard as `DESCRIPTION_DOCUMENTS_CHANGED`
    * events, on the app state every window draws, never answered.
    */
   TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
@@ -147,7 +147,7 @@ export const GATEWAY_METHOD = {
    * One task's comments, its plan's own threads or one page's, held followed
    * for a window from now until it is let go, over Neon Realtime, and a
    * while after among those let go lately: the open task's plan's, or a page
-   * tab's. What they hold is heard as `PLAN_COMMENTS_CHANGED` events, on the
+   * tab's. What they hold is heard as `DESCRIPTION_COMMENTS_CHANGED` events, on the
    * app state every window draws, never answered.
    */
   TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
@@ -783,9 +783,9 @@ export const GATEWAY_EVENT = {
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
   /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
-  PLAN_COMMENTS_CHANGED: "planComments.changed",
+  DESCRIPTION_COMMENTS_CHANGED: "descriptionComments.changed",
   /** Every task's plan the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
-  PLAN_DOCUMENTS_CHANGED: "planDocuments.changed",
+  DESCRIPTION_DOCUMENTS_CHANGED: "descriptionDocuments.changed",
   /** Every task's plan history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HISTORIES_CHANGED: "histories.changed",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */

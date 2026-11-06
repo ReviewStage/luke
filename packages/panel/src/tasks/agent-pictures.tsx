@@ -26,7 +26,7 @@ import { useAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { type PictureReader, pictureQuery } from "../picture-query.js";
-import { useAddToPlan } from "./add-to-plan.js";
+import { useAddToDescription } from "./add-to-description.js";
 import {
   AttachedFileChips,
   type MessageFileChip,
@@ -193,7 +193,7 @@ function OpenViewer({
 
 /** The viewer over a set's pictures, from the one named, until it is closed. */
 function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
-  const addToPlan = useAddToPlan();
+  const addToDescription = useAddToDescription();
   const [viewing, setViewing] = useState<
     { readonly items: readonly ViewedPicture[]; readonly id: string } | undefined
   >();
@@ -209,7 +209,7 @@ function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
         id={viewing.id}
         onId={(id) => setViewing({ ...viewing, id })}
         onClose={() => setViewing(undefined)}
-        action={addToPlan}
+        action={addToDescription}
       />
     );
   return { open, viewer };

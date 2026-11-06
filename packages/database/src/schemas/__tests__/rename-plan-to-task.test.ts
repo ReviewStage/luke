@@ -52,7 +52,7 @@ const openTask = Effect.gen(function* () {
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/api",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Sweep the flaky tests.",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),

@@ -108,7 +108,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
     const started = Option.getOrThrow(
       yield* createAgent(owner, {
         taskId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
@@ -269,7 +269,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           yield* createAgent(owner, {
             taskId: null,
             organizationId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: HANDED,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -327,7 +327,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           yield* createAgent(owner, {
             taskId: null,
             organizationId: yield* openWorkspace(owner),
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: handed,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -384,7 +384,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           yield* createAgent(owner, {
             taskId: null,
             organizationId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: handed,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -423,7 +423,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
 });
 
 /** The developer's plan, which an agent's first turn opens on. */
-const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
+const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
 /** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
 const AGENT_MESSAGE =
@@ -449,8 +449,8 @@ const journaledAgent = Effect.gen(function* () {
   const started = yield* createAgent(owner, {
     taskId: null,
     organizationId,
-    planSnapshot: null,
-    prompt: PLAN_TEXT,
+    descriptionSnapshot: null,
+    prompt: DESCRIPTION_TEXT,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -476,7 +476,11 @@ const journaledAgent = Effect.gen(function* () {
       const written = yield* writer.writeAwaitingLine(
         target,
         sender === "developer"
-          ? { text: PLAN_TEXT, clientKey, sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner } }
+          ? {
+              text: DESCRIPTION_TEXT,
+              clientKey,
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }
           : {
               text: AGENT_MESSAGE,
               clientKey,

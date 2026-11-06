@@ -9,7 +9,7 @@ import { bundleLanded } from "./side-bundles.js";
  * composer.ts -- an agent's message box under jsdom: the editor bundle there as the panel finds it, and words typed into the box's editor.
  *
  * `editorBundleLanded` imports the editor bundle
- * (`../plan-editor/index.ts`) as the panel does after its first
+ * (`../description-editor/index.ts`) as the panel does after its first
  * paint, so a box drawn after it has landed mounts its editor at once.
  * jsdom lays nothing out and gives a range no rectangles, which the editor asks for as it keeps the caret in view, so `installEditorLayout`
  * answers an empty one, as a page with no layout would. And jsdom has no
@@ -38,7 +38,7 @@ export const QUIET_COMPOSER = {
 
 /** Imports the editor bundle and settles once it has landed, as the panel lands it after its first paint. */
 export const editorBundleLanded: Effect.Effect<unknown, Error> = bundleLanded(
-  SIDE_BUNDLES.planEditor,
+  SIDE_BUNDLES.descriptionEditor,
 );
 
 /** Gives a range the empty rectangles a page with no layout would, which jsdom leaves out. */

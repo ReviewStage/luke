@@ -1,24 +1,24 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
-  actOnPlanCommentThread,
-  PLAN_COMMENT_OUTCOME,
-  type PlanCommentOutcome,
-  type PlanCommentWriterRef,
-  readPlanCommentThread,
-  readPlanCommentThreads,
-} from "@repo/database/models/plan-comments";
+  actOnDescriptionCommentThread,
+  DESCRIPTION_COMMENT_OUTCOME,
+  type DescriptionCommentOutcome,
+  type DescriptionCommentWriterRef,
+  readDescriptionCommentThread,
+  readDescriptionCommentThreads,
+} from "@repo/database/models/description-comments";
 import {
-  PLAN_COMMENT_ACTION,
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentAsked,
-  type PlanCommentEntry,
-  type PlanCommentThread,
-  type PlanCommentThreadAnswer,
-  planCommentWordsSchema,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTION,
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentAsked,
+  type DescriptionCommentEntry,
+  type DescriptionCommentThread,
+  type DescriptionCommentThreadAnswer,
+  descriptionCommentWordsSchema,
+} from "@repo/features/description-comment-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
@@ -53,8 +53,8 @@ import { logStoreFailure } from "../http/store-failure.js";
 /** Where a call reads and writes: the plan the door bound, who writes, the member whose turn it is and the agent, and whether the plan's own threads are reached, which they are not while Plans is off (`EXPERIMENT.DESCRIPTIONS`), its pages' alone. */
 export interface CommentToolBinding {
   readonly taskId: string;
-  readonly writer: PlanCommentWriterRef;
-  readonly plansOn: boolean;
+  readonly writer: DescriptionCommentWriterRef;
+  readonly descriptionsOn: boolean;
 }
 
 /** Why a call took nothing, in the words its result says. */
@@ -65,7 +65,7 @@ export const COMMENT_TOOL_REFUSAL = {
   NO_TASK: `No task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   RESOLVED: `The thread is resolved; reopen it with ${AGENT_TOOL.UPDATE_COMMENT} before replying.`,
   UNAVAILABLE: "The comments could not be reached; try again.",
-  PLANS_OFF:
+  DESCRIPTIONS_OFF:
     "Plans is off, so the plan's comment threads are not reached; a page's threads still are, by the page's id.",
 } as const;
 
@@ -92,7 +92,7 @@ const READ_INPUT = Schema.Struct({
   ),
   status: Schema.optionalKey(
     describeWire(
-      Schema.Literals(Object.values(PLAN_COMMENT_STATUS)),
+      Schema.Literals(Object.values(DESCRIPTION_COMMENT_STATUS)),
       "Which threads to read: open, the default, or resolved.",
     ),
   ),
@@ -102,7 +102,7 @@ const REPLY_INPUT = Schema.Struct({
   taskId: TASK_ID,
   thread: THREAD_ID,
   words: describeWire(
-    planCommentWordsSchema,
+    descriptionCommentWordsSchema,
     "The reply, in plain words: what the thread asked of you, answered.",
   ),
 });
@@ -162,26 +162,28 @@ export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
 }
 
 /** Who wrote an entry, as an agent reads it. */
-function writerOf(entry: PlanCommentEntry): string {
+function writerOf(entry: DescriptionCommentEntry): string {
   switch (entry.writer.actor) {
-    case PLAN_COMMENT_ACTOR.APP:
+    case DESCRIPTION_COMMENT_ACTOR.APP:
       return PRODUCT_NAME;
-    case PLAN_COMMENT_ACTOR.AGENT:
+    case DESCRIPTION_COMMENT_ACTOR.AGENT:
       return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
-    case PLAN_COMMENT_ACTOR.MEMBER:
+    case DESCRIPTION_COMMENT_ACTOR.MEMBER:
       return entry.writer.by?.name ?? "a former member";
   }
 }
 
 /** Whom a thread was sent to, as an agent reads it. */
-function askedName(asked: PlanCommentAsked | undefined): string {
-  return asked?.actor === PLAN_COMMENT_ACTOR.APP ? PRODUCT_NAME : `agent ${asked?.agentId ?? ""}`;
+function askedName(asked: DescriptionCommentAsked | undefined): string {
+  return asked?.actor === DESCRIPTION_COMMENT_ACTOR.APP
+    ? PRODUCT_NAME
+    : `agent ${asked?.agentId ?? ""}`;
 }
 
 /** A thread as an agent reads it: what it is on, its comments, and who was asked to answer it. */
-function threadRead(thread: PlanCommentThread): WireRecord {
+function threadRead(thread: DescriptionCommentThread): WireRecord {
   const comments = thread.entries
-    .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT)
+    .filter((entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT)
     .map((entry) => ({
       by: writerOf(entry),
       at: new Date(entry.at).toISOString(),
@@ -191,7 +193,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
         : { files: entry.files.map((file) => ({ name: file.name, type: file.mediaType })) }),
     }));
   const asked = thread.entries
-    .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.asked !== undefined)
+    .filter((entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.ASKED && entry.asked !== undefined)
     .map((entry) => ({ by: writerOf(entry), to: askedName(entry.asked) }));
   // Note that a page's thread stands on no words of the plan, so it names its page in their place.
   const where =
@@ -216,7 +218,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
  * stands, with the ones a member's comment could not reach where it says
  * any, or why nothing was taken.
  */
-export function commentAnswerRead(answer: PlanCommentThreadAnswer): WireRecord {
+export function commentAnswerRead(answer: DescriptionCommentThreadAnswer): WireRecord {
   if ("refused" in answer) return commentToolRejected(answer.refused);
   if ("deleted" in answer) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
   return {
@@ -227,18 +229,21 @@ export function commentAnswerRead(answer: PlanCommentThreadAnswer): WireRecord {
 }
 
 /** A write's outcome as the result the model reads. */
-function written(outcome: PlanCommentOutcome): WireRecord {
-  if (outcome.status === PLAN_COMMENT_OUTCOME.NO_TASK)
+function written(outcome: DescriptionCommentOutcome): WireRecord {
+  if (outcome.status === DESCRIPTION_COMMENT_OUTCOME.NO_TASK)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
   // Note that no tool starts a thread, so no write of one finds no page; a thread it names is the task's or none.
-  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE)
+  if (outcome.status !== DESCRIPTION_COMMENT_OUTCOME.DONE)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
   return commentAnswerRead(outcome.answer);
 }
 
 /** Whether a thread is the plan's, standing on no page, and so out of reach while Plans is off; a thread not found is left to the call to refuse as none. */
-export function planThreadOff(thread: PlanCommentThread | undefined, plansOn: boolean): boolean {
-  return !plansOn && thread !== undefined && thread.page === undefined;
+export function descriptionThreadOff(
+  thread: DescriptionCommentThread | undefined,
+  descriptionsOn: boolean,
+): boolean {
+  return !descriptionsOn && thread !== undefined && thread.page === undefined;
 }
 
 /** One call of a comment tool on the plan the door bound, answered as the result the model reads. */
@@ -247,23 +252,24 @@ export function runCommentTool(
   binding: CommentToolBinding,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
-  const { taskId, writer, plansOn } = binding;
-  const act = (thread: string, action: Parameters<typeof actOnPlanCommentThread>[3]) =>
-    Effect.map(actOnPlanCommentThread(writer, taskId, thread, action), written);
+  const { taskId, writer, descriptionsOn } = binding;
+  const act = (thread: string, action: Parameters<typeof actOnDescriptionCommentThread>[3]) =>
+    Effect.map(actOnDescriptionCommentThread(writer, taskId, thread, action), written);
   const threadOf = (thread: string) =>
-    Effect.map(readPlanCommentThread(writer.userId, taskId, thread), Option.getOrUndefined);
-  const planOff = (thread: PlanCommentThread | undefined) => planThreadOff(thread, plansOn);
+    Effect.map(readDescriptionCommentThread(writer.userId, taskId, thread), Option.getOrUndefined);
+  const descriptionOff = (thread: DescriptionCommentThread | undefined) =>
+    descriptionThreadOff(thread, descriptionsOn);
   const run = Effect.gen(function* () {
     switch (name) {
       case AGENT_TOOL.READ_COMMENTS: {
         const read = readEither(READ_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
         const { page } = read.success;
-        if (page === undefined && !plansOn) {
-          return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
+        if (page === undefined && !descriptionsOn) {
+          return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
         }
-        const status = read.success.status ?? PLAN_COMMENT_STATUS.OPEN;
-        const threads = yield* readPlanCommentThreads(writer.userId, taskId, page);
+        const status = read.success.status ?? DESCRIPTION_COMMENT_STATUS.OPEN;
+        const threads = yield* readDescriptionCommentThreads(writer.userId, taskId, page);
         if (Option.isNone(threads)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
         return {
           status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -274,11 +280,12 @@ export function runCommentTool(
         const read = readEither(REPLY_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
         const thread = yield* threadOf(read.success.thread);
-        if (planOff(thread)) return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
-        if (thread?.status === PLAN_COMMENT_STATUS.RESOLVED)
+        if (descriptionOff(thread))
+          return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
+        if (thread?.status === DESCRIPTION_COMMENT_STATUS.RESOLVED)
           return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
         return yield* act(read.success.thread, {
-          action: PLAN_COMMENT_ACTION.REPLY,
+          action: DESCRIPTION_COMMENT_ACTION.REPLY,
           clientKey: randomUUID(),
           words: read.success.words,
         });
@@ -286,12 +293,12 @@ export function runCommentTool(
       case AGENT_TOOL.UPDATE_COMMENT: {
         const read = readEither(UPDATE_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
-        if (planOff(yield* threadOf(read.success.thread))) {
-          return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
+        if (descriptionOff(yield* threadOf(read.success.thread))) {
+          return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
         }
         const action = read.success.resolved
-          ? PLAN_COMMENT_ACTION.RESOLVE
-          : PLAN_COMMENT_ACTION.REOPEN;
+          ? DESCRIPTION_COMMENT_ACTION.RESOLVE
+          : DESCRIPTION_COMMENT_ACTION.REOPEN;
         return yield* act(read.success.thread, { action });
       }
     }
@@ -308,8 +315,8 @@ export function runCommentTool(
  * each, so a comment a member left since its last turn is there to raise.
  * Nothing where the plan holds no open thread.
  */
-export function openThreadsText(threads: readonly PlanCommentThread[]): readonly string[] {
-  const open = threads.filter((thread) => thread.status === PLAN_COMMENT_STATUS.OPEN);
+export function openThreadsText(threads: readonly DescriptionCommentThread[]): readonly string[] {
+  const open = threads.filter((thread) => thread.status === DESCRIPTION_COMMENT_STATUS.OPEN);
   if (open.length === 0) return [];
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }

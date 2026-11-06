@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,7 +11,7 @@ import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { HISTORY_READ } from "./use-plan-history.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
 /**
@@ -46,7 +46,7 @@ function Version(): ReactNode {
     viewing: {
       line: {
         seq: 2,
-        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: false },
+        lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 2, duringCall: false },
         startedAt: 1,
         changes: 1,
       },

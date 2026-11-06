@@ -6,7 +6,7 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import {
-  type HeldPlanDocument,
+  type HeldDescriptionDocument,
   type RepositoryCallFailure,
   type StartCallFailure,
   TASK_CALL_FAILURE,
@@ -70,7 +70,7 @@ export type DocumentRegion =
 
 /** The open task's plan as the host holds it for the window: what its read answered, absent until it first does, and whether it failed before it ever had. */
 export interface HeldDocumentRead {
-  readonly rows?: HeldPlanDocument | undefined;
+  readonly rows?: HeldDescriptionDocument | undefined;
   readonly failed?: boolean;
 }
 

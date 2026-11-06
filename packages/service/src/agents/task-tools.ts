@@ -8,7 +8,7 @@ import { AGENT_KIND } from "@repo/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BOUNDS,
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
@@ -53,7 +53,7 @@ import {
   workedRepository,
 } from "./agent-tools.js";
 import { calledId } from "./called-id.js";
-import { plansOnFor } from "./plans-on.js";
+import { descriptionsOnFor } from "./descriptions-on.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
@@ -86,7 +86,7 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  */
 
 /** The most characters of a plan a read answers, about ten thousand tokens: the rest is counted, never sent. */
-export const PLAN_TEXT_READ_CHARS = 40_000;
+export const DESCRIPTION_TEXT_READ_CHARS = 40_000;
 
 /** Why a read answered nothing, in words the model can act on. */
 export const READ_TASK_REFUSAL = {
@@ -111,15 +111,15 @@ export const READ_TASK_TOOL = {
     "priority), repository, who started it, whether it is the task you " +
     "work on, its mention, the brief the developer started it with (null for none), the tasks " +
     "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), " +
-    `and its plan as last saved, cut on a line at ${PLAN_TEXT_READ_CHARS} characters with how many were ` +
+    `and its plan as last saved, cut on a line at ${DESCRIPTION_TEXT_READ_CHARS} characters with how many were ` +
     `left out. Read one before you start an agent on it, or to learn what another task is about; ` +
     `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** Whether the caller reaches tasks' plans: the coding agent's starter's Plans, or a pilot's Pilot, or the member's own Plans (`plansOnFor`). */
-function callerPlansOn(caller: AgentCall["caller"]) {
-  return plansOnFor(callerUserId(caller), callerAgent(caller)?.kind);
+/** Whether the caller reaches tasks' plans: the coding agent's starter's Plans, or a pilot's Pilot, or the member's own Plans (`descriptionsOnFor`). */
+function callerDescriptionsOn(caller: AgentCall["caller"]) {
+  return descriptionsOnFor(callerUserId(caller), callerAgent(caller)?.kind);
 }
 
 /** One call of `read_task`: a task of the caller's workspace, its plan cut to the bound, or why there is none; no plan where the caller has Plans off. */
@@ -146,8 +146,8 @@ export function runReadTask(
       }
       const { task, text, saved, brief } = stored.value;
       const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
-      const plan = cutOnLine(text, PLAN_TEXT_READ_CHARS);
-      const plansOn = yield* callerPlansOn(call.caller);
+      const plan = cutOnLine(text, DESCRIPTION_TEXT_READ_CHARS);
+      const descriptionsOn = yield* callerDescriptionsOn(call.caller);
       const blocks = yield* taskBlockReadings(userId, task, step);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -162,7 +162,7 @@ export function runReadTask(
           brief: brief ?? null,
           ...blocks,
         },
-        ...(plansOn
+        ...(descriptionsOn
           ? { plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars } }
           : undefined),
       };
@@ -308,7 +308,7 @@ export const CREATE_TASK_TOOL = {
 const TITLE_HEADING = /^(?:[ \t]*\r?\n)*[ ]{0,3}#(?:[ \t][^\r\n]*)?\r?(?:\n|$)/u;
 
 /** A plan's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
-function planTextOf(plan: string): string {
+function descriptionTextOf(plan: string): string {
   return plan.replace(TITLE_HEADING, "").trim();
 }
 
@@ -316,14 +316,16 @@ function planTextOf(plan: string): string {
 function revisionWriterOf(call: AgentCall): NonNullable<TaskCreateAsked["writer"]> {
   const agent = callerAgent(call.caller);
   return agent === undefined
-    ? { actor: PLAN_ACTOR.DEVELOPER }
-    : { actor: PLAN_ACTOR.AGENT, agentId: agent.id };
+    ? { actor: DESCRIPTION_ACTOR.DEVELOPER }
+    : { actor: DESCRIPTION_ACTOR.AGENT, agentId: agent.id };
 }
 
 /** Who made a task for the caller's member: the coding agent by its id; none for the member calling, as for one they make by hand. */
 function originOf(call: AgentCall): { readonly origin?: TaskOrigin } {
   const agent = callerAgent(call.caller);
-  return agent === undefined ? {} : { origin: { actor: PLAN_ACTOR.AGENT, agentId: agent.id } };
+  return agent === undefined
+    ? {}
+    : { origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: agent.id } };
 }
 
 /**
@@ -423,7 +425,7 @@ export function runCreateTask(
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
       // Note that a plan is written only for a caller with Plans on; the schema takes one alike, so the tool's words stay the same.
-      const plansOn = yield* callerPlansOn(call.caller);
+      const descriptionsOn = yield* callerDescriptionsOn(call.caller);
       const made = Option.isSome(before)
         ? before.value.task
         : yield* createTaskAsked(
@@ -440,7 +442,7 @@ export function runCreateTask(
               ...(parentTaskId === undefined ? undefined : { parentTaskId }),
               ...(mode === undefined ? undefined : { mode }),
               ...originOf(call),
-              text: plansOn ? planTextOf(plan ?? "") : "",
+              text: descriptionsOn ? descriptionTextOf(plan ?? "") : "",
               writer: revisionWriterOf(call),
               relations: relation === undefined ? [] : [relation],
             },

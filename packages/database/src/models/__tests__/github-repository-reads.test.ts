@@ -61,7 +61,7 @@ const tokenWorkspace = Effect.gen(function* () {
   const appTask = yield* createTask(owner, { organizationId: workspace, repository: "acme/api" });
   const started = yield* createAgent(owner, {
     taskId: tokenTask.id,
-    planSnapshot: "# Side",
+    descriptionSnapshot: "# Side",
     prompt: null,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -143,7 +143,7 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         yield* joinWorkspace(workspace, teammate);
         const started = yield* createAgent(owner, {
           taskId: appTask.id,
-          planSnapshot: "# API",
+          descriptionSnapshot: "# API",
           prompt: null,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",

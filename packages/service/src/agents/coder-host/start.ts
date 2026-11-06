@@ -73,7 +73,7 @@ import {
 import type { GitHubAccess } from "@repo/features/github-repositories-wire";
 import { agentName, automationRun } from "@repo/features/model-label";
 import { agentFallbackChoice, type ModelChoice } from "@repo/features/models-wire";
-import { planMarkdown } from "@repo/features/plan-markdown";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { TASK_MODE, type Task } from "@repo/features/task-wire";
 import { bothInOrder, causeKind, failureKind } from "@repo/runtime/effect";
 import { EXPERIMENT } from "@repo/settings";
@@ -123,7 +123,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { plansOnFor } from "../plans-on.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -569,7 +569,7 @@ const landingOf = Effect.fnUntraced(function* (
       place: {
         taskId: null,
         organizationId: place.organizationId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: handed.text,
       },
       startedFrom: handed.startedFrom,
@@ -592,15 +592,15 @@ const landingOf = Effect.fnUntraced(function* (
       repository: task.repository,
       task,
       mover,
-      place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
+      place: { taskId: place.taskId, descriptionSnapshot: null, prompt: null, kind },
     };
   }
   // A starter with Plans off hands no plan: the task's brief in its place, or else its name.
   const words =
-    brief === undefined && !(yield* plansOnFor(userId, kind))
+    brief === undefined && !(yield* descriptionsOnFor(userId, kind))
       ? (read.value.brief ?? task.name)
       : brief;
-  const handed = yield* handedOf(words ?? planMarkdown(task), place, fitter, noteFiles);
+  const handed = yield* handedOf(words ?? descriptionMarkdown(task), place, fitter, noteFiles);
   return {
     startedFrom: handed.startedFrom,
     workspaceId: task.workspaceId,
@@ -609,8 +609,8 @@ const landingOf = Effect.fnUntraced(function* (
     mover,
     place:
       words === undefined
-        ? { taskId: place.taskId, planSnapshot: handed.text, prompt: null, kind }
-        : { taskId: place.taskId, planSnapshot: null, prompt: handed.text, kind },
+        ? { taskId: place.taskId, descriptionSnapshot: handed.text, prompt: null, kind }
+        : { taskId: place.taskId, descriptionSnapshot: null, prompt: handed.text, kind },
   };
 });
 
@@ -1008,7 +1008,7 @@ function openingOf(
     taken === undefined
       ? {
           channel: MESSAGE_CHANNEL.START,
-          brief: brief.prompt === null ? START_LINE_BRIEF.PLAN : START_LINE_BRIEF.PROMPT,
+          brief: brief.prompt === null ? START_LINE_BRIEF.DESCRIPTION : START_LINE_BRIEF.PROMPT,
         }
       : {
           channel: MESSAGE_CHANNEL.START,
@@ -1440,7 +1440,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
-  const handed = brief.prompt ?? brief.planSnapshot;
+  const handed = brief.prompt ?? brief.descriptionSnapshot;
   if (handed !== null) {
     // Every line the opening says names the agent, the runtime's own past the answer included. Note
     // that the agent stands from here, so an opening cut short before eve was asked, as a caller's
@@ -1475,7 +1475,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
               landing.task,
               reads,
               undefined,
-              yield* plansOnFor(agent.userId, agent.kind),
+              yield* descriptionsOnFor(agent.userId, agent.kind),
             );
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
       // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).

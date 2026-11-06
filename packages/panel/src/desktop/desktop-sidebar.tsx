@@ -658,7 +658,7 @@ function pinnedRows(
       return agent === undefined ? [] : [{ kind: TASK_ROW.AGENT, agent, pin, place }];
     }
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return task === undefined || pin.tab === SIDE_PANEL_TAB.PLAN
+    return task === undefined || pin.tab === SIDE_PANEL_TAB.DESCRIPTION
       ? []
       : [{ kind: TASK_ROW.TASK, task, pin, place }];
   });

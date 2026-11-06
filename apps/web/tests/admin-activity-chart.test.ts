@@ -25,7 +25,7 @@ function day(date: string, counts: readonly number[]): AdminActivityDay {
   return {
     day: date,
     [ACTIVITY_FEATURE.AGENTS_STARTED]: agents,
-    [ACTIVITY_FEATURE.PLAN_REVISIONS]: revisions,
+    [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: revisions,
     [ACTIVITY_FEATURE.INBOX_ANSWERED]: answers,
     [ACTIVITY_FEATURE.AUTOMATION_RUNS]: runs,
   };

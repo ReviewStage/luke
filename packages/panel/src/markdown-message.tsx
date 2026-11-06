@@ -13,7 +13,7 @@ import { matchRanges } from "@repo/ui/search-tokens";
 import { isWireString } from "@repo/wire";
 import type { Element, ElementContent, Root, RootContent, Text } from "hast";
 import { createContext, memo, type ReactNode, useContext, useMemo } from "react";
-import { PlanDiagram } from "./plan-diagram.js";
+import { DescriptionDiagram } from "./description-diagram.js";
 import { useWordTargets } from "./tasks/use-known-names.js";
 import { TextLink } from "./text-link.js";
 
@@ -35,7 +35,7 @@ export interface MarkdownSpan {
 export const MARKDOWN_MARK = {
   INSERTED: "inserted",
   DELETED: "deleted",
-  /** Words a comment thread is anchored to (`tasks/plan-comments.tsx`). */
+  /** Words a comment thread is anchored to (`tasks/description-comments.tsx`). */
   COMMENT: "comment",
 } as const;
 
@@ -63,7 +63,7 @@ export interface MarkdownEdit {
 const MARK_DRAWN = {
   [MARKDOWN_MARK.INSERTED]: { tagName: "ins", className: "markdown-inserted" },
   [MARKDOWN_MARK.DELETED]: { tagName: "del", className: "markdown-deleted" },
-  [MARKDOWN_MARK.COMMENT]: { tagName: "mark", className: "plan-comment-mark" },
+  [MARKDOWN_MARK.COMMENT]: { tagName: "mark", className: "description-comment-mark" },
 } as const satisfies Record<MarkdownMarkKind, { tagName: string; className: string }>;
 
 /** Whether a node is the line break the renderer leaves between block elements, which draws nothing. */
@@ -558,7 +558,7 @@ function DiagramFence({
   const edit = useContext(FenceEdit);
   const source = <pre>{children}</pre>;
   const code = editReaches(edit, node) ? undefined : diagramCode(node);
-  return code === undefined ? source : <PlanDiagram code={code} source={source} />;
+  return code === undefined ? source : <DescriptionDiagram code={code} source={source} />;
 }
 
 function safeUrl(url: string): string {

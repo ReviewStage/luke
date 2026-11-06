@@ -577,7 +577,7 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
         daily: days.map((day, index) => ({
           day,
           [ACTIVITY_FEATURE.AGENTS_STARTED]: wave(index, 20, 0.6),
-          [ACTIVITY_FEATURE.PLAN_REVISIONS]: wave(index, 34, 0.5),
+          [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: wave(index, 34, 0.5),
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: wave(index, 15, 0.4),
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: wave(index, 4, 0.2),
         })),

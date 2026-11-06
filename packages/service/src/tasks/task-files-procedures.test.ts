@@ -88,7 +88,7 @@ it.layer(getTestDB())("the plan files route", (it) => {
             )
             .map((event) => ({ workspaceId: event.workspaceId, ...event.properties }));
         assert.deepEqual(countedFor(starter), [
-          { workspaceId: task.workspaceId, tool: SERVER_AGENT_TOOL.ADD_TO_PLAN },
+          { workspaceId: task.workspaceId, tool: SERVER_AGENT_TOOL.ADD_TO_DESCRIPTION },
         ]);
         assert.deepEqual(countedFor(outsider), []);
       }),

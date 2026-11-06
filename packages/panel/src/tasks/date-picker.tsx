@@ -42,7 +42,7 @@ import {
 import { inputProblem } from "@repo/ui/reported-failure";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { MentionNode } from "../plan-editor/contract.js";
+import type { MentionNode } from "../description-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
 
 /**

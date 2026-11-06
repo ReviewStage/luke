@@ -34,7 +34,7 @@ import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_LINES_PATH } from "../native-events/runner-lines-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
-import { plansOnFor } from "../plans-on.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { WORKSPACE_MCP_PATH, workspaceIntegrationMcpUrl } from "../workspace-mcp/app.js";
@@ -111,7 +111,7 @@ const nativeCoderInstructions = (
     );
     const taskNumber = yield* agentTaskNumber(userId, agent);
     const memoryOn = yield* memoryOnFor(userId);
-    const plansOn = yield* plansOnFor(userId, agent.kind);
+    const descriptionsOn = yield* descriptionsOnFor(userId, agent.kind);
     const extraRepositories = hasRepository(agent) ? yield* agentExtraCheckouts(userId, agent) : [];
     return agentCoderInstructions(agent, {
       ciReadable,
@@ -119,7 +119,7 @@ const nativeCoderInstructions = (
       workspace,
       taskNumber,
       memoryOn,
-      plansOn,
+      descriptionsOn,
       harness,
       place,
       ...(extraRepositories.length === 0 ? undefined : { extraRepositories }),

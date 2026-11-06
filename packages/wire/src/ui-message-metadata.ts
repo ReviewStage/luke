@@ -146,7 +146,7 @@ export const GITHUB_LINE_BOUNDS = {
 /**
  * The most a comment line's metadata holds: a comment's words and the quote
  * of what its thread is on within the bounds a comment keeps them to
- * (`@repo/features/plan-comment-wire`'s `PLAN_COMMENT_BOUNDS`), which wire,
+ * (`@repo/features/description-comment-wire`'s `DESCRIPTION_COMMENT_BOUNDS`), which wire,
  * beneath features, cannot read, and a page's title within a page's.
  */
 export const COMMENT_LINE_BOUNDS = {

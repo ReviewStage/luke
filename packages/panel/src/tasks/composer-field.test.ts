@@ -6,8 +6,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
 import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
-import type { PlanEditorModule } from "../plan-editor/contract.js";
-import { planEditor } from "../plan-editor/index.js";
+import type { DescriptionEditorModule } from "../description-editor/contract.js";
+import { descriptionEditor } from "../description-editor/index.js";
 import {
   composerEditor,
   installEditorLayout,
@@ -61,10 +61,10 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const landing = Promise.withResolvers<PlanEditorModule>();
+  const landing = Promise.withResolvers<DescriptionEditorModule>();
   let asked = false;
   const bundles = sideBundles({
-    planEditor: () => {
+    descriptionEditor: () => {
       asked = true;
       return landing.promise;
     },
@@ -86,7 +86,7 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   );
 
   assert.ok(asked, "the editor bundle was asked for");
-  landing.resolve(planEditor);
+  landing.resolve(descriptionEditor);
   await settle();
 
   assert.equal(document.activeElement, composerEditor(container));
@@ -103,7 +103,7 @@ test("a key pressed in the box is timed under the message box's keystroke span, 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const bundles = sideBundles({ planEditor: () => Promise.resolve(planEditor) });
+  const bundles = sideBundles({ descriptionEditor: () => Promise.resolve(descriptionEditor) });
   await act(async () => root.render(withQueryClient(onSideBundles(bundles, createElement(Box)))));
   await settle();
 

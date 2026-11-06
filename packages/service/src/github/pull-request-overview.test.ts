@@ -250,7 +250,7 @@ const agentPublishing = (userId: string, branch: string, number: number) =>
       idempotencyKey: `start-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invites\n",
+      descriptionSnapshot: "# Invites\n",
       prompt: null,
       repository: REPOSITORY,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

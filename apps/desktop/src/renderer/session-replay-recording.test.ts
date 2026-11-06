@@ -186,7 +186,7 @@ function adoptSheets(): void {
   const own = new CSSStyleSheet();
   own.replaceSync(".own-sheet-rule { margin: 0; }");
   const measuring = new CSSStyleSheet();
-  writeWithheldSheet(measuring, "#plan-diagram-1 .launch-review > * { font-size: 30px; }");
+  writeWithheldSheet(measuring, "#description-diagram-1 .launch-review > * { font-size: 30px; }");
   const thread = new CSSStyleSheet();
   writeWithheldSheet(thread, "");
   document.adoptedStyleSheets = [own, measuring, thread];

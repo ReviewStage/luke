@@ -203,13 +203,13 @@ export interface DemoTask {
 }
 
 /** A plan's text from its sections, each under its heading, in the order given. */
-function planText(sections: Readonly<Record<string, string>>): string {
+function descriptionText(sections: Readonly<Record<string, string>>): string {
   return `${Object.entries(sections)
     .map(([heading, text]) => `## ${heading}\n\n${text}`)
     .join("\n\n")}\n`;
 }
 
-const INVITATIONS_PLAN = planText({
+const INVITATIONS_PLAN = descriptionText({
   Context:
     "Only an admin can add someone to a workspace, by creating their account by hand. " +
     "Members wait on an admin to bring a teammate in, and support gets a ticket a day asking for it.",
@@ -261,7 +261,7 @@ const INVITATIONS_PLAN = planText({
     "- The sender or any admin may withdraw an invite (Dean, in the Inbox).",
 });
 
-const BILLING_PLAN = planText({
+const BILLING_PLAN = descriptionText({
   Context:
     "Every workspace pays a flat $12 a seat. Teams that run thousands of webhook " +
     "deliveries a day pay the same as teams that run ten, and the largest three " +
@@ -288,7 +288,7 @@ const BILLING_PLAN = planText({
     "- What does a workspace on the old flat plan see on Settings › Billing before its renewal?",
 });
 
-const WEBHOOKS_PLAN = planText({
+const WEBHOOKS_PLAN = descriptionText({
   Context:
     "A webhook delivery that fails is dropped. Customers whose endpoint blips for a minute " +
     "lose every event in that minute, and ask support to replay them by hand.",
@@ -304,7 +304,7 @@ const WEBHOOKS_PLAN = planText({
     "- When an endpoint never answers, then the delivery is dead after its fifth.",
 });
 
-const ONBOARDING_PLAN = planText({
+const ONBOARDING_PLAN = descriptionText({
   Context:
     "Half of new workspaces never send a webhook. The ones that do finish three steps in their " +
     "first hour: they invite a teammate, add an endpoint, and send a test event.",
@@ -317,7 +317,7 @@ const ONBOARDING_PLAN = planText({
   "Open questions": "- Should an admin be able to hide it for the whole workspace?",
 });
 
-const AUDIT_PLAN = planText({
+const AUDIT_PLAN = descriptionText({
   Context:
     "Two enterprise customers ask for an export of who changed what in their workspace, " +
     "for their own compliance reviews.",
@@ -325,7 +325,7 @@ const AUDIT_PLAN = planText({
   "Not doing": "- A streaming export to a customer's own bucket: no one has asked for it yet.",
 });
 
-const DARK_MODE_PLAN = planText({
+const DARK_MODE_PLAN = descriptionText({
   Context: "The dashboard is light only, and support hears about it every week.",
   Goal: "- The dashboard follows the system's appearance, with a manual override in **Settings › Profile**.",
   Approach:
@@ -333,13 +333,13 @@ const DARK_MODE_PLAN = planText({
     "- Check every chart against both palettes before it ships.",
 });
 
-const SSO_PLAN = planText({
+const SSO_PLAN = descriptionText({
   Context: "One prospect asked for SSO with Okta, then signed with Google sign-in instead.",
   Goal: "- Sign in to a workspace through its own Okta.",
   "Not doing": "- SCIM provisioning.",
 });
 
-const USAGE_EVENTS_PLAN = planText({
+const USAGE_EVENTS_PLAN = descriptionText({
   Problem:
     "Nothing counts what a workspace uses. The delivery log holds every delivery, but it is " +
     "pruned after 30 days and is not keyed for billing.",
@@ -352,7 +352,7 @@ const USAGE_EVENTS_PLAN = planText({
     "- Test events do not count (Dana, in the Inbox).",
 });
 
-const ROLLUP_PLAN = planText({
+const ROLLUP_PLAN = descriptionText({
   Problem:
     "Summing `usage_events` on every request is too slow for **Settings › Billing** and for Stripe's daily report.",
   "Acceptance criteria":
@@ -363,7 +363,7 @@ const ROLLUP_PLAN = planText({
   "Open questions": "- How far back should the backfill go?",
 });
 
-const STRIPE_PLAN = planText({
+const STRIPE_PLAN = descriptionText({
   Problem: "Stripe invoices only the usage it is told about, and today it is told nothing.",
   "Acceptance criteria":
     "- Each day's total per workspace is reported to the subscription's metered price once.\n" +
@@ -374,7 +374,7 @@ const STRIPE_PLAN = planText({
     "- Does a workspace on the old flat plan get a metered price at all, or stay flat until renewal?",
 });
 
-const BILLING_PAGE_PLAN = planText({
+const BILLING_PAGE_PLAN = descriptionText({
   Problem: "An admin cannot see what their workspace used until the invoice arrives.",
   "Acceptance criteria":
     "- **Settings › Billing** shows this month's deliveries by day and the projected invoice.\n" +
@@ -383,7 +383,7 @@ const BILLING_PAGE_PLAN = planText({
   "Open questions": "- Show the projection to every member, or to admins alone?",
 });
 
-const VERIFY_POSTMARK_PLAN = planText({
+const VERIFY_POSTMARK_PLAN = descriptionText({
   Problem:
     "Postmark sends from `acme.relay.dev` alone. Mail from `acme.dev` lands in spam, so invite " +
     "emails cannot ship until the domain is verified.",
@@ -394,7 +394,7 @@ const VERIFY_POSTMARK_PLAN = planText({
     "- The Return-Path is `pm-bounces.acme.dev`, where Handle Postmark bounces reads them.",
 });
 
-const INVITE_EMAILS_PLAN = planText({
+const INVITE_EMAILS_PLAN = descriptionText({
   Problem: "`POST /invites` writes the invite email to the console. Invitees get nothing.",
   "Acceptance criteria":
     "- The invite email sends through Postmark's `invites` stream, from the React Email template " +
@@ -406,7 +406,7 @@ const INVITE_EMAILS_PLAN = planText({
     "- Who does it come from: Relay, or the inviter via Relay?",
 });
 
-const RESEND_PLAN = planText({
+const RESEND_PLAN = descriptionText({
   Problem:
     "An expired invite can only be withdrawn and sent again, which mails a second link and " +
     "leaves the first row behind.",
@@ -416,7 +416,7 @@ const RESEND_PLAN = planText({
   "Open questions": "- Should Resend be limited to a few times a day per invite?",
 });
 
-const BOUNCES_PLAN = planText({
+const BOUNCES_PLAN = descriptionText({
   Problem:
     "An invite to a mistyped address bounces silently, and the inviter waits for someone who never got it.",
   "Acceptance criteria":
@@ -425,7 +425,7 @@ const BOUNCES_PLAN = planText({
   Decisions: "- Hard bounces alone; Postmark retries soft ones itself.",
 });
 
-const ROTATE_PLAN = planText({
+const ROTATE_PLAN = descriptionText({
   Problem:
     "An endpoint's signing secret is set once, as the endpoint is made. A customer who leaks it " +
     "has to delete the endpoint and lose its delivery history.",
@@ -439,14 +439,14 @@ const ROTATE_PLAN = planText({
   "Open questions": "- Should rotating from the API come with this, or after?",
 });
 
-const RETRY_429_PLAN = planText({
+const RETRY_429_PLAN = descriptionText({
   Problem: "Postmark answers 429 past 50 sends a second, and the mailer drops the email.",
   "Acceptance criteria":
     "- A 429 is retried up to 5 times, waiting as long as its `Retry-After` says.\n" +
     "- A send still refused after that is logged with its message id.",
 });
 
-const INVOICE_PDF_PLAN = planText({
+const INVOICE_PDF_PLAN = descriptionText({
   Problem:
     "The invoice PDF is Stripe's default: no logo, no usage breakdown, and acme's old legal name.",
   "Acceptance criteria":
@@ -456,7 +456,7 @@ const INVOICE_PDF_PLAN = planText({
     "- Render our own PDF, or style Stripe's through its invoice template settings?",
 });
 
-const CHART_CRASH_PLAN = planText({
+const CHART_CRASH_PLAN = descriptionText({
   Problem:
     'Opening the dashboard of a workspace made today throws "RangeError: Invalid array length", ' +
     "and the whole page goes blank. Three support tickets since yesterday.",
@@ -465,14 +465,14 @@ const CHART_CRASH_PLAN = planText({
     "- A test opens the chart over a range of zero days.",
 });
 
-const EMPTY_STATE_PLAN = planText({
+const EMPTY_STATE_PLAN = descriptionText({
   Problem: "A workspace with its owner alone shows an empty table on **Settings › Members**.",
   "Acceptance criteria":
     '- An owner alone sees "Invite your team" with the invite button.\n' +
     "- The table returns as soon as anyone joins.",
 });
 
-const EXPIRE_PLAN = planText({
+const EXPIRE_PLAN = descriptionText({
   Problem: "Invite links never expire, so one forwarded months later still joins the workspace.",
   "Acceptance criteria":
     '- A link opened after its expiry reads "This invite has expired" and grants nothing.\n' +
@@ -1519,7 +1519,7 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
         {
           text: "Writing the answer into the plan's assumptions.",
           call: {
-            name: AGENT_TOOL.EDIT_PLAN,
+            name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
               taskId: DEMO_INVITATIONS_TASK.id,
               notes: [
@@ -1900,7 +1900,7 @@ const DEMO_PILOT_AGENT: DemoAgent = {
         {
           text: "It splits into four: count usage, roll it up by day, report it to Stripe, and show it on the Billing page. The last two wait on the rollup.",
           call: {
-            name: AGENT_TOOL.EDIT_PLAN,
+            name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
               taskId: DEMO_BILLING_TASK.id,
               notes: [
@@ -1957,7 +1957,7 @@ const DEMO_PILOT_AGENT: DemoAgent = {
         {
           text: "Writing your rollover answer into the plan.",
           call: {
-            name: AGENT_TOOL.EDIT_PLAN,
+            name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
               taskId: DEMO_BILLING_TASK.id,
               notes: [
@@ -2132,7 +2132,7 @@ const ROTATION_AGENT: DemoAgent = {
         {
           text: "Writing Priya's answer into the plan.",
           call: {
-            name: AGENT_TOOL.EDIT_PLAN,
+            name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
               taskId: ROTATE_TASK.id,
               notes: [

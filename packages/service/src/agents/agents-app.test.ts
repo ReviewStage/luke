@@ -18,7 +18,7 @@ import {
 } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
-import { savePlanText } from "@repo/database/models/task-store";
+import { saveDescriptionText } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { agentTable } from "@repo/database/schemas/agent";
 import { messages } from "@repo/database/schemas/storage";
@@ -175,7 +175,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, source } = yield* sourceAgent;
-        yield* savePlanText(owner, task.id, "## Goal\n\nInvite by link.\n");
+        yield* saveDescriptionText(owner, task.id, "## Goal\n\nInvite by link.\n");
 
         const started = readAnswer(
           agentAnswerSchema,
@@ -228,7 +228,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.doesNotMatch(handed, /A thought of its own/u);
         const stored = Option.getOrThrow(yield* readAgent(owner, started.id));
         assert.equal(
-          stored.planSnapshot,
+          stored.descriptionSnapshot,
           handed,
           "the agent keeps the first message it was handed",
         );
@@ -323,7 +323,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const coder = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: task.id,
-            planSnapshot: "# Invite by link",
+            descriptionSnapshot: "# Invite by link",
             prompt: null,
             idempotencyKey: randomUUID(),
             model: SOL,
@@ -368,7 +368,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const parent = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: task.id,
-            planSnapshot: "# Invite by link",
+            descriptionSnapshot: "# Invite by link",
             prompt: null,
             idempotencyKey: randomUUID(),
             model: SOL,
@@ -599,7 +599,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             .set({
               taskId: null,
               organizationId: task.workspaceId,
-              planSnapshot: null,
+              descriptionSnapshot: null,
               prompt: SNAPSHOT,
             })
             .where(eq(agentTable.id, source.id)),
@@ -987,7 +987,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const away = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: elsewhere.id,
-            planSnapshot: "# Billing",
+            descriptionSnapshot: "# Billing",
             prompt: null,
             idempotencyKey: randomUUID(),
             model: SOL,
@@ -1033,7 +1033,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const made = yield* createAgent(owner, {
           taskId: null,
           organizationId: task.workspaceId,
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: BRIEF,
           idempotencyKey: randomUUID(),
           model: SOL,
@@ -1062,7 +1062,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
         const stored = Option.getOrThrow(yield* readAgent(owner, continued.id));
         assert.deepEqual(
-          [stored.taskId, stored.organizationId, stored.repository, stored.planSnapshot],
+          [stored.taskId, stored.organizationId, stored.repository, stored.descriptionSnapshot],
           [null, task.workspaceId, RELAY_FULL_NAME, null],
         );
         assert.equal(openedParts(eve).parts.brief, BRIEF);
@@ -1134,7 +1134,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const bare = yield* createAgent(owner, {
           taskId: null,
           organizationId: task.workspaceId,
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Talk the release through.",
           idempotencyKey: randomUUID(),
           model: SOL,
@@ -1256,7 +1256,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const source = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: task.id,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: "Match these screens.",
             idempotencyKey: randomUUID(),
             model: SOL,
@@ -1353,7 +1353,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const run = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: task.id,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: `${prompt}\n\nThe webhook said: see ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")}.`,
             idempotencyKey: randomUUID(),
             model: SOL,
@@ -1499,7 +1499,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             const made = Option.getOrThrow(
               yield* createAgent(owner, {
                 taskId: task.id,
-                planSnapshot: null,
+                descriptionSnapshot: null,
                 prompt: handed,
                 idempotencyKey: randomUUID(),
                 model: SOL,

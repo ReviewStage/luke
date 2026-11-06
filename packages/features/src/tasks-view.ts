@@ -17,17 +17,21 @@ import {
 import {
   pagePlaceSchema,
   pageVersionNumberSchema,
-  planPageVersionAnswerSchema,
+  taskPageVersionAnswerSchema,
 } from "./page-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
-import { planAttachmentTypeSchema } from "./plan-attachment-wire.js";
+import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
-  planCommentActionRequestSchema,
-  planCommentStartRequestSchema,
-  planCommentThreadAnswerSchema,
-} from "./plan-comment-wire.js";
-import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
+  descriptionCommentActionRequestSchema,
+  descriptionCommentStartRequestSchema,
+  descriptionCommentThreadAnswerSchema,
+} from "./description-comment-wire.js";
+import {
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditConflictSchema,
+  descriptionEditRequestSchema,
+} from "./description-edit.js";
 import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
@@ -43,9 +47,9 @@ import {
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   listedPullRequestSchema,
-  planRevisionAnswerSchema,
-  planRevisionSeqSchema,
-  planRevisionsAnswerSchema,
+  descriptionRevisionAnswerSchema,
+  descriptionRevisionSeqSchema,
+  descriptionRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   type Task,
@@ -136,10 +140,10 @@ export type HostLive = (typeof HOST_LIVE)[keyof typeof HOST_LIVE];
 
 /**
  * One task's plan as the host holds it for the windows that opened it
- * (`LIVE_READ.PLAN_DOCUMENT`): the task with its text as last read or
+ * (`LIVE_READ.DESCRIPTION_DOCUMENT`): the task with its text as last read or
  * written, or that the account no longer reaches it.
  */
-export type HeldPlanDocument = { readonly task: Task } | { readonly gone: true };
+export type HeldDescriptionDocument = { readonly task: Task } | { readonly gone: true };
 
 /** One run of a line in one color per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
@@ -221,7 +225,7 @@ export const tasksViewSchema = EffectSchema.Struct({
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The sections the account made in its sidebars and the tasks it keeps in them, as last read or written; absent before the first read lands. */
   taskSections: EffectSchema.optionalKey(taskSectionsAnswerSchema),
-  /** The one active task, absent while the window has none open; its plan is held apart (`LIVE_READ.PLAN_DOCUMENT`). */
+  /** The one active task, absent while the window has none open; its plan is held apart (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
@@ -525,7 +529,7 @@ export type TasksChangeRelationAnswer = typeof tasksChangeRelationAnswerSchema.T
 /** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
-  edit: planEditRequestSchema,
+  edit: descriptionEditRequestSchema,
 });
 
 export type TasksEditParams = typeof tasksEditParamsSchema.Type;
@@ -534,7 +538,7 @@ export type TasksEditParams = typeof tasksEditParamsSchema.Type;
 const EDIT_FAILURES = [
   TASK_CALL_FAILURE.UNANSWERED,
   TASK_CALL_FAILURE.NOT_FOUND,
-  PLAN_EDIT_REFUSAL.TOO_LONG,
+  DESCRIPTION_EDIT_REFUSAL.TOO_LONG,
 ] as const;
 
 export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
@@ -546,7 +550,7 @@ export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
  */
 export const tasksEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ saved: EffectSchema.Literal(true) }),
-  EffectSchema.Struct({ conflict: planEditConflictSchema }),
+  EffectSchema.Struct({ conflict: descriptionEditConflictSchema }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(EDIT_FAILURES) }),
 ]);
 
@@ -701,20 +705,20 @@ export type TasksFindAnswer = typeof tasksFindAnswerSchema.Type;
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
-  before: EffectSchema.optionalKey(planRevisionSeqSchema),
+  before: EffectSchema.optionalKey(descriptionRevisionSeqSchema),
 });
 
 export type TasksRevisionsParams = typeof tasksRevisionsParamsSchema.Type;
 
 /** The version history's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
 export const tasksRevisionsAnswerSchema = EffectSchema.Union([
-  planRevisionsAnswerSchema,
+  descriptionRevisionsAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
 
-/** One task's plan, held by a window while it has the task open (`LIVE_READ.PLAN_DOCUMENT`), and read again at once on its Try again. */
+/** One task's plan, held by a window while it has the task open (`LIVE_READ.DESCRIPTION_DOCUMENT`), and read again at once on its Try again. */
 export const taskDocumentFollowSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
 });
@@ -729,14 +733,14 @@ export type TaskHistoryFollow = typeof taskHistoryFollowSchema.Type;
 /** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
-  seq: planRevisionSeqSchema,
+  seq: descriptionRevisionSeqSchema,
 });
 
 export type TasksRevisionParams = typeof tasksRevisionParamsSchema.Type;
 
 /** The version history's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
 export const tasksRevisionAnswerSchema = EffectSchema.Union([
-  planRevisionAnswerSchema,
+  descriptionRevisionAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
@@ -760,7 +764,7 @@ export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: planAttachmentTypeSchema,
+    contentType: descriptionAttachmentTypeSchema,
     base64: EffectSchema.String,
   }),
   EffectSchema.Struct({
@@ -812,7 +816,7 @@ export type TasksPageParams = typeof tasksPageParamsSchema.Type;
 
 /** A page frame's read of one version, as the window's process hears it: the version with its HTML, or that the service did not answer. */
 export const tasksPageAnswerSchema = EffectSchema.Union([
-  planPageVersionAnswerSchema,
+  taskPageVersionAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
@@ -1036,13 +1040,13 @@ export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;
 
 /** Why a call about a plan's comments answered nothing to draw: no answer, or the plan is not the account's to read or write. */
-export const PLAN_COMMENT_CALL_FAILURE = {
+export const DESCRIPTION_COMMENT_CALL_FAILURE = {
   UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
   NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
-const planCommentFailedSchema = EffectSchema.Struct({
-  failure: EffectSchema.Literals(Object.values(PLAN_COMMENT_CALL_FAILURE)),
+const descriptionCommentFailedSchema = EffectSchema.Struct({
+  failure: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_CALL_FAILURE)),
 });
 
 /** What a task's comment threads stand on: its plan, or one of its pages. */
@@ -1062,7 +1066,7 @@ export type TasksCommentsFollow = typeof tasksCommentsFollowSchema.Type;
 /** A thread started on a plan, as the window asks it. */
 export const tasksCommentStartParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
-  start: planCommentStartRequestSchema,
+  start: descriptionCommentStartRequestSchema,
 });
 
 export type TasksCommentStartParams = typeof tasksCommentStartParamsSchema.Type;
@@ -1071,15 +1075,15 @@ export type TasksCommentStartParams = typeof tasksCommentStartParamsSchema.Type;
 export const tasksCommentActParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   threadId: EffectSchema.NonEmptyString,
-  action: planCommentActionRequestSchema,
+  action: descriptionCommentActionRequestSchema,
 });
 
 export type TasksCommentActParams = typeof tasksCommentActParamsSchema.Type;
 
 /** A write to a plan's comments as the window hears it: the thread as it stands, its deletion, a refusal, or why there is no answer. */
 export const tasksCommentAnswerSchema = EffectSchema.Union([
-  planCommentThreadAnswerSchema,
-  planCommentFailedSchema,
+  descriptionCommentThreadAnswerSchema,
+  descriptionCommentFailedSchema,
 ]);
 
 export type TasksCommentAnswer = typeof tasksCommentAnswerSchema.Type;

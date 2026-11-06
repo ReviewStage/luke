@@ -1,6 +1,6 @@
 import { DIALOG_SIZE, Dialog, type DialogHandle } from "@repo/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";

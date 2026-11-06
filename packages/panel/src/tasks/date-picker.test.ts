@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditRequest } from "@repo/features/plan-edit";
+import type { DescriptionEditRequest } from "@repo/features/description-edit";
 import type { Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
@@ -19,7 +19,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 
 /**
  * A date chip in the plan's editor, pressed, opens its picker over the real
@@ -82,7 +82,7 @@ function drawn(): HTMLElement {
     root.render(
       onRegistry(
         ownRegistry(),
-        createElement(PlanBody, {
+        createElement(DescriptionBody, {
           task: TASK,
           onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
           sectionLinks: {
@@ -100,7 +100,7 @@ function drawn(): HTMLElement {
 
 /** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a plan written anew. */
 function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
-  const saves: PlanEditRequest[] = [];
+  const saves: DescriptionEditRequest[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -114,10 +114,10 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
           createElement(
             Fragment,
             null,
-            createElement(PlanBody, {
+            createElement(DescriptionBody, {
               task: plan,
               onEdit: editable
-                ? (request: PlanEditRequest) => {
+                ? (request: DescriptionEditRequest) => {
                     saves.push(request);
                     return saving
                       ? Promise.resolve({ saved: true as const })
@@ -142,7 +142,7 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
 
 /** The date chip in the plan's words at rest. */
 function chipAtRest(container: HTMLElement): HTMLElement {
-  const chip = container.querySelector<HTMLElement>('.plan-unit [data-kind="date"]');
+  const chip = container.querySelector<HTMLElement>('.description-unit [data-kind="date"]');
   assert.ok(chip, "the plan's words hold a date chip");
   return chip;
 }
@@ -154,14 +154,18 @@ async function opened(): Promise<{ container: HTMLElement; editor: Editor }> {
   assert.ok(rollout);
   act(() => rollout.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   await act(async () => undefined);
-  const editor = container.querySelector<TiptapEditorHTMLElement>(".plan-document-text")?.editor;
+  const editor = container.querySelector<TiptapEditorHTMLElement>(
+    ".description-document-text",
+  )?.editor;
   assert.ok(editor, "the plan's editor is open");
   return { container, editor };
 }
 
 /** The editor's date chip. */
 function chipIn(container: HTMLElement): HTMLElement {
-  const chip = container.querySelector<HTMLElement>(".plan-document-text [data-mention-ref]");
+  const chip = container.querySelector<HTMLElement>(
+    ".description-document-text [data-mention-ref]",
+  );
   assert.ok(chip, "the text holds a chip");
   return chip;
 }
@@ -636,7 +640,7 @@ test("a date chip in the plan's words at rest opens its picker on the date where
   const dialog = picker(container);
   assert.ok(dialog, "the picker is open");
   assert.equal(fieldOf(dialog, "Start").value, "Oct 23, 2026");
-  assert.equal(container.querySelector(".plan-document-text"), null);
+  assert.equal(container.querySelector(".description-document-text"), null);
 });
 
 test("a day picked from the plan at rest saves the plan with the date named anew in its place", async () => {

@@ -24,7 +24,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readPageVersion } from "@repo/database/models/plan-pages";
+import { readPageVersion } from "@repo/database/models/task-pages";
 import { withPageScripts } from "@repo/features/page-find";
 import { sandboxPageResponseHeaders } from "@repo/features/page-policy";
 import { HTTP_METHOD } from "@repo/wire";
