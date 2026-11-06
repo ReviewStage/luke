@@ -6,10 +6,14 @@ import {
   linkOf,
   PULL_REQUEST_THREAD_VIEW,
 } from "@repo/features/link-grammar";
+import { NO_EXPERIMENTS } from "@repo/settings";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, type RouteIds } from "@tanstack/react-router";
 import { describe, expect, it } from "vitest";
 import { createPanelRouter, type PanelRouter } from "./panel-router.js";
+import { rendererPromise } from "./renderer-runtime.js";
+import { handState } from "./testing/app-state.js";
+import { appStateFirstRead } from "./use-app-state.js";
 
 type PanelRouteId = RouteIds<PanelRouter["routeTree"]>;
 
@@ -270,5 +274,14 @@ describe("the panel's route tree", () => {
   it("covers every place kind", () => {
     const kinds = new Set(LINKS.map(([place]) => place.kind));
     expect([...kinds].sort()).toEqual(Object.values(LINK_PLACE).sort());
+  });
+
+  it("leaves the window's first read to the bridge installed after the router is made", async () => {
+    // The desktop's entry makes its router as it loads, before its root installs the bridge.
+    createPanelRouter(createMemoryHistory({ initialEntries: ["/app"] }), new QueryClient());
+    handState(NO_EXPERIMENTS, { access: { admin: true } });
+    await expect(rendererPromise(appStateFirstRead)).resolves.toMatchObject({
+      access: { admin: true },
+    });
   });
 });

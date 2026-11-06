@@ -23,6 +23,20 @@ export interface RouteAccess {
   readonly experimentsRead: boolean;
 }
 
+/**
+ * The access a router is made with, before anything is read: Admin and every
+ * Settings page waiting on the read rather than giving way. Note that a
+ * router is made with this rather than `routeAccessNow`, because the
+ * desktop makes its router as its entry loads, before the window's bridge is
+ * installed, and a read of the window's state then fails the window's first
+ * read for good. Its provider hands it the access read once it draws.
+ */
+export const ROUTE_ACCESS_UNREAD: RouteAccess = {
+  admin: true,
+  experiments: NO_EXPERIMENTS,
+  experimentsRead: false,
+};
+
 /** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
 export function routeAccessNow(): RouteAccess {
   const state = appStateNow();

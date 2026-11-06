@@ -47,8 +47,8 @@ import {
 } from "./desktop/desktop-shell.js";
 import {
   adminRouteStands,
+  ROUTE_ACCESS_UNREAD,
   type RouteAccess,
-  routeAccessNow,
   settingsPageRouteStands,
 } from "./route-gates.js";
 import {
@@ -417,7 +417,7 @@ export function createPanelRouter(history: RouterHistory, queryClient: QueryClie
   return createRouter({
     routeTree,
     history,
-    context: { queryClient, access: routeAccessNow() },
+    context: { queryClient, access: ROUTE_ACCESS_UNREAD },
     parseSearch: readSearch,
     stringifySearch: writeSearch,
   });
