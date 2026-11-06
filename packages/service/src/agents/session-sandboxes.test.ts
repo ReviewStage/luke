@@ -67,9 +67,6 @@ function vercel(sandboxes: readonly NamedSandbox[], stopStatus = 200) {
       const parsed = new URL(url);
       asked.push({ method: init.method ?? "GET", url: parsed });
       const session = /\/sessions\/([^/]+)\//u.exec(parsed.pathname)?.[1] ?? "";
-      if (parsed.pathname.endsWith("/network-policy")) {
-        return Response.json(sessionAnswered({ id: session, status: "running" }));
-      }
       if (parsed.pathname.endsWith("/stop")) {
         return (
           sandboxStopRefusal(init) ??
@@ -97,7 +94,7 @@ const stopFor = (sessionId: string) =>
   );
 
 it.effect(
-  "the session's sandbox that is up has its credential taken off its firewall and then its running session stopped, in the token's project and team, and one already stopped is left",
+  "the session's sandbox that is up has its running session stopped, in the token's project and team, and one already stopped is left",
   () =>
     Effect.gen(function* () {
       const api = vercel([
@@ -114,10 +111,7 @@ it.effect(
       assert.equal(list?.url.searchParams.get("teamId"), TEAM);
       assert.deepEqual(
         api.asked.filter((asked) => asked.method !== "GET").map((asked) => asked.url.pathname),
-        [
-          "/api/v2/sandboxes/sessions/sbs_up/network-policy",
-          "/api/v2/sandboxes/sessions/sbs_up/stop",
-        ],
+        ["/api/v2/sandboxes/sessions/sbs_up/stop"],
       );
     }),
 );

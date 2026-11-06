@@ -5,7 +5,7 @@ import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@repo/featu
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { agentTab, fileTab, isAgentTab } from "@repo/ui/tab-strip-model";
+import { agentTab, fileTab, STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -97,7 +97,10 @@ function onTask(
       ...base.mainTabs,
       tab: column,
       tabs: column === undefined ? [] : [column],
-      openAgents: column !== undefined && isAgentTab(column) ? [column.agent] : [],
+      openAgents:
+        column !== undefined && typeof column !== "string" && column.kind === STRIP_TAB_KIND.AGENT
+          ? [column.agent]
+          : [],
     },
     sidePanel: {
       ...base.sidePanel,

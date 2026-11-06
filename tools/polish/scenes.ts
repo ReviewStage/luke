@@ -381,12 +381,6 @@ export const SCENES: readonly Scene[] = [
     profile: "agent-terminal-exited",
   },
   {
-    id: "terminal-stopped",
-    place: PLACE.TERMINAL,
-    title: "Stopped",
-    profile: "agent-terminal-stopped",
-  },
-  {
     id: "terminal-starting",
     place: PLACE.TERMINAL,
     title: "Starting",

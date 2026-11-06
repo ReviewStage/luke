@@ -3,7 +3,7 @@ import { afterEach, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { HOSTED_API_ERROR } from "@repo/features";
 import { WORKSPACE_ROLE, WORKSPACE_SLUG_PROBLEM } from "@repo/features/workspace-wire";
-import type { WireBoundaryInput } from "@repo/wire";
+import { HTTP_METHOD, type WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
@@ -148,7 +148,7 @@ const ACTS = Object.values(WORKSPACE_ACTS).map((act) => ({
 
 /** What the host sent the service on an act's behalf: every request but the reads it opens on its own, which only read. */
 function asksSent<Request extends { readonly method: string }>(requests: readonly Request[]) {
-  return requests.filter((request) => request.method !== "GET");
+  return requests.filter((request) => request.method !== HTTP_METHOD.GET);
 }
 
 const ports: TestActPort<unknown>[] = [];
@@ -220,7 +220,7 @@ it.effect(
       const { port } = yield* hostActPort({
         account: SIGNED_IN,
         respond: (request) =>
-          request.method !== "GET" && refusal !== undefined
+          request.method !== HTTP_METHOD.GET && refusal !== undefined
             ? Response.json({ error: refusal }, { status: 403 })
             : new Response(null, { status: 503 }),
       });

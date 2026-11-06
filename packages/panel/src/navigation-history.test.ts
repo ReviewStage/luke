@@ -5,15 +5,7 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import {
-  agentTab,
-  fileTab,
-  isAgentTab,
-  isDraftTab,
-  isFileTab,
-  isPageTab,
-  pageTab,
-} from "@repo/ui/tab-strip-model";
+import { agentTab, fileTab, pageTab, STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { createMemoryHistory } from "@tanstack/react-router";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -40,6 +32,7 @@ import {
 } from "./navigation-history.js";
 import type { RoutedPlace } from "./places/routed-places.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import { isOverviewTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   type AdminViewControl,
@@ -864,7 +857,7 @@ function onTabs(input: {
       openAgents: agents.map((tab) => tab.agent),
       onShow: (_taskId, tab) =>
         input.shown?.push(
-          `column:${isAgentTab(tab) ? tab.agent : isDraftTab(tab) ? tab.draft : tab}`,
+          `column:${isOverviewTab(tab) ? tab : tab.kind === STRIP_TAB_KIND.AGENT ? tab.agent : tab.draft}`,
         ),
     },
     sidePanel: {
@@ -873,7 +866,10 @@ function onTabs(input: {
       stop: TASK_ID,
       tab: input.side ?? SIDE_PANEL_TAB.INBOX,
       opened: input.opened ?? 0,
-      onShow: (_taskId, tab) => input.shown?.push(`side:${isFileTab(tab) ? tab.file : tab}`),
+      onShow: (_taskId, tab) =>
+        input.shown?.push(
+          `side:${typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.FILE ? tab.file : tab}`,
+        ),
       onSetOpen: (open) => {
         if (!open) input.shown?.push("side:shut");
       },
@@ -1060,7 +1056,10 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
         stop: itemId,
         tab: side,
         opened,
-        onShow: (holder, tab) => done.push(`side:${holder}:${isPageTab(tab) ? tab.page : tab}`),
+        onShow: (holder, tab) =>
+          done.push(
+            `side:${holder}:${typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.PAGE ? tab.page : tab}`,
+          ),
         onSetOpen: (open) => done.push(open ? "side:open" : "side:shut"),
       },
     });
@@ -1217,7 +1216,9 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
   const shown: string[] = [];
   const titled = (tasks: TasksControl): StepTitle | undefined => {
     const column = tasks.mainTabs.tab;
-    return column === undefined || !isAgentTab(column)
+    return column === undefined ||
+      typeof column === "string" ||
+      column.kind !== STRIP_TAB_KIND.AGENT
       ? { label: "Home" }
       : { label: "Auth refactor", detail: column.agent };
   };

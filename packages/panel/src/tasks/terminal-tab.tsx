@@ -14,7 +14,7 @@ import {
   TEXT_BUTTON_TONE,
   TextButton,
 } from "@repo/ui";
-import { isTerminalTab } from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
@@ -34,7 +34,6 @@ import {
 import type { TerminalKind } from "./terminal-session.js";
 import type { AgentsControl } from "./use-agents.js";
 import { type ShellTab, useTerminalTabSession } from "./use-terminal-session.js";
-import { WorkingTime } from "./working-time.js";
 
 /**
  * terminal-tab.tsx -- one terminal tab, "Cloud 1" in the agent's own sandbox or "Local 1" on this Mac in the agent's mirrored files: its shell's screen, under a bar naming the agent and where the connection stands.
@@ -115,10 +114,6 @@ function StateBar({
         <OneLine className="terminal-bar-words">{bar.words}</OneLine>
       </span>
       <span className="terminal-bar-end ml-auto inline-flex items-center gap-control-gap">
-        {bar.since === undefined ? null : (
-          <WorkingTime startedAt={bar.since} className="text-muted-foreground" />
-        )}
-        {bar.note === undefined ? null : <span className="text-muted-foreground">{bar.note}</span>}
         {action === undefined ? null : (
           <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => onAction(action.kind)}>
             {action.label}
@@ -149,7 +144,7 @@ export function TerminalTab({
   /** Closes the tab, as an archived agent's does. */
   onClose: () => void;
 }): React.JSX.Element {
-  const agentId = isTerminalTab(tab) ? tab.terminal : tab.local;
+  const agentId = tab.kind === STRIP_TAB_KIND.TERMINAL ? tab.terminal : tab.local;
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
   const session = useTerminalTabSession(tab, shown, onClose);
   useFindSource(useScrollbackFind(session.find));

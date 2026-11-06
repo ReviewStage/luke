@@ -74,8 +74,9 @@ export interface MachinePlace {
  * a launch names them before the machine is asked anything: its checkout,
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
- * folder a message's files are written under, and the Claude Code CLI and
- * the Codex a launch runs, none where the harness's own default stands.
+ * folder a message's files are written under, the Claude Code CLI and the
+ * Codex a launch runs, none where the harness's own default stands, and the
+ * home Codex keeps its threads in.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -85,8 +86,10 @@ export interface MachineLayout {
   /** Where the agent saves a file the service reads back, a screenshot it shows or a page it posts: a folder the service's reads reach on that machine. */
   readonly sharedFiles: string;
   readonly claudeExecutable: string | undefined;
-  /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
+  /** The image's Codex in a sandbox, and on a Mac the one it checked against the pin; none on a Mac that checked none yet, which runs no Codex agent. */
   readonly codexExecutable: string | undefined;
+  /** Where Codex keeps its threads (`CODEX_HOME`): a sandbox's home on its persisted disk; none on a Mac, whose Codex keeps its default under the agent's own home. */
+  readonly codexHome: string | undefined;
   /**
    * Whether the runner reads its lines past its config from the service
    * (`@repo/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
@@ -166,9 +169,8 @@ export interface ResumedPlace {
 /**
  * A running place's firewall, the account whose agent it is named beside
  * it: the whole policy written from the sources given and the swaps of the
- * launch kept for it; a launch's swaps kept ahead of its first write; that
- * launch let go and the policy written without it; or every credential
- * cleared ahead of a stop (`../sandbox-firewall.ts`). A machine with no
+ * launch kept for it; a launch's swaps kept ahead of its first write; or
+ * that launch deleted ahead of a stop, the policy left as it stands (`../sandbox-firewall.ts`). A machine with no
  * firewall of ours does nothing.
  */
 interface MachineFirewall {
@@ -181,11 +183,6 @@ interface MachineFirewall {
     place: MachinePlace,
     userId: string,
     launch: FirewallLaunch,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly endLaunch: (
-    place: MachinePlace,
-    userId: string,
-    sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
   readonly clear: (
     place: MachinePlace,
@@ -376,14 +373,16 @@ export interface AgentMachineService {
     files: readonly SandboxFile[],
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /**
-   * The repositories the agent works in beside its own that the running
-   * place does not hold yet cloned into their folders, on the token minted
-   * for each, the ones it holds left as they stand; where the runner already
-   * runs (`shared`), each folder is then shared with the runner's user as a
-   * launch shares it, which a launch to come does itself. Nothing on a
-   * machine that clones no extras, a device's, nor for an agent with none.
+   * What the running place does not hold yet of the agent's repositories
+   * cloned: before a relaunch (not `shared`), its own checkout where the
+   * place holds none; then the repositories it works in beside its own,
+   * into their folders, on the token minted for each, the ones it holds
+   * left as they stand; where the runner already runs (`shared`), each
+   * folder is then shared with the runner's user as a launch shares it,
+   * which a launch to come does itself. Nothing on a machine that clones
+   * nothing for a launch, a device's, nor for an agent with no repository.
    */
-  readonly checkOutExtras: (
+  readonly checkOutMissing: (
     place: MachinePlace,
     target: ConversationTarget,
     agent: Agent,
@@ -444,10 +443,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what it clones beside the agent's own, handing a runner its credentials, and launching a runner in it. */
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what the place does not hold yet, handing a runner its credentials, and launching a runner in it. */
 export type MachineLifecycle = Omit<
   AgentMachineService,
-  "layout" | "open" | "resume" | "checkOutExtras" | "deliverCredentials" | "launchRunner"
+  "layout" | "open" | "resume" | "checkOutMissing" | "deliverCredentials" | "launchRunner"
 >;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(

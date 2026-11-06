@@ -7,8 +7,9 @@
  * every tool. Each is declared once here: the name, the description, and
  * the input schema its tool file declares; the gate it stands behind, if
  * any (`gates.ts`); whether Claude Code loads it from the first turn; the
- * door it runs through (`../coder-host/inbox-door.ts` for the inbox,
- * `../coder-host/agent-doors.ts` for the rest); and, for the tools whose
+ * door it runs through (`../coder-host/inbox-door.ts` for the inbox, the
+ * agent tools' own runs for the workspace's agents, tasks, automations, and
+ * memory, `../coder-host/agent-doors.ts` for the rest); and, for the tools whose
  * answer is a picture, how it is shown. A door is reached directly rather
  * than through the coder host, because the host composes eve's sandbox and
  * tools, which the web function serving the server does not bundle.
@@ -71,11 +72,23 @@ import {
 } from "../../tasks/picture-look.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
+  AGENT_CALLER,
+  type AgentCall,
+  agentToolRejected,
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
   LIST_TASKS_TOOL,
   READ_PAGE_TOOL,
+  runListAgents,
+  runListModels,
+  runListTasks,
+  runReadAgent,
+  runReadPage,
+  runStartAgent,
+  runStopAgent,
+  runUpdateAgent,
+  runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UPDATE_AGENT_TOOL,
@@ -86,6 +99,11 @@ import {
   DELETE_AUTOMATION_TOOL,
   LIST_AUTOMATIONS_TOOL,
   RUN_AUTOMATION_TOOL,
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runRunAutomation,
+  runUpdateAutomation,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
@@ -99,16 +117,15 @@ import {
 } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
-  type AgentToolCall,
   runAgentComment,
   runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
   runAgentShowImage,
   runAgentShowPage,
-  runAgentTools,
 } from "../coder-host/agent-doors.js";
-import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
+import { MESSAGE_AGENT_TOOL, runMessageAgent } from "../coder-host/agent-message.js";
+import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import {
   DESCRIPTION_EDIT_REFUSAL,
   descriptionEditRejected,
@@ -119,12 +136,23 @@ import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
+import { sessionsRouter } from "../coder-host/runtime-sessions.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { macCommandNotRun, RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
-import { SAVE_MEMORY_TOOL, SEARCH_MEMORY_TOOL } from "../memory-tools.js";
-import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
-import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
+import {
+  runAgentRecall,
+  runAgentRemember,
+  SAVE_MEMORY_TOOL,
+  SEARCH_MEMORY_TOOL,
+} from "../memory-tools.js";
+import {
+  CREATE_SECTION_TOOL,
+  DELETE_SECTION_TOOL,
+  runCreateSection,
+  runDeleteSection,
+} from "../task-section-tools.js";
+import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
 import { type AgentStanding, GATES, standingOf, TOOL_GATE, type ToolGate } from "./gates.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
@@ -214,21 +242,46 @@ function served<const Name extends string>(
   };
 }
 
-/** A tool about the workspace's agents and tasks, run through their one door under the call's key. */
-function agentTool<const Name extends AgentToolCall["tool"]>(
+/** One of the agent tools about the workspace's agents and tasks (`../agent-tools.ts`), run under the call the agent makes. */
+type AgentToolRun = (
+  call: AgentCall,
+  input: UnparsedWireValue,
+) => Effect.Effect<WorkspaceMcpToolResult, never, WorkspaceMcpServices>;
+
+/**
+ * A tool about the workspace's agents and tasks, run as the agent the
+ * conversation is, under the call's key: a message or a start keyed on it,
+ * which reach the agents' sessions as the deployment acting for this agent's
+ * starter. Note that the agent is the standing's own row, read once for the
+ * call, and that an agent whose row is gone is refused before its key is read.
+ */
+function agentTool<const Name extends string>(
   spec: ToolSpec<Name>,
+  run: AgentToolRun,
   options?: Served,
 ) {
-  const run: Door = (admitted, input, { seams, callKey, standing }) =>
-    Effect.flatMap(callKey, (callId) =>
-      runAgentTools(
-        seams,
-        admitted,
-        { tool: spec.name, input, callId },
-        standing.open.has(TOOL_GATE.DESCRIPTIONS),
-      ),
-    );
-  return served(spec, run, options);
+  const door: Door = (admitted, input, { seams, callKey, standing }) => {
+    if (Option.isNone(standing.agent)) {
+      return Effect.succeed(agentToolRejected(CODER_REFUSAL.NO_AGENT));
+    }
+    const agent = standing.agent.value;
+    const descriptionsOn = standing.open.has(TOOL_GATE.DESCRIPTIONS);
+    return Effect.gen(function* () {
+      const clientKey = yield* callKey;
+      // Each agent the tools reach is answered by the runtime its conversation runs on (`../coder-host/runtime-sessions.ts`).
+      const eveAs = yield* sessionsRouter;
+      const call: AgentCall = {
+        caller: { kind: AGENT_CALLER.AGENT, agent, descriptionsOn },
+        eve: eveAs(agent.userId),
+        eveAs,
+        writer: seams.writer(),
+        clientKey,
+        summaryModel: seams.summaryModel,
+      };
+      return yield* run(call, input);
+    });
+  };
+  return served(spec, door, options);
 }
 
 /** A tool of the description's comment threads, run through the comment door. */
@@ -408,31 +461,31 @@ const CATALOG = [
     (admitted, input, { sandbox }) => runAgentShowPage(admitted, input, sandbox),
     LOADED,
   ),
-  agentTool(READ_PAGE_TOOL),
+  agentTool(READ_PAGE_TOOL, runReadPage),
   // The workspace's agents.
-  agentTool(START_AGENT_TOOL, LOADED),
-  agentTool(STOP_AGENT_TOOL),
-  agentTool(LIST_AGENTS_TOOL, LOADED),
-  agentTool(CODER_READ_AGENT_TOOL),
-  agentTool(MESSAGE_AGENT_TOOL, LOADED),
-  agentTool(UPDATE_AGENT_TOOL),
-  agentTool(LIST_MODELS_TOOL),
+  agentTool(START_AGENT_TOOL, runStartAgent, LOADED),
+  agentTool(STOP_AGENT_TOOL, runStopAgent),
+  agentTool(LIST_AGENTS_TOOL, runListAgents, LOADED),
+  agentTool(CODER_READ_AGENT_TOOL, runReadAgent),
+  agentTool(MESSAGE_AGENT_TOOL, runMessageAgent, LOADED),
+  agentTool(UPDATE_AGENT_TOOL, runUpdateAgent),
+  agentTool(LIST_MODELS_TOOL, runListModels),
   // Tasks and sections.
-  agentTool(LIST_TASKS_TOOL),
-  agentTool(READ_TASK_TOOL, LOADED),
-  agentTool(CREATE_TASK_TOOL),
-  agentTool(UPDATE_TASK_TOOL, LOADED),
-  agentTool(CREATE_SECTION_TOOL),
-  agentTool(DELETE_SECTION_TOOL),
+  agentTool(LIST_TASKS_TOOL, runListTasks),
+  agentTool(READ_TASK_TOOL, runReadTask, LOADED),
+  agentTool(CREATE_TASK_TOOL, runCreateTask),
+  agentTool(UPDATE_TASK_TOOL, runUpdateTask, LOADED),
+  agentTool(CREATE_SECTION_TOOL, runCreateSection),
+  agentTool(DELETE_SECTION_TOOL, runDeleteSection),
   // Automations.
-  agentTool(LIST_AUTOMATIONS_TOOL),
-  agentTool(CREATE_AUTOMATION_TOOL),
-  agentTool(UPDATE_AUTOMATION_TOOL),
-  agentTool(DELETE_AUTOMATION_TOOL),
-  agentTool(RUN_AUTOMATION_TOOL),
+  agentTool(LIST_AUTOMATIONS_TOOL, runListAutomations),
+  agentTool(CREATE_AUTOMATION_TOOL, runCreateAutomation),
+  agentTool(UPDATE_AUTOMATION_TOOL, runUpdateAutomation),
+  agentTool(DELETE_AUTOMATION_TOOL, runDeleteAutomation),
+  agentTool(RUN_AUTOMATION_TOOL, runRunAutomation),
   // The workspace's shared memory.
-  agentTool(SAVE_MEMORY_TOOL, { gate: TOOL_GATE.MEMORY }),
-  agentTool(SEARCH_MEMORY_TOOL, { gate: TOOL_GATE.MEMORY }),
+  agentTool(SAVE_MEMORY_TOOL, runAgentRemember, { gate: TOOL_GATE.MEMORY }),
+  agentTool(SEARCH_MEMORY_TOOL, runAgentRecall, { gate: TOOL_GATE.MEMORY }),
   // The description's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),
