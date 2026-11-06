@@ -1,4 +1,5 @@
 import {
+  type ChatGptDeviceSettled,
   type FastAccess,
   PROVIDER_KEY_KIND,
   type ProviderKeyKind,
@@ -78,5 +79,31 @@ export const accountChatGptHost = pgTable("account_chatgpt_host", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   extAgentHostId: text("ext_agent_host_id").notNull(),
+  createdAt: timestamptz("created_at").notNull(),
+});
+
+/**
+ * The account's pending connection of a ChatGPT plan through Codex's
+ * device-code login: at most one per account, a new one replacing it, so
+ * none outlives the next start. The device authorization and its user code,
+ * which together claim the sign-in at OpenAI, are held only as the service
+ * sealed them (`models/provider-key-seal.ts`'s `sealChatGptDeviceCodes`),
+ * bound to the account and the login, never in the clear and never in the
+ * panel, and leave the row once it settles. `outcome` is how it settled,
+ * null while it is pending, so a poll after the one that settled it answers
+ * the same. The row leaves with its account.
+ */
+export const accountChatGptDeviceLogin = pgTable("account_chatgpt_device_login", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** The opaque id the panel polls and cancels the login by, minted afresh at every start. */
+  loginId: text("login_id").notNull(),
+  /** The device authorization and user code as the service sealed them; null once the login settled. */
+  sealedCodes: text("sealed_codes"),
+  /** How the login settled; null while it is pending. */
+  outcome: text("outcome").$type<ChatGptDeviceSettled>(),
+  /** When OpenAI stops taking the user code, fifteen minutes after the start. */
+  expiresAt: timestamptz("expires_at").notNull(),
   createdAt: timestamptz("created_at").notNull(),
 });

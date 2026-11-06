@@ -322,3 +322,89 @@ export const chatGptHostAnswerSchema = EffectSchema.Struct({
 });
 
 export type ChatGptHostAnswer = typeof chatGptHostAnswerSchema.Type;
+
+/**
+ * How a ChatGPT plan's connection through Codex's device-code login
+ * stands, as a poll answers it: still waiting for the code to be entered,
+ * connected, or one of a fixed set of failures. A failure is answered as a
+ * fixed sentence of ours (`CHATGPT_DEVICE_FAILURE_MESSAGE`) and never in
+ * OpenAI's words.
+ */
+export const CHATGPT_DEVICE_LOGIN = {
+  /** The code has not been entered yet; poll again after the interval. */
+  PENDING: "pending",
+  /** The plan is connected, replacing whichever ChatGPT sign-in the account held. */
+  CONNECTED: "connected",
+  /** The code was not entered before it lapsed. */
+  EXPIRED: "expired",
+  /** OpenAI refused the login, or answered nothing a sign-in could be kept from. */
+  REFUSED: "refused",
+  /** The login was canceled, replaced by a newer one, or is none of the account's. */
+  CANCELED: "canceled",
+} as const;
+
+export type ChatGptDeviceLoginOutcome =
+  (typeof CHATGPT_DEVICE_LOGIN)[keyof typeof CHATGPT_DEVICE_LOGIN];
+
+/** How a login settled, which every poll after the one that settled it answers again. */
+export type ChatGptDeviceSettled =
+  | typeof CHATGPT_DEVICE_LOGIN.CONNECTED
+  | typeof CHATGPT_DEVICE_LOGIN.EXPIRED
+  | typeof CHATGPT_DEVICE_LOGIN.REFUSED;
+
+/** The one sentence each failure is answered with. */
+export const CHATGPT_DEVICE_FAILURE_MESSAGE = {
+  [CHATGPT_DEVICE_LOGIN.EXPIRED]:
+    "The code expired before it was entered. Start again for a new one.",
+  [CHATGPT_DEVICE_LOGIN.REFUSED]:
+    "ChatGPT did not connect this account. Start again to try once more.",
+  [CHATGPT_DEVICE_LOGIN.CANCELED]: "This connection was canceled. Start again for a new code.",
+} as const satisfies Record<
+  Exclude<
+    ChatGptDeviceLoginOutcome,
+    typeof CHATGPT_DEVICE_LOGIN.PENDING | typeof CHATGPT_DEVICE_LOGIN.CONNECTED
+  >,
+  string
+>;
+
+/** No login id we mint is longer; one past it is none of ours. */
+const CHATGPT_DEVICE_LOGIN_ID_MAX_CHARS = 64;
+
+/**
+ * A device-code connection begun (POST): the login the panel polls and
+ * cancels by, the code the account enters at the verification page, how
+ * often to poll, and when the code lapses, in epoch milliseconds. What
+ * claims the sign-in at OpenAI stays on the service.
+ */
+export const chatGptDeviceStartAnswerSchema = EffectSchema.Struct({
+  loginId: EffectSchema.String,
+  userCode: EffectSchema.String,
+  verificationUrl: EffectSchema.String,
+  intervalSeconds: countedNumber,
+  expiresAt: countedNumber,
+});
+
+export type ChatGptDeviceStartAnswer = typeof chatGptDeviceStartAnswerSchema.Type;
+
+/** A poll or a cancel of a device-code connection (POST), by the login its start answered. */
+export const chatGptDeviceLoginRequestSchema = EffectSchema.Struct({
+  loginId: EffectSchema.String.check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(CHATGPT_DEVICE_LOGIN_ID_MAX_CHARS),
+  ),
+});
+
+export type ChatGptDeviceLoginRequest = typeof chatGptDeviceLoginRequestSchema.Type;
+
+/**
+ * How a device-code connection stands (a poll's answer, and a cancel's):
+ * its outcome, the fixed sentence of a failure, and the account's keys as
+ * they then stand once it connected.
+ */
+export const chatGptDevicePollAnswerSchema = EffectSchema.Struct({
+  outcome: EffectSchema.Literals(Object.values(CHATGPT_DEVICE_LOGIN)),
+  message: EffectSchema.optionalKey(EffectSchema.String),
+  keys: EffectSchema.optionalKey(providerKeysAnswerSchema),
+});
+
+export type ChatGptDevicePollAnswer = typeof chatGptDevicePollAnswerSchema.Type;
