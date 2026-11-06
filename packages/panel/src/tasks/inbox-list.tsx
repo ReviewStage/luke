@@ -1113,7 +1113,16 @@ function ListHead({
         {choosing === undefined ? options : null}
       </>
     );
+  // Note that the count stands in the title's place in a label's type rather than the title's, so choosing reads as a passing mode rather than another place.
   const heading = choosing === undefined ? title : selectedWords(choosing.count);
+  const barTitle =
+    choosing === undefined ? (
+      title
+    ) : (
+      <ReplayUnmask>
+        <Text variant={TEXT_VARIANT.LABEL}>{heading}</Text>
+      </ReplayUnmask>
+    );
   return (
     <>
       {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
@@ -1122,7 +1131,7 @@ function ListHead({
       ) : (
         <Toolbar
           lead={all}
-          title={heading}
+          title={barTitle}
           titleReplayUnmasked
           actions={actions}
           end={TOOLBAR_INSET.COLUMN}
