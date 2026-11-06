@@ -1000,9 +1000,11 @@
      stage that holds one alone shows the one moment that sells it instead:
      the desktop app as it is, laid out at 1280 by 800, cut to that moment's
      box and scaled so the box spans the stage, about three quarters of the
-     app's size on a phone. The stage is as tall as the box, so no ground
-     stands empty, and the window fades out at its right and foot, where it
-     runs on. A window names its box in its own pixels: where it starts
+     app's size on a phone. It stands in from the stage's top and start, on
+     the drifting dots, its corner the window's, and runs off the stage's
+     end and foot as a wide stage's window runs off its foot; the stage is
+     as tall as the box, so no ground stands empty. A window names its box
+     in its own pixels: where it starts
      (`--ui-landing-crop-x`, `--ui-landing-crop-y`) and how wide and tall it
      is (`--ui-landing-crop-w`, `--ui-landing-crop-h`); a margin's percentage
      is of the stage's width, so each offset is a share of the box's. */
@@ -1071,19 +1073,15 @@
     }
 
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
-      padding: 0;
+      padding: var(--ui-space-24) 0 0 var(--ui-space-20);
       aspect-ratio: var(--ui-landing-crop-w) / var(--ui-landing-crop-h);
     }
 
-    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-field {
-      display: none;
-    }
-
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-scene {
-      mask-image:
-        linear-gradient(to left, transparent, #000 var(--ui-space-32)),
-        linear-gradient(to top, transparent, #000 var(--ui-space-32));
-      mask-composite: intersect;
+      overflow: clip;
+      border-top: 1px solid var(--ui-color-border-strong);
+      border-left: 1px solid var(--ui-color-border-strong);
+      border-top-left-radius: var(--ui-display-window-radius);
     }
 
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
@@ -1097,7 +1095,7 @@
     .ui-landing-stage[data-scene="inbox"] {
       --ui-landing-crop-x: 592;
       --ui-landing-crop-y: 56;
-      --ui-landing-crop-w: 445;
+      --ui-landing-crop-w: 420;
       --ui-landing-crop-h: 440;
     }
 
@@ -1106,7 +1104,7 @@
     .ui-landing-stage[data-scene="agents"] {
       --ui-landing-crop-x: 268;
       --ui-landing-crop-y: 0;
-      --ui-landing-crop-w: 445;
+      --ui-landing-crop-w: 420;
       --ui-landing-crop-h: 345;
     }
 
