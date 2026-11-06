@@ -49,6 +49,14 @@ function useWorkspacePhoto(workspaceId: string, version: string | undefined): st
   return rows?.version === version ? rows?.url : undefined;
 }
 
+/** The picture a workspace's tile draws: its photo where one is set, its owner's picture on a personal one, and nothing while its letter stands. */
+export function useWorkspaceTileUrl(
+  workspace: Pick<Workspace, "id" | "photoVersion" | "pictureUrl">,
+): string | undefined {
+  const photo = useWorkspacePhoto(workspace.id, workspace.photoVersion);
+  return workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
+}
+
 /** A workspace's tile, at a row's glyph size unless said otherwise. */
 export function WorkspaceTile({
   workspace,
@@ -57,8 +65,7 @@ export function WorkspaceTile({
   workspace: Pick<Workspace, "id" | "name" | "photoVersion" | "pictureUrl">;
   size?: TileSize;
 }): React.JSX.Element {
-  const photo = useWorkspacePhoto(workspace.id, workspace.photoVersion);
-  const url = workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
+  const url = useWorkspaceTileUrl(workspace);
   // Note that the letter and its hue stand until the picture has loaded, because an avatar on the network may take a while, and go once it has, because a transparent photo would show them through.
   return (
     <Avatar

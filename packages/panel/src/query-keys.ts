@@ -15,6 +15,8 @@
  * lists.
  */
 
+import type { QueryClient } from "@tanstack/react-query";
+
 /** The first element of every panel query key, one per read. */
 export const QUERY_ROOT = {
   /** The web app's invitation page: the invitation its link names, as the signed-in session reads it. */
@@ -49,3 +51,35 @@ export const QUERY_ROOT = {
   /** A picture the window reads (`picture-query.ts`'s `pictureQuery`), by what it belongs to and its id there. */
   PICTURE: "picture",
 } as const;
+
+/**
+ * The roots read as the account signed in but not keyed by it, which the
+ * window lets go of once that account changes (`forgetAccountReads`), so the
+ * next account is never drawn what the last one read on a task both may
+ * open. Note that a new root read as the account, and not keyed by it, joins
+ * this list in the PR that adds it, because nothing else lets go of it.
+ */
+const ACCOUNT_SCOPED_ROOTS: ReadonlySet<unknown> = new Set<string>([
+  QUERY_ROOT.TASK_TREE,
+  QUERY_ROOT.WORKSPACE_AGENTS,
+  QUERY_ROOT.TASK_FILE,
+  QUERY_ROOT.PAGE_SOURCE,
+  QUERY_ROOT.REPOSITORY_PATHS,
+  QUERY_ROOT.AGENT_PART,
+  QUERY_ROOT.TASK_NEWEST_REVISION,
+  QUERY_ROOT.AGENT_CHANGES,
+  QUERY_ROOT.TASK_REVISION,
+  QUERY_ROOT.INSTALLED_SKILL,
+  QUERY_ROOT.INSTALLED_SKILL_PREVIEW,
+  QUERY_ROOT.HOST_PAIRING,
+]);
+
+/**
+ * Lets go of every read the window took as the account signed in but keyed
+ * by no account, as `forgetPictures` does its pictures: reset rather than
+ * removed, so a place still drawing one reads it again as the account now
+ * signed in rather than going on drawing the last one's answer.
+ */
+export function forgetAccountReads(client: QueryClient): Promise<void> {
+  return client.resetQueries({ predicate: (query) => ACCOUNT_SCOPED_ROOTS.has(query.queryKey[0]) });
+}

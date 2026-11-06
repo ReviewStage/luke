@@ -26,6 +26,13 @@ function openAskId(item: InboxItem): string | undefined {
   return item.thread?.findLast((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id;
 }
 
+/** Whether the item's thread holds the ask on the message given still open, so an answer to it settles it. */
+export function asksOpen(item: InboxItem, askId: string): boolean {
+  return (item.thread ?? []).some(
+    (message) => message.id === askId && message.ask?.status === INBOX_ASK_STATUS.OPEN,
+  );
+}
+
 /** How a settled ask stands: answered, or withdrawn at a moment. */
 type SettledStanding =
   | { readonly status: typeof INBOX_ASK_STATUS.ANSWERED }

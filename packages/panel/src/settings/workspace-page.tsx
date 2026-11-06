@@ -46,6 +46,7 @@ import {
   type InlineEditEnd,
   MENU_DETAIL,
   OneLine,
+  PhotoPick,
   ProviderMark,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
@@ -77,7 +78,6 @@ import {
   CrownIcon,
   ExternalLinkIcon,
   GLYPH,
-  ImageUpIcon,
   ShieldIcon,
   UserIcon,
   UserRoundIcon,
@@ -96,7 +96,7 @@ import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
-import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
+import { TILE_SIZE, useWorkspaceTileUrl, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import {
   automationsQuery,
@@ -169,10 +169,8 @@ import {
  * and a read that failed says so with Retry.
  */
 
-/** The photo's acts in the identity row's ⋯. */
+/** The photo's removal, which its tile offers and the confirm asks. */
 const PHOTO_WORDS = {
-  UPLOAD: "Upload photo",
-  REPLACE: "Replace photo",
   REMOVE: "Remove photo",
   /** What goes with a removed photo, which the confirm says in one line. */
   REMOVE_BODY: "The photo is deleted, and the workspace is marked by its first letter instead.",
@@ -1748,8 +1746,9 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
 /**
  * The page's first row, drawn as Account's account row is: the workspace's
  * tile, its name, and who shares it in one line, then for an owner or an
- * admin Rename, and the photo's acts in its ⋯, beside the owner's Change
- * slug (`useSlugDialog`). Rename opens
+ * admin Rename beside the owner's Change slug in its ⋯ (`useSlugDialog`),
+ * the tile itself the press that picks the photo or, with one set, offers
+ * Replace and Remove (`PhotoPick`), as setup and New workspace draw it. Rename opens
  * the name in place on its own line, as the sidebar renames a task, and
  * Return or a press elsewhere sends what was typed with its ends trimmed,
  * while Escape, an empty name, or the same one renames nothing; an account's
@@ -1819,34 +1818,8 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     workspace.role === WORKSPACE_ROLE.OWNER
       ? [{ label: SLUG_WORDS.CHANGE, icon: <GLYPH.LINK />, onSelect: slugging.ask }]
       : [];
-  const actions = manages
-    ? [
-        [
-          {
-            label: set ? PHOTO_WORDS.REPLACE : PHOTO_WORDS.UPLOAD,
-            icon: <ImageUpIcon />,
-            disabled: uploading || remove.busy,
-            onSelect: () => {
-              setRefusal(undefined);
-              picker.open();
-            },
-          },
-          ...slugActs,
-        ],
-        // An upload still under way would put a photo back after its removal, so none is asked meanwhile.
-        set
-          ? [
-              {
-                label: PHOTO_WORDS.REMOVE,
-                icon: <GLYPH.REMOVE />,
-                danger: true,
-                disabled: uploading,
-                onSelect: remove.ask,
-              },
-            ]
-          : [],
-      ]
-    : [];
+  // Note that the photo's acts are its tile's own (`PhotoPick`), as setup and New workspace draw it, so the ⋯ holds the slug alone.
+  const actions = slugActs.length === 0 ? [] : [slugActs];
   const rename =
     renamable && !editing ? (
       <Button
@@ -1860,7 +1833,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         Rename
       </Button>
     ) : null;
-  const photoPicker = manages ? picker.input : null;
+  const tileUrl = useWorkspaceTileUrl(workspace);
   return (
     <Stack gap={GAP.NONE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_RENAME)}>
       <MenuRow
@@ -1868,7 +1841,24 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         anchor={SETTINGS_SEARCH_ROW.WORKSPACE_SLUG}
         actions={actions}
         row={{
-          leading: (
+          leading: manages ? (
+            <PhotoPick
+              name={workspace.name}
+              unnamed={workspace.name}
+              id={workspace.id}
+              photo={tileUrl}
+              picker={{
+                ...picker,
+                open: () => {
+                  setRefusal(undefined);
+                  picker.open();
+                },
+              }}
+              // An upload still under way would put a photo back after its removal, so none is asked meanwhile.
+              onRemove={set && !uploading ? remove.ask : undefined}
+              disabled={uploading || remove.busy}
+            />
+          ) : (
             <ReplayMask>
               <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
             </ReplayMask>
@@ -1887,12 +1877,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           ),
           description: sharedWords(workspace.memberCount, workspace.personal === true),
           error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_WRITE)),
-          control: (
-            <>
-              {rename}
-              {photoPicker}
-            </>
-          ),
+          control: rename,
         }}
       />
       <ConfirmDialog

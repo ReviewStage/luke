@@ -47,6 +47,8 @@ export const TAB_KIND = {
   CHANGES: "changes",
   /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
   TERMINAL: "terminal",
+  /** One cloud agent's shells on this Mac in its mirror, which wears the agent's own glyph too. */
+  LOCAL: "local",
   FILE: "file",
   PAGE: "page",
   /** A Browser tab, named by its page's title once it has one. */
@@ -98,8 +100,8 @@ export type TabSubject =
       readonly pullRequest?: (PullRequestMarked & Pick<AgentPullRequest, "title">) | undefined;
     }
   | {
-      readonly kind: typeof TAB_KIND.TERMINAL;
-      /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
+      readonly kind: typeof TAB_KIND.TERMINAL | typeof TAB_KIND.LOCAL;
+      /** Where the agent whose sandbox or mirror it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
@@ -239,6 +241,8 @@ export function tabLook(subject: TabSubject): KindLook {
       // Note that the agent's name is not the label, because the tab says
       // what it is first; each place drawing it names the agent beside it.
       return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
+    case TAB_KIND.LOCAL:
+      return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.LOCAL };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);

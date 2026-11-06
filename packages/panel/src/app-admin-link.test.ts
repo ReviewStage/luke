@@ -8,14 +8,13 @@ import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { App } from "./app.js";
 // Note that the Admin place is loaded as the window loads it, on first use
-// (`pages-on-demand.ts`), so the module is read here first and its load settles
+// (`admin-route.lazy.tsx`), so the module is read here first and its load settles
 // within the test's own ticks rather than on a clock a busy machine outruns.
-import "./desktop/desktop-admin.js";
+import "./desktop/admin-route.lazy.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
@@ -110,9 +109,7 @@ async function settle(): Promise<void> {
 
 async function drawWindow(): Promise<void> {
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() =>
-    root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
-  );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
   await settle();
 }
 

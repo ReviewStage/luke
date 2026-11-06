@@ -5,9 +5,9 @@
  * this is the window whose start is timed.
  */
 
-import { createPanelRouter } from "@repo/panel/panel-router";
+import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { queryClient } from "@repo/panel/query-client";
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
+import { createMemoryHistory } from "@tanstack/react-router";
 import { mountWindow } from "./window-root";
 
 /** The address a window opens at: the panel's own, which names no place, as a step with no link is held at. */
@@ -21,4 +21,4 @@ const router = createPanelRouter(
 );
 
 // The panel is the window a person waits on, so it alone times its start.
-mountWindow(<RouterProvider router={router} />, { timesStart: true });
+mountWindow(<PanelRouterProvider router={router} />, { timesStart: true });

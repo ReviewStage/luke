@@ -77,7 +77,7 @@
       },
       "minItems": 1,
       "maxItems": 9,
-      "description": "Other repositories the agent works in beside its own, each checked out in a folder of its own beside its checkout, which its instructions name: each reached through the GitHub App installation its own repository is on, the agent in the cloud, and the member with the Several repositories experiment on. Leave it out for one repository."
+      "description": "Other repositories the agent works in beside its own, each checked out in a folder of its own beside its checkout, which its instructions name: each reached through the GitHub App installation its own repository is on, and the agent in the cloud. Leave it out for one repository."
     },
     "model": {
       "type": "string",
