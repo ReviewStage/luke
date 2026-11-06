@@ -19,12 +19,11 @@ import {
   type PortActResult,
   type TERMINAL_ACT_KIND,
 } from "@repo/host/contract";
-import { timeRuntime } from "@repo/ui";
 import type { TerminalStripTab } from "@repo/ui/tab-strip-model";
 import { terminalTab } from "@repo/ui/tab-strip-model";
+import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
-import { Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { Clock, Context, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -266,9 +265,10 @@ async function mount(shown = true) {
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  // Note that the window's ticks never start here, because the working agent's mark steps on one
-  // forever, and a test that runs every fake timer out would never finish.
-  const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
+  // Note that the working agent's mark never steps here, because it steps on a beat forever, and a
+  // test that runs every fake timer out would never finish.
+  serveEffectsOn(Context.make(Clock.Clock, STILL_CLOCK));
+  const registry = AtomRegistry.make();
   registries.push(registry);
   let closed = 0;
   let end: ((tab: TerminalStripTab) => void) | undefined;

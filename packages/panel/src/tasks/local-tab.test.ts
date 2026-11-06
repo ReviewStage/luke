@@ -17,12 +17,11 @@ import {
   type PortActResult,
 } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { timeRuntime } from "@repo/ui";
 import type { LocalStripTab, ViewedAt } from "@repo/ui/tab-strip-model";
 import { localTab } from "@repo/ui/tab-strip-model";
+import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
-import { Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { Clock, Context, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -289,9 +288,10 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  // Note that the window's ticks never start here, because the working agent's mark steps on one
-  // forever, and a test that runs every fake timer out would never finish.
-  const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
+  // Note that the working agent's mark never steps here, because it steps on a beat forever, and a
+  // test that runs every fake timer out would never finish.
+  serveEffectsOn(Context.make(Clock.Clock, STILL_CLOCK));
+  const registry = AtomRegistry.make();
   registries.push(registry);
   const wrapped = (tab: React.ReactElement) =>
     findable

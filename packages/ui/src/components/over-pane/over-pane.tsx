@@ -26,10 +26,8 @@
  * whole box on a phone.
  */
 
-import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import { Duration, Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -37,12 +35,12 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
 import { MOTION_TOKEN, milliseconds } from "../../motion-timing.js";
 import { trappedTab } from "../../trapped-tab.js";
+import { useWait } from "../../wait.js";
 import { PanePin } from "../pane-pin/pane-pin.js";
 
 /** Which edge of the tab the pane stands at, and slides in from and out past. */
@@ -113,25 +111,12 @@ function exitDuration(): number {
 }
 
 /**
- * The pane's exit, as an atom whose work is the wait: it lets the pane go
- * once its slide out has run. Note that the way to say so is handed inside a
- * record, because a function handed to an atom's setter is read as an update
- * of its value and called at once.
- */
-function exitWait() {
-  return Atom.fn(({ delay, done }: { readonly delay: number; readonly done: () => void }) =>
-    Effect.andThen(Effect.sleep(Duration.millis(delay)), Effect.sync(done)),
-  );
-}
-
-/**
  * Whether the pane is on its way out: from the render `open` falls in until
  * its slide out has run, or not at all where there is no motion to play. A
  * pane opened again on its way out stops leaving and slides back in.
  */
 function useLeaving(open: boolean): boolean {
-  const atom = useMemo(exitWait, []);
-  const wait = useAtomSet(atom);
+  const wait = useWait();
   const [shown, setShown] = useState(open);
   const [leaving, setLeaving] = useState(false);
   if (shown !== open) {
@@ -146,8 +131,14 @@ function useLeaving(open: boolean): boolean {
       setLeaving(false);
       return undefined;
     }
-    wait({ delay, done: () => setLeaving(false) });
-    return () => wait(Atom.Interrupt);
+    // The pane goes once its slide out has run.
+    wait.start(
+      Effect.andThen(
+        Effect.sleep(Duration.millis(delay)),
+        Effect.sync(() => setLeaving(false)),
+      ),
+    );
+    return wait.stop;
   }, [leaving, wait]);
   return leaving;
 }

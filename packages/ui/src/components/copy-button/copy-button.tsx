@@ -1,9 +1,8 @@
-import { useAtomSet } from "@effect/atom-react";
 import { Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
+import { useWait } from "../../wait.js";
 import { ANNOUNCE, type Announce, announce, type Retire } from "../announcer/announcer.js";
 import { type ButtonSize, IconButton } from "../button/button.js";
 import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../chip/chip.js";
@@ -39,9 +38,9 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A second press starts the hold over from its own answer, and only the
  * last press's answer is shown, however the clipboard orders them. The hold
- * is an atom's work on the registry the app's root provides, as a hint's
- * rest is (`../tooltip/hint.tsx`), so nothing here arms a timer of its own
- * and a test moves it on a faked clock.
+ * forks on the library's edge, as a hint's rest does
+ * (`../tooltip/hint.tsx`, `../../wait.ts`), so nothing here arms a timer of
+ * its own and a test moves it on a faked clock.
  *
  * The glyph is drawn in the Tailwind theme's utilities, in the complete ink
  * once a copy lands and the danger ink once one is refused, and a chip's
@@ -84,19 +83,6 @@ const COPY_GLYPH = {
   [COPY_STATE.COPIED]: CheckIcon,
   [COPY_STATE.FAILED]: GLYPH.FAILED,
 } as const;
-
-/**
- * One button's hold, as an atom whose work is the wait: it hands the glyph
- * back once the hold has run out. A new answer starts it afresh, and an
- * interrupt calls it off. Note that the way to say so is handed inside a
- * record, because a function handed to an atom's setter is read as an update
- * of its value and called at once.
- */
-function copyHold() {
-  return Atom.fn(({ settle }: { readonly settle: () => void }) =>
-    Effect.andThen(Effect.sleep(TOAST_HOLD.DONE), Effect.sync(settle)),
-  );
-}
 
 /** The name of a copy button: "code" makes "Copy code". */
 function copyLabel(what: string): string {
@@ -182,7 +168,8 @@ function ChipLead({
 export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   const { text, what, copy, disabled } = props;
   const label = copyLabel(what);
-  const hold = useAtomSet(useMemo(copyHold, []));
+  // The button's hold: it hands the glyph back once it runs out, and a new answer starts it afresh.
+  const hold = useWait();
   const [shown, setShown] = useState<{ readonly state: CopyState; readonly turns: number }>({
     state: COPY_STATE.IDLE,
     turns: 0,
@@ -195,7 +182,7 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   useEffect(
     () => () => {
       latest.current += 1;
-      hold(Atom.Interrupt);
+      hold.stop();
       said.current();
     },
     [hold],
@@ -209,12 +196,15 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
       turn(state);
       said.current();
       said.current = announce(COPY_SAID[state], COPY_ANSWER[state]);
-      hold({
-        settle: () => {
-          turn(COPY_STATE.IDLE);
-          said.current();
-        },
-      });
+      hold.start(
+        Effect.andThen(
+          Effect.sleep(TOAST_HOLD.DONE),
+          Effect.sync(() => {
+            turn(COPY_STATE.IDLE);
+            said.current();
+          }),
+        ),
+      );
     };
     // Note that the act is called within the press, because a browser's
     // clipboard takes a write only while the press's activation stands, and

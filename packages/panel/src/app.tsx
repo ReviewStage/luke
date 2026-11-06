@@ -28,7 +28,7 @@ import {
   type SettingsView,
 } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { cssCustomProperties, RetryOffered } from "@repo/ui";
+import { cssCustomProperties, RetryOffered, TimeTicks } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
@@ -233,8 +233,11 @@ export function App(): React.JSX.Element {
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   // Note that the account's key is read above the window, because every message box's Dictate reads it.
+  // The window's ticks run here, once, for as long as it stands.
   return (
-    <OpenAiKeyProvider account={accountKey}>{landed ? <AppWindow /> : null}</OpenAiKeyProvider>
+    <TimeTicks>
+      <OpenAiKeyProvider account={accountKey}>{landed ? <AppWindow /> : null}</OpenAiKeyProvider>
+    </TimeTicks>
   );
 }
 
