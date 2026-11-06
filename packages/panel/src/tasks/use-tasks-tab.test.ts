@@ -21,7 +21,7 @@ import { MENTION_KIND } from "@repo/features/mention-link";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_CREATE_RELATION_KIND,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -33,12 +33,13 @@ import {
   TASKS_READ,
   type TasksView,
 } from "@repo/features/tasks-view";
+import { ACT_UNREACHED_WORDS } from "@repo/features/words";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
-  type AppPlanDocuments,
+  type AppDescriptionDocuments,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
@@ -56,7 +57,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { type ActHandle, KEPT, type Kept } from "../act.js";
+import { KEPT, type Kept } from "../act.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -75,6 +76,7 @@ import {
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
+  refusedOnPort,
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
@@ -99,7 +101,7 @@ import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { useInboxTask } from "./use-inbox-task.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
-import { HISTORY_READ } from "./use-plan-history.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -109,9 +111,9 @@ import {
   useTasksTab,
 } from "./use-tasks-tab.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
@@ -131,21 +133,21 @@ const OPEN: TasksView = {
   activeTaskId: TASK.id,
 };
 
-/** The plans the host holds for the window as a test's tab opens on them: the open task's, unless a test names others. */
-const HELD_PLANS: AppPlanDocuments = { [TASK.id]: { rows: { task: TASK } } };
+/** The descriptions the host holds for the window as a test's tab opens on them: the open task's, unless a test names others. */
+const HELD_DESCRIPTIONS: AppDescriptionDocuments = { [TASK.id]: { rows: { task: TASK } } };
 
 /**
- * Lays `plans` over whatever document the window was handed, as the host
- * holds them for it (`LIVE_READ.PLAN_DOCUMENT`), for a registry that reads
+ * Lays `descriptions` over whatever document the window was handed, as the host
+ * holds them for it (`LIVE_READ.DESCRIPTION_DOCUMENT`), for a registry that reads
  * the document from here on.
  */
-function handPlans(plans: AppPlanDocuments): void {
+function handDescriptions(descriptions: AppDescriptionDocuments): void {
   const handed = fakeAppBridgeCalls().requestAppState;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: async () => ({
       ...(handed === undefined ? stateWith({}, {}) : await handed()),
-      [LIVE_READ.PLAN_DOCUMENT]: plans,
+      [LIVE_READ.DESCRIPTION_DOCUMENT]: descriptions,
     }),
   });
 }
@@ -172,18 +174,18 @@ interface Standing {
   room: ShellRoom;
   /** Whether the window's history stands over the tab, as the panel's root keeps it. */
   history: boolean;
-  /** The plans the host holds for the window as the tab mounts (`LIVE_READ.PLAN_DOCUMENT`). */
-  plans: AppPlanDocuments;
+  /** The descriptions the host holds for the window as the tab mounts (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
+  descriptions: AppDescriptionDocuments;
 }
 
 /**
- * Mounts the hook alone over what the panel would hand it, and the plans the
+ * Mounts the hook alone over what the panel would hand it, and the descriptions the
  * host holds on the window's document, keeping every act it told, in order;
  * `answers` answers the acts it names, an act-port kind among them. A press is answered and kept as an asked act is, and stays
  * quiet, unless `press` hands the window's own press door, which goes out on
  * the act port the test installed.
  */
-/** The kinds the tab and its agents send on mutations rather than their `acts`. */
+/** The kinds the tab and its agents send on mutations or read through Query rather than their `acts`. */
 const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.AGENTS_START,
   ACT_KIND.AGENTS_STOP,
@@ -220,6 +222,13 @@ const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.TASKS_RESTORE,
   ACT_KIND.TASKS_START,
   ACT_KIND.TASKS_REFRESH,
+  // The reads asked through fetchQuery reach the act port too.
+  ACT_KIND.TASKS_FIND,
+  ACT_KIND.AGENTS_PAGE,
+  ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+  ACT_KIND.GITHUB_CONNECT,
+  ACT_KIND.GITHUB_DISCONNECT,
+  ACT_KIND.TASKS_REVISIONS,
 ];
 
 function mount(
@@ -253,10 +262,10 @@ function mount(
     account: "dev@example.com",
     room: SHELL_ROOM.WIDE,
     history: false,
-    plans: HELD_PLANS,
+    descriptions: HELD_DESCRIPTIONS,
     ...initial,
   };
-  handPlans(standing.plans);
+  handDescriptions(standing.descriptions);
   let windowHistory: WindowHistoryLists | undefined;
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
@@ -306,12 +315,6 @@ function mount(
     const [held, setHeld] = useState(standing);
     restand = setHeld;
     control = useTasksTab({
-      acts: {
-        // A kind the test does not answer is recorded and refused.
-        // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
-        act: (<Kind extends PortActKind>(kind: Kind, ...args: unknown[]) =>
-          portAnswer(kind, ...args)) as ActHandle["act"],
-      },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
       signedIn: held.signedIn,
@@ -339,7 +342,7 @@ function mount(
   const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
   const root = createRoot(container);
   roots.push(root);
-  // A fresh registry reads the document handed here, its plans among it, rather than one an earlier test handed.
+  // A fresh registry reads the document handed here, its descriptions among it, rather than one an earlier test handed.
   act(() => {
     root.render(
       windowRouter().provide(
@@ -407,7 +410,7 @@ function _undoButton(): HTMLButtonElement {
 function revisionLine(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
@@ -1307,7 +1310,8 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   assert.equal(tab.control().agentView.agentId, AGENT_ID);
   // Note that the open task's pages stay held beneath the agent's page.
   assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
-  assert.deepEqual(tab.control().agentView.pages, [page]);
+  // Note that the agent's pages stand once they reach their query.
+  await vi.waitFor(() => assert.deepEqual(tab.control().agentView.pages, [page]));
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
@@ -1775,7 +1779,7 @@ test("a Vespin link to a version of a task the service will not hand the reader 
     {
       shown: true,
       tasks: OPEN,
-      plans: { ...HELD_PLANS, [OTHER_TASK_ID]: { rows: { gone: true } } },
+      descriptions: { ...HELD_DESCRIPTIONS, [OTHER_TASK_ID]: { rows: { gone: true } } },
     },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
@@ -1793,7 +1797,7 @@ test("a Vespin link to a version of a task the service will not hand the reader 
   assert.equal(tab.control().region.kind, DOCUMENT_REGION.MISSING);
 });
 
-test("a task whose plan the host holds opens on its plan in its first frame again, and one never held reads it", async () => {
+test("a task whose description the host holds opens on its description in its first frame again, and one never held reads it", async () => {
   const tab = mount({ shown: true, tasks: OPEN });
   await settle();
 
@@ -1850,7 +1854,7 @@ test("a section shown is let go, so the plan opened again later opens where it w
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
+  act(() => panel().onClose(SIDE_PANEL_TAB.DESCRIPTION));
   for (let close = 0; close < 20; close += 1) {
     act(() => panel().onOpenFile(FILE_REF));
     act(() => panel().onClose(FILE));
@@ -1864,7 +1868,7 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
     reopen = tab.control().onReopenClosedTab;
   }
   assert.equal(reopened, 20);
-  assert.deepEqual(panel().strip, [FILE], "the plan's tab, closed first, is not kept");
+  assert.deepEqual(panel().strip, [FILE], "the description's tab, closed first, is not kept");
 });
 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {
@@ -1939,6 +1943,8 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
+  // Note that each read of the pages reaches their query one notify tick later, which lands before the tabs move.
+  await vi.waitFor(() => assert.equal(tab.control().pages?.length, 1));
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(PULLS));
   act(() => panel().onClose(PULLS));
@@ -1949,6 +1955,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
     reads.deliverPages({ [PAGE_OWNER.TASK]: { [TASK.id]: { rows: [] } }, [PAGE_OWNER.AGENT]: {} }),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(tab.control().pages?.length, 0));
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
@@ -2488,8 +2495,8 @@ test("Settings' GitHub row is the connection main's view holds, its Connect and 
 
   assert.deepEqual(tab.control().github, { connected: true, login: null });
   assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
-  // The test leaves Disconnect unanswered, which the bridge refuses.
-  assert.equal(newestToastSays(), "Not answered in this test.");
+  // The test leaves Disconnect unanswered, a failure on the way to the service rather than a refusal.
+  assert.equal(newestToastSays(), ACT_UNREACHED_WORDS);
 });
 
 test("the repository chooser says the account manages the workspace it owns, and not one it is a member of", () => {
@@ -2506,7 +2513,7 @@ test("a Disconnect whose page did not open says why in a toast", async () => {
   const refusal = "Could not disconnect GitHub on this system.";
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
-    { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },
+    { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(refusedOnPort(refusal)) },
   );
 
   act(() => {
@@ -2547,14 +2554,20 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   };
-  const tab = mount({
-    shown: true,
-    tasks: {
-      ...TWO_WORKSPACES,
-      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-    },
-  });
+  // Note that the tab and the chip stand on one registry over the document the lists are laid on, so the document each writes into the test's client is the same one.
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => listed);
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  const tab = mount(
+    {
+      shown: true,
+      tasks: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      },
+    },
+    {},
+    registry,
+  );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
   const chipRoot = createRoot(chip);
@@ -2562,7 +2575,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        registry,
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2577,17 +2590,21 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
-  assert.deepEqual(
-    [
-      // A row names the repository, then its owner after it.
-      [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".ui-combobox-option-detail", ".ui-combobox-option-label"]
-          .map((part) => row.querySelector(part)?.textContent)
-          .join("/"),
-      ),
-      [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
-    ],
-    [["acme/relay"], []],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      [
+        // A row names the repository, then its owner after it.
+        [...menu.querySelectorAll('[role="option"]')].map((row) =>
+          [".ui-combobox-option-detail", ".ui-combobox-option-label"]
+            .map((part) => row.querySelector(part)?.textContent)
+            .join("/"),
+        ),
+        [...menu.querySelectorAll('[role="group"]')].map((group) =>
+          group.getAttribute("aria-label"),
+        ),
+      ],
+      [["acme/relay"], []],
+    ),
   );
 });
 
@@ -2616,7 +2633,7 @@ test("Connect GitHub under a plan opens Settings on the plan's workspace's GitHu
   const tab = mount({
     shown: true,
     tasks: { ...OPEN, listStatus: TASKS_READ.FAILED, workspaces: [PERSONAL, ACME] },
-    plans: { [TASK.id]: { rows: { task: { ...TASK, workspaceId: ACME.id } } } },
+    descriptions: { [TASK.id]: { rows: { task: { ...TASK, workspaceId: ACME.id } } } },
   });
   await settle();
 
@@ -2703,9 +2720,10 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   );
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
+  // Note that the move is sent a step after the press, as its mutation sends it, and the workspaces land and one is chosen while it is out.
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2786,7 +2804,10 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   );
   assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
   assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
-  assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE });
+  // Note that the page is held on the task's pages, whose read reaches its query a moment after the document.
+  await vi.waitFor(() =>
+    assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE }),
+  );
 });
 
 /** The task as the list names it. */
@@ -3101,9 +3122,9 @@ const readAgentNamed = Schema.decodeUnknownOption(
 /** The task New task's Agent mode starts, as the host opens it once started. */
 const AGENT_TASK: TasksView = { ...OPEN, activeTaskId: OTHER_TASK_ID };
 
-/** The plans the host holds once Agent mode's task started: the started task's beside the open one's. */
-const AGENT_PLANS: AppPlanDocuments = {
-  ...HELD_PLANS,
+/** The descriptions the host holds once Agent mode's task started: the started task's beside the open one's. */
+const AGENT_DESCRIPTIONS: AppDescriptionDocuments = {
+  ...HELD_DESCRIPTIONS,
   [OTHER_TASK_ID]: {
     rows: { task: { ...TASK, id: OTHER_TASK_ID, name: "Untitled", repository: "acme/web" } },
   },
@@ -3174,7 +3195,7 @@ test("a group's quick add sends one quiet start with the group's standing and no
 test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), descriptions: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3234,7 +3255,7 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), descriptions: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3256,7 +3277,7 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
 test("New task's agent opens alone, no plan beside it, and the task left draws no panel until asked, since a tab standing opens none", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), descriptions: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3277,7 +3298,7 @@ test("New task's agent opens alone, no plan beside it, and the task left draws n
 test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN, plans: AGENT_PLANS },
+    { shown: true, tasks: OPEN, descriptions: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3300,7 +3321,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), descriptions: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
     },
@@ -3475,7 +3496,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN, plans: AGENT_PLANS },
+    { shown: true, tasks: OPEN, descriptions: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({
@@ -3685,7 +3706,10 @@ test("a task opened is timed from the press to its document drawn ready, and one
     {
       shown: true,
       tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID },
-      plans: { ...HELD_PLANS, [OTHER_TASK_ID]: { rows: { task: { ...TASK, id: OTHER_TASK_ID } } } },
+      descriptions: {
+        ...HELD_DESCRIPTIONS,
+        [OTHER_TASK_ID]: { rows: { task: { ...TASK, id: OTHER_TASK_ID } } },
+      },
     },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(opens) },
   );
@@ -3714,7 +3738,7 @@ test("a task opened is timed from the press to its document drawn ready, and one
       {
         name: PANEL_SPAN.TASK_OPEN,
         waited: 650,
-        attributes: { [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: TASK.document.body.length },
+        attributes: { [PANEL_SPAN_ATTRIBUTE.DESCRIPTION_CHARS]: TASK.document.body.length },
       },
     ],
   );

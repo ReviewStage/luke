@@ -231,7 +231,9 @@ test("a plan's routes refuse through the committed table, the dispatcher and the
   };
 
   assert.deepEqual(
-    await bytes(await dispatched(new Request(`${ORIGIN}/api/plans/${plan}/revisions`), routes)),
+    await bytes(
+      await dispatched(new Request(`${ORIGIN}/api/plans/${plan}/description/revisions`), routes),
+    ),
     unsigned,
   );
   assert.deepEqual(
@@ -250,7 +252,7 @@ test("a plan's routes refuse through the committed table, the dispatcher and the
   assert.deepEqual(
     await bytes(
       await dispatched(
-        new Request(`${ORIGIN}/api/plans/${plan}/revisions`, {
+        new Request(`${ORIGIN}/api/plans/${plan}/description/revisions`, {
           method: HTTP_METHOD.POST,
           headers: { authorization: "Bearer t" },
         }),

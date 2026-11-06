@@ -52,7 +52,7 @@ export function pressMutation<Kind extends PortActKind>(kind: Kind) {
 }
 
 /** A setting as a writer generic in its field sends it: a field and a value of that field. */
-interface SettingWrite<Field extends AppSettingField = AppSettingField> {
+export interface SettingWrite<Field extends AppSettingField = AppSettingField> {
   readonly field: Field;
   readonly value: AppSettingValue<Field>;
 }

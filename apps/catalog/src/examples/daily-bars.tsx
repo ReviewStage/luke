@@ -33,14 +33,14 @@ const CALLS = DAYS.map((day, index) => ({
 
 const STACKED_CHART = {
   agents: { label: "Agents started", color: "var(--ui-color-chart-1)" },
-  plans: { label: "Description revisions", color: "var(--ui-color-chart-2)" },
+  descriptions: { label: "Description revisions", color: "var(--ui-color-chart-2)" },
   calls: { label: "Calls held", color: "var(--ui-color-chart-3)" },
 } satisfies ChartConfig;
 
 const STACKED = DAYS.map((day, index) => ({
   day,
   agents: (index * 3) % 7,
-  plans: (index * 5) % 9,
+  descriptions: (index * 5) % 9,
   calls: (index * 2) % 5,
 }));
 

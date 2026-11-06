@@ -206,6 +206,8 @@ function layStanding(): void {
 
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
+/** Whether the page stands over no workspace, so nothing it reads is laid. */
+let unlisted = false;
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
 /** Every change asked, as the act carried it. */
@@ -335,6 +337,7 @@ beforeEach(() => {
   standing = [DIGEST, SWEEP, FAILING];
   listRefusals = 0;
   listHeld = false;
+  unlisted = false;
   heldChanges = undefined;
   changes = [];
   creates = [];
@@ -559,6 +562,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
 /** The Automations page, standing in the task's place over the workspace listed. */
 function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   holdChoices();
+  unlisted = tasks.workspace === undefined;
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -571,6 +575,17 @@ function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  // Note that the list and the runs the host lays reach their queries a tick after they land, so the page is read once neither still stands out, bar one the test holds or a page over no workspace reads; a list held out holds the runs out too, since the page's skeleton reads them until the list lands.
+  if (listHeld || unlisted) return;
+  await vi.waitFor(() => {
+    const text = document.body.textContent ?? "";
+    assert.equal(
+      text.includes("Reading your automations") ||
+        text.includes("Reading the automation") ||
+        (!runsHeld && (text.includes("Reading the runs") || text.includes("Reading its runs"))),
+      false,
+    );
   });
 }
 
@@ -641,7 +656,7 @@ test("an automation turned off reads Off where its next run would, and a failed 
 
   const off = rowOf(page, "Nightly flaky-test sweep");
   assert.equal(off.querySelector(".automation-row-when")?.textContent, "Off");
-  assert.equal(off.querySelector(".failed-mark"), null);
+  assert.equal(off.querySelector(".failed-mark") === null, true);
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
 });
 
@@ -657,7 +672,7 @@ test("an automation an event fires says nothing where a next run would be, and a
   await settle();
 
   const row = rowOf(page, "Check each deploy");
-  assert.equal(row.querySelector(".automation-row-when"), null);
+  assert.equal(row.querySelector(".automation-row-when") === null, true);
   assert.doesNotMatch(row.textContent ?? "", /Not scheduled/u);
   assert.ok(row.querySelector(".failed-mark"));
 });
@@ -669,7 +684,11 @@ test("an automation's row leads with its clock tile, wearing its newest run's st
 
   const row = rowOf(page, "Dependency bumps");
   assert.ok(row.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
-  assert.equal(row.querySelector(".automation-row-glyph"), null, "no trigger glyph on a tile");
+  assert.equal(
+    row.querySelector(".automation-row-glyph") === null,
+    true,
+    "no trigger glyph on a tile",
+  );
   restOn(row.querySelector<HTMLElement>("button") ?? assert.fail("no press"));
   const card = document.querySelector('.ui-tooltip-card [data-actor-card="automation"]');
   assert.match(card?.textContent ?? "", /Dependency bumps/u);
@@ -687,8 +706,13 @@ test("a switch turns its automation off, and the row takes the service's answer 
   await settle();
 
   assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { enabled: false } }]);
+  await vi.waitFor(() =>
+    assert.equal(
+      rowOf(page, "Nightly flaky-test sweep").querySelector(".automation-row-when")?.textContent,
+      "Off",
+    ),
+  );
   const row = rowOf(page, "Nightly flaky-test sweep");
-  assert.equal(row.querySelector(".automation-row-when")?.textContent, "Off");
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
@@ -709,11 +733,13 @@ test("what changed elsewhere is drawn as the host lays it, and a switch reads no
   layStanding();
   await settle();
 
-  assert.deepEqual(rows(page), [
-    ["Nightly flaky-test sweep", "Acme"],
-    ["Dependency bumps, weekly", "Acme"],
-    ["Morning digest", "Only you"],
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(page), [
+      ["Nightly flaky-test sweep", "Acme"],
+      ["Dependency bumps, weekly", "Acme"],
+      ["Morning digest", "Only you"],
+    ]),
+  );
 });
 
 test("a switch the service refuses stays where it was and says who may move it", async () => {
@@ -750,7 +776,7 @@ test("a list that could not be read says so, and Retry reads it again", async ()
   await settle();
 
   assert.deepEqual(listed(), [WORKSPACE.id, WORKSPACE.id]);
-  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
+  await vi.waitFor(() => assert.deepEqual(rows(page), [["Morning digest", "Only you"]]));
 });
 
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
@@ -889,6 +915,7 @@ let moveTo: (workspace: Workspace) => void = () => undefined;
  */
 function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): HTMLElement {
   holdChoices();
+  unlisted = false;
   places = [start];
   shellAsk = undefined;
   function Pages() {
@@ -1279,7 +1306,9 @@ test("an edit says it is unsaved and saves only what moved", async () => {
       },
     },
   ]);
-  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+  await vi.waitFor(() =>
+    assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved"),
+  );
 });
 
 test("a save the service refuses keeps the draft and says why under the name", async () => {
@@ -1310,7 +1339,7 @@ test("a switch the service refuses in the editor toasts, as the list's does, and
   act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
   await settle();
 
-  assert.equal(page.querySelector("[role='alert']"), null);
+  assert.equal(page.querySelector("[role='alert']") === null, true);
   assert.match(
     document.body.textContent ?? "",
     /Only its creator, or the workspace's owners and admins, can change it\./u,
@@ -1464,7 +1493,7 @@ test("the Owner row stands in a shared workspace, and not in the account's perso
 
   const personal = mountPages({ kind: AUTOMATIONS_PAGE.NEW }, PERSONAL);
   await settle();
-  assert.equal(personal.querySelector("button[aria-label^='Owner: ']"), null);
+  assert.equal(personal.querySelector("button[aria-label^='Owner: ']") === null, true);
 });
 
 /** The groups of the editor's form, by their titles, top to bottom. */
@@ -1480,8 +1509,8 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
 
   assert.equal(formGroups(page)[0], "Sharing");
   assert.equal(picked(page, "Owner"), "Acme");
-  assert.equal(page.querySelector(".automation-editor .automation-owner"), null);
-  assert.equal(page.querySelector("h1 .automation-owner"), null);
+  assert.equal(page.querySelector(".automation-editor .automation-owner") === null, true);
+  assert.equal(page.querySelector("h1 .automation-owner") === null, true);
 });
 
 test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
@@ -1557,7 +1586,7 @@ test("a new agent's Integrations row claims nothing while the owner's connection
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
   assert.ok(reading.includes("Reading your connected integrations…"), "the row says it is reading");
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected integration/u);
-  assert.equal(serversChip(page), undefined, "no chip claims None while the read is out");
+  assert.equal(serversChip(page) === undefined, true, "no chip claims None while the read is out");
 });
 
 test("a new agent's Integrations row says a refused read of the owner's connections, and Retry reads them", async () => {
@@ -1566,13 +1595,19 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  const alert = page.querySelector("[role=alert]");
-  assert.match(alert?.textContent ?? "", /Your connected integrations could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(
+      page.querySelector("[role=alert]")?.textContent ?? "",
+      /Your connected integrations could not be read\./u,
+    ),
+  );
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
 
   act(() => button("Retry").click());
   await settle();
-  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
+  await vi.waitFor(() =>
+    assert.match(page.textContent ?? "", /Every connected integration is on\./u),
+  );
   assert.equal(
     (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(".ui-provider-mark")
       .length,
@@ -1595,7 +1630,7 @@ test("another member's automation says which servers its creator switched off, o
     page.textContent ?? "",
     /Its creator's connected integrations, but Sentry and Notion \(account 2\) switched off\./u,
   );
-  assert.equal(serversChip(page), undefined);
+  assert.equal(serversChip(page) === undefined, true);
 });
 
 test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {
@@ -1605,13 +1640,17 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   assert.ok(page.querySelector("aside[aria-label='Runs']"), "it stands at first");
 
   act(() => button("Hide runs").click());
-  assert.equal(page.querySelector("aside[aria-label='Runs']"), null);
+  assert.equal(page.querySelector("aside[aria-label='Runs']") === null, true);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const again = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  assert.equal(again.querySelector("aside[aria-label='Runs']"), null, "folded as it was left");
+  assert.equal(
+    again.querySelector("aside[aria-label='Runs']") === null,
+    true,
+    "folded as it was left",
+  );
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
   assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
   window.localStorage.clear();
@@ -1632,7 +1671,7 @@ test("the Runs panel slides out past the page's right edge as it is hidden, held
     assert.deepEqual(exit?.keyframes.at(-1), { transform: "translateX(100%)" });
 
     act(() => exit?.finish());
-    assert.equal(pane(), null, "it is let go once its slide has played");
+    assert.equal(pane() === null, true, "it is let go once its slide has played");
 
     act(() => button("Show runs").click());
     const arriving = pane() ?? assert.fail("it stands again");
@@ -1812,7 +1851,7 @@ test("with no workspace listed because the workspaces could not be read, the lis
   const page = mount(unread({ kind: AUTOMATIONS_PAGE.LIST }));
   await settle();
   assert.match(page.textContent ?? "", /The workspaces could not be read\./u);
-  assert.equal(page.querySelector("[role=status][aria-busy=true]"), null);
+  assert.equal(page.querySelector("[role=status][aria-busy=true]") === null, true);
   act(() => button("Retry").click());
   assert.equal(retries, 1);
 
@@ -1843,9 +1882,11 @@ test("an automation's page whose list could not be read says so with Retry, rath
   act(() => button("Retry").click());
   await settle();
 
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    SWEEP.name,
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+      SWEEP.name,
+    ),
   );
 });
 
@@ -1882,7 +1923,7 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
     "When an issue by people is opened in acme/ledger labeled bug",
   );
   assert.equal(picked(page, "Event"), "Issue opened");
-  assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
+  assert.equal(page.querySelector("button[aria-label^='Time zone: ']") === null, true);
   type(page.querySelector("textarea[aria-label='Prompt']"), "Reproduce the bug first.");
   act(() => button("Save").click());
   await settle();
@@ -2058,13 +2099,17 @@ test("Escape while writing the prompt lets go of the caret and reaches the windo
     });
 
   pressEscape({ isComposing: true });
-  assert.equal(document.activeElement, prompt, "the input method's cancel keeps the caret");
+  assert.equal(
+    document.activeElement === prompt,
+    true,
+    "the input method's cancel keeps the caret",
+  );
   pressEscape({});
   window.removeEventListener("keydown", listen);
 
   // Note that both reach the window, whose live call Escape stops first, marked taken, so neither leaves the page.
   assert.deepEqual(reached, [true, true]);
-  assert.notEqual(document.activeElement, prompt);
+  assert.equal(document.activeElement === prompt, false);
   assert.equal(prompt.value, "Triage the issues opened overnight.");
 });
 
@@ -2576,7 +2621,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
 
   assert.deepEqual(runsAsked, [SWEEP.id]);
-  assert.match(runRows(page)[0]?.textContent ?? "", /^Run now/u);
+  await vi.waitFor(() => assert.match(runRows(page)[0]?.textContent ?? "", /^Run now/u));
 });
 
 test("a Run now the service refuses says why under the name, and a new automation has no Run now", async () => {
@@ -2641,8 +2686,18 @@ test("a default model that could not be read is said as unknown, and a model can
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  assert.equal(page.querySelector(".agent-model-chip"), null, "no model is drawn as the default");
-  assert.match(page.textContent ?? "", /It runs on your default model, which could not be read\./u);
+  // Note that the default reads as failed once the preferences' failure reaches their query.
+  await vi.waitFor(() =>
+    assert.match(
+      page.textContent ?? "",
+      /It runs on your default model, which could not be read\./u,
+    ),
+  );
+  assert.equal(
+    page.querySelector(".agent-model-chip") === null,
+    true,
+    "no model is drawn as the default",
+  );
   // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
@@ -2987,7 +3042,7 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
     );
   });
   await settle();
-  assert.equal(document.activeElement, press);
+  assert.equal(document.activeElement === press, true);
 });
 
 test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link and whose Run now runs it", async () => {
@@ -3081,7 +3136,7 @@ test("a link to a run shows the Runs panel a reader folded, its run marked curre
   );
 
   assert.equal(current, "true");
-  assert.equal(folded, null, "the fold after it stands");
+  assert.equal(folded === null, true, "the fold after it stands");
   assert.ok(page.querySelector("aside[aria-label='Runs']"), "the same link opened again shows it");
   window.localStorage.clear();
 });
@@ -3177,8 +3232,8 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
     await settle();
     assert.deepEqual(screensShown(page), ["setup"]);
     assert.equal(
-      page.querySelector(".automation-runs-pane"),
-      null,
+      page.querySelector(".automation-runs-pane") === null,
+      true,
       "no Runs panel stands beside the setup, kept open or not",
     );
 
@@ -3219,16 +3274,16 @@ test("on a wide stage an automation's page under the split's line by its own wid
     await settle();
     assert.deepEqual(screensShown(page), ["setup"]);
     assert.equal(
-      page.querySelector(".automation-runs-pane"),
-      null,
+      page.querySelector(".automation-runs-pane") === null,
+      true,
       "no Runs panel stands beside it",
     );
 
     act(() => button("Runs").click());
     assert.deepEqual(screensShown(page), ["runs"]);
     assert.equal(
-      page.querySelector(".automation-runs-screen h2"),
-      null,
+      page.querySelector(".automation-runs-screen h2") === null,
+      true,
       "the screen is titled Runs already, so its runs wear no second heading",
     );
 
@@ -3291,7 +3346,7 @@ test("on a narrow stage each row says when it runs next before what fires it, un
     [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
     ["Acme"],
   );
-  assert.equal(page.querySelector(".automation-owner"), null, "no row names its owner");
+  assert.equal(page.querySelector(".automation-owner") === null, true, "no row names its owner");
   const line = (name: string) =>
     rowOf(page, name).querySelector(".ui-list-row-description")?.textContent ?? "";
   assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 AM · UTC$/u);
@@ -3477,9 +3532,9 @@ test("where the workspace has no Sentry installed, a Sentry trigger offers Insta
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
   await settle();
 
-  assert.match(page.textContent ?? "", /Sentry isn't installed/u);
-  assert.equal(page.querySelector("button[aria-label^='Event: ']"), null);
-  assert.equal(page.querySelector("input[aria-label='Projects']"), null);
+  await vi.waitFor(() => assert.match(page.textContent ?? "", /Sentry isn't installed/u));
+  assert.equal(page.querySelector("button[aria-label^='Event: ']") === null, true);
+  assert.equal(page.querySelector("input[aria-label='Projects']") === null, true);
   act(() => button("Install Sentry").click());
   await settle();
   assert.deepEqual(sentryInstalls, [WORKSPACE.id]);
@@ -3491,11 +3546,13 @@ test("a Sentry read that fails says so above a saved trigger's rows, which stay 
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
   await settle();
 
-  assert.match(page.textContent ?? "", /The workspace's Sentry could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(page.textContent ?? "", /The workspace's Sentry could not be read\./u),
+  );
   assert.ok(page.querySelector("input[aria-label='Projects']"), "the saved trigger's rows stand");
   act(() => button("Retry").click());
   await settle();
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.ok(page.querySelector("input[aria-label='Projects']"));
 });
 
@@ -3505,11 +3562,13 @@ test("Sentry stays listed but unpickable, saying why, where this deployment hold
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   act(() => picker(page, "Type").click());
-  const sentry = [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
-    (row) => row.querySelector(".ui-combobox-option-label")?.textContent === "Sentry",
-  );
-  assert.ok(sentry, "Sentry is listed");
-  assert.equal(sentry.getAttribute("aria-disabled"), "true");
+  const sentryOption = () =>
+    [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
+      (row) => row.querySelector(".ui-combobox-option-label")?.textContent === "Sentry",
+    ) ?? assert.fail("Sentry is listed");
+  // Note that Sentry is said unpickable once the workspace's integrations reach their query.
+  await vi.waitFor(() => assert.equal(sentryOption().getAttribute("aria-disabled"), "true"));
+  const sentry = sentryOption();
   assert.match(sentry.textContent ?? "", /Not set up on this deployment yet/u);
   act(() => sentry.click());
   assert.equal(picked(page, "Type"), "Schedule");
@@ -3528,7 +3587,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   pick(page, "Type", "Sentry");
   await settle();
 
-  assert.match(page.textContent ?? "", /Sentry isn't available/u);
+  await vi.waitFor(() => assert.match(page.textContent ?? "", /Sentry isn't available/u));
   type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
   act(() => button("Create automation").click());
@@ -3581,7 +3640,7 @@ test("on a phone an automation's page is headed by the way back to the list, its
     ["Automations", "Automation actions"],
   );
   // The page's header names it, and the head picks the name up once that scrolls away, so it is the one h1.
-  assert.equal(head.querySelector("h1"), null);
+  assert.equal(head.querySelector("h1") === null, true);
   assert.equal(
     page.querySelector<HTMLInputElement>("h1 input[aria-label='Automation name']")?.value,
     SWEEP.name,
@@ -3613,15 +3672,19 @@ test("a model catalog that could not be read says so in the model menu, and Retr
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
-  act(() => button("Choose a model").click());
+  // Note that the picker stands once the failed reads reach their queries.
+  const choose = await vi.waitFor(() => button("Choose a model"));
+  act(() => choose.click());
   await settle();
 
   const menu = page.querySelector(".ui-searchable-menu") ?? assert.fail("the model menu opens");
-  assert.equal(
-    menu.querySelector("[role=alert]")?.textContent,
-    "The models could not be read.Retry",
+  await vi.waitFor(() =>
+    assert.equal(
+      menu.querySelector("[role=alert]")?.textContent,
+      "The models could not be read.Retry",
+    ),
   );
-  assert.equal(menu.querySelector("[role=status]"), null, "it does not read for ever");
+  assert.equal(menu.querySelector("[role=status]") === null, true, "it does not read for ever");
 
   catalogRefused = false;
   const readsBefore = catalogReads;
@@ -3631,7 +3694,7 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   await settle();
 
   assert.equal(catalogReads, readsBefore + 1, "Retry reads the catalog again");
-  assert.equal(menu.querySelector("[role=alert]"), null);
+  await vi.waitFor(() => assert.equal(menu.querySelector("[role=alert]") === null, true));
   assert.ok(menu.querySelectorAll("[role=option]").length > 0, "the models are listed");
 });
 
@@ -3645,9 +3708,8 @@ test("workspace agents the task list failed to carry say so in the Agent row, an
   assert.match(page.textContent ?? "", /The workspace's agents could not be read\./u);
 
   act(() => button("Retry").click());
-  await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.equal(picked(page, "Agent"), "Started by its first run");
 });
 

@@ -42,7 +42,7 @@ const startedIn = (
     createAgent(userId, {
       taskId: null,
       organizationId,
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Bump the client in both",
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",

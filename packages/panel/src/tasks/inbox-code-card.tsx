@@ -19,7 +19,7 @@ import {
   codeReadOf,
   codeWindow,
 } from "./inbox-model.js";
-import { taskFileQueryOptions } from "./repository-reads.js";
+import { ReadRefused, taskFileQueryOptions } from "./repository-reads.js";
 import type { FileReadPlace } from "./use-side-panel.js";
 
 /**
@@ -55,7 +55,12 @@ function codeReadFrom(
 ): CodeRead {
   if (place === undefined) return codeReadOf(block, UNREAD_FILE);
   if (file.isPending || file.isFetching) return { kind: CODE_READ.READING };
-  if (file.isError) return CODE_READ_FAILED;
+  // Note that a refusal says why where the service said it, and a read that never arrived is failed.
+  if (file.isError) {
+    return file.error instanceof ReadRefused
+      ? codeReadOf(block, file.error.answer)
+      : CODE_READ_FAILED;
+  }
   return codeReadOf(block, file.data);
 }
 

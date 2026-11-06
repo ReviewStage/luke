@@ -1,13 +1,13 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
 import { agentKeyLink } from "@repo/settings/settings-views";
+import { useQuery } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
+import { providerKeysQuery } from "./live-reads.js";
 import { useOpenSettings } from "./open-settings.js";
-import { useHostRead } from "./use-host-read.js";
 
 /**
  * openai-key.tsx -- whether the signed-in account has an OpenAI API key saved, which its calls and dictation run on, as every surface offering them reads it.
@@ -58,7 +58,7 @@ export function OpenAiKeyProvider({
   account: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const { rows } = useHostRead(LIVE_READ.PROVIDER_KEYS, account);
+  const { data: rows } = useQuery(providerKeysQuery(account));
   const key = useMemo(() => (rows === undefined ? OPENAI_KEY.UNKNOWN : keyOf(rows.keys)), [rows]);
   return <OpenAiKeyContext.Provider value={key}>{children}</OpenAiKeyContext.Provider>;
 }

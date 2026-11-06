@@ -45,9 +45,9 @@ import { integrationInstallation } from "../schemas/integration-installation.js"
 import { macCommand } from "../schemas/mac-command.js";
 import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { planComment, planCommentThread } from "../schemas/plan-comment.js";
-import { planPageVersion } from "../schemas/plan-page.js";
-import { planRevision } from "../schemas/plan-revision.js";
+import { descriptionComment, descriptionCommentThread } from "../schemas/description-comment.js";
+import { taskPageVersion } from "../schemas/task-page.js";
+import { descriptionRevision } from "../schemas/description-revision.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
@@ -377,8 +377,8 @@ const deviceAgentRequestSync = defineSyncTable(deviceAgentRequest, {
 });
 
 /** A comment thread on a task's plan, on the task's topic. */
-export const planCommentThreadSync = defineSyncTable(planCommentThread, {
-  topics: [{ kind: TOPIC.TASK, column: planCommentThread.taskId }],
+export const descriptionCommentThreadSync = defineSyncTable(descriptionCommentThread, {
+  topics: [{ kind: TOPIC.TASK, column: descriptionCommentThread.taskId }],
 });
 
 /**
@@ -386,8 +386,8 @@ export const planCommentThreadSync = defineSyncTable(planCommentThread, {
  * entry's write moves its thread's revision in the same transaction, so the
  * two notify one topic under one txid, which Postgres sends once.
  */
-export const planCommentSync = defineSyncTable(planComment, {
-  topics: [{ kind: TOPIC.TASK, column: planComment.taskId }],
+export const descriptionCommentSync = defineSyncTable(descriptionComment, {
+  topics: [{ kind: TOPIC.TASK, column: descriptionComment.taskId }],
 });
 
 /**
@@ -506,9 +506,9 @@ export const automationRunSync = defineSyncTable(automationRun, {
  * same save moves `at` and `changes` beside it, which the history reads, so
  * a save still notifies.
  */
-export const planRevisionSync = defineSyncTable(planRevision, {
-  topics: [{ kind: TOPIC.TASK, column: planRevision.taskId }],
-  ignore: [planRevision.document],
+export const descriptionRevisionSync = defineSyncTable(descriptionRevision, {
+  topics: [{ kind: TOPIC.TASK, column: descriptionRevision.taskId }],
+  ignore: [descriptionRevision.document],
 });
 
 /**
@@ -516,10 +516,10 @@ export const planRevisionSync = defineSyncTable(planRevision, {
  * on no task, its agent's. A version is written once and never changed, so
  * no column of it is hot.
  */
-export const planPageVersionSync = defineSyncTable(planPageVersion, {
+export const taskPageVersionSync = defineSyncTable(taskPageVersion, {
   topics: [
-    { kind: TOPIC.TASK, column: planPageVersion.taskId },
-    { kind: TOPIC.AGENT, column: planPageVersion.agentId },
+    { kind: TOPIC.TASK, column: taskPageVersion.taskId },
+    { kind: TOPIC.AGENT, column: taskPageVersion.agentId },
   ],
 });
 
@@ -672,7 +672,7 @@ export const turnsSync = defineSyncTable(turns, {
       ],
     },
   ],
-  ignore: [turns.planNotesTaken],
+  ignore: [turns.descriptionNotesTaken],
   log: LOG.EVERY,
 });
 
@@ -721,16 +721,16 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentQueueSync,
   deviceAgentLineSync,
   deviceAgentRequestSync,
-  planCommentThreadSync,
-  planCommentSync,
+  descriptionCommentThreadSync,
+  descriptionCommentSync,
   inboxItemSync,
   inboxMessageSync,
   inboxItemReadSync,
   attachmentSync,
   automationSync,
   automationRunSync,
-  planRevisionSync,
-  planPageVersionSync,
+  descriptionRevisionSync,
+  taskPageVersionSync,
   agentBrowserTabSync,
   pullRequestChaptersSync,
   memorySync,

@@ -1,5 +1,5 @@
 /**
- * markdown-class.ts -- the classes a note's Markdown is drawn with (`markdown.tsx`), apart from the renderer, so the plan's editor wears them without reaching the parser.
+ * markdown-class.ts -- the classes a note's Markdown is drawn with (`markdown.tsx`), apart from the renderer, so the description's editor wears them without reaching the parser.
  */
 
 import { PROSE_CLASS } from "../components/prose/prose.js";

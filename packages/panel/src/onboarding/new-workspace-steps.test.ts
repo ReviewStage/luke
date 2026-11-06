@@ -151,11 +151,14 @@ test("an invitation refused holds the first card on what was refused, and Contin
 
   await act(async () => button(container, "Create").click());
   await settle();
-  const held = container.textContent ?? "";
   const title = container.querySelector("h1")?.textContent;
+  const refused = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "dana@paperstar.app",
+  );
+  const why = document.getElementById(refused?.getAttribute("aria-describedby") ?? "")?.textContent;
   act(() => button(container, "Continue").click());
 
   assert.equal(title, "Your new workspace");
-  assert.match(held, /dana@paperstar\.app: That address is already a member\./u);
+  assert.equal(why, "That address is already a member.", "the refused address's chip says why");
   assert.equal(container.querySelector("h1")?.textContent, "Connect GitHub");
 });

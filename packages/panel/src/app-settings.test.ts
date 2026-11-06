@@ -7,7 +7,7 @@ import { UPDATE_STATUS } from "@repo/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { type SettingsDoors, useSettingsPanel } from "./app-settings.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import type { SettingsPanelProps } from "./settings/settings-panel.js";
@@ -35,7 +35,6 @@ const DOORS: SettingsDoors = {
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: () => undefined,
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: () => Promise.reject(new Error("Not in this test.")),
   onRequestMicrophone: () => undefined,
   // SAFETY: the doors under test never reach the workspace's own control.
   workspace: {} as SettingsDoors["workspace"],
@@ -76,6 +75,7 @@ async function mountRefusingInstall(sentence: string): Promise<() => SettingsPan
       ),
     ),
   );
+  await vi.waitFor(() => assert.equal(panel?.updates !== undefined, true));
   return () => panel ?? assert.fail("Settings drew nothing");
 }
 

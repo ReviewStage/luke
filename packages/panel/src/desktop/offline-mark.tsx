@@ -1,11 +1,12 @@
 import { HOST_LIVE } from "@repo/features/tasks-view";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { ANNOUNCE, BANNER_LOOK, Banner, STATUS_TONE, Tooltip, useAnnounce } from "@repo/ui";
 import { RefreshCwIcon, WifiOffIcon } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import * as Atom from "effect/reactivity/Atom";
+import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery } from "../use-app-state.js";
 
 /**
  * offline-mark.tsx -- the pill that says what the window shows may be behind: this Mac offline, the service not answering, or live updates catching up; in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar, and as a strip under a phone's header.
@@ -49,18 +50,18 @@ const LIVE_MARK_LOOK = {
 } as const satisfies Record<LiveMark, { word: string; hint: string; Icon: unknown }>;
 
 /** What the pill stands for now, or none, which redraws its readers only as it turns. */
-const liveMarkAtom: Atom.Atom<LiveMark | undefined> = Atom.make((get) => {
-  const network = get(APP_SLICE.NETWORK);
-  if (network?.online === false) return LIVE_MARK.MAC_OFFLINE;
-  const live = get(APP_SLICE.TASKS)?.live;
-  if (network?.reachable === false || live === HOST_LIVE.OFFLINE) return LIVE_MARK.SERVICE_OFFLINE;
+const selectLiveMark = (state: AppStateSnapshot): LiveMark | undefined => {
+  const { network } = state;
+  if (!network.online) return LIVE_MARK.MAC_OFFLINE;
+  const live = state.tasks.live;
+  if (!network.reachable || live === HOST_LIVE.OFFLINE) return LIVE_MARK.SERVICE_OFFLINE;
   if (live === HOST_LIVE.CATCHING_UP) return LIVE_MARK.CATCHING_UP;
   return undefined;
-});
+};
 
 /** The pill, or nothing while the Mac is online and live updates are current. */
 export function OfflineMark(): React.JSX.Element | null {
-  const mark = useAppSlice(liveMarkAtom);
+  const mark = useQuery({ ...appStateQuery, select: selectLiveMark }).data;
   useAnnounce(ANNOUNCE.POLITE, mark === undefined ? "" : LIVE_MARK_LOOK[mark].word);
   // Note that the last mark is held drawn through its fade, as anything leaving is.
   const shown = useDisclosure(mark !== undefined);
@@ -95,7 +96,7 @@ export function OfflineMark(): React.JSX.Element | null {
  * the sidebar's foot, mounted in its drawer, already announces it.
  */
 export function OfflineStrip(): React.JSX.Element | null {
-  const mark = useAppSlice(liveMarkAtom);
+  const mark = useQuery({ ...appStateQuery, select: selectLiveMark }).data;
   if (mark === undefined) return null;
   const { hint, Icon } = LIVE_MARK_LOOK[mark];
   return (

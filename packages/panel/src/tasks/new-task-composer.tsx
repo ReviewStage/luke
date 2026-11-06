@@ -11,7 +11,6 @@ import {
   type TaskMode,
 } from "@repo/features/task-wire";
 import { TERM } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@repo/settings/shortcuts";
@@ -28,10 +27,9 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { workspaceReaches } from "@repo/ui/tasks-model";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAgentDefault } from "../account-choices.js";
-import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
   DRAFT_PLACE,
@@ -45,6 +43,7 @@ import { useOpenSettings } from "../open-settings.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-composer.js";
 import { unrunnableChoice } from "./agent-model.js";
+import { repositorySkillsQueryOptions } from "./agent-reads.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import { ConnectAgentBanner } from "./connect-agent-banner.js";
 import type { MentionMenuSide } from "./mention-picker.js";
@@ -112,7 +111,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words or files, with a repository or with none, which the chip offers
- * as No repository and the agent then works in. It starts the task with an empty plan and no
+ * as No repository and the agent then works in. It starts the task with an empty description and no
  * call, Untitled until the
  * agent names it, and the agent on the words, the files, and the model
  * picked on the chip, in the one start (`use-tasks-tab.ts`), then opens the
@@ -140,7 +139,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * other servers among it, mints another, and so does the card mounted afresh.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
- * neither words nor files starts a bare task: an empty plan, no call, and
+ * neither words nor files starts a bare task: an empty description, no call, and
  * no agent, which needs no repository. While the box holds nothing,
  * the round button's hint says so, with its chord, since
  * nothing else on screen would. Escape closes a menu or a
@@ -561,7 +560,6 @@ export function NewTaskComposer({
       : unrunnableChoice(newTask.models, choice);
   const canStart = !devicesUnread && unpaid === undefined && filled;
   // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
-  const { act } = useAct();
   const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
   const slug = workspace?.slug;
   const { onShowMention } = newTask;
@@ -577,6 +575,7 @@ export function NewTaskComposer({
     [workspaceId, slug, repository, onShowMention, readMentionAgents],
   );
   // A `/` offers no skill while the Skills experiment is off.
+  const queryClient = useQueryClient();
   const skillsOn =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SKILLS) }).data === true;
   const skills = useMemo(
@@ -584,12 +583,13 @@ export function NewTaskComposer({
       workspaceId === undefined || !skillsOn
         ? undefined
         : keptSkills(() =>
-            act(
-              ACT_KIND.TASKS_SKILLS,
-              repository === null ? { workspaceId } : { workspaceId, repository },
+            queryClient.fetchQuery(
+              repositorySkillsQueryOptions(
+                repository === null ? { workspaceId } : { workspaceId, repository },
+              ),
             ),
           ),
-    [act, workspaceId, repository, skillsOn],
+    [queryClient, workspaceId, repository, skillsOn],
   );
   // A skill's chip opens its `SKILL.md` on GitHub, as on an agent's page no task holds, since no File tab stands here.
   const openSkill = (skill: SkillWithFile) => {

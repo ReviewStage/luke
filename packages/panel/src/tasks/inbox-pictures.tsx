@@ -1,25 +1,25 @@
 import type { FileChip } from "@repo/features/attachment-model";
 import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
-import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { cssCustomProperties, joinRefs, useNearView } from "@repo/ui";
-import { PICTURE_STATE } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
+import { useQueries } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
   type RefObject,
   useCallback,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { unreadShown } from "../failure-report.js";
+import { pictureUnread } from "../failure-report.js";
 import { PICTURE_BLOCK_CLASS, PictureBlock } from "../picture-block.js";
+import { type PictureReader, pictureQuery } from "../picture-query.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
-import type { TaskInboxControl } from "./use-task-inbox.js";
+import type { InboxImageReads } from "./use-task-inbox.js";
 
 /**
  * inbox-pictures.tsx -- an Inbox item's pictures where its words are drawn: each read through the host as the item's, drawn in its own block with its caption, and opened over the window by a press.
@@ -29,7 +29,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * the picture's address (`@repo/features/inbox-attachment-link`), so the
  * pane standing an item stands `InboxPictures` around its words, and every
  * transcript's words under it draw a picture of that item as the item's
- * own, as `PlanPictures` does a plan's (`plan-pictures.tsx`). A press on
+ * own, as `DescriptionPictures` does a description's (`description-pictures.tsx`). A press on
  * any of them opens one viewer over every picture of the item, in the order
  * they are drawn, which the arrow keys walk, as an agent's pictures' viewer
  * does (`agent-pictures.tsx`): a picture still read joins the walk once its
@@ -66,12 +66,10 @@ interface DrawnPicture {
   readonly anchor: RefObject<HTMLElement | null>;
 }
 
-/** What the pictures under an item's words share: the item, the reads held, how one is asked for, and the one viewer over them all. */
+/** What the pictures under an item's words share: the item, how one is read, and the one viewer over them all. */
 interface InboxPicturesDoor {
   readonly itemId: string;
-  readonly images: TaskInboxControl["images"];
-  readonly onImage: TaskInboxControl["onImage"];
-  readonly onRetryImage: TaskInboxControl["onRetryImage"];
+  readonly read: PictureReader;
   /** Counts a picture drawn among the item's, under its own key, until the returned cleanup. */
   readonly register: (key: string, picture: DrawnPicture) => () => void;
   /** Opens the viewer over the item's pictures at the one drawn under `key`. */
@@ -94,7 +92,7 @@ function viewerFile(alt: string, name: string | undefined, url: string): FileChi
 }
 
 /**
- * One of an item's pictures: drawn as a plan's picture is, at its own size
+ * One of an item's pictures: drawn as a description's picture is, at its own size
  * up to the column's width and a screenful's height, once its bytes are
  * held, its caption under it, pressed to open the item's pictures larger
  * over the window from it; a quiet box while they are read, and the same
@@ -119,14 +117,12 @@ export function InboxPicture({
   const anchor = useRef<HTMLElement | null>(null);
   const [place, { near, height }] = useNearView();
   const placed = useMemo(() => joinRefs(anchor, place), [place]);
-  const itemId = door?.itemId;
-  const onImage = door?.onImage;
   const register = door?.register;
-  const image = door?.images.get(attachmentId);
-  const held = image !== undefined;
-  useEffect(() => {
-    if (near && !held && itemId !== undefined) onImage?.(itemId, attachmentId);
-  }, [near, held, itemId, attachmentId, onImage]);
+  // Note that a picture is read as it first comes near the screen, and once read stands kept away from it.
+  const state = usePicture(
+    { ...pictureQuery(door?.itemId ?? "", attachmentId, door?.read), enabled: near },
+    pictureUnread,
+  );
   useLayoutEffect(
     () => register?.(key, { attachmentId, alt, name, anchor }),
     [register, key, attachmentId, alt, name],
@@ -143,37 +139,23 @@ export function InboxPicture({
       />
     );
   }
-  if (image === undefined || !near) {
+  if (state.kind === PICTURE_STATE.READY && near) {
     return (
       <PictureBlock
         ref={placed}
-        state={{ kind: PICTURE_STATE.READING }}
+        state={state}
         alt={alt}
         caption={caption}
-      />
-    );
-  }
-  if ("failed" in image) {
-    return (
-      <PictureBlock
-        ref={placed}
-        state={{
-          kind: PICTURE_STATE.FAILED,
-          retry: () => door.onRetryImage(attachmentId),
-          failure: unreadShown(FAILURE_SURFACE.PICTURE_READ),
-        }}
-        alt={alt}
-        caption={caption}
+        onOpen={() => door.open(key)}
       />
     );
   }
   return (
     <PictureBlock
       ref={placed}
-      state={{ kind: PICTURE_STATE.READY, url: image.url }}
+      state={near ? state : { kind: PICTURE_STATE.READING }}
       alt={alt}
       caption={caption}
-      onOpen={() => door.open(key)}
     />
   );
 }
@@ -218,22 +200,27 @@ function stillDrawn(drawn: ReadonlyMap<string, DrawnPicture>, shown: ViewedPictu
  * again draw the same picture under a new key.
  */
 function ItemViewer({
+  itemId,
   pictures,
-  images,
   shown,
   onShow,
   onClose,
 }: {
+  itemId: string;
   pictures: readonly WalkedPicture[];
-  images: TaskInboxControl["images"];
   shown: ViewedPicture;
   onShow: (picture: WalkedPicture) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
-  const held = pictures.flatMap((picture) => {
-    const image = images.get(picture.attachmentId);
-    if (image === undefined || "failed" in image) return [];
-    return [{ picture, file: viewerFile(picture.alt, picture.name, image.url) }];
+  // Note that the viewer reads nothing itself: it watches what the pictures drawn read, so one landing joins the walk.
+  const reads = useQueries({
+    queries: pictures.map((picture) => pictureQuery(itemId, picture.attachmentId)),
+    combine: (results) => results.map((result) => result.data),
+  });
+  const held = pictures.flatMap((picture, index) => {
+    const read = reads[index];
+    if (read?.kind !== PICTURE_STATE.READY) return [];
+    return [{ picture, file: viewerFile(picture.alt, picture.name, read.url) }];
   });
   const byKey = held.findIndex((each) => each.picture.key === shown.key);
   const at =
@@ -268,10 +255,10 @@ export function InboxPictures({
   children,
 }: {
   itemId: string;
-  control: Pick<TaskInboxControl, "images" | "onImage" | "onRetryImage">;
+  control: InboxImageReads;
   children: ReactNode;
 }): React.JSX.Element {
-  const { images, onImage, onRetryImage } = control;
+  const { read } = control;
   const drawn = useRef(new Map<string, DrawnPicture>());
   const [viewing, setViewing] = useState<ViewedPicture | undefined>();
   const register = useCallback((key: string, picture: DrawnPicture) => {
@@ -298,16 +285,16 @@ export function InboxPictures({
     [itemId],
   );
   const door = useMemo<InboxPicturesDoor>(
-    () => ({ itemId, images, onImage, onRetryImage, register, open }),
-    [itemId, images, onImage, onRetryImage, register, open],
+    () => ({ itemId, read, register, open }),
+    [itemId, read, register, open],
   );
   return (
     <InboxPicturesContext.Provider value={door}>
       {children}
       {viewing?.itemId === itemId ? (
         <ItemViewer
+          itemId={itemId}
           pictures={inDrawnOrder(drawn.current)}
-          images={images}
           shown={viewing}
           onShow={({ key, attachmentId }) => setViewing({ itemId, key, attachmentId })}
           onClose={() => setViewing(undefined)}

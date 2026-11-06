@@ -1,4 +1,5 @@
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -16,9 +17,10 @@ import type {
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@repo/settings/wire";
 import { BUTTON_VARIANT, Button, IconButton, STATUS_TONE } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { useSettingWrite } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { KEPT, type Kept, notKept } from "../act.js";
+import { useIsMutating } from "@tanstack/react-query";
+import { actFailureWords, KEPT, type Kept, notKept } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -157,7 +159,19 @@ function ResetPageButton({
       return result;
     });
   };
-  const { busy, run } = useSettingWrite(reset);
+  // Note that the reset is a mutation of the page's writes (`useSettingsWrites`), so the control rests while one by its key is out.
+  const busy = useIsMutating({ mutationKey: actMutation(ACT_KIND.SETTINGS_RESET).mutationKey }) > 0;
+  // Note that a reset that never answered is said as a refused one is, since the control has no row to say it under.
+  const run = (asked: SettingsResetScope) => {
+    void reset(asked).catch((error: unknown) =>
+      toast({
+        words: actFailureWords(error),
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.SETTINGS_RESET, cause: error },
+      }),
+    );
+  };
   // Note that a phone's bar holds the reset as a glyph alone, since a ⋯ over its one item would only hide it.
   if (more !== undefined) {
     return (

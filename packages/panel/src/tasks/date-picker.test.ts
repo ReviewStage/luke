@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditRequest } from "@repo/features/plan-edit";
+import type { DescriptionEditRequest } from "@repo/features/description-edit";
 import type { Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
@@ -15,21 +15,22 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 
 /**
- * A date chip in the plan's editor, pressed, opens its picker over the real
+ * A date chip in the description's editor, pressed, opens its picker over the real
  * editor bundle: a day picked, an end date, a time, typed words, or Clear
  * change the chip in place once the picker closes, and the `@` list narrowed
  * to dates opens the same picker to write a new one. A date chip in the
- * plan's words at rest opens the same picker with no editor opened, and a
- * date changed there saves the plan with it written anew, or says it could
+ * description's words at rest opens the same picker with no editor opened, and a
+ * date changed there saves the description with it written anew, or says it could
  * not where the save is refused. A date in words
- * that take no change opens nothing. Synthetic plan; day-only dates
+ * that take no change opens nothing. Synthetic description; day-only dates
  * wherever the reader's zone would otherwise change what is written.
  */
 
@@ -48,7 +49,7 @@ const TASK: Task = {
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
-/** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
+/** A registry of the test's own, as the window's root provides one, so words a description left unsaved in one test are not the next one's. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
@@ -65,8 +66,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a plan left as it went answer before its atoms go.
-  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  // Note that the saves a description left as it went answer before its atoms go.
+  await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.useRealTimers();
@@ -82,9 +83,11 @@ function drawn(): HTMLElement {
     root.render(
       onRegistry(
         ownRegistry(),
-        createElement(PlanBody, {
+        createElement(DescriptionBody, {
           task: TASK,
-          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          edit: descriptionEditMutation(TASK.id, () =>
+            Promise.reject(new Error("Nothing is saved in this test.")),
+          ),
           sectionLinks: {
             workspace: "acme",
             onOpen: () => undefined,
@@ -98,9 +101,9 @@ function drawn(): HTMLElement {
   return container;
 }
 
-/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a plan written anew. */
+/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a description written anew. */
 function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
-  const saves: PlanEditRequest[] = [];
+  const saves: DescriptionEditRequest[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -114,15 +117,15 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
           createElement(
             Fragment,
             null,
-            createElement(PlanBody, {
+            createElement(DescriptionBody, {
               task: plan,
-              onEdit: editable
-                ? (request: PlanEditRequest) => {
+              edit: editable
+                ? descriptionEditMutation(plan.id, (request: DescriptionEditRequest) => {
                     saves.push(request);
                     return saving
                       ? Promise.resolve({ saved: true as const })
                       : Promise.reject(new Error("Nothing is saved in this test."));
-                  }
+                  })
                 : undefined,
               sectionLinks: {
                 workspace: "acme",
@@ -140,28 +143,32 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
   return { container, saves, draw };
 }
 
-/** The date chip in the plan's words at rest. */
+/** The date chip in the description's words at rest. */
 function chipAtRest(container: HTMLElement): HTMLElement {
-  const chip = container.querySelector<HTMLElement>('.plan-unit [data-kind="date"]');
-  assert.ok(chip, "the plan's words hold a date chip");
+  const chip = container.querySelector<HTMLElement>('.description-unit [data-kind="date"]');
+  assert.ok(chip, "the description's words hold a date chip");
   return chip;
 }
 
-/** The plan's editor, opened on Rollout by Enter on its block. */
+/** The description's editor, opened on Rollout by Enter on its block. */
 async function opened(): Promise<{ container: HTMLElement; editor: Editor }> {
   const container = drawn();
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
   assert.ok(rollout);
   act(() => rollout.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   await act(async () => undefined);
-  const editor = container.querySelector<TiptapEditorHTMLElement>(".plan-document-text")?.editor;
-  assert.ok(editor, "the plan's editor is open");
+  const editor = container.querySelector<TiptapEditorHTMLElement>(
+    ".description-document-text",
+  )?.editor;
+  assert.ok(editor, "the description's editor is open");
   return { container, editor };
 }
 
 /** The editor's date chip. */
 function chipIn(container: HTMLElement): HTMLElement {
-  const chip = container.querySelector<HTMLElement>(".plan-document-text [data-mention-ref]");
+  const chip = container.querySelector<HTMLElement>(
+    ".description-document-text [data-mention-ref]",
+  );
   assert.ok(chip, "the text holds a chip");
   return chip;
 }
@@ -260,7 +267,7 @@ function readerOffset(at: number): string {
   return offset === "" ? "+00:00" : offset;
 }
 
-test("a date chip pressed in the plan's editor opens its picker on the date, its words and its month", async () => {
+test("a date chip pressed in the description's editor opens its picker on the date, its words and its month", async () => {
   const { container } = await opened();
 
   const dialog = await pressChip(container);
@@ -627,7 +634,7 @@ test("the picker closed with nothing changed leaves the chip as it was", async (
   ]);
 });
 
-test("a date chip in the plan's words at rest opens its picker on the date where it stands, with no editor opened", async () => {
+test("a date chip in the description's words at rest opens its picker on the date where it stands, with no editor opened", async () => {
   const { container } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -636,10 +643,10 @@ test("a date chip in the plan's words at rest opens its picker on the date where
   const dialog = picker(container);
   assert.ok(dialog, "the picker is open");
   assert.equal(fieldOf(dialog, "Start").value, "Oct 23, 2026");
-  assert.equal(container.querySelector(".plan-document-text"), null);
+  assert.equal(container.querySelector(".description-document-text"), null);
 });
 
-test("a day picked from the plan at rest saves the plan with the date named anew in its place", async () => {
+test("a day picked from the description at rest saves the description with the date named anew in its place", async () => {
   const { container, saves } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -663,7 +670,7 @@ test("a day picked from the plan at rest saves the plan with the date named anew
   ]);
 });
 
-test("a day picked from the plan at rest whose save is refused leaves the date as it was and says the plan could not be saved", async () => {
+test("a day picked from the description at rest whose save is refused leaves the date as it was and says the description could not be saved", async () => {
   const { container, saves } = drawnAtRest();
   const before = chipAtRest(container).querySelector(".ui-inline-ref-label")?.textContent;
 
@@ -686,7 +693,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
   assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
-test("a tick, a date and a tick from the plan at rest, before it is drawn anew, are each written over the one before", async () => {
+test("a tick, a date and a tick from the description at rest, before it is drawn anew, are each written over the one before", async () => {
   const body =
     "## Rollout\n\n- [ ] One\n- [ ] Two\n\nShip by [@Oct 23, 2026](mention://date/2026-10-23).";
   const { container, saves } = drawnAtRest(
@@ -731,7 +738,7 @@ test("a tick, a date and a tick from the plan at rest, before it is drawn anew, 
   );
 });
 
-test("Clear from the plan at rest saves the plan with the date taken out", async () => {
+test("Clear from the description at rest saves the description with the date taken out", async () => {
   const { container, saves } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -751,7 +758,7 @@ test("Clear from the plan at rest saves the plan with the date taken out", async
   );
 });
 
-test("the picker opened from the plan at rest and closed with nothing changed saves nothing", async () => {
+test("the picker opened from the description at rest and closed with nothing changed saves nothing", async () => {
   const { container, saves } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -811,7 +818,7 @@ test("a page handed another task while a date's picker stands writes nothing int
   assert.deepEqual(saves, []);
 });
 
-test("a date chip in a plan that takes no change opens no picker", () => {
+test("a date chip in a description that takes no change opens no picker", () => {
   const { container } = drawnAtRest(TASK, false);
 
   const chip = chipAtRest(container);

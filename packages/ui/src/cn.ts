@@ -326,9 +326,9 @@ const TASK_SURFACES = {
   text: ["section-inline", "picture-caption"],
   tracking: ["busy"],
   spacing: [
-    "plan-byline-room",
-    "plan-unit-row",
-    "plan-changed-note",
+    "description-byline-room",
+    "description-unit-row",
+    "description-changed-note",
     "content-inset",
     "bubble",
     "transcript-gutter",

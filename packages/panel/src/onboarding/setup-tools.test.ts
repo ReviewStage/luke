@@ -80,12 +80,13 @@ test("a connected account is named beside its provider, and a tool not connected
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 
-  const names = [...container.querySelectorAll('[id$="label"]')].map((label) => {
-    const beside = label.nextElementSibling;
-    const account = beside?.classList.contains("ui-account-words") ? beside.textContent : "";
-    return account ? `${label.textContent} · ${account}` : label.textContent;
-  });
-  assert.deepEqual(names, ["Linear", "Slack", "Sentry", "Notion · Acme"]);
+  const names = () =>
+    [...container.querySelectorAll('[id$="label"]')].map((label) => {
+      const beside = label.nextElementSibling;
+      const account = beside?.classList.contains("ui-account-words") ? beside.textContent : "";
+      return account ? `${label.textContent} · ${account}` : label.textContent;
+    });
+  await vi.waitFor(() => assert.deepEqual(names(), ["Linear", "Slack", "Sentry", "Notion · Acme"]));
   assert.equal(
     container
       .querySelector('[id$="label"]')

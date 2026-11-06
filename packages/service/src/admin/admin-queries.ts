@@ -722,7 +722,7 @@ export function readAdminDayHostedSource(input: {
 /**
  * Reads the whole account roster with each account's meaningful-action
  * aggregates. The actions arrive folded per account through a left join, so an
- * account that never created a task, wrote a plan, or started an agent is
+ * account that never created a task, wrote a description, or started an agent is
  * still a row — with zero active days and no last-active day — instead of
  * vanishing the way it does from every inner-joined aggregate above. Active
  * days count the window; the last-active day reads back the wider lookback,

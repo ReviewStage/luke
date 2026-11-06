@@ -12,21 +12,21 @@
  * type, size, line height, and ligatures, and whether review comments on
  * their lines stand minimized. Until the first document arrives each stands
  * at its default. A change is written through the one settings write
- * (`useAct`'s `updateSetting`), whose answer a control reads to say a
- * refusal, as a Settings row does; while it is out the setting is drawn as
- * written, so a second press before the document comes back reads the
- * first rather than undoing nothing, as the zoom keys step from the size
- * they last asked for.
+ * (`settingMutation`), a row's through a mutation of its own whose answer it
+ * reads to say a refusal, as a Settings row does (`row-write.ts`); while any
+ * is out the setting is drawn as written in every File tab, diff, and menu
+ * of the window, read from the window's mutations (`useMutationState`), so
+ * a second press before the document comes back reads the first rather than
+ * undoing nothing, as the zoom keys step from the size they last asked for.
  */
 
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@repo/settings";
-import type { AppSettingsView } from "@repo/settings/wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { settingMutation } from "../act-mutations.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import type { AppSettingsView, SettingsUpdateResult } from "@repo/settings/wire";
+import { type Mutation, useMutation, useMutationState, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { type SettingWrite, settingMutation } from "../act-mutations.js";
+import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 
 /** The settings code and diffs are drawn by, by their fields in the settings schema. */
 type FileViewField = Extract<
@@ -85,21 +85,13 @@ function settingsOf(view: AppSettingsView | undefined): FileViewSettings {
   };
 }
 
-/** Whether two readings draw code and diffs alike, each field a value. */
-function sameFileView(held: FileViewSettings, next: FileViewSettings): boolean {
-  const nextValues = new Map(Object.entries(next));
-  return Object.entries(held).every(([field, value]) => nextValues.get(field) === value);
-}
-
 /**
- * The settings as the document holds them, read once per change to the
- * settings for every File tab and diff, which tells them only when one of
+ * The settings as the document holds them for a File tab or diff, which
+ * Query's structural sharing hands back as the same object until one of
  * their own fields moves, so a write to another setting draws none of them.
  */
-const storedFileViewAtom: Atom.Atom<FileViewSettings> = Atom.withEquality(
-  Atom.map(APP_SETTINGS_VIEW, settingsOf),
-  sameFileView,
-);
+const selectStoredFileView = (state: AppStateSnapshot): FileViewSettings =>
+  settingsOf(selectAppSettingsView(state));
 
 /** The settings code and diffs are drawn by, and the door that writes one for every window, answering the write's own answer. */
 export interface FileViewSettingsControl {
@@ -107,73 +99,45 @@ export interface FileViewSettingsControl {
   readonly change: <Field extends FileViewField>(
     field: Field,
     value: AppSettingValue<Field>,
-  ) => Promise<ActionResult>;
+  ) => void;
 }
 
-/**
- * The writes still out, by field, as this window drew them: one run for
- * every File tab, diff, and menu in the window, so a press in one is drawn
- * at once in all of them and read by the next press anywhere.
- */
-let pending: Partial<FileViewSettings> = {};
-const pendingListeners = new Set<() => void>();
-/** Each field's latest write, by the number it was asked under, which alone may clear what is drawn for it. */
-const latestWrite = new Map<FileViewField, number>();
-let writesAsked = 0;
-
-/** What a control is told where a write was refused before it reached the store. */
-const REFUSED = "Could not save that setting on this system.";
-
-function subscribePending(listener: () => void): () => void {
-  pendingListeners.add(listener);
-  return () => pendingListeners.delete(listener);
+/** Whether `field` is one code and diffs are drawn by. */
+function isFileViewField(field: AppSettingField): field is FileViewField {
+  return field in DEFAULT_SETTINGS;
 }
 
-function pendingNow(): Partial<FileViewSettings> {
-  return pending;
-}
-
-/** Sets the writes still out, telling every reader. */
-function setPending(next: Partial<FileViewSettings>): void {
-  pending = next;
-  for (const listener of pendingListeners) listener();
-}
-
-/** The writes still out, without the one given. */
-function without(
-  writes: Partial<FileViewSettings>,
-  field: FileViewField,
-): Partial<FileViewSettings> {
-  const next = { ...writes };
-  delete next[field];
-  return next;
+/** `stored` with each write still out drawn as written, the latest of a field's last. */
+function withWrites(
+  stored: FileViewSettings,
+  out: readonly (SettingWrite | undefined)[],
+): FileViewSettings {
+  let settings = stored;
+  for (const write of out) {
+    if (write !== undefined && isFileViewField(write.field)) {
+      settings = { ...settings, [write.field]: write.value };
+    }
+  }
+  return settings;
 }
 
 export function useFileViewSettings(): FileViewSettingsControl {
-  const stored = useAppSlice(storedFileViewAtom);
-  const { mutateAsync: updateSetting } = useMutation(settingMutation());
-  const out = useSyncExternalStore(subscribePending, pendingNow);
-  const settings = useMemo(() => ({ ...stored, ...out }), [stored, out]);
+  const stored =
+    useQuery({ ...appStateQuery, select: selectStoredFileView }).data ?? DEFAULT_SETTINGS;
+  const { mutate } = useMutation(settingMutation());
+  // Note that every settings write still out, this hook's or a row's, is read from the window's mutations, as the Optimistic Updates guide reads another component's.
+  const out = useMutationState<
+    SettingWrite | undefined,
+    Mutation<SettingsUpdateResult, Error, SettingWrite>
+  >({
+    filters: { mutationKey: settingMutation().mutationKey, status: "pending" },
+    select: (mutation) => mutation.state.variables,
+  });
+  const settings = useMemo(() => withWrites(stored, out), [stored, out]);
   const change = useCallback(
-    <Field extends FileViewField>(field: Field, value: AppSettingValue<Field>) => {
-      writesAsked += 1;
-      const asked = writesAsked;
-      latestWrite.set(field, asked);
-      setPending({ ...pending, [field]: value });
-      // The write is drawn as written until the field's latest write is answered, then as the document holds it.
-      const settle = () => {
-        if (latestWrite.get(field) !== asked) return;
-        latestWrite.delete(field);
-        setPending(without(pending, field));
-      };
-      // Note that a refusal is answered as a rejected result, as a control reads one, rather than thrown.
-      const write: Promise<ActionResult> = updateSetting({ field, value }).then(
-        (result) => result,
-        () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED }),
-      );
-      return write.finally(settle);
-    },
-    [updateSetting],
+    <Field extends FileViewField>(field: Field, value: AppSettingValue<Field>) =>
+      mutate({ field, value }),
+    [mutate],
   );
   return { settings, change };
 }

@@ -33,7 +33,7 @@ import { Schema as EffectSchema, Option } from "effect";
  * PDF by its mark.
  *
  * A line that mentions what eve cannot read for itself, a section of the
- * plan, carries one more text part after its words: what it named, as it
+ * description, carries one more text part after its words: what it named, as it
  * stood when the line was sent, under a heading of its own
  * (`packages/service/src/agents/mentioned-context.ts`). The journal keeps it as
  * a data part after the words, so the transcript draws only the words, and

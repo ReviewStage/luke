@@ -641,7 +641,7 @@ function itemVisibleTo(userId: string): SQL {
   return sql`(${itemReachableBy(userId)} and (${inboxItem.taskId} is null or ${taskReached}))`;
 }
 
-/** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
+/** The step a link names the agent's workspace by: its slug, or its id where it has none, as a description's picture names it. */
 const AGENT_WORKSPACE_STEP = sql<string>`coalesce((select ${organization.slug} from ${organization} where ${organization.id} = ${AGENT_WORKSPACE}), ${AGENT_WORKSPACE})`;
 
 /** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts. */

@@ -3,17 +3,11 @@ import { ACT_KIND, COLORED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@rep
 import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@repo/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@repo/ui/github-html";
 import type { MarkdownComponents, MarkdownNodeProps } from "@repo/ui/markdown";
-import {
-  type ComponentProps,
-  createContext,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { type ActHandle, useAct } from "../act.js";
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import { type ComponentProps, createContext, type ReactNode, useContext, useMemo } from "react";
+import { askAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
 /**
@@ -104,18 +98,22 @@ const FENCE_OPENING = /^ {0,3}(`{3,}|~{3,})/u;
 /** The quote marks a line inside a quote opens on. */
 const QUOTE_MARKS = /^[\s>]*/u;
 
-/** How many colored blocks the window holds before forgetting the oldest. */
-const COLORINGS_HELD = 200;
-
-/** One block's coloring: main's lines once they land, and the ask that brings them. */
-interface Coloring {
-  lines: CodeLines | undefined;
-  readonly asked: Promise<CodeLines | undefined>;
+/**
+ * A block's coloring, asked of main the first time it is wanted and held for
+ * the window's life while drawn, since a block's colors never change; one let
+ * go of no longer drawn is forgotten after Query's garbage-collection time.
+ * Note that a refusal draws the block plain and is held as one, so it is not
+ * asked again.
+ */
+function coloringQueryOptions(language: string, code: string) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.CODE_COLORING, language, code],
+    queryFn: (): Promise<CodeLines | null> =>
+      askAct(ACT_KIND.TASKS_COLOR_CODE, { language, code }).catch(() => null),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
 }
-
-/** The colorings asked for, by language and then by code, oldest first. */
-const colorings = new Map<string, Map<string, Coloring>>();
-let coloringCount = 0;
 
 /**
  * The last line written inside a fenced block of a transcript's words still
@@ -126,39 +124,6 @@ let coloringCount = 0;
  * the words after the last block stream draws no block again.
  */
 const OpenFenceTail = createContext<string | undefined>(undefined);
-
-/** Forgets the oldest coloring, so a long session's window holds a bounded number. */
-function forgetOldest(): void {
-  const [language, blocks] = colorings.entries().next().value ?? [];
-  const oldest = blocks?.keys().next().value;
-  if (language === undefined || blocks === undefined || oldest === undefined) return;
-  blocks.delete(oldest);
-  if (blocks.size === 0) colorings.delete(language);
-  coloringCount -= 1;
-}
-
-/** A block's coloring, asked of main the first time it is wanted and held after. */
-function coloringOf(act: ActHandle["act"], language: string, code: string): Coloring {
-  const held = colorings.get(language)?.get(code);
-  if (held !== undefined) return held;
-  if (coloringCount >= COLORINGS_HELD) forgetOldest();
-  const coloring: Coloring = {
-    lines: undefined,
-    // Note that a refusal draws the block plain and is held as one, so it is not asked again.
-    asked: act(ACT_KIND.TASKS_COLOR_CODE, { language, code }).then(
-      (lines) => {
-        coloring.lines = lines;
-        return lines;
-      },
-      () => undefined,
-    ),
-  };
-  const blocks = colorings.get(language) ?? new Map<string, Coloring>();
-  blocks.set(code, coloring);
-  colorings.set(language, blocks);
-  coloringCount += 1;
-  return coloring;
-}
 
 /** Whether main is asked to color a block at all: a named language, and code within the bound. */
 function colorable(language: string, code: string): boolean {
@@ -208,23 +173,9 @@ function blockText(node: MarkdownNodeProps["node"]): string {
  * while the block streams, or for a block not colored at all.
  */
 function useColoredLines(language: string, code: string, whole: boolean): CodeLines | undefined {
-  const { act } = useAct();
   const asking = whole && colorable(language, code);
-  const [answered, setAnswered] = useState<{ language: string; code: string; lines: CodeLines }>();
-  useEffect(() => {
-    if (!asking) return undefined;
-    let shown = true;
-    void coloringOf(act, language, code).asked.then((lines) => {
-      if (shown && lines !== undefined) setAnswered({ language, code, lines });
-    });
-    return () => {
-      shown = false;
-    };
-  }, [act, asking, language, code]);
-  if (!asking) return undefined;
-  const held = colorings.get(language)?.get(code)?.lines;
-  if (held !== undefined) return held;
-  return answered?.language === language && answered.code === code ? answered.lines : undefined;
+  const coloring = useQuery({ ...coloringQueryOptions(language, code), enabled: asking });
+  return asking ? (coloring.data ?? undefined) : undefined;
 }
 
 /**

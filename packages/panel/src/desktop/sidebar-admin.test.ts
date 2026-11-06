@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
@@ -69,6 +69,7 @@ async function mount(admin: boolean): Promise<{ sidebar: HTMLElement; opened: nu
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  if (admin) await vi.waitFor(() => assert.equal(adminRow(container) !== undefined, true));
   return {
     sidebar: container,
     get opened() {

@@ -57,7 +57,7 @@ const codingSession = Effect.gen(function* () {
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: "acme/relay",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

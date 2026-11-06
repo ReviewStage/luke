@@ -6,6 +6,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { GitHubPictureLink, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 
@@ -46,7 +47,7 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(element));
+  await act(async () => root.render(withQueryClient(element)));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

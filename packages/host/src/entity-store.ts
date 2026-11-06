@@ -10,7 +10,7 @@
  * who left, its pending invitations with the origin their accept links are
  * built on, and its automations with their latest runs. None of them holds
  * a credential, and an automation's row holds no webhook's body or secret. Every other read the host
- * holds stays in memory, among them transcripts, the inbox, plans, pages,
+ * holds stays in memory, among them transcripts, the inbox, descriptions, pages,
  * comments, browser tabs, Mac commands, Terminal bytes, pictures, devices,
  * and every credential's standing.
  *

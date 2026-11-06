@@ -64,7 +64,7 @@ export function copyImageThroughShell(url: string): Promise<void> {
 
 /**
  * Copies from a menu: hands the words to the shell's clipboard and says what came
- * of it in a toast reading `label` ("Plan copied"), or the failure. `label` is the
+ * of it in a toast reading `label` ("Description copied"), or the failure. `label` is the
  * app's own words, never a name, so the toast shows in a screen recording.
  */
 export function useCopyToast(): (words: string, label: string) => void {

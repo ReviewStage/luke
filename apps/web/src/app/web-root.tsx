@@ -32,6 +32,7 @@ import type { DuplicateGatewayMethod, HostTag } from "@repo/host/effect";
 import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
+import { LiveReadSubscription } from "@repo/panel/live-reads";
 import { createPanelRouter } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
@@ -166,6 +167,7 @@ export async function mountWebApp(
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
           <AppStateSubscription />
+          <LiveReadSubscription />
           <WebAppearance />
           <RouterProvider router={router} />
         </QueryProvider>

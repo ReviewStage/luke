@@ -13,7 +13,7 @@ import {
   removeTaskBlock,
   type TaskBlocks,
 } from "../task-block-store.js";
-import { createTask, deleteTask, readTaskPlan, updateTask } from "../task-store.js";
+import { createTask, deleteTask, readTaskDescription, updateTask } from "../task-store.js";
 
 /**
  * One task blocking another, read and written through the store's public
@@ -66,7 +66,7 @@ it.layer(getTestDB())("one task blocking another", (it) => {
         assert.deepEqual(again, Option.some({}));
         assert.deepEqual(yield* blocksOf(dean, sidebar), { blockedBy: [schema], blocks: [] });
         assert.deepEqual(yield* blocksOf(charles, schema), { blockedBy: [], blocks: [sidebar] });
-        const opened = Option.getOrThrow(yield* readTaskPlan(charles, sidebar));
+        const opened = Option.getOrThrow(yield* readTaskDescription(charles, sidebar));
         assert.deepEqual([opened.blockedBy, opened.blocks], [[schema], []]);
       }),
   );

@@ -178,7 +178,7 @@ async function useControls(): Promise<void> {
 
 /**
  * The sheets the window adopts: one of the panel's own, which a recording
- * keeps, a plan diagram's measuring sheet, which names the diagram's
+ * keeps, a description diagram's measuring sheet, which names the diagram's
  * classes, and the open thread's, written again once adopted, which names
  * the thread.
  */
@@ -186,7 +186,7 @@ function adoptSheets(): void {
   const own = new CSSStyleSheet();
   own.replaceSync(".own-sheet-rule { margin: 0; }");
   const measuring = new CSSStyleSheet();
-  writeWithheldSheet(measuring, "#plan-diagram-1 .launch-review > * { font-size: 30px; }");
+  writeWithheldSheet(measuring, "#description-diagram-1 .launch-review > * { font-size: 30px; }");
   const thread = new CSSStyleSheet();
   writeWithheldSheet(thread, "");
   document.adoptedStyleSheets = [own, measuring, thread];

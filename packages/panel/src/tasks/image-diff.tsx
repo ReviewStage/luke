@@ -8,10 +8,11 @@ import {
   PictureStandIn,
   Slider,
 } from "@repo/ui";
-import { PICTURE_STATE, type PictureState, usePicture } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, type PictureState, usePicture } from "@repo/ui/picture-read";
 import { useCallback, useEffect, useId, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
+import { pictureQuery } from "../picture-query.js";
 
 /**
  * image-diff.tsx -- a changed image as Files changed draws it: the picture before and after, side by side, swiped, or one faded over the other, in place of "binary file".
@@ -29,7 +30,7 @@ import { pictureUnread } from "../failure-report.js";
  * (`@repo/ui`'s `PictureStandIn`), and one whose read did not land this
  * time says so with Retry, which reads it again. A side is
  * read only once its file is open and Pierre has drawn it near the view,
- * and kept for the window's life (`@repo/ui/picture-cache`), so a list of a
+ * and kept while it is looked at (`../picture-query.ts`), so a list of a
  * hundred images reads only the ones looked at; a side whose read did not
  * land is asked for again when the changes are read again. An image added has no
  * before and one deleted no after; a before whose merge base the service
@@ -86,11 +87,10 @@ function rawAddress(repository: string, sha: string, path: string): string {
 
 /** Reads a picture of the agent's repository through the service. */
 function useImageRead() {
-  const { act } = useAct();
   return useCallback(
     (agentId: string, address: string) =>
-      act(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId, src: address }),
-    [act],
+      askAct(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId, src: address }),
+    [],
   );
 }
 
@@ -137,7 +137,7 @@ function OneSide({
   label: string;
   note?: string | undefined;
 }): React.JSX.Element {
-  const state = usePicture(agentId, address, useImageRead(), pictureUnread);
+  const state = usePicture(pictureQuery(agentId, address, useImageRead()), pictureUnread);
   return (
     <div className="flex w-full flex-wrap justify-center gap-block-gap">
       <figure className="m-0 flex min-w-0 shrink grow basis-image-diff-side flex-col items-center gap-item-gap [&>figcaption]:text-caption-inline [&>figcaption]:text-muted-foreground">
@@ -204,8 +204,8 @@ function BothSides({
   onComparison: (comparison: Comparison) => void;
 }): React.JSX.Element {
   const read = useImageRead();
-  const beforeState = usePicture(agentId, before, read, pictureUnread);
-  const afterState = usePicture(agentId, after, read, pictureUnread);
+  const beforeState = usePicture(pictureQuery(agentId, before, read), pictureUnread);
+  const afterState = usePicture(pictureQuery(agentId, after, read), pictureUnread);
   const { compare, amount } = comparison;
   const ready =
     beforeState.kind === PICTURE_STATE.READY && afterState.kind === PICTURE_STATE.READY

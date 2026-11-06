@@ -68,15 +68,17 @@ test("a workspace reached on the token draws the token's card checked, its done 
     ),
   );
   await settle();
-  const checked =
-    container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
-    assert.fail("the step checks a route");
-
-  assert.equal(
-    checked.textContent?.includes("Personal access token"),
-    true,
-    checked.textContent ?? "",
-  );
+  // Note that the step checks the token's card once the repositories it reaches reach their query.
+  await vi.waitFor(() => {
+    const radio =
+      container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
+      assert.fail("the step checks a route");
+    assert.equal(
+      radio.textContent?.includes("Personal access token"),
+      true,
+      radio.textContent ?? "",
+    );
+  });
   assert.equal(
     container.textContent?.includes("1 repository on octo through your token"),
     true,

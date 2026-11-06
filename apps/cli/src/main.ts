@@ -23,7 +23,6 @@ import { Console, Effect, Exit, Layer, Stdio } from "effect";
 import { CliConfig, CliError, Command, GlobalFlag } from "effect/cli";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { COMMANDS } from "./commands/index.js";
-import { currentCommandLine } from "./commands/plan.js";
 import { VERSION } from "./commands/version.js";
 import { GLOBAL_FLAGS } from "./flags.js";
 import { CommandFailed } from "./output.js";
@@ -77,9 +76,7 @@ function ended(failure: unknown): Effect.Effect<CliExit> {
 
 NodeRuntime.runMain(
   Effect.flatMap(Stdio.Stdio, ({ args }) => args).pipe(
-    Effect.flatMap((args) =>
-      Command.runWith(vespin, { version: VERSION })(currentCommandLine(args)),
-    ),
+    Effect.flatMap(Command.runWith(vespin, { version: VERSION })),
     Effect.as<CliExit>(CLI_EXIT.OK),
     Effect.catch(ended),
     Effect.provide(services),

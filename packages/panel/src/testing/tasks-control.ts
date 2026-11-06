@@ -24,13 +24,24 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
-import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
+import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
+import {
+  AGENT_RENAME_SHAPE,
+  type AgentsControl,
+  agentArchiveMutation,
+  agentDeleteMutation,
+  agentRenameMutation,
+  MODELS_READ,
+} from "../tasks/use-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { DRAWN_KINDS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type TasksControl,
+  taskDeleteMutation,
+  taskMoveMutation,
+  taskRenameMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
@@ -258,6 +269,9 @@ const NO_REPOSITORIES = {
 
 /** A task with no agents and no repository, every press ignored. */
 export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsControl {
+  const onArchive: AgentsControl["onArchive"] =
+    overrides.onArchive ??
+    (() => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }));
   return {
     me: undefined,
     agents: [],
@@ -304,9 +318,20 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     onOpenIntegrations: ignore,
     onOpenApiKeys: ignore,
     archiving: false,
-    onRename: () => Promise.resolve(false),
-    onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
-    onDelete: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
+    rename: {
+      ...AGENT_RENAME_SHAPE,
+      options: agentRenameMutation(() =>
+        Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause: undefined }),
+      ),
+    },
+    onArchive,
+    // A question's archive is the same archive, as the test answers it.
+    archiveAgent: agentArchiveMutation(({ agentId, archived, asked }) =>
+      onArchive(agentId, archived, asked === undefined ? {} : { asked }),
+    ),
+    deleteAgent: agentDeleteMutation(() =>
+      Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause: undefined }),
+    ),
     // An agent read again stands as the control's list has it.
     readAgent: (agentId) =>
       Promise.resolve(
@@ -317,9 +342,7 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     readTranscript: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     numberedPullRequests: new Map(),
-    readChanges: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    changesPeople: new Map(),
     answerInbox: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     messageInbox: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     startInboxThread: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
@@ -363,6 +386,10 @@ export function agentHoldingsOf(
  * no task name (`agentHoldingsOf`), as main lists both from one read.
  */
 export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
+  const onMoveTask: TasksControl["onMoveTask"] =
+    overrides.onMoveTask ?? (() => Promise.resolve(false));
+  const onDeleteTask: TasksControl["onDeleteTask"] =
+    overrides.onDeleteTask ?? (() => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }));
   return {
     page: TASKS_PAGE.HOME,
     starting: undefined,
@@ -385,7 +412,11 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     newWorkspace: { open: false, onOpen: ignore, onClose: ignore },
     onOpenWorkspaceSettings: ignore,
     onOpenWorkspaceGitHub: ignore,
-    onMoveTask: () => Promise.resolve(false),
+    onMoveTask,
+    // A question's move and delete are the same move and delete, as the test answers them.
+    moveTask: taskMoveMutation(({ taskId, workspaceId, quiet }) =>
+      onMoveTask(taskId, workspaceId, { quiet }),
+    ),
     github: undefined,
     onConnectAccountGitHub: () => Promise.resolve(false),
     onDisconnectAccountGitHub: () => Promise.resolve(false),
@@ -395,7 +426,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     listRead: true,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
-    edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    descriptionEdit: (taskId) =>
+      descriptionEditMutation(taskId, () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })),
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,
@@ -573,7 +605,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     onLeaveTask: ignore,
     onGoHome: ignore,
-    onRenameTask: () => Promise.resolve(true),
+    renameTask: taskRenameMutation(() => Promise.resolve(true), undefined),
     onDraftName: ignore,
     onMarkTask: ignore,
     onSettleTasks: ignore,
@@ -586,7 +618,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     liveAgents: [],
     listedPullRequests: undefined,
     onMovePins: ignore,
-    onDeleteTask: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    onDeleteTask,
+    deleteTask: taskDeleteMutation((taskId) => onDeleteTask(taskId)),
     back: () => false,
     // No page asks before it is left, so every way out goes at once.
     leaveGuard: {

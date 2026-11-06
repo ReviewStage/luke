@@ -640,7 +640,7 @@ function PanelPage(): React.JSX.Element {
   });
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Plan or Comments", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Description or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -687,7 +687,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Plan|Comments|Inbox)/u.test(label ?? "")),
+    offered.filter((label) => /^(Description|Comments|Inbox)/u.test(label ?? "")),
     [],
     "no task's kind nor an Inbox is offered",
   );
@@ -820,7 +820,7 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
   );
 });
 
-test("an agent on a task, an archived one's page among them, opens on its plan sent by the task, whose name opens the task's plan", async () => {
+test("an agent on a task, an archived one's page among them, opens on its description sent by the task, whose name opens the task's plan", async () => {
   const task: Task = {
     id: PAGE_TASK,
     workspaceId: PAGE.workspaceId,
@@ -830,7 +830,7 @@ test("an agent on a task, an archived one's page among them, opens on its plan s
     repository: "acme/relay",
     document: { body: "", assumptions: [] },
   };
-  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.PLAN };
+  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.DESCRIPTION };
   transcript = {
     messages: [
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "# Invitations" }] },
@@ -1066,10 +1066,12 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  const more = container.querySelector<HTMLAnchorElement>(
-    "aside.side-panel .pull-request-earlier a",
+  // Note that the link stands once the conversation's read reaches its query.
+  const more = await vi.waitFor(
+    () =>
+      container.querySelector<HTMLAnchorElement>("aside.side-panel .pull-request-earlier a") ??
+      assert.fail("the tab counts the earlier comments"),
   );
-  assert.ok(more, "the tab counts the earlier comments");
   act(() => more.click());
   assert.deepEqual(openedOnGitHub, [other, url]);
 });
@@ -1414,7 +1416,7 @@ interface OpenedOrigin {
 function origin(page: HTMLElement): OpenedOrigin {
   const card =
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
-  const head = card.querySelector<HTMLElement>("[data-origin-plan] > summary");
+  const head = card.querySelector<HTMLElement>("[data-origin-description] > summary");
   act(() => head?.click());
   return { card, sender: card.querySelector<HTMLElement>(".ui-message-line-sender") };
 }
@@ -1896,18 +1898,22 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chips = [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
+  const chipsNow = () => [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
 
-  assert.deepEqual(
-    chips.map((chip) => [
-      chip.dataset.kind,
-      chip.querySelector(".ui-inline-ref-label")?.textContent,
-    ]),
-    [
-      ["file", "store.ts"],
-      ["folder", "src"],
-    ],
+  // Note that the agent's words stand once its transcript reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chipsNow().map((chip) => [
+        chip.dataset.kind,
+        chip.querySelector(".ui-inline-ref-label")?.textContent,
+      ]),
+      [
+        ["file", "store.ts"],
+        ["folder", "src"],
+      ],
+    ),
   );
+  const chips = chipsNow();
   const [fileChip, folderChip] = chips;
   assert.ok(fileChip && folderChip);
   restOn(fileChip);
@@ -1958,8 +1964,12 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chips = [...page.querySelectorAll(".agent-page [data-mention-ref]")];
-  assert.equal(chips.length, 2, "the pull request and its files are chips");
+  const chipsNow = () => [...page.querySelectorAll(".agent-page [data-mention-ref]")];
+  // Note that the agent's words stand once its transcript reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(chipsNow().length, 2, "the pull request and its files are chips"),
+  );
+  const chips = chipsNow();
 
   for (const chip of chips) {
     restOn(chip);

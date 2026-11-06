@@ -317,7 +317,9 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
   roots.push(root);
   act(() =>
     root.render(
-      held.provide(onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Probe))),
+      held.provide(
+        onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Probe)),
+      ),
     ),
   );
   return {
@@ -465,14 +467,14 @@ test("on a narrow stage a task opened from a list on its plan is one step, whose
   window.move((held) => ({
     ...held,
     inbox: { ...held.inbox, open: false },
-    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    panel: { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   }));
   assert.equal(window.addresses().length, 2, "landing on the plan is one step after the list");
 
   window.press(() => window.shown().sidePanel.onToggle());
   assert.deepEqual(
     window.at().panel,
-    { open: false, tab: SIDE_PANEL_TAB.PLAN },
+    { open: false, tab: SIDE_PANEL_TAB.DESCRIPTION },
     "Close shuts the panel",
   );
   assert.equal(window.at().inbox.open, false, "and leaves the task standing");
@@ -841,7 +843,7 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
 test("on a narrow stage another thing a link opens in the side panel standing over the plan is a step of its own, which Back shows again", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
-  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.DESCRIPTION));
   assert.equal(window.addresses().length, 3, "the plan, the page's tab, then the plan's tab");
 
   act(() => window.history().onBack());
@@ -857,7 +859,7 @@ test("on a narrow stage a task's way out steps back past its own panes to the pa
   window.move((held) => ({
     ...held,
     inbox: { ...held.inbox, open: false },
-    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    panel: { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   }));
   // The task's own panes, each a step of its own: the agents' column, then a page's tab.
   window.press(() => window.shown().sidePanel.onToggle());
@@ -877,7 +879,7 @@ test("on a narrow stage a task's way out steps back past its own panes to the pa
 
 test("on a narrow stage a task with no page behind it, as one a link opened, names none for its way out", () => {
   const window = mount(SHELL_ROOM.NARROW, { ...ON_TASK, panel: { open: true, tab: PAGE_TAB } });
-  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.DESCRIPTION));
   assert.equal(window.history().canGoBack, true, "Back has the task's own pane behind it");
   assert.equal(window.history().away, undefined, "but the way out has no page to go back to");
 });

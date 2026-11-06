@@ -2,7 +2,7 @@
  * landed.ts -- "you landed here": the one mark a place wears once the view brought the eye to it.
  *
  * A search result's row, a review thread a link named, a message brought
- * into view, a unit of the plan as it settles, a diff's lines a chapter
+ * into view, a unit of the description as it settles, a diff's lines a chapter
  * points at: each wears `data-landed`, and `landed.css` lights it once. A
  * wash stands over it for `--ui-confirm-delay`, then fades over
  * `--ui-duration-shape`. Reduced motion zeroes the fade alone, so the wash

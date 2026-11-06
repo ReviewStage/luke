@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
-import { listPages, writePage } from "@repo/database/models/plan-pages";
+import { listPages, writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
@@ -42,8 +42,13 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
   Effect.map(
     createAgent(userId, {
       ...("taskId" in place
-        ? { taskId: place.taskId, planSnapshot: null, prompt: null }
-        : { taskId: null, organizationId: place.organizationId, planSnapshot: null, prompt: "Go" }),
+        ? { taskId: place.taskId, descriptionSnapshot: null, prompt: null }
+        : {
+            taskId: null,
+            organizationId: place.organizationId,
+            descriptionSnapshot: null,
+            prompt: "Go",
+          }),
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",

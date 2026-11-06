@@ -14,21 +14,19 @@ import { isVideoType, type KeptPicture } from "@repo/features/conversation-pictu
 import { formatBytes } from "@repo/features/number-format";
 import { ACT_KIND } from "@repo/host/acts";
 import { isVideoDataUrl, PICTURE_SET_SHOWN, PictureSet, PictureSetTile } from "@repo/ui";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@repo/ui/picture-cache";
 import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useReducer,
-  useState,
-} from "react";
-import { useAct } from "../act.js";
+  PICTURE_STATE,
+  type PictureState,
+  pictureStateOf,
+  usePicture,
+} from "@repo/ui/picture-read";
+import { useQueries } from "@tanstack/react-query";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
-import { useAddToPlan } from "./add-to-plan.js";
+import { type PictureReader, pictureQuery } from "../picture-query.js";
+import { useAddToDescription } from "./add-to-description.js";
 import {
   AttachedFileChips,
   type MessageFileChip,
@@ -39,9 +37,9 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 /**
  * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, the pictures an integration's call answered, under the call's row, and an image a line handed it, over the line.
  *
- * Each picture is read once through the window's picture cache
- * (`@repo/ui/picture-cache`), under the agent, or under the worker whose
- * transcript names it, and drawn as a plan's picture is
+ * Each picture is read once through the window's pictures
+ * (`../picture-query.ts`), under the agent, or under the worker whose
+ * transcript names it, and drawn as a description's picture is
  * (`../picture-block.tsx`): its own block while one, a quiet box while its
  * bytes are read, its words where it is gone. Several, whether the agent
  * showed them or an integration's call answered them under the call's row,
@@ -51,7 +49,7 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * the rest read all the same for the viewer; a picture the call answered
  * that was not kept says so, with its size, since the model saw it all the
  * same, and a gone tile opens nothing. A press on any other opens the window's file viewer
- * walking the set, or the call's pictures, from it, with Add to plan
+ * walking the set, or the call's pictures, from it, with Add to description
  * beside Download where the transcript is drawn on a plan's page. A WebM
  * the agent recorded, shown as a picture or answered by its browser's
  * `stop_recording`, plays where it stands instead, its own block above the
@@ -65,10 +63,10 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * it is.
  */
 
-/** Where an agent's or a worker's pictures are read through: the scope the cache keeps them under, and the read. */
+/** Where an agent's or a worker's pictures are read through: the scope the window keeps them under, and the read. */
 export interface AgentPictureDoor {
   readonly owner: string;
-  readonly read: (owner: string, id: string) => Promise<PictureAnswer>;
+  readonly read: PictureReader;
 }
 
 const AgentPicturesContext = createContext<AgentPictureDoor | undefined>(undefined);
@@ -82,15 +80,14 @@ export const AgentPicturesProvider = AgentPicturesContext.Provider;
  * the service reads them from its own transcript.
  */
 export function useAgentPictureDoor(agentId: string, callId?: string): AgentPictureDoor {
-  const { act } = useAct();
   const read = useCallback(
     (_owner: string, pictureId: string) =>
-      act(ACT_KIND.AGENTS_PICTURE, {
+      askAct(ACT_KIND.AGENTS_PICTURE, {
         agentId,
         pictureId,
         ...(callId === undefined ? undefined : { callId }),
       }),
-    [act, agentId, callId],
+    [agentId, callId],
   );
   return useMemo(() => ({ owner: callId ?? agentId, read }), [agentId, callId, read]);
 }
@@ -107,11 +104,35 @@ interface HeldFile {
   readonly id: string;
 }
 
-/** The pictures among `items` the window holds now, as the viewer takes files, each beside the place it stands at. */
-function heldFiles(owner: string, items: readonly ViewedPicture[]): readonly HeldFile[] {
-  return items.flatMap(({ picture, words }) => {
-    const state = pictureNow(owner, picture.id);
-    if (state.kind !== PICTURE_STATE.READY) return [];
+/**
+ * Where each picture `ids` names stands, read through `door` and watched, so
+ * what draws them is drawn again as each read lands; one no id names, or
+ * any with no door, is read by nothing and stands as reading.
+ */
+function usePictureStates(
+  door: AgentPictureDoor | undefined,
+  ids: readonly (string | undefined)[],
+): readonly PictureState[] {
+  return useQueries({
+    queries: ids.map((id) =>
+      pictureQuery(
+        door?.owner ?? "",
+        id ?? "",
+        door === undefined || id === undefined ? undefined : door.read,
+      ),
+    ),
+    combine: (results) => results.map((result) => pictureStateOf(result.data)),
+  });
+}
+
+/** The pictures among `items` that landed, each standing as `states` says at its place, as the viewer takes files, each beside the place it stands at. */
+function heldFiles(
+  items: readonly ViewedPicture[],
+  states: readonly PictureState[],
+): readonly HeldFile[] {
+  return items.flatMap(({ picture, words }, index) => {
+    const state = states[index];
+    if (state?.kind !== PICTURE_STATE.READY) return [];
     const file = { name: viewerName(words, picture), mediaType: picture.mediaType, url: state.url };
     return [{ file, id: picture.id }];
   });
@@ -127,21 +148,6 @@ interface ViewedPicture {
 interface PictureViewer {
   readonly open: (items: readonly ViewedPicture[], id: string) => void;
   readonly viewer: ReactNode;
-}
-
-/** One picture read through the door, watched so what draws it is drawn again as its read lands. */
-function PictureWatch({
-  door,
-  id,
-  onSettled,
-}: {
-  door: AgentPictureDoor;
-  id: string;
-  onSettled: () => void;
-}): null {
-  const state = usePicture(door.owner, id, door.read, pictureUnread);
-  useEffect(() => onSettled(), [state.kind, onSettled]);
-  return null;
 }
 
 /**
@@ -164,33 +170,29 @@ function OpenViewer({
   onClose: () => void;
   action: ViewerAction | undefined;
 }): ReactNode {
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
-  const files = heldFiles(door.owner, items);
+  const states = usePictureStates(
+    door,
+    items.map((each) => each.picture.id),
+  );
+  const files = heldFiles(items, states);
   const at = files.findIndex((each) => each.id === id);
-  return (
-    <>
-      {items.map((each) => (
-        <PictureWatch key={each.picture.id} door={door} id={each.picture.id} onSettled={redraw} />
-      ))}
-      {at < 0 ? null : (
-        <AttachmentViewer
-          files={files.map((each) => each.file)}
-          at={at}
-          onAt={(next) => {
-            const shown = files[next];
-            if (shown !== undefined) onId(shown.id);
-          }}
-          onClose={onClose}
-          action={action}
-        />
-      )}
-    </>
+  return at < 0 ? null : (
+    <AttachmentViewer
+      files={files.map((each) => each.file)}
+      at={at}
+      onAt={(next) => {
+        const shown = files[next];
+        if (shown !== undefined) onId(shown.id);
+      }}
+      onClose={onClose}
+      action={action}
+    />
   );
 }
 
 /** The viewer over a set's pictures, from the one named, until it is closed. */
 function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
-  const addToPlan = useAddToPlan();
+  const addToDescription = useAddToDescription();
   const [viewing, setViewing] = useState<
     { readonly items: readonly ViewedPicture[]; readonly id: string } | undefined
   >();
@@ -206,7 +208,7 @@ function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
         id={viewing.id}
         onId={(id) => setViewing({ ...viewing, id })}
         onClose={() => setViewing(undefined)}
-        action={addToPlan}
+        action={addToDescription}
       />
     );
   return { open, viewer };
@@ -222,7 +224,7 @@ function ShownOne({
   shown: ShownPicture & { readonly picture: KeptPicture };
   onOpen: () => void;
 }): ReactNode {
-  const state = usePicture(door.owner, shown.picture.id, door.read, pictureUnread);
+  const state = usePicture(pictureQuery(door.owner, shown.picture.id, door.read), pictureUnread);
   // Note that a picture is described by its file's name, since its caption is drawn beside it, but a video's player is named by the caption, because "Video: flow" says nothing of what it shows.
   const video = state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url);
   return (
@@ -282,7 +284,7 @@ function KeptTile({
 }): ReactNode {
   return (
     <PictureSetTile
-      state={usePicture(door.owner, picture.id, door.read, pictureUnread)}
+      state={usePicture(pictureQuery(door.owner, picture.id, door.read), pictureUnread)}
       width={picture.width}
       height={picture.height}
       words={words}
@@ -294,7 +296,7 @@ function KeptTile({
 
 /** A picture of a set past the six drawn, read all the same, so the viewer walks the whole set. */
 function UnseenPicture({ door, picture }: { door: AgentPictureDoor; picture: KeptPicture }): null {
-  usePicture(door.owner, picture.id, door.read, pictureUnread, false);
+  usePicture(pictureQuery(door.owner, picture.id, door.read), pictureUnread);
   return null;
 }
 
@@ -503,54 +505,36 @@ export interface LineAttachment {
  * A line's files as a message to the agent carries them again, for Edit to
  * send: each one the line holds inline, and each one kept as a picture whose
  * bytes the window has read, by its place on the line; and whether a
- * picture is still being read, which joins them once it lands
- * (`LinePicturesWatch`). One that is gone is left out.
+ * picture is still being read, which joins them once it lands. One that
+ * is gone is left out.
  */
 export function useLineAttachments(message: AgentTranscriptMessage): {
   readonly attachments: readonly LineAttachment[];
   readonly reading: boolean;
 } {
   const door = useContext(AgentPicturesContext);
+  const files = messageFileChips(message);
+  const states = usePictureStates(
+    door,
+    files.map(({ pictureId }) => pictureId),
+  );
   let reading = false;
-  const attachments = messageFileChips(message).flatMap(
-    ({ name, url, pictureId }, index): LineAttachment[] => {
-      const state =
-        pictureId === undefined || door === undefined
-          ? undefined
-          : pictureNow(door.owner, pictureId);
-      if (
-        state !== undefined &&
-        state.kind !== PICTURE_STATE.READY &&
-        state.kind !== PICTURE_STATE.MISSING
-      ) {
-        reading = true;
-      }
-      const attachment = attachmentOfData(
-        name,
-        state?.kind === PICTURE_STATE.READY ? state.url : url,
-      );
-      return attachment === undefined ? [] : [{ key: String(index), attachment }];
-    },
-  );
+  const attachments = files.flatMap(({ name, url, pictureId }, index): LineAttachment[] => {
+    const state = pictureId === undefined || door === undefined ? undefined : states[index];
+    if (
+      state !== undefined &&
+      state.kind !== PICTURE_STATE.READY &&
+      state.kind !== PICTURE_STATE.MISSING
+    ) {
+      reading = true;
+    }
+    const attachment = attachmentOfData(
+      name,
+      state?.kind === PICTURE_STATE.READY ? state.url : url,
+    );
+    return attachment === undefined ? [] : [{ key: String(index), attachment }];
+  });
   return { attachments, reading };
-}
-
-/** Reads a line's kept pictures through the agent's door, and says so each time one settles; draws nothing. */
-export function LinePicturesWatch({
-  message,
-  onSettled,
-}: {
-  message: AgentTranscriptMessage;
-  onSettled: () => void;
-}): ReactNode {
-  const door = useContext(AgentPicturesContext);
-  if (door === undefined) return null;
-  return messageFileChips(message).map(({ pictureId }, index) =>
-    pictureId === undefined ? null : (
-      // Note that a file's place on its line is its identity: a line never reorders.
-      <PictureWatch key={index} door={door} id={pictureId} onSettled={onSettled} />
-    ),
-  );
 }
 
 /**
@@ -586,23 +570,15 @@ export function KeptFileChips({
   sending?: boolean;
 }): ReactNode {
   const door = useContext(AgentPicturesContext);
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
-  const chips = files.map(({ pictureId, ...chip }): FileChip => {
-    if (pictureId === undefined || door === undefined) return chip;
-    const state = pictureNow(door.owner, pictureId);
-    return state.kind === PICTURE_STATE.READY ? { ...chip, url: state.url } : chip;
-  });
-  return (
-    <>
-      {door === undefined
-        ? null
-        : files.map(({ pictureId }, index) =>
-            pictureId === undefined ? null : (
-              // Note that a file's place on its line is its identity: a line never reorders.
-              <PictureWatch key={index} door={door} id={pictureId} onSettled={redraw} />
-            ),
-          )}
-      <AttachedFileChips files={chips} uploading={sending} />
-    </>
+  const states = usePictureStates(
+    door,
+    files.map(({ pictureId }) => pictureId),
   );
+  const chips = files.map(({ pictureId, ...chip }, index): FileChip => {
+    const state = states[index];
+    return pictureId !== undefined && state?.kind === PICTURE_STATE.READY
+      ? { ...chip, url: state.url }
+      : chip;
+  });
+  return <AttachedFileChips files={chips} uploading={sending} />;
 }

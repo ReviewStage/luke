@@ -14,7 +14,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { pullRequestNumberLabel } from "../tasks/agent-model.js";
-import type { PlanRoom } from "../tasks/plan-body.js";
+import type { DescriptionRoom } from "../tasks/description-body.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useFittedColumns } from "./fitted-columns.js";
@@ -122,7 +122,7 @@ export function RelatedTasks({
   /** The rows drawn, in order, those folded away left out. */
   rows: readonly RelatedTaskRow[];
   /** Where the plan's head stands: the scroller the rows are drawn near the view of. */
-  room: PlanRoom;
+  room: DescriptionRoom;
   /** Opens a row's task, as the surface the list stands on opens a task. */
   onOpenTask: (taskId: string) => void;
 }): React.JSX.Element {

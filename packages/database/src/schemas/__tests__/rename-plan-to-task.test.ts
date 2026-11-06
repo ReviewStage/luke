@@ -8,8 +8,8 @@ import { createAgent, readAgent } from "../../models/agent-store.js";
 import { createTask, readTask } from "../../models/task-store.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
-  agentTablesRename,
   getTestDB,
+  laterRenames,
   migrationStatements,
   RENAME_PLAN_TO_TASK,
   replayable,
@@ -52,7 +52,7 @@ const openTask = Effect.gen(function* () {
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/api",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Sweep the flaky tests.",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
@@ -68,7 +68,7 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         const sql = yield* SqlClient.SqlClient;
         const { userId, taskId, agentId } = yield* openTask;
         const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
-        const agentTables = yield* agentTablesRename();
+        const agentTables = yield* laterRenames();
 
         // The database as it stood before the migration, with no sync capture yet, written to as an earlier build wrote it.
         for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);

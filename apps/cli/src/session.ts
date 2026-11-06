@@ -128,9 +128,14 @@ function failureWords(failed: HostedFailure): string {
   const exit = cliExitOfHostedFailure(failed);
   if (exit === CLI_EXIT.AUTH) return `Not signed in, or the sign-in lapsed. ${SIGN_IN_HINT}`;
   if (failed._tag === "HostedRefused") {
-    return failed.refusal === HOSTED_API_ERROR.UNAVAILABLE
-      ? `${PRODUCT_NAME} is unavailable right now.`
-      : `${PRODUCT_NAME} refused: ${failed.refusal}.`;
+    if (failed.refusal === HOSTED_API_ERROR.UNAVAILABLE) {
+      return `${PRODUCT_NAME} is unavailable right now.`;
+    }
+    // Note that the service answers this where a procedure this build calls was renamed, so only a newer build reaches it.
+    if (failed.refusal === HOSTED_API_ERROR.HOST_UPGRADE_NEEDED) {
+      return `This vespin is older than ${PRODUCT_NAME}: update it with vespin update, then run the command again.`;
+    }
+    return `${PRODUCT_NAME} refused: ${failed.refusal}.`;
   }
   if (failed.status !== undefined) return `${PRODUCT_NAME} failed (${failed.status}).`;
   return `Could not reach ${PRODUCT_NAME}.`;

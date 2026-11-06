@@ -3,7 +3,7 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * markdown.tsx -- a note's Markdown as the window draws a plan, a comment,
+ * markdown.tsx -- a note's Markdown as the window draws a description, a comment,
  * or a file's note: headings drawn as paragraphs a step above the words,
  * emphasis and code, a list with a nested one, task items read-only and
  * tickable, a table, a fence, a quote, and a rule, and the same words in a
@@ -37,7 +37,7 @@ const invite = await inviteMember({ email });
 
 Raw <b>HTML</b> stays as the words it is.`;
 
-/** A tick that is always saved, as a plan the developer can edit answers one. */
+/** A tick that is always saved, as a description the developer can edit answers one. */
 const saved = () => Promise.resolve(true);
 
 function MarkdownExamples(): React.JSX.Element {

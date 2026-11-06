@@ -7,17 +7,14 @@
  * says. It is taken as connected until the document is read.
  */
 
-import { networkConnected } from "@repo/host/app-state";
-import * as Atom from "effect/reactivity/Atom";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { type AppStateSnapshot, networkConnected } from "@repo/host/app-state";
+import { useQuery } from "@tanstack/react-query";
+import { appStateQuery } from "./use-app-state.js";
 
 /** Whether the window reaches the service, which redraws its readers only as it turns. */
-const connectedAtom: Atom.Atom<boolean> = Atom.make((get) => {
-  const network = get(APP_SLICE.NETWORK);
-  return network === undefined || networkConnected(network);
-});
+const selectConnected = (state: AppStateSnapshot): boolean => networkConnected(state.network);
 
 /** Whether the window reaches the service now. */
 export function useConnected(): boolean {
-  return useAppSlice(connectedAtom);
+  return useQuery({ ...appStateQuery, select: selectConnected }).data ?? true;
 }

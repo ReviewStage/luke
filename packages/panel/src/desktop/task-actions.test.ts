@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BLOCK_CHANGE,
   TASK_PRIORITY,
   TASK_RELATION_KIND,
@@ -28,12 +28,13 @@ import { OpenPersonProvider } from "../person-door.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { type TasksControl, taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, readExperiments, registryWith } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, startQueriesAfresh, withQueryClient } from "../testing/copy-feedback.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -43,7 +44,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
@@ -77,7 +78,7 @@ const SHARED_TASK: Task = {
   updatedAt: 120_000,
   ownerId: CHARLES.userId,
   createdBy: CHARLES,
-  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
+  lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
 };
 
 /** What the task actions asked of the tab, by the task each named. */
@@ -135,12 +136,12 @@ function openTab(
       asked.deleted.push(taskId);
       return deletes();
     },
-    onRenameTask: (taskId, name) => {
+    renameTask: taskRenameMutation(({ taskId, name }) => {
       asked.renamed.push([taskId, name]);
       return renames();
-    },
+    }, undefined),
     onMarkTask: (taskId, mark) => asked.marked.push([taskId, mark]),
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
   return { tasks, asked };
 }
@@ -160,7 +161,10 @@ function mountReading(element: ReactElement): HTMLElement {
 }
 
 /** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu; on `registry` where one is named. */
-function mountPlanTab(tasks: TasksControl, registry?: AtomRegistry.AtomRegistry): HTMLElement {
+function mountDescriptionTab(
+  tasks: TasksControl,
+  registry?: AtomRegistry.AtomRegistry,
+): HTMLElement {
   const page = createElement(DesktopTasks, {
     summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
@@ -257,7 +261,7 @@ async function confirmDelete(): Promise<void> {
 test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
   const { tasks, asked } = openTab();
 
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   assert.equal(asking(), false);
   choose("Permanently delete");
   const question = dialog();
@@ -317,7 +321,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the plan's path, its repository plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the description, and the plan's path, its repository plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
   const asked = (overview: boolean): TasksControl => ({
@@ -346,7 +350,7 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
       ),
     );
   draw(asked(false));
-  assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the plan first");
+  assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the description first");
 
   draw(asked(true));
   const head = () => container.querySelector(".plan-task-path");
@@ -368,7 +372,7 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
 
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   choose("Permanently delete");
   const drawn = dialog()?.parentElement;
   assert.ok(drawn);
@@ -391,8 +395,11 @@ function sharedTab(me: string): TasksControl {
 }
 
 /** `tasks` with its side panel open on the plan, whose tab's ⋯ drops the task's menu. */
-function planShown(tasks: TasksControl): TasksControl {
-  return { ...tasks, sidePanel: { ...tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN } };
+function descriptionShown(tasks: TasksControl): TasksControl {
+  return {
+    ...tasks,
+    sidePanel: { ...tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
+  };
 }
 
 /** The lines under the open menu's items, each with its time left off. */
@@ -402,7 +409,7 @@ function menuFooter(): string[] {
 }
 
 test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
-  openTaskMenu(mountPlanTab(planShown(sharedTab(DEAN.userId))));
+  openTaskMenu(mountDescriptionTab(descriptionShown(sharedTab(DEAN.userId))));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
   const faces = document.querySelectorAll('[role="menu"] .ui-menu-footer .actor-mark');
@@ -420,7 +427,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   );
   unmountAll();
 
-  openTaskMenu(mountPlanTab(planShown(sharedTab(CHARLES.userId))));
+  openTaskMenu(mountDescriptionTab(descriptionShown(sharedTab(CHARLES.userId))));
   assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
   unmountAll();
 
@@ -475,15 +482,12 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
     const { tasks, asked } = openTab();
     const task = { ...OTHER, workspaceId: workspace.id };
     const container = mountReading(
-      createElement(MemberDirectory, {
-        workspace,
-        readerId: DEAN.userId,
-        children: sidebarTask(tasks, task, asked),
-      }),
+      withPeopleRead({ workspace, readerId: DEAN.userId }, sidebarTask(tasks, task, asked)),
     );
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
+    await peopleRead();
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
     const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
@@ -523,8 +527,11 @@ test("a sidebar task Vespin or a coding agent made wears who is on it rather tha
     return worn;
   };
   const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
-  const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
-  const byApp = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
+  const byAgent = {
+    ...deans,
+    origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
+  } as const;
+  const byApp = { ...deans, origin: { actor: DESCRIPTION_ACTOR.NOTETAKER } } as const;
   assert.deepEqual(marks(byAgent), ["unassigned"]);
   assert.deepEqual(marks({ ...byApp, assignee: DEAN }), []);
   assert.deepEqual(marks({ ...byApp, assignee: CHARLES }), ["person"]);
@@ -618,7 +625,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
     agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
   const container = mount(withQueryClient(sidebarTask(tasks, working, asked)));
-  const card = mount(taskCardOf(tasks, working, working.updatedAt));
+  const card = mount(withQueryClient(taskCardOf(tasks, working, working.updatedAt)));
 
   assert.ok(
     container.querySelector('.sidebar-task-time [role="img"][aria-label="Working"]') !== null,
@@ -638,7 +645,7 @@ test("no sidebar plan's card says its repository belongs elsewhere where its own
   ];
   const named = cases.map(([task, workspaces]) => {
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [...workspaces] });
-    const card = mount(taskCardOf(tasks, task, task.updatedAt));
+    const card = mount(withQueryClient(taskCardOf(tasks, task, task.updatedAt)));
     const found = /Repository belongs to/u.test(heard(card));
     unmountAll();
     return found;
@@ -666,7 +673,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
   const tasks: TasksControl = {
     ...opened.tasks,
     workspaces: [{ ...PERSONAL, slug: "dean" }],
-    sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   };
   const link = `https://vespin.dev/dean/task/${TASK.id}`;
   const copyFromMenu = async () => {
@@ -675,7 +682,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
     await act(async () => item.click());
   };
 
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   await copyFromMenu();
   const title = document.querySelector<HTMLButtonElement>(
     '.ui-page-header-actions button[aria-label="Copy link"]',
@@ -724,7 +731,7 @@ test("a task's card says who created it where others share its workspace, the re
     ...charles,
     ownerId: DEAN.userId,
     createdBy: DEAN,
-    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+    origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
   } as const;
   assert.deepEqual(details(byAgent, PERSONAL), ["Created by Agent for you"]);
 });
@@ -760,7 +767,7 @@ test("a task's card's creator line opens the creator's page in the window, and i
   // A task an agent made for Charles still opens Charles's page, the member it names.
   const byAgent = drawn(true, {
     ...charles,
-    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+    origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
   });
   assert.equal(byAgent?.tagName, "BUTTON");
   act(() => byAgent?.click());
@@ -780,15 +787,15 @@ test("a task's card says you of the reader's own task outside a member directory
     const card = mountReading(
       members === undefined
         ? taskCardOf(tasks, mine, mine.updatedAt)
-        : createElement(MemberDirectory, {
-            workspace,
-            readerId: DEAN.userId,
-            children: taskCardOf(tasks, mine, mine.updatedAt),
-          }),
+        : withPeopleRead(
+            { workspace, readerId: DEAN.userId },
+            taskCardOf(tasks, mine, mine.updatedAt),
+          ),
     );
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
+    if (members !== undefined) await peopleRead();
     const said = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
       heard(line).replace(/ · .*$/u, ""),
     );
@@ -804,6 +811,8 @@ test("a task's card says you of the reader's own task outside a member directory
 
 /** The host holding the workspace's people as `members`, each a member of the workspace, or their read refused where there are none. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
+  // Note that each world reads its own members, never those the last one's surface left cached.
+  startQueriesAfresh();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
   });
@@ -952,7 +961,7 @@ const CHIP_ITEMS = ["Status", "Priority", "Assignee"];
 test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Status, Priority, and Assignee to the plan's chips, which a row keeps, and keeps Change repository, Choose a repository on a task with none, which a row leaves to it; another task's row prints only U, S, and P, which act on the focused row", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   assert.deepEqual(itemChords(), [
     ["Copy description", "⌥⌘C"],
     ["Version history", "⌥⇧⌘H"],
@@ -969,7 +978,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
   assert.ok(offered.includes("Change repository"), "the plan's repository is words, not a chip");
 
   unmountAll();
-  openTaskMenu(mountPlanTab(openTab().tasks));
+  openTaskMenu(mountDescriptionTab(openTab().tasks));
   assert.ok(
     menuItems().map(itemLabel).includes("Choose a repository"),
     "a task with no repository is offered the pick it still needs",
@@ -995,10 +1004,10 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
   );
 });
 
-test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version history, and neither chord answers", () => {
+test("while Descriptions is off the Plan tab's ⋯ offers no Copy description or Version history, and neither chord answers", () => {
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
 
-  openTaskMenu(mountPlanTab(tasks, registryWith({})));
+  openTaskMenu(mountDescriptionTab(tasks, registryWith({})));
   const offered = menuItems().map(itemLabel);
   assert.deepEqual(
     ["Copy description", "Version history"].filter((item) => offered.includes(item)),

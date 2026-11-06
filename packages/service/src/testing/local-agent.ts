@@ -74,7 +74,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository,
       machine: AGENT_MACHINE.DEVICE,

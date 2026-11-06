@@ -25,16 +25,11 @@ export function AppearanceSection({
   return (
     <>
       <SettingsSection>
-        <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.APPEARANCE} view={view} writes={writes} />
+        <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.APPEARANCE} view={view} />
       </SettingsSection>
       {DIFF_SETTING_GROUPS.map(({ section, title }) => (
         <SettingsSection key={section} title={title}>
-          <SchemaSettingRows
-            page={SCHEMA_SETTINGS_PAGE.APPEARANCE}
-            section={section}
-            view={view}
-            writes={writes}
-          />
+          <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.APPEARANCE} section={section} view={view} />
         </SettingsSection>
       ))}
     </>

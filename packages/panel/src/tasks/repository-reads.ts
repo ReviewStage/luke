@@ -6,17 +6,63 @@
  * (`FileReadPlace`). Each read is a `queryOptions` factory keyed by its root
  * and the ids it reads by, its `queryFn` the act, answered at once where it
  * fails and never tried again on its own, so a failed read shows as one and
- * waits for its Retry. Where the answer names its refusal, the refusal is the
- * answer, as the surface draws it.
+ * waits for its Retry. A read the service refused, or never answered, throws
+ * `ReadRefused`, so it stands as the query's error rather than as data, and
+ * only a read that landed is ever held; a surface draws the refusal from
+ * the error (`refusedAnswer`).
  */
 
 import type { PagePlace } from "@repo/features/page-wire";
-import type { TaskFileRequest } from "@repo/features/task-wire";
+import type { TaskFileRequest, taskFileRefusalSchema } from "@repo/features/task-wire";
+import {
+  TASK_CALL_FAILURE,
+  type TasksFileAnswer,
+  type TasksPageSourceAnswer,
+  type TasksTreeAnswer,
+} from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import { queryOptions, skipToken } from "@tanstack/react-query";
 import { askAct } from "../act.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import type { FileReadPlace } from "./use-side-panel.js";
+
+/** What a read the service did not carry answered: its refusal, or that it was not answered. */
+export type RefusedAnswer =
+  | typeof taskFileRefusalSchema.Type
+  | { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED };
+
+/** A read the service refused or did not answer, as its query's error, carrying the answer it gave. */
+export class ReadRefused extends Error {
+  readonly answer: RefusedAnswer;
+
+  constructor(answer: RefusedAnswer) {
+    super("The service did not carry this read.");
+    this.answer = answer;
+  }
+}
+
+/** A file's lines or text as read, a refusal or a failure thrown as `ReadRefused`. */
+function landedFile(answer: TasksFileAnswer) {
+  if ("refusal" in answer || "failure" in answer) throw new ReadRefused(answer);
+  return answer;
+}
+
+/** A folder's listing as read, a refusal or a failure thrown as `ReadRefused`. */
+function landedTree(answer: TasksTreeAnswer) {
+  if ("refusal" in answer || "failure" in answer) throw new ReadRefused(answer);
+  return answer;
+}
+
+/** A page source's lines as read, a failure thrown as `ReadRefused`. */
+function landedSource(answer: TasksPageSourceAnswer) {
+  if ("failure" in answer) throw new ReadRefused(answer);
+  return answer;
+}
+
+/** The answer a failed read stands for, as a surface draws it: the refusal its error carries, else that it was not answered. */
+export function refusedAnswer(error: unknown): RefusedAnswer {
+  return error instanceof ReadRefused ? error.answer : { failure: TASK_CALL_FAILURE.UNANSWERED };
+}
 
 /** The ids a place reads by, each an element of the key: the task, else the workspace and the repository; none for no place. */
 function placeIds(
@@ -31,8 +77,8 @@ function placeIds(
 /**
  * One window of a file's lines, or, raw, its whole text, at the ref named or
  * the default branch's head; nothing asked where no place reads it. Lines at
- * a commit never change, so they are held; the head's are read again as a
- * surface asks for them anew.
+ * a commit never change, so they are held once read; the head's are read
+ * again as a surface asks for them anew, and a refusal is never held.
  */
 export function taskFileQueryOptions(place: FileReadPlace | undefined, request: TaskFileRequest) {
   const { path, firstLine, lastLine, raw = false, ref } = request;
@@ -47,7 +93,9 @@ export function taskFileQueryOptions(place: FileReadPlace | undefined, request: 
       ref ?? null,
     ],
     queryFn:
-      place === undefined ? skipToken : () => askAct(ACT_KIND.TASKS_FILE, { ...place, ...request }),
+      place === undefined
+        ? skipToken
+        : () => askAct(ACT_KIND.TASKS_FILE, { ...place, ...request }).then(landedFile),
     staleTime: ref === undefined ? 0 : Number.POSITIVE_INFINITY,
     retry: false,
   });
@@ -61,8 +109,7 @@ export function taskTreeKey(place: FileReadPlace) {
 /**
  * One folder of the repository at its default branch, or, recursive, every
  * path under it. A listing is held once it lands, so a folder is listed once
- * however many ask; one the service refused is not, so the next ask lists it
- * again.
+ * however many ask; a refusal is never held, so the next ask lists it again.
  */
 export function taskTreeQueryOptions(
   place: FileReadPlace | undefined,
@@ -80,9 +127,8 @@ export function taskTreeQueryOptions(
               ...("taskId" in place ? { planId: place.taskId } : place),
               path,
               ...(recursive ? { recursive } : undefined),
-            }),
-    staleTime: (query) =>
-      query.state.data !== undefined && "folder" in query.state.data ? Number.POSITIVE_INFINITY : 0,
+            }).then(landedTree),
+    staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
 }
@@ -99,13 +145,14 @@ export function pageSourcesKey(place: PagePlace, pageId: string) {
 
 /**
  * One version's source, colored as HTML: a version's source never changes,
- * so it is held until Reload forgets it, and a read that failed is asked
- * again only on Retry.
+ * so it is held until Reload forgets it; a read that failed stands as one
+ * until Retry, even across the tab drawn again.
  */
 export function pageSourceQueryOptions(place: PagePlace, pageId: string, version: number) {
   return queryOptions({
     queryKey: [...pageSourcesKey(place, pageId), version],
-    queryFn: () => askAct(ACT_KIND.TASKS_PAGE_SOURCE, { ...place, pageId, version }),
+    queryFn: () =>
+      askAct(ACT_KIND.TASKS_PAGE_SOURCE, { ...place, pageId, version }).then(landedSource),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     retryOnMount: false,

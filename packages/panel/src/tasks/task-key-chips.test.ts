@@ -5,15 +5,17 @@ import { MENTION_KIND, type Mention } from "@repo/features/mention-link";
 import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { appStateQuery, selectTasks } from "../use-app-state.js";
 import { mentionLinkDrawer } from "./mention-chip.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -21,7 +23,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /**
  * task-key-chips.test.ts -- a listed task's key written among words
  * (`STAG-422`) is drawn as that task's chip, saying the key as written,
- * wherever words are drawn with chips: a transcript's, an Inbox item's, and a plan's or a comment's. A key in code or a link, a
+ * wherever words are drawn with chips: a transcript's, an Inbox item's, and a description's or a comment's. A key in code or a link, a
  * word shaped like a key that names no task, and a key two tasks share
  * stay words. Synthetic workspaces and tasks.
  */
@@ -97,19 +99,33 @@ function planPage(opened: Mention[]): TaskMentionsValue {
   };
 }
 
+/** Whether the window's document has reached the test's Query client, which every chip reads its tasks from. */
+let landed = false;
+
+/** Marks `landed` once the document's tasks reach the client. */
+function Landed(): null {
+  landed = useQuery({ ...appStateQuery, select: selectTasks }).data !== undefined;
+  return null;
+}
+
 /** `element` drawn on the plan's page over the window's document, once the document has landed. */
 async function drawn(element: ReactElement, opened: Mention[] = []): Promise<HTMLElement> {
+  landed = false;
   listTasks();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page = createElement(TaskMentions, { value: planPage(opened), children: element });
+  const page = createElement(TaskMentions, {
+    value: planPage(opened),
+    children: createElement(Fragment, null, createElement(Landed), element),
+  });
   // Note that the words are drawn before the document lands, as a window drawn before its tasks are listed draws them.
   act(() => root.render(onRegistry(AtomRegistry.make(), page)));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await vi.waitFor(() => expect(landed).toBe(true));
   return container;
 }
 
@@ -189,7 +205,7 @@ test("a key alone on its line of an Inbox item's document is its chip in the par
   );
 });
 
-test("in a plan's or a comment's words a listed task's key is its chip, and a place that draws no chips leaves it as words", async () => {
+test("in a description's or a comment's words a listed task's key is its chip, and a place that draws no chips leaves it as words", async () => {
   const doors = planPage([]).doors;
   const words = "See STAG-421, not `STAG-422` nor STAG-422/notes.";
   const chipped = await drawn(

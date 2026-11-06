@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { SETTINGS_ACT_KIND } from "@repo/host/contract";
 import {
   type AppSettingField,
@@ -17,11 +18,10 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { SchemaSettingRows } from "./schema-rows.js";
-import { type SettingsWrites, useSettingsWrites } from "./writes.js";
 
 /**
  * schema-rows.test.ts -- a schema row as the reader meets it: a toggle is a
@@ -38,19 +38,26 @@ let written: [AppSettingField, unknown][] = [];
 let answer: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** A write the store has not answered yet, for a test that reads the row while it waits. */
 let held: PromiseWithResolvers<ActionResult> | undefined;
-const writes: SettingsWrites = {
-  setting: (field, value) => {
-    written.push([field, value]);
-    return held?.promise ?? Promise.resolve(answer);
-  },
-  reset: () => Promise.reject(new Error("a row resets nothing")),
-};
 const roots: Root[] = [];
+
+/** The store as the rows' writes reach it over the act port: each write recorded and answered as the test says, beside the settings it holds. */
+function standStore(): void {
+  fakeActPort({
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: ({ field, value }) => {
+      written.push([field, value]);
+      return (held?.promise ?? Promise.resolve(answer)).then((answered) => ({
+        ...answered,
+        settings: appSettingsWire(settingsView()),
+      }));
+    },
+  });
+}
 
 beforeEach(() => {
   written = [];
   answer = { status: ACTION_RESULT_STATUS.ACCEPTED };
   held = undefined;
+  standStore();
 });
 
 afterEach(() => {
@@ -68,12 +75,8 @@ const DRAWN_SECTION = {
   [SETTINGS_PAGE.THIS_MAC]: SETTING_SECTION.STARTUP,
 } as const satisfies Record<DrawnPage, SettingSection>;
 
-/** The rows the page draws over `settings`, beside the window's toasts, drawn with `writes`. */
-function rows(
-  page: DrawnPage,
-  settings: ReturnType<typeof settingsView>,
-  rowWrites: SettingsWrites,
-) {
+/** The rows the page draws over `settings`, beside the window's toasts. */
+function rows(page: DrawnPage, settings: ReturnType<typeof settingsView>) {
   const view = {
     settings,
     accountDrawn: true,
@@ -83,8 +86,9 @@ function rows(
   return createElement(
     Fragment,
     null,
-    createElement(SchemaSettingRows, { page, section, view, writes: rowWrites }),
-    onRegistry(rendererRegistry, createElement(ToastHost)),
+    createElement(SchemaSettingRows, { page, section, view }),
+    // Note that the toasts read the window's own registry, on the one Query client the rows stand on.
+    createElement(RegistryContext.Provider, { value: rendererRegistry }, createElement(ToastHost)),
   );
 }
 
@@ -94,11 +98,11 @@ function mount(page: DrawnPage = SETTINGS_PAGE.APPEARANCE): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(withQueryClient(rows(page, settingsView(), writes))));
+  act(() => root.render(withQueryClient(rows(page, settingsView()))));
   return container;
 }
 
-/** This Mac's Startup drawn through the window's own writes, which reach the fake act port, and a way to draw it again over the settings the store then holds. */
+/** This Mac's Startup, and a way to draw it again over the settings the store then holds. */
 function mountThroughActs(): {
   page: HTMLElement;
   redraw: (settings: ReturnType<typeof settingsView>) => void;
@@ -108,7 +112,7 @@ function mountThroughActs(): {
   const root = createRoot(container);
   roots.push(root);
   function Page({ settings }: { settings: ReturnType<typeof settingsView> }) {
-    return rows(SETTINGS_PAGE.THIS_MAC, settings, useSettingsWrites());
+    return rows(SETTINGS_PAGE.THIS_MAC, settings);
   }
   const redraw = (settings: ReturnType<typeof settingsView>) =>
     act(() => root.render(withQueryClient(createElement(Page, { settings }))));
@@ -159,9 +163,8 @@ test("Zoom is a pop-up naming the stored size, described by its row, and choosin
   assert.equal(document.querySelector('[role="dialog"] input'), null);
   assert.equal(optionNamed("100%").getAttribute("aria-selected"), "true");
   act(() => optionNamed("125%").click());
-  await settle();
 
-  assert.deepEqual(written, [["zoom", 125]]);
+  await vi.waitFor(() => assert.deepEqual(written, [["zoom", 125]]));
 });
 
 test("choosing the size a pop-up already names writes nothing", async () => {
@@ -180,13 +183,15 @@ test("a switch flips at once, before the store answers, and is never rested for 
 
   act(() => control(page, "Open Vespin at login").click());
 
-  const login = control(page, "Open Vespin at login");
-  assert.equal(login.getAttribute("aria-checked"), "false");
-  assert.equal(login.disabled, false);
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false"),
+  );
+  assert.equal(control(page, "Open Vespin at login").disabled, false);
   assert.deepEqual(written, [["openAtLogin", false]]);
 
   held.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
   await settle();
+  await vi.waitFor(() => assert.equal(control(page, "Open Vespin at login").disabled, false));
   assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
   assert.equal(newestToastSays(), undefined);
 });
@@ -208,7 +213,9 @@ test("a switch follows the settings again once they agree with what it flipped t
 
   // Another window turns it back on; the switch is the store's again, not a value held here.
   redraw(settingsView({ openAtLogin: true }));
-  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "true");
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "true"),
+  );
 });
 
 test("a switch the store refuses flips back and says why in a toast, and can be pressed again", async () => {
@@ -216,9 +223,11 @@ test("a switch the store refuses flips back and says why in a toast, and can be 
   held = Promise.withResolvers<ActionResult>();
 
   act(() => control(page, "Open Vespin at login").click());
-  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false"),
+  );
   held.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED });
-  await settle();
+  await vi.waitFor(() => assert.equal(newestToastSays(), REFUSED));
 
   const login = control(page, "Open Vespin at login");
   assert.equal(login.getAttribute("aria-checked"), "true");
@@ -227,8 +236,9 @@ test("a switch the store refuses flips back and says why in a toast, and can be 
 
   held = undefined;
   act(() => login.click());
-  await settle();
-  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false"),
+  );
 });
 
 test("a switch whose write the host refuses outright flips back with the host's sentence and is never left disabled", async () => {
@@ -238,12 +248,11 @@ test("a switch whose write the host refuses outright flips back with the host's 
   });
 
   act(() => control(page, "Open Vespin at login").click());
-  await settle();
+  await vi.waitFor(() => assert.equal(newestToastSays(), REFUSED));
 
   const login = control(page, "Open Vespin at login");
   assert.equal(login.getAttribute("aria-checked"), "true");
   assert.equal(login.disabled, false);
-  assert.equal(newestToastSays(), REFUSED);
 });
 
 test("a choice the store refuses says why under its own row and marks its pop-up invalid until a choice is kept", async () => {
@@ -255,7 +264,9 @@ test("a choice the store refuses says why under its own row and marks its pop-up
   };
 
   choose("125%");
-  await settle();
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Zoom: 100%").getAttribute("aria-invalid"), "true"),
+  );
   const zoom = control(page, "Zoom: 100%");
   assert.equal(zoom.getAttribute("aria-invalid"), "true");
   assert.equal(describedAs(zoom).endsWith(REFUSED), true);
@@ -263,8 +274,9 @@ test("a choice the store refuses says why under its own row and marks its pop-up
 
   answer = { status: ACTION_RESULT_STATUS.ACCEPTED };
   choose("90%");
-  await settle();
-  assert.equal(control(page, "Zoom: 100%").getAttribute("aria-invalid"), null);
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Zoom: 100%").getAttribute("aria-invalid"), null),
+  );
   assert.deepEqual(written, [
     ["zoom", 125],
     ["zoom", 90],

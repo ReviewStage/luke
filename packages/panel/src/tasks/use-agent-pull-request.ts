@@ -1,11 +1,11 @@
 import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
 import type { AgentPullRequest, AgentPullRequestAnswer } from "@repo/features/agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { ListedPullRequest } from "@repo/features/task-wire";
-import * as Atom from "effect/reactivity/Atom";
-import { useMemo } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { pullRequestPublishedQuery } from "../live-reads.js";
+import { appStateQuery } from "../use-app-state.js";
 
 /**
  * use-agent-pull-request.ts -- what one agent published, as its tab draws it: the pull request the task list carries for it, and its branch as the host holds it while the tab shows.
@@ -17,7 +17,7 @@ import { useHostRead } from "../use-host-read.js";
  * opened mid-run without a read of its own. What the row leaves out is the
  * branch the agent pushed and its repository, which the dock's copies and
  * the branch's chip name: the host holds them while the tab shows
- * (`LIVE_READ.PULL_REQUEST_PUBLISHED`), asked again as a window comes
+ * (`pullRequestPublishedQuery`), asked again as a window comes
  * forward, as the agent's status moves, its end among it, and as the list
  * first names the pull request it opened or its line moves. A read the
  * service could not give leaves what was drawn standing; another agent's
@@ -54,7 +54,7 @@ export function useAgentPullRequest(input: {
   known?: AgentPullRequest | undefined;
 }): AgentPublished {
   const { agentId, shown, known } = input;
-  const held = useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, shown ? { agentId } : undefined).rows;
+  const held = useQuery(pullRequestPublishedQuery(shown ? { agentId } : undefined)).data;
   return useMemo(() => ({ published: publishedOf(held, known) }), [held, known]);
 }
 
@@ -91,14 +91,6 @@ export function useListedPullRequests(
   }, [listed, taskId, agentId]);
 }
 
-/** The pull request the task list holds of one agent, as its row keeps it. */
-const listedPullRequestAtom = Atom.family((agentId: string) =>
-  Atom.map(
-    APP_SLICE.TASKS,
-    (tasks) => tasks?.agentPullRequests?.find((each) => each.agentId === agentId)?.pullRequest,
-  ),
-);
-
 /**
  * The pull request one agent opened, as the service last synced it onto the
  * agent's row and the task list carries it, a hover card's whole source of
@@ -108,5 +100,10 @@ const listedPullRequestAtom = Atom.family((agentId: string) =>
  * does.
  */
 export function useListedPullRequest(agentId: string): AgentPullRequest | undefined {
-  return useAppSlice(listedPullRequestAtom(agentId));
+  const select = useCallback(
+    (state: AppStateSnapshot) =>
+      state.tasks.agentPullRequests?.find((each) => each.agentId === agentId)?.pullRequest,
+    [agentId],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
 }

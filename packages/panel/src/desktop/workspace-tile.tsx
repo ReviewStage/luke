@@ -1,7 +1,7 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { AVATAR_SHAPE, AVATAR_SIZE, Avatar } from "@repo/ui";
-import { useHostRead } from "../use-host-read.js";
+import { useQuery } from "@tanstack/react-query";
+import { workspacePhotoQuery } from "../live-reads.js";
 
 /**
  * workspace-tile.tsx -- a workspace's mark: its photo, its owner's picture on a personal one, or the first letter of its name on a square of one of six hues.
@@ -45,10 +45,7 @@ const AVATAR_OF = {
 
 /** The workspace's photo as a `data:` URL, as the host holds it at the version the list names; nothing where it has none, while it loads, or where it could not be read. */
 function useWorkspacePhoto(workspaceId: string, version: string | undefined): string | undefined {
-  const { rows } = useHostRead(
-    LIVE_READ.WORKSPACE_PHOTOS,
-    version === undefined ? undefined : workspaceId,
-  );
+  const rows = useQuery(workspacePhotoQuery(version === undefined ? undefined : workspaceId)).data;
   return rows?.version === version ? rows?.url : undefined;
 }
 

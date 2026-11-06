@@ -25,8 +25,8 @@ import {
   fakeActs,
   quietHold,
 } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handState, stateWith } from "../testing/app-state.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -346,16 +346,16 @@ describe("a pinned Changes tab's card", () => {
 
   test("is the pin's own card, naming the pull request the task list holds without asking the service, where the task is not open", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-    handState(
-      {},
-      {
-        tasks: {
-          ...IDLE_TASKS_VIEW,
-          tasks: [TASK],
-          agentPullRequests: [{ agentId: AGENT, taskId: TASK.id, pullRequest: read }],
-        },
+    const listed = {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        tasks: [TASK],
+        agentPullRequests: [{ agentId: AGENT, taskId: TASK.id, pullRequest: read }],
       },
-    );
+    };
+    handState({}, listed);
+    // Note that the test's Query client is handed the document at once, since its timers are held still.
+    writeAppState(stateWith({}, listed));
     restOn(drawPin(pin));
     await settled();
     assert.match(card()?.textContent ?? "", /Newer title/u);

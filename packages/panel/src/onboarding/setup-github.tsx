@@ -5,7 +5,6 @@ import {
   type GitHubRepository,
 } from "@repo/features/github-repositories-wire";
 import { GITHUB_TOKEN_CREATE_URL } from "@repo/features/github-token-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   ALIGN,
@@ -28,17 +27,17 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { githubTokenQuery, repositoryListsQuery } from "../live-reads.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
   AddTokenRepository,
   useTokenRepositories,
 } from "../settings/workspace-token-repositories.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 
 /**
  * setup-github.tsx -- setup's GitHub step: the App installed on the workspace's repositories, or the member's own token, chosen as two cards.
@@ -150,10 +149,10 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
   const saveToken = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
   const openLink = useOpenLink();
   const repositories = useTokenRepositories(workspaceId);
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const held = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const held = useQuery(githubTokenQuery(accountId));
   // Note that a token read that failed is taken for none, so the card offers a paste rather than waiting.
-  const token = held.status === HOST_READ_STATUS.FAILED ? null : held.rows?.token;
+  const token = held.isError ? null : held.data?.token;
   const [pasted, setPasted] = useState("");
   const saved = saveToken.data;
   const saving = saveToken.isPending;
@@ -246,7 +245,7 @@ export function GitHubSetup({
   onReached: (reached: boolean) => void;
 }): React.JSX.Element {
   const [chosen, setChosen] = useState<GitHubAccess>(GITHUB_ACCESS.APP);
-  const repositories = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId).rows?.repositories;
+  const repositories = useQuery(repositoryListsQuery(workspaceId)).data?.repositories;
   const reached = repositories?.length ?? 0;
   useEffect(() => onReached(reached > 0), [reached, onReached]);
   // Note that once a repository is reached the route is the one that reaches it, never the card last chosen, which a remount forgets.

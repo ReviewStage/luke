@@ -69,7 +69,7 @@ const openAgent = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const started = yield* createAgent(userId, {
       taskId,
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",

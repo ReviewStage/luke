@@ -126,7 +126,7 @@ function openTab(
     workspaces,
     workspace: workspaces.find((workspace) => workspace.id === task.workspaceId),
     onMoveTask,
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
 }
 
@@ -372,9 +372,9 @@ test("a plan whose repository its workspace cannot reach and another of the acco
 
 test("a stranded plan's banner stands over every tab of the plan: an agent's beside the plan, and over the side panel filling the window", () => {
   const tasks = openTab(TASK, [STUDIO, ACME]);
-  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.PLAN }));
+  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION }));
   const full = openTask(
-    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
+    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.DESCRIPTION }),
   );
 
   assert.deepEqual(

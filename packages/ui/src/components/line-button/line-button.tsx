@@ -9,7 +9,7 @@ import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/dis
  *
  * A line button is a `<button>` for a line that acts as a whole: a
  * transcript's call or subagent that opens its tab, or a comment's quote
- * that shows its words in the plan. A line summary is the same line as the
+ * that shows its words in the description. A line summary is the same line as the
  * `summary` of a fold (`Disclosure`, or an app's own skin over
  * `useDisclosureFold`), which opens and closes it, says whether it stands
  * open in `aria-expanded`, and takes Enter and Space as the platform's own
@@ -83,8 +83,7 @@ const ROW_BOX = "min-h-[28px] py-0.5 px-1 rounded-ui-6 text-muted-foreground";
  */
 const LINE_LOOK = {
   row: `${ROW_BOX} pointer-coarse:min-h-touch data-[look=row]:text-caption hover:not-active:bg-fill-strong active:bg-fill-pressed data-[brightens=true]:hover:text-foreground`,
-  quote:
-    "line-clamp-2 [line-clamp:2] wrap-anywhere hover:text-foreground active:opacity-70",
+  quote: "line-clamp-2 [line-clamp:2] wrap-anywhere hover:text-foreground active:opacity-70",
   band: "decoration-1 underline-offset-[0.24em] hover:bg-muted hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline active:bg-fill-pressed",
 } as const satisfies Record<LineButtonLook, string>;
 

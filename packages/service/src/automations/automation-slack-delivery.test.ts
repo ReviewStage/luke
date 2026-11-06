@@ -118,7 +118,7 @@ const openDeliveringRun = () =>
       yield* createAgent(member, {
         taskId: null,
         organizationId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         repository: null,
         prompt: "Digest my inbox.",
         idempotencyKey: randomUUID(),

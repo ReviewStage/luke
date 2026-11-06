@@ -8,7 +8,6 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -73,7 +72,7 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import {
   Fragment,
@@ -95,6 +94,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
+import { pagesQuery, pullRequestPublishedQuery } from "../live-reads.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { ADDRESS, type Address } from "../route.js";
 import { centerWithin } from "../scroll-within.js";
@@ -117,6 +117,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { useAgentsElsewhere } from "../tasks/agents-elsewhere.js";
+import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import { TaskChipCard } from "../tasks/chip-cards.js";
 import {
   CloudBrowserDraftPane,
@@ -154,9 +155,9 @@ import {
   TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { AgentsControl } from "../tasks/use-agents.js";
+import type { AgentsControl, HeldPeople } from "../tasks/use-agents.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
-import { usePlanComments } from "../tasks/use-plan-comments.js";
+import { useDescriptionComments } from "../tasks/use-description-comments.js";
 import {
   DRAWN_KINDS,
   type DrawnTabs,
@@ -180,7 +181,6 @@ import {
   sameHolder,
 } from "../tasks/use-side-panel.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
-import { useHostReads, usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -387,7 +387,7 @@ const NO_TERMINALS: readonly TerminalStripTab[] = [];
  * The fixed kinds each holder's panel offers: a task's every one it draws,
  * never the plan's, which the column's Overview holds, nor the Inbox's,
  * whose threads open in the window's Inbox; an agent's page none, the
- * plan's comments being a task's alone.
+ * description's comments being a task's alone.
  */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: DRAWN_KINDS,
@@ -640,6 +640,8 @@ export interface PanelCards {
   readonly shownAgent: string | undefined;
   /** Opens an agent's tab in the plan's column, as a pull request's card offers. */
   readonly onOpenAgent: (agentId: string) => void;
+  /** Who each agent's pull request names, as its Changes tab last read them. */
+  readonly people: ReadonlyMap<string, HeldPeople>;
 }
 
 /** An agent's tab card as a row of its browser hangs it, named as the row names the agent. */
@@ -723,7 +725,7 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
   return {
     id: tab,
     ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }),
-    replayMasked: tab === SIDE_PANEL_TAB.PLAN && plan !== undefined,
+    replayMasked: tab === SIDE_PANEL_TAB.DESCRIPTION && plan !== undefined,
   };
 }
 
@@ -786,7 +788,7 @@ export function panelEntries(input: {
             subject: agentSubject(cards.agents, agentId, cards.held, cards.shownAgent === agentId),
             models: cards.agents.models,
             pullRequest,
-            people: peopleOf(cards.agents.changesPeople.get(agentId), pullRequest),
+            people: peopleOf(cards.people.get(agentId), pullRequest),
             onOpenAgent: () => cards.onOpenAgent(agentId),
           });
     return {
@@ -1001,6 +1003,8 @@ function stripTabs(input: {
   pagePlace: PagePlace;
   /** Whether the Inbox kind holds one thread, as it does beside the window's Inbox, and is named Thread. */
   thread: boolean;
+  /** Who each agent's pull request names, as its Changes tab last read them. */
+  people: ReadonlyMap<string, HeldPeople>;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
   const { copied, onOpenAgent, shownAgent, agentsOf } = input;
@@ -1077,7 +1081,7 @@ function stripTabs(input: {
       people:
         pullRequest === undefined
           ? undefined
-          : peopleOf(own.changesPeople.get(tab.changes), pullRequest),
+          : peopleOf(input.people.get(tab.changes), pullRequest),
       onOpenAgent: () => onOpenAgent(tab.changes),
     });
     return {
@@ -1287,6 +1291,7 @@ function PanelTabs({
   transcriptDoors: TranscriptDoors | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const people = useChangesPeopleOf(useMemo(() => changes.map((tab) => tab.changes), [changes]));
   const kinds = stripTabs({
     panel,
     unread,
@@ -1305,6 +1310,7 @@ function PanelTabs({
     pagePlace,
     // Note that beside the window's Inbox the one Inbox tab is the chosen thread, never a task's Inbox.
     thread: holder === SIDE_PANEL_HOLDER.INBOX,
+    people,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   // Note that only a task's panel hands its looks over, since an agent's page holds its panel under the agent's id.
@@ -1779,7 +1785,7 @@ export interface TaskCards {
  * worker's, read as its tab reads its own, `chosen` telling whether that
  * tab is the one shown, whose transcript follows the run; a tab that hangs
  * none leaves the row its hint. A call's own rows name no worker, and hang
- * none for one. An agent's transcript also names the task whose plan it was
+ * none for one. An agent's transcript also names the task whose description it was
  * handed, by `task`, and every transcript names an agent a call is about by
  * its tab's tile and name, by `agent`. Every kind of target names the tab
  * it opens, so a kind added to `TOOL_TARGET` is a choice made here.
@@ -1790,7 +1796,7 @@ export function taskCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
   pages: PagePlace | undefined;
-  /** The plan's task, which an agent's plan card names as its sender. */
+  /** The description's task, which an agent's description card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
   const { agents, held, chosen, pages, task } = input;
@@ -1806,7 +1812,7 @@ export function taskCards(input: {
         return pages === undefined
           ? undefined
           : { kind: TAB_KIND.PAGE, place: pages, pageId: opened.page, name };
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         return taskId === undefined
           ? undefined
           : { kind: TAB_KIND.PLAN, taskId, name: task?.name, status: task?.status };
@@ -1870,7 +1876,7 @@ function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefi
 /** What the chosen tab shows. */
 /**
  * A page's tab, with the page's comment threads where it stands on a task,
- * held on the task and the page and written through the plan's comment
+ * held on the task and the page and written through the description's comment
  * doors naming the page, beside the open task or an Inbox item's alike; a
  * page an agent on no task showed has none.
  */
@@ -1882,7 +1888,7 @@ function TaskPagePane({
 }): React.JSX.Element {
   const taskId = "taskId" in pane.place ? pane.place.taskId : undefined;
   const pageId = pane.page.id;
-  const control = usePlanComments(
+  const control = useDescriptionComments(
     useMemo(() => (taskId === undefined ? undefined : { taskId, pageId }), [taskId, pageId]),
   );
   return <PagePane {...pane} comments={control === undefined ? undefined : { control, doors }} />;
@@ -2470,7 +2476,7 @@ export function SidePanel({
       number === undefined ? [] : [{ agentId, number }],
     ),
   );
-  useHostReads(LIVE_READ.PULL_REQUEST_PUBLISHED, numberedTabs);
+  useQueries({ queries: numberedTabs.map((key) => pullRequestPublishedQuery(key)) });
   // Whether a File or Changes tab's tree is open, for every one of them
   // alike and for the window's life, as an editor's explorer stands across
   // its tabs.
@@ -2596,15 +2602,22 @@ export function SidePanel({
       ),
     [panel.pages, panel.strip, pagePlace],
   );
-  const pagesBeside = usePlacesPages(
-    useMemo(() => placesBeside(pagesElsewhere, pagePlace), [pagesElsewhere, pagePlace]),
+  // The pages of each place the strip's other page tabs stand on, held while the strip draws them.
+  const besidePlaces = useMemo(
+    () => placesBeside(pagesElsewhere, pagePlace),
+    [pagesElsewhere, pagePlace],
   );
+  const besidePages = useQueries({
+    queries: besidePlaces.map((place) => pagesQuery(place)),
+    combine: (reads) =>
+      new Map(besidePlaces.map((place, at) => [pagePlaceId(place), reads[at]?.data])),
+  });
   const pageTabs = panel.pages.flatMap((tab): DrawnPage[] => {
     const place = tab.place ?? pagePlace;
     const listed = pageStandsOn(tab, pagePlace)
       ? taskPages
       : pagesElsewhere.includes(tab)
-        ? pagesBeside(place)
+        ? besidePages.get(pagePlaceId(place))
         : undefined;
     const line = listed?.find((each) => each.id === tab.page);
     return line === undefined ? [] : [{ tab, line, place }];
@@ -2656,6 +2669,10 @@ export function SidePanel({
   const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  const offeredChanges = panel.changes;
+  const changesPeople = useChangesPeopleOf(
+    useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
+  );
   const offers = panelOffers({
     holder,
     taskId,
@@ -2673,6 +2690,7 @@ export function SidePanel({
       pagePlace,
       shownAgent,
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+      people: changesPeople,
     },
   });
   // Note that the panel is drawn only with something in it; while shut, it stands here only for the toggle's ask, as the "+" menu hung from the toggle.

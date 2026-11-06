@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { ACT_KIND } from "@repo/host/acts";
+import type { PictureAnswer } from "@repo/ui/picture-read";
 import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import type { PictureReader } from "../picture-query.js";
 import {
   type AnyAct,
   fakeActPort,
@@ -24,7 +26,6 @@ import { InboxPictures } from "./inbox-pictures.js";
 import { LoneLinkCards } from "./lone-link-card.js";
 import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import type { InboxImage } from "./use-task-inbox.js";
 
 /**
  * transcript-document.test.ts -- words drawn as a document, as an Inbox
@@ -49,8 +50,34 @@ const LINES = `https://github.com/${REPOSITORY}/blob/${COMMIT}/apps/web/rollout-
 const PAGE = linkOf({ kind: LINK_PLACE.PAGE, planId: TASK_ID, pageId: PAGE_ID }, "acme");
 const LINEAR = "https://linear.app/acme/issue/ACME-142";
 
-/** A picture's bytes as the Inbox holds them once read. */
-const HELD: InboxImage = { url: "data:image/png;base64,iVBORw0KGgo=" };
+/** A picture's bytes as its read answers them. */
+const HELD: PictureAnswer = { contentType: "image/png", base64: "iVBORw0KGgo=" };
+
+/** A read that did not answer. */
+const UNANSWERED = new Error("The host did not answer.");
+
+/** No picture of an item is ever answered: each read waits. */
+const NO_PICTURES: PictureReader = () => new Promise(() => undefined);
+
+/**
+ * An item's pictures read as the test answers them: at once as `answers`
+ * holds them, a failure where it holds one, and held until `land` answers it
+ * where it holds none; each ask kept in `asked`.
+ */
+function pictureReader(
+  answers: ReadonlyMap<string, PictureAnswer | Error>,
+  asked: string[] = [],
+): { readonly read: PictureReader; readonly land: (attachmentId: string) => void } {
+  const held = new Map<string, (answer: PictureAnswer) => void>();
+  const read: PictureReader = (itemId, attachmentId) => {
+    asked.push(`${itemId}/${attachmentId}`);
+    const answer = answers.get(attachmentId);
+    if (answer instanceof Error) return Promise.reject(answer);
+    if (answer !== undefined) return Promise.resolve(answer);
+    return new Promise<PictureAnswer>((resolve) => held.set(attachmentId, resolve));
+  };
+  return { read, land: (attachmentId) => act(() => held.get(attachmentId)?.(HELD)) };
+}
 
 /** An item's own picture's address, under its task. */
 function pictureOf(itemId: string, attachmentId: string): string {
@@ -102,13 +129,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** What a pane hands its words: the cards' doors over the task's repository, and the item's pictures as `images` holds them, each asked for kept. */
+/** What a pane hands its words: the cards' doors over the task's repository, and the item's pictures as `pictures` reads them. */
 function inPane(
   children: ReactNode,
-  images: ReadonlyMap<string, InboxImage> = new Map(),
-  asked: string[] = [],
+  pictures: PictureReader = NO_PICTURES,
   read: { path: string; ref: string | undefined }[] = [],
-): ReactNode {
+): ReactElement {
   // A file's lines are held unread, so a code card stands as it reads them.
   fakeActPort({
     ...openingLinks((link) => told.push(link)),
@@ -126,17 +152,13 @@ function inPane(
   };
   return createElement(InboxPictures, {
     itemId: ITEM_ID,
-    control: {
-      images,
-      onImage: (itemId: string, attachmentId: string) => asked.push(`${itemId}/${attachmentId}`),
-      onRetryImage: () => undefined,
-    },
+    control: { read: pictures },
     children: createElement(LoneLinkCards, { doors, children }),
   });
 }
 
 /** The node drawn into a fresh container. */
-function drawn(node: ReactNode): HTMLElement {
+function drawn(node: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -165,7 +187,7 @@ function chipsInWords(container: HTMLElement): (string | null)[] {
 test("drawn as a document, a link alone in its paragraph is its card, a pull request's row, a page's row, or the lines at a commit as the Code tab's card, while the same link in a sentence and a lone link that earns no card stay chips", () => {
   const read: { path: string; ref: string | undefined }[] = [];
   const container = drawn(
-    inPane(createElement(TranscriptWords, { text: LINKS, asDocument: true }), new Map(), [], read),
+    inPane(createElement(TranscriptWords, { text: LINKS, asDocument: true }), NO_PICTURES, read),
   );
 
   assert.deepEqual(cards(container), [
@@ -208,29 +230,27 @@ test("a typed message drawn as a document draws its lone links as cards too", ()
   );
 });
 
-test("drawn as a document, pictures written next to each other stand side by side in one row, each with its caption, asked for as it is drawn and opened over the window by a press", () => {
+test("drawn as a document, pictures written next to each other stand side by side in one row, each with its caption, asked for as it is drawn and opened over the window by a press", async () => {
   const asked: string[] = [];
-  const reading = drawn(
-    inPane(createElement(TranscriptWords, { text: PAIR, asDocument: true }), new Map(), asked),
-  );
-  assert.deepEqual(asked, [`${ITEM_ID}/${BEFORE}`, `${ITEM_ID}/${AFTER}`]);
-  assert.equal(reading.querySelectorAll(".transcript-pictures .picture-pending").length, 2);
-
-  const held = new Map([
-    [BEFORE, HELD],
-    [AFTER, HELD],
-  ]);
+  const pictures = pictureReader(new Map(), asked);
   const container = drawn(
-    inPane(createElement(TranscriptWords, { text: PAIR, asDocument: true }), held),
+    inPane(createElement(TranscriptWords, { text: PAIR, asDocument: true }), pictures.read),
   );
-  const rows = [...container.querySelectorAll(".transcript-pictures")];
-  assert.equal(rows.length, 1, "the two pictures stand in one row");
-  assert.deepEqual(
-    [...(rows[0]?.querySelectorAll("img") ?? [])].map((image) => image.alt),
-    ["Before", "After"],
+  await vi.waitFor(() => assert.deepEqual(asked, [`${ITEM_ID}/${BEFORE}`, `${ITEM_ID}/${AFTER}`]));
+  assert.equal(container.querySelectorAll(".transcript-pictures .picture-pending").length, 2);
+
+  pictures.land(BEFORE);
+  pictures.land(AFTER);
+  const rows = () => [...container.querySelectorAll(".transcript-pictures")];
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      [...(rows()[0]?.querySelectorAll("img") ?? [])].map((image) => image.alt),
+      ["Before", "After"],
+    ),
   );
+  assert.equal(rows().length, 1, "the two pictures stand in one row");
   assert.deepEqual(
-    [...(rows[0]?.querySelectorAll(".picture-caption") ?? [])].map((said) => said.textContent),
+    [...(rows()[0]?.querySelectorAll(".picture-caption") ?? [])].map((said) => said.textContent),
     ["Before", "After"],
   );
   const press = container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
@@ -239,7 +259,7 @@ test("drawn as a document, pictures written next to each other stand side by sid
   assert.equal(document.querySelector<HTMLImageElement>(".ui-zoom-image")?.alt, "After.png");
 });
 
-test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read or drawn later joining once held and one whose read failed left out, and none of another item's", () => {
+test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read or drawn later joining once held and one whose read failed left out, and none of another item's", async () => {
   const third = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d03";
   const broken = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d04";
   let text = [
@@ -248,29 +268,38 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
     `![Broken](${pictureOf(ITEM_ID, broken)})`,
   ].join("\n\n");
   const otherText = `![Another's](${pictureOf(OTHER_ITEM_ID, BEFORE)})`;
-  const draw = (images: ReadonlyMap<string, InboxImage>) =>
+  const fourth = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d05";
+  const pictures = pictureReader(
+    new Map<string, PictureAnswer | Error>([
+      [BEFORE, HELD],
+      [AFTER, HELD],
+      [broken, UNANSWERED],
+      [fourth, HELD],
+    ]),
+  );
+  const draw = () =>
     createElement(
       "div",
       null,
-      inPane(createElement(TranscriptWords, { text, asDocument: true }), images),
+      inPane(createElement(TranscriptWords, { text, asDocument: true }), pictures.read),
       // Another item's pane in the same window, its own picture held.
       createElement(InboxPictures, {
         itemId: OTHER_ITEM_ID,
-        control: { images, onImage: () => undefined, onRetryImage: () => undefined },
+        control: { read: pictures.read },
         children: createElement(TranscriptWords, { text: otherText, asDocument: true }),
       }),
     );
-  const reading = new Map<string, InboxImage>([
-    [BEFORE, HELD],
-    [AFTER, HELD],
-    [broken, { failed: true }],
-  ]);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(withQueryClient(draw(reading))));
-  assert.equal(container.querySelectorAll('button[aria-label="Enlarge Another\'s"]').length, 1);
+  act(() => root.render(withQueryClient(draw())));
+  await vi.waitFor(() =>
+    assert.equal(container.querySelectorAll('button[aria-label="Enlarge Another\'s"]').length, 1),
+  );
+  await vi.waitFor(() =>
+    assert.equal(container.querySelector('button[aria-label="Enlarge After"]') === null, false),
+  );
 
   const press = container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
   assert.ok(press, "a picture is pressed to enlarge it");
@@ -297,8 +326,8 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   assert.deepEqual(viewer(), ["Before.png", "1 of 2"]);
 
   // The third's bytes land, and it joins the walk where it is drawn.
-  act(() => root.render(withQueryClient(draw(new Map([...reading, [third, HELD]])))));
-  assert.deepEqual(viewer(), ["Before.png", "1 of 3"]);
+  pictures.land(third);
+  await vi.waitFor(() => assert.deepEqual(viewer(), ["Before.png", "1 of 3"]));
   key("ArrowRight");
   assert.deepEqual(viewer(), ["After.png", "2 of 3"]);
   key("ArrowRight");
@@ -309,17 +338,14 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   assert.deepEqual(viewer(), ["Third.png", "3 of 3"]);
 
   // A picture drawn while the viewer stands, as a newer read of the item adds one, joins the walk.
-  const fourth = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d05";
   text = `${text}\n\n![Fourth](${pictureOf(ITEM_ID, fourth)})`;
-  act(() =>
-    root.render(withQueryClient(draw(new Map([...reading, [third, HELD], [fourth, HELD]])))),
-  );
-  assert.deepEqual(viewer(), ["Third.png", "3 of 4"]);
+  act(() => root.render(withQueryClient(draw())));
+  await vi.waitFor(() => assert.deepEqual(viewer(), ["Third.png", "3 of 4"]));
   key("ArrowRight");
   assert.deepEqual(viewer(), ["Fourth.png", "4 of 4"]);
 });
 
-test("a picture far from the screen is neither asked for nor drawn until it comes near, and going away again lets its drawing go", () => {
+test("a picture far from the screen is neither asked for nor drawn until it comes near, and going away again lets its drawing go", async () => {
   const far = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d05";
   const away = { top: 5_000, bottom: 5_200, left: 0, right: 300, width: 300, height: 200 };
   const near = { ...away, top: 100, bottom: 300 };
@@ -339,13 +365,18 @@ test("a picture far from the screen is neither asked for nor drawn until it come
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => box as DOMRect);
   const asked: string[] = [];
   const text = `![Far](${pictureOf(ITEM_ID, far)})`;
-  const draw = (images: ReadonlyMap<string, InboxImage>) =>
-    inPane(createElement(TranscriptWords, { text, asDocument: true }), images, asked);
+  const pictures = pictureReader(new Map(), asked);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(withQueryClient(draw(new Map()))));
+  act(() =>
+    root.render(
+      withQueryClient(
+        inPane(createElement(TranscriptWords, { text, asDocument: true }), pictures.read),
+      ),
+    ),
+  );
   assert.deepEqual(asked, []);
 
   const scrolled = (isIntersecting: boolean) => {
@@ -353,12 +384,12 @@ test("a picture far from the screen is neither asked for nor drawn until it come
     act(() => seen.at(-1)?.([{ isIntersecting, boundingClientRect: box as DOMRect }]));
   };
   scrolled(true);
-  assert.deepEqual(asked, [`${ITEM_ID}/${far}`]);
-  act(() => root.render(withQueryClient(draw(new Map([[far, HELD]])))));
-  assert.equal(container.querySelector("img")?.alt, "Far");
+  await vi.waitFor(() => assert.deepEqual(asked, [`${ITEM_ID}/${far}`]));
+  pictures.land(far);
+  await vi.waitFor(() => assert.equal(container.querySelector("img")?.alt, "Far"));
 
   scrolled(false);
-  assert.equal(container.querySelector("img"), null);
+  assert.equal(container.querySelector("img") === null, true);
   scrolled(true);
   assert.equal(container.querySelector("img")?.alt, "Far");
 });
@@ -367,7 +398,10 @@ test("a picture of another item stands as its link and is never asked for", () =
   const asked: string[] = [];
   const text = `![Another's](${pictureOf(OTHER_ITEM_ID, BEFORE)})`;
   const container = drawn(
-    inPane(createElement(TranscriptWords, { text, asDocument: true }), new Map(), asked),
+    inPane(
+      createElement(TranscriptWords, { text, asDocument: true }),
+      pictureReader(new Map(), asked).read,
+    ),
   );
 
   assert.deepEqual(asked, []);
@@ -378,7 +412,7 @@ test("a picture of another item stands as its link and is never asked for", () =
   );
 });
 
-test("words drawn as a transcript, as the transcript and the plan draw them, keep a lone link as its chip and their pictures in their paragraph", () => {
+test("words drawn as a transcript, as the transcript and the description draw them, keep a lone link as its chip and their pictures in their paragraph", () => {
   const container = drawn(
     inPane(createElement(TranscriptWords, { text: [LINKS, PAIR].join("\n\n") })),
   );
