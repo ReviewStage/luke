@@ -62,6 +62,7 @@
     "@orpc/client": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "8.18.1",
+    "better-sqlite3-multiple-ciphers": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

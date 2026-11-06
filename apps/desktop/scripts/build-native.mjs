@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { swiftCompilerArguments } from "./package-config.mjs";
-import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, NODE_PTY } from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, NODE_PTY, SQLITE_DRIVER } from "./package-layout.mjs";
 
 if (process.platform !== "darwin") {
   process.stdout.write("Skipping the macOS helpers on this platform.\n");
@@ -104,3 +104,32 @@ fs.cpSync(path.join(nodePtySource, "lib"), path.join(nodePtyOutput, "lib"), {
 fs.cpSync(nodePtyPrebuilds, path.join(nodePtyOutput, NODE_PTY.prebuilds), { recursive: true });
 fs.chmodSync(path.join(nodePtyOutput, NODE_PTY.prebuilds, "spawn-helper"), 0o755);
 process.stdout.write(`Copied node-pty: ${NODE_PTY.folder}\n`);
+
+// better-sqlite3-multiple-ciphers is copied the same way: its JavaScript and
+// the one prebuild for the packaged architecture, laid out as the package
+// lays them, since its JavaScript finds the addon under its own folder. The
+// prebuild is N-API, so the one binary serves Node and Electron alike.
+const sqliteSource = path.join(appRoot, "node_modules", SQLITE_DRIVER.packageName);
+const sqliteOutput = path.join(outputDirectory, SQLITE_DRIVER.folder);
+const sqlitePrebuilds = SQLITE_DRIVER.binaries.map((binary) =>
+  path.join(sqliteSource, SQLITE_DRIVER.prebuilds, binary),
+);
+for (const prebuild of sqlitePrebuilds) {
+  if (!fs.existsSync(prebuild)) {
+    throw new Error(
+      `The SQLite driver's prebuild is missing (${prebuild}): ${SQLITE_DRIVER.packageName} did not install. Run ./scripts/bootstrap.sh and read its output.`,
+    );
+  }
+}
+fs.rmSync(sqliteOutput, { recursive: true, force: true });
+fs.mkdirSync(path.join(sqliteOutput, SQLITE_DRIVER.prebuilds), { recursive: true });
+fs.copyFileSync(path.join(sqliteSource, "package.json"), path.join(sqliteOutput, "package.json"));
+fs.copyFileSync(path.join(sqliteSource, "LICENSE"), path.join(sqliteOutput, "LICENSE"));
+fs.cpSync(path.join(sqliteSource, "lib"), path.join(sqliteOutput, "lib"), { recursive: true });
+for (const prebuild of sqlitePrebuilds) {
+  fs.copyFileSync(
+    prebuild,
+    path.join(sqliteOutput, SQLITE_DRIVER.prebuilds, path.basename(prebuild)),
+  );
+}
+process.stdout.write(`Copied the SQLite driver: ${SQLITE_DRIVER.folder}\n`);

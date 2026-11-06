@@ -16,6 +16,7 @@ export {
   CookieSessionFailed,
   cookieAccountSourceLayer,
 } from "../cookie-account-source.js";
+export type { SqliteDatabase, SqliteDriverSeam, SqliteStatement } from "../entity-store.js";
 export {
   ALL_CLIENT_CAPABILITIES,
   ALL_HOST_PLATFORM_CONCERNS,
@@ -50,6 +51,7 @@ export {
   SettingsChangedElsewhere,
   ShutdownSignal,
   SignInConsent,
+  SqliteDriver,
   StateRoot,
   TerminalSocket,
   ThisMacHost,

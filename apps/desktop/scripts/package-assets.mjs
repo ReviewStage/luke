@@ -5,12 +5,13 @@ import { BRAND_ASSETS_DIRECTORY } from "@repo/brand/assets-directory";
 import { DMG_WINDOW } from "@repo/brand/dmg-window";
 import { buildAppIcon } from "./app-icon.mjs";
 import { LICENSE_RESOURCE_NAME, NOTICE_RESOURCE_NAME } from "./package-config.mjs";
-import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, NODE_PTY } from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, NODE_PTY, SQLITE_DRIVER } from "./package-layout.mjs";
 
 export function packageAssetPaths({ appRoot }) {
   const helperPaths = [
     ...[...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map((helper) => helper.binary),
     NODE_PTY.folder,
+    SQLITE_DRIVER.folder,
   ].map((name) => path.join(appRoot, ".build", "native", name));
   const iconPath = path.join(appRoot, ".build", "Vespin.icns");
   const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);

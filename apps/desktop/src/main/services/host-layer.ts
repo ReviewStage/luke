@@ -24,6 +24,7 @@ import {
   SecretCipher,
   ShutdownSignal,
   SignInConsent,
+  SqliteDriver,
   StateRoot,
   TerminalSocket,
 } from "@repo/host/effect";
@@ -31,6 +32,7 @@ import { listenOnLoopbackOverNet, mirrorPlatform, openTerminalSocketOverWs } fro
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
+import { sqliteDriver } from "../native/sqlite-driver";
 import { thisMacHostLayer } from "../native/this-mac-host";
 import type { DesktopConfig } from "./desktop-config";
 
@@ -67,6 +69,8 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     // Cloud agents' mirrors stand beside the local agents' clones under the member's own home, `~/.vespin`.
     Layer.succeed(MirrorPlatform, mirrorPlatform(os.homedir())),
     thisMacHostLayer(),
+    // The account's lists are kept on disk in an encrypted SQLite this Mac loads beside its helpers.
+    Layer.succeed(SqliteDriver, sqliteDriver),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Its consent is a loopback on this Mac: the browser hands the
     // code back to a `node:http` listener on 127.0.0.1.

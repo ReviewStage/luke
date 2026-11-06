@@ -30,7 +30,7 @@ import {
   TerminalSocket,
   ThisMacHost,
 } from "./effect/seams.js";
-import { ENTITY_STORE_FILE_NAME } from "./entity-store.js";
+import { ENTITY_DATABASE_FILE_NAME } from "./entity-store.js";
 import {
   ALL_CLIENT_CAPABILITIES,
   ALL_HOST_PLATFORM_CONCERNS,
@@ -228,8 +228,8 @@ describe("the account's lists kept on disk", () => {
     Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped("host-entities-");
       const fileSystem = yield* FileSystem.FileSystem;
-      const file = (yield* Path.Path).join(stateRoot, ENTITY_STORE_FILE_NAME);
-      yield* fileSystem.writeFileString(file, "sealed lists");
+      const file = (yield* Path.Path).join(stateRoot, ENTITY_DATABASE_FILE_NAME);
+      yield* fileSystem.writeFileString(file, "encrypted lists");
       const account = {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",

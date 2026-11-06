@@ -22,6 +22,7 @@ import {
   NATIVE_HELPERS,
   NODE_PTY,
   packagedAppPath,
+  SQLITE_DRIVER,
 } from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
@@ -119,6 +120,9 @@ export function createElectronBuilderConfig(env = process.env) {
         ...[...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
         ...NODE_PTY.binaries.map((binary) =>
           path.join("Contents", "Resources", NODE_PTY.folder, NODE_PTY.prebuilds, binary),
+        ),
+        ...SQLITE_DRIVER.binaries.map((binary) =>
+          path.join("Contents", "Resources", SQLITE_DRIVER.folder, SQLITE_DRIVER.prebuilds, binary),
         ),
       ],
       // The app's own scheme, which an app link's page that opens it in the app hands

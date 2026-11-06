@@ -53,6 +53,7 @@ import {
   MirrorPlatform,
   Reporter,
   ShutdownSignal,
+  SqliteDriver,
   TerminalSocket,
   type ThisMacHost,
 } from "./effect/seams.js";
@@ -139,6 +140,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
     const { tokenCipher } = yield* AccountSource;
+    const sqliteDriver = yield* Effect.serviceOption(SqliteDriver);
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const settings = yield* composeSettings();
@@ -419,29 +421,36 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     /**
      * The signed-in account's store opened where none stands: only where the
-     * account source seals with a cipher the system can use, and the run
-     * needs an account, so neither a browser tab nor a fixture run keeps one,
-     * and only once the account is signed in, so the Keychain is never read
-     * before the tokens' own read.
+     * account source seals with a cipher the system can use and the shell
+     * hands a SQLite driver, and the run needs an account, so neither a
+     * browser tab nor a fixture run keeps one, and only once the account is
+     * signed in, so the Keychain is never read before the tokens' own read. A
+     * database that cannot be had leaves the lists in memory alone, as a
+     * browser tab keeps them.
      */
     const openEntities = Effect.gen(function* () {
       const signedInId = account.signedIn() ? accountId() : undefined;
       if (entities !== undefined || signedInId === undefined) return;
       if (tokenCipher === undefined || !tokenCipher.isAvailable()) return;
-      if (!kernel.runMode.requiresAccount) return;
+      if (Option.isNone(sqliteDriver) || !kernel.runMode.requiresAccount) return;
       const scope = yield* Scope.make();
       const store = yield* openEntityStore({
         directory: kernel.stateRoot,
         cipher: tokenCipher,
+        driver: sqliteDriver.value,
         accountId: signedInId,
         queued: pool.queued,
       }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
+      if (store === undefined) {
+        yield* Scope.close(scope, Exit.void);
+        return;
+      }
       entities = { store, scope };
       // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.
       yield* pool.requeue(store.queue, [...tasks.queueable, ...agents.queueable]);
     });
 
-    /** The store forgotten, its file deleted, as a sign-out does; a file no store stands over is deleted too. */
+    /** The store forgotten, its files deleted, as a sign-out does; files no store stands over are deleted too. */
     const forgetEntities = Effect.gen(function* () {
       const standing = entities;
       entities = undefined;

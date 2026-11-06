@@ -61,6 +61,9 @@ catalogs:
     ai:
       specifier: 7.0.135
       version: 7.0.135
+    better-sqlite3-multiple-ciphers:
+      specifier: 13.0.3
+      version: 13.0.3
     drizzle-kit:
       specifier: 1.0.0-rc.4
       version: 1.0.0-rc.4
@@ -303,6 +306,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
+      better-sqlite3-multiple-ciphers:
+        specifier: 'catalog:'
+        version: 13.0.3
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -813,6 +819,9 @@ importers:
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
+      better-sqlite3-multiple-ciphers:
+        specifier: 'catalog:'
+        version: 13.0.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -5086,6 +5095,10 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
+
+  better-sqlite3-multiple-ciphers@13.0.3:
+    resolution: {integrity: sha512-UYabM82r1J84TLWc/SszoHs6XopWpl/2HCg3Nui1JUaFXg/VLswzkPowYiRhK/4CftI8dgtikwyZQecMldrGxQ==}
+    engines: {node: '>=22'}
 
   bidi-js@1.1.0:
     resolution: {integrity: sha512-fX1Onk0tdVPC7obPWB5EbJ1z7NVhLq4m2xZLq2YXBkxzMXIGRpNMU88n0EPgWseKl12J7zXs7qrDxPK4sRs2fg==}
@@ -11356,6 +11369,10 @@ snapshots:
     optionalDependencies:
       zod: 4.5.4
 
+  better-sqlite3-multiple-ciphers@13.0.3:
+    dependencies:
+      node-addon-api: 8.9.2
+
   bidi-js@1.1.0:
     dependencies:
       require-from-string: 2.0.2
@@ -13513,8 +13530,7 @@ snapshots:
 
   node-addon-api@7.1.1: {}
 
-  node-addon-api@8.9.2:
-    optional: true
+  node-addon-api@8.9.2: {}
 
   node-api-version@0.2.1:
     dependencies:

@@ -106,13 +106,18 @@ import {
   NO_KEYS_HELD,
 } from "./app-state.js";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
-import { type EntityStore, KEPT_READ, openEntityStore } from "./entity-store.js";
+import {
+  type EntityStore,
+  type EntityStoreOptions,
+  KEPT_READ,
+  openEntityStore,
+} from "./entity-store.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
-import { memoryFileSystem } from "./testing/memory-file-system.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { testCipher } from "./testing/test-cipher.js";
+import { testSqliteDriver } from "./testing/test-sqlite-driver.js";
 import { windowFocus } from "./window-focus.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -1565,6 +1570,14 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
+/** The account's store over `directory`, opened as the desktop opens it; a test whose store does not open dies. */
+function openedStore(options: Omit<EntityStoreOptions, "cipher" | "driver">) {
+  return Effect.flatMap(
+    openEntityStore({ cipher: testCipher(), driver: testSqliteDriver(), ...options }),
+    (store) => (store === undefined ? Effect.die("the store did not open") : Effect.succeed(store)),
+  );
+}
+
 it.effect(
   "the account gate opening draws the lists kept on disk while the service answers nothing, and reads the list past where it was kept",
   () =>
@@ -1572,7 +1585,7 @@ it.effect(
       const directory = yield* temporaryDirectoryScoped("tasks-entities-");
       const earlier = yield* Scope.make();
       const kept = yield* Scope.provide(earlier)(
-        openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" }),
+        openedStore({ directory, accountId: "user-dana" }),
       );
       yield* kept.keep(KEPT_READ.TASK_LIST, {
         rows: { plans: [rowOfTask(task(INVITES, "Kept invitations", "# Kept", 10))], agents: [] },
@@ -1586,11 +1599,7 @@ it.effect(
         pins: [{ repository: "acme/relay", pinnedAt: 3 }],
       });
       yield* Scope.close(earlier, Exit.void);
-      const entities = yield* openEntityStore({
-        directory,
-        cipher: testCipher(),
-        accountId: "user-dana",
-      });
+      const entities = yield* openedStore({ directory, accountId: "user-dana" });
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
       service.workspacesFail = true;
@@ -1621,11 +1630,8 @@ it.effect(
   "an answer of the list that moves no row writes nothing to disk, and the sync id it reached is written as the store closes",
   () =>
     Effect.gen(function* () {
-      const disk = Layer.merge(memoryFileSystem().layer, NodePath.layer);
-      const opened = Effect.provide(
-        openEntityStore({ directory: "/state", cipher: testCipher(), accountId: "user-dana" }),
-        disk,
-      );
+      const directory = yield* temporaryDirectoryScoped("tasks-entities-");
+      const opened = openedStore({ directory, accountId: "user-dana" });
       /** The sync id the list stands at on disk, as a store opened over it reads it. */
       const keptAt = Effect.map(
         Effect.scoped(opened),
@@ -1647,7 +1653,7 @@ it.effect(
       yield* Scope.close(quit, Exit.void);
 
       assert.deepEqual([first, meanwhile, yield* keptAt], ["1", "1", "2"]);
-    }),
+    }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );
 
 it.effect(
@@ -1659,12 +1665,7 @@ it.effect(
       service.renameUntaken = WRITE_UNTAKEN.UNANSWERED;
       const options = { mintKey: () => "rename-key", replayRefused: Effect.void };
       const opened = (pool: EntityPool) =>
-        openEntityStore({
-          directory,
-          cipher: testCipher(),
-          accountId: "user-dana",
-          queued: pool.queued,
-        });
+        openedStore({ directory, accountId: "user-dana", queued: pool.queued });
       const quit = yield* Scope.make();
       const before = yield* Scope.provide(quit)(entityPool(options));
       const kept = yield* Scope.provide(quit)(opened(before));
@@ -1742,12 +1743,7 @@ it.effect(
       };
       const options = { mintKey: () => "start-key", replayRefused: Effect.void };
       const opened = (pool: EntityPool) =>
-        openEntityStore({
-          directory,
-          cipher: testCipher(),
-          accountId: "user-dana",
-          queued: pool.queued,
-        });
+        openedStore({ directory, accountId: "user-dana", queued: pool.queued });
       const quit = yield* Scope.make();
       const before = yield* Scope.provide(quit)(entityPool(options));
       const kept = yield* Scope.provide(quit)(opened(before));
@@ -2987,16 +2983,10 @@ it.effect("a workspace list of none kept on disk is not drawn as ready at launch
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("tasks-entities-");
     const earlier = yield* Scope.make();
-    const kept = yield* Scope.provide(earlier)(
-      openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" }),
-    );
+    const kept = yield* Scope.provide(earlier)(openedStore({ directory, accountId: "user-dana" }));
     yield* kept.keep(KEPT_READ.WORKSPACES, []);
     yield* Scope.close(earlier, Exit.void);
-    const entities = yield* openEntityStore({
-      directory,
-      cipher: testCipher(),
-      accountId: "user-dana",
-    });
+    const entities = yield* openedStore({ directory, accountId: "user-dana" });
     const service = fakeService([]);
     service.workspacesFail = true;
     const { tasks, last, settled } = yield* subject(service, { entities });
@@ -3424,7 +3414,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("tasks-people-");
-      const opened = openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" });
+      const opened = openedStore({ directory, accountId: "user-dana" });
       const earlier = yield* Scope.make();
       const kept = yield* Scope.provide(earlier)(opened);
       yield* kept.keepIn(KEPT_READ.MEMBERS, ACME.id, { members: [memberRow(DANA)], former: [] });

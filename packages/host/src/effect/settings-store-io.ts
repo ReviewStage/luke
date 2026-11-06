@@ -6,7 +6,7 @@
  * is `PersistedSettingsSchema` in `../settings-store.ts`, beside the store
  * that keeps it, so this module imports nothing of the store's. Each reads
  * and writes `settings.json` unless handed another file of the state root,
- * as the sealed entity store's (`../entity-store.ts`).
+ * as the entity store's sealed key (`../entity-store.ts`).
  */
 import { Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";

@@ -46,6 +46,22 @@ export const NODE_PTY = {
   binaries: ["pty.node", "spawn-helper"],
 };
 
+/**
+ * better-sqlite3-multiple-ciphers, the encrypted SQLite the entity store
+ * keeps the account's lists in (`src/main/native/sqlite-driver.ts`): its
+ * JavaScript and its prebuilt N-API addon for the packaged architecture,
+ * copied as one folder beside the helpers by the native build and shipped in
+ * the app's resources, where main loads it, rather than bundled, since its
+ * JavaScript finds the addon from its own folder. The addon is signed as the
+ * helpers are.
+ */
+export const SQLITE_DRIVER = {
+  packageName: "better-sqlite3-multiple-ciphers",
+  folder: "better-sqlite3-multiple-ciphers",
+  prebuilds: "prebuilds",
+  binaries: [`darwin-${PACKAGED_ARCHITECTURE}.node`],
+};
+
 export function packagedAppPath(repoRoot) {
   return path.join(
     repoRoot,

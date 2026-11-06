@@ -30,6 +30,7 @@ import type { ChildProcessSpawner } from "effect/process";
 import type { AccountSourceSeam } from "../account-source.js";
 import type { ListenOnLoopback } from "../compose-port-forwards.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
+import type { SqliteDriverSeam } from "../entity-store.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
@@ -101,6 +102,18 @@ export class SettingsChangedElsewhere extends Context.Service<
   SettingsChangedElsewhere,
   Stream.Stream<void>
 >()("@repo/host/SettingsChangedElsewhere") {}
+
+/**
+ * The encrypted SQLite the entity store keeps the account's lists in
+ * (`entity-store.ts`): `better-sqlite3-multiple-ciphers`, which the desktop
+ * loads from beside its helpers. It arrives rather than being imported here,
+ * because it is a native addon, and a host that imported it could not load
+ * in a browser, which keeps no lists on disk. It is optional: a host handed
+ * none keeps no store, as a browser tab's.
+ */
+export class SqliteDriver extends Context.Service<SqliteDriver, SqliteDriverSeam>()(
+  "@repo/host/SqliteDriver",
+) {}
 
 /**
  * A terminal's relay WebSocket. It arrives rather than being built here,
