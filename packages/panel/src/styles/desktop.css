@@ -567,6 +567,54 @@ body,
   --ui-toolbar-start-at: 0px;
 }
 
+/* The agents' tabs and the side panel's stand on one row tucked under the
+   topbar: tabs a step shorter than a control, a hair above and below them,
+   so the work starts higher than a second full bar would let it. The topbar
+   keeps the title bar's height; only this row is drawn tighter, and the
+   sheets under it start where it ends. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main) {
+  --task-tab-height: calc(var(--ui-control-height) - var(--ui-space-4));
+  --task-tabs-height: calc(var(--task-tab-height) + 2 * var(--ui-space-4));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  .task-tabs,
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .side-panel-bar {
+  --ui-control-height: var(--task-tab-height);
+  --ui-toolbar-height: var(--task-tabs-height);
+  --ui-toolbar-block-inset: var(--ui-space-4);
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .side-panel-bar {
+  min-height: var(--task-tabs-height);
+  padding-top: var(--ui-space-4);
+  padding-bottom: var(--ui-space-4);
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > :is(.desktop-task-main, .side-panel)::before {
+  top: var(--task-tabs-height);
+}
+
 /* The task's details stand across the page with no bar of their own, so
    their sheet starts right under the topbar. */
 :where(:root):not([data-ui-room="narrow"])
