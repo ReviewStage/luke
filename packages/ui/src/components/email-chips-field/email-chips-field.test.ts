@@ -10,7 +10,7 @@ import { EMAIL_CHIP_STATE, type EmailChip, EmailChipsField } from "../../index.j
  * email-chips-field.test.ts -- words typed become chips at a comma, or at a
  * space once they hold an address, and a pasted list lands whole; Backspace in empty words takes the last address
  * back to edit; an address sent stands with no ×; and why an address is
- * wrong is said under the field and describes its words.
+ * wrong is its chip's hint, which describes it to a reader.
  */
 
 declare global {
@@ -124,11 +124,12 @@ test("Backspace in empty words takes the last address back to edit, but never on
   assert.equal(document.querySelector('[aria-label="Remove dana@acme.dev"]'), null);
 });
 
-test("why an address is wrong is said under the field and describes its words", () => {
+test("why an address is wrong is its chip's description, and no line under the field", () => {
   const words = render();
   type(words, "dana,");
-  const describedBy = words.getAttribute("aria-describedby");
-  assert.ok(describedBy !== null);
-  assert.equal(document.getElementById(describedBy)?.textContent, "dana: Not an email address");
-  assert.equal(words.getAttribute("aria-invalid"), "true");
+  const chip = [...document.querySelectorAll("button")].find((each) => each.textContent === "dana");
+  const describedBy = chip?.getAttribute("aria-describedby");
+  assert.ok(describedBy !== null && describedBy !== undefined, "the chip's words are described");
+  assert.equal(document.getElementById(describedBy)?.textContent, "Not an email address");
+  assert.equal(words.getAttribute("aria-describedby"), null, "the words typed carry no reason of their own");
 });

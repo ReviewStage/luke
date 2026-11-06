@@ -1,4 +1,4 @@
-import { type ClipboardEvent, type KeyboardEvent, type Ref, useId, useRef } from "react";
+import { type ClipboardEvent, type KeyboardEvent, type Ref, useRef } from "react";
 import { cn } from "../../cn.js";
 import { isComposingKey } from "../../composing-key.js";
 import { CheckIcon } from "../../face/glyphs.js";
@@ -9,7 +9,6 @@ import { STATUS_TONE } from "../../status-tone.js";
 import { AVATAR_SIZE, Avatar } from "../avatar/avatar.js";
 import { CHIP_LOOK, CHIP_SIZE, Chip, ChipName, StaticChip } from "../chip/chip.js";
 import type { FieldControl } from "../form-field/form-field.js";
-import { TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
  * email-chips-field.tsx -- a field of email addresses, each a chip: typed or pasted in, marked where one is wrong, and ticking in as each is sent.
@@ -27,12 +26,13 @@ import { TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * nothing typed, is the form's own submit.
  *
  * A chip to be sent wears its person's letter; one that is no address, or
- * that the service refused, wears the danger's mark, and why is said under
- * the field, a line per reason after the addresses it holds, which
- * describes the field to a reader; the chips stand in lines up to a grown
- * note's height, and scroll past it; one on its way pulses
- * the working dot, and one sent wears a tick. Neither of the last two can
- * be lifted or edited here, since what was sent is undone elsewhere.
+ * that the service refused, wears the danger's mark, and why is its words'
+ * hint, said on a rest, under a finger's long press, and to a reader as
+ * their description, so the field holds no line of its own for it and a
+ * caller may simply leave such an address unsent; one on its way pulses the
+ * working dot, and one sent wears a tick. Neither of the last two can be
+ * lifted or edited here, since what was sent is undone elsewhere. The chips
+ * stand in lines up to a grown note's height, and scroll past it.
  */
 
 /** Where one address stands: to be sent, no address, on its way, sent, or refused by the service. */
@@ -101,16 +101,6 @@ const WELL = cn(
 const TYPING =
   "ui-email-chips-typing m-0 flex-1 basis-chip-field-half min-w-0 h-chip-compact border-0 bg-transparent p-0 ps-ui-4 font-body text-body font-text text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-default";
 
-/** The wrong addresses by why each is wrong, so a long list of them reads as a line per reason. */
-function reasonsOf(wrong: readonly EmailChip[]): Map<string, string[]> {
-  const reasons = new Map<string, string[]>();
-  for (const chip of wrong) {
-    if (chip.reason === undefined) continue;
-    reasons.set(chip.reason, [...(reasons.get(chip.reason) ?? []), chip.words]);
-  }
-  return reasons;
-}
-
 /** The chip one address stands as. */
 function AddressChip({
   chip,
@@ -161,6 +151,7 @@ function AddressChip({
       onRemove={onRemove}
       removeLabel={`Remove ${chip.words}`}
       onOpen={onEdit}
+      hint={chip.reason}
     >
       {mark}
       {words}
@@ -202,12 +193,6 @@ export function EmailChipsField({
   ref?: Ref<HTMLInputElement> | undefined;
 }): React.JSX.Element {
   const words = useRef<HTMLInputElement | null>(null);
-  const reasonsId = useId();
-  const wrong = chips.filter((chip) => chip.reason !== undefined);
-  const describedBy =
-    [field?.["aria-describedby"], wrong.length > 0 ? reasonsId : undefined]
-      .filter((id) => id !== undefined)
-      .join(" ") || undefined;
 
   const take = (words: string) => {
     onTyped("");
@@ -249,7 +234,7 @@ export function EmailChipsField({
   };
 
   return (
-    <div>
+    <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the well's bare ground lands the caret in its words for the pointer alone, as a press inside a field's box does; the words themselves are the keyboard's. */}
       <div
         className={WELL}
@@ -282,9 +267,9 @@ export function EmailChipsField({
           disabled={disabled}
           placeholder={chips.length === 0 ? placeholder : undefined}
           aria-label={field === undefined ? label : undefined}
-          aria-describedby={describedBy}
+          aria-describedby={field?.["aria-describedby"]}
           aria-required={field?.["aria-required"]}
-          aria-invalid={wrong.length > 0 || field?.["aria-invalid"] === true ? true : undefined}
+          aria-invalid={field?.["aria-invalid"]}
           onChange={(event) => {
             const words = event.target.value;
             if (endsAddress(words)) take(words);
@@ -295,15 +280,6 @@ export function EmailChipsField({
           onBlur={() => take(typed)}
         />
       </div>
-      {wrong.length === 0 ? null : (
-        <div className="ui-email-chips-reasons mt-ui-4" id={reasonsId}>
-          {[...reasonsOf(wrong)].map(([reason, words]) => (
-            <Text key={reason} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {words.join(", ")}: {reason}
-            </Text>
-          ))}
-        </div>
-      )}
-    </div>
+    </>
   );
 }

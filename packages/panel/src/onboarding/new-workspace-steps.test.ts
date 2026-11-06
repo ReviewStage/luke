@@ -147,7 +147,7 @@ test("an invitation refused holds the first card on what was refused, and Contin
   });
   const container = mount([]);
   type(container, "Name", "Paperstar");
-  type(container, "Invite your team", "dana@paperstar.app");
+  type(container, "Add teammates by email", "dana@paperstar.app");
 
   await act(async () => button(container, "Create").click());
   await settle();

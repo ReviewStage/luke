@@ -2085,31 +2085,10 @@ test("the Invite card's address field is named by a visible label, and, being re
   assert.equal(address.getAttribute("aria-required"), "true");
 });
 
-test("an address the service would refuse is said under the field and nothing is sent until it is fixed", async () => {
+test("an address the service would not read as one is left unsent, its chip saying why, and the rest are invited", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com, ada", WORKSPACE_ROLE.MEMBER);
-
-  assert.equal(
-    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
-    "Enter only email addresses.",
-  );
-  assert.equal(addressField().getAttribute("aria-invalid"), "true");
-  assert.deepEqual(invitedAddresses(), []);
-
-  act(() =>
-    (
-      inviteDialog().querySelector<HTMLButtonElement>('[aria-label="Remove ada"]') ??
-      assert.fail("no Remove ada")
-    ).click(),
-  );
-  assert.equal(
-    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent ?? "",
-    "",
-    "lifting the wrong address takes back what the field said",
-  );
-  act(() => inviteAct().click());
-  await settle();
 
   assert.deepEqual(invitedAddresses(), ["alan@example.com"]);
 });
@@ -2156,6 +2135,17 @@ test("an address refused partway stops the run there, saying why, and leaves it 
   assert.deepEqual(
     invitationRows(page).map((row) => addressOf(row)?.textContent),
     ["alan@example.com"],
+  );
+  act(() =>
+    (
+      inviteDialog().querySelector<HTMLButtonElement>('[aria-label="Remove sam@example.com"]') ??
+      assert.fail("no Remove sam@example.com")
+    ).click(),
+  );
+  assert.equal(
+    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent ?? "",
+    "",
+    "lifting the refused address takes back what the field said",
   );
 });
 

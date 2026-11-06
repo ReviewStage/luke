@@ -12,7 +12,8 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  *
  * An address the service would not read as one, or the reader's own, is
  * marked as it is typed and stays out of what is sent until it is edited
- * or lifted, so a form says what is wrong before it asks. Each address is
+ * or lifted, and is simply never sent, as Slack leaves one: its chip says
+ * why, and nothing waits on it. Each address is
  * known by its lower case, as the service knows it, so one typed twice
  * stands once.
  */
@@ -30,10 +31,9 @@ interface Invitee {
   readonly reason?: string | undefined;
 }
 
-/** What a press sends, once what was typed stands as chips: the addresses to send, and how many typed are wrong. */
+/** What a press sends, once what was typed stands as chips: the addresses to send. */
 export interface InviteesCommitted {
   readonly pending: readonly string[];
-  readonly wrong: number;
 }
 
 /** The addresses a form holds, the chips they draw, the words still being typed, and the writes that move them. */
@@ -44,8 +44,6 @@ export interface Invitees {
   readonly onTyped: (typed: string) => void;
   /** The addresses a press would send: the chips to send, then each address in the words typed. */
   readonly pending: readonly string[];
-  /** How many chips are not sent as they stand. */
-  readonly wrong: number;
   readonly add: (typed: string) => void;
   readonly remove: (id: string) => void;
   /** Lets every address go, as a form opened again starts empty. */
@@ -103,10 +101,6 @@ function pendingOf(invitees: readonly Invitee[]): readonly string[] {
   return invitees.filter((one) => one.state === EMAIL_CHIP_STATE.DRAFT).map((one) => one.email);
 }
 
-function wrongOf(invitees: readonly Invitee[]): number {
-  return invitees.filter((one) => one.state === EMAIL_CHIP_STATE.BAD).length;
-}
-
 /**
  * The addresses a form invites, the reader's own (`yours`) marked as theirs.
  * Note that the words still being typed are held here beside the chips,
@@ -124,7 +118,6 @@ export function useInvitees(yours: string | undefined): Invitees {
     typed,
     onTyped: setTyped,
     pending: pendingOf(joined(invitees, typed, yours)),
-    wrong: wrongOf(invitees),
     add: (words) => setInvitees((now) => joined(now, words, yours)),
     remove: (id) => setInvitees((now) => now.filter((one) => keyOf(one.email) !== id)),
     clear: () => {
@@ -136,7 +129,7 @@ export function useInvitees(yours: string | undefined): Invitees {
       const next = joined(invitees, typed, yours);
       setInvitees(next);
       setTyped("");
-      return { pending: pendingOf(next), wrong: wrongOf(next) };
+      return { pending: pendingOf(next) };
     },
     send: async (workspaceId, emails) => {
       const refused: string[] = [];

@@ -4,6 +4,7 @@ import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { StatusTone } from "../../status-tone.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -40,7 +41,9 @@ import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
  * answers at once, so what it named is gone on the press; one that names a
  * thing a reader may go to (`onOpen`, a task another waits on) takes a press
  * on its words too, which opens it, the × its sibling rather than inside it,
- * since a button holds no button. It springs in as
+ * since a button holds no button, and whose words may carry a hint
+ * (`hint`), said on a rest, under a finger, and to a reader, as why an
+ * address is wrong. It springs in as
  * it arrives; its exit is the list's that draws it, a `ListMotion`
  * following it by its `motionKey`, which plays its arrival in its place,
  * since its caller has already let it go.
@@ -180,6 +183,8 @@ type RemovableChipProps = ChipFace & {
   onOpen?: (() => void) | undefined;
   /** The key a `ListMotion` around its row follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
+  /** What the chip's words say on a rest, under a finger's long press or tap, and to a reader as their description (`Tooltip`). */
+  hint?: string | undefined;
   href?: never;
   children: ReactNode;
 };
@@ -358,9 +363,23 @@ function RemovableChip({
   removeLabel,
   onOpen,
   motionKey,
+  hint,
   children,
   ...face
 }: RemovableChipProps): React.JSX.Element {
+  const words =
+    onOpen === undefined ? (
+      <span className={faceClasses(face, false)}>{children}</span>
+    ) : (
+      <button
+        type="button"
+        className={`${faceClasses(face, false)} ${OPEN_FACE}`}
+        onClick={pulseOnPress(onOpen, PRESS_PULSE.FACE)}
+        {...PRESS_FACE}
+      >
+        {children}
+      </button>
+    );
   return (
     <span
       className={chipClasses(face, true, false)}
@@ -368,18 +387,7 @@ function RemovableChip({
       {...faceAttributes(face)}
       {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
     >
-      {onOpen === undefined ? (
-        <span className={faceClasses(face, false)}>{children}</span>
-      ) : (
-        <button
-          type="button"
-          className={`${faceClasses(face, false)} ${OPEN_FACE}`}
-          onClick={pulseOnPress(onOpen, PRESS_PULSE.FACE)}
-          {...PRESS_FACE}
-        >
-          {children}
-        </button>
-      )}
+      {hint === undefined ? words : <Tooltip label={hint}>{words}</Tooltip>}
       <button
         type="button"
         className={REMOVE}

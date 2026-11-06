@@ -57,7 +57,7 @@ function ProviderChoices(): React.JSX.Element {
   );
 }
 
-/** Setup's team fields as the step draws them, an address typed wrong among those to invite. */
+/** Setup's team fields as the step draws them, an address typed wrong among those to invite, left unsent. */
 function TeamFields(): React.JSX.Element {
   const [name, setName] = useState("Acme");
   const [typed, setTyped] = useState("");
@@ -82,14 +82,14 @@ function TeamFields(): React.JSX.Element {
       <FormField label="Name">
         {(control) => <TextField field={control} value={name} onChange={setName} />}
       </FormField>
-      <FormField label="Invite your team" optional description="2 to invite">
+      <FormField label="Add teammates by email" optional>
         {(control) => (
           <EmailChipsField
             field={control}
             chips={chips}
             typed={typed}
             onTyped={setTyped}
-            placeholder="Type or paste emails, like dana@acme.dev"
+            placeholder="Ex. ellis@acme.dev, maria@acme.dev"
             onAdd={IGNORE}
             onRemove={(id) => setChips((now) => now.filter((chip) => chip.id !== id))}
           />

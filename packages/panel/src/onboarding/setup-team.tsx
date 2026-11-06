@@ -49,7 +49,7 @@ export interface TeamFields {
 export interface TeamFormState extends TeamFields {
   /** Whether the press is out: the workspace, its photo, and its invitations going. */
   readonly busy: boolean;
-  /** Whether a name is typed, no photo is still being read, and no address typed is wrong, which the press needs. */
+  /** Whether a name is typed and no photo is still being read, which the press needs. */
   readonly ready: boolean;
   /** The press's words: what it will do. */
   readonly label: string;
@@ -108,7 +108,7 @@ export function useTeamForm({
   const renamed = made !== undefined && made.name !== undefined && trimmed !== made.name;
   const newPhoto = photo !== undefined && photo !== setPhoto;
   const changed = renamed || newPhoto || invitees.pending.length > 0;
-  const ready = trimmed !== "" && !reading && invitees.wrong === 0;
+  const ready = trimmed !== "" && !reading;
 
   // Note that the photo and the invitations follow the name, and one refused leaves the rest standing.
   const write = async (workspaceId: string, emails: readonly string[]) => {
@@ -129,9 +129,8 @@ export function useTeamForm({
   };
   const create = async () => {
     if (!ready || busy) return;
-    // Note that an address typed and never ended is read as the press lands, and one typed wrong holds the press back.
-    const { pending, wrong } = invitees.commit();
-    if (wrong > 0) return;
+    // Note that an address typed and never ended is read as the press lands, and one typed wrong is left unsent, its chip saying why.
+    const { pending } = invitees.commit();
     if (made !== undefined && !renamed && !newPhoto && pending.length === 0) {
       onDone([]);
       return;
@@ -171,16 +170,9 @@ export function useTeamForm({
   };
 }
 
-/** How many addresses the press will invite, said under the field once there is one. */
-function inviteCount(invitees: Invitees): string | undefined {
-  const count = invitees.pending.length;
-  return count === 0 ? undefined : `${count} to invite`;
-}
-
 /**
  * The team's fields: the photo, the name, and who to invite, one field
- * apart, as setup's team step and New workspace both draw them, the
- * addresses counted under their field. A card that lands focus in the name hands its
+ * apart, as setup's team step and New workspace both draw them. A card that lands focus in the name hands its
  * `nameRef`, one that says a refusal of the name on its field hands
  * `nameError`, and `disabled` stills every field while the workspace is
  * being made.
@@ -220,7 +212,7 @@ export function TeamForm({
           />
         )}
       </FormField>
-      <FormField label="Invite your team" optional description={inviteCount(form.invitees)}>
+      <FormField label="Add teammates by email" optional>
         {(control) => (
           <ReplayMask>
             <EmailChipsField
@@ -228,7 +220,7 @@ export function TeamForm({
               chips={form.invitees.chips}
               typed={form.invitees.typed}
               onTyped={form.invitees.onTyped}
-              placeholder="Type or paste emails, like dana@acme.dev"
+              placeholder="Ex. ellis@acme.dev, maria@acme.dev"
               disabled={disabled}
               onAdd={form.invitees.add}
               onRemove={form.invitees.remove}

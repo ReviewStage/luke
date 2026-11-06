@@ -31,7 +31,8 @@ import { replayMaskedError } from "./marks.js";
  *
  * The addresses are typed or pasted into one field of chips (`invitees.ts`),
  * so a list pasted from anywhere lands whole, each checked as the service
- * reads it as it lands, and Invite waits while one is wrong. Then each is
+ * reads it as it lands, one that is no address marked with why and simply
+ * left unsent, as Slack leaves one. Then each to send is
  * invited in turn, one act at a time; one refused stops the run there, the
  * card saying why with that address and those after it left in the field
  * for another try, the ones before it already invited and listed under the
@@ -42,9 +43,6 @@ import { replayMaskedError } from "./marks.js";
 
 /** The roles an invitation offers, in the order the bar draws them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
-
-/** What the field says where an address typed is none the service invites, each marked under the field with why. */
-const MALFORMED = "Enter only email addresses.";
 
 function refused(reason: string): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
@@ -84,8 +82,7 @@ export function useInviteDialog({
   // Note that the run reads the addresses it was asked with, and leaves in
   // the field only those it did not invite, so a retry sends none twice.
   const sendAll = (): Promise<ActionResult> => {
-    const { pending: addresses, wrong } = invitees.commit();
-    if (wrong > 0) return Promise.resolve(refused(MALFORMED));
+    const { pending: addresses } = invitees.commit();
     return addresses.reduce<Promise<ActionResult>>(
       (before, email, index) =>
         before.then((result) =>
@@ -113,7 +110,7 @@ export function useInviteDialog({
     send,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_INVITE),
   );
-  const form = useFormDialog(confirm, invitees.pending.length > 0 && invitees.wrong === 0);
+  const form = useFormDialog(confirm, invitees.pending.length > 0);
   const dialog = (
     <Dialog
       open={form.open}
