@@ -456,7 +456,7 @@ interface InboxHeadSelecting {
  * (`APP_COMMAND.TOGGLE_READ`). Its menu, opened by the row's ⋯, a
  * right-click, a long press, and the menu key
  * alike (`ListRow`'s `menu`), offers
- * Copy link, the item's link under the task or the agent that holds it, where
+ * Copy link, the item's link by its id alone (`inbox-item-actions.tsx`), where
  * the list hands down a workspace to write it under. Where the list
  * hands down `onAskClose`, an open item's row offers to close it without an
  * answer, asked first through the list's one question (`inbox-close.tsx`),

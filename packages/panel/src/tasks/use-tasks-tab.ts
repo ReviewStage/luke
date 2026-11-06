@@ -267,7 +267,7 @@ export type InboxChoice =
     // An item a link named by its id alone that the account may not read, which the Inbox says is missing.
     | { readonly itemId: string }
   ) & {
-    /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
+    /** Whether a link or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
     readonly opened?: true;
   };
 

@@ -97,17 +97,14 @@ import { taskCardOf } from "./task-card.js";
  * It stands in the task's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
- * workspace the sidebar lists that main says holds one (the switcher counts
- * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-holder-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the oldest
- * first, Needs you, the questions alone that wait on their answer, Needs
- * you, the open threads that wait on them, or All,
- * everything, of everyone's, theirs, or one teammate's, as the developer
- * last chose; Needs
- * you is the Inbox's one name for an item not yet answered
- * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. A task's status never hides its items: the Inbox is a feed
+ * workspace the sidebar lists that main says holds one, needing the
+ * developer or settled, each task read whole as main says it changed
+ * (`use-holder-inbox-items.ts`), in one run, the latest changed first, in
+ * the scope the developer last chose: Needs you, the questions alone that
+ * wait on their answer; Open, what is not done; All, everything; or
+ * Reminders, of everyone's, theirs, or one teammate's. The sidebar's Inbox
+ * row counts the open threads that wait on the developer, a question or an
+ * update not yet opened (`places-waiting.ts`). A task's status never hides its items: the Inbox is a feed
  * of what the agents got done, so an item of a task done or canceled is
  * listed and counted as any other until it is read or answered, its row
  * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the

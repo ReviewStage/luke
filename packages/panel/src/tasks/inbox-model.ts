@@ -62,8 +62,7 @@ import { plainWords } from "./tool-call-model.js";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan, under the person it waits on, or in one
- * run with no groups, the items its tab takes: what needs the reader, what
+ * first, in one run with no groups, the items its tab takes: what needs the reader, what
  * they are not done with, everything, or what they set a reminder on, each tab
  * counting its own.
  * An item is the reader's where it waits on them: they are its task's

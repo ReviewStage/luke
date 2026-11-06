@@ -1874,7 +1874,6 @@ function SidebarColumn({
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   const waiting = useInboxWaiting(tasks);
-  // The Inbox's row marks its threads read from its right-click.
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing; a task's row goes back to work
   // on it, on the agent waiting on the developer where one does (`onResume`).
