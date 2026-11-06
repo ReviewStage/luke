@@ -101,7 +101,7 @@ test("Cancel and Escape before Create make nothing and put the cards away", () =
   });
   const pressed: string[] = [];
   const container = mount(pressed);
-  type(container, "Name", "Paperstar");
+  type(container, "Workspace", "Paperstar");
 
   act(() => button(container, "Cancel").click());
   act(() => {
@@ -124,7 +124,7 @@ test("Create makes the workspace and lists it, goes on to GitHub, and Skip lands
   const container = mount(pressed);
   const create = button(container, "Create");
   const waited = create.disabled;
-  type(container, "Name", "  Paperstar ");
+  type(container, "Workspace", "  Paperstar ");
 
   await act(async () => button(container, "Create").click());
   await settle();
@@ -146,7 +146,7 @@ test("an invitation refused holds the first card on what was refused, and Contin
       Promise.reject(refusedOnPort("That address is already a member.")),
   });
   const container = mount([]);
-  type(container, "Name", "Paperstar");
+  type(container, "Workspace", "Paperstar");
   type(container, "Add teammates by email", "dana@paperstar.app");
 
   await act(async () => button(container, "Create").click());

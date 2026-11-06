@@ -115,16 +115,14 @@ function Held({
 
 function EmailChips(): React.JSX.Element {
   return (
-    <>
-      <CatalogSection id="email-chips" title="Empty, in every state, and unavailable">
-        <Stack gap={GAP.CONTROL}>
-          <Held start={[]} />
-          <Held start={EVERY_STATE} />
-          <Held start={MANY_WRONG} />
-          <Held start={EVERY_STATE.slice(0, 3)} disabled />
-        </Stack>
-      </CatalogSection>
-    </>
+    <CatalogSection id="email-chips" title="Empty, in every state, and unavailable">
+      <Stack gap={GAP.CONTROL}>
+        <Held start={[]} />
+        <Held start={EVERY_STATE} />
+        <Held start={MANY_WRONG} />
+        <Held start={EVERY_STATE.slice(0, 3)} disabled />
+      </Stack>
+    </CatalogSection>
   );
 }
 

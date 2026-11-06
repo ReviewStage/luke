@@ -3,8 +3,10 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   EmailChipsField,
   type FilePicker,
+  Fill,
   FormField,
   GAP,
+  Inline,
   PhotoPick,
   Stack,
   TEXT_TONE,
@@ -39,6 +41,8 @@ export interface TeamFields {
   readonly invitees: Invitees;
   readonly photo: string | undefined;
   readonly picker: FilePicker;
+  /** Lets the photo picked go, offered from its tile while one stands. */
+  readonly onRemovePhoto: (() => void) | undefined;
   /** What was refused, said under the fields, while something was. */
   readonly refusal: string | undefined;
   /** Enter in the name: the form's way on. */
@@ -113,7 +117,7 @@ export function useTeamForm({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [setPhoto, setSetPhoto] = useState<string | undefined>(undefined);
   const invitees = useInvitees(signedIn?.email);
-  const { photo, reading, picker } = useWorkspacePhotoPick(setRefusal);
+  const { photo, reading, picker, clear } = useWorkspacePhotoPick(setRefusal);
   // Note that a workspace made before a reload is named once the list holds it, unless something was typed meanwhile.
   useEffect(() => {
     if (made?.name === undefined || named.current) return;
@@ -177,6 +181,18 @@ export function useTeamForm({
     invitees,
     photo,
     picker,
+    // Note that a photo already set on the workspace made is taken off it, and one only picked is let go.
+    onRemovePhoto:
+      photo === undefined
+        ? undefined
+        : () => {
+            clear();
+            if (made === undefined || setPhoto === undefined) return;
+            void setWorkspacePhoto({ workspaceId: made.id, photo: null }).then(
+              () => setSetPhoto(undefined),
+              (why: Error) => setRefusal(why.message),
+            );
+          },
     busy,
     refusal,
     ready,
@@ -190,8 +206,10 @@ export function useTeamForm({
 }
 
 /**
- * The team's fields: the photo, the name, and who to invite, one field
- * apart, as setup's team step and New workspace both draw them. A card that lands focus in the name hands its
+ * The team's fields: the workspace's tile and its name in one row, the tile
+ * itself the press that picks its photo (`PhotoPick`), as Settings ›
+ * Workspace draws it too, then who to invite, as setup's team step and New
+ * workspace both draw them. A card that lands focus in the name hands its
  * `nameRef`, one that says a refusal of the name on its field hands
  * `nameError`, and `disabled` stills every field while the workspace is
  * being made.
@@ -209,26 +227,31 @@ export function TeamForm({
 }): React.JSX.Element {
   return (
     <Stack gap={GAP.FIELD}>
-      <PhotoPick
-        name={form.name}
-        unnamed="Team"
-        photo={form.photo}
-        picker={form.picker}
-        disabled={disabled}
-      />
-      <FormField label="Name" error={nameError}>
+      <FormField label="Workspace" error={nameError}>
         {(control) => (
-          <TextField
-            ref={nameRef}
-            field={control}
-            value={form.name}
-            placeholder="Acme"
-            spellCheck={false}
-            maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
-            disabled={disabled}
-            onChange={form.onName}
-            onEnter={form.create}
-          />
+          <Inline wrap={false}>
+            <PhotoPick
+              name={form.name}
+              unnamed="Team"
+              photo={form.photo}
+              picker={form.picker}
+              onRemove={form.onRemovePhoto}
+              disabled={disabled}
+            />
+            <Fill>
+              <TextField
+                ref={nameRef}
+                field={control}
+                value={form.name}
+                placeholder="Acme"
+                spellCheck={false}
+                maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+                disabled={disabled}
+                onChange={form.onName}
+                onEnter={form.create}
+              />
+            </Fill>
+          </Inline>
         )}
       </FormField>
       <FormField label="Add teammates by email" optional>
