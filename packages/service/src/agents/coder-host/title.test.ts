@@ -253,6 +253,12 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       );
 
       assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).title, null);
+
+      const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
+      yield* titledAs(owner, second, "I can help with that\nWhat would you like me to do?");
+
+      assert.equal(Option.getOrThrow(yield* readAgent(owner, second.id)).title, null);
+      assert.equal(yield* taskName(owner, task.id), "Untitled");
     }),
   );
 

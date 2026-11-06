@@ -121,7 +121,7 @@ const SENTENCE_BREAK = /[.!?]\s+\S/u;
 function repliesInsteadOfTitling(answer: string): boolean {
   const line = answer.trim().split("\n")[0] ?? "";
   const words = line.split(/\s+/u).length;
-  return line.includes("?") || SENTENCE_BREAK.test(line) || words > AGENT_TITLE.MAX_ANSWER_WORDS;
+  return answer.includes("?") || SENTENCE_BREAK.test(line) || words > AGENT_TITLE.MAX_ANSWER_WORDS;
 }
 
 /** The model's answer as a title: its first line, unquoted, unpunctuated, and bounded; nothing where nothing is left. */
