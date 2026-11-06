@@ -2,8 +2,9 @@ import type { AccountProvider } from "@repo/credentials/snapshot";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
-import { useAct } from "./act.js";
+import { actMutation, pressMutation } from "./act-mutations.js";
 import { appPlatform } from "./app-platform.js";
 
 export interface SignIn {
@@ -21,7 +22,12 @@ export interface SignIn {
  * signed in or not.
  */
 export function useSignIn(): SignIn {
-  const { act, press } = useAct();
+  const { mutateAsync: beginAccountSignIn } = useMutation(
+    actMutation(ACT_KIND.ACCOUNT_BEGIN_SIGN_IN),
+  );
+  const { mutate: cancelAccountSignIn } = useMutation(
+    pressMutation(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN),
+  );
 
   /**
    * Whose sign-in the gate is waiting on. Held as app state with a ref
@@ -47,7 +53,7 @@ export function useSignIn(): SignIn {
       // Note that a sign-in that ended without landing answers why, as a
       // key said in the words module's own words; a refusal is the port's
       // own fault, which says only that it did not finish.
-      act(ACT_KIND.ACCOUNT_BEGIN_SIGN_IN, { provider }).then(
+      beginAccountSignIn({ provider }).then(
         (answer) => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
@@ -64,7 +70,7 @@ export function useSignIn(): SignIn {
         },
       );
     },
-    [setSignInWait, signInWaitNow],
+    [setSignInWait, signInWaitNow, beginAccountSignIn],
   );
 
   /**
@@ -77,8 +83,8 @@ export function useSignIn(): SignIn {
     if (signInWaitNow() === undefined) return;
     signInAttempt.current += 1;
     setSignInWait(undefined);
-    press(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN);
-  }, [setSignInWait, signInWaitNow]);
+    cancelAccountSignIn();
+  }, [setSignInWait, signInWaitNow, cancelAccountSignIn]);
 
   return { signInWait, signInFailure, beginSignIn, cancelSignIn };
 }
