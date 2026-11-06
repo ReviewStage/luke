@@ -108,7 +108,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  */
 
 /** How long each scene holds a step, in milliseconds. */
-const BEAT = { HERO: 800, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+const BEAT = { HERO: 1600, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -1151,129 +1151,114 @@ function KeysScene(): React.JSX.Element {
   );
 }
 
-/** One of the asks the hero's Inbox turns through: its task, its title, its line while open, and the answer it settles on. */
-type HeroAsk = {
+/** One of the posts the hero's Inbox turns through: its task, its title, what it asks, and its last line. */
+type HeroPost = {
   readonly id: string;
   readonly task: string;
   readonly title: string;
   readonly kind: Line;
-  readonly open: string;
-  readonly answer: string;
+  readonly line: string;
 };
 
-/** The asks agents post to the hero's Inbox, in the order they arrive, round and round; the last two stand on top where motion is held. */
-const HERO_ASKS: readonly HeroAsk[] = [
+/** What agents post to the hero's Inbox, in the order it arrives, round and round; asks among them, and news that asks nothing. */
+const HERO_POSTS: readonly HeroPost[] = [
   {
     id: "migration",
     task: "Teammate invitations",
     title: "Run the memberships migration on preview?",
     kind: LINE.DECIDE,
-    open: "Approve (recommended) / Decline",
-    answer: "Approved",
+    line: "Approve (recommended) / Decline",
+  },
+  {
+    id: "merged",
+    task: "Pricing page",
+    title: "Merged #479 into main",
+    kind: LINE.SETTLED,
+    line: "Checks passed · Deployed to production",
   },
   {
     id: "domain",
     task: "Weekly digest email",
     title: "Verify the digest's sender domain",
     kind: LINE.DO,
-    open: "3 steps left · Open the mail provider's Domains page",
-    answer: "Done",
+    line: "3 steps left · Open the mail provider's Domains page",
   },
   {
     id: "flag",
     task: "Search ranking",
     title: "Ship the new ranking behind a flag?",
     kind: LINE.DECIDE,
-    open: "Yes (recommended) / No",
-    answer: "Yes (recommended)",
+    line: "Yes (recommended) / No",
+  },
+  {
+    id: "tests",
+    task: "Checkout redesign",
+    title: "Fixed the two flaky payment tests",
+    kind: LINE.SETTLED,
+    line: "Pushed to #482 · Checks passing",
   },
   {
     id: "secret",
     task: "Onboarding checklist",
     title: "Add the email provider's API key",
     kind: LINE.DO,
-    open: "1 step left · Add the secret in Vercel",
-    answer: "Done",
-  },
-  {
-    id: "copy",
-    task: "Pricing page",
-    title: "Ready for review: #479",
-    kind: LINE.DECIDE,
-    open: "Merge / Request changes",
-    answer: "Merged",
-  },
-  {
-    id: "tests",
-    task: "Checkout redesign",
-    title: "Two flaky tests on the payment step",
-    kind: LINE.DECIDE,
-    open: "Fix them here (recommended) / Open a task",
-    answer: "Fix them here (recommended)",
+    line: "1 step left · Add the secret in Vercel",
   },
   {
     id: "review",
-    task: "Teammate invitations",
+    task: "Checkout redesign",
     title: "Ready for review: #482",
     kind: LINE.DECIDE,
-    open: "Merge / Request changes",
-    answer: "Merged",
+    line: "Merge / Request changes",
   },
   {
     id: "currency",
     task: "Billing export",
     title: "Which currency goes in the CSV?",
     kind: LINE.DECIDE,
-    open: "USD / The account's own (recommended)",
-    answer: "The account's own (recommended)",
+    line: "USD / The account's own (recommended)",
   },
 ];
 
-/** How many of the asks the hero's Inbox lists at once, the last below the panel's crop; fewer than there are asks, so the one arriving on top is never one still listed. */
+/** How many posts the hero's Inbox lists at once, the last below the panel's crop; fewer than there are posts, so the one arriving on top is never one still listed. */
 const HERO_LISTED = 6;
 
-/** Minutes between one ask's arrival and the next's. */
+/** Minutes between one post's arrival and the next's. */
 const HERO_SPACING = 9;
 
 /**
- * The hero's Inbox at `step`, two steps to each ask's arrival: on the first
- * the newest ask arrives unread on top and the rest make room for it as they
- * stood, and on the second they settle, the one before it read and every
- * older one answered, each carried down by the next until it runs off the
- * panel's foot. Note that an arrival changes nothing but the list's order,
- * because a row that glides as its words change reads as a jolt. An ask's
- * place in the story is its age alone, so the last step leads into the first
- * with nothing reset.
+ * The hero's Inbox at `step`: the newest post arriving on top, each carried
+ * down by the next until it runs off the panel's foot. Note that a post
+ * stands as it arrived, unread and asking what it asks, because nothing on
+ * screen reads or answers it, and a row that changed by itself would read as
+ * the app acting at random. A post's place in the story is its age alone, so
+ * the last step leads into the first with nothing reset.
  */
 function heroItems(step: number): readonly InboxItem[] {
-  const count = HERO_ASKS.length;
-  const arrival = Math.floor(step / 2);
-  const settled = step % 2 === 1;
+  const count = HERO_POSTS.length;
   return Array.from({ length: HERO_LISTED }, (_, age) => {
-    const ask = HERO_ASKS[(arrival - age + count) % count];
-    if (ask === undefined) throw new Error("heroItems: an ask out of range");
-    const shown = settled ? age : Math.max(age - 1, 0);
-    const answered = shown >= 2;
+    const post = HERO_POSTS[(step - age + count) % count];
+    if (post === undefined) throw new Error("heroItems: a post out of range");
     return {
-      id: ask.id,
-      task: ask.task,
+      id: post.id,
+      task: post.task,
       status: TASK_STATUS.IN_PROGRESS,
-      title: ask.title,
-      line: answered ? ask.answer : ask.open,
-      kind: answered ? LINE.SETTLED : ask.kind,
-      ago: 1 + shown * HERO_SPACING,
-      unread: shown === 0,
+      title: post.title,
+      line: post.line,
+      kind: post.kind,
+      ago: 1 + age * HERO_SPACING,
+      unread: true,
     };
   });
 }
 
-/** The hero's moving screen: the Inbox's column alone, agents' asks arriving on top as older ones are answered and carried off its foot. */
+/** The hero's moving screen: the Inbox's column alone, agents' posts arriving on top and carrying the older ones off its foot. */
 export function LandingHeroScene(): React.JSX.Element {
-  const [ref, step] = useStory(HERO_ASKS.length * 2, BEAT.HERO);
+  const [ref, step] = useStory(HERO_POSTS.length, BEAT.HERO);
   const rows = useRef<HTMLDivElement>(null);
   return (
     <div ref={ref} className="ui-landing-scene">
-      <LandingPanel label="The Inbox, where agents' asks arrive and are answered">
+      <LandingPanel label="The Inbox, as agents post to it">
         <div className="ui-landing-desktop ui-landing-hero-inbox" {...DESKTOP_SURFACE}>
           <Toolbar
             title="Inbox"
