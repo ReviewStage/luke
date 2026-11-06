@@ -13,22 +13,32 @@ import { CatalogSection } from "../section";
 /** Every state an address stands in, as an invitation's run leaves them. */
 const EVERY_STATE: readonly EmailChip[] = [
   {
-    id: "dana",
+    id: "dana@acme.dev",
     words: "Dana Ruiz",
     typed: "Dana Ruiz <dana@acme.dev>",
     state: EMAIL_CHIP_STATE.SENT,
   },
-  { id: "theo", words: "theo@acme.dev", typed: "theo@acme.dev", state: EMAIL_CHIP_STATE.SENDING },
-  { id: "priya", words: "priya@acme.dev", typed: "priya@acme.dev", state: EMAIL_CHIP_STATE.DRAFT },
   {
-    id: "sam",
+    id: "theo@acme.dev",
+    words: "theo@acme.dev",
+    typed: "theo@acme.dev",
+    state: EMAIL_CHIP_STATE.SENDING,
+  },
+  {
+    id: "priya@acme.dev",
+    words: "priya@acme.dev",
+    typed: "priya@acme.dev",
+    state: EMAIL_CHIP_STATE.DRAFT,
+  },
+  {
+    id: "sam@gmail",
     words: "sam@gmail",
     typed: "sam@gmail",
     state: EMAIL_CHIP_STATE.BAD,
     reason: "Not an email address",
   },
   {
-    id: "lee",
+    id: "lee@acme.dev",
     words: "lee@acme.dev",
     typed: "lee@acme.dev",
     state: EMAIL_CHIP_STATE.REFUSED,
@@ -88,9 +98,9 @@ function Held({
         setChips((now) => [
           ...now,
           ...inviteesOf(typed)
-            .filter((one) => !now.some((chip) => chip.id === one.email))
+            .filter((one) => !now.some((chip) => chip.id === one.email.toLowerCase()))
             .map((one) => ({
-              id: one.email,
+              id: one.email.toLowerCase(),
               words: one.name ?? one.email,
               typed: one.typed,
               state: one.invitable ? EMAIL_CHIP_STATE.DRAFT : EMAIL_CHIP_STATE.BAD,

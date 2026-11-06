@@ -64,14 +64,19 @@ function TeamFields(): React.JSX.Element {
   const [typed, setTyped] = useState("");
   const [chips, setChips] = useState<readonly EmailChip[]>([
     {
-      id: "dana",
+      id: "dana@acme.dev",
       words: "Dana Ruiz",
       typed: "Dana Ruiz <dana@acme.dev>",
       state: EMAIL_CHIP_STATE.DRAFT,
     },
-    { id: "theo", words: "theo@acme.dev", typed: "theo@acme.dev", state: EMAIL_CHIP_STATE.DRAFT },
     {
-      id: "sam",
+      id: "theo@acme.dev",
+      words: "theo@acme.dev",
+      typed: "theo@acme.dev",
+      state: EMAIL_CHIP_STATE.DRAFT,
+    },
+    {
+      id: "sam@gmail",
       words: "sam@gmail",
       typed: "sam@gmail",
       state: EMAIL_CHIP_STATE.BAD,
@@ -95,9 +100,9 @@ function TeamFields(): React.JSX.Element {
               setChips((now) => [
                 ...now,
                 ...inviteesOf(words)
-                  .filter((one) => !now.some((chip) => chip.id === one.email))
+                  .filter((one) => !now.some((chip) => chip.id === one.email.toLowerCase()))
                   .map((one) => ({
-                    id: one.email,
+                    id: one.email.toLowerCase(),
                     words: one.name ?? one.email,
                     typed: one.typed,
                     state: one.invitable ? EMAIL_CHIP_STATE.DRAFT : EMAIL_CHIP_STATE.BAD,
