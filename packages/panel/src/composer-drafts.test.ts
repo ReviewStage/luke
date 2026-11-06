@@ -403,6 +403,36 @@ test("lines a window keeps for its account outlast a reload, but for what storag
   assert.deepEqual(signedIn({ id: "account-grace", email: "grace@acme.test" }).get(lines), []);
 });
 
+test("a window that read kept lines before another let them go never writes them back as it adds its own", () => {
+  const lines = keptLines<{ readonly id: string }, { readonly id: string }>({
+    key: "app.testKeptLinesStale",
+    kept: Schema.Struct({ id: Schema.String }),
+    toKept: (line) => line,
+    fromKept: (kept) => kept,
+    idOf: (kept) => kept.id,
+  });
+  const signedIn = () => {
+    const registry = AtomRegistry.make();
+    const Owner = () => {
+      useDraftsOwner({ id: "account-ada", email: "ada@acme.test" });
+      return null;
+    };
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    roots.push(root);
+    act(() => root.render(onRegistry(registry, createElement(Owner))));
+    return registry;
+  };
+  const sending = signedIn();
+  sending.set(lines, [{ id: "sent" }]);
+  const stale = signedIn();
+  assert.deepEqual(stale.get(lines), [{ id: "sent" }]);
+
+  sending.set(lines, []);
+  stale.set(lines, [...stale.get(lines), { id: "new" }]);
+
+  assert.deepEqual(signedIn().get(lines), [{ id: "new" }]);
+});
+
 test("a message sent takes its words out of the draft, so the box comes back empty and nothing is marked", async () => {
   const sent: string[] = [];
   const send: MessageSender = (_agentId, text) => {

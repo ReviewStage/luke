@@ -721,61 +721,79 @@ export interface KeptLines<Line, Kept> {
   readonly idOf: (kept: Kept) => string;
 }
 
+/** Moved on by every write of kept lines, and by another window's write to storage, so a read of them reads storage again. */
+const keptRevisionAtom = Atom.keepAlive(Atom.make(0));
+
 /**
  * Lines a window holds for the account signed in to it, as `heldLines`
- * does, that also outlast a reload and a relaunch on this Mac: each is
- * kept in the renderer's storage as `toKept` makes it, with its account's
- * id, and read back for that account alone, so what storage cannot hold,
- * a line's files, stays in this window. Note that a write starts from what
- * storage holds, as the drafts' does, because another window keeps its
- * lines there too, so it changes only the lines this window held or holds.
- * A window not signed in keeps nothing.
+ * does, that also outlast a reload and a relaunch on this Mac: storage is
+ * where they stand, each kept as `toKept` makes it, with its account's id,
+ * and read back for that account alone. What storage cannot hold, a line's
+ * files, stays in the window that attached them, by the line, so a line
+ * moving from an account's address to its id keeps them. Note that a write
+ * starts from what storage holds, because another window keeps its lines
+ * there too: it changes the lines it changed, adds the ones it added, and
+ * lets go of the ones it let go, so a line another window let go is never
+ * written back. A window not signed in keeps nothing.
  */
 export function keptLines<Line, Kept>(spec: KeptLines<Line, Kept>): Atom.Writable<readonly Line[]> {
   const stored = Schema.fromJsonString(
     Schema.Array(Schema.Struct({ accountId: Schema.String, line: spec.kept })),
   );
-  const read = (owner: Owner): readonly Line[] =>
+  const idOf = (line: Line) => spec.idOf(spec.toKept(line));
+  // Each line as this window last wrote it, its files among it, by its id.
+  const held = Atom.keepAlive(Atom.make<ReadonlyMap<string, Line>>(new Map()));
+  const read = (owner: Owner, lines: ReadonlyMap<string, Line>): readonly Line[] =>
     owner === null
       ? []
       : readKept(spec.key, stored, [])
           .filter((entry) => entry.accountId === owner)
-          .map((entry) => spec.fromKept(entry.line));
-  const write = (owner: string, was: readonly Line[], next: readonly Line[]) => {
-    const touched = new Set([...was, ...next].map((line) => spec.idOf(spec.toKept(line))));
-    const others = readKept(spec.key, stored, []).filter(
-      (entry) => entry.accountId !== owner || !touched.has(spec.idOf(entry.line)),
-    );
-    writeKept(spec.key, stored, [
-      ...others,
-      ...next.map((line) => ({ accountId: owner, line: spec.toKept(line) })),
-    ]);
-  };
-  const all = Atom.keepAlive(Atom.make<ReadonlyMap<Owner, readonly Line[]>>(new Map()));
+          .map(({ line: kept }) => {
+            const was = lines.get(spec.idOf(kept));
+            return was !== undefined && Equal.equals(spec.toKept(was), kept)
+              ? was
+              : spec.fromKept(kept);
+          });
   ADOPTERS.push((ctx, address, accountId) => {
     const moved = readKept(spec.key, stored, []).map((entry) =>
       entry.accountId === address ? { ...entry, accountId } : entry,
     );
     writeKept(spec.key, stored, moved);
-    const lines = new Map(ctx.get(all));
-    lines.delete(address);
-    lines.delete(accountId);
-    ctx.set(all, lines);
+    ctx.set(keptRevisionAtom, ctx.get(keptRevisionAtom) + 1);
   });
-  return Atom.keepAlive(
+  const self: Atom.Writable<readonly Line[]> = Atom.keepAlive(
     Atom.writable(
       (get) => {
-        const owner = get(ownerAtom);
-        return get(all).get(owner) ?? read(owner);
+        get(keptRevisionAtom);
+        return read(get(ownerAtom), get(held));
       },
       (ctx, next: readonly Line[]) => {
         const owner = ctx.get(ownerAtom);
-        const was = ctx.get(all).get(owner) ?? read(owner);
-        ctx.set(all, new Map(ctx.get(all)).set(owner, next));
-        if (owner !== null) write(owner, was, next);
+        if (owner === null) return;
+        const was = new Set(ctx.get(self).map(idOf));
+        const changed = new Map(next.map((line) => [idOf(line), line]));
+        const all = readKept(spec.key, stored, []);
+        const standing = all.flatMap((entry) => {
+          if (entry.accountId !== owner) return [entry];
+          const id = spec.idOf(entry.line);
+          const line = changed.get(id);
+          if (line !== undefined) return [{ accountId: owner, line: spec.toKept(line) }];
+          // Note that a line this window held and lets go goes, and one only another window holds stands.
+          return was.has(id) ? [] : [entry];
+        });
+        const kept = new Set(
+          standing.flatMap((entry) => (entry.accountId === owner ? [spec.idOf(entry.line)] : [])),
+        );
+        const added = next
+          .filter((line) => !was.has(idOf(line)) && !kept.has(idOf(line)))
+          .map((line) => ({ accountId: owner, line: spec.toKept(line) }));
+        writeKept(spec.key, stored, [...standing, ...added]);
+        ctx.set(held, new Map([...ctx.get(held), ...changed]));
+        ctx.set(keptRevisionAtom, ctx.get(keptRevisionAtom) + 1);
       },
     ),
   );
+  return self;
 }
 
 /**
@@ -828,6 +846,7 @@ export function useDraftsOwner(
 ): void {
   const own = useAtomSet(ownerAtom);
   const change = useAtomSet(draftsAtom);
+  const reread = useAtomSet(keptRevisionAtom);
   const adopt = useAtomSet(adoptAtom);
   const id = account?.id;
   const email = account?.email;
@@ -848,10 +867,12 @@ export function useDraftsOwner(
   useEffect(() => {
     const heard = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY) change(REREAD);
+      // Note that lines kept beside the drafts are read from storage again on any other write, which costs a read.
+      else reread((was) => was + 1);
     };
     window.addEventListener("storage", heard);
     return () => window.removeEventListener("storage", heard);
-  }, [change]);
+  }, [change, reread]);
   // Note that what the window holds unwritten is written at once wherever the words could be lost
   // or read elsewhere before the typing rests: the box losing focus, the window losing it, hidden,
   // or closed, a quit's included, and the window's root going.
