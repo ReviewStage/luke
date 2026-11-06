@@ -3006,7 +3006,7 @@ function paletteOverInbox(inbox: FedInbox, changed = 9_000) {
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+    registryWith({}),
   );
   return { deliver: (next: FedInbox) => deliver(fedOf(next)), opened };
 }
