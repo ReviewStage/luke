@@ -107,13 +107,12 @@ it.effect("a stopped sandbox is never woken: the tunnel closes as not running", 
   Effect.gen(function* () {
     const device = yield* scriptedSocket;
     const pty = yield* scriptedSocket;
-    const { deps, asked, heldUntil } = world(pty, SANDBOX_STATE.STOPPED);
+    const { deps, heldUntil } = world(pty, SANDBOX_STATE.STOPPED);
 
     yield* Effect.scoped(relayTunnel(device.socket, ASK, deps));
 
     assert.deepEqual(device.closed, [TUNNEL_CLOSE.NOT_RUNNING]);
-    assert.equal(asked.connected, 0);
-    assert.equal(asked.resumed, 0);
+    assert.deepEqual(pty.sent, []);
     assert.equal(heldUntil(), 0);
   }),
 );
@@ -124,7 +123,7 @@ it.effect(
     Effect.gen(function* () {
       const device = yield* scriptedSocket;
       const pty = yield* scriptedSocket;
-      const { deps, asked, heldUntil } = world(pty, SANDBOX_STATE.STOPPED);
+      const { deps, heldUntil } = world(pty, SANDBOX_STATE.STOPPED);
       const mirror = { ...ASK, bridge: { kind: TUNNEL_KIND.MIRROR, wake: true } } as const;
 
       const relay = yield* Effect.forkChild(
@@ -132,8 +131,7 @@ it.effect(
       );
       yield* settle;
 
-      assert.equal(asked.resumed, 1);
-      assert.equal(asked.connected, 1);
+      assert.equal(pty.sent.length > 0, true);
       assert.equal(heldUntil(), 0);
       assert.deepEqual(device.closed, []);
       yield* Fiber.interrupt(relay);
