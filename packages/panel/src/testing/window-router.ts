@@ -14,7 +14,7 @@ import {
   type RouterHistory,
 } from "@tanstack/react-router";
 import { createElement, type ReactElement } from "react";
-import { createPanelRouter } from "../panel-router.js";
+import { createPanelRouter, PanelRouterProvider } from "../panel-router.js";
 
 /** The router a test's window stands under. */
 export interface TestWindowRouter {
@@ -25,6 +25,8 @@ export interface TestWindowRouter {
   readonly at: () => number;
   /** `element` under the router, as the window's root draws the panel under it. */
   readonly provide: (element: ReactElement) => ReactElement;
+  /** The router drawn as the window's root draws it, `App` its root route's, and whatever route stands drawn in its places. */
+  readonly drawn: () => ReactElement;
 }
 
 /** The panel's router over `history`, a memory history at `/app` where none is given, its entries followed from the start. */
@@ -60,5 +62,6 @@ export function windowRouter(
     addresses: () => entries,
     at: () => at,
     provide: (element) => createElement(RouterContextProvider, { router, children: element }),
+    drawn: () => createElement(PanelRouterProvider, { router }),
   };
 }

@@ -551,6 +551,8 @@ export const MAC_TERMINAL_ACT_KIND = {
  * attach posts to that panel, as a cloud shell's does, never on an act.
  */
 export const MAC_SHELL_ACT_KIND = {
+  /** The folder a cloud agent's Local shells open in: its mirror on this Mac, made where none stands. */
+  MAC_SHELL_MIRROR: "macShell.mirror",
   MAC_SHELL_OPEN: "macShell.open",
   MAC_SHELL_ATTACH: "macShell.attach",
   MAC_SHELL_CLOSE: "macShell.close",
@@ -926,6 +928,7 @@ export const PORT_ACT_USE = {
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
+  MAC_SHELL_MIRROR: ACT_USE.WRITE,
   MAC_SHELL_OPEN: ACT_USE.WRITE,
   MAC_SHELL_ATTACH: ACT_USE.WRITE,
   MAC_SHELL_CLOSE: ACT_USE.WRITE,

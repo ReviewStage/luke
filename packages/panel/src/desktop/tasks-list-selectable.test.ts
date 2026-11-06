@@ -20,6 +20,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { ADMIN_AWAY } from "../testing/tasks-control.js";
 import { TasksPage } from "./tasks-page.js";
 
 /**
@@ -105,6 +106,7 @@ async function mount() {
       onOpenSettings: () => undefined,
       leaveGuard: useLeaveGuard(),
       room: SHELL_ROOM.WIDE,
+      adminView: ADMIN_AWAY,
     });
     return createElement(TasksPage, {
       tasks: { ...control, onSelect: (taskId: string) => opened.push(taskId) },

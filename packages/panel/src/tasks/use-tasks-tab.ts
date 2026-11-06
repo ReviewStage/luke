@@ -1,6 +1,7 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
@@ -13,10 +14,9 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
+import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
-import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
@@ -67,6 +67,7 @@ import {
   isCloudBrowserTab,
   isDraftTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -125,16 +126,16 @@ import {
   unreachedAs,
 } from "../act.js";
 import { actMutation, pressMutation } from "../act-mutations.js";
-import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
+import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import {
+  descriptionDocumentQuery,
+  descriptionDocumentRetryMutation,
   historyQuery,
   historyRetryMutation,
   pagesQuery,
-  descriptionDocumentQuery,
-  descriptionDocumentRetryMutation,
 } from "../live-reads.js";
 import {
   beginPanelSpan,
@@ -167,14 +168,17 @@ import {
   withUndrawnPassed,
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import type { SectionReveal } from "./description-body.js";
+import {
+  type DescriptionEditMutation,
+  descriptionEditMutation,
+} from "./description-edit-mutation.js";
+import type { RevisionSource } from "./description-history-model.js";
 import { holdsAsk } from "./inbox-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
-import type { SectionReveal } from "./description-body.js";
-import { type DescriptionEditMutation, descriptionEditMutation } from "./description-edit-mutation.js";
-import type { RevisionSource } from "./description-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
@@ -187,6 +191,12 @@ import {
   readAgentById,
   useAgents,
 } from "./use-agents.js";
+import {
+  type DescriptionHistoryControl,
+  type DescriptionHistorySource,
+  type HistorySpot,
+  useDescriptionHistory,
+} from "./use-description-history.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import {
   chooseInboxTask,
@@ -204,14 +214,9 @@ import {
   useMainTabs,
 } from "./use-main-tabs.js";
 import {
-  type HistorySpot,
-  type DescriptionHistoryControl,
-  type DescriptionHistorySource,
-  useDescriptionHistory,
-} from "./use-description-history.js";
-import {
   DRAWN_KINDS,
   drawsChanges,
+  drawsLocal,
   drawsSubagent,
   drawsTerminal,
   isPinnable,
@@ -343,9 +348,6 @@ interface PersonViewControl {
   readonly onClose: () => void;
 }
 
-/** The Admin place's first view, and the one it reads as while it does not stand. */
-const ADMIN_OVERVIEW: AdminView = { kind: ADMIN_TAB.DASHBOARD };
-
 /** The places that are an agent's own, which open on its task where it has one, else on its page. */
 type AgentPlaceKind =
   | typeof LINK_PLACE.AGENT
@@ -383,7 +385,6 @@ const STAND_IN = {
   PERSON: "person",
   AUTOMATIONS: "automations",
   BOARD: "board",
-  ADMIN: "admin",
   /** A workspace's Home or Board asked for under a step naming none of the reader's workspaces. */
   UNKNOWN_WORKSPACE: "unknown-workspace",
 } as const;
@@ -409,17 +410,18 @@ type StandIn =
       readonly runs?: boolean | undefined;
     }
   | { readonly kind: typeof STAND_IN.BOARD }
-  | { readonly kind: typeof STAND_IN.ADMIN; readonly view: AdminView }
   | { readonly kind: typeof STAND_IN.UNKNOWN_WORKSPACE };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
-interface AdminViewControl {
+export interface AdminViewControl {
   readonly open: boolean;
   /** The view standing, or the Overview while the place does not stand. */
   readonly view: AdminView;
   /** Opens the place on `view`; where none is named, on the Overview. */
   readonly onOpen: (view?: AdminView) => void;
   readonly onClose: () => void;
+  /** Reads the place ahead of a press the pointer says is coming, its chunk, charts and all. */
+  readonly onPreload: () => void;
 }
 
 /** The window's Board: whether it stands in the task's place, and the presses that open and leave it. */
@@ -469,10 +471,9 @@ export function automationsTab(place: AutomationsPlace): boolean {
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 
-/** What a fixture run's profile stands in the task's place at launch: Admin's Overview, or an Automations page; none for a place that is no stand-in. */
+/** What a fixture run's profile stands in the task's place at launch: an Automations page; none for a place that is no stand-in. */
 function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
   if (place === undefined) return undefined;
-  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW };
   if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
   return undefined;
 }
@@ -1418,6 +1419,8 @@ export function useTasksTab(input: {
   leaveGuard: LeaveGuard;
   /** The room the panel's stage gives, which holds the side panel only full screen while it is narrow (`shell-room.ts`). */
   room: ShellRoom;
+  /** Admin as the router stands it, which a link to it opens (`admin-route.ts`). */
+  adminView: AdminViewControl;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1909,8 +1912,10 @@ export function useTasksTab(input: {
   // shows something else; a fixture's staged agents are no one's to announce.
   // The window's Inbox stands in the column's place, showing the task whose item is chosen there.
   // Whether the column stands on screen, a fixture's among them.
+  // Note that Admin stands over the window's state, which stays as it was under it (`admin-route.ts`), so none of it is on screen then.
+  const stateShown = shown && !input.adminView.open;
   const columnInView =
-    shown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
+    stateShown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
   // Note that the column is filled only while in view, because a blank draft out of view is let
   // go at once (below), which would leave it empty to fill again.
@@ -1944,7 +1949,7 @@ export function useTasksTab(input: {
   // An agent's page stands in the task's place, showing its agent as its tab would.
   // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
   const inboxTranscript =
-    shown &&
+    stateShown &&
     fixture === undefined &&
     inboxView !== undefined &&
     sidePanel.open &&
@@ -1953,7 +1958,7 @@ export function useTasksTab(input: {
       ? sidePanel.tab.transcript
       : undefined;
   const shownAgent =
-    shown && fixture === undefined && agentView !== undefined
+    stateShown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
       : inboxTranscript !== undefined
         ? inboxTranscript
@@ -1961,7 +1966,7 @@ export function useTasksTab(input: {
           ? mainTabs.tab.agent
           : null;
   const shownInbox =
-    shown && fixture === undefined && inboxView !== undefined ? (inboxTask ?? null) : null;
+    stateShown && fixture === undefined && inboxView !== undefined ? (inboxTask ?? null) : null;
   // Main is told which agent's tab is on screen, whose end it marks unseen nowhere then.
   const reportedAgent = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -3034,7 +3039,12 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    const atHome = page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined;
+    // Note that Home under Admin is no Home on screen, so its composer is no New task there (`admin-route.ts`).
+    const atHome =
+      page === TASKS_PAGE.HOME &&
+      standIn === undefined &&
+      historyFor === undefined &&
+      !input.adminView.open;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -3530,7 +3540,7 @@ export function useTasksTab(input: {
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
       // workspace's accounts, so it lists nothing; one naming the place alone opens on its Overview.
       case LINK_PLACE.ADMIN:
-        standInFor({ kind: STAND_IN.ADMIN, view: adminViewOfLink(place) ?? ADMIN_OVERVIEW });
+        input.adminView.onOpen(adminViewOfLink(place));
         return;
       // Settings is the window's, not the Plans tab's, so its link is opened there.
       case LINK_PLACE.SETTINGS:
@@ -3633,6 +3643,7 @@ export function useTasksTab(input: {
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
+    if (isLocalTab(tab)) return drawsLocal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
@@ -3657,7 +3668,7 @@ export function useTasksTab(input: {
   );
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
-    shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
+    stateShown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
   const pinnedHere = (tab: StripTab) =>
     isAgentTab(tab)
       ? taskAgentPins.some((pin) => pin.agentId === tab.agent)
@@ -3960,17 +3971,9 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // The Admin place stands over the task's place as the Inbox and an agent's page do, each giving way to the others.
-    adminView: {
-      open: standIn?.kind === STAND_IN.ADMIN,
-      view: standIn?.kind === STAND_IN.ADMIN ? standIn.view : ADMIN_OVERVIEW,
-      onOpen: guard((view?: AdminView) => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.ADMIN, view: view ?? ADMIN_OVERVIEW });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
-    },
-    // The Automations page stands over the task's place as the Admin place does, each giving way to the others.
+    // The Admin place is the router's, which draws it in the task's place (`admin-route.ts`).
+    adminView: { ...input.adminView, onOpen: guard(input.adminView.onOpen) },
+    // The Automations page stands over the task's place as the Inbox does, each giving way to the others.
     automationsView: {
       open: standIn?.kind === STAND_IN.AUTOMATIONS,
       place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,

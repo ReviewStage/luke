@@ -242,7 +242,7 @@ function AgentPageBar({
   trail: readonly ToolbarPlace[] | undefined;
   /** What stands before the ⋯: the arrows through its automation's runs, an automation's agent's alone. */
   steps: React.ReactNode;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
   /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */

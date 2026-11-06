@@ -29,8 +29,8 @@ import {
   useHeadingAway,
   useMinute,
 } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
 import { DescriptionCommentsProvider } from "@repo/ui/description-comments";
+import { GLYPH } from "@repo/ui/icons";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import {
   agentOfTab,
@@ -59,7 +59,6 @@ import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
 import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
-import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
 import {
   DescriptionBody,
   type DescriptionRoom,
@@ -67,6 +66,7 @@ import {
   type TitleRename,
 } from "../tasks/description-body.js";
 import { CommentFocusScope } from "../tasks/description-comments.js";
+import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -81,9 +81,9 @@ import type { TaskRelationsDoor } from "../tasks/task-relation-menu.js";
 import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { useDescriptionComments } from "../tasks/use-description-comments.js";
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenAddressesHere, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
-import { useDescriptionComments } from "../tasks/use-description-comments.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
@@ -1362,6 +1362,7 @@ function DescriptionDocument({
                             keys={!phone && tasks.shown && !sideFocused}
                             shown={tasks.shown}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
+                            onOpenLocal={terminalDoors.onOpenLocal}
                             onOpenBrowser={phone ? openBrowser : undefined}
                             onShown={phone ? setShownAgentTab : undefined}
                             waiting={waitingOf}

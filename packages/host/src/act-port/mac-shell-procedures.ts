@@ -1,5 +1,5 @@
 /**
- * mac-shell-procedures.ts -- shells on this Mac as the act port carries them: the developer's login shell opened in a folder for the asking panel, attached on a port of its own, and closed, from a panel alone.
+ * mac-shell-procedures.ts -- shells on this Mac as the act port carries them: a cloud agent's mirror found or made, the developer's login shell opened in a folder for the asking panel, attached on a port of its own, and closed, from a panel alone.
  *
  * The platform holds each shell (`MacShell`: the desktop's main, over
  * node-pty), and these procedures hold which window it belongs to. A shell
@@ -51,6 +51,8 @@ export interface MacShell {
 }
 
 export interface MacShellActsDependencies<Sender> {
+  /** The agent's mirror on this Mac, made where none stands, by its folder; none where the host could not make it. */
+  mirror: (agentId: string) => Effect.Effect<string | undefined>;
   /** The developer's login shell started in `folder`; none where that is no folder on this Mac or the shell did not start. */
   spawn: (folder: string) => MacShell | undefined;
   ports: TerminalPortSeam<Sender>;
@@ -148,7 +150,7 @@ function attached(held: Held, port: HostTerminalPort): void {
 export function macShellProcedures<Sender>(
   dependencies: MacShellActsDependencies<Sender>,
 ): Pick<PlatformActProcedures<Sender>, MacShellActKind> {
-  const { spawn, ports, whenClosed, createId } = dependencies;
+  const { mirror, spawn, ports, whenClosed, createId } = dependencies;
   const macShellPort = actPortFor<Sender>();
   /** Each window's shells, by agent and then by shell. */
   const windows = new Map<Sender, Map<string, Map<string, Held>>>();
@@ -190,6 +192,14 @@ export function macShellProcedures<Sender>(
   };
 
   return {
+    [MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const folder = yield* mirror(input.agentId);
+        if (folder === undefined) return yield* Effect.fail(errors.REFUSED());
+        return { folder };
+      },
+    ),
     [MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
