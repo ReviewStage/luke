@@ -83,7 +83,7 @@ function Badges(): React.JSX.Element {
         <Inline gap={GAP.CONTROL}>
           <QuietWords>Waiting on a teammate</QuietWords>
           <QuietWords>Pending</QuietWords>
-          <QuietWords mark={QUIET_MARK.FAILED}>Destructive</QuietWords>
+          <QuietWords mark={QUIET_MARK.FAILED}>Failed</QuietWords>
         </Inline>
       </CatalogSection>
       <CatalogSection id="row-count" title="A count at a row's end">
