@@ -706,26 +706,24 @@ function fakeService(tasks: Task[]): FakeService {
         Effect.suspend(() => {
           const read = service.connection;
           return Effect.map(service.githubGate, () =>
-            read === undefined
-              ? { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED }
-              : { ok: true as const, answer: read },
+            read === undefined ? { failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED } : read,
           );
         }),
       connect: () =>
         Effect.sync(() => {
           const url = `https://vespin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
-          return { ok: true as const, answer: { url } };
+          return { url };
         }),
       // The service unlinks the session's GitHub and answers the connection as it then stands.
       disconnect: () =>
         Effect.sync(() => {
           service.reads.push("github-disconnect");
           if (service.notPermitted) {
-            return { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
+            return { failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
           }
           service.connection = { connected: false, login: null };
-          return { ok: true as const, answer: service.connection };
+          return service.connection;
         }),
     },
     // The service answers an admin read with what it read, and stars any account.

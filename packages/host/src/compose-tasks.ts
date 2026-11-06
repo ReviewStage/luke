@@ -1796,7 +1796,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const read = githubRead;
     githubAskedAt = yield* Clock.currentTimeMillis;
     const status = yield* served(client.github.status());
-    if (read === githubRead && status.ok) write({ github: status.answer });
+    if (read === githubRead && !("failure" in status)) write({ github: status });
   });
 
   /** Reads the connection where none was asked for since a sign-out, or the last ask is older than its bound. */
@@ -3504,7 +3504,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
         return carried<TasksGitHubPageAnswer>(
-          page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
+          "failure" in page ? GITHUB_PAGE_UNANSWERED : { url: page.url },
         );
       }),
     // The view takes the connection the service answers at once, so Settings
@@ -3516,14 +3516,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         githubAskedAt = undefined;
         // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
-        if (!disconnected.ok) {
+        if ("failure" in disconnected) {
           return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });
         }
         // Note that a read started before the answer is made stale, because
         // the status it read may predate the unlink.
         githubRead += 1;
-        write({ github: disconnected.answer });
-        return carried<TasksGitHubDisconnectAnswer>({ connection: disconnected.answer });
+        write({ github: disconnected });
+        return carried<TasksGitHubDisconnectAnswer>({ connection: disconnected });
       }),
     // An admin read is answered to the caller as the service answered it and
     // held nowhere, since it is other accounts' data, which no view keeps.

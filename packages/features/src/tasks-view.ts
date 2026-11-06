@@ -9,18 +9,7 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
-import { failureFactsSchema } from "./failure-facts.js";
-import {
-  githubRepositoryFullNameSchema,
-  workspaceTokenRepositoriesAnswerSchema,
-} from "./github-repositories-wire.js";
-import {
-  pagePlaceSchema,
-  pageVersionNumberSchema,
-  taskPageVersionAnswerSchema,
-} from "./page-wire.js";
-import { pictureDataUrlSchema } from "./picture-wire.js";
-import { pinPositionSchema } from "./pin-order.js";
+import { githubContract } from "./contract/github.js";
 import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
   descriptionCommentActionRequestSchema,
@@ -32,6 +21,20 @@ import {
   descriptionEditConflictSchema,
   descriptionEditRequestSchema,
 } from "./description-edit.js";
+import { failureFactsSchema } from "./failure-facts.js";
+import { githubConnectionSchema } from "./github-connection-view.js";
+import {
+  githubRepositoryFullNameSchema,
+  workspaceTokenRepositoriesAnswerSchema,
+} from "./github-repositories-wire.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
+import {
+  pagePlaceSchema,
+  pageVersionNumberSchema,
+  taskPageVersionAnswerSchema,
+} from "./page-wire.js";
+import { pictureDataUrlSchema } from "./picture-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
@@ -46,10 +49,10 @@ import {
 } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  listedPullRequestSchema,
   descriptionRevisionAnswerSchema,
   descriptionRevisionSeqSchema,
   descriptionRevisionsAnswerSchema,
+  listedPullRequestSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   type Task,
@@ -160,18 +163,6 @@ export type CodeToken = typeof codeTokenSchema.Type;
 export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
 
 export type CodeLines = typeof codeLinesSchema.Type;
-
-/**
- * Whether the account has a GitHub account linked, and its login where the
- * service holds one: the view's copy of the connection the service answers.
- * Note that it is declared here rather than in `github-connection-wire.ts`,
- * which takes it from here, because the window reads this module and that
- * one's claim vocabulary has no business in the window's bundle.
- */
-export const githubConnectionSchema = EffectSchema.Struct({
-  connected: EffectSchema.Boolean,
-  login: EffectSchema.NullOr(EffectSchema.String),
-});
 
 export const tasksViewSchema = EffectSchema.Struct({
   /** The account's tasks, newest started first, as the last list read answered. */
@@ -1016,25 +1007,21 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
-export const tasksGitHubPageAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ url: EffectSchema.String }),
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
+export const tasksGitHubPageAnswerSchema = answerView(githubContract.connect);
 
 export type TasksGitHubPageAnswer = typeof tasksGitHubPageAnswerSchema.Type;
 
 /** Why the account's GitHub was not disconnected: no answer, or GitHub is its only way to sign in. */
-export const GITHUB_DISCONNECT_FAILURE = {
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
-  NOT_PERMITTED: "not-permitted",
-} as const;
+export const GITHUB_DISCONNECT_FAILURE = failureSetOf(githubContract.disconnect);
 
-/** A disconnect of the account's GitHub, as the window's process hears it: the connection as it then stands, or why it is not. */
+/**
+ * A disconnect of the account's GitHub, as the window's process hears it:
+ * the connection as it then stands, under `connection` as it shipped, or
+ * how the disconnect failed, as its procedure's answer spells it.
+ */
 export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ connection: githubConnectionSchema }),
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(GITHUB_DISCONNECT_FAILURE)),
-  }),
+  answerView(githubContract.disconnect).members[1],
 ]);
 
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;
