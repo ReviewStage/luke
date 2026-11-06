@@ -76,7 +76,9 @@ export function AutomationDirectory({
  * `wanted` holds, in the workspace and with the way to a page of the
  * directory standing around it, which a place inside reads where the
  * place around it does not: a transcript holding an automation's lines,
- * on an agent no automation started.
+ * on an agent no automation started. Note that it stands a directory
+ * whether wanted or not, because a read beginning must not move what it
+ * holds in the tree, which would draw a transcript afresh.
  */
 export function AutomationsWanted({
   wanted,
@@ -86,14 +88,15 @@ export function AutomationsWanted({
   children: ReactNode;
 }): ReactNode {
   const outer = useContext(ShelfContext);
-  if (!wanted || outer === undefined || outer.reading || outer.workspaceId === undefined) {
-    return children;
-  }
+  if (outer === undefined) return children;
+  const { workspaceId, workspaceName, onOpen } = outer;
   return (
     <AutomationDirectory
-      workspace={{ id: outer.workspaceId, name: outer.workspaceName ?? "" }}
-      wanted
-      onOpen={outer.onOpen}
+      workspace={
+        workspaceId === undefined ? undefined : { id: workspaceId, name: workspaceName ?? "" }
+      }
+      wanted={wanted}
+      onOpen={onOpen}
     >
       {children}
     </AutomationDirectory>
