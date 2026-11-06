@@ -137,7 +137,7 @@ const UNREACHABLE_MESSAGE = {
   [BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE]: "Vercel Sandbox was unavailable",
   [BROWSER_UNREACHABLE.NOT_RESUMED]: "the agent's sandbox did not resume in time",
   [BROWSER_UNREACHABLE.SNAPSHOT_GONE]:
-    "the agent's sandbox can no longer resume: its saved files are gone, and its next turn starts a fresh one",
+    "the agent's sandbox shut down after being idle, and its next turn starts a fresh one",
   [BROWSER_UNREACHABLE.NO_CHROMIUM]: "the agent's sandbox carries no browser",
   [BROWSER_UNREACHABLE.NOT_STARTED]: "the browser did not start in the agent's sandbox",
   [BROWSER_UNREACHABLE.BRIDGE_FAILED]: "the browser in the agent's sandbox could not be reached",

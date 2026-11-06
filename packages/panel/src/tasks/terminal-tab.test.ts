@@ -507,7 +507,7 @@ test("a stopped sandbox shows its bar over the dimmed screen and resumes only on
   ]);
 });
 
-test("a resume whose snapshot is gone says the sandbox's saved files are gone", async () => {
+test("a resume whose snapshot is gone says the sandbox shut down and how to start a fresh one", async () => {
   main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   main.resumeRefused = TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE;
   const tab = await mount();
@@ -515,7 +515,7 @@ test("a resume whose snapshot is gone says the sandbox's saved files are gone", 
   await settle();
   assert.equal(
     tab.bar(),
-    "The sandbox’s saved files are gone. The agent’s next message starts a fresh one.",
+    "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
   );
 });
 

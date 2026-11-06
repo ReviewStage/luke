@@ -112,7 +112,7 @@ const UNREACHED_WORDS = {
   [TERMINAL_UNREACHED.SERVICE]: "The service did not answer.",
   [TERMINAL_UNREACHED.SANDBOX]: "The agent’s sandbox didn’t answer.",
   [TERMINAL_UNREACHED.SNAPSHOT_GONE]:
-    "The sandbox’s saved files are gone. The agent’s next message starts a fresh one.",
+    "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
   [TERMINAL_UNREACHED.NOT_FOUND]: "Could not find this agent’s shell.",
   [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",
 } as const satisfies Record<TerminalUnreached, string>;
