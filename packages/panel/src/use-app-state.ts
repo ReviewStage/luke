@@ -7,7 +7,9 @@ import {
   withAppStateDelivery,
 } from "@repo/host/app-state";
 import {
-  type Experiment,
+  type AccountExperiment,
+  type AccountExperimentChoices,
+  accountExperimentChoices,
   type ExperimentChoices,
   experimentOn,
   type HostCapability,
@@ -338,9 +340,15 @@ export const selectSettingsHeld = (state: AppStateSnapshot): boolean =>
 export const selectAppSettingsView = (state: AppStateSnapshot): AppSettingsView | undefined =>
   state.settings === undefined ? undefined : appSettingsView(state.settings);
 
-/** Every experiment the account chose; signed out, every one is off. */
-export const selectExperimentChoices = (state: AppStateSnapshot): ExperimentChoices =>
+/** Every experiment the account chose as its store holds them, a workspace experiment's old choice among them; signed out, every one is off. Read only to combine with a workspace's (`workspace-experiments.ts`). */
+export const selectStoredExperimentChoices = (state: AppStateSnapshot): ExperimentChoices =>
   state.settings?.experiments ?? NO_EXPERIMENTS;
+
+/** Every experiment of its own the account chose; signed out, every one is off. A workspace experiment is the workspace's, read through `workspace-experiments.ts`. */
+export const selectExperimentChoices = memoizedSelect(
+  (state: AppStateSnapshot) => [selectStoredExperimentChoices(state)],
+  (choices: ExperimentChoices): AccountExperimentChoices => accountExperimentChoices(choices),
+);
 
 /** Whether the signed-in account is an admin; signed out, or where the host's read of it failed, none is. */
 export const selectAdminAccess = (state: AppStateSnapshot): boolean => state.access.admin === true;
@@ -349,15 +357,19 @@ export const selectAdminAccess = (state: AppStateSnapshot): boolean => state.acc
 export const selectAdminAccessPending = (state: AppStateSnapshot): boolean =>
   state.access.pending === true;
 
-const experimentSelects = new Map<Experiment, (state: AppStateSnapshot) => boolean>();
+const experimentSelects = new Map<AccountExperiment, (state: AppStateSnapshot) => boolean>();
 
 /**
- * Whether the signed-in account has one experiment on: the one way a gated
- * feature's row, command, and place ask. One function per experiment, made
- * once and kept, so the `select` a surface hands Query stands still from
- * render to render. Signed out, every experiment is off.
+ * Whether the signed-in account has one of its own experiments on: the one
+ * way an account experiment's row, command, and place ask. A workspace
+ * experiment is asked of the workspace (`useWorkspaceExperiment`), so this
+ * takes none. One function per experiment, made once and kept, so the
+ * `select` a surface hands Query stands still from render to render. Signed
+ * out, every experiment is off.
  */
-export function selectExperiment(experiment: Experiment): (state: AppStateSnapshot) => boolean {
+export function selectExperiment(
+  experiment: AccountExperiment,
+): (state: AppStateSnapshot) => boolean {
   const held = experimentSelects.get(experiment);
   if (held !== undefined) return held;
   const select = (state: AppStateSnapshot): boolean =>

@@ -14,7 +14,8 @@ import type { RowChange } from "./row-write.js";
  * asks for, until the stored value agrees; a write the store refuses puts
  * the switch back, its caller saying why in a FAILED toast (`refusalToast`),
  * and the switch never rests disabled for a write (Dean, 2026-10-23). A
- * switch that only changes a draft takes a plain change.
+ * switch that only changes a draft takes a plain change. A switch the reader
+ * may not change is locked, its why its tooltip.
  */
 export function SwitchRow({
   label,
@@ -24,6 +25,7 @@ export function SwitchRow({
   anchor,
   changed,
   disabled,
+  locked,
   density,
   write,
   onChange,
@@ -40,6 +42,8 @@ export function SwitchRow({
   changed?: boolean;
   /** Whether the switch rests for a reason of its caller's; a write in flight never rests it. */
   disabled?: boolean;
+  /** Why the reader may not change it, where they may not, said as its tooltip (`Switch`'s `locked`). */
+  locked?: string | undefined;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
 }): React.JSX.Element {
@@ -67,6 +71,7 @@ export function SwitchRow({
           describedBy={control["aria-describedby"]}
           aria-invalid={control["aria-invalid"]}
           disabled={disabled}
+          locked={locked}
           onChange={(next) => run(next)}
         />
       )}

@@ -404,8 +404,8 @@ const adminDayRoute = createRoute({ getParentRoute: () => adminRoute, path: "day
  * Settings, over the whole window rather than beside the sidebar, under the
  * workspace whose Workspace page it shows, or under `/app` while the window
  * lists none. Its list is the index, which a narrow room stands alone, and
- * each page a `$page`. A page an experiment holds stands only while the
- * account has it on (`settingsPageRouteStands`), and gives way to Profile
+ * each page a `$page`. A page an experiment holds stands only while it is
+ * on, the account's own or the workspace's (`settingsPageRouteStands`), and gives way to Profile
  * otherwise. Its pages are a chunk of their own, opened seldom, whose frame
  * stands while it loads.
  */
@@ -424,7 +424,7 @@ const settingsPageRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "$page",
   beforeLoad: ({ context, params }) => {
-    if (settingsPageRouteStands(params.page, context.access)) return;
+    if (settingsPageRouteStands(params.page, context.access, params.workspace)) return;
     throw redirect({
       to: "/$workspace/settings/$page",
       params: { workspace: params.workspace, page: SETTINGS_VIEW.ACCOUNT },
@@ -440,7 +440,7 @@ const settingsPageRoute = createRoute({
  * alone, a version chosen at `/version/<revision>`, its sections listed at
  * `/version/<revision>/sections`, and one of them at
  * `/version/<revision>/section/<heading>`. It is the description's, so it
- * stands only while the account has Descriptions on
+ * stands only while the workspace it names has Descriptions on
  * (`versionHistoryRouteStands`), and gives way to the task otherwise. One
  * layout draws every page of it, so moving between them draws no new
  * history; its chunk is its own, opened seldom, whose frame stands while it
@@ -460,9 +460,9 @@ const versionHistoryRoute = createRoute({
 const taskVersionsRoute = createRoute({
   getParentRoute: () => versionHistoryRoute,
   path: "/$workspace/task/$taskId/versions",
-  // A version history gives way to the task it is of while the account has Descriptions off.
+  // A version history gives way to the task it is of while its workspace has Descriptions off.
   beforeLoad: ({ context, params }) => {
-    if (versionHistoryRouteStands(context.access)) return;
+    if (versionHistoryRouteStands(context.access, params.workspace)) return;
     throw redirect({ to: "/$workspace/task/$taskId", params, replace: true });
   },
 });
@@ -471,7 +471,7 @@ const taskVersionRoute = createRoute({
   getParentRoute: () => versionHistoryRoute,
   path: "/$workspace/task/$taskId/version/$revision",
   beforeLoad: ({ context, params }) => {
-    if (versionHistoryRouteStands(context.access)) return;
+    if (versionHistoryRouteStands(context.access, params.workspace)) return;
     throw redirect({
       to: "/$workspace/task/$taskId",
       params: { workspace: params.workspace, taskId: params.taskId },

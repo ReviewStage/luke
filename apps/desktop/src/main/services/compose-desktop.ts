@@ -32,7 +32,12 @@ import {
 } from "@repo/host/quit";
 import { effectServiceLayer, serviceLayer } from "@repo/host/service-layer";
 import type { ColorCode } from "@repo/host/task-code-remote";
-import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@repo/settings";
+import {
+  experimentsAnywhere,
+  HOST_CAPABILITY,
+  NO_EXPERIMENTS,
+  workspaceExperimentChoicesFrom,
+} from "@repo/settings";
 import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
@@ -172,9 +177,16 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
           Effect.sync(() => {
             windows.publishAppState();
             // A gated feature's menu items follow the account's experiments and the platform's capabilities as the windows' surfaces do.
+            // Note that the menu cannot know which workspace a window lists, so a workspace experiment's items stand while any of the
+            // account's workspaces has it on, and the window each command reaches gates it again by its own.
             const held = state.snapshot();
             config.showMenuBar({
-              experiments: held.settings?.experiments ?? NO_EXPERIMENTS,
+              experiments: experimentsAnywhere(
+                held.settings?.experiments ?? NO_EXPERIMENTS,
+                held.tasks.workspaces.map((workspace) =>
+                  workspaceExperimentChoicesFrom(workspace.experiments),
+                ),
+              ),
               capabilities: held.run.capabilities,
             });
           }),

@@ -167,6 +167,8 @@ export const GATEWAY_METHOD = {
   WORKSPACES_CREATE: "workspaces.create",
   /** A workspace renamed on the service by an owner or admin; the view's workspaces are read again. */
   WORKSPACES_RENAME: "workspaces.rename",
+  /** One experiment turned on or off for everyone in a workspace on the service by an owner or admin, drawn on the view ahead of its answer. */
+  WORKSPACES_EXPERIMENT_SET: "workspaces.experimentSet",
   /** A workspace's slug changed on the service by its owner; the view's workspaces are read again. */
   WORKSPACES_SLUG_SET: "workspaces.slugSet",
   /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */

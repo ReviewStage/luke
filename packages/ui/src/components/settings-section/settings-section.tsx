@@ -13,7 +13,8 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * the rows edge to edge with a hairline between each and the next, so a
  * row (`SettingsRow`) owns its padding and the section owns everything
  * around it: the room under the heading, the card's edge and corner, and
- * the rules. A section with no heading draws the card alone, for a page
+ * the rules. A headed section may say under its heading, in a caption, what
+ * its rows have in common, such as whom they reach. A section with no heading draws the card alone, for a page
  * that is one group and whose title already says what the rows are. A
  * headed section is a region named by its heading, so a reader moving by
  * landmark hears what the rows are for before reaching them. The room
@@ -264,12 +265,14 @@ export type SettingsSectionFrame =
 function SectionFrame({
   head,
   labelledBy,
+  describedBy,
   anchor,
   frame = SETTINGS_SECTION_FRAME.CARD,
   children,
 }: {
   head: ReactNode;
   labelledBy?: string | undefined;
+  describedBy?: string | undefined;
   anchor?: string | undefined;
   frame?: SettingsSectionFrame;
   children: ReactNode;
@@ -285,6 +288,7 @@ function SectionFrame({
       }
       data-frame={frame}
       aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
     >
       {head === undefined ? null : (
@@ -333,6 +337,7 @@ function SectionHead({
 /** A card of `children`, one row or line each, under `title` when there is one. */
 export function SettingsSection({
   title,
+  caption,
   action,
   anchor,
   frame = SETTINGS_SECTION_FRAME.CARD,
@@ -340,6 +345,8 @@ export function SettingsSection({
 }: {
   /** The group's name, or nothing when the page's title already names it. */
   title?: ReactNode;
+  /** One line under a headed group's name saying what its rows have in common, as whom they reach, which the region is described by. */
+  caption?: ReactNode;
   /** One control at the head's end, beside the title, acting on the whole group (Members' Invite). */
   action?: ReactNode;
   /** The id a Settings link or a search result lands on, worn by the whole section. */
@@ -350,26 +357,37 @@ export function SettingsSection({
   children: ReactNode;
 }): React.JSX.Element {
   const headingId = useId();
+  const captionId = useId();
   const headed = title !== undefined && title !== null && title !== false && title !== "";
+  const captioned = headed && caption !== undefined && caption !== null && caption !== false;
+  const heading = (
+    <SectionHead action={action}>
+      <Text
+        variant={frame === SETTINGS_SECTION_FRAME.ROWS ? TEXT_VARIANT.GROUP : TEXT_VARIANT.SECTION}
+        tone={TEXT_TONE.MUTED}
+        as={TEXT_ELEMENT.H2}
+        id={headingId}
+      >
+        {title}
+      </Text>
+    </SectionHead>
+  );
   return (
     <SectionFrame
       head={
-        headed ? (
-          <SectionHead action={action}>
-            <Text
-              variant={
-                frame === SETTINGS_SECTION_FRAME.ROWS ? TEXT_VARIANT.GROUP : TEXT_VARIANT.SECTION
-              }
-              tone={TEXT_TONE.MUTED}
-              as={TEXT_ELEMENT.H2}
-              id={headingId}
-            >
-              {title}
+        !headed ? undefined : captioned ? (
+          <div className="flex min-w-0 flex-col gap-tight-gap">
+            {heading}
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} id={captionId}>
+              {caption}
             </Text>
-          </SectionHead>
-        ) : undefined
+          </div>
+        ) : (
+          heading
+        )
       }
       labelledBy={headed ? headingId : undefined}
+      describedBy={captioned ? captionId : undefined}
       anchor={anchor}
       frame={frame}
     >

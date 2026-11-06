@@ -60,6 +60,7 @@ import {
   type WorkspaceMember,
   type WorkspacePhotoType,
   workspaceCreateRequestSchema,
+  workspaceExperimentSetRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
@@ -311,6 +312,22 @@ export class HostedWorkspaceClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hostedInSession.workspaces.rename, admitted),
+      (answer) => answer.workspace,
+    );
+  }
+
+  /** One experiment turned on or off for everyone in the workspace by an owner or admin, answering the workspace as it then stands. */
+  setExperiment(
+    workspaceId: string,
+    experiment: string,
+    on: boolean,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceExperimentSetRequestSchema)({ workspaceId, experiment, on }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaces.setExperiment, admitted),
       (answer) => answer.workspace,
     );
   }
