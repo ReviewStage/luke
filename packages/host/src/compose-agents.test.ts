@@ -910,9 +910,9 @@ function fakeService() {
       keptKeys = keys;
       offeredModels = models;
     },
-    /** The service never answering how long ago the devices beat, from now on. */
-    hangPresence: () => {
-      presence = Effect.never;
+    /** Every read of how long ago the devices beat failing from now on, as one past its deadline does. */
+    failPresence: () => {
+      presence = Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   };
 }
@@ -1133,7 +1133,7 @@ function subject(
       answerKeys: service.answerKeys,
       markKeys: service.markKeys,
       answerMarks: service.answerMarks,
-      hangPresence: service.hangPresence,
+      failPresence: service.failPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
       holdPages: service.holdPages,
@@ -4016,33 +4016,21 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a read of the beats the service never answers counts as failed past its bound, the beats it answered before kept, stale",
-  () =>
-    Effect.gen(function* () {
-      const { call, answerPresence, hangPresence, beats } = yield* subject();
-      const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
-      answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
-      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
-      yield* settled;
+it.effect("a read of the beats that fails keeps the beats it answered before, stale", () =>
+  Effect.gen(function* () {
+    const { call, answerPresence, failPresence, beats } = yield* subject();
+    const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
+    answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
+    yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+    yield* settled;
 
-      hangPresence();
-      yield* TestClock.adjust(Duration.seconds(20));
-      yield* settled;
-      yield* TestClock.adjust(Duration.seconds(11));
-      yield* settled;
-      assert.deepEqual(
-        beats().at(-1),
-        { "user-dana": { rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 0 } } },
-        "a read still within its bound has not failed",
-      );
-
-      yield* TestClock.adjust(Duration.seconds(1));
-      yield* settled;
-      assert.deepEqual(beats().at(-1), {
-        "user-dana": {
-          rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 32_000, stale: true },
-        },
-      });
-    }),
+    failPresence();
+    yield* TestClock.adjust(Duration.seconds(20));
+    yield* settled;
+    assert.deepEqual(beats().at(-1), {
+      "user-dana": {
+        rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 20_000, stale: true },
+      },
+    });
+  }),
 );

@@ -539,9 +539,11 @@ export class HostedAgentClient {
     return hostedCall(this.#hosted.hosts.list, undefined);
   }
 
-  /** How long ago the account's own devices last beat, and nothing else of them. */
+  /** How long ago the account's own devices last beat, and nothing else of them, failed past `MAC_PRESENCE.READ_TIMEOUT_MS`. */
   devicePresence(): Effect.Effect<DevicePresenceAnswerView, never, HttpClient.HttpClient> {
-    return hostedCall(this.#hosted.hosts.presence, undefined);
+    return hostedCall(this.#hosted.hosts.presence, undefined, {
+      deadline: HOSTED_DEADLINE.PRESENCE,
+    });
   }
 
   /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
