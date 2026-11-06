@@ -1,12 +1,13 @@
 import { storedAgentChoice } from "@repo/features/account-preferences-live";
 import { contextWindowSchema } from "@repo/features/agent-wire";
 import {
-  CHAPTERS_MODEL_LIST,
-  type ChaptersModelId,
+  CHAPTERS_PICK_LIST,
+  type ChaptersPick,
   chaptersModelFrom,
+  chaptersProviderOf,
 } from "@repo/features/chapters-model-choice";
 import { LINK_OPEN_LIST, type LinkOpen } from "@repo/features/link-open";
-import type { ModelChoice } from "@repo/features/models-wire";
+import type { ModelChoice, ModelProvider } from "@repo/features/models-wire";
 import {
   type AccountPreferences,
   AGENT_ENTER_LIST,
@@ -50,7 +51,7 @@ export interface AccountPreferencesRow {
   /** What a click on Start runs on; none until the account chooses, which the service answers with the fallback its credentials pay for. */
   agent: ModelChoice | undefined;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
-  chaptersModel: ChaptersModelId;
+  chaptersModel: ChaptersPick;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
   experiments: ExperimentChoices;
   /**
@@ -84,7 +85,7 @@ export interface AccountPreferencesWrite {
   setupFinished?: boolean;
   setupPlace?: string;
   agent?: ModelChoice;
-  chaptersModel?: ChaptersModelId;
+  chaptersModel?: ChaptersPick;
   experiments?: ExperimentChoices;
 }
 
@@ -266,6 +267,15 @@ export function accountExperimentOn(
   );
 }
 
+/** Whose API key the account's chapters run on first where it saved both: the provider of the model it last picked, Anthropic's where it picked none. */
+export function accountChaptersProvider(
+  userId: string,
+): Effect.Effect<ModelProvider, StoreFailure, DatabaseServices> {
+  return Effect.map(readAccountPreferences(userId), (row) =>
+    chaptersProviderOf(chaptersModelFrom(row?.chaptersModel)),
+  );
+}
+
 const findAccess = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -324,7 +334,7 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
-  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
+  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_PICK_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   /** The instant the shared preferences part was written, where the write carries it. */
   updatedAt: Schema.optionalKey(Schema.Date),

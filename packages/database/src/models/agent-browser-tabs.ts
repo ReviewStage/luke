@@ -23,7 +23,8 @@
  *
  * The agent's side also keeps its pointer on a tab (`pointBrowserTab`), and
  * a member's window follows an agent's or a task's tabs live
- * (`browserTabsLiveStatement`), under the same rule as the list.
+ * (`packages/service/src/live/reads/browser-tabs.ts`), under the same rule
+ * as the list.
  */
 
 import {
@@ -36,11 +37,9 @@ import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-reposito
 import { and, asc, eq, gt, isNull, lte, or, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
-import { member } from "../schemas/auth.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { agentVisibleTo, reachableTask } from "./workspace-store.js";
@@ -649,58 +648,4 @@ export function renewBrowserTabTakeover(
 /** Hands the tab back to its agent where the member drives it, answering whether they did; another member's takeover stands. */
 export function handBackBrowserTab(tabId: string, userId: string): BrowserTabEffect<boolean> {
   return Effect.map(releaseTab({ tabId, userId }), (rows) => rows.length > 0);
-}
-
-/**
- * One agent's or one task's tabs written for Neon Realtime, so a member's
- * window follows them, the agent's pointer among them, as they move: each
- * tab `listBrowserTabs` lists the account, under the same rule of who may
- * read it, every column under the key the wire's tab line reads it by
- * (`@repo/features/agent-browser-tab-wire`'s `agentBrowserTabLineSchema`)
- * and every instant in epoch milliseconds. The account is joined through its
- * membership of the agent's workspace, as Neon's guide authorizes a live
- * read. It reads no clock, as Realtime requires, so a takeover past its
- * instant is delivered as it stands and lapsed by the reader, and keeps no
- * order, which the reader keeps. None where a value cannot be carried, which
- * a caller answers as the tabs not being live.
- */
-export function browserTabsLiveStatement(
-  userId: string,
-  place: BrowserTabsPlace,
-): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: agentBrowserTab.id,
-            agentId: agentTable.id,
-            address: agentBrowserTab.address,
-            title: agentBrowserTab.title,
-            openedBy: agentBrowserTab.openedBy,
-            openedByUserId: agentBrowserTab.openedByUserId,
-            driverUserId: agentBrowserTab.driverUserId,
-            cursorX: agentBrowserTab.cursorX,
-            cursorY: agentBrowserTab.cursorY,
-            cursorKind: agentBrowserTab.cursorKind,
-            cursorViewportW: agentBrowserTab.cursorViewportW,
-            cursorViewportH: agentBrowserTab.cursorViewportH,
-          },
-          {
-            heldUntil: agentBrowserTab.heldUntil,
-            createdAt: agentBrowserTab.createdAt,
-            lastActedAt: agentBrowserTab.lastActedAt,
-            cursorAt: agentBrowserTab.cursorAt,
-          },
-        ),
-      )
-      .from(agentBrowserTab)
-      // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
-      .innerJoin(agentTable, eq(agentTable.conversationId, agentBrowserTab.conversationId))
-      .innerJoin(
-        member,
-        and(eq(member.organizationId, agentTable.organizationId), eq(member.userId, userId)),
-      )
-      .where(and(agentOfPlace(place), agentVisibleTo(userId))),
-  );
 }

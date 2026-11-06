@@ -10,6 +10,7 @@
  * wherever it stands; the list itself composes them in `inbox-list.tsx`.
  */
 
+import type { ListedAgent } from "@repo/features/agent-wire";
 import {
   INBOX_STATUS,
   type InboxItem,
@@ -73,6 +74,7 @@ import { PlanGlyph } from "./tab-look.js";
 import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 import { cardTitle } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
+import { useTaskAgent } from "./use-task-work.js";
 
 /**
  * An item put away until a reminder says when it comes back in its age's
@@ -122,10 +124,11 @@ const UNNAMED_AGENT = {
   state: ACTOR_STATE.REST,
 } as const;
 
-/** The agent that posted an item as its holder names it: the task's summary's line, or main's line for an agent with no task; none where neither holds it. */
+/** The agent that posted an item as its holder names it: the task's agent as the list followed live holds it (`useTaskAgent`), or main's line for an agent with no task; none where neither holds it. */
 function itemSubject(
   holder: InboxHolder,
   agentId: string,
+  listed: ListedAgent | undefined,
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject | undefined {
@@ -133,8 +136,7 @@ function itemSubject(
     const { agent } = holder;
     return agent.agentId !== agentId ? undefined : tasklessSubject(agent, models);
   }
-  const line = holder.task.agents?.agents.find((each) => each.id === agentId);
-  return line === undefined ? undefined : lineSubject(line, models, readerId);
+  return listed === undefined ? undefined : lineSubject(listed, models, readerId);
 }
 
 /**
@@ -158,7 +160,7 @@ export function ItemMark({
   /** Whether the tile hangs no card of its own, as a row's leading mark does, the row's own card naming the agent instead. */
   plain?: boolean;
 }): React.JSX.Element {
-  const subject = itemSubject(holder, agentId, models, readerId);
+  const subject = itemSubject(holder, agentId, useTaskAgent(agentId), models, readerId);
   if (subject === undefined) {
     if (holder.kind !== INBOX_HOLDER.TASK) return <ActorMark actor={UNNAMED_AGENT} />;
     return (
@@ -256,12 +258,10 @@ export function InboxItemCard({
   const { holder, item } = listed;
   const { needsYou, starter, nameOf } = useInboxStanding(listed, readerId);
   const settled = inboxSettledWords(item, nameOf);
-  const subject = itemSubject(holder, item.agentId, models, readerId);
-  // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
-  const line =
-    holder.kind === INBOX_HOLDER.TASK
-      ? holder.task.agents?.agents.find((each) => each.id === item.agentId)
-      : undefined;
+  const listedAgent = useTaskAgent(item.agentId);
+  const subject = itemSubject(holder, item.agentId, listedAgent, models, readerId);
+  // Note that the list followed live names what each of a task's agents is doing; an agent with no task carries no such word, and shows no spinner.
+  const line = holder.kind === INBOX_HOLDER.TASK ? listedAgent : undefined;
   const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-item-card="">

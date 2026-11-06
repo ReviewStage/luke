@@ -15,7 +15,6 @@ import {
   type Automation,
   type AutomationRun,
   adoptAutomationAgent,
-  archivableRunAgents,
   createAutomation,
   deleteAutomation,
   listAutomationRuns,
@@ -28,6 +27,7 @@ import { readMessageByClientId, sentLineStands } from "@repo/database/models/mes
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
 import { automationRun, automation as automationTable } from "@repo/database/schemas/automation";
 import { turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
@@ -85,6 +85,7 @@ import {
 } from "../testing/github-app-fake.js";
 import { executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 import { sweepAutomations } from "./automation-sweep.js";
+import { reconsiderRunArchive } from "./run-archive.js";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts
@@ -181,6 +182,9 @@ const services = Layer.mergeAll(
   modelCatalogOf(CATALOG),
   ANALYTICS.layer,
 );
+
+/** A trigger no sweep fires, for a test that starts its runs by hand and must leave no schedule due for another test's sweep. */
+const UNSCHEDULED: AutomationTrigger = { kind: AUTOMATION_TRIGGER.WEBHOOK };
 
 /** An owner, a task on the repository of its workspace's installation (or none), and an automation on it due a minute ago, on a weekday schedule unless another trigger is named. */
 const openAutomation = (
@@ -879,37 +883,17 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a run whose agent's starter left the workspace takes no place in the archive's read, so a later run's agent is read in its stead",
-    () =>
-      Effect.gen(function* () {
-        const agentSessions = fakeAgentSessions();
-        const departing = yield* openAutomation({ archiveSuccessful: true });
-        const staying = yield* openAutomation({ archiveSuccessful: true });
-        const orphaned = yield* startedNow(agentSessions, departing.automation);
-        const standing = yield* startedNow(agentSessions, staying.automation);
-        yield* leaveWorkspace(departing.workspaceId, departing.owner);
-
-        const read = yield* archivableRunAgents(new Date(departing.now - 86_400_000), 1);
-
-        assert.deepEqual(
-          read.map((agent) => agent.agentId),
-          [standing],
-        );
-        assert.notEqual(standing, orphaned);
-      }),
-  );
-
-  it.effect(
-    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one waiting on the inbox until its question closes, one whose pull request is open until it merges, and every agent of an automation that does not",
+    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one whose starter left, one waiting on the inbox until its question closes, one whose pull request is open until it merges, and every agent of an automation that does not",
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
         const archiving = yield* openAutomation({
           archiveSuccessful: true,
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
+          trigger: UNSCHEDULED,
         });
-        const keeping = yield* openAutomation();
-        const departing = yield* openAutomation({ archiveSuccessful: true });
+        const keeping = yield* openAutomation({ trigger: UNSCHEDULED });
+        const departing = yield* openAutomation({ archiveSuccessful: true, trigger: UNSCHEDULED });
         const succeeded = yield* startedNow(agentSessions, archiving.automation);
         const failed = yield* startedNow(agentSessions, archiving.automation);
         const asking = yield* startedNow(agentSessions, archiving.automation);
@@ -922,7 +906,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* ranTurn(archiving.owner, publishing, TURN_STATUS.SETTLED);
         yield* ranTurn(keeping.owner, kept, TURN_STATUS.SETTLED);
         yield* ranTurn(departing.owner, orphaned, TURN_STATUS.SETTLED);
-        // Its starter gone from the workspace, the agent is no one's to archive, so it is not counted archived.
+        // Its starter gone from the workspace, the agent is no one's to archive.
         yield* leaveWorkspace(departing.workspaceId, departing.owner);
         const question = yield* postInboxThread(
           { userId: archiving.owner, taskId: null, agentId: asking },
@@ -947,13 +931,16 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           });
         yield* published(PULL_REQUEST_STATE.OPEN);
 
-        const swept = yield* sweepAutomations(agentSessions.sessionsFor, archiving.now).pipe(
-          Effect.provide(services),
-        );
+        const reconsidered = () =>
+          Effect.forEach(
+            [succeeded, failed, asking, publishing, kept, orphaned],
+            reconsiderRunArchive,
+            { discard: true },
+          );
+        yield* reconsidered();
 
         const archived = (owner: string, id: string) =>
           Effect.map(readAgent(owner, id), (read) => Option.getOrThrow(read).archivedAt !== null);
-        assert.equal(swept.archived, 1);
         assert.deepEqual(
           [
             yield* archived(archiving.owner, succeeded),
@@ -961,8 +948,15 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             yield* archived(archiving.owner, asking),
             yield* archived(archiving.owner, publishing),
             yield* archived(keeping.owner, kept),
+            // Note that the starter who left reads their agent no more, so its row is read directly.
+            (yield* Database.use((db) =>
+              db
+                .select({ archivedAt: agentTable.archivedAt })
+                .from(agentTable)
+                .where(eq(agentTable.id, orphaned)),
+            ))[0]?.archivedAt !== null,
           ],
-          [true, false, false, false, false],
+          [true, false, false, false, false, false],
         );
 
         // Brought back by hand, the agent stays; its question closed and its pull request merged later, the asking and publishing ones go.
@@ -973,11 +967,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           "which-queue",
           "Settled it.",
         );
-        const later = yield* sweepAutomations(
-          agentSessions.sessionsFor,
-          archiving.now + 3 * 86_400_000,
-        ).pipe(Effect.provide(services));
-        assert.equal(later.archived, 2);
+        yield* reconsidered();
         assert.deepEqual(
           [
             yield* archived(archiving.owner, succeeded),
@@ -995,8 +985,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
-        const { owner, automation, now, workspaceId } = yield* openAutomation({
+        const { owner, automation, workspaceId } = yield* openAutomation({
           archiveSuccessful: true,
+          trigger: UNSCHEDULED,
         });
         const lead = yield* startedNow(agentSessions, automation);
         const made = yield* createAgent(owner, {
@@ -1021,7 +1012,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             Effect.map(readAgent(owner, id), (read) => Option.getOrThrow(read).archivedAt !== null),
           );
 
-        yield* sweepAutomations(agentSessions.sessionsFor, now).pipe(Effect.provide(services));
+        yield* reconsiderRunArchive(lead);
         const whileHelping = yield* archived();
         yield* Database.use((db) =>
           db
@@ -1029,9 +1020,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .set({ status: TURN_STATUS.SETTLED })
             .where(eq(turns.conversationId, helper.conversationId)),
         );
-        yield* sweepAutomations(agentSessions.sessionsFor, now + 60_000).pipe(
-          Effect.provide(services),
-        );
+        yield* reconsiderRunArchive(helper.id);
 
         assert.deepEqual(whileHelping, [false, false]);
         assert.deepEqual(yield* archived(), [true, true]);

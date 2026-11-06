@@ -1,5 +1,5 @@
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { CHAPTERS_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -29,12 +29,11 @@ export interface ChaptersProceduresDependencies {
 export function chaptersProcedures(dependencies: ChaptersProceduresDependencies) {
   const { host } = dependencies;
   /** Every pull request's chapters a window holds a stream open of, so the host lets them go only with the last. */
-  const openChapters: OpenFollows<never, PullRequestChaptersReadParams> = MutableHashMap.empty();
+  const openChapters: OpenFollows<PullRequestChaptersReadParams> = MutableHashMap.empty();
   return {
     [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: actPort[CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW].effect(
       function* ({ input, context, errors }) {
         if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held chapters reach the panel on app state.
         const hold = followedStream(
           {
             keyOf: (params: PullRequestChaptersReadParams) => ({
@@ -43,8 +42,6 @@ export function chaptersProcedures(dependencies: ChaptersProceduresDependencies)
             }),
             follow: host.chaptersFollow,
             unfollow: host.chaptersUnfollow,
-            onChanged: () => () => undefined,
-            valueOf: () => Option.none<never>(),
           },
           openChapters,
           input,

@@ -101,17 +101,7 @@ const ROW = {
   agents: {
     total: 1,
     working: 0,
-    agents: [
-      {
-        id: AGENT.id,
-        title: AGENT.title,
-        model: AGENT.model,
-        effort: AGENT.effort,
-        status: AGENT.status,
-      },
-    ],
     pullRequestTotal: 0,
-    pullRequests: [],
   },
 };
 

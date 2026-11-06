@@ -304,9 +304,7 @@ test("a plan's card says under its name when the task last saw activity, its age
       total: 1,
       working: 0,
       activityAt: STARTED_AT + 2 * 3_600_000,
-      agents: [],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
   const card = drawn(

@@ -1,7 +1,9 @@
+import type { AnyProcedureContract } from "@orpc/contract";
 import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";
+import { deviceAgentsContract } from "./contract/device-agents.js";
 import type {
   DeviceAgentAnswer,
   DeviceAgentLaunchSecrets,
@@ -18,29 +20,26 @@ import type {
   HostUpdate,
 } from "./device-agent-wire.js";
 import {
+  type HostEnrollAnswer,
   type HostPairingPollAnswer,
   type HostPairingStartAnswer,
   type HostPairingStartRequest,
   hostGithubTokenAnswerSchema,
   type OwnDeviceEnrollRequest,
 } from "./host-wire.js";
-import {
-  askHosted,
-  HOSTED_DEADLINE,
-  type HostedClient,
-  type HostedFailure,
-  type HostedRefused,
-  hostedClient,
-} from "./hosted-link.js";
+import { hostedCall } from "./hosted-call.js";
+import { failureSetOf, type HostedFailed } from "./hosted-failure.js";
+import { HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
-import { HOSTED_API_ERROR } from "./service-wire.js";
+import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
  * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, says which step a launch it claimed has reached, settles a line or answers a request, and saves its agents' state.
  *
- * Each is a procedure of the hosted contract over the one account call, so
- * the bearer is read fresh per attempt and a 401 is renewed and retried
- * once. No call fails: a held read the service did not answer is nothing,
+ * Each is a procedure of the hosted contract asked through `hostedCall`
+ * over the one account call, so the bearer is read fresh per attempt and a
+ * 401 is renewed and retried once, and a refusal its contract declares is
+ * read as a failure, every other one as unanswered. No call fails: a held read the service did not answer is nothing,
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, or its caller withdrew
  * it) and one unanswered nothing; a
@@ -52,7 +51,9 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * (`githubToken`), on the same credential, its device secret. A box with
  * no secret yet pairs with a code: it starts a pairing with no credential
  * (`startHostPairing`) and polls on the poll secret it was answered
- * (`pollHostPairing`) until a member approves or denies it.
+ * (`pollHostPairing`) until a member approves or denies it. A pairing's
+ * call and an own enroll answer as `hostedCall` does, their refusals spelled
+ * as they shipped (`HOST_PAIRING_FAILURE`, `OWN_ENROLL_FAILURE`).
  */
 
 /** A read's bytes as the answer's wire spells them. */
@@ -96,59 +97,68 @@ export interface DeviceAgentDevice extends DeviceMachine {
   readonly setupFailure?: string | undefined;
 }
 
-/** How a pairing's start or poll ended. */
-export const HOST_PAIRING_OUTCOME = {
-  /** The service answered: a start its poll secret, code, and link; a poll where the pairing stands. */
-  ANSWERED: "answered",
-  /** The service is taking no more starts from the box's address for now; start again a little later. */
-  BRAKED: "braked",
-  /** The service refused the daemon's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
-  UPGRADE_NEEDED: "upgrade-needed",
-  /** The service refused the call for any other reason: a malformed start, or a poll on no poll secret. */
-  REFUSED: "refused",
-  /** No answer could be read: the network, the deadline, or a service answering something else. */
-  UNANSWERED: "unanswered",
+/** A procedure's declared refusals, by the slug each is coded as. */
+type DeclaredBy<Procedure extends AnyProcedureContract> = keyof Procedure["~orpc"]["errorMap"] &
+  HostedApiError;
+
+const { startPairing, pollPairing, enrollOwn, ...deviceCalls } = deviceAgentsContract;
+
+/**
+ * How a host's join, a pairing's start or poll or an own enroll, reads its
+ * refusals, as it shipped: below the floor as needing an upgrade, braked
+ * where the service takes no more starts from the box's address, and every
+ * other refusal (a malformed start, a poll on no poll secret, a store that
+ * could not answer, a method its path is not served on) as refused. An own
+ * enroll keeps not found as its own.
+ */
+const HOST_JOIN_RENAMES = {
+  [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: "upgrade-needed",
+  [HOSTED_API_ERROR.QUOTA_EXHAUSTED]: "braked",
+  [HOSTED_API_ERROR.INVALID_TOKEN]: "refused",
+  [HOSTED_API_ERROR.INVALID_REQUEST]: "refused",
+  [HOSTED_API_ERROR.UNAVAILABLE]: "refused",
+  [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: "refused",
+  [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: "refused",
 } as const;
 
-export type HostPairingOutcome<Answer> =
-  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.ANSWERED; readonly answer: Answer }
-  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.BRAKED }
-  | {
-      readonly outcome: typeof HOST_PAIRING_OUTCOME.UPGRADE_NEEDED;
-      readonly minimumVersion?: string | undefined;
-    }
-  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.REFUSED }
-  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.UNANSWERED };
+/** How a pairing's call reads its refusals: as a join does, and not found, a service from before the route, as refused too. */
+const HOST_PAIRING_RENAMES = {
+  ...HOST_JOIN_RENAMES,
+  [HOSTED_API_ERROR.NOT_FOUND]: "refused",
+} as const;
 
-/** A pairing call's answer, or how it failed, by the refusal's slug. */
-function pairingOutcome<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<HostPairingOutcome<Answer>, never, HttpClient.HttpClient> {
-  return asked.pipe(
-    Effect.map(
-      (answer): HostPairingOutcome<Answer> => ({
-        outcome: HOST_PAIRING_OUTCOME.ANSWERED,
-        answer,
-      }),
-    ),
-    Effect.catch((failed): Effect.Effect<HostPairingOutcome<Answer>> => {
-      if (failed._tag !== "HostedRefused") {
-        return Effect.succeed({ outcome: HOST_PAIRING_OUTCOME.UNANSWERED });
-      }
-      switch (failed.refusal) {
-        case HOSTED_API_ERROR.HOST_UPGRADE_NEEDED:
-          return Effect.succeed({
-            outcome: HOST_PAIRING_OUTCOME.UPGRADE_NEEDED,
-            minimumVersion: failed.data?.minimumVersion,
-          });
-        case HOSTED_API_ERROR.QUOTA_EXHAUSTED:
-          return Effect.succeed({ outcome: HOST_PAIRING_OUTCOME.BRAKED });
-        default:
-          return Effect.succeed({ outcome: HOST_PAIRING_OUTCOME.REFUSED });
-      }
-    }),
-  );
-}
+/**
+ * How a call on the device secret reads its refusals: each as its own slug,
+ * those any procedure may answer among them, since a claim refused for any
+ * reason is not claimed and a leave refused on its bearer has left.
+ */
+const DEVICE_AGENT_RENAMES = {
+  [HOSTED_API_ERROR.INVALID_TOKEN]: HOSTED_API_ERROR.INVALID_TOKEN,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_API_ERROR.INVALID_REQUEST,
+  [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_API_ERROR.UNAVAILABLE,
+  [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_API_ERROR.REQUEST_TOO_LARGE,
+} as const;
+
+/** How a call on the device secret failed. */
+const DEVICE_AGENT_FAILURE = failureSetOf(deviceCalls, { as: DEVICE_AGENT_RENAMES });
+
+/** How a pairing's start or poll failed: upgrade needed, braked, refused, or unanswered. */
+export const HOST_PAIRING_FAILURE = failureSetOf(
+  { startPairing, pollPairing },
+  { as: HOST_PAIRING_RENAMES },
+);
+
+/** How a pairing's start or poll failed (`HOST_PAIRING_FAILURE`), under its older name. */
+export const HOST_PAIRING_OUTCOME = HOST_PAIRING_FAILURE;
+
+/** A pairing's start or poll as it failed, with the floor an upgrade must reach where it names one. */
+export type HostPairingFailed = HostedFailed<
+  DeclaredBy<typeof startPairing> | DeclaredBy<typeof pollPairing>,
+  typeof HOST_PAIRING_RENAMES
+>;
+
+/** A pairing call's answer, or how it failed. */
+export type HostPairingOutcome<Answer> = Answer | HostPairingFailed;
 
 /**
  * A box's pairing started (`contract/device-agents.ts`'s `startPairing`),
@@ -162,7 +172,7 @@ export function startHostPairing(
   request: HostPairingStartRequest,
 ): Effect.Effect<HostPairingOutcome<HostPairingStartAnswer>, never, HttpClient.HttpClient> {
   const hosted = hostedClient({ baseUrl: serviceBaseUrl, credential: {} });
-  return pairingOutcome(askHosted(hosted.deviceAgents.startPairing, request));
+  return hostedCall(hosted.deviceAgents.startPairing, request, { as: HOST_PAIRING_RENAMES });
 }
 
 /**
@@ -181,50 +191,27 @@ export function pollHostPairing(
     baseUrl: serviceBaseUrl,
     credential: { authorization: () => Effect.succeed(bearer) },
   });
-  return pairingOutcome(askHosted(hosted.deviceAgents.pollPairing, undefined));
+  return hostedCall(hosted.deviceAgents.pollPairing, undefined, { as: HOST_PAIRING_RENAMES });
 }
 
 /** The machine an own enroll names, which the service creates the device from where the account never registered its id, and which machine it is where it was read (`DeviceMachine`). */
 type OwnEnrollingMachine = Required<Pick<OwnDeviceEnrollRequest, "name" | "platform" | "arch">> &
   DeviceMachine;
 
-/** How an own device's enroll ended (`HostedDeviceAgentClient.enrollOwn`). */
-export const OWN_ENROLL_OUTCOME = {
-  /** The service converted the device in place and answered its device secret, this once. */
-  ENROLLED: "enrolled",
-  /** The account holds no device of that id. */
-  NOT_FOUND: "not-found",
-  /** The service refused the enroll for any other reason, its slug kept. */
-  REFUSED: "refused",
-  /** The service refused the host program's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
-  UPGRADE_NEEDED: "upgrade-needed",
-  /** No answer could be read: the network, the deadline, or a service answering something else. */
-  UNANSWERED: "unanswered",
-} as const;
+/** How an own device's enroll failed: not found, upgrade needed, refused, or unanswered. */
+export const OWN_ENROLL_FAILURE = failureSetOf({ enrollOwn }, { as: HOST_JOIN_RENAMES });
 
+/** How an own device's enroll failed (`OWN_ENROLL_FAILURE`), under its older name. */
+export const OWN_ENROLL_OUTCOME = OWN_ENROLL_FAILURE;
+
+/** An own device's enroll: its device secret, answered this once, or how it failed. */
 export type OwnEnrollOutcome =
-  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.ENROLLED; readonly deviceSecret: string }
-  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.NOT_FOUND }
-  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.REFUSED; readonly refusal: string }
-  | {
-      readonly outcome: typeof OWN_ENROLL_OUTCOME.UPGRADE_NEEDED;
-      readonly minimumVersion?: string | undefined;
-    }
-  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.UNANSWERED };
+  | HostEnrollAnswer
+  | HostedFailed<DeclaredBy<typeof enrollOwn>, typeof HOST_JOIN_RENAMES>;
 
-/** How a refusal of an own device's enroll reads, by its slug. */
-function ownEnrollRefusal(failed: HostedRefused): OwnEnrollOutcome {
-  switch (failed.refusal) {
-    case HOSTED_API_ERROR.NOT_FOUND:
-      return { outcome: OWN_ENROLL_OUTCOME.NOT_FOUND };
-    case HOSTED_API_ERROR.HOST_UPGRADE_NEEDED:
-      return {
-        outcome: OWN_ENROLL_OUTCOME.UPGRADE_NEEDED,
-        minimumVersion: failed.data?.minimumVersion,
-      };
-    default:
-      return { outcome: OWN_ENROLL_OUTCOME.REFUSED, refusal: failed.refusal };
-  }
+/** Whether a call on the device secret was refused, rather than answered or unanswered. */
+function refused(answer: object): boolean {
+  return "failure" in answer && answer.failure !== DEVICE_AGENT_FAILURE.UNANSWERED;
 }
 
 export interface HostedDeviceAgentClientOptions {
@@ -273,20 +260,10 @@ export class HostedDeviceAgentClient {
     deviceId: string,
     machine?: OwnEnrollingMachine,
   ): Effect.Effect<OwnEnrollOutcome, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.enrollOwn, { deviceId, ...machine }).pipe(
-      Effect.map(
-        (answer): OwnEnrollOutcome => ({
-          outcome: OWN_ENROLL_OUTCOME.ENROLLED,
-          deviceSecret: answer.deviceSecret,
-        }),
-      ),
-      Effect.catch((failed) =>
-        Effect.succeed(
-          failed._tag === "HostedRefused"
-            ? ownEnrollRefusal(failed)
-            : { outcome: OWN_ENROLL_OUTCOME.UNANSWERED },
-        ),
-      ),
+    return hostedCall(
+      this.#hosted.deviceAgents.enrollOwn,
+      { deviceId, ...machine },
+      { as: HOST_JOIN_RENAMES },
     );
   }
 
@@ -297,13 +274,9 @@ export class HostedDeviceAgentClient {
    * had already removed is gone too.
    */
   leave(deviceId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.leave, { deviceId }).pipe(
-      Effect.as(true),
-      Effect.catch((failed) =>
-        Effect.succeed(
-          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-        ),
-      ),
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.leave, { deviceId }, { as: DEVICE_AGENT_RENAMES }),
+      (answer) => !("failure" in answer) || answer.failure === DEVICE_AGENT_FAILURE.INVALID_TOKEN,
     );
   }
 
@@ -324,9 +297,9 @@ export class HostedDeviceAgentClient {
       ...(setup === undefined ? undefined : { setup }),
       ...(setup === undefined || setupFailure === undefined ? undefined : { setupFailure }),
     };
-    return askHosted(this.#hosted.deviceAgents.register, input).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.register, input),
+      (answer) => !("failure" in answer),
     );
   }
 
@@ -342,14 +315,12 @@ export class HostedDeviceAgentClient {
       ...(updating === undefined ? undefined : { update: updating.update }),
       ...(updating === undefined || failure === undefined ? undefined : { updateFailure: failure }),
     };
-    return askHosted(this.#hosted.deviceAgents.beat, input).pipe(
-      Effect.map(
-        (answer): DeviceAgentBeat => ({
-          openLaunches: answer.openLaunches,
-          release: answer.release,
-        }),
-      ),
-      Effect.orElseSucceed(() => undefined),
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.beat, input),
+      (answer): DeviceAgentBeat | undefined =>
+        "failure" in answer
+          ? undefined
+          : { openLaunches: answer.openLaunches, release: answer.release },
     );
   }
 
@@ -357,9 +328,9 @@ export class HostedDeviceAgentClient {
   lines(
     deviceId: string,
   ): Effect.Effect<readonly DeviceAgentLine[] | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.lines, { deviceId }, HOSTED_DEADLINE.HELD).pipe(
-      Effect.map((answer): readonly DeviceAgentLine[] => answer.lines),
-      Effect.orElseSucceed(() => undefined),
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.lines, { deviceId }, { deadline: HOSTED_DEADLINE.HELD }),
+      (answer) => ("failure" in answer ? undefined : answer.lines),
     );
   }
 
@@ -381,21 +352,19 @@ export class HostedDeviceAgentClient {
     HttpClient.HttpClient
   > {
     const claimed = (named: string | undefined) =>
-      askHosted(this.#hosted.deviceAgents.claimLine, {
-        deviceId,
-        id,
-        ...(named === undefined ? {} : { claimToken: named }),
-      });
+      hostedCall(
+        this.#hosted.deviceAgents.claimLine,
+        { deviceId, id, ...(named === undefined ? {} : { claimToken: named }) },
+        { as: DEVICE_AGENT_RENAMES },
+      );
     return claimed(claimToken).pipe(
-      Effect.catch((failed) =>
-        claimToken !== undefined && failed._tag === "HostedRefused"
-          ? claimed(undefined)
-          : Effect.fail(failed),
+      Effect.flatMap((answer) =>
+        claimToken !== undefined && refused(answer) ? claimed(undefined) : Effect.succeed(answer),
       ),
-      Effect.map((answer): DeviceAgentClaimedLine => answer),
-      Effect.catch((failed) =>
-        Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
-      ),
+      Effect.map((answer): DeviceAgentClaimedLine | typeof DEVICE_AGENT_NOT_CLAIMED | undefined => {
+        if (!("failure" in answer)) return answer;
+        return refused(answer) ? DEVICE_AGENT_NOT_CLAIMED : undefined;
+      }),
     );
   }
 
@@ -410,9 +379,9 @@ export class HostedDeviceAgentClient {
     id: string,
     step: DeviceLaunchStep,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.lineStep, { deviceId, id, step }).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.lineStep, { deviceId, id, step }),
+      (answer) => !("failure" in answer),
     );
   }
 
@@ -423,14 +392,15 @@ export class HostedDeviceAgentClient {
     exitCode?: number,
     unstarted?: DeviceLaunchUnstarted,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.settleLine, {
+    const input = {
       deviceId,
       id,
       ...(exitCode === undefined ? {} : { exitCode }),
       ...(unstarted === undefined ? {} : { unstarted }),
-    }).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
+    };
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.settleLine, input),
+      (answer) => !("failure" in answer),
     );
   }
 
@@ -438,9 +408,13 @@ export class HostedDeviceAgentClient {
   requests(
     deviceId: string,
   ): Effect.Effect<readonly DeviceAgentRequest[] | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.requests, { deviceId }, HOSTED_DEADLINE.HELD).pipe(
-      Effect.map((answer): readonly DeviceAgentRequest[] => answer.requests),
-      Effect.orElseSucceed(() => undefined),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.deviceAgents.requests,
+        { deviceId },
+        { deadline: HOSTED_DEADLINE.HELD },
+      ),
+      (answer) => ("failure" in answer ? undefined : answer.requests),
     );
   }
 
@@ -453,11 +427,16 @@ export class HostedDeviceAgentClient {
     never,
     HttpClient.HttpClient
   > {
-    return askHosted(this.#hosted.deviceAgents.claimRequest, { deviceId, id }).pipe(
-      Effect.map((answer): DeviceAgentRequest => answer.request),
-      Effect.catch((failed) =>
-        Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.deviceAgents.claimRequest,
+        { deviceId, id },
+        { as: DEVICE_AGENT_RENAMES },
       ),
+      (answer): DeviceAgentRequest | typeof DEVICE_AGENT_NOT_CLAIMED | undefined => {
+        if (!("failure" in answer)) return answer.request;
+        return refused(answer) ? DEVICE_AGENT_NOT_CLAIMED : undefined;
+      },
     );
   }
 
@@ -468,9 +447,9 @@ export class HostedDeviceAgentClient {
     answer: DeviceAgentAnswer,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     const wire = { ...answer, bytes: answer.bytes === null ? null : encodeBytes(answer.bytes) };
-    return askHosted(this.#hosted.deviceAgents.answerRequest, { deviceId, id, answer: wire }).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
+    return Effect.map(
+      hostedCall(this.#hosted.deviceAgents.answerRequest, { deviceId, id, answer: wire }),
+      (answered) => !("failure" in answered),
     );
   }
 }

@@ -1,4 +1,5 @@
 import type { HostedAgentClient } from "@repo/features";
+import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -62,7 +63,7 @@ import {
 } from "@repo/features/inbox-writes";
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
-import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
+import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
@@ -103,7 +104,11 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
+import {
+  agentDefaultWritten,
+  chaptersProviderWritten,
+  heldAccountPreferences,
+} from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -250,11 +255,11 @@ const AGENT_QUEUED_WRITE = {
 export type AgentClient = Pick<
   HostedAgentClient,
   | "pullRequestChaptersLive"
-  | "agentOriginLive"
   | "generateChapters"
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
+  | "writeChaptersProvider"
   | "liveRead"
   | "devicePresence"
   | "removeHost"
@@ -543,7 +548,9 @@ export function composeAgents(
     });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
-        asked(client.agentOriginLive(agentId, userId, poll, after)),
+        asked(
+          client.liveRead(AGENT_ORIGIN_READ, { id: agentId, userId }, poll ? { after } : undefined),
+        ),
       accountId: dependencies.accountId,
       gate,
       tell: (held: AppAgentOrigins) =>
@@ -788,7 +795,6 @@ function fetchedReads(
       path: (userId) => [userId],
       gate,
       focus,
-      every: MODEL_CATALOG_TTL,
       fetch: (userId) =>
         userId === accountId()
           ? Effect.map(asked(client.models()), (answer) =>
@@ -1374,6 +1380,13 @@ function composed(
     AGENTS_DEFAULT_WRITE: declaredWrite(
       dependencies.pool,
       agentDefaultWritten((choice) => asked(client.writeDefault(choice)), dependencies.accountId),
+    ),
+    AGENTS_CHAPTERS_PROVIDER_WRITE: declaredWrite(
+      dependencies.pool,
+      chaptersProviderWritten(
+        (provider) => asked(client.writeChaptersProvider(provider)),
+        dependencies.accountId,
+      ),
     ),
     // A removal is drawn gone over the held hosts the moment it is asked.
     HOSTS_REMOVE: declaredWrite(

@@ -48,8 +48,6 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
-  /** Deletes the hosts' pairings whose code lapsed, a sweep's worth, and the hosts approved whose boxes never collected their secret, answering how many pairings went. */
-  sweepHostPairings: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
   /** Drops the firewall records of the sandbox sessions past the longest a session runs, answering how many went. */
@@ -92,8 +90,6 @@ interface MaintenanceSweepAnswer {
   purgedPictures: Swept<number>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
-  /** Hosts' pairings whose code lapsed, deleted. */
-  hostPairings: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
   /** Firewall records of sandbox sessions long ended, dropped. */
@@ -147,7 +143,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
     purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
-    hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
     staleFirewalls: yield* isolated("purgeStaleFirewalls", sweeps.purgeStaleFirewalls(now)),
     codexPlanSwaps: yield* isolated("renewCodexPlanSwaps", sweeps.renewCodexPlanSwaps(now)),
