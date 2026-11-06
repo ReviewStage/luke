@@ -14,7 +14,7 @@ import { GitHubSetup } from "./setup-github.js";
 /**
  * Setup's GitHub step drawn again, as Back draws it, over a workspace that
  * reaches its repository on a member's token: the token's card stands
- * checked with the done line naming the token. Synthetic throughout.
+ * checked with the done line naming the repository's owner and the token. Synthetic throughout.
  */
 
 const WORKSPACE = "workspace-acme";
@@ -38,7 +38,7 @@ async function settle(): Promise<void> {
   });
 }
 
-test("a workspace reached on the token draws the token's card checked, its done line naming the token", async () => {
+test("a workspace reached on the token draws the token's card checked, its done line naming the owner and the token", async () => {
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
     repositories: {
       installed: false,
@@ -78,7 +78,7 @@ test("a workspace reached on the token draws the token's card checked, its done 
     checked.textContent ?? "",
   );
   assert.equal(
-    container.textContent?.includes("1 repository through your token"),
+    container.textContent?.includes("1 repository on octo through your token"),
     true,
     container.textContent ?? "",
   );
