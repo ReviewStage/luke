@@ -14,7 +14,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
@@ -86,7 +86,7 @@ function drawn(input: {
   });
   const message = createElement(AgentMessage, {
     message: input.message ?? SETTLED,
-    plan: false,
+    description: false,
     lead: AGENT_LEAD,
     moving: input.moving ?? false,
     delegation: { models: [] },
@@ -282,6 +282,7 @@ async function forkedAtInTab(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   for (const button of container.querySelectorAll<HTMLButtonElement>(
     `button[aria-label="${FORK_LABEL}"]`,
   )) {

@@ -30,7 +30,7 @@ import { WorkingLine } from "./working-time.js";
  * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
  * service until the first send, which starts the agent with those words, the
- * files attached, or both as its prompt, never the plan, on the model
+ * files attached, or both as its prompt, never the description, on the model
  * the chip names where the developer
  * changed it and else on the account's default, in the task's repository;
  * the tab then gives way to the agent's own. The words and the choice are

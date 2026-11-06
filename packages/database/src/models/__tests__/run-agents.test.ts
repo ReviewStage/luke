@@ -86,7 +86,7 @@ it.layer(getTestDB())("a run's agents", (it) => {
             createAgent(owner, {
               taskId: null,
               organizationId,
-              planSnapshot: null,
+              descriptionSnapshot: null,
               prompt: "Triage the new issues.",
               automationId: made.id,
               automationRunId,

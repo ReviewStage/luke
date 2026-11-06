@@ -12,7 +12,7 @@ import { agoText } from "@repo/features/time-format";
  * window that step read, turns amber within a tenth of the window of the
  * compaction, and red at or past it, since the next step compacts. The
  * popover divides the read into the parts the service could name: the
- * instructions, the tool definitions, and the plan or task while eve has
+ * instructions, the tool definitions, and the description or task while eve has
  * never compacted, each an estimate, and the conversation as what is left,
  * which leans on the estimates and so is one too; estimates that outrun the
  * count are scaled down to it, so the parts never add up to more. A "~" marks every count
@@ -47,7 +47,7 @@ const ESTIMATE_MARK = "~";
 
 /** What the brief's row is called, by what the agent was handed. */
 const BRIEF_LABEL = {
-  [AGENT_BRIEF.PLAN]: "Description",
+  [AGENT_BRIEF.DESCRIPTION]: "Description",
   [AGENT_BRIEF.PROMPT]: "Prompt",
   [AGENT_BRIEF.BLANK]: "First message",
 } as const satisfies Record<AgentBrief, string>;
@@ -127,7 +127,7 @@ export function contextRows(context: AgentContext, brief: AgentBrief | undefined
   if (briefTokens !== undefined) {
     rows.push({
       part: CONTEXT_PART.BRIEF,
-      label: BRIEF_LABEL[brief ?? AGENT_BRIEF.PLAN],
+      label: BRIEF_LABEL[brief ?? AGENT_BRIEF.DESCRIPTION],
       tokens: briefTokens,
       estimated: true,
     });

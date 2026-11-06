@@ -4,7 +4,7 @@
  * Every read names the account by its id, as the account page's other reads
  * do, so the overview's admin scope has nothing to narrow here. No read
  * selects a column the page may not show: a task's name or document, an
- * agent's title, prompt, plan, or pull request beyond its state, a turn's
+ * agent's title, prompt, description, or pull request beyond its state, a turn's
  * detail beyond what `coder-host/status.ts` reads it for, a key's sealed
  * parts or hint, or a connection's label. A workspace's name and an
  * agent's repository are read, which the developer allowed the admin pages. `admin-account.ts` folds what they answer.

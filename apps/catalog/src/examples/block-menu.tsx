@@ -23,7 +23,7 @@ import { CatalogSection } from "../section";
  * narrowed to nothing.
  */
 
-/** The rows a document offers beyond the vocabulary's, as the plan's own. */
+/** The rows a document offers beyond the vocabulary's, as the description's own. */
 const DIAGRAM: BlockMenuRow = {
   id: "diagram",
   label: "Diagram",

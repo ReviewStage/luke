@@ -6,7 +6,7 @@ import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
 /**
  * saved-tick.tsx -- the confirmation an autosave gives once its write lands: a small Saved tick that springs in, stands a moment, and fades.
  *
- * Something that saves itself (a setting written on change, a plan's words
+ * Something that saves itself (a setting written on change, a description's words
  * saved as they are typed) has no Save button to answer, so its caller
  * counts the writes that landed (`saves`), or says when the newest landed,
  * and the tick says so each time that grows: it fades and springs in, stands for `--ui-confirm-delay`,

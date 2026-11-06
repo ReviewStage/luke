@@ -126,7 +126,7 @@ const openAgentIn = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
@@ -244,7 +244,7 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Sweep the flaky tests.",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
@@ -465,7 +465,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Billing export\n",
+          descriptionSnapshot: "# Billing export\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1060,7 +1060,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           effort: "high",
           repository: "acme/relay",
           githubAccess: GITHUB_ACCESS.APP,
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1766,7 +1766,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository: "acme/relay",
-              planSnapshot: null,
+              descriptionSnapshot: null,
               prompt: null,
               runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             });

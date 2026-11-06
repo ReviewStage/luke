@@ -13,9 +13,10 @@ import { PUSH_METHOD } from "@repo/host/contract";
 import { installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
-import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { rendererPromise, rendererRegistry } from "@repo/panel/renderer-runtime";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
-import { onRegistry } from "@repo/panel/testing/copy-feedback";
+import { onRegistry, writeAppState } from "@repo/panel/testing/copy-feedback";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
 import { QueryClient } from "@tanstack/react-query";
 import { createBrowserHistory, type RouterHistory } from "@tanstack/react-router";
@@ -126,6 +127,8 @@ export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void 
 export async function drawPanel() {
   // A fixture run's window is drawn once its synthetic tasks have landed; they land before this one draws.
   await loadTasksFixture();
+  // The document is in the test's client before the window draws, as the tab's root's `ensureQueryData` leaves it.
+  writeAppState(await rendererPromise(appStateFirstRead));
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);

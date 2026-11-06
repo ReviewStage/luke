@@ -11,6 +11,7 @@ import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
+  type AppStateSnapshot,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import {
@@ -33,7 +34,6 @@ import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "./act-mutations.js";
 import { useAdminRoute } from "./admin/admin-route.js";
@@ -88,22 +88,25 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
+import { useDescriptionWordsUnsaved } from "./tasks/use-description-editing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { ToastHost } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
-  APP_SETTINGS_VIEW,
-  APP_SLICE,
   appStateQuery,
-  SETTINGS_HELD,
+  selectAccount,
   selectAdminAccess,
   selectAdminAccessPending,
+  selectAppSettingsView,
   selectExperiment,
   selectExperimentChoices,
-  useAppSlice,
+  selectInbox,
+  selectRun,
+  selectSessionReplay,
+  selectSettingsHeld,
+  selectTasks,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
@@ -134,22 +137,16 @@ const NO_CAPABILITIES: readonly HostCapability[] = [];
 const IDLE_RUN = { fixtureMode: false, profile: RUN_PROFILE.IDLE } as const;
 
 /** Whether this is a fixture run, which the window waits on its synthetic tasks for. */
-const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.RUN,
-  (run) => run?.fixtureMode === true,
-);
+const selectFixtureMode = (state: AppStateSnapshot): boolean => state.run.fixtureMode === true;
 
 /** The agents main says ended unseen. */
-const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
-  APP_SLICE.AGENTS,
-  (agents) => agents?.unseen ?? NO_UNSEEN_AGENTS,
-);
+const selectUnseenAgents = (state: AppStateSnapshot): readonly string[] => state.agents.unseen;
 
 /** Whether this window stands in full screen. */
-const FULL_SCREEN = Atom.map(APP_SLICE.WINDOW, (facts) => facts?.fullScreen);
+const selectFullScreen = (state: AppStateSnapshot): boolean => state.window.fullScreen;
 
 /** The stored zoom, which the zoom keys step from. */
-const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
+const selectZoom = (state: AppStateSnapshot) => selectAppSettingsView(state)?.zoom;
 
 /** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
 const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
@@ -223,9 +220,9 @@ function ExpiredServerToasts(): null {
  * writes, never see the tasks arrive after the rest.
  */
 export function App(): React.JSX.Element {
-  const fixtureMode = useAppSlice(FIXTURE_MODE);
+  const fixtureMode = useQuery({ ...appStateQuery, select: selectFixtureMode }).data === true;
   const landed = useTasksFixtureLanded(fixtureMode);
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   // Note that the account's key is read above the window, because every message box's Dictate reads it.
@@ -244,12 +241,13 @@ function AppWindow(): React.JSX.Element {
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
   // window, and the tasks it holds, as they were.
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
-  const run = useAppSlice(APP_SLICE.RUN);
-  const planning = useAppSlice(APP_SLICE.TASKS);
-  const inbox = useAppSlice(APP_SLICE.INBOX);
-  const unseenAgents = useAppSlice(UNSEEN_AGENTS);
-  const settingsHeld = useAppSlice(SETTINGS_HELD);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
+  const planning = useQuery({ ...appStateQuery, select: selectTasks }).data;
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
+  const unseenAgents =
+    useQuery({ ...appStateQuery, select: selectUnseenAgents }).data ?? NO_UNSEEN_AGENTS;
+  const settingsHeld = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   // A picture is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
@@ -281,13 +279,13 @@ function AppWindow(): React.JSX.Element {
   // The editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions; so does session replay, below.
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
+  // The shell hears the ask too, and whether a description holds words not saved, which no page's ask
   // covers, so its own ways out of the page and the app ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
-  const planWordsUnsaved = usePlanWordsUnsaved();
+  const descriptionWordsUnsaved = useDescriptionWordsUnsaved();
   useEffect(() => {
-    appPlatform().unsavedPlanWords?.(planWordsUnsaved);
-  }, [planWordsUnsaved]);
+    appPlatform().unsavedDescriptionWords?.(descriptionWordsUnsaved);
+  }, [descriptionWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   // Opens Settings at the place a link names (`settings-link.ts`), counted as the tab changed where it was not standing.
   const goSettings = useCallback((link: SettingsLink) => {
@@ -379,11 +377,11 @@ function AppWindow(): React.JSX.Element {
   useAppCommand(APP_COMMAND.REDO, undo.redoes ? () => void redoLast() : undefined);
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(useAppSlice(ZOOM), (zoom) =>
+  useWindowZoom(useQuery({ ...appStateQuery, select: selectZoom }).data, (zoom) =>
     updateSetting({ field: APP_SETTING_SCHEMA.zoom.field, value: zoom }),
   );
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
-  useWindowFullScreen(useAppSlice(FULL_SCREEN));
+  useWindowFullScreen(useQuery({ ...appStateQuery, select: selectFullScreen }).data);
 
   const signOut = useCallback(async () => {
     await sendSignOut();
@@ -437,7 +435,11 @@ function AppWindow(): React.JSX.Element {
     });
   }, [accountKey, passLeave, onGoHome]);
   // Session replay starts once the renderer is idle, filed under the workspace the sidebar lists.
-  useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY), tasks.workspace?.id);
+  useSessionReplay(
+    run,
+    useQuery({ ...appStateQuery, select: selectSessionReplay }).data,
+    tasks.workspace?.id,
+  );
   // Settings as the router stands it: its page, its list, and the workspace its address names, else the sidebar's.
   const settingsPlace = useSettingsRoute({
     workspaces: tasks.workspaces,
@@ -490,7 +492,7 @@ function AppWindow(): React.JSX.Element {
   const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   const adminPending =
     useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
-  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
+  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open description among them, holds while the window is drawn again.
   const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
@@ -579,7 +581,7 @@ function AppWindow(): React.JSX.Element {
         return;
       }
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
+      // time: Settings, a description's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // task, then an open task back to the page it was opened from. A menu and the
       // settings search answer their own Escapes and keep them — the search

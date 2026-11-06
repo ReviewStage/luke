@@ -24,7 +24,7 @@
 
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { ReloadState } from "@repo/ui/error-boundary";
-import type { QueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
   createRoute,
@@ -52,10 +52,10 @@ import {
   settingsPageRouteStands,
 } from "./route-gates.js";
 import {
-  SETTINGS_HELD,
+  appStateQuery,
+  selectSettingsHeld,
   useAdminAccess,
   useAdminAccessPending,
-  useAppSlice,
   useExperimentChoices,
 } from "./use-app-state.js";
 
@@ -436,7 +436,7 @@ export function PanelRouterProvider({ router }: { router: PanelRouter }): React.
   const admin = useAdminAccess();
   const adminPending = useAdminAccessPending();
   const experiments = useExperimentChoices();
-  const experimentsRead = useAppSlice(SETTINGS_HELD);
+  const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   const access = useMemo(
     (): RouteAccess => ({ admin: admin || adminPending, experiments, experimentsRead }),
     [admin, adminPending, experiments, experimentsRead],

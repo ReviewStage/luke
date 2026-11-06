@@ -2,7 +2,7 @@
 
 import { MOTION_DELAY_MS } from "@repo/brand";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -10,7 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
@@ -28,7 +28,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  * the list's foot says how many and reads the next page on its press, or says
  * the read failed and offers Retry; and the Back row at the list's head goes
  * back, its hint, raised by the keyboard's focus, saying where it leads.
- * Synthetic plan and people.
+ * Synthetic description and people.
  */
 
 declare global {
@@ -47,12 +47,12 @@ const ACME = {
   github: null,
 };
 
-/** A revision of the plan by Lee. */
+/** A revision of the description by Lee. */
 function line(seq: number) {
   return {
     seq,
     lastEdit: {
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       by: { userId: "user-lee", name: "Lee Park" },
       at: 10 * seq,
       duringCall: false,
@@ -78,7 +78,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
+/** The description's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
 function drawn(
   chosen: number[],
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},
@@ -221,12 +221,15 @@ test("the foot counts the older versions, and reading them is its press", async 
   expect(foot(view)?.textContent).toBe("Show 2 more");
 
   act(() => foot(view)?.click());
-  expect(foot(view)?.getAttribute("aria-label")).toBe("Reading older versions");
+  // Note that the read stands out once its mutation's notification has drawn it.
+  await vi.waitFor(() =>
+    expect(foot(view)?.getAttribute("aria-label")).toBe("Reading older versions"),
+  );
   act(() => foot(view)?.click());
   expect(read).toHaveLength(1);
 
   await act(async () => read[0]?.(true));
-  expect(foot(view)?.textContent).toBe("Show 2 more");
+  await vi.waitFor(() => expect(foot(view)?.textContent).toBe("Show 2 more"));
 });
 
 test("a read of older versions that failed says so with Retry, which reads again", async () => {
@@ -237,15 +240,15 @@ test("a read of older versions that failed says so with Retry, which reads again
     onLoadEarlier: () => Promise.resolve(outcomes[reads++] ?? true),
   });
   await act(async () => foot(view)?.click());
-  expect(foot(view)).toBeNull();
+  await vi.waitFor(() => expect(foot(view) === null).toBe(true));
   expect(view.querySelector('[role="alert"]')?.textContent).toContain(
     "Could not read older versions.",
   );
 
   const retry = [...view.querySelectorAll("button")].find((each) => each.textContent === "Retry");
   await act(async () => retry?.click());
+  await vi.waitFor(() => expect(view.querySelector('[role="alert"]') === null).toBe(true));
   expect(reads).toBe(2);
-  expect(view.querySelector('[role="alert"]')).toBeNull();
   expect(foot(view)?.textContent).toBe("Show 2 more");
 });
 

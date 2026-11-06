@@ -4,7 +4,7 @@ import type {
   AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
-import type { PlanEditor } from "@repo/features/task-wire";
+import type { DescriptionEditor } from "@repo/features/task-wire";
 import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -117,7 +117,7 @@ export interface CardReading {
   readonly choice: ModelChoice | undefined;
   readonly transcript: CopiedTranscript | undefined;
   /** The teammate who started the agent, as the wire names them, drawn "[face] Started by Charles Pan · 3d ago"; none for the reader's own, or a card that is no agent's. */
-  readonly startedBy?: PlanEditor | undefined;
+  readonly startedBy?: DescriptionEditor | undefined;
   /** The automation whose run started the agent, drawn "[tile] Started by Morning Sentry triage · 3d ago" in the starter's place where the window knows it. */
   readonly automationId?: string | undefined;
   /** When the agent was started, said after whoever started it, where known. */
@@ -170,7 +170,7 @@ function StartedBy({
   automationId,
   at,
 }: {
-  by: PlanEditor | undefined;
+  by: DescriptionEditor | undefined;
   automationId: string | undefined;
   at: number | undefined;
 }): React.JSX.Element | null {
@@ -305,7 +305,7 @@ export interface CardFoot {
 
 /** The foot naming the task an agent works on, by the plan's glyph: "On Teammate invitations", "On no task". */
 export function taskFoot(words: string): CardFoot {
-  return { glyph: <GLYPH.PLAN />, words };
+  return { glyph: <GLYPH.DESCRIPTION />, words };
 }
 
 /**

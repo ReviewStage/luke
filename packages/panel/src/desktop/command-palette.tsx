@@ -64,7 +64,6 @@
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { automationTriggerText } from "@repo/features/automation-list-model";
 import type { AutomationSummary } from "@repo/features/automation-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -147,7 +146,7 @@ import {
   taskRow,
 } from "@repo/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@repo/ui/tasks-model";
-import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type UseQueryResult, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Fragment,
   isValidElement,
@@ -177,6 +176,7 @@ import {
 } from "../command-items.js";
 import { unreadShown } from "../failure-report.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
+import { workspaceMembersQuery, workspaceMembersRetryMutation } from "../live-reads.js";
 import { memberRows } from "../member-rows.js";
 import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -211,7 +211,6 @@ import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectCapability, selectExperimentChoices } from "../use-app-state.js";
-import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
@@ -659,15 +658,16 @@ function tasksNotice(
  */
 function peopleNotice(
   tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
-  read: HostRead<WorkspaceMembersAnswer>,
+  read: UseQueryResult<WorkspaceMembersAnswer>,
+  retry: () => void,
 ): PaletteNotice | undefined {
   if (tasks.workspace === undefined) {
     const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
     return coming ? { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE } : undefined;
   }
-  if (read.rows !== undefined) return undefined;
-  return read.status === HOST_READ_STATUS.FAILED
-    ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: read.retry }
+  if (read.data !== undefined) return undefined;
+  return read.isError
+    ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: retry }
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
 }
 
@@ -1281,8 +1281,8 @@ function commandLabel(command: AppCommand, experiments: ExperimentChoices): stri
 /**
  * What a command's row says: a place as "Go to" it, and else the words its
  * shortcut says for the account's experiments, which its menu item says too
- * (`panelCommandOf`) but where an experiment renames it, as Copy plan or
- * transcript is Copy transcript while Plans is off.
+ * (`panelCommandOf`) but where an experiment renames it, as Copy description or
+ * transcript is Copy transcript while Descriptions is off.
  */
 function actionLabel(command: AppCommand, experiments: ExperimentChoices): string {
   const label = commandLabel(command, experiments);
@@ -1510,7 +1510,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history while Plans is on, New sub-task, Add task relation, which
+ * the door its ⋯ asks, Version history while Descriptions is on, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history
@@ -2113,9 +2113,10 @@ export function CommandPalette({
 
   const tokens = searchTokens(sought);
   // The listed workspace's members, read once for it, name a task's assignee by face.
-  const membersRead = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, tasks.workspace?.id);
+  const membersRead = useQuery(workspaceMembersQuery(tasks.workspace?.id));
+  const { mutate: retryMembers } = useMutation(workspaceMembersRetryMutation());
   const originOf = useTaskOrigin();
-  const members = membersRead.rows?.members;
+  const members = membersRead.data?.members;
   // Note that the tasks' rows are built once for what they say rather than on every render, and
   // only while a filter that lists them stands open, because a key, an arrow, or the pointer
   // moving ranks or lights them again but changes none of them, and an account may hold thousands.
@@ -2302,7 +2303,11 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
     [PALETTE_FILTER.THIS_TASK]: () => undefined,
     [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
-    [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
+    [PALETTE_FILTER.PEOPLE]: () =>
+      peopleNotice(tasks, membersRead, () => {
+        const workspaceId = tasks.workspace?.id;
+        if (workspaceId !== undefined) retryMembers({ workspaceId });
+      }),
     [PALETTE_FILTER.AUTOMATIONS]: () =>
       automationsAsked ? automationsNotice(tasks, automations) : undefined,
     [PALETTE_FILTER.FILES]: () =>

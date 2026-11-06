@@ -12,7 +12,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
 
 /**
@@ -130,6 +130,7 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   });
   // Note that Codex's mark is served under the platform's asset base, which a row may draw.
   fakeAppPlatform(QUIET_PANEL);
+  await writeHandedAppState();
   const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");
@@ -155,8 +156,8 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   assert.ok(pageText().includes("Disconnected. Its access ends within 15 minutes."), pageText());
   assert.ok(!pageText().includes("didn't finish"), pageText());
   assert.equal(
-    container.querySelector('button[aria-haspopup="menu"]'),
-    null,
+    container.querySelector('button[aria-haspopup="menu"]') === null,
+    true,
     "a disconnected agent offers no Disconnect",
   );
   assert.deepEqual(asked, [CLAUDE.clientId, CLAUDE.clientId]);

@@ -17,7 +17,10 @@ import {
   pagePickAnswerSchema,
 } from "@repo/features/page-pick";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
-import { PLAN_COMMENT_SCOPE, type PlanCommentThread } from "@repo/features/plan-comment-wire";
+import {
+  DESCRIPTION_COMMENT_SCOPE,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view";
 import { readingWords } from "@repo/features/words";
@@ -47,7 +50,7 @@ import {
   MessageSquarePlusIcon,
   RotateCwIcon,
 } from "@repo/ui/icons";
-import type { PlanCommentsControl } from "@repo/ui/plan-comments";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import {
@@ -60,7 +63,7 @@ import {
   useState,
 } from "react";
 import { appPlatform } from "../app-platform.js";
-import { type PlanCommentPlace, useDraftWriter } from "../composer-drafts.js";
+import { type DescriptionCommentPlace, useDraftWriter } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
@@ -92,7 +95,7 @@ import {
   pageDraftPlace,
   threadsByElement,
   withQuote,
-} from "./plan-comments.js";
+} from "./description-comments.js";
 import { pageSourceQueryOptions, pageSourcesKey } from "./repository-reads.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
@@ -149,8 +152,8 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the frame it drew, only while it asked, and only while the window holds a
  * press of the developer's, as it takes a link. The bar's last toggle, the
  * side panel's own glyph as a File tab's tree has it, opens the page's
- * comments pane on its right, listed as the plan's comments list lists the
- * plan's (`PageComments`); it slides in and out as the tree does, is
+ * comments pane on its right, listed as the description's comments list lists the
+ * description's (`PageComments`); it slides in and out as the tree does, is
  * dragged wider or narrower by its left edge, one width for every page,
  * and shut by a drag past its least width. The bar's comment controls stand
  * at its end, Comment then that toggle, as the tree's toggle ends a File
@@ -609,7 +612,7 @@ function versionStepAction(
  * kept where it holds words or files of the writer's own, and dropped where
  * it holds only the quotes it was started from, so the next starts afresh.
  */
-function useCommenting(place: PlanCommentPlace | undefined) {
+function useCommenting(place: DescriptionCommentPlace | undefined) {
   const drafts = useDraftWriter();
   const [column, setColumn] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -670,11 +673,11 @@ function pageReserve(row: HTMLElement): number {
 
 /** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected; then those holding only comments held in the reader's review. */
 function threadMarks(
-  threads: readonly PlanCommentThread[],
+  threads: readonly DescriptionCommentThread[],
   held: readonly HeldComment[],
 ): readonly PageMark[] {
   const posted = [...threadsByElement(threads)].map(([path, [first]]) =>
-    first?.scope === PLAN_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
+    first?.scope === DESCRIPTION_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
   );
   const marked = new Set(posted.map((mark) => mark.path));
   const heldMarks = held.flatMap((comment) => {
@@ -709,7 +712,7 @@ export function PagePane({
   /** The page's comment threads and who writes them; none for a page with no comments, one an agent on no task showed. */
   comments?:
     | {
-        readonly control: PlanCommentsControl;
+        readonly control: DescriptionCommentsControl;
         readonly doors: Parameters<typeof PageComments>[0]["doors"];
       }
     | undefined;

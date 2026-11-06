@@ -1,7 +1,7 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a task's page, a plan's version history, the home page,
+ * A place is a task's page, a description's version history, the home page,
  * the Inbox, or a routed place, Settings or Admin, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
@@ -30,7 +30,7 @@
  * however many of its pages are turned, since each turn replaces its entry
  * (`settings-link.ts`), so Back from any page of it returns to wherever it
  * was opened from; leaving one for a place the window's state says is a
- * visit after it (`onLeaveRouted`). A plan's version
+ * visit after it (`onLeaveRouted`). A description's version
  * history is one step the same way, whichever version is chosen in it or
  * whichever revision's sections are open, and going back to it opens it on
  * that version with those sections. Whatever is opened from it — a version's
@@ -111,6 +111,7 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { type HistoryLocation, type RouterHistory, useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
 import {
@@ -127,9 +128,9 @@ import { ROUTED_PLACE, type RouteAccess, type RoutedPlace, routedStands } from "
 import { useRoutedLocation } from "./routed-location.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
+import type { HistorySpot } from "./tasks/use-description-history.js";
 import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
-import type { HistorySpot } from "./tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -140,10 +141,10 @@ import {
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
 import {
-  SETTINGS_HELD,
+  appStateQuery,
+  selectSettingsHeld,
   useAdminAccess,
   useAdminAccessPending,
-  useAppSlice,
   useExperimentChoices,
 } from "./use-app-state.js";
 import { useHostRead } from "./use-host-read.js";
@@ -427,7 +428,7 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or a routed place at the same address. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same description's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or a routed place at the same address. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED) {
@@ -965,7 +966,7 @@ function sameReading(one: HistoryReading, other: HistoryReading): boolean {
   );
 }
 
-/** The window's history, with the way a restore leaves a plan's version history and a page's way out. */
+/** The window's history, with the way a restore leaves a description's version history and a page's way out. */
 export interface WindowHistory extends NavigationHistory {
   /** Leaves the routed place standing, Settings or Admin, for the place the window's state says, as a visit after it; nothing off one. */
   onLeaveRouted: () => void;
@@ -1556,7 +1557,7 @@ function awayStep(
 /**
  * The window's history: Tasks on the task it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or on that plan's version history, or the Inbox, or Settings on its page. A task the
+ * or on that description's version history, or the Inbox, or Settings on its page. A task the
  * account's list once held and holds no more is passed over, unless the list
  * itself could not be read, or it is the task the window is bound for. Note that a
  * task no list has held yet is still a place, because the list may not have
@@ -1656,7 +1657,7 @@ export function useWindowHistory(input: {
   // A routed step is reachable as its route's gate would let the window stand there (`route-gates.ts`).
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
-  const experimentsRead = useAppSlice(SETTINGS_HELD);
+  const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   const access: RouteAccess = { admin: adminOn || adminPending, experiments, experimentsRead };
   const router = useRouter();
   // The window leaving the routed place standing for the place its state says, which it stands on as a visit.
@@ -1786,7 +1787,7 @@ export function useWindowHistory(input: {
       if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
       return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
     }
-    // A task's version history is the plan's, which stands only while the account has Plans on.
+    // A task's version history is the description's, which stands only while the account has Descriptions on.
     if (
       to.kind === PLACE_KIND.VERSION_HISTORY &&
       !experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)

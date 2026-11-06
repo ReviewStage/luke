@@ -470,7 +470,7 @@ const composedWeb = (
           {
             recordSurfaceEvent: count,
             unsavedWork: tab.unsavedWork,
-            unsavedPlanWords: tab.unsavedPlanWords,
+            unsavedDescriptionWords: tab.unsavedDescriptionWords,
           },
           linkPlatform,
         ),

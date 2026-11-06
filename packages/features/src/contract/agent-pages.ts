@@ -11,7 +11,7 @@ import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { pageFrameAnswerSchema } from "../page-frame.js";
-import { planPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
+import { taskPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { hostedProcedure } from "./base.js";
 
@@ -37,7 +37,7 @@ export const agentPagesContract = {
   version: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${PAGES_PATH}/{page}/versions/{version}` }))
     .input(agentPageVersionSchema)
-    .output(EffectSchema.flip(planPageVersionAnswerSchema)),
+    .output(EffectSchema.flip(taskPageVersionAnswerSchema)),
   /** One version of one of the agent's own pages as a browser's frame loads it, answered as a plan's page frame is (`task-files.ts`). */
   frame: hostedProcedure
     .meta(

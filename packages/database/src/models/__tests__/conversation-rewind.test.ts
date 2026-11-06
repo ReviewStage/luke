@@ -37,7 +37,7 @@ const openConversation = Effect.gen(function* () {
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
     repository: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

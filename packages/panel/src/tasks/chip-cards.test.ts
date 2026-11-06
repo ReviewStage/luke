@@ -160,7 +160,7 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Roll it out\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Roll it out\n\nStore first.\n";
 
 const SWEEP: AutomationSummary = {
   id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
@@ -351,7 +351,7 @@ const PAGE: TaskMentionsValue = {
   taskName: TASK.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
-  text: () => PLAN_TEXT,
+  text: () => DESCRIPTION_TEXT,
   doors: {
     holder: { taskId: TASK_ID },
     place: PLACE,
@@ -712,6 +712,10 @@ test("an Inbox item's chip whose feed could not be read keeps the card main's br
 
 test("a member's chip hangs their card", async () => {
   const container = await drawn(`Ask [Sam](${HOME}/person/${SAM}).`);
+  // Note that the chip names the member once the workspace's members reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Sam Okafor"), true),
+  );
 
   const member = await cardOf(chipsOf(container)[0]);
 
@@ -724,6 +728,10 @@ test("an automation's chip is called by its name now, its workspace's automation
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationHolds.length;
+  // Note that the chip says the automation's name once the workspace's automations reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Nightly sweep"), true),
+  );
   const [chip] = chipsOf(container);
   const drawnReads = reads();
   const called = chip?.textContent;

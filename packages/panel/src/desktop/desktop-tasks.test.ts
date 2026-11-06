@@ -21,13 +21,13 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+} from "@repo/features/description-comment-wire";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -89,7 +89,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The side panel shown on the plan's comments beside it. */
+/** The side panel shown on the description's comments beside it. */
 /** A File tab of the task, which the panel draws in these tests. */
 const NOTES = { file: "docs/notes.md" };
 
@@ -147,16 +147,19 @@ test("a task's comments are held from its open, so its first ready frame marks t
   const from = body.indexOf("seven days");
   const thread = {
     id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "seven days",
     anchor: { from, to: from + "seven days".length },
     section: "Goal",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       {
         id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-        kind: PLAN_COMMENT_ENTRY.COMMENT,
-        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-lee", name: "Lee Park" } },
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: {
+          actor: DESCRIPTION_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-lee", name: "Lee Park" },
+        },
         words: "Should this be a setting?",
         at: 1,
       },
@@ -175,7 +178,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
       // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() =>
         reads.deliverComments({
-          [COMMENT_SUBJECT.PLAN]: { [TASK.id]: { rows: [thread] } },
+          [COMMENT_SUBJECT.DESCRIPTION]: { [TASK.id]: { rows: [thread] } },
           [COMMENT_SUBJECT.PAGE]: {},
         }),
       );
@@ -210,7 +213,8 @@ test("a task's comments are held from its open, so its first ready frame marks t
     ),
   );
   assert.equal(
-    container.querySelector(`mark.plan-comment-mark[data-threads~="${thread.id}"]`)?.textContent,
+    container.querySelector(`mark.description-comment-mark[data-threads~="${thread.id}"]`)
+      ?.textContent,
     "seven days",
   );
   act(() => root.unmount());
@@ -444,8 +448,8 @@ async function _narrowTaskInbox(
             sidePanel: {
               ...tasksControl().sidePanel,
               open: true,
-              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+              strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
               tab: SIDE_PANEL_TAB.INBOX,
             },
             me: reader.me,
@@ -559,7 +563,7 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
     ...TASK,
     repository: "acme/web",
     lastEdit: {
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       by: { userId: "user-lee", name: "Lee Park" },
       at: 2,
       duringCall: false,
@@ -589,9 +593,11 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
   );
   // Note that the plan's last editor is drawn once Plans reaches the page through the Query client.
   await vi.waitFor(() =>
-    assert.match(container.querySelector(".plan-byline")?.textContent ?? "", /Edited /u),
+    assert.match(container.querySelector(".description-byline")?.textContent ?? "", /Edited /u),
   );
-  const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
+  const body = container.querySelector(
+    ".desktop-document .description-document-body .description-body",
+  );
   // A task from before statuses draws no standing chip.
   const path = body?.firstElementChild;
   const first = path?.nextElementSibling;
@@ -613,7 +619,7 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
     "the repository is words, not a press",
   );
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
-  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.ok(byline?.classList.contains("description-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
   act(() => root.unmount());
   container.remove();
@@ -910,7 +916,7 @@ function panelPage(
   };
 }
 
-test("the plan stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
+test("the description stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const column = (tab: MainTab): Partial<TasksControl> => ({
     mainTabs: {
@@ -922,11 +928,15 @@ test("the plan stays drawn, hidden, while an agent's tab of the column is shown,
   });
   const page = panelPage(NOTES, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
-  assert.ok(document, "the plan is drawn on Overview");
+  assert.ok(document, "the description is drawn on Overview");
   assert.equal(document.hasAttribute("hidden"), false);
 
   page.draw(NOTES, column({ agent: agentId }));
-  assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
+  assert.equal(
+    page.container.querySelector(".desktop-document"),
+    document,
+    "the same description stands",
+  );
   assert.equal(document.hasAttribute("hidden"), true);
 
   page.draw(NOTES, column(MAIN_TAB.OVERVIEW));

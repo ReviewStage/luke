@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { heardWords } from "../testing/heard-words.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -134,6 +134,7 @@ async function workerTab(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   return container;
 }
 
@@ -271,10 +272,12 @@ test("a worker's tab whose earlier messages could not be read says so over its l
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const settle = () =>
-    act(async () => {
+  const settle = async () => {
+    await act(async () => {
       for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
     });
+    await settleQueries();
+  };
   act(() =>
     root?.render(
       onRegistry(

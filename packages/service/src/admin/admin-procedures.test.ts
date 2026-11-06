@@ -96,7 +96,7 @@ function seams(asked: string[], viewer: AdminViewer | null = ADMIN): AdminProced
             activity: {
               features: {
                 agentsStarted: 0,
-                planRevisions: 0,
+                descriptionRevisions: 0,
                 inboxAnswered: 0,
                 automationRuns: 0,
               },
@@ -338,7 +338,7 @@ it.effect(
       assert.equal(day.status, 200);
       assert.match(
         day.text,
-        /^\{"generatedAt":\d+,"day":"2026-10-01","limit":50,"activity":\{"features":\{"agentsStarted":0,"planRevisions":0,"inboxAnswered":0,"automationRuns":0\},"activeDevelopers":0,"accounts":\[\]\},"totals":\{"accounts":0,"calls":0\},"accounts":\[\]\}$/u,
+        /^\{"generatedAt":\d+,"day":"2026-10-01","limit":50,"activity":\{"features":\{"agentsStarted":0,"descriptionRevisions":0,"inboxAnswered":0,"automationRuns":0\},"activeDevelopers":0,"accounts":\[\]\},"totals":\{"accounts":0,"calls":0\},"accounts":\[\]\}$/u,
       );
       assert.deepEqual(asked, ["users all admin-1 7 undefined", "day 2026-10-01 non-admins"]);
     }),

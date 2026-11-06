@@ -5,7 +5,7 @@
  * not delivered, until the developer sends it again, takes it back into the
  * box, or deletes it, as a chat app keeps a message that did not go
  * (`use-agent-composer.ts`). Its tab is not the only place that knows: the
- * line is held here, for the account that sent it, as a plan comment
+ * line is held here, for the account that sent it, as a description comment
  * refused is (`heldLines`), so a tab closed, or a task left, while the
  * refusal landed draws the line again on its return, and the task's row,
  * the agent's row, and its tab wear the failed mark in the draft pencil's

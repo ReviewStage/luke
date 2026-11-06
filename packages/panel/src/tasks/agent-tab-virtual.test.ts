@@ -24,7 +24,7 @@ import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -138,6 +138,7 @@ function following(first: AgentMessagesAnswerView) {
 
 async function settled(): Promise<void> {
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  await settleQueries();
 }
 
 /** The scroll each log box stands at, and the writes heard on each box a test listens to (`layOut`). */

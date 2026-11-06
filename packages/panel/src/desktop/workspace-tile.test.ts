@@ -6,7 +6,7 @@ import type { AppWorkspacePhotos } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { WorkspaceTile } from "./workspace-tile.js";
@@ -95,6 +95,8 @@ test("a workspace with a photo draws its letter while it loads, then the photo t
 
   assert.deepEqual(drawn(tile), letterTile("A"));
   await settle();
+  // Note that the photo is offered once the host's read of it reaches its query.
+  await vi.waitFor(() => assert.equal(tile.querySelector("img") !== null, true));
   const read = drawn(tile);
   load(tile);
 
@@ -120,6 +122,7 @@ test("a photo the host holds none of at the version the list names, or that fail
     photos,
   );
   await settle();
+  await vi.waitFor(() => assert.equal(broken.querySelector("img") !== null, true));
   const offered = broken.querySelector("img") !== null;
   act(() => broken.querySelector("img")?.dispatchEvent(new Event("error")));
 

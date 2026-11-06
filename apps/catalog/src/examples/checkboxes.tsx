@@ -74,8 +74,8 @@ function Checkboxes(): React.JSX.Element {
       <CatalogSection id="checkbox-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">
           <Held start>
-            Send the transcript of this call, its plan, and the screenshots attached to it with the
-            report
+            Send the transcript of this call, its description, and the screenshots attached to it
+            with the report
           </Held>
         </div>
       </CatalogSection>

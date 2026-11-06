@@ -72,9 +72,9 @@ function sameWord(before: SessionReplayWord | undefined, after: SessionReplayWor
 
 /**
  * The editor bundle loads once the panel has been idle, so an agent's message
- * box and a plan's editor find it there; so does the parser a reply's markdown
+ * box and a description's editor find it there; so does the parser a reply's markdown
  * is drawn through, so a transcript opened finds it there. Each surface that
- * needs either reads it itself and loads it at once, and a plan's text still
+ * needs either reads it itself and loads it at once, and a description's text still
  * warms the editor as the pointer comes over it, so this is only the warm-up.
  */
 export function usePrefetchBundles(): void {

@@ -24,23 +24,23 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * stand (`AgentGlyph`, `SubagentGlyph`) in every one of those places, the
  * "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. A task wears its
- * status's mark (`PlanGlyph`), and so does a pin of its Plan tab, which is
+ * status's mark (`PlanGlyph`), and so does a pin of its Description tab, which is
  * named for the task wherever the place knows it; the task's Overview, which
- * holds its plan in its column, wears the document's glyph and its word. Each place adds what
+ * holds its description in its column, wears the document's glyph and its word. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
  * and section, ⌘K's task name.
  */
 
 /** The kinds of tab, each drawn its own way. */
 export const TAB_KIND = {
-  /** One of the side panel's fixed kinds: Plan, Inbox, Board, Code, or Comments. */
+  /** One of the side panel's fixed kinds: Description, Inbox, Board, Code, or Comments. */
   PANEL: "panel",
   /** A task, as a row naming it does. */
   PLAN: "plan",
   INBOX: "inbox",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
-  /** The task's Overview, which leads its column and shows its plan document. */
+  /** The task's Overview, which leads its column and shows its description. */
   OVERVIEW: "overview",
   AGENT: "agent",
   SUBAGENT: "subagent",
@@ -70,7 +70,7 @@ export type TabSubject =
   | {
       readonly kind: typeof TAB_KIND.PANEL;
       readonly tab: FixedSidePanelTab;
-      /** The task the panel stands beside, whose name and status its Plan tab wears; none where the place does not know it, and the tab says Plan. */
+      /** The task the panel stands beside, whose name and status its Description tab wears; none where the place does not know it, and the tab says Description. */
       readonly plan?: PlanStanding | undefined;
       /** Whether the Inbox kind holds one thread open, as it does beside the window's Inbox, which it is named for, under the thread's glyph, rather than any task's Inbox. */
       readonly thread?: boolean | undefined;
@@ -126,7 +126,7 @@ export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
 }
 
 /**
- * The open task as its Plan tab wears it: its name, and its status as the
+ * The open task as its Description tab wears it: its name, and its status as the
  * task list holds it, which a status set from the sidebar moves first; none
  * while no task is open.
  */
@@ -195,7 +195,7 @@ export function tabLook(subject: TabSubject): KindLook {
   switch (subject.kind) {
     case TAB_KIND.PANEL: {
       const { tab, plan } = subject;
-      if (tab === SIDE_PANEL_TAB.PLAN && plan !== undefined) {
+      if (tab === SIDE_PANEL_TAB.DESCRIPTION && plan !== undefined) {
         return { icon: <PlanGlyph status={plan.status} />, label: plan.name };
       }
       if (tab === SIDE_PANEL_TAB.INBOX && subject.thread === true) {

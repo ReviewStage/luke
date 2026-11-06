@@ -11,7 +11,7 @@
  * database agree. A caller annotates the scope its work runs in once, with
  * the ids it already holds. A line names ids, statuses,
  * codes, and a failure's own words with every credential-shaped run
- * redacted, and never a message's, a plan's, or a model's words.
+ * redacted, and never a message's, a description's, or a model's words.
  *
  * A failure a developer meets is said once as an error, where it is decided.
  * One that no named refusal explains (the sandbox would not open, the launch

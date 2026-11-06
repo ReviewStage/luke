@@ -107,7 +107,7 @@ const startAgent = (repository: string | null, skillsOn = true) =>
       idempotencyKey: `start-${task.id}`,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: null,
       repository,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

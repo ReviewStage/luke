@@ -17,7 +17,7 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@repo/database/models/recorded-session";
-import { readTaskPlan } from "@repo/database/models/task-store";
+import { readTaskDescription } from "@repo/database/models/task-store";
 import { readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
@@ -62,7 +62,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { plansOnFor } from "../plans-on.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";
@@ -81,7 +81,7 @@ import { agentStatusOf } from "./status.js";
  * after all takes it with its kind and sender. Files the developer
  * attached go with the words, to eve and onto the row, each image kept beside the conversation first
  * and named to eve by its id (`attached-files.ts`), and so does what the words
- * mention of the plan, as it stands now (`mentioned-context.ts`), and a
+ * mention of the description, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
  * are another coding agent's or a reviewer's, which hand none, or an
  * automation's run, which hands only those its automation's own prompt
@@ -134,7 +134,7 @@ import { agentStatusOf } from "./status.js";
  * send is made under, which a repeat carries again, and what sent them, which
  * the row keeps and eve is not told; and what the row says carried it, the
  * developer's typed ask unless the caller names another agent's message, a
- * thread, a plan comment, GitHub, the app, or an automation's run, which eve is
+ * thread, a description comment, GitHub, the app, or an automation's run, which eve is
  * not told either.
  */
 export interface SteerLine {
@@ -185,7 +185,7 @@ const REFUSAL_OF_UNWRITTEN_LINE = {
 /**
  * Whether a message to an agent whose session has not claimed its record
  * opens one: where its Start opened none, as an agent started blank, with
- * neither the plan nor a prompt, has none until its first words; or past the
+ * neither the description nor a prompt, has none until its first words; or past the
  * grace its first turn may land in, where the session its Start opened never
  * started. Inside the grace a Start's session is still coming up, and a
  * second opened beside it would only lose the record to it, so the developer
@@ -195,7 +195,7 @@ const opensUnclaimed = (agent: Agent) =>
   Effect.map(
     Clock.currentTimeMillis,
     (now) =>
-      (agent.planSnapshot === null && agent.prompt === null) ||
+      (agent.descriptionSnapshot === null && agent.prompt === null) ||
       agentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
   );
 
@@ -342,7 +342,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)
-          : hostedStoreOrUnavailable(readTaskPlan(userId, agent.taskId)),
+          : hostedStoreOrUnavailable(readTaskDescription(userId, agent.taskId)),
       ),
       workspace: Effect.result(hostedStoreOrUnavailable(agentWorkspace(userId, agent))),
       sessionId: Effect.result(hostedStoreOrUnavailable(recordedRuntimeSession(target))),
@@ -428,7 +428,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   const reads = yield* Effect.fromResult(reached.reads);
   const mentioned = reviewers
     ? undefined
-    : mentionedContext(pointed, task, reads, agent.id, yield* plansOnFor(agent.userId, agent.kind));
+    : mentionedContext(
+        pointed,
+        task,
+        reads,
+        agent.id,
+        yield* descriptionsOnFor(agent.userId, agent.kind),
+      );
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the

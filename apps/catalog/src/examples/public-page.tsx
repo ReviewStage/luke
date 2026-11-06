@@ -35,7 +35,7 @@ const SECTIONS = [
     body: `Say what the feature is for. ${PRODUCT_NAME} asks what it needs to and reads the code while you talk.`,
   },
   {
-    id: "plan",
+    id: "description",
     title: "Get a description",
     body: "The description is written as you go, in steps an agent can follow, with the files each step touches.",
   },

@@ -30,7 +30,7 @@ const ACTIONS_PLOT_HEIGHT = "12rem";
 /** Each kind's name and its slot's hue, keyed by the series it draws. */
 const ACTIONS_CHART = {
   [MEANINGFUL_ACTION.TASKS_CREATED]: { label: "Tasks created", color: "var(--ui-color-chart-3)" },
-  [MEANINGFUL_ACTION.PLAN_REVISIONS]: {
+  [MEANINGFUL_ACTION.DESCRIPTION_REVISIONS]: {
     label: "Description revisions",
     color: "var(--ui-color-chart-2)",
   },

@@ -77,7 +77,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * plays at once as large as the card lets it, with the player's own
  * controls, Full screen among them (`@repo/ui`'s VideoPlayer). A Mermaid
  * file (`.mmd`, `.mermaid`) is drawn as its diagram, through the diagram
- * bundle a plan's fences draw through (`../diagram-drawing.ts`), and then
+ * bundle a description's fences draw through (`../diagram-drawing.ts`), and then
  * shown, zoomed, and copied as a picture is; while it is drawn, or where
  * Mermaid refused it, its code stands as a text file's does, with Copy text,
  * a refusal saying so over it.
@@ -85,8 +85,8 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * The files of one message are walked in place with the arrows standing on
  * the dimmed window either side of the card, a press on a file's preview in
  * the strip under it, or the arrow keys, and the header names the file shown, its size, a
- * note the place opening it gives the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
- * whatever the place opening it offers for a picture (Add to plan, in an
+ * note the place opening it gives the file shown (who last edited it, for a description's picture), beside Copy for a text file or a picture,
+ * whatever the place opening it offers for a picture (Add to description, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@repo/ui`'s dialog drawn bare over the dimmed window, its top clear of the
  * traffic lights, and the viewer's own card (`DialogCard`) filling the room
@@ -123,7 +123,7 @@ const TITLE_CLASS = "attachment-viewer-title m-0 overflow-hidden whitespace-nowr
 /** How large the file is, quiet, in the caption role. */
 const SIZE_CLASS = "attachment-viewer-size flex-none text-caption text-muted-foreground";
 
-/** What the place opening the viewer says of the file, a plan's picture saying who last edited it, in the size's quiet ink, cut past the ring a press in it draws. */
+/** What the place opening the viewer says of the file, a description's picture saying who last edited it, in the size's quiet ink, cut past the ring a press in it draws. */
 const NOTE_CLASS =
   "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)] text-caption text-muted-foreground";
 
@@ -434,7 +434,7 @@ function AttachmentBody({
         {diagram.refused ? (
           <FailureNote
             failure={failureShown({
-              surface: FAILURE_SURFACE.PLAN_DIAGRAM,
+              surface: FAILURE_SURFACE.DESCRIPTION_DIAGRAM,
               cause: FAILURE_CONDITION.REFUSED,
               refused: true,
             })}
@@ -495,7 +495,7 @@ export function AttachmentViewer({
   onClose: () => void;
   /** One more thing a picture or a video shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
   action?: ViewerAction | undefined;
-  /** A quiet line the place says of the file shown, after its size, such as who last edited a plan's picture; none where it says nothing. */
+  /** A quiet line the place says of the file shown, after its size, such as who last edited a description's picture; none where it says nothing. */
   note?: React.ReactNode;
   /** How a picture is first drawn: fitted to the window, or at its own pixels, as a diagram too fine to read fitted opens. */
   opening?: ImageOpening;

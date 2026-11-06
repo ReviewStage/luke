@@ -412,7 +412,7 @@ test("a picture of another item stands as its link and is never asked for", () =
   );
 });
 
-test("words drawn as a transcript, as the transcript and the plan draw them, keep a lone link as its chip and their pictures in their paragraph", () => {
+test("words drawn as a transcript, as the transcript and the description draw them, keep a lone link as its chip and their pictures in their paragraph", () => {
   const container = drawn(
     inPane(createElement(TranscriptWords, { text: [LINKS, PAIR].join("\n\n") })),
   );

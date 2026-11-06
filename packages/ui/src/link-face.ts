@@ -3,7 +3,7 @@
  *
  * A link the window draws as words rather than a chip (the desktop's
  * `text-link.tsx`) says its label. Where its words are its address, as a
- * bare `https://…` written into a reply or a plan autolinks to itself, it
+ * bare `https://…` written into a reply or a description autolinks to itself, it
  * says the address as a reader names a page instead: the host without its
  * `www.`, then the path, a short query kept and the fragment dropped, and
  * past a bound the middle steps folded to `…` and a long last step cut. The

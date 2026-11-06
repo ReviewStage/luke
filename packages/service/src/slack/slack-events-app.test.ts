@@ -156,7 +156,7 @@ const openAskedMember = (
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       repository: null,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -401,7 +401,7 @@ const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
       idempotencyKey: randomUUID(),
       model: AGENT_DEFAULT_CHOICE.model,
       effort: "high",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "find the flakiest test and fix it",
       repository: inBeacon ? "Acme/Beacon" : null,
       runtime,
@@ -585,7 +585,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names, on an untitled task with a blank plan in its channel's repository, reacts to it with 👀, and replies with the agent's link; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, on an untitled task with a blank description in its channel's repository, reacts to it with 👀, and replies with the agent's link; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));

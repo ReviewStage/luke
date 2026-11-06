@@ -110,7 +110,7 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       // Started blank, so no first turn is on its way and the agent can be archived at once.
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: null,
       repository: "acme/relay",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -155,7 +155,7 @@ const openTokenAgent = Effect.gen(function* () {
     idempotencyKey: `start-${randomUUID()}`,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Side\n",
+    descriptionSnapshot: "# Side\n",
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,

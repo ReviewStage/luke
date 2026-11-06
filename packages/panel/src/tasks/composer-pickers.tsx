@@ -6,7 +6,7 @@ import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerTrigger,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
 import type { ComposerFieldMentions } from "./composer-field.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";

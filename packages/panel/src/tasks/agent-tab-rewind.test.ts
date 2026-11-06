@@ -22,7 +22,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -46,7 +46,7 @@ const AGENT_SUMMARY: AgentSummary = {
   createdAt: 1_000,
   status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.DESCRIPTION,
 };
 
 function line(
@@ -102,6 +102,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** The agent's tab over the transcript, every rewind and send it makes written down in order. */

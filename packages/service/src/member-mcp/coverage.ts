@@ -8,7 +8,7 @@
  * `MEMBER_MCP_TOOL` has a row, and a tool added without one does not build;
  * each row names the procedures, by their declarations in the contract
  * itself, that together do what the tool does, a read a write needs among
- * them, such as the plan a comment is anchored in. A procedure may answer in
+ * them, such as the description a comment is anchored in. A procedure may answer in
  * other words and shapes than its tool, and may take several calls where the
  * tool takes one, but no tool may do what no procedure reaches. Where a
  * procedure the tool needs does not exist, it is added to the contract
@@ -26,7 +26,8 @@ type HostedProcedure = {
 }[keyof HostedContract];
 
 const { account, agentPullRequests, agents, automations, inbox, messages, models } = hostedContract;
-const { planComments, plans, taskFiles, agentPages, taskSections, workspaces } = hostedContract;
+const { descriptionComments, plans, taskFiles, agentPages, taskSections, workspaces } =
+  hostedContract;
 
 /** Each tool's procedures: at least one, so no row stands empty. */
 export const MEMBER_MCP_COVERAGE = {
@@ -43,9 +44,9 @@ export const MEMBER_MCP_COVERAGE = {
     agentPages.list,
     agentPages.version,
   ],
-  [MEMBER_MCP_TOOL.CREATE_TASK]: [plans.create, plans.edit],
+  [MEMBER_MCP_TOOL.CREATE_TASK]: [plans.create, plans.editDescription],
   [MEMBER_MCP_TOOL.UPDATE_TASK]: [plans.update, plans.parent, plans.block, taskSections.write],
-  [MEMBER_MCP_TOOL.EDIT_PLAN]: [plans.open, plans.edit],
+  [MEMBER_MCP_TOOL.EDIT_DESCRIPTION]: [plans.open, plans.editDescription],
   [MEMBER_MCP_TOOL.CREATE_SECTION]: [taskSections.write],
   [MEMBER_MCP_TOOL.DELETE_SECTION]: [taskSections.write],
   [MEMBER_MCP_TOOL.START_AGENT]: [agents.start, agents.startFrom, plans.create],
@@ -57,10 +58,10 @@ export const MEMBER_MCP_COVERAGE = {
   [MEMBER_MCP_TOOL.REPLY_TO_THREAD]: [inbox.message],
   [MEMBER_MCP_TOOL.CLOSE_THREAD]: [inbox.close],
   [MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION]: [agentPullRequests.action],
-  [MEMBER_MCP_TOOL.READ_COMMENTS]: [planComments.read],
-  [MEMBER_MCP_TOOL.COMMENT_ON_PLAN]: [plans.open, planComments.start],
-  [MEMBER_MCP_TOOL.REPLY_TO_COMMENT]: [planComments.act],
-  [MEMBER_MCP_TOOL.UPDATE_COMMENT]: [planComments.act],
+  [MEMBER_MCP_TOOL.READ_COMMENTS]: [descriptionComments.read],
+  [MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION]: [plans.open, descriptionComments.start],
+  [MEMBER_MCP_TOOL.REPLY_TO_COMMENT]: [descriptionComments.act],
+  [MEMBER_MCP_TOOL.UPDATE_COMMENT]: [descriptionComments.act],
   [MEMBER_MCP_TOOL.SEARCH_MEMORY]: [account.searchMemories],
   [MEMBER_MCP_TOOL.SAVE_MEMORY]: [account.saveMemory],
   [MEMBER_MCP_TOOL.FORGET_MEMORY]: [account.forgetMemory],

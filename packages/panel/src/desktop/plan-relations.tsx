@@ -22,7 +22,7 @@ import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { subTaskCount, subTasksOf, taskFinished } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
-import type { PlanRoom } from "../tasks/plan-body.js";
+import type { DescriptionRoom } from "../tasks/description-body.js";
 import { RelationKindPill } from "../tasks/relation-kind-pill.js";
 import {
   TASK_RELATION_ORDER,
@@ -37,7 +37,7 @@ import { type RelatedTaskRow, RelatedTasks } from "./related-tasks.js";
 import { chipSubmenu } from "./standing-submenus.js";
 
 /**
- * plan-relations.tsx -- the open task's sub-tasks and the tasks related to it at the head of its plan, each a group of the Tasks list's own rows.
+ * plan-relations.tsx -- the open task's sub-tasks and the tasks related to it at the head of its description, each a group of the Tasks list's own rows.
  *
  * Two groups stand under the byline, ahead of the Agents, each the shape
  * every group of the head takes, a `GroupHeader` over a list
@@ -288,7 +288,7 @@ function blockTasks(
 }
 
 /**
- * The open task's Sub-tasks and Task relations groups at the head of its plan,
+ * The open task's Sub-tasks and Task relations groups at the head of its description,
  * each only while it holds a row; nothing for a task with neither. Its
  * relations change through the task list's doors, and each group's + adds
  * one through the add menu's `door`.
@@ -303,9 +303,9 @@ export function PlanRelations({
   task: Task;
   tasks: TasksControl;
   door: TaskRelationDoor;
-  /** Where the plan's head stands, whose scroller its lists draw only the rows near the view of. */
-  room: PlanRoom;
-  /** Opens a row's task, as the plan's head opens a task. */
+  /** Where the description's head stands, whose scroller its lists draw only the rows near the view of. */
+  room: DescriptionRoom;
+  /** Opens a row's task, as the description's head opens a task. */
   onOpenTask: (taskId: string) => void;
 }): React.JSX.Element | null {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());

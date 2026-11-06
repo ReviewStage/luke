@@ -109,7 +109,7 @@ export const BROWSER_TOOL = {
   name: AGENT_TOOL.BROWSER,
   description:
     "Drive a real browser, a Chromium in your own sandbox, whose tabs the developer can watch " +
-    "and take over in the Browser tab beside the plan. Your own dev server is at localhost " +
+    "and take over in the Browser tab beside the description. Your own dev server is at localhost " +
     "there, such as http://localhost:3000/. Each call takes up to " +
     `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, run in order: list the tabs, open one at an ` +
     "address, navigate, go back or forward, click, type, choose an option in a dropdown, press " +
@@ -218,7 +218,7 @@ export function browserNotRun(reason: string): BrowserToolResult {
 /** The words a refused action answers: a member drives its tab. */
 function drivenWords(tab: string): string {
   return (
-    `Not done: a member is driving tab ${tab} in the Browser tab beside the plan. ` +
+    `Not done: a member is driving tab ${tab} in the Browser tab beside the description. ` +
     "Wait until they hand it back, then call again, or ask them what they need."
   );
 }

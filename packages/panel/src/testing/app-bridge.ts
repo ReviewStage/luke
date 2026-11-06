@@ -42,7 +42,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, an agent's or a worker's transcript, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, an agent's or a worker's transcript, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a description's or a page's comments, a task's description history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's description. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_TRANSCRIPT
@@ -143,9 +143,9 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * the account's beats, hosts, models, integrations, provider keys, or GitHub token,
  * an agent's or a server's tools, the outside MCP clients, a workspace's
  * memories, skills, or repositories, a link's standing, the automations'
- * lists and histories, a plan's or a page's comments, a task's plan
+ * lists and histories, a description's or a page's comments, a task's description
  * history, the run that started an agent, a workspace's people, token
- * repositories, own integrations, or Slack channels, or a task's plan, is
+ * repositories, own integrations, or Slack channels, or a task's description, is
  * held quietly, and an automations', the integrations', the memories', the
  * skills', a repository list's, a workspace's integrations', its Slack
  * channels', the models', the preferences', or a transcript's Try again taken, since what

@@ -40,7 +40,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, handState } from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import {
@@ -97,7 +97,7 @@ function agentOf(id: string, overrides: Partial<AgentSummary> = {}): AgentSummar
     createdAt: 1_000,
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     ...overrides,
   };
 }
@@ -134,6 +134,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** Lays words and files in the agent's box before its tab draws, as a draft kept from before. */
@@ -1089,7 +1090,7 @@ test("where the tab's place opens drafts, Continue on a closed box opens the con
   assert.equal(button.disabled, false, "nothing is out to hold the press for");
 });
 
-test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's plan", async () => {
+test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's description", async () => {
   const tab = await drawnTab({
     status: AGENT_STATUS.COMPLETED,
     message: { failure: AGENT_CALL_FAILURE.AGENT_RETIRED },

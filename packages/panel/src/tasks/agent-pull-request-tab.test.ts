@@ -77,8 +77,7 @@ import {
 import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
-import { MemberDirectory } from "../member-directory.js";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -97,9 +96,10 @@ import {
   type PullRequestPartAnswers,
 } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -297,7 +297,8 @@ beforeAll(async () => {
     landedBundles({
       diffView: () => Promise.resolve(DIFF_STAND_IN),
       fileTree: () => Promise.resolve(TREE_STAND_IN),
-      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
+      descriptionEditor: () =>
+        import("../description-editor/index.js").then((entry) => entry.descriptionEditor),
     }),
   );
 });
@@ -639,10 +640,9 @@ async function drawn(
           bundles,
           createElement(GitHubConnectProvider, {
             value: github,
-            children: createElement(MemberDirectory, {
-              workspace: { id: "workspace-acme", memberCount: 2 },
-              readerId: "user-dana",
-              children: createElement(
+            children: withPeopleRead(
+              { workspace: { id: "workspace-acme", memberCount: 2 }, readerId: "user-dana" },
+              createElement(
                 Fragment,
                 null,
                 createElement(ToastHost),
@@ -650,7 +650,7 @@ async function drawn(
                   ? tab
                   : createElement(OpenLinkProvider, { value: openPlace, children: tab }),
               ),
-            }),
+            ),
           }),
         ),
       ),
@@ -666,6 +666,8 @@ async function drawn(
       [],
     ),
   );
+  // Note that the tab draws who opened and reviewed once the workspace's people reach their query.
+  await peopleRead();
   return container;
 }
 
@@ -3023,27 +3025,34 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     await vi.waitFor(() => assert.deepEqual(mergeShown(tab), expected, name));
     act(() => root?.unmount());
     root = undefined;
+    // Note that each case is a window of its own, so none reads the last one's pull request while its own read lands.
+    testQueryClientNow().clear();
   }
 });
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
-  const chevron =
-    first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
-    assert.fail("the chevron chooses the method");
+  // Note that the merge control stands once the pull request's merge read reaches its query.
+  const chevron = await vi.waitFor(
+    () =>
+      first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
+      assert.fail("the chevron chooses the method"),
+  );
   act(() => chevron.click());
   assert.deepEqual(menuItems(), [
     { label: "Squash and merge", checked: "true" },
     { label: "Rebase and merge", checked: "false" },
   ]);
   await pressItem("Rebase and merge");
-  assert.equal(mergeShown(first)?.press, "Rebase and merge");
+  await vi.waitFor(() => assert.equal(mergeShown(first)?.press, "Rebase and merge"));
   assert.deepEqual(changes, [], "choosing a method merges nothing");
   act(() => root?.unmount());
   root = undefined;
 
   const again = await draw(merging(MERGE_STATE.CLEAN));
-  assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept");
+  await vi.waitFor(() =>
+    assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept"),
+  );
   await pressBox(again, "Rebase and merge");
   assert.equal(
     document.querySelector('[role="dialog"], [role="alertdialog"]') === null,
@@ -4723,7 +4732,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
       }),
     ],
   } as const;
-  handSettings();
+  handSettings({}, { [LIVE_READ.WORKSPACE_MEMBERS]: HELD_PEOPLE });
   const tab = await draw(
     controlAnswering(
       {
@@ -5680,7 +5689,7 @@ async function threadMenuItem(card: Element, label: string): Promise<void> {
 }
 
 test("a thread's file and lines in the Conversation take it to Files changed through the window's route for its link: its collapsed file opened, its minimized chip shown, the list scrolled to its line, its lines lit, the thread ringed and focused, and the lines let go as the ring ends", async () => {
-  handSettings();
+  handSettings({}, { [LIVE_READ.WORKSPACE_MEMBERS]: HELD_PEOPLE });
   const heard: ReadLink[] = [];
   const tab = await drawn(
     createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),

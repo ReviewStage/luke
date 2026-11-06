@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import {
   ACCOUNT_ACT_KIND,
@@ -33,8 +33,8 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -47,7 +47,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
@@ -578,8 +578,8 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
         sidePanel: {
           ...tasksControl().sidePanel,
           open: true,
-          tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-          strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+          tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+          strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
           tab: SIDE_PANEL_TAB.INBOX,
         },
       },
@@ -703,6 +703,8 @@ async function settle(): Promise<void> {
 
 test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
+  await writeHandedAppState();
   mount(false);
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), false);
@@ -710,6 +712,7 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   document.body.innerHTML = "";
 
   handCapabilities(DESKTOP_CAPABILITIES);
+  await writeHandedAppState();
   const tabs: PanelTab[] = [];
   mount(false, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab));
   await settle();
@@ -998,7 +1001,11 @@ test("while the Automations pages are still loading their frame stands the list 
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
   assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);
-  assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
+  assert.equal(
+    loading.querySelector("[role=switch]") === null,
+    true,
+    "their chunk has not loaded yet",
+  );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
   });
@@ -1013,7 +1020,11 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const page = mount(false, { history });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
-  assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
+  assert.equal(
+    versions.querySelector("[role=listbox], ul") === null,
+    true,
+    "its chunk has not loaded yet",
+  );
   const back = [...versions.querySelectorAll("button")].find(
     (button) => button.textContent?.trim().startsWith("Back") === true,
   );
@@ -1071,7 +1082,7 @@ const PLACE = {
   AUTOMATIONS: "the Automations page",
   SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
   SETTINGS: "Settings",
-  VERSION_HISTORY: "a plan's version history",
+  VERSION_HISTORY: "a description's version history",
 } as const;
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
@@ -1319,7 +1330,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
   });
 });
 
-test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
+test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, {
@@ -1332,7 +1343,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
+          lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },
@@ -1354,6 +1365,8 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
   handState({}, { access: { admin: false } });
+  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
+  await writeHandedAppState();
   mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), false);
@@ -1361,6 +1374,7 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   document.body.innerHTML = "";
 
   handState({}, { access: { admin: true } });
+  await writeHandedAppState();
   mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
@@ -1380,11 +1394,11 @@ test("Admin stands in the plan's place beside the sidebar, its row marked and no
   assert.equal(placeRow(page, "Inbox")?.getAttribute("aria-current") ?? null, null);
   const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
   assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
-  assert.deepEqual(
+  assert.equal(
     [...main.querySelectorAll("button")].filter((button) =>
       /^Back\b/u.test(button.getAttribute("aria-label") ?? button.textContent ?? ""),
-    ),
-    [],
+    ).length,
+    0,
   );
 });
 
@@ -1397,14 +1411,14 @@ test("with the sidebar folded, the Mac offline says so in the title bar beside N
   handState({}, { network: { online: false, reachable: true } });
   const offline = mount(false);
   await settle();
-  assert.ok(titleBarOffline(offline), "the title bar says the Mac is offline");
+  await vi.waitFor(() => assert.equal(titleBarOffline(offline) !== null, true));
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   handState({}, { network: { online: true, reachable: true } });
   const online = mount(false);
   await settle();
-  assert.equal(titleBarOffline(online), null);
+  await vi.waitFor(() => assert.equal(titleBarOffline(online) === null, true));
 });
 
 /** What a strip right under a phone's header says, if one stands there. */
@@ -1417,7 +1431,9 @@ test("on a phone, the service not answering says so in a strip under the page's 
   const inboxView = { ...tasksControl().inboxView, open: true };
   handState({}, { network: { online: true, reachable: false } });
   const unreached = await mountNarrow({ inboxView });
-  assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering.");
+  await vi.waitFor(() =>
+    assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering."),
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1427,7 +1443,7 @@ test("on a phone, the service not answering says so in a strip under the page's 
     answering.querySelector('header.ui-toolbar[data-look="phone"]'),
     "a phone's header stands",
   );
-  assert.equal(stripUnderPhoneHead(answering), undefined);
+  await vi.waitFor(() => assert.equal(stripUnderPhoneHead(answering), undefined));
 });
 
 test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
@@ -1453,7 +1469,7 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
   await settle();
 
   assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
-  assert.equal(titleBarOffline(container)?.textContent, "Offline");
+  await vi.waitFor(() => assert.equal(titleBarOffline(container)?.textContent, "Offline"));
 });
 
 test("on a phone an open task leads its own row with the way back the window's history names, in the sidebar toggle's place, and a wide window keeps the toggle", async () => {
@@ -1489,7 +1505,7 @@ test("on a phone an open task leads its own row with the way back the window's h
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();
   assert.equal(back(fromInbox).textContent, "Inbox");
-  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => back(fromInbox).click());
   assert.deepEqual(left, ["left"]);
   act(() => root?.unmount());
@@ -1503,7 +1519,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const wide = render({ title: { label: "Inbox" } }, SHELL_ROOM.WIDE);
   await settle();
-  assert.equal(wide.querySelector(".task-head"), null);
+  assert.equal(wide.querySelector(".task-head") === null, true);
   assert.ok(
     wide.querySelector(".desktop-shell > .title-bar-controls"),
     "the sidebar's toggle stands",
@@ -1532,7 +1548,7 @@ test("on a phone an open task, which draws no sidebar toggle, still answers the 
     ),
   );
   await settle();
-  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
   assert.equal(toggled, 1);
 });
@@ -1590,7 +1606,7 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
     agentView: { ...tasksControl().agentView, agentId: "agent-1" },
     sidePanel,
   });
-  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
   assert.equal(toggled, 1, "the panel's chord answers on the agent's page");
   act(() => root?.unmount());
@@ -1600,8 +1616,8 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
     automationsView: { ...tasksControl().automationsView, open: true },
   });
   assert.equal(
-    automations.querySelector(".desktop-shell > .title-bar-controls"),
-    null,
+    automations.querySelector(".desktop-shell > .title-bar-controls") === null,
+    true,
     "nor over the Automations list",
   );
   act(() => root?.unmount());

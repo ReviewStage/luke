@@ -17,7 +17,7 @@ import { TERM } from "./words.js";
  * A thing is named in words in two ways: a mention (`mention-link.ts`), a
  * plan, a file, an agent, a pull request's page, and a link to a place in
  * the app (`link-grammar.ts`), an Inbox item, an automation, a version of a
- * plan. Both name some of the same things, a plan, a section, a page, an
+ * description. Both name some of the same things, a plan, a section, a page, an
  * agent, a person, so `THING_KIND` is the one list of them all, and a
  * mention or a place is read as the `Thing` it names (`thingOfMention`,
  * `thingOfPlace`) before anything draws it.
@@ -120,7 +120,7 @@ export type ThingOf<K extends ThingKind> = Extract<Thing, { readonly kind: K }>;
 /** A place of the kind given. */
 type PlaceOf<K extends LinkPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
 
-/** What names a thing beyond the names the window holds: the heading its anchor names in the plan open, the key and title its provider answered for its page, and the repository, `owner/name`, of the place the thing is named in, which a pull request's or an issue's key leaves out where it is the same. */
+/** What names a thing beyond the names the window holds: the heading its anchor names in the description open, the key and title its provider answered for its page, and the repository, `owner/name`, of the place the thing is named in, which a pull request's or an issue's key leaves out where it is the same. */
 export interface ThingSaid {
   readonly heading: string | undefined;
   readonly answered: { readonly key: string; readonly title: string } | undefined;

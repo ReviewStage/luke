@@ -39,10 +39,9 @@ import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement, Fragment, type ReactNode } from "react";
+import { act, createElement, Fragment, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import {
   type AnyAct,
@@ -72,6 +71,7 @@ import {
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -89,17 +89,17 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * `@` in an agent's message box and its transcript, on a task's page and
  * off it, over the real editor bundle: the word typed opens the list of the
- * plan's sections and the repository's files, the row chosen is written
+ * description's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
  * opens it. Off a task's page an `@` is a letter, and a sent mention is
  * still its chip, opened through the window's own doors.
- * Synthetic plan and repository.
+ * Synthetic description and repository.
  */
 
 const TASK_ID = "pl_1";
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
@@ -354,7 +354,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
-    text: () => PLAN_TEXT,
+    text: () => DESCRIPTION_TEXT,
     doors: {
       holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },
@@ -488,7 +488,7 @@ function listedCount(container: HTMLElement): number {
   );
 }
 
-test("an @ typed in the box on a plan's page offers the plan's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
+test("an @ typed in the box on a plan's page offers the description's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
@@ -601,7 +601,7 @@ test("the box is a combobox naming the @ list it opened and the row highlighted 
   assert.equal(field.getAttribute("aria-activedescendant"), null);
 });
 
-test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
+test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no description's sections", async () => {
   const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,
@@ -1838,12 +1838,11 @@ test("the task's pull requests are a kind of their own, narrowed to by their row
 });
 
 /** The node drawn on a plan's page in a workspace whose members the window reads. */
-function amongMembers(node: ReactNode): ReactNode {
-  return createElement(MemberDirectory, {
-    workspace: { id: "workspace-1", memberCount: MEMBERS.length },
-    readerId: READER_ID,
-    children: node,
-  });
+function amongMembers(node: ReactElement): ReactElement {
+  return withPeopleRead(
+    { workspace: { id: "workspace-1", memberCount: MEMBERS.length }, readerId: READER_ID },
+    node,
+  );
 }
 
 /** The box drawn on a plan's page among the workspace's members, every message it sends written down. */
@@ -1858,6 +1857,7 @@ async function memberBox() {
     taskPage(),
   );
   await settle();
+  await peopleRead();
   return { container, sent };
 }
 
@@ -1931,6 +1931,7 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
     taskPage(),
   );
   await settle();
+  await peopleRead();
 
   const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip);

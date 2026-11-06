@@ -16,7 +16,7 @@ import { organization, user } from "./auth.js";
  * history is, so it outlives the member who said it: one who leaves the
  * workspace leaves their memories with it, and deleting their account leaves
  * them too, `user_id` null, read as nobody the service can name, as
- * `plan_revision` keeps its writer. Forgetting one, from Settings, deletes the
+ * `description_revision` keeps its writer. Forgetting one, from Settings, deletes the
  * row, and the row leaves with its workspace.
  */
 export const memory = pgTable(

@@ -16,7 +16,7 @@ export const TASKS_ROUTE = lazyRoute(() =>
   import("./tasks-page.js").then((loaded) => loaded.TasksPage),
 );
 
-/** The open plan's version history, over the whole window (`desktop-version-history.tsx`). */
+/** The open description's version history, over the whole window (`desktop-version-history.tsx`). */
 export const VERSION_HISTORY = lazyRoute(() =>
   import("./desktop-version-history.js").then((loaded) => loaded.TaskVersionHistory),
 );

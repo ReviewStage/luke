@@ -62,10 +62,15 @@ import {
 import {
   type AgentInboxScope,
   type AgentPullRequestReadParams,
+  type AgentTranscriptKey,
   agentInboxScopeSchema,
   PULL_REQUEST_PART,
   type PullRequestPart,
+  TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { IntegrationProviderParams } from "@repo/features/integration-view";
+import { integrationConnectionOf } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
@@ -80,9 +85,11 @@ import {
   type AppHostRead,
   type AppHostReads,
   type AppStateSnapshot,
+  EVERY_WORKSPACE,
   HOST_READ_SLICE,
   KEYS_ON,
   OWN_PULL_REQUEST,
+  OWN_TRANSCRIPT,
   READ_KEYS,
 } from "@repo/host/app-state";
 import { type Query, type QueryClient, queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -130,7 +137,7 @@ type LiveFollow = (
 /** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
 export type CommentSubject = TasksCommentsFollow;
 
-/** The comments a follow holds, as its query carries them on `meta`; its factory puts one there (`planCommentsQuery`), so it always reads. */
+/** The comments a follow holds, as its query carries them on `meta`; its factory puts one there (`descriptionCommentsQuery`), so it always reads. */
 const readCommentSubject = Schema.decodeUnknownSync(tasksCommentsFollowSchema);
 
 /** The pull request a key of one of its parts names: the agent, and its number where the key names one rather than the agent's own. */
@@ -146,11 +153,41 @@ function pullRequestPartFollow(part: PullRequestPart): LiveFollow {
     askAct(ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW, { part, ...pullRequestAskedOf(ids) });
 }
 
+/** The integration server whose tools a surface reads: its provider, and its account where the server is not the provider's own. */
+export type IntegrationServer = Pick<IntegrationProviderParams, "provider" | "connection">;
+
+/** The server a connection's name stands for, as its tools read is held and tried again; none for a name this build cannot read. */
+export function integrationServerOf(name: string): IntegrationServer | undefined {
+  const provider = integrationConnectionOf(name)?.provider;
+  if (provider === undefined) return undefined;
+  return name === provider ? { provider } : { provider, connection: name };
+}
+
+/** A repository list's scope as its acts name it: its workspace, or nothing for every one (`EVERY_WORKSPACE`). */
+export function repositoryScope(workspace: string): { readonly workspaceId?: string } {
+  return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
+}
+
+/** The follow of one automations list or history, by what it holds and its id. */
+function automationsFollow(kind: AutomationFollow["kind"]): LiveFollow {
+  return ([id = ""]) => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { kind, id: String(id) });
+}
+
+/** The follow of an integration server's tools, by its connection's name; none for a name this build cannot read, which the host holds no read under. */
+function integrationToolsFollow(name: string): ReturnType<LiveFollow> {
+  const server = integrationServerOf(name);
+  return server === undefined
+    ? Promise.reject(new Error(`No integration server is named ${name}.`))
+    : askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server);
+}
+
 /**
- * The follow of each live read moved here that the panel holds. Note that
+ * The follow of each live read moved here that the panel holds, by the ids
+ * its key names, as many as its slice is keyed by (`liveReadOf`). Note that
  * the host holds the account reads of whoever is signed in, so none of their
- * follows names the account its key does; the account preferences and This
- * Mac's host the host holds for the session, so they take none.
+ * follows names the account its key does; the account preferences, This
+ * Mac's host, and the workspaces' photos the host holds for the session, so
+ * they take none.
  */
 const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
   [LIVE_READ.MODELS]: () => askAct(ACT_KIND.AGENTS_MODELS_FOLLOW),
@@ -177,9 +214,9 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
       ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
       kind === BROWSER_TABS_PLACE.TASK ? { taskId: String(id) } : { agentId: String(id) },
     ),
-  [LIVE_READ.PLAN_DOCUMENT]: ([taskId = ""]) =>
+  [LIVE_READ.DESCRIPTION_DOCUMENT]: ([taskId = ""]) =>
     askAct(ACT_KIND.TASKS_DOCUMENT_FOLLOW, { taskId: String(taskId) }),
-  [LIVE_READ.PLAN_COMMENTS]: (_ids, meta) =>
+  [LIVE_READ.DESCRIPTION_COMMENTS]: (_ids, meta) =>
     askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, readCommentSubject(meta?.follow)),
   [LIVE_READ.PULL_REQUEST]: pullRequestPartFollow(PULL_REQUEST_PART.PULL_REQUEST),
   [LIVE_READ.PULL_REQUEST_CHECKS]: pullRequestPartFollow(PULL_REQUEST_PART.CHECKS),
@@ -189,6 +226,37 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
   [LIVE_READ.REVIEW_OPTIONS]: pullRequestPartFollow(PULL_REQUEST_PART.REVIEW_OPTIONS),
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: ([agentId, number]) =>
     askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId: String(agentId), number: Number(number) }),
+  [LIVE_READ.TRANSCRIPT]: ([agentId = "", callId]) =>
+    askAct(
+      ACT_KIND.AGENTS_TRANSCRIPT,
+      transcriptOf(String(agentId), callId === undefined ? undefined : String(callId)),
+    ),
+  [LIVE_READ.HISTORY]: ([taskId = ""]) =>
+    askAct(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId: String(taskId) }),
+  [LIVE_READ.INSTALLED_SKILLS]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.INSTALLED_SKILLS_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.INTEGRATIONS]: () => askAct(ACT_KIND.INTEGRATIONS_FOLLOW),
+  [LIVE_READ.INTEGRATION_TOOLS]: ([name = ""]) => integrationToolsFollow(String(name)),
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.WORKSPACE_TOOLS]: ([agentId = ""]) =>
+    askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: String(agentId) }),
+  [LIVE_READ.MCP_CLIENTS]: () => askAct(ACT_KIND.MCP_CLIENTS_FOLLOW),
+  [LIVE_READ.MEMORIES]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.REPOSITORY_LISTS]: ([workspace = ""]) =>
+    askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, repositoryScope(String(workspace))),
+  [LIVE_READ.SLACK_CHANNELS]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.TOKEN_REPOSITORIES]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.WORKSPACE_MEMBERS]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.WORKSPACE_INVITATIONS]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.AUTOMATIONS]: automationsFollow(AUTOMATION_FOLLOW.WORKSPACE),
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: automationsFollow(AUTOMATION_FOLLOW.WORKSPACE_RUNS),
+  [LIVE_READ.AUTOMATION_RUNS]: automationsFollow(AUTOMATION_FOLLOW.RUNS),
 };
 
 /** A pull request part's ids from its path: the agent, then the number, or `OWN_PULL_REQUEST` for the agent's own. */
@@ -213,6 +281,14 @@ const LIVE_KEY_IDS: {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: ([agentId = "", number = ""]) => [agentId, Number(number)],
 };
 
+/** The transcript a transcript's ids name: the agent's own, or its worker's by the call that started it. */
+function transcriptOf(agentId: string, callId: string | undefined): AgentTranscriptKey {
+  const kind = TRANSCRIPT_KIND.AGENT;
+  return callId === undefined || callId === OWN_TRANSCRIPT
+    ? { kind, agentId }
+    : { kind, agentId, callId };
+}
+
 /** Every live read moved here, by its name, which `use-host-read.ts` reads no more. */
 const LIVE_QUERY_READS = [
   LIVE_READ.ACCOUNT_PREFERENCES,
@@ -228,8 +304,8 @@ const LIVE_QUERY_READS = [
   LIVE_READ.LINK_STANDINGS,
   LIVE_READ.PAGES,
   LIVE_READ.BROWSER_TABS,
-  LIVE_READ.PLAN_DOCUMENT,
-  LIVE_READ.PLAN_COMMENTS,
+  LIVE_READ.DESCRIPTION_DOCUMENT,
+  LIVE_READ.DESCRIPTION_COMMENTS,
   LIVE_READ.PULL_REQUEST,
   LIVE_READ.PULL_REQUEST_CHECKS,
   LIVE_READ.PULL_REQUEST_CONVERSATION,
@@ -237,6 +313,24 @@ const LIVE_QUERY_READS = [
   LIVE_READ.PULL_REQUEST_VIEWED,
   LIVE_READ.REVIEW_OPTIONS,
   LIVE_READ.PULL_REQUEST_CHAPTERS,
+  LIVE_READ.TRANSCRIPT,
+  LIVE_READ.HISTORY,
+  LIVE_READ.INSTALLED_SKILLS,
+  LIVE_READ.INTEGRATIONS,
+  LIVE_READ.INTEGRATION_TOOLS,
+  LIVE_READ.WORKSPACE_INTEGRATIONS,
+  LIVE_READ.WORKSPACE_TOOLS,
+  LIVE_READ.MCP_CLIENTS,
+  LIVE_READ.MEMORIES,
+  LIVE_READ.REPOSITORY_LISTS,
+  LIVE_READ.SLACK_CHANNELS,
+  LIVE_READ.TOKEN_REPOSITORIES,
+  LIVE_READ.WORKSPACE_MEMBERS,
+  LIVE_READ.WORKSPACE_INVITATIONS,
+  LIVE_READ.WORKSPACE_PHOTOS,
+  LIVE_READ.AUTOMATIONS,
+  LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
+  LIVE_READ.AUTOMATION_RUNS,
 ] as const satisfies readonly LiveReadName[];
 
 /** A live read moved here, by its name. */
@@ -428,6 +522,18 @@ export const linkStandingQuery = (link: LinkStandingKey | undefined) =>
     LIVE_READ.LINK_STANDINGS,
     link === undefined ? undefined : [link.workspaceId, link.address],
   );
+/** One agent's or worker's transcript, by the agent and then the worker's call or the agent's own, which its tab holds while it shows. */
+export const transcriptQuery = (transcript: AgentTranscriptKey | undefined) =>
+  liveReadQuery(
+    LIVE_READ.TRANSCRIPT,
+    transcript === undefined
+      ? undefined
+      : [transcript.agentId, transcript.callId ?? OWN_TRANSCRIPT],
+  );
+
+/** One task's plan history, by the task, which its version history holds while it shows. */
+export const historyQuery = (taskId: string | undefined) =>
+  liveReadQuery(LIVE_READ.HISTORY, taskId === undefined ? undefined : [taskId]);
 
 /** One task's pages, or one agent's on no task, by its place; none offers Try again, since the host reads them again on its own. */
 export const pagesQuery = (place: PagePlace | undefined) =>
@@ -448,8 +554,8 @@ export const browserTabsQuery = (place: BrowserTabsPlace | undefined) =>
   );
 
 /** One task's plan, by the task, which the window's open task holds. */
-export const planDocumentQuery = (taskId: string | undefined) =>
-  liveReadQuery(LIVE_READ.PLAN_DOCUMENT, taskId === undefined ? undefined : [taskId]);
+export const descriptionDocumentQuery = (taskId: string | undefined) =>
+  liveReadQuery(LIVE_READ.DESCRIPTION_DOCUMENT, taskId === undefined ? undefined : [taskId]);
 
 /** The comments a surface holds, as the acts name them, with no page key where it reads the plan's. */
 function commentsFollowOf({ taskId, pageId }: CommentSubject): CommentSubject {
@@ -457,13 +563,13 @@ function commentsFollowOf({ taskId, pageId }: CommentSubject): CommentSubject {
 }
 
 /** One plan's comments, or one of its task's pages', by the subject; the follow's subject rides on `meta`, since a page's key names no task. */
-export const planCommentsQuery = (subject: CommentSubject | undefined) =>
+export const descriptionCommentsQuery = (subject: CommentSubject | undefined) =>
   liveReadQuery(
-    LIVE_READ.PLAN_COMMENTS,
+    LIVE_READ.DESCRIPTION_COMMENTS,
     subject === undefined
       ? undefined
       : subject.pageId === undefined
-        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        ? [COMMENT_SUBJECT.DESCRIPTION, subject.taskId]
         : [COMMENT_SUBJECT.PAGE, subject.pageId],
     subject === undefined ? undefined : { follow: commentsFollowOf(subject) },
   );
@@ -506,6 +612,75 @@ export const pullRequestChaptersQuery = (key: PullRequestChaptersReadParams | un
     key === undefined ? undefined : [key.agentId, key.number],
   );
 
+/** The ids of a read keyed by one id: that id, or none while a surface names none. */
+function oneId(id: string | undefined): readonly string[] | undefined {
+  return id === undefined ? undefined : [id];
+}
+
+/** The skills the account sees in a workspace, by the workspace. */
+export const installedSkillsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.INSTALLED_SKILLS, oneId(workspaceId));
+
+/** Where the account's integrations stand, by the account. */
+export const integrationsQuery = (accountId: string | undefined) =>
+  liveReadQuery(LIVE_READ.INTEGRATIONS, accountIds(accountId));
+
+/** What an integration server answered when asked for its tools, by its connection's name (`integrationServerOf`). */
+export const integrationToolsQuery = (name: string | undefined) =>
+  liveReadQuery(LIVE_READ.INTEGRATION_TOOLS, oneId(name));
+
+/** A workspace's own integrations, its Sentry installations and its Slack bot, by the workspace. */
+export const workspaceIntegrationsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.WORKSPACE_INTEGRATIONS, oneId(workspaceId));
+
+/** An agent's own tools, by the agent. */
+export const workspaceToolsQuery = (agentId: string | undefined) =>
+  liveReadQuery(LIVE_READ.WORKSPACE_TOOLS, oneId(agentId));
+
+/** The outside MCP clients the account allowed, by the account. */
+export const mcpClientsQuery = (accountId: string | undefined) =>
+  liveReadQuery(LIVE_READ.MCP_CLIENTS, accountIds(accountId));
+
+/** A workspace's memories, by the workspace. */
+export const memoriesQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.MEMORIES, oneId(workspaceId));
+
+/** The repositories the account reaches, by the workspace or every one (`EVERY_WORKSPACE`). */
+export const repositoryListsQuery = (workspace: string | undefined) =>
+  liveReadQuery(LIVE_READ.REPOSITORY_LISTS, oneId(workspace));
+
+/** The channels of a workspace's Slack team, by the workspace. */
+export const slackChannelsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.SLACK_CHANNELS, oneId(workspaceId));
+
+/** A workspace's token repositories, by the workspace. */
+export const tokenRepositoriesQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.TOKEN_REPOSITORIES, oneId(workspaceId));
+
+/** A workspace's people, its members and who its work names but left, by the workspace. */
+export const workspaceMembersQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.WORKSPACE_MEMBERS, oneId(workspaceId));
+
+/** A workspace's pending invitations, by the workspace. */
+export const workspaceInvitationsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.WORKSPACE_INVITATIONS, oneId(workspaceId));
+
+/** A listed workspace's photo, by the workspace, which the host fetches as its version moves and holds for the session. */
+export const workspacePhotoQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.WORKSPACE_PHOTOS, oneId(workspaceId));
+
+/** A workspace's automations, by the workspace. */
+export const automationsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AUTOMATIONS, oneId(workspaceId));
+
+/** Every run of a workspace's automations the account reads, by the workspace. */
+export const automationWorkspaceRunsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, oneId(workspaceId));
+
+/** One automation's runs, by the automation. */
+export const automationRunsQuery = (automationId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AUTOMATION_RUNS, oneId(automationId));
+
 /** Try again on the account's preferences row. */
 export const accountPreferencesRetryMutation = () => actMutation(ACT_KIND.AGENTS_PREFERENCES_RETRY);
 
@@ -530,10 +705,10 @@ export const inboxItemsRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_I
 /** Try again on one holder's own inbox. */
 export const holderInboxRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_RETRY);
 /** Try again on a plan's or a page's comments, by the subject. */
-export const planCommentsRetryMutation = () => actMutation(ACT_KIND.TASKS_COMMENTS_RETRY);
+export const descriptionCommentsRetryMutation = () => actMutation(ACT_KIND.TASKS_COMMENTS_RETRY);
 
 /** Try again on a task's plan. */
-export const planDocumentRetryMutation = () => actMutation(ACT_KIND.TASKS_DOCUMENT_RETRY);
+export const descriptionDocumentRetryMutation = () => actMutation(ACT_KIND.TASKS_DOCUMENT_RETRY);
 
 /** Try again on one part of a pull request, named by its part, its agent, and its number, which answers once its ask has landed, so a write's read-back can wait on it. */
 export const pullRequestPartRetryMutation = () =>
@@ -541,6 +716,48 @@ export const pullRequestPartRetryMutation = () =>
 
 /** Try again on a pull request's chapters. */
 export const pullRequestChaptersRetryMutation = () => actMutation(ACT_KIND.CHAPTERS_RETRY);
+
+/** Try again on a transcript. */
+export const transcriptRetryMutation = () => actMutation(ACT_KIND.AGENTS_TRANSCRIPT_RETRY);
+
+/** Try again on a plan's history. */
+export const historyRetryMutation = () => actMutation(ACT_KIND.TASKS_HISTORY_RETRY);
+
+/** Try again on a workspace's skills. */
+export const installedSkillsRetryMutation = () => actMutation(ACT_KIND.INSTALLED_SKILLS_RETRY);
+
+/** Try again on the integrations, whose read names no account, since the host holds those of whoever is signed in. */
+export const integrationsRetryMutation = () => actMutation(ACT_KIND.INTEGRATIONS_RETRY);
+
+/** Try again on one server's tools, by the server (`integrationServerOf`). */
+export const integrationToolsRetryMutation = () => actMutation(ACT_KIND.INTEGRATIONS_TOOLS_RETRY);
+
+/** Try again on a workspace's own integrations. */
+export const workspaceIntegrationsRetryMutation = () =>
+  actMutation(ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY);
+
+/** Try again on the MCP clients, whose read names no account, since the host holds those of whoever is signed in. */
+export const mcpClientsRetryMutation = () => actMutation(ACT_KIND.MCP_CLIENTS_RETRY);
+
+/** Try again on a workspace's memories. */
+export const memoriesRetryMutation = () => actMutation(ACT_KIND.MEMORIES_RETRY);
+
+/** Try again on a repository list, by its scope (`repositoryScope`). */
+export const repositoryListsRetryMutation = () => actMutation(ACT_KIND.TASKS_REPOSITORIES_RETRY);
+
+/** Try again on a workspace's token repositories. */
+export const tokenRepositoriesRetryMutation = () =>
+  actMutation(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY);
+
+/** Try again on a workspace's people. */
+export const workspaceMembersRetryMutation = () => actMutation(ACT_KIND.WORKSPACE_MEMBERS_RETRY);
+
+/** Try again on a workspace's invitations. */
+export const workspaceInvitationsRetryMutation = () =>
+  actMutation(ACT_KIND.WORKSPACE_INVITATIONS_RETRY);
+
+/** Try again on one automations list or history, by what it holds and its id (`AutomationFollow`). */
+export const automationsRetryMutation = () => actMutation(ACT_KIND.AUTOMATIONS_RETRY);
 
 /**
  * Writes what each push lays of a live read into its query: the rows of

@@ -180,24 +180,24 @@ export function calledPicturesOf(
   return found;
 }
 
-/** Escapes the characters that would end a picture's words or address early, as the plan editor writes a picture (`picture-node.ts`). */
+/** Escapes the characters that would end a picture's words or address early, as the description editor writes a picture (`picture-node.ts`). */
 function escaped(words: string, ends: RegExp): string {
   return words.replace(ends, "\\$&");
 }
 
-/** A picture's line in a plan's text: its words as its alt text, and the plan's own address for it. */
+/** A picture's line in a description's text: its words as its alt text, and the description's own address for it. */
 export function taskPictureLine(words: string, address: string): string {
   return `![${escaped(words, /[\\[\]]/gu)}](${escaped(address, /[\\()]/gu)})`;
 }
 
-/** A picture's line added to a plan's text: the text as it then stands, and exactly what was added to it, which Undo takes back out. */
+/** A picture's line added to a description's text: the text as it then stands, and exactly what was added to it, which Undo takes back out. */
 export interface PictureAddition {
   readonly text: string;
   readonly added: string;
 }
 
 /**
- * The plan's text with a picture's line at its end, a paragraph of its own.
+ * The description's text with a picture's line at its end, a paragraph of its own.
  * Note that the text before it is kept byte for byte, because a trailing
  * space is a Markdown line break and a blank line is the developer's own;
  * only the line breaks the paragraph needs are added.
@@ -218,8 +218,8 @@ function standsAlone(text: string, at: number, added: string): boolean {
 }
 
 /**
- * The plan's text with an addition taken back out, as Undo takes back Add
- * to plan: its last occurrence still standing as a paragraph of its own,
+ * The description's text with an addition taken back out, as Undo takes back Add
+ * to description: its last occurrence still standing as a paragraph of its own,
  * exactly; nothing where none does. Note that a line the developer moved
  * into their words, or wrote straight under, is theirs now, and is left.
  */

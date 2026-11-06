@@ -1,6 +1,6 @@
 import { DIALOG_SIZE, Dialog, type DialogHandle } from "@repo/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
@@ -19,8 +19,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * workspace's repositories.
  *
  * What the composer starts is its own to say: in Agent mode a task with an
- * empty plan and a coding agent on the words, opened on the agent's tab; in
- * Plan mode an empty plan and a call with the app. Tab stays inside the
+ * empty description and a coding agent on the words, opened on the agent's tab; in
+ * Plan mode an empty description and a call with the app. Tab stays inside the
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's

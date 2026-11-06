@@ -1,6 +1,6 @@
 import { sectionAnchors } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import {
   useAutomation,
   useAutomationsLanded,
 } from "../automation-directory.js";
-import { pagesQuery, planDocumentQuery } from "../live-reads.js";
+import { pagesQuery, descriptionDocumentQuery } from "../live-reads.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import { appStateQuery, selectWorkspaces } from "../use-app-state.js";
 import { holderTaskId } from "./mention-holder.js";
@@ -85,14 +85,14 @@ export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string
 }
 
 /**
- * The heading a section's anchor names in a plan the window holds the
+ * The heading a section's anchor names in a description the window holds the
  * words of: the plan's page's, or one the host holds for a window that
- * opened it (`LIVE_READ.PLAN_DOCUMENT`); none where it holds neither, no
+ * opened it (`LIVE_READ.DESCRIPTION_DOCUMENT`); none where it holds neither, no
  * heading spells the anchor, or no plan is asked for.
  */
 export function useSectionHeading(taskId: string | undefined, anchor: string): string | undefined {
   const page = useTaskMentions();
-  const held = useQuery({ ...planDocumentQuery(taskId), enabled: false }).data;
+  const held = useQuery({ ...descriptionDocumentQuery(taskId), enabled: false }).data;
   const text =
     taskId === undefined
       ? undefined
@@ -102,7 +102,7 @@ export function useSectionHeading(taskId: string | undefined, anchor: string): s
           ? held.task.document.body
           : undefined;
   if (text === undefined) return undefined;
-  const headings = planSections(text).map((section) => section.heading);
+  const headings = descriptionSections(text).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(anchor)];
 }
 
@@ -129,7 +129,7 @@ export function useTaskCard(
   return taskId === undefined ? undefined : place?.taskCard(taskId, now, focus);
 }
 
-/** A section's card: its plan's card's head, and the heading the anchor names, or the name it was written with; where the plan no longer holds it, that said. */
+/** A section's card: its plan's card's head, and the heading the anchor names, or the name it was written with; where the description no longer holds it, that said. */
 export function SectionChipCard({
   taskId,
   anchor,
@@ -140,7 +140,7 @@ export function SectionChipCard({
   taskId: string;
   anchor: string;
   name: string;
-  /** What the card says of a section the plan no longer holds; none while it holds it. */
+  /** What the card says of a section the description no longer holds; none while it holds it. */
   gone: string | undefined;
   fallback: ReactNode;
 }): ReactNode {

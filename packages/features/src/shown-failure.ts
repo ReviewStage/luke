@@ -19,7 +19,7 @@
  * bound, but the trace a hosted call traveled under, read only in a trace
  * id's shape, which the service's log lines for that call carry. There is
  * no field for what
- * a person typed, a transcript, a plan, or a file. Note that a cause's
+ * a person typed, a transcript, a description, or a file. Note that a cause's
  * message is the error's own words, as an error's words already reach
  * Sentry (root `AGENTS.md`), and a refusal's is the sentence the service or
  * the host drew for it.
@@ -143,20 +143,20 @@ export const FAILURE_SURFACE = {
   PICTURE_KEEP: "picture.keep",
   PICTURE_READ: "picture.read",
   PIN_MOVE: "pin.move",
-  PLAN_ADD: "plan.add",
-  PLAN_COMMENTS_READ: "plan_comments.read",
-  PLAN_COMMENT_DELETE: "plan_comment.delete",
-  PLAN_COMMENT_DISCARD: "plan_comment.discard",
-  PLAN_COMMENT_EDIT: "plan_comment.edit",
-  PLAN_COMMENT_SEND: "plan_comment.send",
-  PLAN_DIAGRAM: "plan.diagram",
-  PLAN_HISTORY_OLDER_READ: "plan_history_older.read",
-  PLAN_HISTORY_READ: "plan_history.read",
-  PLAN_RESTORE: "plan.restore",
-  PLAN_SAVE: "plan.save",
-  PLAN_THREAD_REOPEN: "plan_thread.reopen",
-  PLAN_THREAD_RESOLVE: "plan_thread.resolve",
-  PLAN_VERSION_READ: "plan_version.read",
+  DESCRIPTION_ADD: "description.add",
+  DESCRIPTION_COMMENTS_READ: "description_comments.read",
+  DESCRIPTION_COMMENT_DELETE: "description_comment.delete",
+  DESCRIPTION_COMMENT_DISCARD: "description_comment.discard",
+  DESCRIPTION_COMMENT_EDIT: "description_comment.edit",
+  DESCRIPTION_COMMENT_SEND: "description_comment.send",
+  DESCRIPTION_DIAGRAM: "description.diagram",
+  DESCRIPTION_HISTORY_OLDER_READ: "description_history_older.read",
+  DESCRIPTION_HISTORY_READ: "description_history.read",
+  DESCRIPTION_RESTORE: "description.restore",
+  DESCRIPTION_SAVE: "description.save",
+  DESCRIPTION_THREAD_REOPEN: "description_thread.reopen",
+  DESCRIPTION_THREAD_RESOLVE: "description_thread.resolve",
+  DESCRIPTION_VERSION_READ: "description_version.read",
   PULL_REQUEST_CHECKS_READ: "pull_request_checks.read",
   PULL_REQUEST_COMMENT_DELETE: "pull_request_comment.delete",
   PULL_REQUEST_CONVERSATION_READ: "pull_request_conversation.read",

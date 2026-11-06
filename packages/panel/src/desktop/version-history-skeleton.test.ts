@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HISTORY_READ, type PlanHistoryControl } from "../tasks/use-plan-history.js";
+import { HISTORY_READ, type DescriptionHistoryControl } from "../tasks/use-description-history.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -17,9 +17,9 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * version-history-skeleton.test.ts -- while a plan's versions are read, the
+ * version-history-skeleton.test.ts -- while a description's versions are read, the
  * list stands its blocks in a version's own row and the page in its own
- * bar, so both land where their blocks stood. Synthetic plan.
+ * bar, so both land where their blocks stood. Synthetic description.
  */
 
 const ignore = (): void => undefined;
@@ -38,8 +38,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history over the window, its list as `list` says. */
-function drawn(list: PlanHistoryControl["list"], room: ShellRoom = SHELL_ROOM.WIDE): HTMLElement {
+/** The description's version history over the window, its list as `list` says. */
+function drawn(
+  list: DescriptionHistoryControl["list"],
+  room: ShellRoom = SHELL_ROOM.WIDE,
+): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,

@@ -1,17 +1,6 @@
-import type { AgentTranscriptKey } from "@repo/features/agent-view";
-import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
-import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import {
-  type AppHostRead,
-  type AppHostReads,
-  type AppStateSnapshot,
-  EVERY_WORKSPACE,
-  HOST_READ_SLICE,
-  OWN_TRANSCRIPT,
-  READ_KEYS,
-} from "@repo/host/app-state";
+import type { AppHostRead, AppHostReads, AppStateSnapshot } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect } from "react";
 import { askAct, tellAct } from "./act.js";
@@ -28,10 +17,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * drawn again draws its rows in its first frame, before anything is pushed.
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
- * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, a task's or an agent's pages or cloud Browser tabs, a
- * workspace's automations or runs, an automation's runs, an agent's or a
- * worker's transcript, or a workspace's people or invitations, is held by the
+ * holds rows never says loading again. A keyed read, a workspace's people, is held by the
  * surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
@@ -48,7 +34,7 @@ export const HOST_READ_STATUS = {
   FAILED: "failed",
 } as const;
 
-export type HostReadStatus = (typeof HOST_READ_STATUS)[keyof typeof HOST_READ_STATUS];
+type HostReadStatus = (typeof HOST_READ_STATUS)[keyof typeof HOST_READ_STATUS];
 
 /** A read as a surface draws it: its rows once it answered, and where it stands. */
 export interface HeldRead<Rows> {
@@ -62,26 +48,13 @@ export interface HostRead<Rows> extends HeldRead<Rows> {
   readonly retry: () => Promise<void>;
 }
 
-/** A repository list's scope as its acts name it: its workspace, or nothing for every one (`EVERY_WORKSPACE`). */
-function repositoryScope(workspace: string): { readonly workspaceId?: string } {
-  return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
-}
-
-/** The integration server whose tools a surface reads: its provider, and its account where the server is not the provider's own. */
-export type IntegrationServer = Pick<IntegrationProviderParams, "provider" | "connection">;
-
-/** A read the host holds for the panel, by its name (`AppHostReads`), but those read as queries (`live-reads.ts`). */
-type HostReadName = Exclude<keyof AppHostReads, LiveQueryRead>;
+/** A read the host holds for the panel, by its name (`AppHostReads`), but those read as queries (`live-reads.ts`), and the workspace's people while the Router's history still reads them here. */
+type HostReadName = Exclude<keyof AppHostReads, LiveQueryRead> | typeof LIVE_READ.WORKSPACE_MEMBERS;
 
 /** Where a read stands, from what the host holds of it. */
 function statusOf(held: AppHostRead<unknown> | undefined): HostReadStatus {
   if (held?.rows !== undefined) return HOST_READ_STATUS.READY;
   return held?.failed === true ? HOST_READ_STATUS.FAILED : HOST_READ_STATUS.LOADING;
-}
-
-/** How deep a key of `read` stands in its slice: one segment per id its slice is keyed by (`HOST_READ_SLICE`). */
-function depthOf(read: HostReadName): number {
-  return HOST_READ_SLICE[read].keys === READ_KEYS.TWO ? 2 : 1;
 }
 
 /** What `value` holds at `path`, record by record; none where it holds none. */
@@ -142,7 +115,7 @@ function hostRead<
   Key = never,
   Retry extends ((key: Key) => void) | undefined = undefined,
 >(
-  read: Read,
+  _read: Read,
   declared: {
     readonly slice: Atom.Atom<AppStateSnapshot[Read] | undefined>;
     readonly path: ((key: Key) => readonly string[]) | undefined;
@@ -152,7 +125,7 @@ function hostRead<
     readonly retry: Retry;
   },
 ): HostReadEntry<Read, Key, Retry> {
-  const at = atomsAt(declared.slice, depthOf(read));
+  const at = atomsAt(declared.slice, 1);
   return {
     // SAFETY: what a read's slice holds at a key's whole path is that key's read (`HOST_READ_SLICE`).
     at: (path) => at(path) as Atom.Atom<AppHostRead<AppHostReads[Read]> | undefined>,
@@ -163,147 +136,18 @@ function hostRead<
   };
 }
 
-/** The automations' hold on one list or history, a stream that carries nothing, and its Try again, by what it holds. */
-function automationsRead(kind: AutomationFollow["kind"]) {
-  return {
-    path: (id: string) => [id],
-    hold: (id: string) => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { kind, id }),
-    retry: (id: string) => tellAct(ACT_KIND.AUTOMATIONS_RETRY, { kind, id }),
-  };
-}
-
 /**
  * Every read a surface reads through `useHostRead`, by its name, but
- * those moved onto TanStack Query (`live-reads.ts`): where the account's integrations stand, by the account, which every
- * surface drawing an integration holds; one agent's own tools, which its
- * servers popover holds; one integration server's tools, by the account it
- * stands for, which a list of the servers holds; the outside MCP clients the account allowed, by
- * the account, which Settings › MCP holds; one agent's or worker's
- * transcript, by the agent and then the worker's call or the agent's own,
- * which its tab holds while it shows; one workspace's
- * memories, which Settings › Memory holds; the skills the account sees in
- * one workspace, which Settings › Skills holds; one workspace's
- * automations, one workspace's runs, or one automation's runs, by its id;
- * one task's plan history, which its version history
- * holds while it shows; one workspace's people, its members and who its work names but
- * left, which every surface naming them holds; one workspace's token
- * repositories, which Settings › Workspace and onboarding's GitHub step
- * hold; one workspace's pending invitations, which an owner's or an
- * admin's Settings › Workspace holds; one workspace's own integrations, its
- * Sentry installations and its Slack bot, which Settings › Workspace and an
- * automation's editor hold; the channels of one workspace's Slack team,
- * which an owner's or an admin's Settings › Workspace holds; each listed
- * workspace's photo, which the host fetches as its version moves and holds
- * for the session. A workspace's photo offers
- * none, since the host fetches it again as the workspaces next move.
+ * those moved onto TanStack Query (`live-reads.ts`): one workspace's people,
+ * which the window's history holds while a person's page stands on it.
  */
 const HOST_READS = {
-  [LIVE_READ.INSTALLED_SKILLS]: hostRead(LIVE_READ.INSTALLED_SKILLS, {
-    slice: APP_SLICE.INSTALLED_SKILLS,
-    path: (workspaceId: string) => [workspaceId],
-    hold: (workspaceId) => askAct(ACT_KIND.INSTALLED_SKILLS_FOLLOW, { workspaceId }),
-    retry: (workspaceId) => tellAct(ACT_KIND.INSTALLED_SKILLS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.INTEGRATIONS]: hostRead(LIVE_READ.INTEGRATIONS, {
-    slice: APP_SLICE.INTEGRATIONS,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the integrations of whoever is signed in, so the hold and its Try again name no account.
-    hold: () => askAct(ACT_KIND.INTEGRATIONS_FOLLOW),
-    retry: () => tellAct(ACT_KIND.INTEGRATIONS_RETRY),
-  }),
-  [LIVE_READ.INTEGRATION_TOOLS]: hostRead(LIVE_READ.INTEGRATION_TOOLS, {
-    slice: APP_SLICE.INTEGRATION_TOOLS,
-    path: (server: IntegrationServer) => [server.connection ?? server.provider],
-    hold: (server) => askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server),
-    retry: (server) => tellAct(ACT_KIND.INTEGRATIONS_TOOLS_RETRY, server),
-  }),
-  [LIVE_READ.MEMORIES]: hostRead(LIVE_READ.MEMORIES, {
-    slice: APP_SLICE.MEMORIES,
-    path: (workspaceId: string) => [workspaceId],
-    hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
-    retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.REPOSITORY_LISTS]: hostRead(LIVE_READ.REPOSITORY_LISTS, {
-    slice: APP_SLICE.REPOSITORY_LISTS,
-    path: (workspace: string) => [workspace],
-    hold: (workspace) => askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, repositoryScope(workspace)),
-    retry: (workspace) => tellAct(ACT_KIND.TASKS_REPOSITORIES_RETRY, repositoryScope(workspace)),
-  }),
-  [LIVE_READ.WORKSPACE_INVITATIONS]: hostRead(LIVE_READ.WORKSPACE_INVITATIONS, {
-    slice: APP_SLICE.WORKSPACE_INVITATIONS,
-    path: (workspaceId: string) => [workspaceId],
-    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW, { workspaceId }),
-    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_INVITATIONS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.TRANSCRIPT]: hostRead(LIVE_READ.TRANSCRIPT, {
-    slice: APP_SLICE.TRANSCRIPT,
-    path: (transcript: AgentTranscriptKey) => [
-      transcript.agentId,
-      transcript.callId ?? OWN_TRANSCRIPT,
-    ],
-    hold: (transcript) => askAct(ACT_KIND.AGENTS_TRANSCRIPT, transcript),
-    retry: (transcript) => tellAct(ACT_KIND.AGENTS_TRANSCRIPT_RETRY, transcript),
-  }),
+  // Note that `navigation-history.ts`, the Router task's, is the last caller of this entry, which leaves with it (`workspaceMembersQuery`).
   [LIVE_READ.WORKSPACE_MEMBERS]: hostRead(LIVE_READ.WORKSPACE_MEMBERS, {
     slice: APP_SLICE.WORKSPACE_MEMBERS,
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_MEMBERS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.WORKSPACE_INTEGRATIONS]: hostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, {
-    slice: APP_SLICE.WORKSPACE_INTEGRATIONS,
-    path: (workspaceId: string) => [workspaceId],
-    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW, { workspaceId }),
-    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.SLACK_CHANNELS]: hostRead(LIVE_READ.SLACK_CHANNELS, {
-    slice: APP_SLICE.SLACK_CHANNELS,
-    path: (workspaceId: string) => [workspaceId],
-    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW, { workspaceId }),
-    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.TOKEN_REPOSITORIES]: hostRead(LIVE_READ.TOKEN_REPOSITORIES, {
-    slice: APP_SLICE.TOKEN_REPOSITORIES,
-    path: (workspaceId: string) => [workspaceId],
-    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, { workspaceId }),
-    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.WORKSPACE_PHOTOS]: hostRead(LIVE_READ.WORKSPACE_PHOTOS, {
-    slice: APP_SLICE.WORKSPACE_PHOTOS,
-    path: (workspaceId: string) => [workspaceId],
-    hold: undefined,
-    retry: undefined,
-  }),
-  [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
-    slice: APP_SLICE.WORKSPACE_TOOLS,
-    path: (agentId: string) => [agentId],
-    hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
-    retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
-  }),
-  [LIVE_READ.MCP_CLIENTS]: hostRead(LIVE_READ.MCP_CLIENTS, {
-    slice: APP_SLICE.MCP_CLIENTS,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the clients of whoever is signed in, so the hold names no account.
-    hold: () => askAct(ACT_KIND.MCP_CLIENTS_FOLLOW),
-    retry: () => tellAct(ACT_KIND.MCP_CLIENTS_RETRY),
-  }),
-  [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
-    slice: APP_SLICE.AUTOMATIONS,
-    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE),
-  }),
-  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: hostRead(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, {
-    slice: APP_SLICE.AUTOMATION_WORKSPACE_RUNS,
-    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE_RUNS),
-  }),
-  [LIVE_READ.AUTOMATION_RUNS]: hostRead(LIVE_READ.AUTOMATION_RUNS, {
-    slice: APP_SLICE.AUTOMATION_RUNS,
-    ...automationsRead(AUTOMATION_FOLLOW.RUNS),
-  }),
-  [LIVE_READ.HISTORY]: hostRead(LIVE_READ.HISTORY, {
-    slice: APP_SLICE.HISTORY,
-    path: (taskId: string) => [taskId],
-    hold: (taskId) => askAct(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }),
-    retry: (taskId) => tellAct(ACT_KIND.TASKS_HISTORY_RETRY, { taskId }),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 
@@ -348,8 +192,8 @@ export function useHostRead<Read extends HostReadName>(
   const keyed = key as never;
   const path =
     entry.path === undefined ? WHOLE_SLICE : key === undefined ? undefined : entry.path(keyed);
-  // Note that a key's path is at most two segments (`READ_KEYS`), so the effects below name a fixed number of them.
-  const [first, second] = path ?? [];
+  // Note that a key's path is one segment (`READ_KEYS.ONE`), so the effects below name it alone.
+  const [first] = path ?? [];
   const held = useAppSlice<AppHostRead<unknown> | undefined>(
     path === undefined ? NO_READ : entry.at(path),
   );
@@ -360,7 +204,7 @@ export function useHostRead<Read extends HostReadName>(
       () => hold(keyed),
       () => undefined,
     );
-  }, [entry, first, second]);
+  }, [entry, first]);
   // Note that a Try again the port refuses settles as one that landed, since the read's own failure is what the surface draws.
   const retry = useCallback(
     (): Promise<void> =>
@@ -370,36 +214,11 @@ export function useHostRead<Read extends HostReadName>(
             () => undefined,
             () => undefined,
           ),
-    [entry, first, second],
+    [entry, first],
   );
   const drawn = { rows: held?.rows, status: statusOf(held) };
   // SAFETY: a read's rows are its entry's (`AppHostReads`), and Try again stands where its entry offers one (`HostReadOf`).
   return (entry.retry === undefined ? drawn : { ...drawn, retry }) as HostReadOf<Read>;
-}
-
-/**
- * What `read` holds at `key` as the host holds it now, without holding it:
- * what a surface beside the one that holds a read draws from it, as a
- * section's chip names a heading in a plan the window holds; none until it
- * is read, or where no surface holds it.
- */
-export function useHeldRows<Read extends HostReadName>(
-  read: Read,
-  ...[key]: HostReadKey<Read>
-): AppHostReads[Read] | undefined {
-  const entry = HOST_READS[read];
-  // SAFETY: the key a surface hands is the one its read's entry takes (`HostReadKey`).
-  const path =
-    entry.path === undefined
-      ? WHOLE_SLICE
-      : key === undefined
-        ? undefined
-        : entry.path(key as never);
-  const held = useAppSlice<AppHostRead<unknown> | undefined>(
-    path === undefined ? NO_READ : entry.at(path),
-  );
-  // SAFETY: a read's rows are its entry's (`AppHostReads`).
-  return held?.rows as AppHostReads[Read] | undefined;
 }
 
 /** No slice, for a surface reading no key of a read. */
