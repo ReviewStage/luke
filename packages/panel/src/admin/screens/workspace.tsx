@@ -9,7 +9,6 @@
  */
 
 import type { AdminWorkspaceDetail, AdminWorkspaceMember } from "@repo/features/admin-answer-wire";
-import { ADMIN_READ } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
 import { formatDate } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
@@ -32,9 +31,11 @@ import {
   Text,
 } from "@repo/ui";
 import { githubAccountPageUrl } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminWorkspaceQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { ExternalLink } from "../chrome/external-links.js";
@@ -43,7 +44,6 @@ import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, workspaceReadQuery } from "../routing.js";
 import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
-import { useAdminRead } from "../use-admin-read.js";
 
 const WORKSPACE_ERROR = readFailedWords("this workspace");
 
@@ -227,17 +227,13 @@ export function WorkspaceScreen({
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();
   const query = workspaceReadQuery(id);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.WORKSPACE, query },
-    (signal) => reads.workspace(query, signal),
-    WORKSPACE_ERROR,
-    { keeps: (shown) => shown.workspace.id === id },
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminWorkspaceQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const back: AdminWayBack = { tab: ADMIN_TAB.WORKSPACES, onBack };
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

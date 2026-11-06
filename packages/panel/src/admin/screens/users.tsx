@@ -1,9 +1,5 @@
 import type { AdminUserList, AdminUserListRow } from "@repo/features/admin-answer-wire";
-import {
-  ADMIN_READ,
-  ADMIN_USERS_SEARCH_MAX_LENGTH,
-  type AdminMetricsWindow,
-} from "@repo/features/admin-wire";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH, type AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
 import { formatDate, formatDayTick } from "@repo/features/time-format";
 import {
@@ -23,6 +19,7 @@ import {
 } from "@repo/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@repo/ui/accounts-sort";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
@@ -30,6 +27,7 @@ import {
   AccountsTableSkeleton,
 } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminUsersQuery, useAdminSignOut, useFavoriteMutation } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { SignInMethodsChart, SignInMethodsChartSkeleton } from "../charts/signups-chart.js";
 import { AdminSection } from "../charts/stat-card.js";
@@ -40,13 +38,10 @@ import {
   CollectionCountSkeleton,
   type ViewerAccount,
 } from "../chrome/page-header.js";
-import { SEARCH_DEBOUNCE_MS, searchTerm, usersReadQuery } from "../routing.js";
-import { useAdminRead, useAdminWrite } from "../use-admin-read.js";
+import { searchTerm, usersReadQuery } from "../routing.js";
+import { useSettledSearch } from "../settled-search.js";
 
 const USERS_ERROR = readFailedWords("users");
-
-/** What a toast says when the star's write did not land. */
-const FAVORITE_FAILED = "The favorite could not be saved. Try again.";
 
 const ACCOUNT: Noun = { one: "account", many: "accounts" };
 
@@ -183,26 +178,16 @@ export function UsersScreen({
   };
   useEffect(() => address.onSearchMoved(() => setQuery(address.search())), [address]);
 
-  const asked = usersReadQuery(hideAdmins, windowDays, searchTerm(query));
-  const { state, refreshing, reload, withdraw, revise } = useAdminRead(
-    { procedure: ADMIN_READ.USERS, query: asked },
-    (signal) => reads.users(asked, signal),
-    USERS_ERROR,
-    { debounceMs: SEARCH_DEBOUNCE_MS },
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const asked = usersReadQuery(hideAdmins, windowDays, useSettledSearch(searchTerm(query)));
+  const read = useQuery({ ...adminUsersQuery(reads, asked), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
 
-  // The star answers the press at once, while one write chain per account
-  // carries the newest intent to the service and redraws its outcome.
-  const toggleFavorite = useAdminWrite(
-    (id, favorite, signal) => reads.favorite(id, favorite, signal),
-    (id, favorite) =>
-      revise((list) => ({
-        ...list,
-        rows: list.rows.map((row) => (row.id === id ? { ...row, favorite } : row)),
-      })),
-    FAVORITE_FAILED,
-  );
+  // The star answers the press at once, while its write carries the press to
+  // the service and redraws its outcome.
+  const favorite = useFavoriteMutation(reads);
+  const toggleFavorite = (id: string, starred: boolean) =>
+    favorite.mutate({ id, favorite: starred });
 
   // The title, its controls, and the search stand the same on the loading
   // page and the loaded one, so the box takes typing before the first answer.
@@ -239,7 +224,7 @@ export function UsersScreen({
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

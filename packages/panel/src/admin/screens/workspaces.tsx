@@ -3,7 +3,7 @@ import type {
   AdminWorkspaceList,
   AdminWorkspaceRow,
 } from "@repo/features/admin-answer-wire";
-import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@repo/features/admin-wire";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@repo/features/admin-wire";
 import { formatCount, formatPercent } from "@repo/features/number-format";
 import { formatDate } from "@repo/features/time-format";
 import {
@@ -34,9 +34,11 @@ import {
 } from "@repo/ui";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { githubAccountPageUrl } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminWorkspacesQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminViewOptions, PageSections } from "../chrome/controls.js";
@@ -48,9 +50,9 @@ import {
 } from "../chrome/page-header.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
-import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
+import { searchTerm, workspacesReadQuery } from "../routing.js";
+import { useSettledSearch } from "../settled-search.js";
 import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
-import { useAdminRead } from "../use-admin-read.js";
 import { WorkspaceCell } from "../workspace-cell.js";
 
 /**
@@ -307,14 +309,10 @@ export function WorkspacesScreen({
     setSharedOnly(next);
   };
 
-  const asked = workspacesReadQuery(hideAdmins, sharedOnly, searchTerm(query));
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.WORKSPACES, query: asked },
-    (signal) => reads.workspaces(asked, signal),
-    WORKSPACES_ERROR,
-    { debounceMs: SEARCH_DEBOUNCE_MS },
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const asked = workspacesReadQuery(hideAdmins, sharedOnly, useSettledSearch(searchTerm(query)));
+  const read = useQuery({ ...adminWorkspacesQuery(reads, asked), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
 
   const page = (
     content: Pick<
@@ -348,7 +346,7 @@ export function WorkspacesScreen({
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,
