@@ -20,7 +20,8 @@ import { relayTunnel, type TunnelDependencies } from "./relay.js";
 /**
  * One tunnel as the relay pipes it, over sockets and a sandbox that answer
  * from a script, on the test clock: a stopped sandbox is never woken and
- * the tunnel closes as not running; a running one starts the port bridge,
+ * the tunnel closes as not running, but for a mirror that asks to wake,
+ * which resumes it and starts its bridge; a running one starts the port bridge,
  * and once it is ready frames cross both ways, holding the sandbox as they
  * do, until twenty minutes without a byte close the tunnel as idle and end
  * its keep-alive.
@@ -56,10 +57,11 @@ const scriptedSocket = Effect.gen(function* () {
 
 type Scripted = Effect.Success<typeof scriptedSocket>;
 
-/** The relay's world: the agent reached, its sandbox standing as given, the lease, and every keep-alive asked. */
-function world(pty: Scripted, sandbox: SandboxState = SANDBOX_STATE.RUNNING) {
+/** The relay's world: the agent reached, its sandbox standing as given until a resume wakes it, the lease, and every keep-alive asked. */
+function world(pty: Scripted, standing: SandboxState = SANDBOX_STATE.RUNNING) {
   let heldUntil = 0;
-  const asked = { opened: 0, connected: 0, keptAlive: [] as number[] };
+  let sandbox = standing;
+  const asked = { opened: 0, resumed: 0, connected: 0, keptAlive: [] as number[] };
   const deps: TunnelDependencies = {
     reach: () => Effect.succeed(Option.some({ conversationId: CONVERSATION, sessionId: "wrun_1" })),
     open: () =>
@@ -68,6 +70,11 @@ function world(pty: Scripted, sandbox: SandboxState = SANDBOX_STATE.RUNNING) {
         return sandbox === SANDBOX_STATE.RUNNING
           ? { state: sandbox, shell: { url: "wss://pty.test", token: Redacted.make("pty-token") } }
           : { state: sandbox };
+      }),
+    resume: () =>
+      Effect.sync(() => {
+        asked.resumed += 1;
+        sandbox = SANDBOX_STATE.RUNNING;
       }),
     connect: () =>
       Effect.sync(() => {
@@ -106,8 +113,31 @@ it.effect("a stopped sandbox is never woken: the tunnel closes as not running", 
 
     assert.deepEqual(device.closed, [TUNNEL_CLOSE.NOT_RUNNING]);
     assert.equal(asked.connected, 0);
+    assert.equal(asked.resumed, 0);
     assert.equal(heldUntil(), 0);
   }),
+);
+
+it.effect(
+  "a mirror that asks to wake resumes a stopped sandbox and starts its bridge, holding nothing",
+  () =>
+    Effect.gen(function* () {
+      const device = yield* scriptedSocket;
+      const pty = yield* scriptedSocket;
+      const { deps, asked, heldUntil } = world(pty, SANDBOX_STATE.STOPPED);
+      const mirror = { ...ASK, bridge: { kind: TUNNEL_KIND.MIRROR, wake: true } } as const;
+
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTunnel(device.socket, mirror, deps)),
+      );
+      yield* settle;
+
+      assert.equal(asked.resumed, 1);
+      assert.equal(asked.connected, 1);
+      assert.equal(heldUntil(), 0);
+      assert.deepEqual(device.closed, []);
+      yield* Fiber.interrupt(relay);
+    }),
 );
 
 it.effect(

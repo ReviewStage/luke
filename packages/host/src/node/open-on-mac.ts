@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { MirrorPlatformSeam } from "../effect/seams.js";
 
 /**
  * open-on-mac.ts -- the script a local agent's worktree is made with on its box, from the box's own clone of the repository.
@@ -26,6 +27,14 @@ export function worktreesRoot(home: string): string {
 /** The folder under the root the app's clones live in. */
 const CLONES_FOLDER = "clones";
 
+/** The folder under the root each cloud agent's mirror lives in, by the agent's id. */
+const MIRRORS_FOLDER = "mirrors";
+
+/** Where every cloud agent's mirror on this Mac lives, each in a folder named by the agent's id. */
+export function mirrorsFolder(home: string): string {
+  return path.join(worktreesRoot(home), MIRRORS_FOLDER);
+}
+
 /** A repository's owner and name as folder names, lowercased as GitHub matches them. */
 function repositoryFolders(repository: string): readonly [string, string] {
   const [owner = "", name = ""] = repository.toLowerCase().split("/");
@@ -52,6 +61,12 @@ const WORKTREE_TIMING = {
   /** Seconds a connection over SSH, which a clone made over it before still fetches by, may take to open. */
   CONNECT_SECONDS: 20,
 } as const;
+
+/** The lines that set the login shell's PATH: an app opened from the Dock has a bare one, and the login shell's is the one the developer's Git and tools live on. */
+const LOGIN_PATH = [
+  'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
+  "export PATH",
+];
 
 /** A word quoted for a POSIX shell. */
 function shellQuoted(word: string): string {
@@ -178,9 +193,7 @@ export function agentWorktreeScript(input: {
 }): string {
   const stallSeconds = input.stallSeconds ?? WORKTREE_TIMING.STALL_SECONDS;
   return [
-    // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git and tools live on.
-    'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
-    "export PATH",
+    ...LOGIN_PATH,
     ...nonInteractiveGit(Math.max(1, Math.trunc(stallSeconds))),
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
@@ -217,4 +230,72 @@ export function agentWorktreeScript(input: {
     "fi",
     "",
   ].join("\n");
+}
+
+/**
+ * The script, its values quoted, that makes a cloud agent's mirror
+ * (`@repo/host`'s `compose-mirrors.ts`) a worktree of this Mac's shared clone
+ * of its repository, detached at `base`, the commit the agent's checkout
+ * starts from: the clone made the first time, where the local agents' host
+ * would make it, and `base` fetched into it, under the clone's lock, through
+ * whatever this Mac's own Git configuration reaches GitHub with. A mirror
+ * whose worktree stands is left as it is.
+ */
+export function mirrorWorktreeScript(input: {
+  /** The repository as `owner/name`, cloned from GitHub the first time. */
+  readonly repository: string;
+  readonly clone: string;
+  readonly worktree: string;
+  readonly base: string;
+}): string {
+  return [
+    ...LOGIN_PATH,
+    ...nonInteractiveGit(WORKTREE_TIMING.STALL_SECONDS),
+    `clone=${shellQuoted(input.clone)}`,
+    `worktree=${shellQuoted(input.worktree)}`,
+    `base=${shellQuoted(input.base)}`,
+    `https=${shellQuoted(`https://github.com/${input.repository}.git`)}`,
+    ...SHARED_CLONE,
+    "brought_in() {",
+    "  cloned || return 1",
+    '  cd "$clone" || return 1',
+    '  git fetch origin "$base" || return 1',
+    '  mkdir -p "$(dirname "$worktree")" || return 1',
+    '  git worktree add --quiet --detach "$worktree" "$base"',
+    "}",
+    '[ -e "$worktree/.git" ] && exit 0',
+    "( opened )",
+    "",
+  ].join("\n");
+}
+
+/** The script that prints a mirror's own files by git's rules, each path ended by a NUL. */
+export function mirrorListScript(worktree: string): string {
+  return [
+    ...LOGIN_PATH,
+    `git -C ${shellQuoted(worktree)} ls-files -co --exclude-standard -z`,
+    "",
+  ].join("\n");
+}
+
+/** The script that takes a mirror's worktree out of the shared clone it was made of, files and all. */
+export function mirrorRemovedScript(worktree: string): string {
+  return [
+    ...LOGIN_PATH,
+    `worktree=${shellQuoted(worktree)}`,
+    'common="$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)" || exit 1',
+    'git -C "$(dirname "$common")" worktree remove --force "$worktree"',
+    "",
+  ].join("\n");
+}
+
+/** This Mac's mirrors as the host asks them (`@repo/host/effect`'s `MirrorPlatform`), under the home folder given. */
+export function mirrorPlatform(home: string): MirrorPlatformSeam {
+  return {
+    folder: mirrorsFolder(home),
+    worktreeScript: (input) =>
+      mirrorWorktreeScript({ ...input, clone: cloneFolder(worktreesRoot(home), input.repository) }),
+    listScript: mirrorListScript,
+    removeScript: mirrorRemovedScript,
+  };
 }

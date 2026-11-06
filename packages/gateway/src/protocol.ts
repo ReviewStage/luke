@@ -655,6 +655,12 @@ export const GATEWAY_METHOD = {
    * crosses the Gateway.
    */
   PORT_FORWARDS_SET: "portForwards.set",
+  /**
+   * A cloud agent's mirror on this Mac (`@repo/host`'s `compose-mirrors.ts`),
+   * made where none stands and kept in step from then on, answered with its
+   * folder (`{ folder }`) once its worktree stands.
+   */
+  MIRRORS_ENSURE: "mirrors.ensure",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

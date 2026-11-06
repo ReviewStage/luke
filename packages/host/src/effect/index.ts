@@ -41,6 +41,8 @@ export {
   type LocalAgentPlatformSeam,
   type LocalAgentRunner,
   LoopbackListener,
+  MirrorPlatform,
+  type MirrorPlatformSeam,
   RunMode,
   reporterLayer,
   SecretCipher,
