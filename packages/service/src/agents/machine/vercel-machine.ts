@@ -55,12 +55,13 @@
  * session and its agent, as the sandbox is created. The
  * firewall is the sandbox session's network policy, composed whole at each
  * write from its sources and the swaps its launch keeps
- * (`../sandbox-firewall.ts`), a stop is the session's, and a
- * resume opens the sandbox's last snapshot, its timeout lowered first, so
- * the session it opens lives a launch's timeout and not an old sandbox's
- * day; a snapshot expired is a place gone, which the next `open` replaces.
- * A sandbox opened before `getOrCreate`, under a UUID, keeps that path until
- * its snapshot lapses, and the one opened in its place is the session's own.
+ * (`../sandbox-firewall.ts`), and a stop is the session's. A resume of a
+ * sandbox under its session's name is the same `getOrCreate`, which makes
+ * it anew on the session's drive where its snapshot expired, set up as a new
+ * one is, and says so, since the harness's own session went with the old
+ * disk. A sandbox opened before `getOrCreate`, under a UUID, resumes from its
+ * last snapshot and is a place gone once that expired; the one opened in
+ * its place is the session's own.
  */
 
 import { createHash } from "node:crypto";
@@ -92,6 +93,7 @@ import {
   type AgentDrive,
   type AgentDriveFrom,
   agentDrive,
+  agentDriveName,
 } from "../agent-drive.js";
 import { type BaseDriveOf, fillBaseDrive, installDependencies } from "../base-drive.js";
 import { AgentImage } from "../coder-host/agent-image.js";
@@ -573,16 +575,6 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       clear: (place) => firewall.clear(sessionOfPlace(place)),
     },
 
-    resume: (found) =>
-      Effect.gen(function* () {
-        const resumed = yield* Effect.result(api.resume(found.name));
-        if (Result.isFailure(resumed)) {
-          if (snapshotGone(resumed.failure)) return PLACE_RESUME.GONE;
-          return yield* resumed.failure;
-        }
-        return vercelPlace(found.session, found.name, resumed.success.currentSessionId);
-      }),
-
     stop: (place) =>
       Effect.flatMap(api.session(sessionOfPlace(place)), (session) => session.stop()),
 
@@ -749,10 +741,11 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * the size its repository asks for, with the session's drive mounted at
    * the workspace, set up in its `onCreate` where it was created (`setUp`),
    * and asked again while the registry still prepares the image
-   * (`IMAGE_RETRY`). A setup that fails fails the open, and what it made is
-   * left as it stands. Note that the setup's own failure is the open's,
-   * because the SDK hands `onCreate`'s rejection on as the call's, which
-   * would read as Vercel's rather than in the checkout's words.
+   * (`IMAGE_RETRY`), with whether it was created. A setup that fails fails
+   * the open, and what it made is left as it stands. Note that the setup's
+   * own failure is the open's, because the SDK hands `onCreate`'s rejection
+   * on as the call's, which would read as Vercel's rather than in the
+   * checkout's words.
    */
   const gotOn = (
     agent: Agent,
@@ -763,6 +756,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   ) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<DatabaseServices>();
+      let created = false;
       const opened = yield* Effect.suspend(() => {
         let refused: CheckoutRefused | SandboxUnavailable | undefined;
         return api
@@ -781,16 +775,18 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
               env: SANDBOX_ENV,
               mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive.name },
             },
-            (created) =>
-              run(
-                setUp(context, agent, checkout, drive, runningOf(created)).pipe(
+            (sandbox) => {
+              created = true;
+              return run(
+                setUp(context, agent, checkout, drive, runningOf(sandbox)).pipe(
                   Effect.tapError((failure) =>
                     Effect.sync(() => {
                       refused = failure;
                     }),
                   ),
                 ),
-              ),
+              );
+            },
           )
           .pipe(Effect.mapError((failure) => refused ?? failure));
       }).pipe(
@@ -801,7 +797,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
             failure instanceof SandboxUnavailable && failure.code === IMAGE_NOT_READY,
         }),
       );
-      return runningOf(opened);
+      return { ...runningOf(opened), created };
     });
 
   /**
@@ -880,6 +876,35 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           },
           beside,
         );
+      }),
+
+    // A sandbox under its session's name is run again as it was opened, through `getOrCreate`
+    // (`gotOn`): resumed where it stands, or made again on the session's drive where its snapshot is
+    // gone, set up with nothing to check out, since the drive holds the checkout. One opened before,
+    // under a UUID, resumes from its snapshot alone, and is gone once that lapsed.
+    resume: (found, agent) =>
+      Effect.gen(function* () {
+        if (found.name === agentSandboxName(found.session)) {
+          const image = yield* Effect.flatMap(AgentImage, (agentImage) => agentImage.reference);
+          const drive = { name: agentDriveName(found.session), from: AGENT_DRIVE_FROM.KEPT };
+          const { name, running, created } = yield* gotOn(
+            agent,
+            found.session,
+            image,
+            drive,
+            undefined,
+          );
+          return { place: vercelPlace(found.session, name, running), created };
+        }
+        const resumed = yield* Effect.result(api.resume(found.name));
+        if (Result.isFailure(resumed)) {
+          if (snapshotGone(resumed.failure)) return PLACE_RESUME.GONE;
+          return yield* resumed.failure;
+        }
+        return {
+          place: vercelPlace(found.session, found.name, resumed.success.currentSessionId),
+          created: false,
+        };
       }),
 
     // The sandbox is readied as root once the caller's steps are done, since the readying shares

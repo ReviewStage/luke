@@ -1603,12 +1603,25 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, with no CLI session to resume",
+    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, with no CLI session to resume and the installed skills written again",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
+        yield* installSkill(userId, {
+          owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
+          name: "incident-notes",
+          description: "Write incident notes.",
+          userInvocable: false,
+          source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+          files: [{ path: "SKILL.md", bytes: new TextEncoder().encode("Write them.\n") }],
+        });
+        const skillUploads = () =>
+          api.uploads.filter((upload) =>
+            [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
+          ).length;
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
@@ -1643,6 +1656,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.resume, undefined);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+        // The installed skills went with the expired disk, so the fresh sandbox is handed them again.
+        assert.equal(skillUploads(), 2);
         // The session is found again by its tag, in the new sandbox alone.
         const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
         assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
