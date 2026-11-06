@@ -123,6 +123,7 @@ export const PANEL_COMMAND = {
   CLOSE_TAB: keyed(APP_COMMAND.CLOSE_TAB, <GLYPH.CLOSE />, NOUN.TAB),
   CLOSE_OTHER_TABS: keyedAs(APP_COMMAND.CLOSE_OTHER_TABS, "Close others", <ListXIcon />),
   SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),
+  SHOW_LOCAL: unkeyed("Show local", <GLYPH.TERMINAL />),
   SHOW_BROWSER: unkeyed("Show browser", <GLYPH.WEBSITE />),
   OPEN_IN_TASK: keyed(APP_COMMAND.OPEN_IN_TASK, <GLYPH.TASK />),
   OPEN_IN_SLACK: unkeyed("Open in Slack", <ProviderMark provider={INTEGRATION_PROVIDER.SLACK} />),

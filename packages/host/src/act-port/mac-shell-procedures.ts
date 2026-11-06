@@ -5,8 +5,8 @@
  * node-pty), and these procedures hold which window it belongs to. A shell
  * belongs to the window that opened it, and no other window can attach to
  * or close it. An attach opens a channel and posts its other end to that
- * window under a ticket naming the shell, which the Terminal tab reads:
- * what the shell prints, paced to the
+ * window under the ticket a cloud shell's port carries, so the Terminal tab
+ * reads it as it reads a cloud shell's: what the shell prints, paced to the
  * tab's acks (`TERMINAL_FLOW`), how it stands, and its exit, out; what the
  * panel types, resizes, and acks, in. The window's page going, a reload
  * among it, closes the port and leaves the shell running, so the page that
@@ -23,7 +23,6 @@ import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
   TERMINAL_PORT_MESSAGE,
-  type TerminalPortOutbound,
   type TerminalPortTicket,
   terminalPortInboundSchema,
 } from "@repo/features/terminal-acts";
@@ -33,24 +32,9 @@ import { Effect, Result } from "effect";
 import { MAC_SHELL_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPortFor } from "./base.js";
 import type { PlatformActProcedures } from "./index.js";
+import type { HostTerminalPort, TerminalPortSeam } from "./terminal-procedures.js";
 
 type MacShellActKind = (typeof MAC_SHELL_ACT_KIND)[keyof typeof MAC_SHELL_ACT_KIND];
-
-/** The host's end of one attached shell's channel. */
-export interface HostTerminalPort {
-  post(message: TerminalPortOutbound): void;
-  /** Hears each message the panel sends, unread. */
-  onMessage(listener: (message: WireBoundaryInput) => void): void;
-  close(): void;
-}
-
-/** How main reaches a panel's page for its ports, `Sender` being the platform's own handle on the window. */
-export interface TerminalPortSeam<Sender> {
-  /** A fresh channel: the host's end, with the other end already posted to the panel under the ticket. */
-  open(sender: Sender, ticket: TerminalPortTicket): HostTerminalPort;
-  /** Calls `then` once, when the panel's page is gone. */
-  whenGone(sender: Sender, then: () => void): void;
-}
 
 /** One running shell, as the platform holds it. */
 export interface MacShell {

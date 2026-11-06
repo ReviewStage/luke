@@ -1,7 +1,7 @@
 /**
  * terminal-entry.ts -- which coding agent a terminal command is for: the rules every way of opening a terminal follows.
  *
- * A terminal belongs to one coding agent's mirror, never to the task, so
+ * A terminal belongs to one coding agent's sandbox, never to the task, so
  * every way in first decides which agent, and never asks. Show terminal
  * (⌘J) goes to an existing Terminal tab; New terminal (⌘K, the panel's "+")
  * adds a shell. From an agent's own tab, its Changes tab, or its Terminal

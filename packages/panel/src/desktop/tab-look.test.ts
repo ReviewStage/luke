@@ -329,7 +329,7 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
   assert.deepEqual(cardOf(files), own, "a link to its files hangs it too");
 });
 
-test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card", async () => {
+test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
     (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Terminal",
@@ -341,6 +341,10 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, WORKING.title);
+  assert.equal(
+    card.querySelector(".ui-hover-card-row:last-child .ui-hover-card-row-label")?.textContent,
+    "Terminal in this agent’s sandbox",
+  );
 });
 
 test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", async () => {

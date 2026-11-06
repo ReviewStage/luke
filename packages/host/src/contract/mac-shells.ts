@@ -8,12 +8,13 @@ import { actProcedure, exactInput } from "./base.js";
 import { MAC_SHELL_ACT_KIND } from "./kinds.js";
 
 /**
- * mac-shells.ts -- a cloud agent's shells on this Mac: the agent's mirror found or made, and a shell opened in a folder for the asking panel, attached, and closed, as procedures.
+ * mac-shells.ts -- a shell on this Mac, opened in a folder for the asking panel, attached, and closed, as procedures.
  *
  * Main answers them itself (`../act-port/mac-shell-procedures.ts`), and a
- * browser tab refuses them. A shell is named by its agent and its own id,
- * and an attach posts it a port: what the shell prints, how it stands, and
- * what the panel types, resizes, and acks travel on it, never on these.
+ * browser tab refuses them. A shell is named as a cloud shell is, by its
+ * agent and its own id, so an attach takes the cloud's attach as it stands
+ * and posts the same port: what the shell prints, how it stands, and what
+ * the panel types, resizes, and acks travel on it, never on these.
  */
 
 /** The longest folder a shell opens in, as macOS's `PATH_MAX` bounds a path. */

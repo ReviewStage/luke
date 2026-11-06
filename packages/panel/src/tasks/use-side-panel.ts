@@ -11,10 +11,12 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
+  type LocalStripTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
@@ -228,6 +230,7 @@ export type SidePanelTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
+  | LocalStripTab
   | PageStripTab
   | CloudBrowserStripTab;
 
@@ -599,6 +602,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pages: readonly OpenPage[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
+  /** The open Local tabs, by agent, in the order opened. */
+  readonly locals: readonly LocalStripTab[];
   /** The agents' cloud Browser tabs opened in this window, by the id the service keeps each under, in the order opened: the only ones the strip draws. */
   readonly openedCloudBrowsers: readonly string[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
@@ -702,6 +707,8 @@ export interface SidePanelControl {
   pages: readonly OpenPage[];
   /** The open Terminal tabs in the order opened, after the page tabs; only those of the open task's agents are drawn. */
   terminals: readonly TerminalStripTab[];
+  /** The open Local tabs in the order opened, after the Terminal tabs; only those of the open task's agents are drawn. */
+  locals: readonly LocalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
   /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
@@ -1112,6 +1119,10 @@ function withTab(
     isTerminalTab(tab) && !held.terminals.some((each) => sameTab(each, tab))
       ? [...held.terminals, tab]
       : held.terminals;
+  const locals =
+    isLocalTab(tab) && !held.locals.some((each) => sameTab(each, tab))
+      ? [...held.locals, tab]
+      : held.locals;
   const lastTerminals =
     isTerminalTab(tab) && taskId !== undefined && held.lastTerminals[taskId] !== tab.terminal
       ? { ...held.lastTerminals, [taskId]: tab.terminal }
@@ -1128,6 +1139,7 @@ function withTab(
     pages === held.pages &&
     transcripts === held.transcripts &&
     terminals === held.terminals &&
+    locals === held.locals &&
     lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
@@ -1138,6 +1150,7 @@ function withTab(
         files,
         pages,
         terminals,
+        locals,
         lastTerminals,
         openedCloudBrowsers,
         tab: chosen,
@@ -1404,6 +1417,10 @@ export function drawsTerminal(
   return drawn.taskAgents?.includes(tab.terminal) === true;
 }
 
+export function drawsLocal(tab: LocalStripTab, drawn: Pick<DrawnTabs, "taskAgents">): boolean {
+  return drawn.taskAgents?.includes(tab.local) === true;
+}
+
 /** The open file tabs of files opened on the task, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -1458,6 +1475,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
+    ...held.locals.filter((each) => drawsLocal(each, drawn)),
     ...drawnCloudBrowsers(held, drawn),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
@@ -1525,14 +1543,16 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
             ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
             : isTerminalTab(tab)
               ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-              : isCloudBrowserTab(tab)
-                ? {
-                    ...held,
-                    openedCloudBrowsers: held.openedCloudBrowsers.filter(
-                      (each) => each !== tab.cloudBrowser,
-                    ),
-                  }
-                : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+              : isLocalTab(tab)
+                ? { ...held, locals: held.locals.filter((each) => !sameTab(each, tab)) }
+                : isCloudBrowserTab(tab)
+                  ? {
+                      ...held,
+                      openedCloudBrowsers: held.openedCloudBrowsers.filter(
+                        (each) => each !== tab.cloudBrowser,
+                      ),
+                    }
+                  : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1811,6 +1831,7 @@ function settled(state: SidePanelState): HeldState {
     files: [],
     pages: [],
     terminals: [],
+    locals: [],
     openedCloudBrowsers: [],
     lastTerminals: {},
     pullRequestViews: new Map(),
@@ -1936,6 +1957,7 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
+  if (isLocalTab(kept)) return drawsLocal(kept, drawn) ? kept : tabs[0];
   // Note that a cloud Browser tab chosen stands while the list is on its way, so it is not swapped for another and back.
   if (isCloudBrowserTab(kept)) {
     return drawn.cloudBrowsers === undefined || drawn.cloudBrowsers.includes(kept.cloudBrowser)
@@ -2416,6 +2438,7 @@ export function useSidePanel(
     changes: taskTabs(state, taskId).changes ?? NO_CHANGES,
     pages: state.pages,
     terminals: state.terminals,
+    locals: state.locals,
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
     pullRequestViews: state.pullRequestViews,
     onPullRequestView,

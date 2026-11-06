@@ -6,16 +6,20 @@ import { MOTION_DURATION_MS } from "@repo/brand";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
+  TERMINAL_REFUSAL,
   type TerminalPortInbound,
   type TerminalPortOutbound,
+  type TerminalRefusal,
 } from "@repo/features/terminal-acts";
+import { shellsAsked } from "@repo/features/terminal-store";
+import { SANDBOX_STATE, type TerminalsAnswer } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   ACT_ERROR,
-  type MAC_SHELL_ACT_KIND,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
+  type TERMINAL_ACT_KIND,
 } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { timeRuntime } from "@repo/ui";
@@ -38,21 +42,18 @@ import { longPress, underAFinger } from "../testing/finger.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
-import { type HeldShell, shellsAsked } from "./terminal-held.js";
-import { TerminalStanding } from "./terminal-shells.js";
+import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * A cloud agent's Terminal tab as the developer meets it: shells on this
- * Mac in the agent's mirror, found or opened and attached only while the
- * tab is shown, under a bar naming the agent and where the connection
- * stands, with each state said the way a terminal says it. Main is the
- * process boundary: its act channel answers from the shells it holds, and a
- * shell's port is handed into the page as the preload hands it, the test
- * speaking for main on it. What the window kept across a reload is its
- * session storage, which each test stages. The screen is the real terminal
- * bundle.
+ * An agent's Terminal tab as the developer meets it: a shell in the agent's
+ * own sandbox, found and attached only while the tab is shown, under a bar
+ * naming the agent and where the connection stands, with each state said the
+ * way a terminal says it. Main is the process boundary: its act channel
+ * answers from a staged sandbox, and a shell's port is handed into the page
+ * as the preload hands it, the test speaking for the host on it. The screen
+ * is the real terminal bundle.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -72,24 +73,17 @@ const OLDEST = "3f1c5a7b-9d2e-4b6f-8a1c-3e5f7a9b1d20";
 const NEWER = "4a2d6b8c-0e3f-4c7a-9b2d-4f6a8b0c2e31";
 const MADE = "5b3e7c9d-1f4a-4d8b-8c3e-5a7b9c1d3f42";
 
-/** The agent's mirror on this Mac, as main answers it. */
-const FOLDER = "/Users/someone/.vespin/mirrors/8c1a6a4f/luke";
-
-/** The shells the window holds for the agent unless a test keeps others, oldest first. */
-const HELD: readonly HeldShell[] = [
-  { terminalId: OLDEST, title: "zsh" },
-  { terminalId: NEWER, title: "dev server" },
-];
-
-/** Keeps the window's shells for the agent, as a page before a reload left them in session storage. */
-function keep(shells: readonly HeldShell[]): void {
-  window.sessionStorage.setItem(
-    "vespin.terminalShells",
-    JSON.stringify(shells.length === 0 ? {} : { [AGENT.id]: shells }),
-  );
+/** A shell as the sandbox lists it. */
+function shell(id: string, title: string) {
+  return { id, title, command: "zsh", cwd: "/vercel/sandbox/luke", running: false };
 }
 
-/** A shell's port as the test holds it: what the tab posted on it, whether the tab closed it, and main's voice on it. */
+const RUNNING: TerminalsAnswer = {
+  sandbox: SANDBOX_STATE.RUNNING,
+  terminals: [shell(OLDEST, "zsh"), shell(NEWER, "dev server")],
+};
+
+/** A shell's port as the test holds it: what the tab posted on it, whether the tab closed it, and the host's voice on it. */
 interface HostPort {
   readonly posted: TerminalPortInbound[];
   readonly closed: () => boolean;
@@ -97,28 +91,34 @@ interface HostPort {
   readonly say: (message: TerminalPortOutbound | UnparsedWireValue) => void;
 }
 
-type ShellKind = (typeof MAC_SHELL_ACT_KIND)[keyof typeof MAC_SHELL_ACT_KIND];
+type TerminalKind = (typeof TERMINAL_ACT_KIND)[keyof typeof TERMINAL_ACT_KIND];
 
-/** One Mac shell act as it rides the act port: its kind, and the payload the kind takes. */
-type ShellAct = {
-  [Kind in ShellKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
-}[ShellKind];
+/** One Terminal tab act as it rides the act port: its kind, and the payload the kind takes. */
+type TerminalAct = {
+  [Kind in TerminalKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
+}[TerminalKind];
 
 /** Any act the tab sends on its act port. */
-type SentAct = AnyAct | ShellAct;
+type SentAct = AnyAct | TerminalAct;
 
 /** What main answers and posts, as the test stages it. */
 interface Main {
   /** Every act the tab sent, by kind and payload, in order. */
   readonly sent: SentAct[];
-  /** The shells main holds for this window, which an attach to any other is refused for. */
-  readonly shells: Set<string>;
-  /** The kinds main refuses outright. */
-  readonly down: Set<PortActKind | ShellKind>;
+  /** The sandbox's list as `terminal.list` answers it, which a test may change. */
+  listed: TerminalsAnswer;
+  /** The kinds main refuses outright, as it does when the service cannot be reached. */
+  readonly down: Set<PortActKind | TerminalKind>;
+  /** What `terminal.create` answers in place of a shell, where the sandbox refuses one. */
+  createRefused: TerminalRefusal | undefined;
+  /** What `terminal.list` answers in place of the list, where the service refuses it. */
+  listRefused: TerminalRefusal | undefined;
+  /** What `terminal.resume` answers in place of the sandbox, where the service refuses it. */
+  resumeRefused: TerminalRefusal | undefined;
   /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
   /** The kinds whose answers are held back until the test lets them go. */
-  readonly holding: Set<PortActKind | ShellKind>;
+  readonly holding: Set<PortActKind | TerminalKind>;
   /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
@@ -130,34 +130,52 @@ beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 let main: Main;
 
 beforeEach(() => {
-  keep(HELD);
   const sent: SentAct[] = [];
-  const shells = new Set(HELD.map((each) => each.terminalId));
-  /** Whether main refuses the act: a kind it is down for, or an attach or close of a shell it does not hold. */
-  const refused = (request: ShellAct) =>
-    main.down.has(request.kind) ||
-    (request.kind === ACT_KIND.MAC_SHELL_ATTACH && !main.shells.has(request.payload.terminalId));
-  const answer = (request: ShellAct): PortActResult<ShellKind> => {
+  const answer = (request: TerminalAct): PortActResult<TerminalKind> => {
     switch (request.kind) {
-      case ACT_KIND.MAC_SHELL_MIRROR:
-        return { folder: FOLDER };
-      case ACT_KIND.MAC_SHELL_OPEN: {
-        // Note that each shell opened has an id of its own, as main mints one per shell, the first of them MADE.
-        const terminalId = main.shells.has(MADE) ? crypto.randomUUID() : MADE;
-        main.shells.add(terminalId);
-        return { terminalId };
+      case ACT_KIND.TERMINAL_LIST:
+        return main.listRefused === undefined ? main.listed : { refused: main.listRefused };
+      case ACT_KIND.TERMINAL_CREATE: {
+        if (main.createRefused !== undefined) return { refused: main.createRefused };
+        // Note that each shell made has an id of its own, as the service mints one per shell, the first of them MADE.
+        const made = shell(
+          main.listed.terminals.some((each) => each.id === MADE) ? crypto.randomUUID() : MADE,
+          "zsh",
+        );
+        main.listed = { ...main.listed, terminals: [...main.listed.terminals, made] };
+        return { terminal: made };
       }
-      case ACT_KIND.MAC_SHELL_CLOSE:
-        main.shells.delete(request.payload.terminalId);
-        return undefined;
+      case ACT_KIND.TERMINAL_RENAME:
+        main.listed = {
+          ...main.listed,
+          terminals: main.listed.terminals.map((each) =>
+            each.id === request.payload.terminalId
+              ? { ...each, title: request.payload.title }
+              : each,
+          ),
+        };
+        return main.listed;
+      case ACT_KIND.TERMINAL_KILL:
+        main.listed = {
+          ...main.listed,
+          terminals: main.listed.terminals.filter((each) => each.id !== request.payload.terminalId),
+        };
+        return main.listed;
+      case ACT_KIND.TERMINAL_RESUME:
+        if (main.resumeRefused !== undefined) return { refused: main.resumeRefused };
+        main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
+        return { sandbox: SANDBOX_STATE.RUNNING };
       default:
         return undefined;
     }
   };
   main = {
     sent,
-    shells,
+    listed: RUNNING,
     down: new Set(),
+    createRefused: undefined,
+    listRefused: undefined,
+    resumeRefused: undefined,
     held: [],
     holding: new Set(),
     post: (terminalId) => {
@@ -179,45 +197,57 @@ beforeEach(() => {
       return {
         posted,
         closed: () => close.mock.calls.length > 0,
-        // Main's message, delivered to the tab's own handler as the port would.
+        // The host's message, delivered to the tab's own handler as the port would.
         say: (message) =>
           act(() => port.onmessage?.(new MessageEvent("message", { data: message }))),
       };
     },
   };
-  /** A Mac shell act answered as main's procedure would: refused, held back, or answered now. */
-  const respond = (request: ShellAct): Promise<PortActResult<ShellKind>> => {
+  /** A Terminal tab act answered as main's procedure would: refused, held back, or answered now. */
+  const respond = (request: TerminalAct): Promise<PortActResult<TerminalKind>> => {
     sent.push(request);
-    const refusal = () =>
-      new ORPCError(ACT_ERROR.REFUSED, { message: "Could not open that shell." });
-    // A held answer says what main said when it was asked, or refuses as main would when it is let go.
-    if (main.holding.has(request.kind)) {
-      const value = answer(request);
-      return new Promise((resolve, reject) =>
-        main.held.push(() => (refused(request) ? reject(refusal()) : resolve(value))),
+    if (main.down.has(request.kind)) {
+      return Promise.reject(
+        new ORPCError(ACT_ERROR.REFUSED, { message: "Could not reach this agent's sandbox." }),
       );
     }
-    if (refused(request)) return Promise.reject(refusal());
+    // A held answer says what main said when it was asked, landing whenever it is let go.
+    if (main.holding.has(request.kind)) {
+      const value = answer(request);
+      return new Promise((resolve) => main.held.push(() => resolve(value)));
+    }
     return Promise.resolve(answer(request));
   };
   fakeAppBridge({});
   // SAFETY: each procedure answers its own kind, whose answer `answer` gives by the same kind; the casts are the one dispatch on it.
   fakeActPort({
-    [ACT_KIND.MAC_SHELL_MIRROR]: (payload) =>
-      respond({ kind: ACT_KIND.MAC_SHELL_MIRROR, payload }) as Promise<
-        PortActResult<typeof ACT_KIND.MAC_SHELL_MIRROR>
+    [ACT_KIND.TERMINAL_LIST]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_LIST, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_LIST>
       >,
-    [ACT_KIND.MAC_SHELL_OPEN]: (payload) =>
-      respond({ kind: ACT_KIND.MAC_SHELL_OPEN, payload }) as Promise<
-        PortActResult<typeof ACT_KIND.MAC_SHELL_OPEN>
+    [ACT_KIND.TERMINAL_CREATE]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_CREATE, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_CREATE>
       >,
-    [ACT_KIND.MAC_SHELL_ATTACH]: (payload) =>
-      respond({ kind: ACT_KIND.MAC_SHELL_ATTACH, payload }) as Promise<
-        PortActResult<typeof ACT_KIND.MAC_SHELL_ATTACH>
+    [ACT_KIND.TERMINAL_RENAME]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_RENAME, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_RENAME>
       >,
-    [ACT_KIND.MAC_SHELL_CLOSE]: (payload) =>
-      respond({ kind: ACT_KIND.MAC_SHELL_CLOSE, payload }) as Promise<
-        PortActResult<typeof ACT_KIND.MAC_SHELL_CLOSE>
+    [ACT_KIND.TERMINAL_KILL]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_KILL, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_KILL>
+      >,
+    [ACT_KIND.TERMINAL_RESUME]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_RESUME, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_RESUME>
+      >,
+    [ACT_KIND.TERMINAL_ATTACH]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_ATTACH, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_ATTACH>
+      >,
+    [ACT_KIND.TERMINAL_DETACH]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_DETACH, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_DETACH>
       >,
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
@@ -244,7 +274,6 @@ afterEach(() => {
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   document.body.style.removeProperty("--ui-duration-pane");
-  window.sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -284,6 +313,7 @@ async function mount(
           children: tab,
         })
       : tab;
+  let closed = 0;
   let toggled = 0;
   let agentOpened = 0;
   let handed = onPhone(null).handed;
@@ -294,6 +324,9 @@ async function mount(
       shown: on,
       onOpenAgent: () => {
         agentOpened += 1;
+      },
+      onClose: () => {
+        closed += 1;
       },
       shells: {
         open: shellsOpen,
@@ -327,14 +360,18 @@ async function mount(
       render(on);
       await settle();
     },
+    /** How many times the tab asked to close. */
+    closed: () => closed,
     /** How many times the shells list's toggle was pressed. */
     toggled: () => toggled,
     registry,
-    /** The shells as the list draws them: each one's name, and whether it is shown. */
+    /** The shells as the list draws them: each one's name, what it says under it, whether it is shown, and whether it runs something. */
     rows: () =>
       [...container.querySelectorAll('[aria-label="Shell list"] > li')].map((row) => ({
         name: row.querySelector(".ui-list-row-title")?.textContent,
+        detail: row.querySelector(".terminal-shell-detail")?.textContent,
         shown: row.querySelector('[aria-current="true"]') !== null,
+        running: row.querySelector(".terminal-shell-running") !== null,
       })),
     /** Presses the button the label names, wherever it stands in the tab. */
     press: async (label: string) => {
@@ -394,6 +431,13 @@ function bytes(text: string): Uint8Array {
   return Uint8Array.from(text, (character) => character.charCodeAt(0));
 }
 
+/** The attach the tab sent last, as main received it. */
+function lastAttach() {
+  const attach = main.sent.findLast((request) => request.kind === "terminal.attach");
+  assert.ok(attach);
+  return attach.payload;
+}
+
 test("the tab is left out of the screen recording, its screen and bar with it", async () => {
   const tab = await mount();
   const screen = tab.container.querySelector(".terminal-tab-screen");
@@ -401,23 +445,20 @@ test("the tab is left out of the screen recording, its screen and bar with it", 
   assert.ok(tab.container.querySelector(".ui-pane-bar")?.closest(".ph-no-capture"));
 });
 
-test("shown, the tab attaches to the oldest shell the window holds; hidden, it lets the port go and attaches nothing more", async () => {
+test("shown, the tab lists the agent's shells and attaches to the oldest; hidden, it lets the port go and attaches nothing more", async () => {
   const tab = await mount();
-  assert.deepEqual(tab.kinds(), ["macShell.attach"]);
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
-    agentId: AGENT.id,
-    terminalId: OLDEST,
-    cols: 80,
-    rows: 24,
-  });
-  assert.equal(tab.standing(), "· connecting…");
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.attach"]);
+  const attach = lastAttach();
+  assert.ok(attach instanceof Object && "terminalId" in attach);
+  assert.equal(attach.terminalId, OLDEST);
+  assert.equal(tab.standing(), "· sandbox · connecting…");
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "attached" });
-  assert.equal(tab.standing(), "· connected");
+  assert.equal(tab.standing(), "· sandbox · connected");
   assert.equal(tab.bar(), undefined);
   await tab.render(false);
   assert.equal(port.closed(), true);
-  assert.deepEqual(tab.kinds(1), []);
+  assert.deepEqual(tab.kinds(2), []);
 });
 
 test("what is typed goes to the shell's port while it is connected", async () => {
@@ -437,66 +478,146 @@ test("a port posted for a shell the tab did not ask for, or after it was hidden,
   assert.equal(main.post(OLDEST).closed(), true);
 });
 
-test("an agent with no shell yet has its files mirrored and a shell opened in the mirror, and the tab attaches to it", async () => {
-  keep([]);
+test("a sandbox with no shell has one opened, and the tab attaches to it", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
   const tab = await mount();
-  assert.deepEqual(tab.kinds(), ["macShell.mirror", "macShell.open", "macShell.attach"]);
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_MIRROR), { agentId: AGENT.id });
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_OPEN), { agentId: AGENT.id, folder: FOLDER });
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
-    agentId: AGENT.id,
-    terminalId: MADE,
-    cols: 80,
-    rows: 24,
-  });
-  assert.deepEqual(
-    tab.rows().map((row) => row.name),
-    ["Terminal 1"],
-  );
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create", "terminal.attach"]);
+  const attach = lastAttach();
+  assert.ok(attach instanceof Object && "terminalId" in attach);
+  assert.equal(attach.terminalId, MADE);
 });
 
-test("a shell that ended takes any key for a new one, and is let go", async () => {
-  keep([{ terminalId: OLDEST, title: "zsh" }]);
+test("a stopped sandbox shows its bar over the dimmed screen and resumes only on its action, then opens a shell", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   const tab = await mount();
-  const port = main.post(OLDEST);
-  port.say({ type: "state", state: "exited", code: 0 });
-  assert.equal(tab.standing(), "· exited");
-  assert.equal(tab.bar(), undefined);
-  const before = main.sent.length;
-  await tab.type("a", 65);
-  assert.deepEqual(tab.kinds(before), [
-    "macShell.close",
-    "macShell.mirror",
-    "macShell.open",
-    "macShell.attach",
-  ]);
-  assert.deepEqual(
-    tab.rows().map((row) => row.name),
-    ["Terminal 1"],
-  );
-});
-
-test("a mirror main could not make shows a bar that says so, whose action asks again", async () => {
-  keep([]);
-  main.down.add(ACT_KIND.MAC_SHELL_MIRROR);
-  mountAnnouncer();
-  const tab = await mount();
-  assert.equal(tab.standing(), "· unreachable");
-  assert.equal(tab.bar(), "Could not mirror this agent’s files on this Mac.");
-  assert.equal(
-    announcedPolitely(),
-    "Could not mirror this agent’s files on this Mac.",
-    "the bar is said as it lands",
-  );
-  main.down.clear();
+  assert.equal(tab.standing(), "· sandbox · sandbox stopped");
+  assert.equal(tab.bar(), "Sandbox stopped.");
+  assert.match(tab.action()?.textContent ?? "", /^Resume sandbox/);
+  // Typing anything but Return resumes nothing.
+  await tab.type("x", 88);
+  assert.deepEqual(tab.kinds(), ["terminal.list"]);
   await act(async () => tab.action()?.click());
   await settle();
   assert.deepEqual(tab.kinds(), [
-    "macShell.mirror",
-    "macShell.mirror",
-    "macShell.open",
-    "macShell.attach",
+    "terminal.list",
+    "terminal.resume",
+    "terminal.list",
+    "terminal.create",
+    "terminal.attach",
   ]);
+});
+
+test("a resume whose snapshot is gone says the sandbox shut down and how to start a fresh one", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  main.resumeRefused = TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE;
+  const tab = await mount();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.equal(
+    tab.bar(),
+    "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
+  );
+});
+
+test("Return on the stopped bar resumes the sandbox, as its action does", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  const tab = await mount();
+  await tab.type("Enter", 13);
+  assert.equal(tab.kinds()[1], "terminal.resume");
+});
+
+test("an agent that has not opened its sandbox yet shows the waiting bar", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.STARTING, terminals: [] };
+  const tab = await mount();
+  assert.equal(tab.standing(), "· sandbox · waiting for sandbox");
+  assert.equal(tab.bar(), "Waiting for the agent to open its sandbox…");
+  assert.equal(tab.action(), null);
+});
+
+/** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
+function revealBar(): void {
+  act(() => {
+    for (const name of ["animationend", "webkitAnimationEnd"]) {
+      document.querySelector(".terminal-bar")?.dispatchEvent(new Event(name, { bubbles: true }));
+    }
+  });
+}
+
+test("a dropped connection shows its bar, and its action asks for the shell again at once", async () => {
+  mountAnnouncer();
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "reconnecting" });
+  assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "a bar still hidden says nothing, so a blip is never said");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…", "it is said once shown");
+
+  // A later drop hides its bar again, so its words wait for that reveal too.
+  port.say({ type: "state", state: "starting" });
+  assert.equal(announcedPolitely(), "Waiting for the agent to open its sandbox…");
+  port.say({ type: "state", state: "reconnecting" });
+  assert.equal(
+    announcedPolitely(),
+    "",
+    "the second bar is hidden, so it says nothing yet, and the bar it replaced took its words back",
+  );
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
+  const before = main.sent.length;
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
+});
+
+test("after five idle minutes the screen dims with no bar, and any key reconnects to the same shell", async () => {
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "idle" });
+  assert.equal(tab.standing(), "· sandbox · disconnected");
+  assert.equal(tab.bar(), undefined);
+  const before = main.sent.length;
+  await tab.type("q", 81);
+  assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
+  const attach = lastAttach();
+  assert.ok(attach instanceof Object && "terminalId" in attach);
+  assert.equal(attach.terminalId, OLDEST);
+  // The key reconnected; it never reached the shell.
+  assert.equal(port.posted.length, 0);
+});
+
+test("a shell that ended takes any key for a new one", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [shell(OLDEST, "zsh")] };
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "exited", code: 0 });
+  assert.equal(tab.standing(), "· sandbox · exited");
+  assert.equal(tab.bar(), undefined);
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
+  const before = main.sent.length;
+  await tab.type("a", 65);
+  assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.create", "terminal.attach"]);
+});
+
+test("a sandbox that refuses a shell because it stopped meanwhile shows the stopped bar", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
+  main.createRefused = TERMINAL_REFUSAL.SANDBOX_STOPPED;
+  const tab = await mount();
+  assert.equal(tab.bar(), "Sandbox stopped.");
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create"]);
+});
+
+test("a service it cannot reach shows a bar that says so, whose action asks again", async () => {
+  main.down.add(ACT_KIND.TERMINAL_LIST);
+  mountAnnouncer();
+  const tab = await mount();
+  assert.equal(tab.standing(), "· sandbox · unreachable");
+  assert.equal(tab.bar(), "The service did not answer.");
+  assert.equal(announcedPolitely(), "The service did not answer.", "the bar is said as it lands");
+  main.down.clear();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.list", "terminal.attach"]);
 });
 
 test("the screen says it has drawn each five thousand characters of output, which the host paces the shell by", async () => {
@@ -510,7 +631,7 @@ test("the screen says it has drawn each five thousand characters of output, whic
   port.say({ type: "output", data: bytes("y".repeat(1_500)) });
   await act(async () => vi.runAllTimersAsync());
   assert.deepEqual(port.posted, [{ type: "ack", bytes: 5_500 }]);
-  assert.equal(tab.standing(), "· connected");
+  assert.equal(tab.standing(), "· sandbox · connected");
 });
 
 test("a message on the port that is no message of main's is never drawn nor acted on", async () => {
@@ -519,7 +640,7 @@ test("a message on the port that is no message of main's is never drawn nor acte
   port.say({ type: "state", state: "attached" });
   port.say({ type: "state", state: "melted" });
   port.say({ type: "output", data: "not bytes" });
-  assert.equal(tab.standing(), "· connected");
+  assert.equal(tab.standing(), "· sandbox · connected");
 });
 
 test("a terminal bundle that fails to load leaves the tab saying so with Retry, which imports it again and draws the screen", async () => {
@@ -552,32 +673,37 @@ test("a terminal bundle that fails to load leaves the tab saying so with Retry, 
   assert.ok(tab.container.querySelector(".terminal-tab-screen"));
 });
 
-test("a shell main no longer holds, as one kept from before the window closed, is dropped and the next one attached", async () => {
-  main.shells.delete(OLDEST);
+test("an agent archived or retired closes its Terminal tab, as its Changes tab closes", async () => {
+  main.listRefused = TERMINAL_REFUSAL.GONE;
   const tab = await mount();
-  assert.deepEqual(tab.kinds(), ["macShell.attach", "macShell.attach"]);
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
-    agentId: AGENT.id,
-    terminalId: NEWER,
-    cols: 80,
-    rows: 24,
-  });
-  assert.deepEqual(
-    tab.rows().map((row) => row.name),
-    ["dev server"],
-  );
+  assert.equal(tab.closed(), 1);
+  assert.deepEqual(tab.kinds(), ["terminal.list"]);
 });
 
-test("a shell main could not open in the mirror says so, and its action asks again", async () => {
-  keep([]);
-  main.down.add(ACT_KIND.MAC_SHELL_OPEN);
+test("a shell or agent the service cannot find shows the bar that asks again, and leaves the tab open", async () => {
+  main.listRefused = TERMINAL_REFUSAL.NOT_FOUND;
   const tab = await mount();
-  assert.equal(tab.standing(), "· unreachable");
-  assert.equal(tab.bar(), "Could not open a shell in this agent’s files.");
-  main.down.clear();
+  assert.equal(tab.bar(), "Could not find this agent’s shell.");
+  assert.equal(tab.closed(), 0);
+});
+
+test("a sandbox that did not answer says it was the agent's sandbox, and its action asks again", async () => {
+  main.listRefused = TERMINAL_REFUSAL.SANDBOX_UNANSWERED;
+  const tab = await mount();
+  assert.equal(tab.standing(), "· sandbox · unreachable");
+  assert.equal(tab.bar(), "The agent’s sandbox didn’t answer.");
+  main.listRefused = undefined;
   await act(async () => tab.action()?.click());
   await settle();
-  assert.deepEqual(tab.kinds().slice(2), ["macShell.mirror", "macShell.open", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.list", "terminal.attach"]);
+});
+
+test("a deployment that serves no terminal relay says so, and leaves the tab open", async () => {
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "unavailable" });
+  assert.equal(tab.bar(), "The terminal service isn’t set up on this deployment.");
+  assert.equal(tab.closed(), 0);
 });
 
 test("of two attaches out at once, only the newest one's port is taken, and the late one is closed", async () => {
@@ -585,13 +711,18 @@ test("of two attaches out at once, only the newest one's port is taken, and the 
   // Hidden and shown again before the first attach's port lands, the tab attaches again.
   await tab.render(false);
   await tab.render(true);
-  assert.deepEqual(tab.kinds(), ["macShell.attach", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(), [
+    "terminal.list",
+    "terminal.attach",
+    "terminal.list",
+    "terminal.attach",
+  ]);
   // Main posts the ports in the order the attaches went out.
   const late = main.post(OLDEST);
   assert.equal(late.closed(), true);
   // What the late port says moves nothing: the tab waits on the newest.
   late.say({ type: "state", state: "attached" });
-  assert.equal(tab.standing(), "· connecting…");
+  assert.equal(tab.standing(), "· sandbox · connecting…");
   const newest = main.post(OLDEST);
   assert.equal(newest.closed(), false);
   newest.say({ type: "state", state: "attached" });
@@ -605,21 +736,20 @@ test("output still being drawn when its port gives way is counted for no other p
   first.say({ type: "state", state: "attached" });
   vi.useFakeTimers();
   first.say({ type: "output", data: bytes("x".repeat(6_000)) });
-  await tab.render(false);
-  await tab.render(true);
+  first.say({ type: "state", state: "reconnecting" });
+  await act(async () => tab.action()?.click());
   const second = main.post(OLDEST);
   await act(async () => vi.runAllTimersAsync());
   assert.deepEqual(second.posted, []);
 });
 
 test("the bar's action hands the keyboard back to the screen, since its button goes with the bar", async () => {
-  keep([]);
-  main.down.add(ACT_KIND.MAC_SHELL_MIRROR);
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   const tab = await mount();
-  const retry = tab.action();
-  assert.ok(retry);
-  retry.focus();
-  await act(async () => retry.click());
+  const resume = tab.action();
+  assert.ok(resume);
+  resume.focus();
+  await act(async () => resume.click());
   await settle();
   // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
   assert.ok(
@@ -628,9 +758,10 @@ test("the bar's action hands the keyboard back to the screen, since its button g
   );
 });
 
-test("what is typed while the shell is still attaching goes nowhere", async () => {
+test("what is typed while the connection is still opening goes nowhere, as the host would drop it", async () => {
   const tab = await mount();
   const port = main.post(OLDEST);
+  port.say({ type: "state", state: "connecting" });
   await tab.type("l", 76);
   assert.deepEqual(port.posted, []);
   port.say({ type: "state", state: "attached" });
@@ -650,9 +781,13 @@ test("a port that answers no attach in line is closed without losing the tab its
   assert.equal(newest.closed(), false);
 });
 
-test("a tab taken down with an attach still out closes the port that lands after it", async () => {
+test("a tab taken down with an attach still out lets its shell go, and closes the port that lands after it", async () => {
   await mount();
   for (const root of roots.splice(0)) act(() => root.unmount());
+  assert.deepEqual(main.sent.at(-1), {
+    kind: ACT_KIND.TERMINAL_DETACH,
+    payload: { agentId: AGENT.id, terminalId: OLDEST },
+  });
   assert.equal(main.post(OLDEST).closed(), true);
 });
 
@@ -676,25 +811,26 @@ test("a paste longer than one message is cut between characters, never inside on
   for (const part of sent) assert.doesNotMatch(part, /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/);
 });
 
-test("an attach refused after its tab was taken down leaves nothing waiting, so a later tab's port stands", async () => {
-  main.holding.add(ACT_KIND.MAC_SHELL_ATTACH);
+test("an attach refused after its tab was taken down leaves nothing waiting, so a later tab's port for the same shell stands", async () => {
+  main.down.add(ACT_KIND.TERMINAL_ATTACH);
   await mount();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Main refuses the attach once the tab is gone, as it does a shell it no longer holds.
-  main.shells.delete(OLDEST);
-  main.holding.clear();
-  for (const release of main.held.splice(0)) release();
   await settle();
+  main.down.clear();
   const later = await mount();
-  const port = main.post(NEWER);
+  const port = main.post(OLDEST);
   port.say({ type: "state", state: "attached" });
-  assert.equal(later.standing(), "· connected");
+  assert.equal(later.standing(), "· sandbox · connected");
 });
 
 test("a tab taken down with attaches out for two shells closes both ports, whichever lands first", async () => {
   const tab = await mount();
-  // Another shell chosen before the first attach's port lands, the tab attaches again.
-  await tab.choose("dev server");
+  main.post(OLDEST).say({ type: "state", state: "idle" });
+  // A key re-attaches the oldest shell; hidden and shown, the tab attaches again before any port lands.
+  await tab.type("q", 81);
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [shell(NEWER, "dev server")] };
+  await tab.render(false);
+  await tab.render(true);
   for (const root of roots.splice(0)) act(() => root.unmount());
   // The later attach's port lands first.
   assert.equal(main.post(NEWER).closed(), true);
@@ -702,17 +838,71 @@ test("a tab taken down with attaches out for two shells closes both ports, which
 });
 
 /** The payload of the last act of the kind the tab sent, as main received it. */
-function lastPayload(kind: PortActKind | ShellKind) {
+function lastPayload(kind: PortActKind | TerminalKind) {
   const request = main.sent.findLast((each) => each.kind === kind);
   assert.ok(request, `the tab sent ${kind}`);
   return "payload" in request ? request.payload : undefined;
 }
 
-test("the list shows each shell the window holds for the agent, the one shown marked", async () => {
+/** What the shells list says to a reader in place of its rows: the reading region's words, or the failure's. */
+function shellsSaid(container: HTMLElement) {
+  const list = container.querySelector("aside[aria-label='Shells']");
+  assert.ok(list, "the shells list stands");
+  return {
+    reading: list.querySelector("[role=status]")?.textContent,
+    failed: list.querySelector("[role=alert]")?.textContent,
+  };
+}
+
+test("while the shells are first read, the list stands rows of blocks that say so, and the shells land in their place", async () => {
+  main.holding.add(ACT_KIND.TERMINAL_LIST);
+  const tab = await mount();
+  assert.deepEqual(shellsSaid(tab.container), {
+    reading: "Reading the shells…",
+    failed: undefined,
+  });
+  assert.doesNotMatch(tab.container.textContent ?? "", /No shells\./u);
+
+  main.holding.clear();
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.deepEqual(shellsSaid(tab.container), { reading: undefined, failed: undefined });
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server"],
+  );
+});
+
+test("a read of the shells the service refused says so in the list, beside the bar's Retry", async () => {
+  main.down.add(ACT_KIND.TERMINAL_LIST);
+  const tab = await mount();
+  assert.deepEqual(shellsSaid(tab.container), {
+    reading: undefined,
+    failed: "The shells could not be read.",
+  });
+
+  main.down.clear();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(shellsSaid(tab.container), { reading: undefined, failed: undefined });
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server"],
+  );
+});
+
+test("the list shows each shell in the agent's sandbox, the one shown marked, a running one's command and its dot", async () => {
+  main.listed = {
+    sandbox: SANDBOX_STATE.RUNNING,
+    terminals: [
+      shell(OLDEST, "zsh"),
+      { ...shell(NEWER, "dev server"), command: "pnpm dev", running: true },
+    ],
+  };
   const tab = await mount();
   assert.deepEqual(tab.rows(), [
-    { name: "zsh", shown: true },
-    { name: "dev server", shown: false },
+    { name: "zsh", detail: "luke", shown: true, running: false },
+    { name: "dev server", detail: "pnpm dev", shown: false, running: true },
   ]);
 });
 
@@ -720,7 +910,7 @@ test("a press on another shell's row shows that shell, from a clear screen", asy
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   await tab.choose("dev server");
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
     agentId: AGENT.id,
     terminalId: NEWER,
     cols: 80,
@@ -732,12 +922,12 @@ test("a press on another shell's row shows that shell, from a clear screen", asy
   );
 });
 
-test("the list's + opens a shell in the same agent's mirror and shows it", async () => {
+test("the list's + starts a shell in the same agent's sandbox and shows it", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   await tab.press("New shell");
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_OPEN), { agentId: AGENT.id, folder: FOLDER });
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_CREATE), { agentId: AGENT.id });
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
     agentId: AGENT.id,
     terminalId: MADE,
     cols: 80,
@@ -748,7 +938,7 @@ test("the list's + opens a shell in the same agent's mirror and shows it", async
     [
       ["zsh", false],
       ["dev server", false],
-      ["Terminal 1", true],
+      ["zsh", true],
     ],
   );
 });
@@ -778,31 +968,40 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
   assert.deepEqual(tab.kinds(before), [], "nothing is ended before the answer");
   await confirmWith("End shell");
   await settle();
-  assert.deepEqual(tab.kinds(before), ["macShell.close", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
   assert.deepEqual(
     tab.rows().map((row) => [row.name, row.shown]),
     [["dev server", true]],
   );
 });
 
-test("a shell renamed from its row's menu is renamed in place, and a reload finds it under its new name", async () => {
+test("a shell renamed from its row's menu is renamed in place, and the list says its new name", async () => {
   const tab = await mount();
-  await renameOldest(tab.container, "server");
-  assert.equal(tab.rows()[0]?.name, "server");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  // A reload draws the tab again in a new page, which reads what the window kept.
-  const reloaded = await mount();
-  assert.deepEqual(
-    reloaded.rows().map((row) => row.name),
-    ["server", "dev server"],
+  const row = tab.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Shell list"] > li > button',
   );
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  assert.ok(rename, "the row's menu offers Rename");
+  await act(async () => rename.click());
+  const field = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.ok(field, "the name is edited in place");
+  act(() => {
+    field.value = "server";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_RENAME), {
     agentId: AGENT.id,
     terminalId: OLDEST,
-    cols: 80,
-    rows: 24,
+    title: "server",
   });
+  assert.equal(tab.rows()[0]?.name, "server");
 });
 
 /** Opens the oldest shell's name field from its row's menu and ends it on `name`, as Return does. */
@@ -824,6 +1023,35 @@ async function renameOldest(container: HTMLElement, name: string): Promise<void>
   });
   await settle();
 }
+
+test("a shell's new name is drawn at once, before the service answers the rename", async () => {
+  const tab = await mount();
+  main.holding.add(ACT_KIND.TERMINAL_RENAME);
+  await renameOldest(tab.container, "server");
+  assert.equal(main.held.length, 1, "the rename is still out");
+  assert.equal(tab.rows()[0]?.name, "server");
+
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "server");
+});
+
+test("a refused shell rename reopens its field holding the name typed, says under it that the shell was not renamed, and Escape leaves the old name", async () => {
+  const tab = await mount();
+  main.down.add(ACT_KIND.TERMINAL_RENAME);
+  await renameOldest(tab.container, "server");
+
+  const reopened = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.equal(reopened?.value, "server");
+  assert.ok(tab.container.textContent?.includes("The shell could not be renamed. Try again."));
+
+  act(() => {
+    reopened?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "zsh");
+  assert.ok(!tab.container.textContent?.includes("could not be renamed"));
+});
 
 test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename and End shell", async () => {
   const tab = await mount();
@@ -895,10 +1123,37 @@ test("the shells list folds away beside the screen, and its toggle asks the pane
   assert.equal(tab.toggled(), 1);
 });
 
-test("a terminal's row in the panel's + counts the agent's shells, leaving whether the agent works to its glyph", async () => {
+test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {
+  vi.useFakeTimers();
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+  main.listed = { ...main.listed, terminals: [...main.listed.terminals, shell(MADE, "tests")] };
+  await act(async () => vi.advanceTimersByTimeAsync(5_000));
+  assert.deepEqual(tab.kinds(before), ["terminal.list"]);
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server", "tests"],
+  );
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.list"]);
+});
+
+test("the tab's card counts the agent's shells as the tab last read them", async () => {
+  const tab = await mount();
+  const foot = renderToStaticMarkup(
+    onRegistry(tab.registry, createElement(TerminalCardFoot, { agentId: AGENT.id })),
+  );
+  assert.equal(foot, "Terminal in this agent’s sandbox · 2 shells");
+});
+
+test("a terminal's row in the panel's + says how the sandbox stands, leaving whether the agent works to its glyph", async () => {
   const tab = await mount();
   const standing = renderToStaticMarkup(
-    onRegistry(tab.registry, createElement(TerminalStanding, { agentId: AGENT.id })),
+    onRegistry(tab.registry, createElement(TerminalStanding, { agent: AGENT })),
   );
   assert.equal(standing, "2 shells");
 });
@@ -908,6 +1163,24 @@ test("the list's foot names the agent, its glyph saying it works with no word re
   const foot = tab.container.querySelector(".terminal-shells-foot");
   assert.equal(foot?.textContent, "Invite flow");
   assert.ok(foot?.querySelector('[role="img"][aria-label="Working"]'));
+});
+
+test("a sandbox that stops under a connected shell is read again, and the list says it holds no shells", async () => {
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  port.say({ type: "state", state: "stopped" });
+  await settle();
+  assert.equal(tab.container.querySelector(".ui-note-line")?.textContent, "No shells.");
+  assert.equal(
+    tab.container.querySelector(".terminal-shells-foot")?.textContent,
+    "Sandbox stopped",
+  );
+  assert.equal(
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="New shell"]')?.disabled,
+    true,
+  );
 });
 
 test("a shell chosen from the list takes the keyboard to the screen, the shell's to type into", async () => {
@@ -921,38 +1194,71 @@ test("a shell chosen from the list takes the keyboard to the screen, the shell's
   );
 });
 
-test("ending the only shell opens one in its place once the end answers", async () => {
-  keep([{ terminalId: OLDEST, title: "zsh" }]);
+test("a read of the shells that went out before a rename lands nowhere, so the new name stands", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  main.holding.add(ACT_KIND.TERMINAL_LIST);
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  main.holding.clear();
+  const row = tab.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Shell list"] > li > button',
+  );
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  await act(async () => rename?.click());
+  const field = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.ok(field);
+  act(() => {
+    field.value = "server";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+  // The read from before the rename lands now, holding the old name.
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "server");
+});
+
+test("ending the shown shell starts one shell in its place, though the host says it went before the end answers", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [shell(OLDEST, "zsh")] };
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "attached" });
   const before = main.sent.length;
-  main.holding.add(ACT_KIND.MAC_SHELL_CLOSE);
+  main.holding.add(ACT_KIND.TERMINAL_KILL);
   await tab.press("End shell");
   await confirmWith("End shell");
+  // The host says the shell is gone, on the port the tab let go, before the end answers.
+  port.say({ type: "state", state: "gone" });
   await settle();
-  assert.deepEqual(tab.kinds(before), ["macShell.close"]);
   main.holding.clear();
   for (const release of main.held.splice(0)) release();
   await settle();
   assert.deepEqual(tab.kinds(before), [
-    "macShell.close",
-    "macShell.mirror",
-    "macShell.open",
-    "macShell.attach",
+    "terminal.kill",
+    "terminal.list",
+    "terminal.create",
+    "terminal.attach",
   ]);
 });
 
-test("an end main refuses leaves the shown shell shown, attached again, and the question saying why", async () => {
+test("an end the service refuses leaves the shown shell shown, attached again, and the question saying why", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
-  main.down.add(ACT_KIND.MAC_SHELL_CLOSE);
+  main.down.add(ACT_KIND.TERMINAL_KILL);
   const before = main.sent.length;
   await tab.press("End shell");
   await confirmWith("End shell");
   await settle();
-  assert.deepEqual(tab.kinds(before), ["macShell.close", "macShell.attach"]);
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+  assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
     agentId: AGENT.id,
     terminalId: OLDEST,
     cols: 80,
@@ -967,7 +1273,7 @@ test("an end main refuses leaves the shown shell shown, attached again, and the 
 test("an end still out when another shell is chosen leaves the chosen one shown", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
-  main.holding.add(ACT_KIND.MAC_SHELL_CLOSE);
+  main.holding.add(ACT_KIND.TERMINAL_KILL);
   await tab.press("End shell");
   await confirmWith("End shell");
   await tab.choose("dev server");
@@ -976,7 +1282,7 @@ test("an end still out when another shell is chosen leaves the chosen one shown"
   for (const release of main.held.splice(0)) release();
   await settle();
   assert.deepEqual(tab.kinds(before), []);
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
     agentId: AGENT.id,
     terminalId: NEWER,
     cols: 80,
@@ -992,21 +1298,34 @@ test("the question asked from the list goes when the tab leaves the screen", asy
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
-test("an exit said on a shell no longer shown changes nothing", async () => {
+test("an idle close is the shown shell's alone: one said on a shell no longer shown changes nothing, and a key after the shown one's re-attaches it", async () => {
   const tab = await mount();
   const first = main.post(OLDEST);
   first.say({ type: "state", state: "attached" });
   await tab.choose("dev server");
-  main.post(NEWER).say({ type: "state", state: "attached" });
-  first.say({ type: "state", state: "exited", code: 0 });
-  assert.equal(tab.standing(), "· connected");
+  const shown = main.post(NEWER);
+  shown.say({ type: "state", state: "attached" });
+  // The relay closes each terminal on its own five idle minutes: the one no longer shown first.
+  first.say({ type: "state", state: "idle" });
+  assert.equal(tab.standing(), "· sandbox · connected");
+  shown.say({ type: "state", state: "idle" });
+  assert.equal(tab.standing(), "· sandbox · disconnected");
+  const before = main.sent.length;
+  await tab.type("q", 81);
+  assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: NEWER,
+    cols: 80,
+    rows: 24,
+  });
 });
 
-test("a new shell asked for before the tab opens is opened in place of attaching to the oldest", async () => {
+test("a new shell asked for before the tab opens is started in place of attaching to the oldest", async () => {
   const tab = await mount(true, true, (registry) => registry.set(shellsAsked(AGENT.id), 1));
-  assert.deepEqual(tab.kinds(), ["macShell.mirror", "macShell.open", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create", "terminal.attach"]);
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
-  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
     agentId: AGENT.id,
     terminalId: MADE,
     cols: 80,
@@ -1014,7 +1333,7 @@ test("a new shell asked for before the tab opens is opened in place of attaching
   });
 });
 
-test("a new shell asked for while a shell is connected opens at once, and shows", async () => {
+test("a new shell asked for while a shell is connected starts at once, and shows", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   const before = main.sent.length;
@@ -1022,29 +1341,47 @@ test("a new shell asked for while a shell is connected opens at once, and shows"
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
   await settle();
-  assert.deepEqual(tab.kinds(before), ["macShell.mirror", "macShell.open", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(before), ["terminal.create", "terminal.attach", "terminal.list"]);
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
 });
 
-test("two new shells asked for at once open two shells, each ask its own", async () => {
+test("two new shells asked for at once start two shells, each ask its own", async () => {
   const tab = await mount(true, true, (registry) => registry.set(shellsAsked(AGENT.id), 2));
-  assert.deepEqual(tab.kinds(), ["macShell.mirror", "macShell.open", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create", "terminal.attach"]);
   main.post(MADE).say({ type: "state", state: "attached" });
   await settle();
-  assert.equal(tab.kinds().filter((kind) => kind === "macShell.open").length, 2);
+  assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 2);
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
 });
 
-test("a new shell asked for after the shown shell ended opens it, as a key would", async () => {
+test("a new shell asked for after an idle close connects again and starts it, as a key would", async () => {
   const tab = await mount();
-  main.post(OLDEST).say({ type: "state", state: "exited", code: 0 });
+  main.post(OLDEST).say({ type: "state", state: "idle" });
   const before = main.sent.length;
   act(() => {
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
   await settle();
-  assert.deepEqual(tab.kinds(before), ["macShell.mirror", "macShell.open", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.create", "terminal.attach"]);
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+});
+
+test("a new shell asked for while the tab is hidden waits for a stopped sandbox's Resume, and is not lost", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  await tab.render(false);
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  act(() => {
+    tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
+  });
+  await tab.render(true);
+  assert.equal(tab.bar(), "Sandbox stopped.");
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 1);
+  assert.ok(!tab.kinds().includes("terminal.create"));
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+  assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 1);
 });
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
@@ -1178,12 +1515,12 @@ test("a shell chosen in the list floated over the screen takes the list down", a
   assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
 });
 
-test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ shows the shells over it and opens the agent, saying where the connection stands", async () => {
+test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ shows the shells over it and opens the agent, saying where the sandbox stands", async () => {
   const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
 
   assert.equal(tab.container.querySelector(".file-view-bar"), null);
   assert.deepEqual(tab.handed().labels(), ["Show shells", "Open agent"]);
-  assert.match(tab.handed().item("Show shells").detail ?? "", /^Terminal · /u);
+  assert.match(tab.handed().item("Show shells").detail ?? "", /^Sandbox · /u);
 
   tab.handed().press("Open agent");
   assert.equal(tab.agentOpened(), 1);
@@ -1207,6 +1544,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
     agents,
     shown: true,
     onOpenAgent: () => undefined,
+    onClose: () => undefined,
     shells: { open: true, onToggle: () => undefined },
   });
   // The window's opener is a new closure whenever what it reads changes, as the window draws it.
@@ -1259,6 +1597,19 @@ test("on a phone a connecting terminal says so in a bar over its screen, and a c
 
 test("in a wide room a connecting terminal draws no bar, the title bar saying so", async () => {
   const tab = await mount();
-  assert.equal(tab.standing(), "· connecting…");
+  assert.equal(tab.standing(), "· sandbox · connecting…");
   assert.equal(tab.bar(), undefined);
+});
+
+test("on a phone a drop after connecting waits out its own reveal, as a drop after a connection does", async () => {
+  mountAnnouncer();
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  revealBar();
+  assert.equal(announcedPolitely(), "Connecting…");
+
+  main.post(OLDEST).say({ type: "state", state: "reconnecting" });
+  assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "the drop's bar is hidden, so it says nothing yet");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
 });

@@ -227,7 +227,7 @@ export function AgentMenuTab({
   shown: boolean;
   /** Whether the strip drawing the tab offers its keys, which the chosen agent's copies and delete answer while it does. */
   keys: boolean;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
   /** Opens a new tab of the agent's cloud browser in the side panel, by the agent; a phone's alone (`useAgentActions`). */
   onOpenBrowser?: ((agentId: string) => void) | undefined;
   /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
@@ -620,6 +620,7 @@ export function MainTabBars({
   keys,
   shown,
   onOpenTerminal,
+  onOpenLocal,
   onOpenBrowser,
   slots,
   onShown,
@@ -644,6 +645,8 @@ export function MainTabBars({
   shown: boolean;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
+  /** Opens a cloud agent's own Local tab in the side panel, adding no shell, by the agent; none where the platform mirrors no agent's files. */
+  onOpenLocal?: ((agentId: string) => void) | undefined;
   /** Opens a new tab of an agent's cloud browser in the side panel, by the agent; a phone's alone, whose ⋯ offers it beside Show terminal. */
   onOpenBrowser?: ((agentId: string) => void) | undefined;
   /** Whether the bar keeps a slot for the chosen agent's ⋯; none on a phone, whose header offers what it would. */
@@ -737,7 +740,7 @@ export function MainTabBars({
                   doors={doorsOf(entry)}
                   shown={shown}
                   keys={keys}
-                  terminals={{ onOpenTerminal }}
+                  terminals={{ onOpenTerminal, onOpenLocal }}
                   onOpenBrowser={onOpenBrowser}
                   slot={slots ? slot : null}
                   onShown={onShown}

@@ -2206,6 +2206,14 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   font-weight: var(--ui-weight-semibold);
 }
 
+/* A narrow panel leaves out the word "sandbox" the tab's name already
+   implies, so the agent's name keeps more of the bar. */
+@container side-panel (width < 360px) {
+  .terminal-tab-sandbox {
+    display: none;
+  }
+}
+
 /* A dot while a command runs in the shell, centered where the × steps in. */
 .terminal-shells-foot [data-agent-ref] .ui-harness-mark {
   width: var(--ui-control-icon);

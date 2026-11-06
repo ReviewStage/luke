@@ -8,50 +8,86 @@
  * either, dimmed while no shell is connected, the line itself kept readable. The bar beside the agent's
  * name says the state in a word or two. There are no cards, icons, or pills.
  *
- * The tab's shells run on this Mac, in the agent's mirror: "attached" and
- * "exited" are said on the shell's port (`TERMINAL_CONNECTION`), and
- * "unreachable" is the tab's own, for a mirror or a shell main could not
- * make, its bar naming which, so a developer knows what to retry.
+ * Most states are the host's, said on the shell's port
+ * (`TERMINAL_CONNECTION`); "resuming" is the tab's own, between the click on
+ * Resume and its answer, and "unreachable" is the tab's own too, for a read
+ * the service could not answer or a relay the deployment does not serve. Its
+ * bar names which it was, where that is known, so a developer knows whether
+ * to wait, retry, or tell whoever runs the deployment.
  */
 
 import { SHELL_EXITED_WORDS } from "./words.js";
 
 /** Where a Terminal tab's connection stands. */
 export const TERMINAL_STATE = {
-  /** The tab is finding the agent's mirror, opening its shell, or attaching. */
+  /** The tab is finding its shell, or the socket is opening. */
   CONNECTING: "connecting",
   ATTACHED: "attached",
+  /** The socket dropped and the host is reconnecting by itself. */
+  RECONNECTING: "reconnecting",
+  /** Closed after five minutes without typing; a key reconnects. */
+  IDLE: "idle",
+  /** The sandbox is stopped; only the developer's click resumes it. */
+  STOPPED: "stopped",
+  /** Resume was asked for and has not answered. */
+  RESUMING: "resuming",
+  /** The agent has not opened its sandbox yet. */
+  STARTING: "starting",
   /** The shell ended; a key opens a new one. */
   EXITED: "exited",
-  /** The mirror or the shell could not be made; the bar's action asks again. */
+  /** The service could not be reached; the bar's action asks again. */
   UNREACHABLE: "unreachable",
 } as const;
 
+type TerminalStateKind = (typeof TERMINAL_STATE)[keyof typeof TERMINAL_STATE];
+
 /** Why the tab could not reach its shell. */
 export const TERMINAL_UNREACHED = {
-  /** The agent's files could not be mirrored on this Mac. */
+  /** Our service could not be reached, or did not answer. */
+  SERVICE: "service",
+  /** The service answered, and the agent's sandbox did not: Vercel Sandbox's API, or tmux in the sandbox. */
+  SANDBOX: "sandbox",
+  /** The agent's sandbox can never resume: its snapshot is gone, its saved files with it. */
+  SNAPSHOT_GONE: "snapshot-gone",
+  /** The service holds no such agent or shell for this account. */
+  NOT_FOUND: "not-found",
+  /** The deployment serves no terminal relay. */
+  RELAY: "relay",
+  /** A Local tab's: the agent's files could not be mirrored on this Mac. */
   MIRROR: "mirror",
-  /** No shell could be opened in the mirror. */
+  /** A Local tab's: no shell could be opened in the mirror. */
   SHELL: "shell",
 } as const;
 
 type TerminalUnreached = (typeof TERMINAL_UNREACHED)[keyof typeof TERMINAL_UNREACHED];
 
 export type TerminalState =
-  | { readonly kind: typeof TERMINAL_STATE.CONNECTING | typeof TERMINAL_STATE.ATTACHED }
+  | {
+      readonly kind: Exclude<
+        TerminalStateKind,
+        | typeof TERMINAL_STATE.EXITED
+        | typeof TERMINAL_STATE.RESUMING
+        | typeof TERMINAL_STATE.UNREACHABLE
+      >;
+    }
   | { readonly kind: typeof TERMINAL_STATE.EXITED; readonly code: number | undefined }
+  | { readonly kind: typeof TERMINAL_STATE.RESUMING; readonly since: number }
   | { readonly kind: typeof TERMINAL_STATE.UNREACHABLE; readonly why: TerminalUnreached };
 
 /** What the bar's one action does. */
 export const TERMINAL_ACTION = {
   RETRY: "retry",
+  RESUME: "resume",
 } as const;
 
 export type TerminalAction = (typeof TERMINAL_ACTION)[keyof typeof TERMINAL_ACTION];
 
-/** The slim bar over the screen: its words, its one action, and whether it is waiting on something. */
+/** The slim bar over the screen: its words, a note after them, its one action, and whether it is waiting on something. */
 export interface TerminalBar {
   readonly words: string;
+  readonly note?: string | undefined;
+  /** When what the bar waits on began, which its note counts from in place of words. */
+  readonly since?: number | undefined;
   readonly action?: { readonly kind: TerminalAction; readonly label: string } | undefined;
   readonly busy: boolean;
   /** Whether it shows only once the state has held a second, so a blip that heals at once is never seen. */
@@ -69,15 +105,25 @@ export interface TerminalLook {
   readonly dim: boolean;
 }
 
+/** About how long a stopped sandbox takes to resume from its snapshot, which the stopped bar says before the click. */
+const RESUME_TAKES = "~5 s";
+
 const RETRY = { kind: TERMINAL_ACTION.RETRY, label: "Retry now" } as const;
+const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as const;
 
 /** What the unreachable bar says, by why. */
 const UNREACHED_WORDS = {
+  [TERMINAL_UNREACHED.SERVICE]: "The service did not answer.",
+  [TERMINAL_UNREACHED.SANDBOX]: "The agent’s sandbox didn’t answer.",
+  [TERMINAL_UNREACHED.SNAPSHOT_GONE]:
+    "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
+  [TERMINAL_UNREACHED.NOT_FOUND]: "Could not find this agent’s shell.",
+  [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",
   [TERMINAL_UNREACHED.MIRROR]: "Could not mirror this agent’s files on this Mac.",
   [TERMINAL_UNREACHED.SHELL]: "Could not open a shell in this agent’s files.",
 } as const satisfies Record<TerminalUnreached, string>;
 
-/** The line a shell that ended leaves, its status where the shell said it. */
+/** The line a shell that ended leaves, its status where the host said it. */
 function exitedLine(code: number | undefined): string {
   const status = code === undefined ? "" : ` with code ${code}`;
   return `[Process exited${status}. Press any key for a new shell …]`;
@@ -99,6 +145,57 @@ export function terminalLook(state: TerminalState): TerminalLook {
       return {
         words: "connected",
         bar: undefined,
+        phoneBar: undefined,
+        line: undefined,
+        dim: false,
+      };
+    case TERMINAL_STATE.RECONNECTING:
+      return {
+        words: "reconnecting…",
+        bar: { words: "Connection lost. Reconnecting…", action: RETRY, busy: true, late: true },
+        phoneBar: undefined,
+        line: undefined,
+        dim: true,
+      };
+    case TERMINAL_STATE.IDLE:
+      return {
+        words: "disconnected",
+        bar: undefined,
+        phoneBar: undefined,
+        line: "[Disconnected after 5 min without typing. Press any key to reconnect.]",
+        dim: true,
+      };
+    case TERMINAL_STATE.STOPPED:
+      return {
+        words: "sandbox stopped",
+        bar: {
+          words: "Sandbox stopped.",
+          note: RESUME_TAKES,
+          action: RESUME,
+          busy: false,
+          late: false,
+        },
+        phoneBar: undefined,
+        line: undefined,
+        dim: true,
+      };
+    case TERMINAL_STATE.RESUMING:
+      return {
+        words: "resuming…",
+        bar: {
+          words: "Resuming sandbox… restoring snapshot",
+          since: state.since,
+          busy: true,
+          late: false,
+        },
+        phoneBar: undefined,
+        line: undefined,
+        dim: true,
+      };
+    case TERMINAL_STATE.STARTING:
+      return {
+        words: "waiting for sandbox",
+        bar: { words: "Waiting for the agent to open its sandbox…", busy: true, late: false },
         phoneBar: undefined,
         line: undefined,
         dim: false,

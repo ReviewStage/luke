@@ -545,14 +545,13 @@ export const MAC_TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * A cloud agent's shells on this Mac (`mac-shells.ts`): the agent's mirror
- * found or made, and the developer's login shell opened in a folder for the
- * asking panel, attached, and closed, answered by the desktop's main, which
- * holds it. What it prints travels on the port an attach posts to that
- * panel, never on an act.
+ * A shell on this Mac (`mac-shells.ts`): the developer's login shell opened
+ * in a folder for the asking panel, attached, and closed, answered by the
+ * desktop's main, which holds it. What it prints travels on the port an
+ * attach posts to that panel, as a cloud shell's does, never on an act.
  */
 export const MAC_SHELL_ACT_KIND = {
-  /** The folder a cloud agent's shells open in: its mirror on this Mac, made where none stands. */
+  /** The folder a cloud agent's Local shells open in: its mirror on this Mac, made where none stands. */
   MAC_SHELL_MIRROR: "macShell.mirror",
   MAC_SHELL_OPEN: "macShell.open",
   MAC_SHELL_ATTACH: "macShell.attach",
@@ -578,6 +577,22 @@ export const MAC_COMMAND_ACT_KIND = {
  */
 export const PORT_FORWARD_ACT_KIND = {
   PORT_FORWARD_SET: "portForward.set",
+} as const;
+
+/**
+ * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
+ * started, named, and ended, its sandbox resumed on the developer's click,
+ * and a shell attached and detached. What a shell prints travels on the port
+ * an attach posts to the asking panel, never on an act.
+ */
+export const TERMINAL_ACT_KIND = {
+  TERMINAL_LIST: "terminal.list",
+  TERMINAL_CREATE: "terminal.create",
+  TERMINAL_RENAME: "terminal.rename",
+  TERMINAL_KILL: "terminal.kill",
+  TERMINAL_RESUME: "terminal.resume",
+  TERMINAL_ATTACH: "terminal.attach",
+  TERMINAL_DETACH: "terminal.detach",
 } as const;
 
 /**
@@ -749,6 +764,7 @@ export const PORT_ACT_KIND = {
   ...PORT_FORWARD_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
+  ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
@@ -781,7 +797,7 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * a Terminal tab's or a live view's stream, whose bytes never reach app
  * state; `TASKS_REFRESH` is a WRITE, the task list's Try again, because the
  * host follows the list from the account gate opening and only a press asks
- * it again; `AGENTS_CHANGES` and `TASKS_TREE` are
+ * it again; `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
  * FETCHes, though each answers what stands now, because each is asked again
  * whenever it is shown and nothing keeps it, as is `AGENTS_MESSAGES`, Copy
  * transcript's read on its press; `AGENTS_TRANSCRIPT_OLDER` is a WRITE,
@@ -976,6 +992,14 @@ export const PORT_ACT_USE = {
   TASKS_COMMENT_START: ACT_USE.WRITE,
   TASKS_COMMENT_ACT: ACT_USE.WRITE,
 
+  TERMINAL_LIST: ACT_USE.FETCH,
+  TERMINAL_CREATE: ACT_USE.WRITE,
+  TERMINAL_RENAME: ACT_USE.WRITE,
+  TERMINAL_KILL: ACT_USE.WRITE,
+  TERMINAL_RESUME: ACT_USE.WRITE,
+  TERMINAL_ATTACH: ACT_USE.WRITE,
+  TERMINAL_DETACH: ACT_USE.WRITE,
+
   UPDATE_CHECK: ACT_USE.WRITE,
   UPDATE_INSTALL: ACT_USE.WRITE,
   UPDATE_MOVE_TO_APPLICATIONS: ACT_USE.WRITE,
@@ -1040,6 +1064,7 @@ export const PLATFORM_PORT_ACT_KIND = {
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...PORT_FORWARD_ACT_KIND,
+  ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
 } as const;

@@ -3,6 +3,7 @@ import type { CatalogModel } from "@repo/features/models-wire";
 import type { PageLine, PagePlace } from "@repo/features/page-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardNote, STATUS_TONE } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { AgentCard, type AgentSubject } from "../tasks/agent-ref.js";
@@ -14,6 +15,7 @@ import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-mo
 import { PageCard, PageNameCard, PageNameSkeleton } from "../tasks/page-card.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { TerminalCardFoot } from "../tasks/terminal-shells.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import {
   type FixedSidePanelTab,
@@ -81,7 +83,14 @@ export type CardSubject =
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
-      /** The agent whose mirror its shells run in. */
+      readonly agentId: string;
+      /** The agent whose sandbox its shells run in. */
+      readonly subject: AgentSubject;
+      readonly models: readonly CatalogModel[] | undefined;
+    }
+  | {
+      readonly kind: typeof TAB_KIND.LOCAL;
+      /** The agent whose mirror its shells stand in. */
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
@@ -218,8 +227,20 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         />
       );
     }
-    // A Terminal tab hangs its agent's card.
+    // A Terminal tab hangs its agent's card, saying at its foot whose sandbox its shells run in.
     case TAB_KIND.TERMINAL:
+      return (
+        <AgentCard
+          subject={subject.subject}
+          models={subject.models}
+          foot={{
+            glyph: <GLYPH.TERMINAL />,
+            words: <TerminalCardFoot agentId={subject.agentId} />,
+          }}
+        />
+      );
+    // A Local tab hangs its agent's card.
+    case TAB_KIND.LOCAL:
       return <AgentCard subject={subject.subject} models={subject.models} />;
     case TAB_KIND.FILE:
       return <FileCard path={subject.path} />;

@@ -63,9 +63,9 @@ export const isPlatformConcern = (concern: HostConcern): concern is HostPlatform
 /** What each platform concern offers the client, which a host that left it out does not; This Mac's host offers nothing the panel draws by. */
 const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
-  // Note that a Terminal tab opens a shell on this Mac in the agent's mirror, so only a host that mirrors offers one.
-  [HOST_PLATFORM_CONCERN.MIRRORS]: HOST_CAPABILITY.TERMINALS,
+  [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
   [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: HOST_CAPABILITY.PORT_FORWARDS,
+  [HOST_PLATFORM_CONCERN.MIRRORS]: HOST_CAPABILITY.LOCAL_TERMINALS,
 } as const satisfies Readonly<Partial<Record<HostPlatformConcern, HostCapability>>>;
 
 /** `CAPABILITY_OF_CONCERN` read by any platform concern, one that offers none among them. */
@@ -117,6 +117,17 @@ const PLATFORM_CONCERN_METHODS = {
   // Note that This Mac's host tells the windows itself, and is asked only to turn on or off.
   [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [GATEWAY_METHOD.HOSTS_THIS_MAC_SET],
   [HOST_PLATFORM_CONCERN.TERMINALS]: [
+    GATEWAY_METHOD.TERMINALS_LIST,
+    GATEWAY_METHOD.TERMINALS_CREATE,
+    GATEWAY_METHOD.TERMINALS_RENAME,
+    GATEWAY_METHOD.TERMINALS_KILL,
+    GATEWAY_METHOD.TERMINALS_RESUME,
+    GATEWAY_METHOD.TERMINALS_CONNECT,
+    GATEWAY_METHOD.TERMINALS_INPUT,
+    GATEWAY_METHOD.TERMINALS_RESIZE,
+    GATEWAY_METHOD.TERMINALS_ACK,
+    GATEWAY_METHOD.TERMINALS_DISCONNECT,
+    GATEWAY_METHOD.TERMINALS_WAKE,
     GATEWAY_METHOD.BROWSER_LIVE_CONNECT,
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,

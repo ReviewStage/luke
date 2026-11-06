@@ -1,8 +1,7 @@
 /**
- * terminal-acts.ts -- what a Terminal tab says to the main process and hears back: its acts' payloads, and the messages on the port each attached shell gets.
+ * terminal.ts -- what a Terminal tab says to the main process and hears back: its acts' payloads and answers, and the messages on the port each attached shell gets.
  *
- * A cloud agent's Terminal tab holds shells on this Mac, opened in the
- * agent's mirror (`@repo/host/contract`'s `mac-shells.ts`). Its acts carry ids,
+ * A Terminal tab belongs to one coding agent's sandbox. Its acts carry ids,
  * sizes, and names, never a byte a shell printed; the bytes travel on one
  * `MessagePort` per attached shell, posted by main to the panel that asked
  * and to no other window, so nothing a shell prints ever enters app state,
@@ -12,48 +11,47 @@
  */
 
 import { Schema as EffectSchema } from "effect";
+import {
+  TERMINAL_CONNECTION,
+  type TerminalRefusal as TerminalViewRefusal,
+  terminalShellParamsSchema,
+  TERMINAL_FLOW as VIEW_FLOW,
+} from "./terminal-view.js";
 
-/** How a shell's connection stands, as its port says it. */
-export const TERMINAL_CONNECTION = {
-  /** Connected to the shell; what follows on the port is what it prints. */
-  ATTACHED: "attached",
-  /** The shell ended, its exit status in `code`. */
-  EXITED: "exited",
-} as const;
-
-export type TerminalConnection = (typeof TERMINAL_CONNECTION)[keyof typeof TERMINAL_CONNECTION];
-
-const id = EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(64));
+// The vocabulary the host answers the tab in is the host's own (`terminal-view.ts`), named here so the tab reads one contract.
+export {
+  TERMINAL_CONNECTION,
+  TERMINAL_REFUSAL,
+  type TerminalConnection,
+  terminalAgentParamsSchema,
+  terminalCreatedActAnswerSchema,
+  terminalCreateParamsSchema,
+  terminalRenameParamsSchema,
+  terminalResumedActAnswerSchema,
+  terminalShellParamsSchema,
+  terminalsActAnswerSchema,
+} from "./terminal-view.js";
 
 /**
- * How a shell's output is paced to what the tab has drawn, and the bounds of
- * what the tab sends. Both ends count output in bytes, as the port's
- * `Uint8Array` carries it, never characters: the tab acks every
- * `ACK_EVERY_BYTES` it has written, main stops reading the shell once
- * more than `PAUSE_ABOVE_BYTES` stand unacked, and reads again once fewer
- * than `RESUME_BELOW_BYTES` do. These are VS Code's watermarks.
+ * How the tab paces its acks and cuts its input, in the bytes and characters
+ * the host counts them in.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9), which lands above this contract.
  */
-export const TERMINAL_FLOW = {
-  ACK_EVERY_BYTES: 5_000,
-  PAUSE_ABOVE_BYTES: 100_000,
-  RESUME_BELOW_BYTES: 5_000,
-  /** The most characters one input message carries: a paste is cut into messages of this size. */
-  MAX_INPUT_CHARS: 65_536,
-  /** The widest and tallest a terminal is taken to be. */
-  MAX_COLUMNS: 1_000,
-  MAX_ROWS: 1_000,
-} as const;
+export const TERMINAL_FLOW = VIEW_FLOW;
 
-/** A call that names an agent. */
-export const terminalAgentParamsSchema = EffectSchema.Struct({ agentId: id });
-
-/** A call that names one of an agent's shells. */
-export const terminalShellParamsSchema = EffectSchema.Struct({ agentId: id, terminalId: id });
+/** @public Read by the Terminal tab, above this contract. */
+export type TerminalRefusal = TerminalViewRefusal;
 
 /** The channel each attached shell's port is posted on. */
 export const TERMINAL_PORT_CHANNEL = "terminal:port";
 
-/** The kinds of message on a shell's port. */
+/**
+ * The kinds of message on a shell's port.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export const TERMINAL_PORT_MESSAGE = {
   /** main → renderer: what the shell printed, to `xterm.write`. */
   OUTPUT: "output",
@@ -82,7 +80,12 @@ export const terminalPortTicketSchema = terminalShellParamsSchema;
 
 export type TerminalPortTicket = typeof terminalPortTicketSchema.Type;
 
-/** What the renderer sends on a shell's port, read by main before anything is sent on. */
+/**
+ * What the renderer sends on a shell's port, read by main before anything is sent on.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export const terminalPortInboundSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.INPUT),
@@ -99,6 +102,7 @@ export const terminalPortInboundSchema = EffectSchema.Union([
   }),
 ]);
 
+/** @public Read by the Terminal tab and the host's terminal client, above this contract. */
 export type TerminalPortInbound = typeof terminalPortInboundSchema.Type;
 
 /**

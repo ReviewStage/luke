@@ -29,6 +29,7 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
+import { useOpenLocal } from "../tasks/use-local-session.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
 import type { MenuAction, MenuEntry } from "./action-menu.js";
@@ -104,6 +105,8 @@ export interface AgentMenuDoors {
   section?: MenuEntry | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Opens the cloud agent's own Local tab in the side panel, adding no shell. */
+  onOpenLocal?: (() => void) | undefined;
   /** Opens a new tab of the agent's cloud browser in the side panel: a phone's, which lists the panel's tabs nowhere else (`task-pane-switcher.tsx`). */
   onOpenBrowser?: (() => void) | undefined;
   /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
@@ -137,8 +140,9 @@ export interface AgentMenuDoors {
  * with few doors draws the few groups it has in the same order.
  */
 export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
-  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
+  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenLocal } =
     doors;
+  const { onOpenInTask } = doors;
   const { onOpenBrowser, onOpenInSlack } = doors;
   const { addRepository, moveTo, archive, deletion } = doors;
   const chosen = doors.chosen === true;
@@ -193,6 +197,9 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
     ...(onOpenTerminal === undefined
       ? []
       : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, chosen)]),
+    ...(onOpenLocal === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.SHOW_LOCAL, onOpenLocal, false)]),
     ...(onOpenBrowser === undefined
       ? []
       : [commandAction(PANEL_COMMAND.SHOW_BROWSER, onOpenBrowser, false)]),
@@ -225,6 +232,7 @@ export type AgentDoors = Pick<
   | "onCopy"
   | "onRename"
   | "onOpenTerminal"
+  | "onOpenLocal"
   | "onOpenBrowser"
   | "onOpenInSlack"
   | "addRepository"
@@ -243,6 +251,7 @@ export type AgentDoors = Pick<
  */
 const NOT_ON_A_ROW = {
   onOpenTerminal: "The terminal opens in a side panel, and a row has none.",
+  onOpenLocal: "The Local tab opens in a side panel, and a row has none.",
   onOpenBrowser: "The browser opens in a side panel, and a row has none.",
   onCopy: "A task's row offers no transcript copy either, so an agent's row offers none.",
 } as const satisfies Partial<Record<keyof AgentDoors, string>>;
@@ -260,6 +269,8 @@ export function rowDoors(doors: AgentDoors): RowDoors {
 export interface AgentTerminalDoors {
   /** Shows the agent's own Terminal tab in the side panel, adding no shell; none where the platform runs no terminals. */
   readonly onOpenTerminal: ((agentId: string) => void) | undefined;
+  /** Shows a cloud agent's own Local tab in the side panel, adding no shell; none where the platform mirrors no agent's files. */
+  readonly onOpenLocal?: ((agentId: string) => void) | undefined;
   /** Whether the platform runs terminals, which ⌘J and New terminal stand on. */
   readonly terminals: boolean;
 }
@@ -295,10 +306,13 @@ export function useAgentTerminalDoors(
   onShown: () => void,
 ): AgentTerminalDoors {
   const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
+  const locals = useCapability(HOST_CAPABILITY.LOCAL_TERMINALS);
   const openTerminal = useOpenTerminal(sidePanel, onShown);
+  const openLocal = useOpenLocal(sidePanel, onShown);
   return {
     terminals,
     onOpenTerminal: terminals ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW) : undefined,
+    onOpenLocal: locals ? (agentId) => openLocal(agentId, false) : undefined,
   };
 }
 
@@ -358,7 +372,7 @@ export function useAgentActions(
     readonly label: string;
     /** Whether the surface is on screen, which the Archive's question asks on. */
     readonly shown: boolean;
-    readonly terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+    readonly terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
     /** Opens a new tab of an agent's cloud browser in the side panel; none where the surface offers none, as off a phone. */
     readonly onOpenBrowser?: ((agentId: string) => void) | undefined;
     /** Closes what shows the agent, its tab or its page, once its delete landed. */
@@ -377,7 +391,7 @@ export function useAgentActions(
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
-  const { onOpenTerminal } = terminals;
+  const { onOpenTerminal, onOpenLocal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const thisMac = useThisMac();
   const local = agent.machine === AGENT_MACHINE.DEVICE;
@@ -399,6 +413,11 @@ export function useAgentActions(
       onRename: renamable ? rename.begin : undefined,
       // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
       onOpenTerminal: agent.archivedAt !== undefined ? undefined : terminal,
+      // Note that only a cloud agent has a mirror, so an agent on a Mac offers no Local tab.
+      onOpenLocal:
+        agent.archivedAt !== undefined || local || onOpenLocal === undefined
+          ? undefined
+          : () => onOpenLocal(agent.id),
       // Note that only a cloud sandbox runs a browser, so an agent on a Mac offers none.
       onOpenBrowser:
         agent.archivedAt !== undefined || local || onOpenBrowser === undefined

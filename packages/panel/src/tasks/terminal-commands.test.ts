@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
+import { shellsAsked } from "@repo/features/terminal-store";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { StripTab } from "@repo/ui/tab-strip-model";
@@ -21,7 +22,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
-import { shellsAsked } from "./terminal-held.js";
 import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
@@ -29,7 +29,7 @@ import { NO_LOOKS } from "./use-task-looks.js";
 /**
  * Show terminal (⌘J) and New terminal from each place a developer can be,
  * as the new-terminal rules have them: which agent's Terminal tab the side
- * panel is asked to show, whether a new shell is asked of its mirror, and
+ * panel is asked to show, whether a new shell is asked of its sandbox, and
  * the picker where the rules leave the agent to the developer. The task is
  * drawn by the real window over a staged control.
  */
@@ -156,7 +156,7 @@ async function mount(input: {
   return {
     /** Every tab the side panel was asked to show, in order. */
     shown,
-    /** How many new shells were asked of the agent's mirror and not yet opened. */
+    /** How many new shells were asked of the agent's sandbox and not yet started. */
     asked: (agentId: string) => registry.get(shellsAsked(agentId)),
     run: async (command: typeof APP_COMMAND.SHOW_TERMINAL | typeof APP_COMMAND.NEW_TERMINAL) => {
       act(() => {
@@ -248,7 +248,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
   assert.ok(said.includes("Choose a repository"), "and offers the remedy");
 });
 
-test("the panel's + lists each agent's terminal under Terminal, and a pick asks for a new shell in that agent's mirror", async () => {
+test("the panel's + lists each agent's terminal under Terminal, and a pick adds a shell to that agent's sandbox", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     side: SIDE_PANEL_TAB.COMMENTS,

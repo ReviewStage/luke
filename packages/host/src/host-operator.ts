@@ -296,6 +296,17 @@ import {
   tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspacePeopleFollow,
 } from "@repo/features/tasks-view";
+import {
+  type TerminalCreatedActAnswer,
+  type TerminalResumedActAnswer,
+  type TerminalStateEvent,
+  type TerminalsActAnswer,
+  terminalCreatedActAnswerSchema,
+  terminalOutputEventSchema,
+  terminalResumedActAnswerSchema,
+  terminalStateEventSchema,
+  terminalsActAnswerSchema,
+} from "@repo/features/terminal-view";
 import { isSignInFailure } from "@repo/features/words";
 import {
   carried,
@@ -324,6 +335,7 @@ import {
 } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
+import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppAccountPreferences,
@@ -962,6 +974,42 @@ export interface HostOperator {
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
   /** How many changes made offline the service refused as they were sent again, each time the count moves. */
   onOfflineRefusedChanged(listener: (count: number) => void): () => void;
+  /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
+  terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
+  terminalCreate(params: {
+    agentId: string;
+    title?: string | undefined;
+  }): Effect.Effect<TerminalCreatedActAnswer | undefined>;
+  terminalRename(params: {
+    agentId: string;
+    terminalId: string;
+    title: string;
+  }): Effect.Effect<TerminalsActAnswer | undefined>;
+  terminalKill(params: {
+    agentId: string;
+    terminalId: string;
+  }): Effect.Effect<TerminalsActAnswer | undefined>;
+  terminalResume(params: { agentId: string }): Effect.Effect<TerminalResumedActAnswer | undefined>;
+  /** One shell attached under the connection id given; whether the host took the attach. */
+  terminalConnect(params: {
+    connectionId: string;
+    agentId: string;
+    terminalId: string;
+    cols: number;
+    rows: number;
+  }): Effect.Effect<boolean>;
+  terminalInput(params: { connectionId: string; data: string }): Effect.Effect<void>;
+  terminalResize(params: { connectionId: string; cols: number; rows: number }): Effect.Effect<void>;
+  terminalAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
+  terminalDisconnect(params: { connectionId: string }): Effect.Effect<void>;
+  /** Every waiting connection opened again now, as after the Mac woke. */
+  terminalWake(): Effect.Effect<void>;
+  /** What an attached shell printed, by its connection. */
+  onTerminalOutput(
+    listener: (output: { connectionId: string; data: Uint8Array }) => void,
+  ): () => void;
+  /** How an attached shell's connection stands, by its connection. */
+  onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
   /** A cloud agent's mirror on this Mac made where none stands, answered with its folder; none where the host could not. */
   mirrorEnsure(params: { agentId: string }): Effect.Effect<string | undefined>;
   /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
@@ -2596,6 +2644,96 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           Result.getOrUndefined(
             readEither(macCommandAsksSchema, { excess: EXCESS_KEYS.DROP })(payload),
           )?.asks,
+        listener,
+      ),
+    terminalList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: params.agentId }),
+        answerOf(terminalsActAnswerSchema, undefined),
+      ),
+    terminalCreate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_CREATE, {
+          agentId: params.agentId,
+          ...(params.title === undefined ? undefined : { title: params.title }),
+        }),
+        answerOf(terminalCreatedActAnswerSchema, undefined),
+      ),
+    terminalRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_RENAME, {
+          agentId: params.agentId,
+          terminalId: params.terminalId,
+          title: params.title,
+        }),
+        answerOf(terminalsActAnswerSchema, undefined),
+      ),
+    terminalKill: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_KILL, {
+          agentId: params.agentId,
+          terminalId: params.terminalId,
+        }),
+        answerOf(terminalsActAnswerSchema, undefined),
+      ),
+    terminalResume: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_RESUME, { agentId: params.agentId }),
+        answerOf(terminalResumedActAnswerSchema, undefined),
+      ),
+    terminalConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_CONNECT, {
+          connectionId: params.connectionId,
+          agentId: params.agentId,
+          terminalId: params.terminalId,
+          cols: params.cols,
+          rows: params.rows,
+        }),
+        (answer) => answer.ok,
+      ),
+    terminalInput: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TERMINALS_INPUT, {
+          connectionId: params.connectionId,
+          data: params.data,
+        }),
+      ),
+    terminalResize: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TERMINALS_RESIZE, {
+          connectionId: params.connectionId,
+          cols: params.cols,
+          rows: params.rows,
+        }),
+      ),
+    terminalAck: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TERMINALS_ACK, {
+          connectionId: params.connectionId,
+          bytes: params.bytes,
+        }),
+      ),
+    terminalDisconnect: (params) =>
+      fire(client.call(GATEWAY_METHOD.TERMINALS_DISCONNECT, { connectionId: params.connectionId })),
+    terminalWake: () => fire(client.call(GATEWAY_METHOD.TERMINALS_WAKE)),
+    onTerminalOutput: (listener) =>
+      on(
+        GATEWAY_EVENT.TERMINAL_OUTPUT,
+        (payload) => {
+          const output = Result.getOrUndefined(readEither(terminalOutputEventSchema)(payload));
+          if (output === undefined) return undefined;
+          const bytes = Base64.decode(output.data);
+          return Result.isSuccess(bytes)
+            ? { connectionId: output.connectionId, data: bytes.success }
+            : undefined;
+        },
+        listener,
+      ),
+    onTerminalState: (listener) =>
+      on(
+        GATEWAY_EVENT.TERMINAL_STATE,
+        (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
         listener,
       ),
     mirrorEnsure: (params) =>

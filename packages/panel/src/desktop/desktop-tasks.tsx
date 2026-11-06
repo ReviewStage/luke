@@ -1330,6 +1330,7 @@ function PlanDocument({
                             keys={!phone && tasks.shown && !sideFocused}
                             shown={tasks.shown}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
+                            onOpenLocal={terminalDoors.onOpenLocal}
                             onOpenBrowser={phone ? openBrowser : undefined}
                             slots={!phone}
                             onShown={phone ? setShownAgentTab : undefined}

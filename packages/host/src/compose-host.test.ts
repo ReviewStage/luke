@@ -93,15 +93,11 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for a cloud browser's live view, and which concerns it says it runs. */
+/** What a standing host answers for an agent's terminals, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
-  const terminals = yield* gateway.call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, {
-    connectionId: "connection",
-    agentId: "agent",
-    tabId: "tab",
-  });
+  const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
   return { concerns, terminals };
 });
 
@@ -180,6 +176,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.LOCAL_TERMINALS,
         HOST_CAPABILITY.PORT_FORWARDS,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
@@ -189,6 +186,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.LOCAL_TERMINALS,
         HOST_CAPABILITY.PORT_FORWARDS,
         HOST_CAPABILITY.CLI_INSTALL,
         HOST_CAPABILITY.DESKTOP_APP,

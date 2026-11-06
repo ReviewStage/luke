@@ -203,6 +203,7 @@ import { cardTitle } from "../tasks/tool-call-model.js";
 import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
+import { useOpenLocal } from "../tasks/use-local-session.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
@@ -927,6 +928,7 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 /** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
+  readonly onNewLocal: ((agentId: string) => void) | undefined;
 }
 
 /**
@@ -987,6 +989,7 @@ function agentRows(
         agents: tasks.agents,
         pages,
         onNewTerminal: doors.onNewTerminal,
+        onNewLocal: doors.onNewLocal,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
         cards: {
@@ -1004,7 +1007,10 @@ function agentRows(
   const entries: readonly AddEntry[] = [...inbox, ...agents, ...places];
   const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
     // Note that a terminal's row is named by its agent, as under the "+"'s Terminal heading, which ⌘K draws none of, so the row says it.
-    const heading = row.section === ADD_SECTION.TERMINAL ? row.section : undefined;
+    const heading =
+      row.section === ADD_SECTION.TERMINAL || row.section === ADD_SECTION.LOCAL
+        ? row.section
+        : undefined;
     const detail = typeof row.detail === "string" ? row.detail : undefined;
     const named = [heading, taskName].filter((word) => word !== undefined);
     return {
@@ -2138,9 +2144,13 @@ export function CommandPalette({
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
+  const openLocal = useOpenLocal(tasks.sidePanel, noFocusMove);
   const offerDoors: PanelOfferDoors = {
     onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
       ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
+      : undefined,
+    onNewLocal: useCapability(HOST_CAPABILITY.LOCAL_TERMINALS)
+      ? (agentId) => openLocal(agentId, true)
       : undefined,
   };
   const taskId = tasks.activeTaskId;

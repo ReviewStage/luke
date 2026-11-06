@@ -1,10 +1,20 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { AgentSummary } from "@repo/features/agent-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { TERMINAL_STATE, type TerminalState } from "@repo/features/terminal-model";
+import { sandboxRead } from "@repo/features/terminal-store";
+import {
+  SANDBOX_STATE,
+  type TerminalSummary,
+  type TerminalsAnswer,
+} from "@repo/features/terminal-wire";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
+  ErrorState,
+  Fill,
   IconButton,
   InlineEdit,
   LIST_DENSITY,
@@ -19,6 +29,9 @@ import {
   PaneBar,
   PanePin,
   ScrollArea,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   Tooltip,
   useConfirmDialog,
 } from "@repo/ui";
@@ -28,25 +41,32 @@ import type { ReactNode, RefObject } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { rowMenu } from "../desktop/action-menu.js";
-import { confirmFailure } from "../failure-report.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import type { PaneOver } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
-import { type HeldShell, shellsHeld } from "./terminal-held.js";
 import type { TerminalSession } from "./use-terminal-session.js";
 
 /**
- * terminal-shells.tsx -- the shells beside a Terminal tab's screen: each one this window opened on this Mac in the agent's mirror, the one shown marked, and the agent at the foot.
+ * terminal-shells.tsx -- the shells beside a Terminal tab's screen: each one in the agent's sandbox, the one shown marked, and the agent at the foot.
  *
- * A Terminal tab belongs to one agent's mirror, and so does every shell in
- * its list: the "+" opens another in that same folder, and the list never
- * switches agent. A row shows its shell's name; a press shows it on the
- * screen, its × ends it, and its right-click offers renaming it and ending
- * it. The list folds away beside the screen as a File tab's tree does, and
- * its foot names the agent. Whether the agent works is
+ * A Terminal tab belongs to one agent's sandbox, and so does every shell in
+ * its list: the "+" starts another in that same sandbox, and the list never
+ * switches agent. A row shows its shell's name, what is running in it or
+ * the folder it stands in, and a dot while a command runs there; a press
+ * shows it on the screen, its × ends it, and its right-click offers
+ * renaming it, a new shell, and ending it. The list folds away beside the
+ * screen as a File tab's tree does, and its foot names the agent, or its
+ * sandbox where that is stopped or not yet up. Whether the agent works is
  * its glyph's to say, the working mark in its place, so no word beside it
  * repeats it (`state-glyph.tsx`).
  */
+
+/** What a shell's row says under the field it reopens when the service refused its new name. */
+const RENAME_REFUSED = "The shell could not be renamed. Try again.";
+
+/** What a Terminal tab's card says under its agent's, before the count of its shells. */
+const CARD_FOOT = "Terminal in this agent’s sandbox";
 
 /** What a shell's row is, which names its ⋯ and its menu. */
 const SHELL_THING = "Shell";
@@ -54,8 +74,41 @@ const SHELL_THING = "Shell";
 /** What ends a shell, as its row's hover × and its menu both say it. */
 const END_SHELL = "End shell";
 
-/** The most characters of a shell's name. */
+/** The most characters of a shell's name, as the service holds it. */
 const TITLE_MAX = 60;
+
+/** What the list says to a reader while the shells are first read. */
+const READING_SHELLS = "Reading the shells…";
+
+/** What the list says where the shells could not be read; the screen's bar beside it holds Retry. */
+const SHELLS_UNREAD = "The shells could not be read.";
+
+/** The rows standing in for shells while they are read: a name's and a folder's widths each, as a list of a few reads. */
+const SKELETON_ROWS = [
+  { name: "55%", detail: "35%" },
+  { name: "45%", detail: "50%" },
+] as const;
+
+/** How wide a row's glyph stands while it is read: the glyph's own size. */
+const SKELETON_GLYPH = "var(--ui-control-icon)";
+
+/** What the foot says beside the agent's glyph: its sandbox where that is stopped or still starting, and the agent's name otherwise. */
+function footWords(subject: AgentSubject, sandbox: string | undefined): string {
+  if (sandbox === SANDBOX_STATE.STOPPED) return "Sandbox stopped";
+  if (sandbox === SANDBOX_STATE.STARTING) return "Starting…";
+  return subject.name;
+}
+
+/** What a row says under a shell's name: what is running in it, or the folder it stands in. */
+function shellDetail(shell: TerminalSummary): string {
+  if (shell.running) return shell.command;
+  return (
+    shell.cwd
+      .split("/")
+      .filter((part) => part !== "")
+      .at(-1) ?? shell.cwd
+  );
+}
 
 /** The shells' list in its scroller, which the shells and their placeholder rows both stand in. */
 function ShellList({ children }: { children: ReactNode }): React.JSX.Element {
@@ -70,17 +123,66 @@ function ShellList({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
+/**
+ * The list while the shells are first read: rows in a shell's own row, a
+ * block where its glyph, its name, and its folder will stand, so the shells
+ * land where the blocks stood. The rows open nothing and the region says
+ * what is being read.
+ */
+function ShellsSkeleton(): React.JSX.Element {
+  return (
+    <Fill className="terminal-shells-wait">
+      <SkeletonRegion label={READING_SHELLS}>
+        <ShellList>
+          {SKELETON_ROWS.map(({ name, detail }) => (
+            <ListRow
+              key={name}
+              leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
+              title={<Skeleton width={name} />}
+              description={<Skeleton width={detail} />}
+            />
+          ))}
+        </ShellList>
+      </SkeletonRegion>
+    </Fill>
+  );
+}
+
+/**
+ * The list's body before a read has listed the shells: blocks while one is
+ * out, none where the sandbox stopped, or the failure where the read did not
+ * land, which the screen's bar offers Retry for. Note that a refused list leaves the tab unreachable
+ * rather than listed, so the tab's state is what says the read failed.
+ */
+function UnlistedShells({ state }: { state: TerminalState }): React.JSX.Element {
+  // A sandbox stopped before the list answered holds no shells until it is resumed.
+  if (state.kind === TERMINAL_STATE.STOPPED)
+    return (
+      <NoteLine look={NOTE_LINE_LOOK.LIST} fill>
+        No shells.
+      </NoteLine>
+    );
+  if (state.kind !== TERMINAL_STATE.UNREACHABLE) return <ShellsSkeleton />;
+  return (
+    <Fill className="terminal-shells-wait px-list-inset py-row-inset" data-failed="">
+      <ErrorState failure={unreadShown(FAILURE_SURFACE.TERMINAL_SHELLS_READ)}>
+        {SHELLS_UNREAD}
+      </ErrorState>
+    </Fill>
+  );
+}
+
 /** The list's body once the shells are listed: a row each, or none said. */
 function ListedShells({
   listed,
   session,
   surfaceOpen,
 }: {
-  listed: readonly HeldShell[];
+  listed: TerminalsAnswer;
   session: TerminalSession;
   surfaceOpen: boolean;
 }): React.JSX.Element {
-  if (listed.length === 0)
+  if (listed.terminals.length === 0)
     return (
       <NoteLine look={NOTE_LINE_LOOK.LIST} fill>
         No shells.
@@ -88,11 +190,11 @@ function ListedShells({
     );
   return (
     <ShellList>
-      {listed.map((shell) => (
+      {listed.terminals.map((shell) => (
         <ShellRow
-          key={shell.terminalId}
+          key={shell.id}
           shell={shell}
-          shown={shell.terminalId === session.shell}
+          shown={shell.id === session.shell}
           surfaceOpen={surfaceOpen}
           session={session}
         />
@@ -108,20 +210,20 @@ function ShellRow({
   surfaceOpen,
   session,
 }: {
-  shell: HeldShell;
+  shell: TerminalSummary;
   shown: boolean;
   /** Whether the tab the list stands in is on screen, which the end's question goes with. */
   surfaceOpen: boolean;
   session: Pick<TerminalSession, "onChoose" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  const rename = useInlineRename(shell.terminalId, session.onRename);
+  const rename = useInlineRename(shell.id, session.onRename);
   const renaming = rename.editing;
   const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog(
     { subject: true, surfaceOpen },
-    () => session.onKill(shell.terminalId),
+    () => session.onKill(shell.id),
     confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
   );
   return (
@@ -141,8 +243,24 @@ function ShellRow({
             shell.title
           )
         }
+        description={
+          rename.refused ? (
+            <span>{RENAME_REFUSED}</span>
+          ) : (
+            <span className="terminal-shell-detail font-mono">{shellDetail(shell)}</span>
+          )
+        }
+        meta={
+          shell.running ? (
+            <span
+              className="terminal-shell-running me-block-gap block size-1.5 rounded-ui-full bg-working"
+              role="img"
+              aria-label="Running"
+            />
+          ) : null
+        }
         current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={renaming ? undefined : () => session.onChoose(shell.terminalId)}
+        onPress={renaming ? undefined : () => session.onChoose(shell.id)}
         more={!coarse}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         actions={
@@ -221,22 +339,31 @@ export function TerminalShells({
         title="Shells"
         actions={
           <Tooltip label="New shell">
-            <IconButton icon={<GLYPH.ADD />} label="New shell" onClick={session.onCreate} />
+            <IconButton
+              icon={<GLYPH.ADD />}
+              label="New shell"
+              disabled={listed?.sandbox !== SANDBOX_STATE.RUNNING}
+              onClick={session.onCreate}
+            />
           </Tooltip>
         }
       />
-      <ListedShells
-        listed={listed}
-        session={session}
-        surfaceOpen={surfaceOpen && (over === undefined ? !leaving : over.open)}
-      />
+      {listed === undefined ? (
+        <UnlistedShells state={session.state} />
+      ) : (
+        <ListedShells
+          listed={listed}
+          session={session}
+          surfaceOpen={surfaceOpen && (over === undefined ? !leaving : over.open)}
+        />
+      )}
       <div className="terminal-shells-foot flex border-t border-border px-list-inset py-row-inset text-caption font-ui-semibold text-foreground">
         <AgentRef
           subject={subject}
           models={models}
           onOpen={onOpenAgent}
           glyph={<AgentGlyph agent={subject.agent} />}
-          label={subject.name}
+          label={footWords(subject, listed?.sandbox)}
         />
       </div>
     </>
@@ -271,11 +398,37 @@ export function TerminalShells({
 }
 
 /**
- * The agent's shells, as a terminal's row in the panel's "+" says them
- * after the agent's name: how many this window holds, nothing before the
- * first. Whether the agent works is the row's glyph's to say.
+ * The line a Terminal tab's card says under its agent's: whose sandbox the
+ * shells run in, and how many there are as the tab last read them, a count
+ * it says only once it has one.
  */
-export function TerminalStanding({ agentId }: { agentId: string }): React.JSX.Element {
-  const count = useAtomValue(shellsHeld(agentId)).length;
-  return <>{count === 0 ? null : `${count} ${count === 1 ? "shell" : "shells"}`}</>;
+export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.Element {
+  const listed = useAtomValue(sandboxRead(agentId));
+  const count = listed?.sandbox === SANDBOX_STATE.RUNNING ? listed.terminals.length : undefined;
+  const shells = count === undefined ? "" : ` · ${count} ${count === 1 ? "shell" : "shells"}`;
+  return (
+    <>
+      {CARD_FOOT}
+      {shells}
+    </>
+  );
+}
+
+/**
+ * How an agent's sandbox stands, as a terminal's row in the panel's "+" says
+ * it after the agent's name: its shells as the window last read them, or its
+ * sandbox stopped or not yet up; nothing before the first read. Whether the
+ * agent works is the row's glyph's to say.
+ */
+export function TerminalStanding({ agent }: { agent: AgentSummary }): React.JSX.Element {
+  const listed = useAtomValue(sandboxRead(agent.id));
+  const sandbox =
+    listed === undefined
+      ? undefined
+      : listed.sandbox === SANDBOX_STATE.RUNNING
+        ? `${listed.terminals.length} ${listed.terminals.length === 1 ? "shell" : "shells"}`
+        : listed.sandbox === SANDBOX_STATE.STOPPED
+          ? "Sandbox stopped"
+          : "No sandbox yet";
+  return <>{sandbox}</>;
 }

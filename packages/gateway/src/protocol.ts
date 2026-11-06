@@ -619,6 +619,25 @@ export const GATEWAY_METHOD = {
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
   AGENTS_PART: "agents.part",
   /**
+   * A coding agent's terminals (`@repo/features/terminal-view`): its shells
+   * listed, started, named, and ended, and its sandbox resumed on the
+   * developer's click; and a shell attached for one panel under a
+   * connection id the desktop minted, typed into, resized, acked, woken
+   * after a sleep, and detached. What a shell prints is heard as
+   * `TERMINAL_OUTPUT` events, never answered.
+   */
+  TERMINALS_LIST: "terminals.list",
+  TERMINALS_CREATE: "terminals.create",
+  TERMINALS_RENAME: "terminals.rename",
+  TERMINALS_KILL: "terminals.kill",
+  TERMINALS_RESUME: "terminals.resume",
+  TERMINALS_CONNECT: "terminals.connect",
+  TERMINALS_INPUT: "terminals.input",
+  TERMINALS_RESIZE: "terminals.resize",
+  TERMINALS_ACK: "terminals.ack",
+  TERMINALS_DISCONNECT: "terminals.disconnect",
+  TERMINALS_WAKE: "terminals.wake",
+  /**
    * A cloud Browser tab's live view (`@repo/features/browser-live-wire`),
    * opened for one panel under a connection id the desktop minted, sent on,
    * and closed. The host only carries the socket's text frames each way;
@@ -753,6 +772,10 @@ export const GATEWAY_EVENT = {
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks and active task, whole, whenever a read moved them. */
   TASKS_CHANGED: "tasks.changed",
+  /** What an attached shell printed, named by its connection, for the one panel that connection's port reaches. */
+  TERMINAL_OUTPUT: "terminal.output",
+  /** How an attached shell's connection stands, named by its connection. */
+  TERMINAL_STATE: "terminal.state",
   /** One text frame a cloud Browser tab's live view sent, named by its connection, for the one panel that connection's port reaches. */
   BROWSER_LIVE_MESSAGE: "browserLive.message",
   /** A cloud Browser tab's live view closed, with its close code, named by its connection. */

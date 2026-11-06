@@ -2,7 +2,7 @@ import { Option, Schema } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 
 /**
- * terminal-held.ts -- the shells this window opened on this Mac for each cloud agent's Terminal tab, kept across a reload, and the new shells asked for and not yet opened.
+ * local-held.ts -- the shells this window opened on this Mac for each cloud agent's Local tab, kept across a reload, and the new shells asked for and not yet opened.
  *
  * Main holds each shell and ends it with the window, but a reload keeps
  * them running (`@repo/host/act-port`'s `mac-shell-procedures.ts`), so the
@@ -15,7 +15,7 @@ import * as Atom from "effect/reactivity/Atom";
  */
 
 /** The one key the window's shells are kept under. */
-const HELD_KEY = "vespin.terminalShells";
+const HELD_KEY = "vespin.localShells";
 
 /** One shell the window opened: the id main named it by, and its name in the list. */
 const heldShellSchema = Schema.Struct({
@@ -71,7 +71,7 @@ const allHeld = Atom.keepAlive(
  * One agent's shells, oldest first: read as the window holds them, and
  * written through to its session storage, so a reload finds them.
  */
-export const shellsHeld = Atom.family((agentId: string) =>
+export const localShellsHeld = Atom.family((agentId: string) =>
   Atom.keepAlive(
     Atom.writable(
       (get) => get(allHeld)[agentId] ?? NOTHING_HELD,
@@ -85,10 +85,10 @@ export const shellsHeld = Atom.family((agentId: string) =>
 
 /**
  * How many new shells were asked for in the agent's mirror and not yet
- * opened: New terminal asks, from ⌘K or the panel's "+", and the agent's
- * Terminal tab opens them and counts them off.
+ * opened: the Local row of ⌘K or the panel's "+" asks, and the agent's
+ * Local tab opens them and counts them off.
  */
-export const shellsAsked = Atom.family((_agentId: string) => Atom.keepAlive(Atom.make(0)));
+export const localShellsAsked = Atom.family((_agentId: string) => Atom.keepAlive(Atom.make(0)));
 
 /** The name a new shell takes: "Terminal" and the next number past every name of that shape the agent's shells hold. */
 export function nextShellTitle(shells: readonly HeldShell[]): string {

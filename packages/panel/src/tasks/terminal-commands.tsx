@@ -7,13 +7,13 @@ import {
   type TerminalAsk,
   terminalTarget,
 } from "@repo/features/terminal-entry";
+import { shellsAsked } from "@repo/features/terminal-store";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
-import { shellsAsked } from "./terminal-held.js";
 import { TerminalPicker } from "./terminal-picker.js";
 import type { AgentsControl } from "./use-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
@@ -24,16 +24,16 @@ import type { SidePanelControl } from "./use-side-panel.js";
  * Both commands are offers on the window's one keymap (`app-commands.ts`), so
  * the menu bar and ⌘K run them as ⌘J does. Each decides the agent
  * (`terminal-entry.ts`) from where the developer is, never asking, then
- * shows that agent's Terminal tab in the side panel, New terminal asking for
- * a new shell in its mirror first (`terminal-held.ts`'s `shellsAsked`),
- * which the tab opens. A task with no agent offers to start one; one whose
+ * shows that agent's Terminal tab in the side panel, New terminal asking its
+ * sandbox for a new shell first (`terminal-store.ts`'s `shellsAsked`), which
+ * the tab starts once the sandbox runs. A task with no agent offers to start one; one whose
  * agents are still being read waits on them, and lands as the rules have it
  * once they are.
  */
 
 /**
  * Opens an agent's terminal as a command means it: its Terminal tab shown,
- * after a new shell is asked of its mirror where the command was New
+ * after a new shell is asked of its sandbox where the command was New
  * terminal. The panel's "+" opens its Terminal rows through the same door.
  */
 export function useOpenTerminal(

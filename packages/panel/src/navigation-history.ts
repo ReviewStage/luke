@@ -98,6 +98,7 @@ import {
   isCloudBrowserTab,
   isDraftTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -542,7 +543,7 @@ function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
   if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of, side };
   if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of, side };
   if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of, side };
-  if (isTerminalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
+  if (isTerminalTab(tab) || isLocalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
   if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
   if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
   // A word of a strip's own: the column's Overview, which shows the task, the task's Inbox, or its comments.

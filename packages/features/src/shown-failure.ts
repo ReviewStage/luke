@@ -190,6 +190,7 @@ export const FAILURE_SURFACE = {
   TASK_STANDING: "task.standing",
   TASK_START: "task.start",
   TERMINAL_CREATE: "terminal.create",
+  TERMINAL_SHELLS_READ: "terminal_shells.read",
   TERMINAL_STOP: "terminal.stop",
   THIS_MAC_SET: "this_mac.set",
   TRANSCRIPT_COPY: "transcript.copy",
