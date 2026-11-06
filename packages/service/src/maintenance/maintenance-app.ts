@@ -1,7 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
 import { purgeUnsavedAttachments } from "@repo/database/models/description-attachments";
-import { sweepHostPairings } from "@repo/database/models/host-pairing-store";
 import { hostedStore } from "@repo/database/models/hosted-store";
 import { dropStaleFirewalls } from "@repo/database/models/sandbox-firewall-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
@@ -93,7 +92,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
-    sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),
     renewCodexPlanSwaps: (now) =>
