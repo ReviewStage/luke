@@ -1458,7 +1458,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch's end that left a message untaken keeps the sandbox up less the swap only its runner sent, and the launch that hands it on reads it on a swap of its own",
+    "a launch's end that left a message untaken keeps the sandbox up, and the launch that hands it on reads it on a swap of its own",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1483,17 +1483,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
         assert.equal(ended, RUNNER_ENDED.LINES_WAITING);
         assert.equal(api.sandboxes[0]?.status, "running");
-        assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
         const first = api.commands[0];
         assert.ok(first !== undefined);
-        // The ended runner's bearer is off the firewall until the launch that hands the line on sets its own.
         const firstBearer = launchBearer(api, first, SERVICE_HOST);
         assert.ok(firstBearer !== undefined);
-        const standing = api.policies.findLast((each) => each.session === first.sandboxSessionId);
-        assert.equal(
-          swappedBearer(standing?.policy, SERVICE_HOST, first.env[RUNNER_ENV.BEARER]),
-          undefined,
-        );
         first.exitCode = 0;
         const handed = yield* sessions.deliverWaiting(opened.sessionId, agent.conversationId);
 
@@ -2198,35 +2191,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
   it.effect(
-    "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(api)),
-        );
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        api.failPolicy.remaining = 1;
-
-        yield* runnerTook(agent.id);
-        const ended = yield* Effect.result(
-          runnerEnded({
-            target: { userId, conversationId: agent.conversationId },
-            sessionId: opened.sessionId,
-            sequence: 5,
-          }).pipe(Effect.provide(api.layer)),
-        );
-
-        assert.ok(Result.isFailure(ended));
-        assert.equal(api.sandboxes[0]?.status, "running");
-      }),
-  );
-
-  it.effect(
-    "a launch's end leaves the sandbox up while a developer's Terminal holds it, every credential taken off its firewall",
+    "a launch's end leaves the sandbox up while a developer's Terminal holds it, its credentials still on its firewall",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2237,24 +2202,25 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
         const [command] = api.commands;
-        assert.ok(launchBearer(api, command, SERVICE_HOST) !== undefined);
+        const bearer = launchBearer(api, command, SERVICE_HOST);
+        assert.ok(bearer !== undefined);
 
         yield* runnerTook(agent.id);
         const ended = yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 5,
-        }).pipe(
-          // The events route's services, the deployment's key ring among them, which the withdraw seals its record under.
-          Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))),
-        );
+        }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
 
         assert.equal(ended, RUNNER_ENDED.HELD);
         assert.equal(api.sandboxes[0]?.status, "running");
         const standing = api.policies.findLast(
           (each) => each.session === command?.sandboxSessionId,
         );
-        assert.deepEqual(standing?.policy, { mode: "allow-all" });
+        assert.equal(
+          swappedBearer(standing?.policy, SERVICE_HOST, command?.env[RUNNER_ENV.BEARER]),
+          bearer,
+        );
       }),
   );
 

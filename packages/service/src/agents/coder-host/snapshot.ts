@@ -22,7 +22,7 @@
  * enters the sandbox's files or a command's words; a member's own token is
  * taken off again once the push is done, unless a terminal or a turn of the
  * source still uses the sandbox. A sandbox this step woke is stopped
- * again, its firewall cleared first as every stop clears it, once it is
+ * again, its kept launch deleted first as ahead of every stop, once it is
  * done, however it ended, unless a developer's terminal
  * holds it, a turn of the source began meanwhile, or another Start's copy
  * still holds it past this one's own hold; one already up stays as it was.
@@ -206,11 +206,9 @@ const stopMissed = (why: string) =>
  * It lists the sandbox again rather than trusting a session it was handed,
  * so a wake interrupted before it answered is stopped too, and asks again
  * whether it must stay up once listed, so a terminal, a turn, or another
- * Start's copy that took it up since the first ask keeps it. Its firewall is
- * cleared ahead of each stop, as every other stop clears it, because a
- * stopped sandbox keeps its policy and a later resume would wear the
- * repository's credential again; one it would not clear is left up for the
- * sweep rather than stopped with it.
+ * Start's copy that took it up since the first ask keeps it. Its kept
+ * launch is deleted ahead of each stop, as ahead of every other stop, so no
+ * renewal writes to it again.
  */
 const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -339,7 +337,7 @@ const TAKEN_UP = { CONTINUED: "continued", FORKED: "forked" } as const;
 const TURN_UNDER_WAY: ReadonlySet<string> = new Set([TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]);
 
 /** Whether a turn of the agent whose conversation is named is under way: queued, or running. */
-export const agentTurnUnderWay = (conversationId: string) =>
+const agentTurnUnderWay = (conversationId: string) =>
   Effect.map(latestTurnsOfReached([conversationId]), (turns) =>
     TURN_UNDER_WAY.has(turns.get(conversationId)?.status ?? ""),
   );

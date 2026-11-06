@@ -31,7 +31,6 @@ import {
   setProviderKeyStatus,
 } from "@repo/database/models/provider-key-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { deviceAgentLine } from "@repo/database/schemas/device-agent";
@@ -663,36 +662,6 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
-      }),
-  );
-
-  it.effect(
-    "a launch's end while a developer's Terminal holds the sandbox takes the token off its firewall and leaves it up",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        yield* signIn(userId, 60);
-        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api)));
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
-        assert.deepEqual(openAiRules(api, CODEX_BACKEND.HOST), [
-          swapRule(placeholder, "access-0", CODEX_BACKEND.PATH),
-        ]);
-        yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
-
-        yield* runnerTook(agent.id);
-        const ended = yield* runnerEnded({
-          target: { userId, conversationId: agent.conversationId },
-          sessionId: opened.sessionId,
-          sequence: 5,
-        }).pipe(Effect.provide(services(api)));
-
-        assert.equal(ended, RUNNER_ENDED.HELD);
-        assert.equal(api.sandboxes[0]?.status, "running");
-        assert.deepEqual(api.policies.at(-1)?.policy, { mode: "allow-all" });
       }),
   );
 

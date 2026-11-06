@@ -258,7 +258,7 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
   );
 
   it.effect(
-    "a stopped sandbox is woken for the copy, which runs in the woken session, and stopped again with the installation token taken off first",
+    "a stopped sandbox is woken for the copy, which runs in the woken session under the installation token, and stopped again",
     (t) =>
       Effect.gen(function* () {
         const source = yield* checkoutFor(t);
@@ -274,10 +274,8 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
           [sandbox.state.status, sandbox.stops],
           ["stopped", [SOURCE_SANDBOX.WOKEN]],
         );
-        // A stopped sandbox keeps its policy and a resume wears it again, so the stop leaves it open.
         assert.deepEqual(sandbox.policies, [
           { session: SOURCE_SANDBOX.WOKEN, hosts: ["*", "github.com", "api.github.com"] },
-          { session: SOURCE_SANDBOX.WOKEN, hosts: [] },
         ]);
       }),
   );

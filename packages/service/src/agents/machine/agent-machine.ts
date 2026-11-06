@@ -160,9 +160,8 @@ export interface ResumedPlace {
 /**
  * A running place's firewall, the account whose agent it is named beside
  * it: the whole policy written from the sources given and the swaps of the
- * launch kept for it; a launch's swaps kept ahead of its first write; that
- * launch let go and the policy written without it; or every credential
- * cleared ahead of a stop (`../sandbox-firewall.ts`). A machine with no
+ * launch kept for it; a launch's swaps kept ahead of its first write; or
+ * that launch deleted ahead of a stop, the policy left as it stands (`../sandbox-firewall.ts`). A machine with no
  * firewall of ours does nothing.
  */
 interface MachineFirewall {
@@ -175,11 +174,6 @@ interface MachineFirewall {
     place: MachinePlace,
     userId: string,
     launch: FirewallLaunch,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly endLaunch: (
-    place: MachinePlace,
-    userId: string,
-    sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
   readonly clear: (
     place: MachinePlace,
