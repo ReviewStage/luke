@@ -95,6 +95,14 @@ export const IMAGE_NOT_READY = "image_not_ready";
 export const SNAPSHOT_GONE_STATUS = 410;
 
 /**
+ * The code Vercel's body names a snapshot gone by. Note that Vercel answers
+ * 410 for a call to a stopped sandbox too (`sandbox_stopped`), which a resume
+ * mends, and that a body that could not be read names no code, so only a 410
+ * that names this code says the snapshot is gone.
+ */
+const SNAPSHOT_GONE_CODE = "snapshot_not_found";
+
+/**
  * Vercel's answer for a call to a session that is stopping, or being
  * snapshotted, under it, and the codes its body names: what a resume of the
  * sandbox mends, as the SDK's own `withResume` reads it.
@@ -190,6 +198,15 @@ export function sessionEnding(failure: { readonly _tag: string }): boolean {
     failure.status === SESSION_ENDING.STATUS &&
     failure.code !== undefined &&
     SESSION_ENDING.CODES.has(failure.code)
+  );
+}
+
+/** Whether a call failed because the snapshot its sandbox resumes or opens from is gone: one no retry mends, the sandbox's saved files lost with it. */
+export function snapshotGone(failure: { readonly _tag: string }): boolean {
+  return (
+    failure instanceof SandboxUnavailable &&
+    failure.status === SNAPSHOT_GONE_STATUS &&
+    failure.code === SNAPSHOT_GONE_CODE
   );
 }
 

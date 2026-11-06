@@ -276,8 +276,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         // Note that a host's older runner, bundled before Claude Code's command sandbox was removed, refuses a config without domains.
         allowedDomains: [],
         installedSkills: layout.installedSkills,
-        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
-        warm: true,
       };
       return written;
     });
