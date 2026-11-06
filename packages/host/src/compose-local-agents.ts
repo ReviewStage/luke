@@ -496,6 +496,17 @@ export function composeLocalAgents(
 
     // -- the follow --------------------------------------------------
 
+    /**
+     * The token each line's claim carries, by the line's id, minted at its
+     * first claim and kept until a claim of it is answered, so the claim
+     * asked again after its answer was lost is the same claim, which the
+     * service answers again rather than refusing as taken. Note that it
+     * outlives a follow, because a gate that shuts between a lost answer and
+     * its re-ask would otherwise leave a launch the service granted that no
+     * later follow asks for.
+     */
+    const claimTokens = new Map<string, string>();
+
     /** Everything one open gate runs, on the device it registered, from its home folder. */
     const follow = (folder: string, shellVariables: Readonly<Record<string, string>>) =>
       Effect.gen(function* () {
@@ -1068,14 +1079,6 @@ export function composeLocalAgents(
             yield* FiberMap.run(workers, agentId, worker);
             return mailbox;
           });
-
-        /**
-         * The token each line's claim carries, by the line's id, minted at its
-         * first claim and kept until a claim of it is answered, so the claim
-         * asked again after its answer was lost is the same claim, which the
-         * service answers again rather than refusing as taken.
-         */
-        const claimTokens = new Map<string, string>();
 
         /**
          * One line claimed by its id under its token, asked once; refused, or
