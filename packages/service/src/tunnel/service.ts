@@ -113,16 +113,6 @@ export function standTunnel(options: TunnelOptions): Effect.Effect<void, never, 
             ? { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED }
             : { ...decision.ask, userId: account.value },
       }),
-    relay: (ask, device, webSocket) =>
-      relayTunnel(
-        {
-          ...device,
-          buffered: Effect.sync(() => webSocket.bufferedAmount),
-          pause: Effect.sync(() => webSocket.pause()),
-          resume: Effect.sync(() => webSocket.resume()),
-        },
-        ask,
-        options.dependencies,
-      ),
+    relay: (ask, device) => relayTunnel(device, ask, options.dependencies),
   });
 }

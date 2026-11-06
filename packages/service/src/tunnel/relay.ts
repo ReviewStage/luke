@@ -11,12 +11,6 @@
  * read only for its shape; its bytes are never read, kept, logged, or
  * counted, here or anywhere the relay writes.
  *
- * Neither side is let to pile up what the other has not taken: before a
- * frame is sent on, the socket it goes to is asked how much it still
- * holds, and past a bound the socket it came from stops being read until
- * that drains, so one channel's large download waits on the desktop rather
- * than standing in the service's memory ahead of every other channel.
- *
  * Where the bridge's kind holds the sandbox (`TUNNEL_HOLDS_SANDBOX`), the
  * connection keeps the sandbox alive past its timeout every keep-alive
  * interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`) for as long as it stands, and
@@ -49,11 +43,12 @@ import {
   Stream,
 } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { type PtySocket, ptyLinesOf } from "../agents/sandbox-pty.js";
+import { ptyLinesOf } from "../agents/sandbox-pty.js";
 import type { SandboxOpen } from "../agents/terminal/agent-sandbox.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import { EXCESS_KEYS } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
+import type { RelaySocket } from "../terminal/relay.js";
 import {
   TUNNEL_BRIDGE_WORD,
   TUNNEL_HOLDS_SANDBOX,
@@ -70,16 +65,9 @@ export const TUNNEL_RELAY_BOUNDS = {
   IDLE_CHECK_EVERY: Duration.seconds(30),
   /** How long the bridge may take to say it is ready once its PTY is open. */
   READY_TIMEOUT: Duration.seconds(15),
-  /** The most bytes a socket may still hold unsent before the side feeding it stops being read. */
-  MAX_BUFFERED_BYTES: 512 * 1024,
-  /** How often a held-back side asks whether the socket it feeds has drained. */
-  DRAIN_CHECK_EVERY: Duration.millis(20),
   /** The PTY the bridge runs in: its size is nothing to it, and its text is UTF-8. */
   PTY: { COLS: 80, ROWS: 24, CWD: "/", ENV: ["TERM=dumb", "LANG=C.UTF-8"] },
 } as const;
-
-/** One side of a tunnel: a relay socket that can say how much it still holds unsent, and stop and start being read, as the PTY's does. */
-export type TunnelSocket = PtySocket;
 
 /** What a connection asks for: whose it is, the agent it names, and the bridge it reaches. */
 export interface TunnelAsk {
@@ -106,7 +94,7 @@ export interface TunnelDependencies {
   /** Opens the PTY's socket for the connection's scope. */
   readonly connect: (
     shell: InteractiveShell,
-  ) => Effect.Effect<TunnelSocket, SandboxUnavailable, Scope.Scope>;
+  ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
   /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
@@ -144,20 +132,6 @@ function heldFrom(instant: Date): Date {
   return new Date(instant.getTime() + Duration.toMillis(reach));
 }
 
-/** Waits until the socket a frame goes to holds no more than the bound, reading nothing from the side it came from meanwhile. */
-function drained(to: TunnelSocket, from: TunnelSocket): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    const full = Effect.map(to.buffered, (bytes) => bytes > TUNNEL_RELAY_BOUNDS.MAX_BUFFERED_BYTES);
-    if (!(yield* full)) return;
-    yield* from.pause;
-    yield* Effect.repeat(full, {
-      schedule: Schedule.spaced(TUNNEL_RELAY_BOUNDS.DRAIN_CHECK_EVERY),
-      while: (stillFull) => stillFull,
-    });
-    yield* from.resume;
-  });
-}
-
 /** Notes a byte crossing at the instant now, moving the lease on at most once a minute where the bridge's kind holds the sandbox. */
 function crossed(
   deps: TunnelDependencies,
@@ -179,8 +153,8 @@ function crossed(
 
 /** The desktop's frames to the bridge, one line each, a frame of no tunnel shape dropped. */
 function deviceToBridge(
-  device: TunnelSocket,
-  pty: TunnelSocket,
+  device: RelaySocket,
+  pty: RelaySocket,
   noteCrossed: Effect.Effect<void>,
 ): Effect.Effect<PipeEnd> {
   return Effect.as(
@@ -190,10 +164,7 @@ function deviceToBridge(
       }
       // Note that a line break in valid JSON stands only between its tokens, so dropping it keeps the frame one line and whole.
       const line = `${frame.text.replace(/[\r\n]/g, "")}\n`;
-      return Effect.andThen(
-        Effect.andThen(noteCrossed, drained(pty, device)),
-        pty.send({ bytes: new TextEncoder().encode(line) }),
-      );
+      return Effect.andThen(noteCrossed, pty.send({ bytes: new TextEncoder().encode(line) }));
     }),
     PIPE_END.DEVICE_LEFT,
   );
@@ -201,8 +172,8 @@ function deviceToBridge(
 
 /** The bridge's lines to the desktop, one frame each, from its ready word on; a line that is neither is the PTY's own output. */
 function bridgeToDevice(
-  device: TunnelSocket,
-  pty: TunnelSocket,
+  device: RelaySocket,
+  pty: RelaySocket,
   ready: Deferred.Deferred<void>,
   noteCrossed: Effect.Effect<void>,
 ): Effect.Effect<PipeEnd> {
@@ -211,10 +182,7 @@ function bridgeToDevice(
       const value = jsonOf(line.replace(/\r$/, ""));
       if (Result.isSuccess(readBridgeWord(value))) return Deferred.succeed(ready, undefined);
       if (Result.isFailure(readBridgeFrame(value))) return Effect.void;
-      return Effect.andThen(
-        Effect.andThen(noteCrossed, drained(device, pty)),
-        device.send({ text: line.replace(/\r$/, "") }),
-      );
+      return Effect.andThen(noteCrossed, device.send({ text: line.replace(/\r$/, "") }));
     }),
     PIPE_END.BRIDGE_LEFT,
   );
@@ -237,7 +205,7 @@ function idleWatch(lastCrossed: Ref.Ref<number>): Effect.Effect<PipeEnd> {
 
 /** One tunnel, from its reach to its close, everything it opens belonging to the scope it runs in. */
 export function relayTunnel(
-  device: TunnelSocket,
+  device: RelaySocket,
   ask: TunnelAsk,
   deps: TunnelDependencies,
 ): Effect.Effect<void, never, Scope.Scope> {

@@ -56,18 +56,11 @@ export function ptyLinesOf(frames: Stream.Stream<RelayFrame>): Stream.Stream<str
   );
 }
 
-/** The PTY's socket with the handles a caller holding its writes back needs: the bytes still waiting to be sent, and its reading paused and resumed. */
-export interface PtySocket extends RelaySocket {
-  readonly buffered: Effect.Effect<number>;
-  readonly pause: Effect.Effect<void>;
-  readonly resume: Effect.Effect<void>;
-}
-
 /** The PTY's socket opened under its minted token, once its server answers healthy, for the scope it is opened in. */
 export function connectPty(
   shell: InteractiveShell,
   client: HttpClient.HttpClient,
-): Effect.Effect<PtySocket, SandboxUnavailable, Scope.Scope> {
+): Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope> {
   return Effect.gen(function* () {
     const address = new URL(shell.url);
     const health = new URL("/health", `https://${address.host}`);
@@ -98,13 +91,7 @@ export function connectPty(
         orElse: () => Effect.fail(new SandboxUnavailable({})),
       }),
     );
-    const voiced = yield* voiceSocket(socket);
-    return {
-      ...voiced,
-      buffered: Effect.sync(() => socket.bufferedAmount),
-      pause: Effect.sync(() => socket.pause()),
-      resume: Effect.sync(() => socket.resume()),
-    };
+    return yield* voiceSocket(socket);
   });
 }
 

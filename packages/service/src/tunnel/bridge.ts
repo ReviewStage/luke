@@ -15,11 +15,7 @@
  * The port bridge opens a TCP connection to the port on the sandbox's
  * loopback for each channel opened, closes the connection when its channel
  * closes and the channel when its connection does, and closes a channel
- * whose port nothing listens on as refused. It holds a write back rather
- * than piling it up: a connection whose bytes the PTY will not take yet is
- * paused until the PTY drains, and the PTY's input is paused while a
- * connection will not take what it was sent, until that connection drains
- * or closes.
+ * whose port nothing listens on as refused.
  */
 
 import { TUNNEL_KIND, type TunnelKind } from "@repo/features/sandbox-tunnel-wire";
@@ -60,22 +56,11 @@ const open = (channel) => {
   const socket = net.connect(port, "127.0.0.1");
   let refused = false;
   channels.set(channel, socket);
-  socket.on("data", (bytes) => {
-    if (say({ type: "data", channel, data: bytes.toString("base64") })) return;
-    socket.pause();
-    process.stdout.once("drain", () => socket.resume());
-  });
+  socket.on("data", (bytes) => say({ type: "data", channel, data: bytes.toString("base64") }));
   socket.on("error", (error) => { refused = error.code === "ECONNREFUSED"; });
   socket.on("close", () => ended(channel, refused ? "refused" : undefined));
 };
-const resumeInput = () => process.stdin.resume();
-const send = (channel, data) => {
-  const socket = channels.get(channel);
-  if (socket === undefined || socket.write(Buffer.from(data, "base64"))) return;
-  process.stdin.pause();
-  socket.once("drain", resumeInput);
-  socket.once("close", resumeInput);
-};
+const send = (channel, data) => channels.get(channel)?.write(Buffer.from(data, "base64"));
 const close = (channel) => {
   const socket = channels.get(channel);
   if (socket === undefined) return;

@@ -14,8 +14,8 @@ import {
   Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
-import type { RelayFrame } from "../terminal/relay.js";
-import { relayTunnel, type TunnelDependencies, type TunnelSocket } from "./relay.js";
+import type { RelayFrame, RelaySocket } from "../terminal/relay.js";
+import { relayTunnel, type TunnelDependencies } from "./relay.js";
 
 /**
  * One tunnel as the relay pipes it, over sockets and a sandbox that answer
@@ -23,8 +23,7 @@ import { relayTunnel, type TunnelDependencies, type TunnelSocket } from "./relay
  * the tunnel closes as not running; a running one starts the port bridge,
  * and once it is ready frames cross both ways, holding the sandbox as they
  * do, until twenty minutes without a byte close the tunnel as idle and end
- * its keep-alive; and a desktop that has not taken what it was sent stops
- * the bridge's side being read until it drains.
+ * its keep-alive.
  */
 
 const CONVERSATION = "conversation-1";
@@ -38,13 +37,12 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const OPEN = JSON.stringify({ type: "open", channel: 1 });
 const DATA = JSON.stringify({ type: "data", channel: 1, data: "aGk=" });
 
-/** One side of the relay as a test drives it: frames pushed in, what the relay sent, how it closed, and how much it holds unsent, kept. */
+/** One side of the relay as a test drives it: frames pushed in, what the relay sent, and how it closed, kept. */
 const scriptedSocket = Effect.gen(function* () {
   const inbound = yield* Queue.make<RelayFrame, Cause.Done>();
   const sent: RelayFrame[] = [];
   const closed: number[] = [];
-  const state = { buffered: 0, paused: false };
-  const socket: TunnelSocket = {
+  const socket: RelaySocket = {
     frames: Stream.fromQueue(inbound),
     send: (frame) => Effect.sync(() => void sent.push(frame)),
     close: (code) =>
@@ -52,15 +50,8 @@ const scriptedSocket = Effect.gen(function* () {
         Effect.sync(() => void closed.push(code)),
         Queue.end(inbound),
       ),
-    buffered: Effect.sync(() => state.buffered),
-    pause: Effect.sync(() => {
-      state.paused = true;
-    }),
-    resume: Effect.sync(() => {
-      state.paused = false;
-    }),
   };
-  return { socket, push: (frame: RelayFrame) => Queue.offer(inbound, frame), sent, closed, state };
+  return { socket, push: (frame: RelayFrame) => Queue.offer(inbound, frame), sent, closed };
 });
 
 type Scripted = Effect.Success<typeof scriptedSocket>;
@@ -160,31 +151,5 @@ it.effect(
       assert.deepEqual(device.closed, [TUNNEL_CLOSE.IDLE]);
       assert.equal(asked.keptAlive.length, keptAlive);
       assert.ok(keptAlive >= 3);
-    }),
-);
-
-it.effect(
-  "a desktop that has not taken what it was sent stops the bridge being read until it drains",
-  () =>
-    Effect.gen(function* () {
-      const device = yield* scriptedSocket;
-      const pty = yield* scriptedSocket;
-      const { deps } = world(pty);
-
-      yield* Effect.forkChild(Effect.scoped(relayTunnel(device.socket, ASK, deps)));
-      yield* settle;
-      yield* pty.push(ready);
-      device.state.buffered = 1024 * 1024;
-      yield* pty.push({ bytes: encode(`${DATA}\n`) });
-      yield* settle;
-      assert.equal(pty.state.paused, true);
-      assert.deepEqual(device.sent, []);
-
-      device.state.buffered = 0;
-      yield* TestClock.adjust(Duration.seconds(1));
-      yield* settle;
-
-      assert.equal(pty.state.paused, false);
-      assert.deepEqual(device.sent, [{ text: DATA }]);
     }),
 );
