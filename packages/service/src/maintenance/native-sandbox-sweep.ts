@@ -322,7 +322,7 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
     }
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const window = windowAt(listed.success, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES, now);
-    // The window's runs are read once for the lot; a sandbox reads its own again only just before it settles or stops.
+    // The window's runs are read once for the lot; a sandbox reads its own again only just before it settles.
     const standings = yield* readNativeRunStandings(window.map((sandbox) => sandbox.agentId));
     const endings = yield* Effect.forEach(
       window,
