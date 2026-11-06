@@ -45,12 +45,14 @@ const WORKSPACE = { workspaceId: "workspace-acme" };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
 
-/** Each relayed act, with a payload its schema takes and the sentence it is refused in. */
+/** Each declared act, with a payload its schema takes and the sentence it is refused in. */
 const ACTS: readonly {
   readonly kind: (typeof WORKSPACE_ACTS)[keyof typeof WORKSPACE_ACTS]["kind"];
   readonly payload: WireBoundaryInput;
   /** Its refusal, as the window drew it before the act was declared. */
   readonly refusal: string;
+  /** Whether its procedure is written by hand, which the host's relayed port does not serve. */
+  readonly byHand?: true;
 }[] = [
   {
     kind: WORKSPACE_ACT_KIND.WORKSPACE_CREATE,
@@ -142,6 +144,18 @@ const ACTS: readonly {
     refusal: "Could not change that workspace's repositories on this system.",
     payload: { ...WORKSPACE, repository: "acme/relay", added: true },
   },
+  {
+    kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT,
+    refusal: "Could not connect GitHub to that workspace on this system.",
+    payload: WORKSPACE,
+    byHand: true,
+  },
+  {
+    kind: WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL,
+    refusal: "Could not install Sentry for that workspace on this system.",
+    payload: WORKSPACE,
+    byHand: true,
+  },
 ];
 
 /** What the host sent the service on an act's behalf: every request but the reads it opens on its own, which only read. */
@@ -155,11 +169,50 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
+/**
+ * A panel's port over the connections' procedures alone, each handler
+ * answering the address `answers` names for it or the refusal it fails
+ * with, every address opened kept in `opened`.
+ */
+function connectPort(answers: {
+  readonly github: Effect.Effect<string, ActRefused>;
+  readonly sentry: Effect.Effect<string, ActRefused>;
+}) {
+  const opened: string[] = [];
+  const dependencies: WorkspaceProceduresDependencies = {
+    // SAFETY: a connection's procedure reads no follow of the host's, so none is handed.
+    host: {} as WorkspaceProceduresDependencies["host"],
+    openExternal: async (url) => {
+      opened.push(url);
+    },
+  };
+  const port = testActPort(
+    workspaceProcedures(dependencies, {
+      WORKSPACE_GITHUB_CONNECT: () => answers.github,
+      WORKSPACE_SENTRY_INSTALL: () => answers.sentry,
+    }),
+  );
+  ports.push(port);
+  return { port, opened };
+}
+
 it.effect.each(ACTS)(
-  "$kind is refused a window that is not a panel, and a frame this build does not trust, in its own words, and the service is not asked",
+  "$kind is refused a window that is not a panel, and a frame this build does not trust, in its own words, and nothing is asked or opened",
   (act) =>
     Effect.gen(function* () {
-      const { port, requests } = yield* hostActPort({ account: SIGNED_IN });
+      // Note that a connection is served by its own procedure, over handlers that would open an address on its own origin.
+      const { port, done } = yield* act.byHand
+        ? Effect.sync(() => {
+            const connect = connectPort({
+              github: Effect.succeed(INSTALL_URL),
+              sentry: Effect.succeed(SENTRY_INSTALL_URL),
+            });
+            return { port: connect.port, done: () => connect.opened };
+          })
+        : Effect.map(hostActPort({ account: SIGNED_IN }), ({ port, requests }) => ({
+            port,
+            done: (): readonly unknown[] => asksSent(requests),
+          }));
 
       const refused = [
         yield* port.perform(act, OTHER_WINDOW),
@@ -167,7 +220,7 @@ it.effect.each(ACTS)(
       ];
 
       assert.deepEqual(refused, [{ refused: act.refusal }, { refused: act.refusal }]);
-      assert.deepEqual(asksSent(requests), []);
+      assert.deepEqual(done(), []);
     }),
 );
 
@@ -205,33 +258,6 @@ it.effect(
       assert.deepEqual(unanswered, { refused: invite.refusal });
     }),
 );
-
-/**
- * A panel's port over the connections' procedures alone, each handler
- * answering the address `answers` names for it or the refusal it fails
- * with, every address opened kept in `opened`.
- */
-function connectPort(answers: {
-  readonly github: Effect.Effect<string, ActRefused>;
-  readonly sentry: Effect.Effect<string, ActRefused>;
-}) {
-  const opened: string[] = [];
-  const dependencies: WorkspaceProceduresDependencies = {
-    // SAFETY: a connection's procedure reads no follow of the host's, so none is handed.
-    host: {} as WorkspaceProceduresDependencies["host"],
-    openExternal: async (url) => {
-      opened.push(url);
-    },
-  };
-  const port = testActPort(
-    workspaceProcedures(dependencies, {
-      WORKSPACE_GITHUB_CONNECT: () => answers.github,
-      WORKSPACE_SENTRY_INSTALL: () => answers.sentry,
-    }),
-  );
-  ports.push(port);
-  return { port, opened };
-}
 
 it.effect(
   "a connection opens the address its handler answered only where it stands on the connection's own origin, and a refused one opens nothing",
