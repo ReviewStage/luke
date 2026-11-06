@@ -20,6 +20,7 @@ import {
   Environment,
   IdSource,
   LoopbackListener,
+  MirrorPlatform,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -139,6 +140,12 @@ describe("the host's platform concerns", () => {
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(LoopbackListener, () => Effect.succeed(undefined)),
+            Layer.succeed(MirrorPlatform, {
+              folder: stateRoot,
+              worktreeScript: () => "exit 1",
+              listScript: () => "exit 1",
+              removeScript: () => "exit 1",
+            }),
             Layer.succeed(ThisMacHost, {
               stateRoot,
               runsHost: false,
