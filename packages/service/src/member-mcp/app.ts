@@ -22,14 +22,16 @@
 
 import { createMcpHandler, originValidationResponse } from "@modelcontextprotocol/server";
 import { HTTP_METHOD } from "@repo/wire";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { CREATE_TASK_REFUSAL } from "../agents/task-tools.js";
 import { AUTH_BASE_PATH } from "../auth/auth-policy.js";
 import { HOSTED_REFUSAL, hostedNotFoundRoute, hostedRefusing } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { admitMember, type MemberMcpResourceClient } from "./admission.js";
 import { MEMBER_MCP_PATH, MEMBER_MCP_SCOPE, memberMcpResourceUrl } from "./resource.js";
 import { type MemberMcpRequestServices, memberMcpServer } from "./server.js";
+import { MEMBER_MCP_TOOL, RENAMED_MEMBER_MCP_TOOL } from "./tools.js";
 
 /** The route the metadata's public paths are rewritten onto, and answered at. */
 export const MEMBER_MCP_METADATA_ROUTE = "/api/mcp/resource-metadata";
@@ -89,6 +91,66 @@ export function memberMcpAuth(client: MemberMcpResourceClient, baseURL: string):
   };
 }
 
+/** A `tools/call` as one JSON-RPC request, read only so far as to know which tool it names and whether its arguments name the retired `plan`. */
+const toolCallSchema = Schema.Struct({
+  jsonrpc: Schema.Literal("2.0"),
+  id: Schema.Union([Schema.String, Schema.Number]),
+  method: Schema.Literal("tools/call"),
+  params: Schema.Struct({
+    name: Schema.String,
+    arguments: Schema.optionalKey(Schema.Struct({ plan: Schema.optionalKey(Schema.Unknown) })),
+  }),
+});
+
+/** The words a renamed call is refused in: what it is named now, and that nothing was done. */
+function renamedWords(params: (typeof toolCallSchema.Type)["params"]): string | undefined {
+  const { name } = params;
+  const renamed = RENAMED_MEMBER_MCP_TOOL.get(name);
+  if (renamed !== undefined) {
+    return `\`${name}\` was renamed \`${renamed}\`, and nothing was done: call \`${renamed}\` with the same input.`;
+  }
+  if (
+    name === MEMBER_MCP_TOOL.CREATE_TASK &&
+    params.arguments !== undefined &&
+    "plan" in params.arguments
+  ) {
+    return CREATE_TASK_REFUSAL.RENAMED_DESCRIPTION;
+  }
+  return undefined;
+}
+
+/**
+ * The answer to a call a client makes by a name since renamed, a tool's or
+ * `create_task`'s `plan`: the tool's own error naming what is called so now,
+ * where the SDK would answer an unknown tool or drop the field and make the
+ * task empty; nothing for any other request, which the SDK answers. Note
+ * that a client keeps the tools it was listed before the rename, and that
+ * the result names its kind, as 2026-07-28 asks of every result, which an
+ * earlier revision's client strips.
+ */
+const renamedToolAnswer = /* @__PURE__ */ Effect.fn("web/memberMcpRenamedTool")(function* (
+  request: Request,
+) {
+  const body = yield* Effect.promise(() =>
+    request
+      .clone()
+      .json()
+      .catch(() => undefined),
+  );
+  const call = Schema.decodeUnknownOption(toolCallSchema)(body);
+  if (Option.isNone(call)) return Option.none<Response>();
+  const { id, params } = call.value;
+  const text = renamedWords(params);
+  if (text === undefined) return Option.none<Response>();
+  return Option.some(
+    Response.json({
+      jsonrpc: "2.0",
+      id,
+      result: { resultType: "complete", content: [{ type: "text", text }], isError: true },
+    }),
+  );
+});
+
 /** The server: the request admitted on its token, then answered by the SDK's handler over a server of its own as the admitted member. */
 const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/memberMcpEndpoint")(function* (
   auth: MemberMcpAuth,
@@ -106,6 +168,8 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/memberMcpEndpoint")(function*
   // Note that the handler is built per request, because the tools run on
   // the services this request's fiber holds, which the SDK's factory is
   // handed nothing of; a handler holds nothing between requests besides.
+  const renamed = yield* renamedToolAnswer(request);
+  if (Option.isSome(renamed)) return HttpServerResponse.raw(renamed.value);
   const services = yield* Effect.context<MemberMcpRequestServices>();
   const handler = createMcpHandler(() => memberMcpServer(services, admitted.success));
   const answer = yield* Effect.promise(() => handler.fetch(request));

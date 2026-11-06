@@ -24,6 +24,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
+import { ADMIN_AWAY } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
@@ -211,6 +212,7 @@ async function mountPage(): Promise<{
       onOpenSettings: () => undefined,
       leaveGuard: useLeaveGuard(),
       room: SHELL_ROOM.WIDE,
+      adminView: ADMIN_AWAY,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE });
   }

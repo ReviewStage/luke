@@ -126,7 +126,7 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
     { ref: tab },
     createElement(AgentMessage, {
       message: TURN,
-      plan: false,
+      description: false,
       lead: AGENT_LEAD,
       moving: false,
       delegation: { models: [] },

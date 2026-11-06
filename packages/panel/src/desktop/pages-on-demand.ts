@@ -3,11 +3,11 @@ import { lazyRoute } from "../lazy-route.js";
 /**
  * pages-on-demand.ts -- the window's pages split off the bundle every window parses, each a chunk of its own read the first time it is drawn or hinted at.
  *
- * Settings and the Automations pages are split off where they are drawn
- * (`desktop-shell.tsx`); these are split here instead because a hover
+ * The Automations pages are split off where they are drawn
+ * (`desktop-shell.tsx`), and Settings and Admin are the router's lazy routes
+ * (`panel-router.tsx`); these are split here instead because a hover
  * elsewhere in the window reads them early (`lazy-route.ts`): the sidebar's
- * Tasks and Admin rows, a plan's Version history item, a person's card, and a Pull request tab's card. The Admin place's chunk
- * carries its charts, so an account that is no admin never reads it. Each is drawn under a `Suspense` whose fallback
+ * Tasks row, a plan's Version history item, a person's card, and a Pull request tab's card. Each is drawn under a `Suspense` whose fallback
  * is its own frame, which offers the page's way out as the page would.
  */
 
@@ -16,12 +16,7 @@ export const TASKS_ROUTE = lazyRoute(() =>
   import("./tasks-page.js").then((loaded) => loaded.TasksPage),
 );
 
-/** The Admin place, an admin's alone, over the whole window as Settings is (`desktop-admin.tsx`). */
-export const ADMIN_PLACE = lazyRoute(() =>
-  import("./desktop-admin.js").then((loaded) => loaded.DesktopAdmin),
-);
-
-/** The open plan's version history, over the whole window (`desktop-version-history.tsx`). */
+/** The open description's version history, over the whole window (`desktop-version-history.tsx`). */
 export const VERSION_HISTORY = lazyRoute(() =>
   import("./desktop-version-history.js").then((loaded) => loaded.TaskVersionHistory),
 );

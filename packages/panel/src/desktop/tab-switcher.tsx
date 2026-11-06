@@ -54,6 +54,7 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -74,6 +75,7 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { ROUTED_PLACE } from "../route-gates.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
@@ -173,6 +175,7 @@ function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined)
   if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
   if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
   if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, agent: undefined });
+  if (isLocalTab(tab)) return tabLook({ kind: TAB_KIND.LOCAL, agent: undefined });
   if (isCloudBrowserTab(tab)) {
     return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
   }
@@ -311,7 +314,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
   const { mainTabs, sidePanel, personView } = tasks;
   const column = mainTabs.tab;
   return shownStop({
-    over: tab === PANEL_TAB.SETTINGS || tasks.history.open,
+    over: tab === PANEL_TAB.SETTINGS || tasks.adminView.open || tasks.history.open,
     inbox: tasks.inboxView.open,
     agentId: tasks.agentView.agentId,
     person:
@@ -449,7 +452,7 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const title = stepTitle(tab, tasks);
+  const title = stepTitle(tab === PANEL_TAB.SETTINGS ? ROUTED_PLACE.SETTINGS : undefined, tasks);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;
@@ -479,9 +482,10 @@ export function TabSwitcher({
 
   // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave canceled moves nothing, the stops' order included.
   const go = (stop: Stop) => {
-    const { tasks: control, tab: shownTab, onTabChange: changeTab } = doors.current;
+    const { tasks: control, onTabChange: changeTab } = doors.current;
     control.leaveGuard.guard(() => {
-      if (shownTab !== PANEL_TAB.TASKS) changeTab(PANEL_TAB.TASKS);
+      // A routed place standing, Settings or Admin, is left for the stop.
+      changeTab(PANEL_TAB.TASKS);
       switch (stop.kind) {
         case STOP_KIND.TASK:
           showTask(control, stop);

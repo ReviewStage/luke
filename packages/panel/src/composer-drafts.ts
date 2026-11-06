@@ -9,8 +9,8 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@repo/features/inbox-wire";
-import { PLAN_COMMENT_SCOPE } from "@repo/features/plan-comment-wire";
-import { Duration, Effect, Equal, Schema } from "effect";
+import { DESCRIPTION_COMMENT_SCOPE } from "@repo/features/description-comment-wire";
+import { Duration, Effect, Equal, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
@@ -23,9 +23,9 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, a plan's comment its words per
+ * the task starts in, a description's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), a line comment in Files changed its words per
+ * (`description-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
  * (`edit-composer.tsx`), and an inbox card its answer
@@ -71,17 +71,34 @@ const MAX_KEPT = 200;
 /** How long the typing rests before what the window changed is written to storage. */
 const STORE_PAUSE = Duration.millis(300);
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a description's comment, a line comment on an agent's changed file, or an agent's line written again. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
-  PLAN_COMMENT: "planComment",
+  DESCRIPTION_COMMENT: "descriptionComment",
   LINE_COMMENT: "lineComment",
   EDIT: "edit",
 } as const;
+
+/** A description's comment's kind as storage holds it: today's, or `planComment`, which every draft kept before the description was named so holds, read as today's. */
+const descriptionCommentKind = Schema.Literals([
+  DRAFT_PLACE.DESCRIPTION_COMMENT,
+  "planComment",
+]).pipe(
+  Schema.decodeTo(
+    Schema.Literal(DRAFT_PLACE.DESCRIPTION_COMMENT),
+    SchemaTransformation.transform<
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT,
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT | "planComment"
+    >({
+      decode: () => DRAFT_PLACE.DESCRIPTION_COMMENT,
+      encode: (kind) => kind,
+    }),
+  ),
+);
 
 const draftPlaceSchema = Schema.Union([
   Schema.Struct({
@@ -125,7 +142,7 @@ const draftPlaceSchema = Schema.Union([
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.PLAN_COMMENT),
+    kind: descriptionCommentKind,
     /** The plan the comment is on, which the sidebar marks. */
     planId: Schema.String,
     /**
@@ -139,7 +156,7 @@ const draftPlaceSchema = Schema.Union([
       Schema.Struct({ threadId: Schema.String }),
       Schema.Struct({
         quote: Schema.String,
-        scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+        scope: Schema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
       }),
     ]),
   }),
@@ -287,8 +304,11 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
 
-/** A plan comment's place: a thread being started, answered, or one of its comments edited. */
-export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+/** A description comment's place: a thread being started, answered, or one of its comments edited. */
+export type DescriptionCommentPlace = Extract<
+  DraftPlace,
+  { kind: typeof DRAFT_PLACE.DESCRIPTION_COMMENT }
+>;
 
 /** A line comment in Files changed: the agent, the file, and the side and last line it stands under. */
 export type LineCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.LINE_COMMENT }>;
@@ -1184,7 +1204,7 @@ export function useDraftWriter(): DraftWriter {
 }
 
 /** Whether a plan holds a draft: one of its agents', its draft agent's, an inbox card's, or a comment's. */
-export function usePlanDrafted(taskId: string): boolean {
+export function useDescriptionDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
 

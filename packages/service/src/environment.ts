@@ -5,15 +5,20 @@ import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
 import { POSTHOG_ENVIRONMENT } from "./providers/posthog.js";
 
+/** The variable our own key for titles is read from, an Anthropic API key spent on every title and nothing else. */
+const TITLE_MODEL_ENVIRONMENT = {
+  ANTHROPIC_API_KEY: "TITLE_ANTHROPIC_API_KEY",
+} as const;
+
 /**
  * What the deployment's environment says about the hosted tier, read once as
  * the services are built rather than at each invocation's `process.env`.
  *
  * A blank value is dropped here rather than at the endpoints: an absent
  * value and a whitespace one both mean it is unset, so the endpoints see one
- * absence. The deployment holds no model provider key of its own: every
- * model call runs on the account's own key, sealed under
- * `providerKeyEncryptionKeys`.
+ * absence. The deployment holds one model provider key of its own, for
+ * titles alone (`titleAnthropicApiKey`); every other model call runs on the
+ * account's own key, sealed under `providerKeyEncryptionKeys`.
  */
 export interface HostedEnvironmentValues {
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
@@ -30,8 +35,10 @@ export interface HostedEnvironmentValues {
   readonly cronSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs our GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
-  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call unmade, since no key of ours stands in. */
+  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call on an account's key unmade, since no key of ours stands in. */
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
+  /** our own Anthropic API key, which every title is generated on (`agents/coder-host/model.ts`) and nothing else; absent names each from its first words, with no model. */
+  readonly titleAnthropicApiKey: Redacted.Redacted | undefined;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -80,6 +87,9 @@ export const hostedEnvironment = Layer.effect(
       providerKeyEncryptionKeys: Config.option(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
       ),
+      titleAnthropicApiKey: Config.option(
+        Config.Redacted(TITLE_MODEL_ENVIRONMENT.ANTHROPIC_API_KEY),
+      ),
     }),
     (read) => {
       const cronSecret = presentRedacted(read.cronSecret);
@@ -92,6 +102,7 @@ export const hostedEnvironment = Layer.effect(
         cronSecret,
         githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
         providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
+        titleAnthropicApiKey: presentRedacted(read.titleAnthropicApiKey),
       };
       return Effect.succeed(values);
     },

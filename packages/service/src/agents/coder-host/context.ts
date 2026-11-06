@@ -15,7 +15,7 @@ import { CODER } from "./bounds.js";
  * window less what it holds back, or for Codex and eve the share eve was
  * told (`bounds.ts`). The brief's estimate is told only while the harness
  * has never compacted the conversation, because a compaction's summary may
- * have folded the plan or task in with the rest. Nothing here reaches eve,
+ * have folded the description or task in with the rest. Nothing here reaches eve,
  * since the routes read it.
  */
 

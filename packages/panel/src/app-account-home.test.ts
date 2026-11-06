@@ -7,10 +7,9 @@ import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { App } from "./app.js";
 import { runAppCommand } from "./app-commands.js";
 // Note that Settings is loaded as the window loads it, on first use
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
@@ -119,9 +118,7 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
   await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() =>
-    root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
-  );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   await settle();

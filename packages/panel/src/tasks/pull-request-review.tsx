@@ -36,7 +36,7 @@ import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-wri
  *
  * The panel asks what the review says of the pull request, Comment,
  * Approve, or Request changes, and its optional words, written as
- * Markdown on the plan's editor (`comment-editor.tsx`), and sends both as one change
+ * Markdown on the description's editor (`comment-editor.tsx`), and sends both as one change
  * (`PULL_REQUEST_ACTION.SUBMIT_REVIEW`), which the service submits on
  * GitHub as the member pressing it: their own pending review where they
  * hold one, else a new one (`pull-request-writes.ts`). Nothing is refused

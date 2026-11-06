@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@repo/database/testing";
@@ -171,7 +171,7 @@ it.layer(getTestDB())("a page framed on the web", (it) => {
           yield* createAgent(starter, {
             taskId: null,
             organizationId: task.workspaceId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: "Chart the funnel",
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",

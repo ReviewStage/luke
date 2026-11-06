@@ -17,7 +17,7 @@ import { CommentEditor } from "./comment-editor.js";
 
 /**
  * comment-editor.test.ts -- the box a member writes GitHub Markdown in, on
- * the plan's editor, as its owner meets it: the words formatted by the
+ * the description's editor, as its owner meets it: the words formatted by the
  * writing chords and handed over as Markdown, ⌘↩ and Esc the owner's, a
  * menu's Esc the box's alone, a comment opened again handed back byte for
  * byte, `@user` and `#123` kept as GitHub reads them, and words past

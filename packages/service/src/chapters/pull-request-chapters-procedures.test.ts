@@ -94,6 +94,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 };
 
 /** The one file the pull request changes, one hunk starting at old line 1. */
@@ -222,7 +223,7 @@ const standing = (
     const agent = Option.getOrThrow(
       yield* createAgent(owner, {
         taskId: task.id,
-        planSnapshot: "# Invitations",
+        descriptionSnapshot: "# Invitations",
         prompt: null,
         idempotencyKey: randomUUID(),
         model: AGENT_DEFAULT_CHOICE.model,

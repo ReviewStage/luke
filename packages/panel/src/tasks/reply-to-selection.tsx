@@ -16,7 +16,7 @@ import {
 import { createPortal } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
-import type { ComposerQuote } from "../plan-editor/contract.js";
+import type { ComposerQuote } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 
 /**

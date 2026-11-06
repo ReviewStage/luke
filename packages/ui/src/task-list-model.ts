@@ -129,7 +129,7 @@ function taskRowCreatorId(row: TaskRow): string | undefined {
 
 /**
  * The time a row shows and is ordered by: when it was started under
- * Created, else when it last saw activity, the later of its plan's last save
+ * Created, else when it last saw activity, the later of its description's last save
  * and its agents' last settled activity (`agents.activityAt`: one started,
  * or a turn ended), so a task an agent worked through stands with the tasks
  * worked on lately, as "last activity" does in Linear and Cursor. Neither

@@ -242,7 +242,7 @@ function AgentPageBar({
   trail: readonly ToolbarPlace[] | undefined;
   /** What stands before the ⋯: the arrows through its automation's runs, an automation's agent's alone. */
   steps: React.ReactNode;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
   /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
@@ -544,7 +544,7 @@ export function DesktopAgentPage({
     }
     if (target.kind === TOOL_TARGET.TASK) openPlace?.(placeOfTaskTarget(target));
     // Its plan's card names its task, an archived agent's among them, whose press opens the plan.
-    if (target.kind === TOOL_TARGET.PLAN && planId !== null) {
+    if (target.kind === TOOL_TARGET.DESCRIPTION && planId !== null) {
       openPlace?.({ kind: LINK_PLACE.TASK, planId });
     }
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.

@@ -2,7 +2,7 @@
 
 import { MOTION_DELAY_MS } from "@repo/brand";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -10,7 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
@@ -28,7 +28,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  * the list's foot says how many and reads the next page on its press, or says
  * the read failed and offers Retry; and the Back row at the list's head goes
  * back, its hint, raised by the keyboard's focus, saying where it leads.
- * Synthetic plan and people.
+ * Synthetic description and people.
  */
 
 declare global {
@@ -47,12 +47,12 @@ const ACME = {
   github: null,
 };
 
-/** A revision of the plan by Lee. */
+/** A revision of the description by Lee. */
 function line(seq: number) {
   return {
     seq,
     lastEdit: {
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       by: { userId: "user-lee", name: "Lee Park" },
       at: 10 * seq,
       duringCall: false,
@@ -78,7 +78,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
+/** The description's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
 function drawn(
   chosen: number[],
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},

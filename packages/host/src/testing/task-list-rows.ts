@@ -37,7 +37,7 @@ export function agentListRow(planId: string | null, createdAt: number): AgentRow
     effort: "high",
     contextWindow: null,
     title: "Invite flow",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     repository: "acme/relay",
     starterId: "user-dana",
     starterName: "Dana",

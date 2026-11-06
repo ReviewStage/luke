@@ -91,7 +91,7 @@ import { usageOfTurns } from "./usage.js";
 /**
  * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
  *
- * The transcript is the conversation's own `messages` rows: the plan the
+ * The transcript is the conversation's own `messages` rows: the description the
  * agent was handed, each turn's journal as the relay writes it, which
  * grows in place while the turn runs and is replaced by the finished answer
  * when it ends, and the lines said on calls into the agent before calls were

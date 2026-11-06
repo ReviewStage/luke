@@ -151,7 +151,7 @@ const UNANSWERED_LINE = failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNAN
 
 /** The glyph each of a row's acts leads with. */
 const ACTION_ICON = {
-  [SKILL_ACTION.VIEW]: <GLYPH.PLAN />,
+  [SKILL_ACTION.VIEW]: <GLYPH.DESCRIPTION />,
   [SKILL_ACTION.REMOVE]: <TrashIcon />,
 } as const satisfies Record<SkillAction, React.JSX.Element>;
 

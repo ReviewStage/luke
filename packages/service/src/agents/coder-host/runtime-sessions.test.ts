@@ -234,6 +234,7 @@ function environment(): Layer.Layer<HostedEnvironment> {
     cronSecret: undefined,
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(RING),
+    titleAnthropicApiKey: undefined,
   };
   return Layer.succeed(HostedEnvironment, values);
 }
@@ -259,7 +260,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" |
       idempotencyKey: randomUUID(),
       model: runtime === "codex" ? "openai/gpt-5.5" : "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       runtime,
@@ -445,7 +446,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 idempotencyKey: randomUUID(),
                 model: "anthropic/claude-opus-5.5",
                 effort: "high",
-                planSnapshot: "# Invitations\n",
+                descriptionSnapshot: "# Invitations\n",
                 prompt: null,
                 repository: null,
                 runtime,
@@ -1315,7 +1316,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start handed words or the plan on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
+      "a Start handed words or the description on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1326,9 +1327,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           });
           const { native } = runtimes();
           const words = startOn(task.id, "anthropic/claude-opus-5.5");
-          const plan = { ...startOn(task.id, "anthropic/claude-opus-5.5"), prompt: undefined };
+          const description = {
+            ...startOn(task.id, "anthropic/claude-opus-5.5"),
+            prompt: undefined,
+          };
 
-          for (const ask of [words, plan]) {
+          for (const ask of [words, description]) {
             const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
               Effect.provide(Layer.mergeAll(CATALOG, environment(), native)),
               Effect.result,

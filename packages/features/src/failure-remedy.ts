@@ -18,7 +18,7 @@ export const FAILURE_REASON = {
   /** The repository is not one the workspace can reach at all: the task names another. */
   CHOOSE_REPOSITORY: "choose-repository",
   /** The repository's owner is connected to another workspace of the account's: the task moves there. */
-  MOVE_TASK: "move-plan",
+  MOVE_TASK: "move-description",
   /** GitHub refused the member's own token: Settings › Profile replaces it. */
   GITHUB_TOKEN: "github-token",
   /** The member's own token is not authorized for an organization's SAML SSO: GitHub's own page authorizes it. */

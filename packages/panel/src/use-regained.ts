@@ -3,7 +3,7 @@
  *
  * The host asks every read it holds again as the connection comes back
  * (`TASKS_REGAINED`); a read a surface asked itself, as a pull request's
- * files or a plan's older version are, is the surface's to ask again, which
+ * files or a description's older version are, is the surface's to ask again, which
  * it does here, where its last ask failed and it is still shown.
  */
 

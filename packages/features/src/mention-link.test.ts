@@ -479,7 +479,7 @@ test("a link in an indented code block, or in a code span across lines, is code"
   );
 });
 
-test("a whole plan is read for every mention it holds, past a message's twenty", () => {
+test("a whole description is read for every mention it holds, past a message's twenty", () => {
   const words = Array.from({ length: 25 }, (_, at) => `[@f${at}](luke://file/f${at}.ts)`).join(" ");
 
   assert.equal(mentionsIn(words, null, Number.POSITIVE_INFINITY).length, 25);

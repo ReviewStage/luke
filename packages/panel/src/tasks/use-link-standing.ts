@@ -40,7 +40,7 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
  * chip in a workspace without it asks nothing. Until it first answers, or
  * where it never does, a repository the App does not reach among them, the
  * chip says what the address says, as it always has. A chip drawn again, as a
- * plan's text is when a section opens in its editor and when it closes, says
+ * description's text is when a section opens in its editor and when it closes, says
  * the last answer at once while the host asks again, rather than its address
  * until the read lands; and an answer is drawn only while that workspace
  * still has the App, so a workspace that disconnects stops drawing it. A

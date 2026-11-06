@@ -33,7 +33,7 @@ function message(
   };
 }
 
-/** The plan, two answered lines, and a line a turn took in while it ran. */
+/** The description, two answered lines, and a line a turn took in while it ran. */
 const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
   message("plan", MESSAGE_ROLE.USER),
   message("first-reply", MESSAGE_ROLE.ASSISTANT),

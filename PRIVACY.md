@@ -198,11 +198,15 @@ We do not use your code or conversations to train AI models.
 We do not sell your personal information or use it for advertising. We share
 data with:
 
-- **AI providers:** your agents, web search, dictation, titles, and pull
-  request chapters run on Anthropic or OpenAI, always on the API key or
-  subscription you saved, never ours. Each call carries what the model needs,
-  such as the description, the conversation, attached files, and what the agent read.
-  These providers process it under their own policies.
+- **AI providers:** your agents, web search, dictation, and pull request
+  chapters run on Anthropic or OpenAI, always on the API key or subscription
+  you saved, never ours. Titles, of your agents, tasks, and the threads you
+  start, are generated on Anthropic under Vespin's own API key, from excerpts
+  of an agent's opening message, your latest message, and its latest answer,
+  or of a thread's first message.
+  Each call carries what the model needs, such as the description, the conversation,
+  attached files, and what the agent read. These providers process it under
+  their own policies.
 - **GitHub:** to check out repositories, push branches, and open pull requests
   through the Vespin GitHub App. Your devices also contact GitHub directly to
   check for updates and load avatars.

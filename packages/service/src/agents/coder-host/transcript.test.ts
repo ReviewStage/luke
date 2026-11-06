@@ -54,7 +54,7 @@ it.layer(getTestDB())("a coding agent's transcript", (it) => {
         const started = yield* createAgent(owner, {
           taskId: null,
           organizationId: yield* openWorkspace(owner),
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Answer the open asks.",
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",

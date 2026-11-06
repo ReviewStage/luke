@@ -104,6 +104,7 @@ import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   acknowledgedNow,
   answeredNow,
+  asksOpen,
   closedNow,
   type InboxReader,
 } from "@repo/features/inbox-writes";
@@ -1112,9 +1113,13 @@ function composed(
   /** A nod to an item, settling it. */
   const nodded = inboxWrite<AgentInboxAnswerParams, AgentInboxAnsweredView>(
     ({ itemId }) => [itemId],
-    ({ itemId }) => {
+    ({ itemId, revision }) => {
       const [by, at] = [reader(), kernel.now()];
-      return { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => acknowledgedNow(item, by, at) };
+      return {
+        kind: INBOX_CHANGE.SETTLED,
+        itemId,
+        item: (item) => (item.revision === revision ? acknowledgedNow(item, by, at) : undefined),
+      };
     },
     ({ itemId, ...request }, key) => asked(client.answerInbox(itemId, request, key)),
     {
@@ -1126,9 +1131,13 @@ function composed(
   /** An open item closed without an answer, settling it. */
   const closed = inboxWrite<AgentInboxCloseParams, AgentInboxAnsweredView>(
     ({ itemId }) => [itemId],
-    ({ itemId }) => {
+    ({ itemId, revision }) => {
       const [by, at] = [reader(), kernel.now()];
-      return { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => closedNow(item, by, at) };
+      return {
+        kind: INBOX_CHANGE.SETTLED,
+        itemId,
+        item: (item) => (item.revision === revision ? closedNow(item, by, at) : undefined),
+      };
     },
     ({ itemId, ...request }, key) => asked(client.closeInbox(itemId, request, key)),
     {
@@ -1139,8 +1148,11 @@ function composed(
   );
   /**
    * A message on an item's thread. Note that a reply carrying an answer
-   * settles the ask, where a plain one only leaves the item read, its words
-   * drawn by the window's own box while they go.
+   * settles the ask while it stands open, where a plain one only leaves the
+   * item read, its words drawn by the window's own box while they go. An
+   * item whose ask the service has answered already, as one the agent has
+   * posted over since and so opened again, is left as it is, or the reply
+   * would be drawn a second time under its key below the agent's post.
    */
   const messaged = inboxWrite<AgentInboxMessageParams, AgentInboxMessagedView>(
     ({ itemId }) => [itemId],
@@ -1152,7 +1164,10 @@ function composed(
       return {
         kind: INBOX_CHANGE.SETTLED,
         itemId,
-        item: (item) => answeredNow(item, { key, text, answers }, by, at),
+        item: (item) =>
+          asksOpen(item, answers.ask)
+            ? answeredNow(item, { key, text, answers }, by, at)
+            : undefined,
       };
     },
     ({ itemId, ...request }) => asked(client.messageInbox(itemId, request)),

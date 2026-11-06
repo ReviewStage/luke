@@ -88,6 +88,12 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
+  | {
+      readonly kind: typeof TAB_KIND.LOCAL;
+      /** The agent whose mirror its shells stand in. */
+      readonly subject: AgentSubject;
+      readonly models: readonly CatalogModel[] | undefined;
+    }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | {
       readonly kind: typeof TAB_KIND.PAGE;
@@ -153,7 +159,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 /** A fixed tab's card: the Plan tab's its task's; the panel's other kinds hang none, their names saying all there is. */
 function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }>) {
   switch (subject.tab) {
-    case SIDE_PANEL_TAB.PLAN:
+    case SIDE_PANEL_TAB.DESCRIPTION:
       return subject.plan === undefined ? null : (
         <PlanCard taskId={subject.plan.taskId} standing={subject.plan.standing} />
       );
@@ -178,7 +184,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         <PlanCard
           taskId={subject.taskId}
           standing={{
-            name: subject.name ?? SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.PLAN].label,
+            name: subject.name ?? SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.DESCRIPTION].label,
             status: subject.status,
           }}
         />
@@ -233,6 +239,9 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
           }}
         />
       );
+    // A Local tab hangs its agent's card.
+    case TAB_KIND.LOCAL:
+      return <AgentCard subject={subject.subject} models={subject.models} />;
     case TAB_KIND.FILE:
       return <FileCard path={subject.path} />;
     case TAB_KIND.PAGE:

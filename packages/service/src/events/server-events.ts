@@ -55,7 +55,7 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./ev
  * No workspace is ever deleted, and PostHog's API deletes no single group,
  * so a group, once named, stays in PostHog as its workspace stays here.
  *
- * What it counts of a team is the member's own act: a thread post or a plan
+ * What it counts of a team is the member's own act: a thread post or a description
  * edit or comment an agent made, through its own tools, is left out rather
  * than counted under the member who started the agent, so a count of posts is
  * a count of people talking, and an agent's work is the agent events'.
@@ -94,8 +94,8 @@ export const SERVER_EVENT = {
   WORKSPACE_INVITE_SEND: "workspace:invite_send",
   WORKSPACE_INVITE_ACCEPT: "workspace:invite_accept",
   THREAD_POST: "thread:post",
-  PLAN_EDIT: "plan:edit",
-  PLAN_COMMENT: "plan:comment",
+  DESCRIPTION_EDIT: "description:edit",
+  DESCRIPTION_COMMENT: "description:comment",
   AUTOMATION_RUN_START: "automation:run_start",
   GITHUB_APP_INSTALL: "github:app_install",
   HOST_INSTALL: "host:install",
@@ -137,7 +137,7 @@ export const SERVER_AUTOMATION_SOURCE = {
   AGENT: SERVER_AGENT_STARTER.AGENT,
 } as const;
 
-/** How a coding agent began: fresh on a plan or a prompt, or carried on from another agent. */
+/** How a coding agent began: fresh on a description or a prompt, or carried on from another agent. */
 export const SERVER_AGENT_START_KIND = {
   FRESH: "fresh",
   FORK: "fork",
@@ -320,7 +320,7 @@ export const SERVER_AGENT_TOOL = {
   BROWSER: "browser",
   BROWSER_TAKEOVER: "browser_takeover",
   BROWSER_HANDBACK: "browser_handback",
-  ADD_TO_PLAN: "add_to_plan",
+  ADD_TO_DESCRIPTION: "add_to_description",
 } as const;
 
 type Values<T> = T[keyof T];
@@ -409,9 +409,9 @@ export interface ServerEventProperties {
   [SERVER_EVENT.WORKSPACE_INVITE_ACCEPT]: Record<string, never>;
   /** A member's post alone: whether it carried the answer to the thread's open ask, and whether it held a picture or a file. */
   [SERVER_EVENT.THREAD_POST]: { answered_ask: boolean; has_media: boolean };
-  [SERVER_EVENT.PLAN_EDIT]: Record<string, never>;
+  [SERVER_EVENT.DESCRIPTION_EDIT]: Record<string, never>;
   /** A member's comment alone: whether it replied on a thread, or started one. */
-  [SERVER_EVENT.PLAN_COMMENT]: { is_reply: boolean };
+  [SERVER_EVENT.DESCRIPTION_COMMENT]: { is_reply: boolean };
   /** Attributed to the automation's owner, whoever or whatever fired the run. */
   [SERVER_EVENT.AUTOMATION_RUN_START]: { trigger_kind: AutomationFiringKind };
   [SERVER_EVENT.GITHUB_APP_INSTALL]: Record<string, never>;

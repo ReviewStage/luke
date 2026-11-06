@@ -7,18 +7,19 @@ import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
-import { act, createElement } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach } from "vitest";
-import { App } from "./app.js";
 // Note that the places are loaded as the window loads them, on first use
-// (`pages-on-demand.ts`), so each module is read here first and its load
+// (`pages-on-demand.ts`, and the router's lazy routes), so each module is read here first and its load
 // settles within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/automations-page.js";
-import "./desktop/desktop-admin.js";
-import "./desktop/desktop-settings.js";
+import "./desktop/admin-route.lazy.js";
+import "./desktop/settings-route.lazy.js";
 import "./desktop/person-page.js";
+import { runAppCommand } from "./app-commands.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
@@ -116,9 +117,7 @@ function drawWindow(profile: string): Effect.Effect<void> {
     // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
     writeAppState(state);
     root = createRoot(document.body.appendChild(document.createElement("div")));
-    act(() =>
-      root?.render(windowRouter().provide(onRegistry(rendererRegistry, createElement(App)))),
-    );
+    act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
     yield* Effect.promise(settle);
   });
 }
@@ -213,5 +212,38 @@ it.effect(
       assert.match(drawn(), /Assigned to you/u);
       assert.match(drawn(), /Needs you/u);
       assert.doesNotMatch(drawn(), /Waiting on their answer/u);
+    }),
+);
+
+/** Types `words` into `input` as a reader does, through the prototype's setter, which React reads a change by. */
+function typeInto(input: HTMLInputElement | null, words: string): void {
+  assert.ok(input, "the field is drawn");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(input, words);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+it.effect(
+  "a Settings page chosen from ⌘K over an automation's unsaved edit asks first, and Settings waits on the answer",
+  () =>
+    Effect.gen(function* () {
+      yield* drawWindow(RUN_PROFILE.AUTOMATIONS_EDITOR);
+      typeInto(document.querySelector("input[aria-label='Automation name']"), "Sweep anew");
+      act(() => {
+        assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+      });
+      typeInto(document.querySelector('[role="dialog"] input[role="combobox"]'), "appearance");
+      const field = document.querySelector('[role="dialog"] input[role="combobox"]');
+      act(() => {
+        field?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+      });
+      yield* Effect.promise(settle);
+
+      assert.match(drawn(), /Leave with unsaved changes\?/u);
+      assert.equal(document.querySelector(".desktop-settings"), null, "Settings waits on the ask");
     }),
 );

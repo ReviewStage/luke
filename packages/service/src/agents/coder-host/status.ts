@@ -84,7 +84,7 @@ export interface AgentStanding {
   readonly now: number;
   /** When the newest message of the developer's standing in the transcript with no turn yet was written; none where none stands or unsaid. */
   readonly awaitingLineAt?: Date | undefined;
-  /** Whether the agent was started blank, handed neither the plan nor a prompt, so no first turn is on its way; unsaid reads as not. */
+  /** Whether the agent was started blank, handed neither the description nor a prompt, so no first turn is on its way; unsaid reads as not. */
   readonly blank?: boolean | undefined;
 }
 

@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
 
+import { FAILURE_FACT } from "@repo/features/failure-facts";
+import {
+  FAILURE_KIND,
+  FAILURE_SURFACE,
+  type ShownFailureSentry,
+  sendShownFailure,
+} from "@repo/features/shown-failure";
 import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-query";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -8,9 +15,11 @@ import {
   PICTURE_STATE,
   type PictureAnswer,
   type PictureState,
+  type PictureUnread,
   readPicture,
   usePicture,
 } from "./picture-read.js";
+import type { ReportedFailure } from "./reported-failure.js";
 import { recordedFailure } from "./testing/reported-failure.js";
 
 /**
@@ -36,6 +45,7 @@ afterEach(() => {
 async function drawPicture(
   id: string,
   read: () => Promise<PictureAnswer>,
+  failed: (unread: PictureUnread) => ReportedFailure = FAILED,
 ): Promise<{ readonly now: () => PictureState }> {
   let drawn: PictureState = { kind: PICTURE_STATE.READING };
   const query = queryOptions({
@@ -44,7 +54,7 @@ async function drawPicture(
     retry: false,
   });
   function Picture(): null {
-    drawn = usePicture(query, FAILED);
+    drawn = usePicture(query, failed);
     return null;
   }
   const client = new QueryClient();
@@ -89,4 +99,45 @@ test("a failure the read answers draws as failed, and a picture gone draws as mi
     expect(refused.now().kind).toBe(PICTURE_STATE.FAILED);
     expect(gone.now()).toEqual({ kind: PICTURE_STATE.MISSING });
   });
+});
+
+test("a read whose call never reached the service is reported as the network's failure, opening no issue", async () => {
+  const unreads: PictureUnread[] = [];
+  const unreached = await drawPicture(
+    "a",
+    () =>
+      Promise.resolve({
+        failure: "unanswered",
+        // The fault the account call names a request the network dropped under.
+        cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: "network" },
+      }),
+    (unread) => {
+      unreads.push(unread);
+      return UNREAD;
+    },
+  );
+  await vi.waitFor(() => expect(unreached.now().kind).toBe(PICTURE_STATE.FAILED));
+
+  const issues: Error[] = [];
+  const sentry: ShownFailureSentry = {
+    captureException: (error) => {
+      issues.push(error);
+      return "event-fixture";
+    },
+    logger: { warn: () => undefined, error: () => undefined },
+    getActiveSpan: () => undefined,
+    getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: "trace-fixture" }) }),
+  };
+  for (const unread of unreads) {
+    sendShownFailure(sentry, {
+      surface: FAILURE_SURFACE.PICTURE_READ,
+      kind: FAILURE_KIND.UNEXPECTED,
+      cause: unread,
+      about: {},
+      state: { online: true, account: "signed-in" },
+    });
+  }
+
+  expect(unreads.length).toBeGreaterThan(0);
+  expect(issues).toEqual([]);
 });

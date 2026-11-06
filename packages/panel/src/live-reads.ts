@@ -137,7 +137,7 @@ type LiveFollow = (
 /** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
 export type CommentSubject = TasksCommentsFollow;
 
-/** The comments a follow holds, as its query carries them on `meta`; its factory puts one there (`planCommentsQuery`), so it always reads. */
+/** The comments a follow holds, as its query carries them on `meta`; its factory puts one there (`descriptionCommentsQuery`), so it always reads. */
 const readCommentSubject = Schema.decodeUnknownSync(tasksCommentsFollowSchema);
 
 /** The pull request a key of one of its parts names: the agent, and its number where the key names one rather than the agent's own. */
@@ -214,9 +214,9 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
       ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
       kind === BROWSER_TABS_PLACE.TASK ? { taskId: String(id) } : { agentId: String(id) },
     ),
-  [LIVE_READ.PLAN_DOCUMENT]: ([taskId = ""]) =>
+  [LIVE_READ.DESCRIPTION_DOCUMENT]: ([taskId = ""]) =>
     askAct(ACT_KIND.TASKS_DOCUMENT_FOLLOW, { taskId: String(taskId) }),
-  [LIVE_READ.PLAN_COMMENTS]: (_ids, meta) =>
+  [LIVE_READ.DESCRIPTION_COMMENTS]: (_ids, meta) =>
     askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, readCommentSubject(meta?.follow)),
   [LIVE_READ.PULL_REQUEST]: pullRequestPartFollow(PULL_REQUEST_PART.PULL_REQUEST),
   [LIVE_READ.PULL_REQUEST_CHECKS]: pullRequestPartFollow(PULL_REQUEST_PART.CHECKS),
@@ -304,8 +304,8 @@ const LIVE_QUERY_READS = [
   LIVE_READ.LINK_STANDINGS,
   LIVE_READ.PAGES,
   LIVE_READ.BROWSER_TABS,
-  LIVE_READ.PLAN_DOCUMENT,
-  LIVE_READ.PLAN_COMMENTS,
+  LIVE_READ.DESCRIPTION_DOCUMENT,
+  LIVE_READ.DESCRIPTION_COMMENTS,
   LIVE_READ.PULL_REQUEST,
   LIVE_READ.PULL_REQUEST_CHECKS,
   LIVE_READ.PULL_REQUEST_CONVERSATION,
@@ -554,8 +554,8 @@ export const browserTabsQuery = (place: BrowserTabsPlace | undefined) =>
   );
 
 /** One task's plan, by the task, which the window's open task holds. */
-export const planDocumentQuery = (taskId: string | undefined) =>
-  liveReadQuery(LIVE_READ.PLAN_DOCUMENT, taskId === undefined ? undefined : [taskId]);
+export const descriptionDocumentQuery = (taskId: string | undefined) =>
+  liveReadQuery(LIVE_READ.DESCRIPTION_DOCUMENT, taskId === undefined ? undefined : [taskId]);
 
 /** The comments a surface holds, as the acts name them, with no page key where it reads the plan's. */
 function commentsFollowOf({ taskId, pageId }: CommentSubject): CommentSubject {
@@ -563,13 +563,13 @@ function commentsFollowOf({ taskId, pageId }: CommentSubject): CommentSubject {
 }
 
 /** One plan's comments, or one of its task's pages', by the subject; the follow's subject rides on `meta`, since a page's key names no task. */
-export const planCommentsQuery = (subject: CommentSubject | undefined) =>
+export const descriptionCommentsQuery = (subject: CommentSubject | undefined) =>
   liveReadQuery(
-    LIVE_READ.PLAN_COMMENTS,
+    LIVE_READ.DESCRIPTION_COMMENTS,
     subject === undefined
       ? undefined
       : subject.pageId === undefined
-        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        ? [COMMENT_SUBJECT.DESCRIPTION, subject.taskId]
         : [COMMENT_SUBJECT.PAGE, subject.pageId],
     subject === undefined ? undefined : { follow: commentsFollowOf(subject) },
   );
@@ -705,10 +705,10 @@ export const inboxItemsRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_I
 /** Try again on one holder's own inbox. */
 export const holderInboxRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_RETRY);
 /** Try again on a plan's or a page's comments, by the subject. */
-export const planCommentsRetryMutation = () => actMutation(ACT_KIND.TASKS_COMMENTS_RETRY);
+export const descriptionCommentsRetryMutation = () => actMutation(ACT_KIND.TASKS_COMMENTS_RETRY);
 
 /** Try again on a task's plan. */
-export const planDocumentRetryMutation = () => actMutation(ACT_KIND.TASKS_DOCUMENT_RETRY);
+export const descriptionDocumentRetryMutation = () => actMutation(ACT_KIND.TASKS_DOCUMENT_RETRY);
 
 /** Try again on one part of a pull request, named by its part, its agent, and its number, which answers once its ask has landed, so a write's read-back can wait on it. */
 export const pullRequestPartRetryMutation = () =>

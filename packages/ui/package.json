@@ -54,7 +54,7 @@
     "./error-boundary": "./src/components/error-boundary/error-boundary.js",
     "./use-state-with-ref": "./src/use-state-with-ref.js",
     "./use-inline-rename": "./src/use-inline-rename.js",
-    "./plan-comments": "./src/plan-comments.js",
+    "./description-comments": "./src/description-comments.js",
     "./use-disclosure": "./src/use-disclosure.js",
     "./testing/held-exits": "./src/testing/held-exits.js",
     "./testing/reported-failure": "./src/testing/reported-failure.js",

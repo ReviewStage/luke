@@ -10,7 +10,7 @@ import { opensAsLink } from "./tasks/use-open-link.js";
  * (`tasks/mention-chip.tsx`) before it ever reaches here; what is left
  * is a page the window has no chip for. Both Markdown renderers draw it
  * through this one element, a transcript's (`tasks/transcript-blocks.tsx`)
- * and a plan's (`markdown-message.tsx`), and the plan's editor gives its
+ * and a description's (`markdown-message.tsx`), and the description's editor gives its
  * link mark the same classes, so a link reads alike wherever it is written.
  * Where words are their own address (`@repo/ui/link-face`), they say it as
  * a reader names a page. Note that it wears no ↗, because every link that

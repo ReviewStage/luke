@@ -1362,7 +1362,7 @@ it.effect(
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Sweep the flaky tests.",
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });

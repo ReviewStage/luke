@@ -51,7 +51,7 @@ const AT_REST: AgentSummary = {
   createdAt: 1,
   status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.DESCRIPTION,
 };
 
 /** The same agent on Studio. */

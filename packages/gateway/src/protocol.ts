@@ -87,9 +87,9 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
   TASKS_FIND: "tasks.find",
-  /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
+  /** A page of one description's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
-  /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
+  /** One revision of one description beside the one before it, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   TASKS_PAGE: "tasks.page",
@@ -104,19 +104,19 @@ export const GATEWAY_METHOD = {
   /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
   /**
-   * One task's plan held for a window from now until it is let go, and a
+   * One task's description held for a window from now until it is let go, and a
    * while after among those let go lately: the task's record followed over
-   * the service's held poll, and its plan read again whenever its mark moves
-   * past the copy held. What it holds is heard as `PLAN_DOCUMENTS_CHANGED`
+   * the service's held poll, and its description read again whenever its mark moves
+   * past the copy held. What it holds is heard as `DESCRIPTION_DOCUMENTS_CHANGED`
    * events, on the app state every window draws, never answered.
    */
   TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
-  /** One task's plan let go by the window that held it: it stays among those let go lately until later ones push it out. */
+  /** One task's description let go by the window that held it: it stays among those let go lately until later ones push it out. */
   TASKS_DOCUMENT_UNFOLLOW: "tasks.documentUnfollow",
-  /** One task's held plan read again at once, as Try again asks; never answered. */
+  /** One task's held description read again at once, as Try again asks; never answered. */
   TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
-   * One task's plan history held for a window's version history from now
+   * One task's description history held for a window's version history from now
    * until it is let go, and a while after among those let go lately: its
    * newest page followed over the service's held poll, and the older pages
    * read past it laid after it. What it holds is heard as
@@ -139,27 +139,27 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** One task's or agent's Browser tabs let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
-  /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
+  /** One picture of one description, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
-  /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
+  /** One picture kept on one description on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * One task's comments, its plan's own threads or one page's, held followed
+   * One task's comments, its description's own threads or one page's, held followed
    * for a window from now until it is let go, over Neon Realtime, and a
-   * while after among those let go lately: the open task's plan's, or a page
-   * tab's. What they hold is heard as `PLAN_COMMENTS_CHANGED` events, on the
+   * while after among those let go lately: the open task's description's, or a page
+   * tab's. What they hold is heard as `DESCRIPTION_COMMENTS_CHANGED` events, on the
    * app state every window draws, never answered.
    */
   TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
-  /** One task's plan's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  /** One task's description's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
-  /** One held plan's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
+  /** One held description's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
   TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
-  /** A comment thread started on one task's plan, answered with the thread as it stands. */
+  /** A comment thread started on one task's description, answered with the thread as it stands. */
   TASKS_COMMENT_START: "tasks.commentStart",
-  /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
+  /** One thing done to one comment thread of one task's description, answered with the thread as it stands. */
   TASKS_COMMENT_ACT: "tasks.commentAct",
-  /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
+  /** One revision of one description put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
@@ -782,11 +782,11 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_CLOSED: "browserLive.closed",
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
-  /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
-  PLAN_COMMENTS_CHANGED: "planComments.changed",
-  /** Every task's plan the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
-  PLAN_DOCUMENTS_CHANGED: "planDocuments.changed",
-  /** Every task's plan history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  /** Every description's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
+  DESCRIPTION_COMMENTS_CHANGED: "descriptionComments.changed",
+  /** Every task's description the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
+  DESCRIPTION_DOCUMENTS_CHANGED: "descriptionDocuments.changed",
+  /** Every task's description history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HISTORIES_CHANGED: "histories.changed",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",

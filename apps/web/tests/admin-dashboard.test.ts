@@ -70,7 +70,7 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
         {
           day: "2026-10-17",
           [ACTIVITY_FEATURE.AGENTS_STARTED]: 4,
-          [ACTIVITY_FEATURE.PLAN_REVISIONS]: 3,
+          [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: 3,
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: 1,
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: 1,
         },

@@ -206,6 +206,7 @@ import { cardTitle } from "../tasks/tool-call-model.js";
 import { type AgentsControl, type HeldPeople, readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
+import { useOpenLocal } from "../tasks/use-local-session.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
@@ -936,6 +937,7 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 /** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
+  readonly onNewLocal: ((agentId: string) => void) | undefined;
 }
 
 /**
@@ -997,6 +999,7 @@ function agentRows(
         agents: tasks.agents,
         pages,
         onNewTerminal: doors.onNewTerminal,
+        onNewLocal: doors.onNewLocal,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
         cards: {
@@ -1015,7 +1018,10 @@ function agentRows(
   const entries: readonly AddEntry[] = [...inbox, ...agents, ...places];
   const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
     // Note that a terminal's row is named by its agent, as under the "+"'s Terminal heading, which ⌘K draws none of, so the row says it.
-    const heading = row.section === ADD_SECTION.TERMINAL ? row.section : undefined;
+    const heading =
+      row.section === ADD_SECTION.TERMINAL || row.section === ADD_SECTION.LOCAL
+        ? row.section
+        : undefined;
     const detail = typeof row.detail === "string" ? row.detail : undefined;
     const named = [heading, taskName].filter((word) => word !== undefined);
     return {
@@ -1281,8 +1287,8 @@ function commandLabel(command: AppCommand, experiments: ExperimentChoices): stri
 /**
  * What a command's row says: a place as "Go to" it, and else the words its
  * shortcut says for the account's experiments, which its menu item says too
- * (`panelCommandOf`) but where an experiment renames it, as Copy plan or
- * transcript is Copy transcript while Plans is off.
+ * (`panelCommandOf`) but where an experiment renames it, as Copy description or
+ * transcript is Copy transcript while Descriptions is off.
  */
 function actionLabel(command: AppCommand, experiments: ExperimentChoices): string {
   const label = commandLabel(command, experiments);
@@ -1510,7 +1516,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history while Plans is on, New sub-task, Add task relation, which
+ * the door its ⋯ asks, Version history while Descriptions is on, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history
@@ -2033,10 +2039,11 @@ export function CommandPalette({
   const onTasks = useCallback(
     (run: () => void) =>
       choose(() => {
-        if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+        // A routed place standing, Settings or Admin, is left for what was chosen.
+        onTabChange(PANEL_TAB.TASKS);
         run();
       }),
-    [choose, tab, onTabChange],
+    [choose, onTabChange],
   );
   // The seek for a setting's row gives itself up once another is asked
   // for or Settings is left, so it never lands on a later visit's page.
@@ -2047,7 +2054,7 @@ export function CommandPalette({
   useEffect(() => () => landing.current?.(), []);
   const land = (page: SettingsView, id: string) =>
     choose(() => {
-      onTabChange(PANEL_TAB.SETTINGS);
+      // Choosing a page opens Settings on it, or turns the page of Settings standing.
       settings.onViewChange(page);
       landing.current?.();
       landing.current = landOnSettingsRow(id);
@@ -2056,7 +2063,6 @@ export function CommandPalette({
     choose(() => {
       landing.current?.();
       landing.current = undefined;
-      onTabChange(PANEL_TAB.SETTINGS);
       settings.onViewChange(page);
     });
 
@@ -2151,6 +2157,7 @@ export function CommandPalette({
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
+  const openLocal = useOpenLocal(tasks.sidePanel, noFocusMove);
   // Note that the task's Changes rows hang their pull request's people, as their Changes tabs read them.
   const offeredChanges = tasks.sidePanel.changes;
   const changesPeople = useChangesPeopleOf(
@@ -2161,6 +2168,11 @@ export function CommandPalette({
       useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
       true
         ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
+        : undefined,
+    onNewLocal:
+      useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.LOCAL_TERMINALS) })
+        .data === true
+        ? (agentId) => openLocal(agentId, true)
         : undefined,
   };
   const taskId = tasks.activeTaskId;

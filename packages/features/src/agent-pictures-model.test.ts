@@ -126,25 +126,25 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
   );
 });
 
-test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
+test("a picture is added to a description's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
   const line = taskPictureLine("Members [after]", "https://vespin.dev/acme/plan/5d8e/files/(3c9e)");
   assert.equal(line, "![Members \\[after\\]](https://vespin.dev/acme/plan/5d8e/files/\\(3c9e\\))");
 
-  for (const plan of [
+  for (const description of [
     "# Teammate invitations\n\nInvite by email.\n",
     "First line  \n",
     "Ends on blank lines\n\n\n",
     "No line break at its end",
     "",
   ]) {
-    const addition = withPictureLine(plan, line);
+    const addition = withPictureLine(description, line);
     assert.ok(
-      addition.text.startsWith(plan),
-      `the text before is kept byte for byte: ${JSON.stringify(plan)}`,
+      addition.text.startsWith(description),
+      `the text before is kept byte for byte: ${JSON.stringify(description)}`,
     );
     assert.ok(addition.text.endsWith(`${line}\n`));
     assert.match(addition.text, /(^|\n\n)!\[/u, "the picture stands as a paragraph of its own");
-    assert.equal(withoutPictureLine(addition.text, addition.added), plan);
+    assert.equal(withoutPictureLine(addition.text, addition.added), description);
   }
   assert.equal(
     withoutPictureLine("# Moved\n\nThe line was edited away.\n", `\n${line}\n`),

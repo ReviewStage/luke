@@ -132,20 +132,20 @@ export interface TasksProceduresDependencies {
     /** A plan's or agent's pages held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
     tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
-    /** A task's plan held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    /** A task's description held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
     tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
     tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
     tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
-    /** A task's plan history held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    /** A task's description history held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
     tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-    /** A plan's or page's comments held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
+    /** A description's or page's comments held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
     tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-    /** A held plan's or page's comments read again at once, as Try again asks. */
+    /** A held description's or page's comments read again at once, as Try again asks. */
     tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
     tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
     tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
@@ -193,7 +193,7 @@ function adminPage(serviceBaseUrl: string): string | undefined {
   return isWebAddress(page) && isServicePage(page, serviceBaseUrl) ? page : undefined;
 }
 
-/** Which comments a stream holds open: a plan's, or one page's, each named so two holds of one compare equal. */
+/** Which comments a stream holds open: a description's, or one page's, each named so two holds of one compare equal. */
 interface CommentsHeld {
   readonly taskId: string;
   readonly pageId: string | undefined;
@@ -207,11 +207,11 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const openRepositories: OpenFollows<never> = MutableHashMap.empty();
   /** Every link's standing a window holds a stream open of, so the host lets it go only with the last. */
   const openLinks: OpenFollows<never, LinkStandingStreamKey> = MutableHashMap.empty();
-  /** Every task's plan a window holds a stream open of, so the host lets one go only with the last. */
+  /** Every task's description a window holds a stream open of, so the host lets one go only with the last. */
   const openDocuments: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each agent's or task's Browser tabs, by its id, which never collide. */
   const openBrowserTabs: OpenFollows<never> = MutableHashMap.empty();
-  /** How many streams stand open of each plan's comments, and each page's, by the task and the page. */
+  /** How many streams stand open of each description's comments, and each page's, by the task and the page. */
   const openComments: OpenFollows<never, CommentsHeld> = MutableHashMap.empty();
   /** Every task's history a window holds a stream open of, so the host lets one go only with the last. */
   const openHistories: OpenFollows<never> = MutableHashMap.empty();
@@ -597,7 +597,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held plan reaches the panel on app state.
+        // Note that nothing is heard down the hold, since the held description reaches the panel on app state.
         const hold = followedStream(
           {
             keyOf: (scope: TaskDocumentFollow) => scope.taskId,

@@ -7,9 +7,9 @@ import { parsedUrl } from "./parsed-url.js";
  * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on vespin.dev: written, read back, and found in the item's words.
  *
  * A message on an item's thread, its agent's or a member's, draws a picture
- * as a plan does, `![alt](<address> "caption")`, its address the item's own
- * link (`link-grammar.ts`) with `/files/<attachment>` after it, as a plan's
- * picture stands under its plan's (`plan-attachment-link.ts`):
+ * as a description does, `![alt](<address> "caption")`, its address the item's own
+ * link (`link-grammar.ts`) with `/files/<attachment>` after it, as a description's
+ * picture stands under its plan's (`description-attachment-link.ts`):
  * `https://vespin.dev/<workspace>/task/<task>/inbox/<item>/files/<attachment>`,
  * or `/agent/<agent>/inbox/<item>/files/<attachment>` for an item of an
  * agent with no task. The address is a real one on purpose: opened in a

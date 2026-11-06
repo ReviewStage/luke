@@ -7,7 +7,7 @@
  * connections, its coding-agent defaults and experiments, and a timeline of
  * what failed for it recently. Every value is a count, a status, a model or
  * effort, or one of the service's own enumerated words; nothing the account
- * typed, said, or ran is read into it, so no task title, plan, prompt,
+ * typed, said, or ran is read into it, so no task title, description, prompt,
  * pull request title, or `failure_detail` is here. A workspace is named,
  * and an agent's repository is, which the developer allowed the admin pages. A coding agent's status and failure class are read by
  * `coder-host/status.ts`, the same reading the panel draws, so the page

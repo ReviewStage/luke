@@ -388,7 +388,7 @@ export const SETTINGS_ACT_KIND = {
  * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block colored, its
- * plan's history, pages, pictures, and comments, and a task given its
+ * pages, its description's history, pictures, and comments, and a task given its
  * status and priority.
  */
 export const TASKS_ACT_KIND = {
@@ -471,11 +471,11 @@ export const TASKS_ACT_KIND = {
   TASKS_COLOR_CODE: "tasks.colourCode",
   /** The id of the task a link names by its workspace and its number, found on the service before the link opens; answered to the window, never on the document. */
   TASKS_FIND: "tasks.find",
-  /** A page of a plan's history, read from the service and answered to the view; an older page is laid on the task's held history too (`LIVE_READ.HISTORY`) where it is held. */
+  /** A page of a description's history, read from the service and answered to the view; an older page is laid on the task's held history too (`LIVE_READ.HISTORY`) where it is held. */
   TASKS_REVISIONS: "tasks.revisions",
-  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
+  /** A revision of the open description beside the one before it for its version history, read from the service; answered to the view, never on the document. */
   TASKS_REVISION: "tasks.revision",
-  /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
+  /** A revision of a description restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and colored by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "tasks.pageSource",
@@ -489,16 +489,16 @@ export const TASKS_ACT_KIND = {
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /**
-   * One task's plan held followed while the window holds the stream open
+   * One task's description held followed while the window holds the stream open
    * for the task it has open, and a while after among those let go lately:
    * what it holds reaches the panel on app state
-   * (`LIVE_READ.PLAN_DOCUMENT`), so the stream carries nothing.
+   * (`LIVE_READ.DESCRIPTION_DOCUMENT`), so the stream carries nothing.
    */
   TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
-  /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
+  /** A held task's description, which the panel reads on app state, read again at once, as Try again asks. */
   TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
-   * One task's plan history held followed while the window holds the stream
+   * One task's description history held followed while the window holds the stream
    * open for its version history, and a while after among those let go
    * lately: its newest page as each save lands, and the older pages read
    * past it, reach the panel on app state (`LIVE_READ.HISTORY`), so the
@@ -507,15 +507,15 @@ export const TASKS_ACT_KIND = {
   TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** A held task's history, which the panel reads on app state, read again at once, as Try again asks. */
   TASKS_HISTORY_RETRY: "tasks.historyRetry",
-  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
+  /** One picture of the open description as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "tasks.pictureRead",
-  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
+  /** A picture pasted, dropped, or chosen into the open description's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * A task's comment threads, its plan's own or one page's: held followed
+   * A task's comment threads, its description's own or one page's: held followed
    * while a window shows them, what they hold reaching the panel on app
-   * state (`LIVE_READ.PLAN_COMMENTS`), and read again at once on Try again;
-   * one started on words of the plan or on a page, and one thing done to
+   * state (`LIVE_READ.DESCRIPTION_COMMENTS`), and read again at once on Try again;
+   * one started on words of the description or on a page, and one thing done to
    * one thread, each answered with the thread as it stands.
    */
   TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
@@ -551,6 +551,8 @@ export const MAC_TERMINAL_ACT_KIND = {
  * attach posts to that panel, as a cloud shell's does, never on an act.
  */
 export const MAC_SHELL_ACT_KIND = {
+  /** The folder a cloud agent's Local shells open in: its mirror on this Mac, made where none stands. */
+  MAC_SHELL_MIRROR: "macShell.mirror",
   MAC_SHELL_OPEN: "macShell.open",
   MAC_SHELL_ATTACH: "macShell.attach",
   MAC_SHELL_CLOSE: "macShell.close",
@@ -926,6 +928,7 @@ export const PORT_ACT_USE = {
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
+  MAC_SHELL_MIRROR: ACT_USE.WRITE,
   MAC_SHELL_OPEN: ACT_USE.WRITE,
   MAC_SHELL_ATTACH: ACT_USE.WRITE,
   MAC_SHELL_CLOSE: ACT_USE.WRITE,

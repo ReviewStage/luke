@@ -13,11 +13,11 @@
 import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
-import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
+import { DESCRIPTION_COMMENT_TOOL } from "./description-comment-wire.js";
 
 /** Every tool we author or declare for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
-  // A look at one of the plan's pictures, the planning model's and a coding agent's.
+  // A look at one of the description's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",
@@ -62,7 +62,7 @@ export const AGENT_TOOL = {
   APPLY_PATCH: "apply_patch",
   // A coding agent's own, and the delegation every agent makes.
   DELEGATE: AGENT_DELEGATE_TOOL,
-  EDIT_PLAN: "edit_plan",
+  EDIT_DESCRIPTION: "edit_description",
   WRITE_TODOS: AGENT_TODOS_TOOL,
   POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
@@ -70,12 +70,12 @@ export const AGENT_TOOL = {
   OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
-  // An interactive page shown in the plan's side panel, and a read of one by its id.
+  // An interactive page shown in the task's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
-  // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
-  READ_COMMENTS: PLAN_COMMENT_TOOL.READ,
-  REPLY_TO_COMMENT: PLAN_COMMENT_TOOL.REPLY,
-  UPDATE_COMMENT: PLAN_COMMENT_TOOL.UPDATE,
+  // The description's comment threads, read and answered by the planning model and every coding agent on the task.
+  READ_COMMENTS: DESCRIPTION_COMMENT_TOOL.READ,
+  REPLY_TO_COMMENT: DESCRIPTION_COMMENT_TOOL.REPLY,
+  UPDATE_COMMENT: DESCRIPTION_COMMENT_TOOL.UPDATE,
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
@@ -121,8 +121,9 @@ export const CONNECTION_TOOL = {
  * code put on the developer's screen and its two whiteboard tools, removed
  * with the Code and Board tabs, a voice call's question queue and
  * hang-up, removed with GPT Live, the memory's two tools, since named for
- * the memory, and the plan comments' resolve and reopen, folded into
- * `update_comment`.
+ * the memory, the plan comments' resolve and reopen, folded into
+ * `update_comment`, and the plan's edit, renamed for the description it
+ * edits.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -170,7 +171,19 @@ export const RETIRED_TOOL = {
   // Folded into `update_comment` (`resolved`), whose name no inbox thread's tool shares.
   RESOLVE_THREAD: "resolve_thread",
   REOPEN_THREAD: "reopen_thread",
+  // Renamed `edit_description`, as the task's document is its description.
+  EDIT_PLAN: "edit_plan",
 } as const;
+
+/**
+ * The retired tools a call may still name, from an agent whose session
+ * listed its tools before they were renamed, each with the tool that took
+ * its place, which the service names in its refusal rather than answering
+ * an unknown tool.
+ */
+export const RENAMED_TOOL: ReadonlyMap<string, AgentTool> = new Map([
+  [RETIRED_TOOL.EDIT_PLAN, AGENT_TOOL.EDIT_DESCRIPTION],
+]);
 
 /**
  * Claude Code's own tools, by the names its CLI calls them, which a coding

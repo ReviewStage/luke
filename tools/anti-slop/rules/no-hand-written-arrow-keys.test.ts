@@ -13,7 +13,10 @@ const REPOSITORY_ROOT = path.resolve(
   "..",
 );
 const PANEL_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/example-list.tsx");
-const EDITOR_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/plan-editor/plan-editor.ts");
+const EDITOR_FILE = path.join(
+  REPOSITORY_ROOT,
+  "packages/panel/src/description-editor/description-editor.ts",
+);
 const TERMINAL_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/terminal/terminal-keys.ts");
 const UI_FILE = path.join(REPOSITORY_ROOT, "packages/ui/src/components/example/example.tsx");
 const TEST_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/example-list.test.ts");

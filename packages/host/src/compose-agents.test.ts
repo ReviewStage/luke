@@ -32,6 +32,8 @@ import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
 import { GITHUB_TOKEN_STATUS, type GitHubTokenSummary } from "@repo/features/github-token-wire";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
@@ -328,6 +330,8 @@ function fakeService() {
   let forgetAnswer: MemoriesAnswerView = { memories: [] };
   /** What a forget waits on before the service answers it; nothing from the start. */
   let forgetGate: Effect.Effect<void> = Effect.void;
+  /** What a message on an inbox thread waits on before the service answers it; nothing from the start. */
+  let messageGate: Effect.Effect<void> = Effect.void;
   /** What a host's removal answers, once its gate lets it; unanswered from the start. */
   let removeAnswer: HostDoneAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
   /** What a host's removal waits on before the service answers it; nothing from the start. */
@@ -648,7 +652,7 @@ function fakeService() {
         return { text: "Run the tests" };
       }),
     taskInboxLive: (taskId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`plan-inbox-live:${taskId}`);
+      if (poll !== true) asked.push(`description-inbox-live:${taskId}`);
       return scopeLive(poll, after);
     },
     agentInboxLive: (agentId, _userId, poll, after) => {
@@ -703,30 +707,33 @@ function fakeService() {
         return { marked: 2, ...committedIn };
       }),
     messageInbox: (itemId, request) =>
-      Effect.sync(() => {
-        const files = (request.attachments ?? []).map((file) => file.name).join(",");
-        const answer =
-          request.answers === undefined
-            ? ""
-            : `:answers ${request.answers.ask} ${request.answers.reply} ${(request.answers.choices ?? []).join(",")}`;
-        asked.push(
-          `inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}${answer}`,
-        );
-        return {
-          item: {
-            ...ITEM,
-            messages: [
-              {
-                id: MESSAGE_ID,
-                author: INBOX_MESSAGE_AUTHOR.MEMBER,
-                text: request.text,
-                createdAt: ITEM.updatedAt,
-              },
-            ],
-          },
-          ...committedIn,
-        };
-      }),
+      Effect.map(
+        Effect.suspend(() => messageGate),
+        () => {
+          const files = (request.attachments ?? []).map((file) => file.name).join(",");
+          const answer =
+            request.answers === undefined
+              ? ""
+              : `:answers ${request.answers.ask} ${request.answers.reply} ${(request.answers.choices ?? []).join(",")}`;
+          asked.push(
+            `inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}${answer}`,
+          );
+          return {
+            item: {
+              ...ITEM,
+              messages: [
+                {
+                  id: MESSAGE_ID,
+                  author: INBOX_MESSAGE_AUTHOR.MEMBER,
+                  text: request.text,
+                  createdAt: ITEM.updatedAt,
+                },
+              ],
+            },
+            ...committedIn,
+          };
+        },
+      ),
     startInboxThread: (request) =>
       Effect.sync(() => {
         asked.push(
@@ -826,6 +833,10 @@ function fakeService() {
     /** What a change to an agent waits on before the service answers it. */
     holdChanges: (gate: Effect.Effect<void>) => {
       changeGate = gate;
+    },
+    /** What a message on an inbox thread waits on before the service answers it. */
+    holdMessages: (gate: Effect.Effect<void>) => {
+      messageGate = gate;
     },
     /** What a change of an agent's queue answers from now on, once `gate` lets it. */
     answerQueue: (answer: AgentQueueAnswerView, gate: Effect.Effect<void> = Effect.void) => {
@@ -1108,6 +1119,7 @@ function subject(
       pageNewest: service.pageNewest,
       sendTxid: service.sendTxid,
       holdChanges: service.holdChanges,
+      holdMessages: service.holdMessages,
       answerQueue: service.answerQueue,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
@@ -2654,7 +2666,7 @@ it.effect(
           },
         ],
       );
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`]);
 
       // Let go, the plan stays held among those let go lately, so a change still tells it.
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
@@ -2681,7 +2693,7 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`], "nothing is read from cold");
+      assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`], "nothing is read from cold");
       assert.deepEqual(heldOf(told, PLAN_SCOPE), { rows: [LIVE_ITEM] });
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
@@ -2699,7 +2711,7 @@ it.effect(
       }
       assert.equal(heldOf(told, PLAN_SCOPE), undefined, "the plan is told no more");
       assert.equal(
-        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
         1,
         "letting it go reads nothing",
       );
@@ -2707,7 +2719,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
       assert.equal(
-        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
         2,
         "held again past the bound, it is read anew",
       );
@@ -2825,7 +2837,7 @@ it.effect(
       yield* open;
       yield* settled;
       assert.equal(live.scope.held(), 1, "the window's hold reads again");
-      assert.equal(asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length, 2);
+      assert.equal(asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length, 2);
     }),
 );
 
@@ -3396,6 +3408,86 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(bothHold(harness, replied), [true, true]);
+    }),
+);
+
+it.effect(
+  "an answer the agent posts over before the service answers it is drawn once, where the service wrote it, never again under its key below the agent's post",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, live, commitIn, told, holdMessages } = yield* subject();
+      sealScope(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      const askId = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
+      const postId = "8d3e5f7a-2c4b-4d6e-8f1a-3b5c7d9e1f2a";
+      const row = (id: string, at: number) => ({
+        id,
+        itemId: ITEM.id,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        userId: null,
+        name: null,
+        text: "Push to the release branch?",
+        ask: null,
+        answers: null,
+        createdAt: at,
+      });
+      const ask = {
+        ...row(askId, ITEM.postedAt),
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Push" }, { label: "Wait" }],
+          status: INBOX_ASK_STATUS.OPEN,
+        },
+      };
+      const answers = { ask: askId, reply: INBOX_REPLY.CHOSE, choices: ["Push"] };
+      live.scope.set(
+        { items: [{ ...ITEM_ROW, openAskMessageId: askId }], messages: [ask], files: [] },
+        ["9100"],
+      );
+      yield* toldTimes(told, 1);
+
+      commitIn("9400");
+      const answering = yield* Deferred.make<void>();
+      holdMessages(Deferred.await(answering));
+      const sending = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+          itemId: ITEM.id,
+          text: "",
+          clientKey: "answer-1",
+          answers,
+        }),
+      );
+      yield* settled;
+
+      // The service took the answer and the agent posted after it, opening the item again, before the answer came back.
+      const later = ITEM.updatedAt + 2_000;
+      live.scope.set({
+        items: [{ ...ITEM_ROW, revision: ITEM.revision + 1, updatedAt: later }],
+        messages: [
+          ask,
+          {
+            ...row(MESSAGE_ID, ITEM.updatedAt + 1_000),
+            author: INBOX_MESSAGE_AUTHOR.MEMBER,
+            userId: "user-dana",
+            name: "Dana",
+            text: "",
+            answers,
+            clientKey: "answer-1",
+          },
+          { ...row(postId, later), text: "The fix is up for review." },
+        ],
+      });
+      yield* nextPoll;
+      const drawn = planInboxOf(told().at(-1)).get(ITEM.id);
+      yield* Deferred.succeed(answering, undefined);
+      yield* Fiber.join(sending);
+
+      assert.deepEqual(
+        drawn?.thread?.map((message) => message.id),
+        [askId, MESSAGE_ID, postId],
+      );
+      assert.equal(drawn?.status, INBOX_STATUS.OPEN, "the agent's post waits on the reader");
     }),
 );
 

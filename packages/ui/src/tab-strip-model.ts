@@ -39,6 +39,7 @@ export const TAB_WORDS = {
   AGENT: "Agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
+  LOCAL: "Local",
   BROWSER: "Browser",
 } as const;
 
@@ -97,6 +98,11 @@ export interface TerminalStripTab {
   readonly terminal: string;
 }
 
+/** One cloud agent's Local tab, named by the agent whose files its shells on this Mac stand in. */
+export interface LocalStripTab {
+  readonly local: string;
+}
+
 /** One page's tab, named by the page an agent wrote for the task. */
 export interface PageStripTab {
   readonly page: string;
@@ -122,6 +128,7 @@ export type StripTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
+  | LocalStripTab
   | PageStripTab
   | CloudBrowserStripTab;
 
@@ -163,6 +170,11 @@ export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
   return tab instanceof Object && "terminal" in tab;
 }
 
+/** Whether a tab is one agent's Local tab. */
+export function isLocalTab(tab: StripTab): tab is LocalStripTab {
+  return tab instanceof Object && "local" in tab;
+}
+
 /** Whether a tab is one page's. */
 export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
@@ -191,13 +203,14 @@ export function followedAgent(
 
 /**
  * The coding agent a tab is one of the agent's own: its tab, its Changes
- * tab, or its Terminal tab, which is where a terminal command means that
- * agent (`terminal-entry.ts`); none for any other tab.
+ * tab, its Terminal tab, or its Local tab, which is where a terminal
+ * command means that agent (`terminal-entry.ts`); none for any other tab.
  */
 export function agentOfTab(tab: StripTab | undefined): string | undefined {
   if (tab === undefined) return undefined;
   if (isAgentTab(tab)) return tab.agent;
   if (isChangesTab(tab)) return tab.changes;
+  if (isLocalTab(tab)) return tab.local;
   return isTerminalTab(tab) ? tab.terminal : undefined;
 }
 
@@ -219,6 +232,7 @@ export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boole
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes && a.number === b.number;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
+  if (isLocalTab(a)) return isLocalTab(b) && a.local === b.local;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
   return a === b;
@@ -236,6 +250,17 @@ function terminalKey(agentId: string): string {
   if (held !== undefined) return held;
   const made = crypto.randomUUID();
   terminalKeys.set(agentId, made);
+  return made;
+}
+
+/** The key each agent's Local tab is drawn under, by agent, made the first time it is asked for, apart from its other tabs'. */
+const localKeys = new Map<string, string>();
+
+function localKey(agentId: string): string {
+  const held = localKeys.get(agentId);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  localKeys.set(agentId, made);
   return made;
 }
 
@@ -274,13 +299,14 @@ function numberedKey(agentId: string, number: number): string {
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
  * of the side panel, the one strip it stands in, is keyed by, one naming a
  * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
- * by a key made for its agent (`terminalKey`), a page's by the page's
+ * by a key made for its agent (`terminalKey`), a Local tab by another (`localKey`), a page's by the page's
  * own id, and a cloud Browser tab's by the id the service keeps it under.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
+  if (isLocalTab(tab)) return localKey(tab.local);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) {

@@ -13,7 +13,7 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
-import { adminLinkFields } from "./admin/routing.js";
+import { type AdminView, adminLinkFields } from "./admin/routing.js";
 import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
@@ -112,6 +112,8 @@ export interface WindowAt {
       }
     | undefined;
   readonly sidePanelFocused: boolean;
+  /** The Admin view the router stands on, while Admin stands. */
+  readonly admin?: AdminView | undefined;
   readonly pageWorkspace?: PageWorkspace | undefined;
   /** Whether the room is narrow, showing one pane at a time. */
   readonly narrow?: boolean;
@@ -273,6 +275,14 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
         : { kind: LINK_PLACE.SETTINGS, page: view };
     return [at_(place, LINK_THING.SETTINGS, slug)];
   }
+  // The Admin place stands over whatever the window's state says, so its link is the step's rather than that place's.
+  // Its workspace is only the one listed, since the place reads every workspace's accounts.
+  if (at.admin !== undefined) {
+    const root = { kind: LINK_PLACE.ADMIN } as const;
+    const fields = adminLinkFields(at.admin);
+    if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
+    return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
+  }
   const { agentId } = tasks.agentView;
   if (agentId !== undefined) {
     const page = at.pageWorkspace;
@@ -323,14 +333,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
     return [at_(list, LINK_THING.AUTOMATIONS)];
   }
-  // The Admin place stands over the plan, so its link is the step's rather than the plan's behind it.
-  // Its workspace is only the one listed, since the place reads every workspace's accounts.
-  if (tasks.adminView.open) {
-    const root = { kind: LINK_PLACE.ADMIN } as const;
-    const fields = adminLinkFields(tasks.adminView.view);
-    if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
-    return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
-  }
   // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
   if (tasks.unknownWorkspace.open) return [];
   // The Board stands over the plan, on the same terms; and with no task bound for, the window stands on the home page.
@@ -350,6 +352,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
 export interface CopyLink {
   readonly linksAt: (sidePanelFocused: boolean) => readonly LinkAtHand[];
   readonly standing: ReadLink | undefined;
+  /** The link of the place the window's state says, the step a routed place is left for. */
+  readonly placed: ReadLink | undefined;
   readonly copy: (held: LinkAtHand) => void;
   readonly onPageWorkspace: (held: PageWorkspace | undefined) => void;
 }
@@ -382,6 +386,7 @@ export function useCopyLink(
   settings: WindowAt["settings"],
   enabled: boolean,
   room: ShellRoom = SHELL_ROOM.WIDE,
+  admin: AdminView | undefined = undefined,
 ): CopyLink {
   const copyWords = useCopyToast();
   const copy = (held: LinkAtHand) =>
@@ -391,6 +396,7 @@ export function useCopyLink(
   const linksAt = (sidePanelFocused: boolean) =>
     linksAtHand(tasks, {
       settings,
+      admin,
       sidePanelFocused,
       pageWorkspace,
       narrow: room === SHELL_ROOM.NARROW,
@@ -411,5 +417,12 @@ export function useCopyLink(
   };
   useHoldChordLinks(firstLink(false), firstLink(true));
   const standing = linksAt(false).find((each) => each.step === true)?.link;
-  return { linksAt, standing, copy, onPageWorkspace };
+  const placed = linksAtHand(tasks, {
+    settings: undefined,
+    sidePanelFocused: false,
+    pageWorkspace,
+    narrow: room === SHELL_ROOM.NARROW,
+    inboxTask,
+  }).find((each) => each.step === true)?.link;
+  return { linksAt, standing, placed, copy, onPageWorkspace };
 }

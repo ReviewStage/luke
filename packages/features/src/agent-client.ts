@@ -5,6 +5,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountCall,
+  type CallAnswer,
   type CallCredential,
   callAnswered,
   jsonOf,
@@ -112,6 +113,7 @@ import {
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
+  HostedUnanswered,
   hostedClient,
   hostedFailureFacts,
 } from "./hosted-link.js";
@@ -406,6 +408,20 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
 /** A Start's refusal the service answered beside a task it made all the same (`task-wire.ts`'s `taskStartAnswerSchema`), read as a refused Start is. */
 export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
   return refusedAs(unparsedWire(refusal), START_REFUSALS);
+}
+
+/**
+ * A call that never reached the service, unanswered with where it ended,
+ * the network or its deadline among them, which the window reports and
+ * never draws, so a read the network failed is not reported as the app's.
+ */
+function unansweredCall(answer: Exclude<CallAnswer, { readonly response: Response }>): Failed {
+  const { fault, errorName } = answer;
+  const unanswered = new HostedUnanswered({
+    fault,
+    ...(errorName === undefined ? undefined : { errorName }),
+  });
+  return { ...UNANSWERED, cause: hostedFailureFacts(unanswered) };
 }
 
 /** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried traveled as. */
@@ -1438,7 +1454,7 @@ export class HostedAgentClient {
         path: agentPicturePath(agentId, pictureId, callId),
       }),
       (answer): Effect.Effect<AgentInboxAttachmentView> => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!callAnswered(answer)) return Effect.succeed(unansweredCall(answer));
         if (!answer.response.ok) {
           return Effect.map(jsonOf(answer.response), (body) =>
             refusedAs(unparsedWire(body), ROW_REFUSALS),
@@ -1496,7 +1512,7 @@ export class HostedAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentGitHubImagePath(agentId, src) }),
       (answer): Effect.Effect<AgentGitHubImageView> => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!callAnswered(answer)) return Effect.succeed(unansweredCall(answer));
         if (!answer.response.ok) {
           return Effect.map(jsonOf(answer.response), (body) =>
             refusedAs(unparsedWire(body), ROW_REFUSALS),
@@ -1525,7 +1541,7 @@ export class HostedAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: inboxAttachmentPath(itemId, attachmentId) }),
       (answer): Effect.Effect<AgentInboxAttachmentView> => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!callAnswered(answer)) return Effect.succeed(unansweredCall(answer));
         if (!answer.response.ok) {
           return Effect.map(jsonOf(answer.response), (body) =>
             refusedAs(unparsedWire(body), ROW_REFUSALS),

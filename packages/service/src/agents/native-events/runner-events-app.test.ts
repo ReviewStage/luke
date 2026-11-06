@@ -162,7 +162,7 @@ const agentOn = (
       model: harness.model,
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime: harness.runtime,
       payer: harness.payer,

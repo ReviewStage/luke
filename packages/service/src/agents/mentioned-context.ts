@@ -21,14 +21,14 @@ import {
   mentionName,
   type NumberedTaskIdOf,
   type PersonMention,
-  type PlanMention,
+  type DescriptionMention,
   type ServerMention,
   sectionAnchors,
   type TaskMention,
 } from "@repo/features/mention-link";
 import { PAGE_OWNER, type PageLine, type PageOwner } from "@repo/features/page-wire";
-import { planSections } from "@repo/features/plan-document";
-import { planMarkdown } from "@repo/features/plan-markdown";
+import { descriptionSections } from "@repo/features/description-document";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
@@ -45,12 +45,12 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
  * file's lines the developer picked (`file.ts:12–20`): those are pinned to
  * the commit they were read at, which the agent's branch may have moved
  * past, so a note names the lines and the commit, and says to read just
- * those. The plan, or
- * one of its sections, is not: a coding agent has no tool to read the plan
+ * those. The description, or
+ * one of its sections, is not: a coding agent has no tool to read the description
  * again, and one started on a prompt never saw it. So the message carries one
- * more part after its words, the plan or each section it named as it stood
+ * more part after its words, the description or each section it named as it stood
  * at the send, under a heading eve's receipt is read back by
- * (`attached-file-parts.ts`). Only the agent's own plan is read, the plan the
+ * (`attached-file-parts.ts`). Only the agent's own description is read, the description the
  * send already read as its sender; a mention of another task adds nothing,
  * but where its link names it by its number, `…/task/42`, which spells
  * none of the id the task tools take: that link is handed the task's id, as
@@ -62,7 +62,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
  * says how much was left out, and a mention the part has no room left for
  * is named with a line saying so, so the model knows to ask rather than
  * guess. A section is found by its anchor (`sectionAnchors`), and one whose
- * anchor no heading of the plan spells any longer is named as gone, by the
+ * anchor no heading of the description spells any longer is named as gone, by the
  * name the mention was written with. *
  * An MCP server, one of its tools, or a page of its integration's (a Linear
  * issue's address), is the agent's to reach through its
@@ -102,8 +102,8 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
 export const MENTIONED_BOUNDS = {
   /** The most characters of one section the part carries. */
   SECTION_CHARS: 4_000,
-  /** The most characters of the whole plan the part carries, before its remaining headings. */
-  PLAN_CHARS: 12_000,
+  /** The most characters of the whole description the part carries, before its remaining headings. */
+  DESCRIPTION_CHARS: 12_000,
   /** The most characters the whole part carries, about six thousand tokens. */
   PART_CHARS: 24_000,
 } as const;
@@ -183,7 +183,7 @@ function cutOnLine(text: string, bound: number): string {
   return `${text.slice(0, kept)}\n… (${text.length - kept} more characters)`;
 }
 
-/** The most characters the list of a cut plan's other sections spells, before it counts the rest. */
+/** The most characters the list of a cut description's other sections spells, before it counts the rest. */
 const HEADINGS_CHARS = 2_000;
 
 /** Headings joined as a list, as many as its bound holds, the rest counted. */
@@ -198,9 +198,9 @@ function headingList(headings: readonly string[]): string {
   return list;
 }
 
-/** A mention of the plan or one of its sections, and the name it was written with. */
+/** A mention of the description or one of its sections, and the name it was written with. */
 interface NamedMention {
-  readonly mention: PlanMention;
+  readonly mention: DescriptionMention;
   readonly name: string;
 }
 
@@ -210,28 +210,29 @@ interface HandedMention {
   readonly name: string;
 }
 
-/** What a mention of the plan or one of its sections is handed as. */
+/** What a mention of the description or one of its sections is handed as. */
 function excerptOf({ mention, name }: NamedMention, task: Task): string {
   if (mention.kind === MENTION_KIND.TASK) {
-    const whole = planMarkdown(task);
-    if (whole.length <= MENTIONED_BOUNDS.PLAN_CHARS) return `The whole plan:\n\n${whole.trimEnd()}`;
+    const whole = descriptionMarkdown(task);
+    if (whole.length <= MENTIONED_BOUNDS.DESCRIPTION_CHARS)
+      return `The whole description:\n\n${whole.trimEnd()}`;
     // Note that a section is left out by where it starts, past the cut, never by its heading's words, which earlier text may quote.
     const bodyKept =
-      keptLength(whole, MENTIONED_BOUNDS.PLAN_CHARS) -
+      keptLength(whole, MENTIONED_BOUNDS.DESCRIPTION_CHARS) -
       (whole.length - task.document.body.trimEnd().length - 1);
-    const headings = planSections(task.document.body)
+    const headings = descriptionSections(task.document.body)
       .filter((section) => section.heading !== "" && section.from >= bodyKept)
       .map((section) => section.heading);
     const rest = headings.length === 0 ? "" : `\n\nIts other sections: ${headingList(headings)}.`;
-    return `The whole plan, cut short:\n\n${cutOnLine(whole, MENTIONED_BOUNDS.PLAN_CHARS)}${rest}`;
+    return `The whole description, cut short:\n\n${cutOnLine(whole, MENTIONED_BOUNDS.DESCRIPTION_CHARS)}${rest}`;
   }
-  const sections = planSections(task.document.body);
+  const sections = descriptionSections(task.document.body);
   const anchors = sectionAnchors(sections.map((section) => section.heading));
   const section = sections[anchors.indexOf(mention.anchor)];
   if (section === undefined) {
-    return `The section "${name}": no longer in the plan.`;
+    return `The section "${name}": no longer in the description.`;
   }
-  return `The plan's section "${section.heading}":\n\n${cutOnLine(section.text, MENTIONED_BOUNDS.SECTION_CHARS)}`;
+  return `The description's section "${section.heading}":\n\n${cutOnLine(section.text, MENTIONED_BOUNDS.SECTION_CHARS)}`;
 }
 
 /** A mention of a file, which the part hands a note for where it pins the file's lines. */
@@ -252,7 +253,7 @@ interface NumberedTask {
 
 /** A mention the part hands something for. */
 type Handed =
-  | PlanMention
+  | DescriptionMention
   | ServerMention
   | LinesMention
   | TaskMention
@@ -567,21 +568,21 @@ export function mentionedServers(words: string, repository: string | null): read
 }
 
 /**
- * The part a message hands its agent beside its words: the plan or each of
- * its sections the words mention, as it stands in `plan`, the agent's own
- * plan as the send read it, each of its pages and each of the workspace's
+ * The part a message hands its agent beside its words: the description or each of
+ * its sections the words mention, as it stands in `task`, the agent's own
+ * task as the send read it, each of its pages and each of the workspace's
  * agents and people they mention, as the send read them into `reads`, and a note for
  * each MCP server or tool they mention; nothing where they mention none of
  * these. An agent with no plan is handed the notes, the agents, and the
  * pages it showed itself, which `agentId` names it by; one whose starter has
- * Plans off (`plans-on.ts`) is handed no excerpt of the plan.
+ * Descriptions off (`descriptions-on.ts`) is handed no excerpt of the description.
  */
 export function mentionedContext(
   words: string,
   task: Task | undefined,
   reads: MentionedReads = NO_MENTIONED_READS,
   agentId?: string | undefined,
-  plansOn = true,
+  descriptionsOn = true,
 ): string | undefined {
   const owner = pagesOwnerOf(task, agentId);
   const named: HandedMention[] = [];
@@ -590,7 +591,10 @@ export function mentionedContext(
   for (const { mention, label, target } of handedMentionsIn(words, repository, { taskIdOf })) {
     const handed = handedMention(mention, target, task, owner);
     if (handed === undefined) continue;
-    if (!plansOn && (handed.kind === MENTION_KIND.TASK || handed.kind === MENTION_KIND.SECTION)) {
+    if (
+      !descriptionsOn &&
+      (handed.kind === MENTION_KIND.TASK || handed.kind === MENTION_KIND.SECTION)
+    ) {
       continue;
     }
     // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.
