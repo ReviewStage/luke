@@ -61,6 +61,21 @@ const NOT_TAKEN = {
 /** What a toast says of an Undo that came after its host had sent a resolve on, as one held past the host's bound is. */
 const TOO_LATE = "Too late to undo: the agent was already told.";
 
+/** What a toast says of an Undo that did not reach the host, which may still hold the resolve, and what its action that asks again is called. */
+const UNDO_UNREACHED = {
+  WORDS: "Could not undo resolving. The agent is told in a minute unless you try again.",
+  RETRY: "Try again",
+} as const;
+
+/** How one held close answered being let go: still held, and let go now; sent on already; or not reached, so it may still be held. */
+const RELEASED = {
+  HELD: "held",
+  LATE: "late",
+  UNREACHED: "unreached",
+} as const;
+
+type Released = (typeof RELEASED)[keyof typeof RELEASED];
+
 /** What the Undo toast says: the one item by its title, or how many. */
 function resolvedNote(items: readonly InboxItem[]): string {
   const [only] = items;
@@ -90,6 +105,25 @@ export type InboxResolver = (items: readonly InboxItem[]) => void;
 /** Lets each resolve this window still holds for its Undo go as sent; each lets itself out of the set as it goes. */
 const heldHere = new Set<() => void>();
 
+/** Whether the window's leaving is heard yet, which is heard once for the window's life. */
+let leavingHeard = false;
+
+/**
+ * Lets every resolve the window holds go as sent once it leaves, heard once
+ * for the window's life rather than the Inbox's, since an Undo toast outlives
+ * the Inbox it was pressed in. Note that a page kept in the back-forward
+ * cache has not left, because it may come back with its toast and its Undo
+ * still standing.
+ */
+function hearLeaving(): void {
+  if (leavingHeard) return;
+  leavingHeard = true;
+  window.addEventListener("pagehide", (event) => {
+    if (event.persisted) return;
+    for (const letGo of [...heldHere]) letGo();
+  });
+}
+
 /** The Inbox's resolves, each held by the host until its Undo toast is gone. */
 export function useInboxResolver(): InboxResolver {
   const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_CLOSE));
@@ -97,13 +131,7 @@ export function useInboxResolver(): InboxResolver {
   const toast = useToast();
   const out = useRef(new Set<string>());
   // Note that a window leaving takes its toasts with it, so whatever they still held goes as sent rather than standing open again.
-  useEffect(() => {
-    const flush = () => {
-      for (const letGo of [...heldHere]) letGo();
-    };
-    window.addEventListener("pagehide", flush);
-    return () => window.removeEventListener("pagehide", flush);
-  }, []);
+  useEffect(hearLeaving, []);
   return useCallback(
     (items: readonly InboxItem[]) => {
       const open = items.filter(
@@ -122,12 +150,12 @@ export function useInboxResolver(): InboxResolver {
           }).catch(unreached),
         ),
       );
-      const releaseAll = (send: boolean) =>
+      const releaseAll = (send: boolean, among: readonly string[] = keys) =>
         Promise.all(
-          keys.map((clientKey) =>
+          among.map((clientKey) =>
             release({ clientKey, send }).then(
-              (found) => found.held,
-              () => false,
+              (found): Released => (found.held ? RELEASED.HELD : RELEASED.LATE),
+              (): Released => RELEASED.UNREACHED,
             ),
           ),
         );
@@ -137,11 +165,26 @@ export function useInboxResolver(): InboxResolver {
         void releaseAll(true);
       };
       heldHere.add(letGo);
-      const undo = () => {
-        if (!heldHere.delete(letGo)) return;
-        undone = true;
-        void releaseAll(false).then((held) => {
-          if (held.every(Boolean)) return;
+      // Note that an Undo the host did not hear may still be held there, so its toast asks again for those alone; one the host had sent on already says so.
+      const takeBack = (among: readonly string[]) =>
+        void releaseAll(false, among).then((released) => {
+          const unreached = among.filter((_, at) => released[at] === RELEASED.UNREACHED);
+          if (unreached.length > 0) {
+            toast({
+              replayUnmasked: true,
+              words: UNDO_UNREACHED.WORDS,
+              tone: STATUS_TONE.DANGER,
+              failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: UNDO_UNREACHED.WORDS },
+              action: {
+                label: UNDO_UNREACHED.RETRY,
+                replayUnmasked: true,
+                onPress: () => takeBack(unreached),
+              },
+              hold: TOAST_HOLD.FAILED,
+            });
+            return;
+          }
+          if (!released.includes(RELEASED.LATE)) return;
           toast({
             replayUnmasked: true,
             words: TOO_LATE,
@@ -150,6 +193,10 @@ export function useInboxResolver(): InboxResolver {
             failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: TOO_LATE, refused: true },
           });
         });
+      const undo = () => {
+        if (!heldHere.delete(letGo)) return;
+        undone = true;
+        takeBack(keys);
       };
       toast({
         ...undoToast(resolvedNote(open), undo),

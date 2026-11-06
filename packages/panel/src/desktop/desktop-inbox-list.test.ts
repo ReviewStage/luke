@@ -11,14 +11,22 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, onTestFinished, test, vi } from "vitest";
+import { appBridge } from "../app-bridge.js";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { FAKE_ANSWER } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActs,
+  fakeActsAnswer,
+} from "../testing/app-bridge.js";
 import { editorBundleLanded } from "../testing/composer.js";
 import {
   ACME,
@@ -227,6 +235,40 @@ test("the Undo of a resolve takes it back before any agent hears of it: the item
     rowMenu(page, threshold).includes("Resolve") && rowMenu(page, expiry).includes("Resolve"),
     "both stand open again",
   );
+});
+
+test("an Undo the host does not hear says so rather than too late, and its Try again takes the resolve back", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  const sent = takenCloses();
+  // The first Undo's release fails on its way to the host, as a dropped act port does.
+  let dropped = false;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE && !dropped) {
+        dropped = true;
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "The act port closed." });
+      }
+      return previous(request);
+    },
+  });
+  commandClick(page, "Alert at 80%?");
+  act(() => barButton(page, "Resolve").click());
+  await settle();
+
+  await act(async () => (newestToastAction() ?? assert.fail("the toast offers Undo")).click());
+  await settle();
+  assert.match(newestToastSays() ?? "", /Could not undo resolving/u);
+  const retry = newestToastAction() ?? assert.fail("the failure offers Try again");
+  assert.equal(retry.textContent, "Try again");
+  await act(async () => retry.click());
+  await settle();
+  await letResolvesGo();
+
+  assert.deepEqual(sent, [], "the service never hears of it");
+  assert.ok(rowMenu(page, "Alert at 80%?").includes("Resolve"), "it stands open again");
 });
 
 test("the bar's Mark as unread marks every item chosen at once under one toast, whose Undo marks each read again as it stood", async () => {

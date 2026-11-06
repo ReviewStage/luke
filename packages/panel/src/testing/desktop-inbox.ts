@@ -1066,6 +1066,8 @@ export function subjectOf(page: HTMLElement): string[] {
 export function takenCloses(): { itemId: string; revision: number }[] {
   const sent: { itemId: string; revision: number }[] = [];
   const held = new Map<string, (send: boolean) => void>();
+  const early = new Map<string, boolean>();
+  const gone = new Set<string>();
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
@@ -1075,10 +1077,12 @@ export function takenCloses(): { itemId: string; revision: number }[] {
         const { clientKey, send } = request.payload;
         const release = held.get(clientKey);
         held.delete(clientKey);
+        // Note that a release before its close comes to wait is kept for it, as the host keeps one.
+        if (release === undefined && !gone.has(clientKey)) early.set(clientKey, send);
         release?.(send);
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { held: release !== undefined },
+          value: { held: !gone.has(clientKey) || release !== undefined },
         });
       }
       if (request.kind !== ACT_KIND.AGENTS_INBOX_CLOSE) return previous(request);
@@ -1094,14 +1098,19 @@ export function takenCloses(): { itemId: string; revision: number }[] {
       };
       if (request.payload.held !== true) return Promise.resolve(taken());
       const answer = Promise.withResolvers<FakeActAnswer>();
-      held.set(clientKey, (send) => {
+      const settle = (send: boolean) => {
+        gone.add(clientKey);
         if (send) {
           answer.resolve(taken());
           return;
         }
         drawnByHost((each) => (each.id === itemId && asked !== undefined ? asked : undefined));
         answer.resolve({ status: FAKE_ANSWER.DONE, value: { failure: "unanswered" } });
-      });
+      };
+      const decided = early.get(clientKey);
+      early.delete(clientKey);
+      if (decided === undefined) held.set(clientKey, settle);
+      else settle(decided);
       return answer.promise;
     },
   });
