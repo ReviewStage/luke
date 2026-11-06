@@ -23,7 +23,7 @@ import {
   taskHolder,
 } from "../tasks/inbox-model.js";
 import { useInboxPager } from "../tasks/inbox-pager.js";
-import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
+import { InboxPane, type InboxPaneDoors, type InboxPaneWithin } from "../tasks/inbox-pane.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { TaskInboxControl } from "../tasks/use-task-inbox.js";
@@ -37,14 +37,18 @@ import { paneDoors, startedThreads } from "./desktop-inbox.js";
  * card, on the thread it names, and they stand in the transcript's place,
  * the transcript kept drawn beneath, hidden (`AgentPane`'s `hidden`), so
  * the way back, the list head's ‹ Transcript or Escape, finds it where it
- * was. Nothing here is drawn anew: the list is the Inbox's (`inbox-list.tsx`)
- * as an Inbox narrowed to a task lists it, every item, open and settled,
- * addressed to anyone, the latest changed first, held still while it is
- * shown (`use-held-inbox-list.ts`), but of this agent alone; the thread is
- * the Inbox's pane (`inbox-pane.tsx`), answered on the task's own held read
- * as the task's page holds it, with the window's Inbox's doors
- * (`desktop-inbox.tsx`'s `paneDoors`), bar its agent's crumb, which goes
- * back to the transcript, the agent's own. Choosing a row, or K and J,
+ * was, standing where the task's details stand their ‹ Agents. Nothing here
+ * is drawn anew: the list is the Inbox's (`inbox-list.tsx`) as an Inbox
+ * narrowed to a task lists it, every item, open and settled, addressed to
+ * anyone, the latest changed first, held still while it is shown
+ * (`use-held-inbox-list.ts`), but of this agent alone, headed Threads in a
+ * bar title's type, its rows naming no task; the thread is the Inbox's pane
+ * (`inbox-pane.tsx`), answered on the task's own held read as the task's
+ * page holds it, its bar naming neither the task nor the agent, which the
+ * card's tab and the task's topbar name, its way back saying ‹ Threads, with
+ * the window's Inbox's doors (`desktop-inbox.tsx`'s `paneDoors`), bar a
+ * press on the agent, which goes back to the transcript, the agent's own.
+ * Choosing a row, or K and J,
  * shows its thread; an answer keeps the list beside it, and a new thread
  * started from the box opens in the card (`startedThreads`). Opening an item
  * reads it, and a notice is acknowledged as it opens, as in the Inbox. Too
@@ -58,6 +62,12 @@ import { paneDoors, startedThreads } from "./desktop-inbox.js";
 
 /** What the card's way back says, and the place its hint names. */
 const TRANSCRIPT = { LABEL: "Transcript", PLACE: "transcript" } as const;
+
+/** What the list is called at its head, and what a thread's way back to it says. */
+const THREADS = { LABEL: "Threads", PLACE: "threads" } as const;
+
+/** Where a thread shown in the card stands: inside its agent's card, its way back to the list. */
+const IN_CARD: InboxPaneWithin = { back: { label: THREADS.LABEL, place: THREADS.PLACE } };
 
 /** What the list lists: every item, open or settled, as an Inbox narrowed to a task does. */
 const AGENT_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
@@ -216,7 +226,7 @@ export function AgentThreads({
           chosen={chosen}
           columns={columns.shown}
           rows={columns.rows}
-          head={{ shown: active, view: undefined, lead: back }}
+          head={{ shown: active, view: undefined, within: { lead: back, title: THREADS.LABEL } }}
           models={agents.models}
           readerId={me}
           reading={inbox.reading}
@@ -255,6 +265,7 @@ export function AgentThreads({
             hidden={columns.shown === INBOX_COLUMNS.LIST}
             onBack={columns.onBack}
             pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+            within={IN_CARD}
             newThread={
               tasks.signedIn
                 ? startedThreads(agents.startInboxThread, (_item, itemId) => onChoose(itemId))
