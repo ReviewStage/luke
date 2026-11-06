@@ -19,10 +19,18 @@ import { focusChoosable } from "./list-selection.js";
  * putting exactly those rows in the selection in place of what stood.
  *
  * A head that draws the box only while a row is chosen takes it away as
- * the selection goes, so choosing none hands the focus to the list it
- * chooses in (`controls`) first, as the selection's toolbar does, rather
- * than let it fall to the page.
+ * the selection goes, so choosing none, None or a way that holds no row,
+ * hands the focus to the list it chooses in (`controls`) first, as the
+ * selection's toolbar does, rather than let it fall to the page.
  */
+
+/** A way to choose rows by what they hold: its words, how many rows it chooses, and the choosing. */
+export interface SelectionPickerChoice {
+  readonly label: string;
+  /** How many rows it chooses, none of which leaves the list with nothing chosen. */
+  readonly count: number;
+  readonly onSelect: () => void;
+}
 
 /** The box and the chevron of a list holding `total` rows, `count` of them chosen. */
 export function SelectionPicker({
@@ -42,24 +50,30 @@ export function SelectionPicker({
   /** Chooses none, as Esc does. */
   onNone: () => void;
   /** The other ways to choose rows, after All and None, each choosing those rows alone. */
-  by?: readonly MenuAction[] | undefined;
+  by?: readonly SelectionPickerChoice[] | undefined;
   /** The id of the list whose rows it chooses, which takes the focus as it chooses none. */
   controls: string;
 }): React.JSX.Element {
   const drop = useMenu(true);
   const any = count > 0;
-  const none = () => {
+  // Note that the focus goes to the list before the rows are let go, since the box goes with them.
+  const handingFocus = (choose: () => void) => () => {
     const list = document.getElementById(controls);
     // Note that a region of the app's own rows keeps no roving Tab stop, so its first row takes the focus instead.
     if (list !== null && !focusRovingStop(list)) focusChoosable(list);
-    onNone();
+    choose();
   };
+  const none = handingFocus(onNone);
+  const ways: readonly MenuAction[] = by.map((choice) => ({
+    label: choice.label,
+    onSelect: choice.count === 0 ? handingFocus(choice.onSelect) : choice.onSelect,
+  }));
   const groups: readonly (readonly MenuAction[])[] = [
     [
       { label: SELECTION_WORDS.ALL, onSelect: onAll },
       { label: SELECTION_WORDS.NONE, onSelect: none },
     ],
-    ...(by.length === 0 ? [] : [by]),
+    ...(ways.length === 0 ? [] : [ways]),
   ];
   return (
     <span className="ui-selection-picker inline-flex flex-none items-center gap-tight-gap">

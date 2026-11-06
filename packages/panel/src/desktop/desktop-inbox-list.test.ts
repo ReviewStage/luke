@@ -326,7 +326,7 @@ test("Esc lets the selection go, in the list as in its bar", async () => {
   );
 });
 
-test("the head's box lets a selection go at a press, and the menu beside it chooses every row", async () => {
+test("the head's box lets a selection go at a press, and the menu beside it chooses every row, or none where no row is unread, handing the focus to the list", async () => {
   const { page } = mount();
   await settle();
   const expiry = "Expire after 7 days?";
@@ -351,6 +351,15 @@ test("the head's box lets a selection go at a press, and the menu beside it choo
   act(() => select?.click());
   act(() => menuItem("All").click());
   assert.deepEqual(picked(page), ["How is a failed email retried?", expiry, "Alert at 80%?"]);
+
+  act(() => select?.focus());
+  act(() => select?.click());
+  act(() => menuItem("Unread").click());
+  assert.deepEqual(picked(page), [], "no row is unread");
+  assert.ok(
+    document.activeElement?.matches(".inbox-tasks button.ui-list-row-main"),
+    "the focus goes to the list as the menu's box goes",
+  );
 });
 
 test("a plain click still opens its item, leaving what is chosen as it stands", async () => {

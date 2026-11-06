@@ -412,6 +412,8 @@ interface InboxChosen {
 interface InboxHeadSelecting {
   readonly count: number;
   readonly total: number;
+  /** How many of the rows drawn are unread. */
+  readonly unread: number;
   readonly onAll: () => void;
   /** Chooses the rows drawn that are unread, or those read. */
   readonly onUnread: (unread: boolean) => void;
@@ -1100,8 +1102,12 @@ function ListHead({
         onNone={choosing.onClear}
         controls={choosing.controls}
         by={[
-          { label: READ, onSelect: () => choosing.onUnread(false) },
-          { label: UNREAD, onSelect: () => choosing.onUnread(true) },
+          {
+            label: READ,
+            count: choosing.total - choosing.unread,
+            onSelect: () => choosing.onUnread(false),
+          },
+          { label: UNREAD, count: choosing.unread, onSelect: () => choosing.onUnread(true) },
         ]}
       />
     );
@@ -1675,6 +1681,7 @@ export function InboxList({
             : {
                 count: picks.length,
                 total: drawn.length,
+                unread: drawn.filter(({ item }) => isUnread(item)).length,
                 onAll: () => setPicked(new Set(drawn.map(({ item }) => item.id))),
                 onUnread: (unread) =>
                   setPicked(
