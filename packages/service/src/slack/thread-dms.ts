@@ -12,7 +12,8 @@
  * or not, so the title is said once. While a reply in its Slack thread holds
  * the thread's open ask, the title DM says that ask's words under the title,
  * and the title alone once it settles (`redrawTitleDms`), so a member reading
- * down their DMs sees which threads wait on them. Before the thread has a
+ * down their DMs sees which threads wait on them; either way it ends in the
+ * open button to the thread. Before the thread has a
  * DM, a follow-up that asks nothing new on a thread still open writes
  * nothing. A member's
  * reply in a DM's Slack thread is found back to its thread by that DM
@@ -294,16 +295,36 @@ function askControls(itemId: string, message: InboxMessage): AskControls {
   };
 }
 
-/** The DM a thread's Slack thread stands under: its title, after the inbox's emoji, as the header, and the open ask's words under it where given, clipped short. */
-function titleDmContent(title: string, openAsk = ""): SlackMessageContent {
-  const text = `${TITLE_PREFIX}${title}`;
-  const header = slackClipped(text, SLACK_TEXT_BOUND.HEADER);
+/** A thread's title, after the inbox's emoji, as a DM's header block. */
+function titleHeader(title: string): SlackBlock {
+  const text = slackClipped(`${TITLE_PREFIX}${title}`, SLACK_TEXT_BOUND.HEADER);
+  return { type: "header", text: { type: "plain_text", text } };
+}
+
+/** The button that opens the thread in the app, by its link. */
+function openButton(link: string): SlackBlock {
+  return {
+    type: "button",
+    text: { type: "plain_text", text: `Open in ${PRODUCT_NAME}` },
+    url: link,
+  };
+}
+
+/**
+ * The DM a thread's Slack thread stands under: its title as the header, the
+ * open ask's words under it where given, clipped short, and the open button.
+ * Note that the button stands whether an ask is open or not, because the
+ * title DM is what a member scanning their DMs sees, and the reply that
+ * carries the thread's own button is a press further in.
+ */
+function titleDmContent(title: string, link: string, openAsk = ""): SlackMessageContent {
   const words = openAsk.trim();
   return {
-    text,
+    text: `${TITLE_PREFIX}${title}`,
     blocks: [
-      { type: "header", text: { type: "plain_text", text: header } },
+      titleHeader(title),
       ...(words === "" ? [] : [slackMarkdownBlock(words, OPEN_ASK_PREVIEW_CHARS)]),
+      { type: "actions", elements: [openButton(link)] },
     ],
   };
 }
@@ -324,7 +345,7 @@ function threadDmContent(
 ): SlackMessageContent {
   const words = view.text.trim();
   const blocks: SlackBlock[] = [
-    ...(view.titled === true ? titleDmContent(view.title).blocks : []),
+    ...(view.titled === true ? [titleHeader(view.title)] : []),
     ...(words === "" ? [] : [slackMarkdownBlock(words)]),
     ...(line === undefined
       ? []
@@ -332,14 +353,7 @@ function threadDmContent(
     ...controls.blocks,
     {
       type: "actions",
-      elements: [
-        ...controls.buttons,
-        {
-          type: "button",
-          text: { type: "plain_text", text: `Open in ${PRODUCT_NAME}` },
-          url: view.link,
-        },
-      ],
+      elements: [...controls.buttons, openButton(view.link)],
     },
   ];
   return { text: line === undefined ? view.title : `${view.title} · ${line}`, blocks };
@@ -589,13 +603,13 @@ function titleDmsOf(dms: readonly (typeof SlackDmSchema.Type)[]): readonly Title
 
 /**
  * Rewrites each title DM to say the open ask whose reply stands in its Slack
- * thread under the item's title, or the title alone where none does, as
- * `titleDmContent` draws it.
+ * thread under the item's title, or the title alone where none does, with
+ * the thread's link, as `titleDmContent` draws it.
  */
 function redrawTitleDms(
   bot: SlackBotService,
   itemId: string,
-  title: string,
+  thread: { readonly title: string; readonly link: string },
   titles: readonly TitleDm[],
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.forEach(
@@ -606,7 +620,7 @@ function redrawTitleDms(
           onNone: () => "",
           onSome: ({ text, steps }) => wordsWithSteps(text, steps ?? []),
         });
-        return bot.update(at.channel, at.ts, titleDmContent(title, words));
+        return bot.update(at.channel, at.ts, titleDmContent(thread.title, thread.link, words));
       }),
     { discard: true },
   );
@@ -737,7 +751,12 @@ export function settleThreadDms(
         ),
       { discard: true },
     );
-    yield* redrawTitleDms(bot.value, itemId, title, titleDmsOf(claimed.map(({ dm }) => dm)));
+    yield* redrawTitleDms(
+      bot.value,
+      itemId,
+      { title, link },
+      titleDmsOf(claimed.map(({ dm }) => dm)),
+    );
   });
 }
 
@@ -773,9 +792,10 @@ export function dmThreadPost(
     if (kept === undefined && post.wasOpen && !post.asked) return;
     const place = yield* findItemPlace(item.id);
     if (Option.isNone(place)) return;
+    const link = threadLink(item.id, place.value);
     const opened =
       kept === undefined
-        ? yield* bot.value.dm(organizationId, recipient, titleDmContent(item.title))
+        ? yield* bot.value.dm(organizationId, recipient, titleDmContent(item.title, link))
         : Option.some(kept);
     if (Option.isNone(opened)) return;
     const thread = { channel: opened.value.channel, ts: opened.value.ts };
@@ -786,7 +806,7 @@ export function dmThreadPost(
     const view = {
       title: item.title,
       text: wordsWithSteps(message.text, askSteps(message.ask)),
-      link: threadLink(item.id, place.value),
+      link,
     };
     const content = threadDmContent(view, undefined, askControls(item.id, message));
     const sent = yield* bot.value.dm(organizationId, recipient, content, thread);
@@ -796,7 +816,7 @@ export function dmThreadPost(
       dm: { ...sent.value, to: recipient, thread: thread.ts },
     });
     if (message.ask?.status === INBOX_ASK_STATUS.OPEN) {
-      yield* redrawTitleDms(bot.value, item.id, item.title, [thread]);
+      yield* redrawTitleDms(bot.value, item.id, { title: item.title, link }, [thread]);
     }
     const uploads = yield* messageUploads(recipient, item.id, message);
     yield* bot.value.upload(thread.channel, thread.ts, uploads);
