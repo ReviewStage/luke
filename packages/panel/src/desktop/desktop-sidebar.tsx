@@ -50,8 +50,7 @@ import {
   RepositoryPicture,
   ResizeEdge,
   type ResizeEdgeHandle,
-  ROVING_REACH,
-  type RovingReach,
+  reachedKey,
   rovingItemIn,
   SCROLL_FADE,
   ScrollArea,
@@ -219,28 +218,6 @@ const RUNNING_NOUN = "running";
 
 /** The widths of the tasks' names while the list is first read, uneven as names are. */
 const LIST_SKELETON = ["72%", "54%", "64%", "46%"] as const;
-
-/**
- * The row of the column's runs a key reaches (`keys`, every run's rows in
- * order), from the row in hand (`inHand`), none where the focus stands on a
- * page's row or nowhere; none where the walk of the items drawn reaches the
- * right one, as it does from the first row back and the last row on, onto
- * the pages' rows above the runs, which are always drawn. From the walk's
- * first item (`first`) back, it reaches the last row.
- */
-function sidebarReach(
-  keys: readonly string[],
-  inHand: string | undefined,
-  to: RovingReach,
-  first: boolean,
-): string | undefined {
-  if (to === ROVING_REACH.LAST) return keys.at(-1);
-  if (to === ROVING_REACH.FIRST) return undefined;
-  if (inHand === undefined) return to === ROVING_REACH.PREVIOUS && first ? keys.at(-1) : undefined;
-  const at = keys.indexOf(inHand);
-  if (at < 0) return undefined;
-  return to === ROVING_REACH.NEXT ? keys[at + 1] : at === 0 ? undefined : keys[at - 1];
-}
 
 /**
  * The edge of the window's left column, the tasks' sidebar or Settings' page
@@ -1846,7 +1823,7 @@ function SidebarColumn({
     [finding, runs.hold],
   );
   // The column's rows, the app's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by;
-  // a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn (`sidebarReach`).
+  // a key reaching past the rows drawn goes on to the row it reaches across the runs, in the order they stand, brought in where it is not drawn.
   const roving = useRovingKeys<HTMLDivElement>({
     reach: (from, to) => {
       const box = body.current;
@@ -1854,8 +1831,7 @@ function SidebarColumn({
       const inHand = from
         ?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`)
         ?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE);
-      const first = from !== undefined && rovingItemIn(box) === from;
-      const key = sidebarReach(runs.keys(), inHand ?? undefined, to, first);
+      const key = reachedKey(runs.keys(), inHand ?? undefined, to);
       if (key === undefined) return false;
       const row = box.querySelector(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}="${CSS.escape(key)}"]`);
       const press = row === null ? undefined : rovingItemIn(row);
