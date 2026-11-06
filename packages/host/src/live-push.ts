@@ -5,6 +5,7 @@ import {
   liveRows,
   type SealedRead,
   type TxWait,
+  waitOrRegained,
 } from "./live-follow.js";
 
 /**
@@ -17,7 +18,8 @@ import {
  * good is read again, each after a wait that doubles from `FOLLOW_RESEAL`'s
  * first to its longest while each read again publishes nothing, so a read
  * that keeps failing, or whose rows never decode, is not read whole every
- * two seconds for as long as it is held. A read the service refused
+ * two seconds for as long as it is held; a wait ends at once where the
+ * service answers again (`waitOrRegained`). A read the service refused
  * for good, one naming nothing the account reaches, is published as a
  * failure and ends there, so a read held of a plan or an agent the reader
  * cannot reach is not asked again for as long as it is held. Only the value
@@ -57,7 +59,7 @@ export function pushLive<Part extends string, Value>(
       yield* dependencies.publish(undefined);
       if (sealed.gone === true) return false;
       fruitless += 1;
-      yield* Effect.sleep(resealWait(fruitless));
+      yield* waitOrRegained(resealWait(fruitless));
       return true;
     }
     let published = false;
@@ -78,7 +80,7 @@ export function pushLive<Part extends string, Value>(
       }),
     ).pipe(Effect.catch(() => Effect.void));
     fruitless = published ? 0 : fruitless + 1;
-    yield* Effect.sleep(resealWait(fruitless));
+    yield* waitOrRegained(resealWait(fruitless));
     return true;
   });
   return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));
