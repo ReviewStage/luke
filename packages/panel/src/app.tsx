@@ -33,7 +33,7 @@ import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { forgetPictures } from "@repo/ui/picture-cache";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
@@ -89,11 +89,13 @@ import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
-  experimentOnNow,
+  appStateQuery,
   SETTINGS_HELD,
+  selectExperiment,
   useAdminAccess,
   useAdminAccessPending,
   useAppSlice,
+  useAppStateSubscription,
   useExperimentChoices,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
@@ -214,6 +216,8 @@ function ExpiredServerToasts(): null {
  * writes, never see the tasks arrive after the rest.
  */
 export function App(): React.JSX.Element {
+  // Every reading of the document is written into the window's Query client from here, its one mount.
+  useAppStateSubscription();
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
   const account = useAppSlice(APP_SLICE.ACCOUNT);
@@ -324,8 +328,10 @@ function AppWindow(): React.JSX.Element {
   // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
   // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
   const openHostConnect = useOpenHostConnect();
+  const queryClient = useQueryClient();
   const openAccountLink = useSteadyDoor(({ place }: AccountLink) => {
-    if (!experimentOnNow(EXPERIMENT.BRING_YOUR_OWN_HOST)) {
+    const state = queryClient.getQueryData(appStateQuery.queryKey);
+    if (state === undefined || !selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST)(state)) {
       openSettings({
         page: SETTINGS_VIEW.EXPERIMENTAL,
         section: SETTINGS_SECTION.BRING_YOUR_OWN_HOST,

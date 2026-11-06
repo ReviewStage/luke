@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
   type AppStateDelivery,
@@ -13,12 +14,15 @@ import {
   NO_EXPERIMENTS,
 } from "@repo/settings";
 import { type AppSettingsView, appSettingsView } from "@repo/settings/wire";
+import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { useContext, useEffect } from "react";
 import { appBridge } from "./app-bridge.js";
-import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
+import { QUERY_ROOT } from "./query-keys.js";
+import { rendererPromise, rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 import { onFixtureMoved } from "./tasks/fixture-moves.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 
@@ -202,6 +206,49 @@ export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavaila
   AtomRegistry.getResult(rendererRegistry, appStateAtom);
 
 /**
+ * The document as one TanStack Query query, which a surface reads its part of
+ * with `useQuery({ ...appStateQuery, select })` and a callback that cannot
+ * wait a render with `getQueryData(appStateQuery.queryKey)` on the client
+ * `useQueryClient` hands it. Its `queryFn` is the first read, and every
+ * later reading is written into the cache as it arrives
+ * (`useAppStateSubscription`), so it is never stale (`staleTime: Infinity`,
+ * as the docs' guide to data pushed over a socket has it) and never read
+ * again. A first read the bridge refused is not tried again, since the
+ * window shows that failure at once.
+ */
+export const appStateQuery = queryOptions({
+  queryKey: [QUERY_ROOT.APP_STATE],
+  queryFn: () => rendererPromise(appStateFirstRead),
+  staleTime: Infinity,
+  retry: false,
+});
+
+/**
+ * Writes every reading of the document into the window's Query client with
+ * `setQueryData`, as the docs' guide to data pushed over a socket does from
+ * a hook mounted once: the readings are the one subscription's
+ * (`appStateAtom`), so `app:state` is still subscribed to once however many
+ * readers the cache and the registry have. The panel's root (`app.tsx`)
+ * mounts it and nothing else does.
+ */
+export function useAppStateSubscription(): void {
+  const queryClient = useQueryClient();
+  const registry = useContext(RegistryContext);
+  useEffect(
+    () =>
+      registry.subscribe(
+        appStateAtom,
+        (result) => {
+          const state = AsyncResult.value(result);
+          if (Option.isSome(state)) queryClient.setQueryData(appStateQuery.queryKey, state.value);
+        },
+        { immediate: true },
+      ),
+    [queryClient, registry],
+  );
+}
+
+/**
  * The snapshot as it stands, for a callback that cannot wait a render: two
  * acts asked in one breath arrive as two calls in one turn, and the second
  * has to read what the first left. Not a hook, so nothing redraws for it.
@@ -371,11 +418,6 @@ export function useExperimentChoices(): ExperimentChoices {
   return useAtomValue(experimentChoicesAtom);
 }
 
-/** The same answer for a callback that cannot wait a render. */
-export function experimentOnNow(experiment: Experiment): boolean {
-  return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
-}
-
 /** Whether the platform offers one capability, an atom per capability, which tells its readers only as that one turns. */
 const capabilityAtom = Atom.family((capability: HostCapability) =>
   Atom.map(APP_SLICE.RUN, (run) => run?.capabilities.includes(capability) === true),
@@ -426,4 +468,130 @@ export function useCapability(capability: HostCapability): boolean {
 /** The same answer for a callback that cannot wait a render. */
 export function capabilityNow(capability: HostCapability): boolean {
   return appStateNow()?.run.capabilities.includes(capability) === true;
+}
+
+/**
+ * What a surface reads of the document, each a `select` for
+ * `useQuery({ ...appStateQuery, select })`: one top-level slice, or one
+ * answer made from one. Each is a module-level function, so its reference
+ * stands still from render to render and Query runs it again only when the
+ * document moves, as the docs' Render Optimizations guide asks of `select`.
+ */
+export const selectRun = (state: AppStateSnapshot) => state.run;
+export const selectSettings = (state: AppStateSnapshot) => state.settings;
+export const selectAccount = (state: AppStateSnapshot) => state.account;
+export const selectAccess = (state: AppStateSnapshot) => state.access;
+export const selectUpdate = (state: AppStateSnapshot) => state.update;
+export const selectAudio = (state: AppStateSnapshot) => state.audio;
+export const selectTasks = (state: AppStateSnapshot) => state.tasks;
+export const selectAgents = (state: AppStateSnapshot) => state.agents;
+export const selectInbox = (state: AppStateSnapshot) => state.inbox;
+export const selectAccountPreferences = (state: AppStateSnapshot) =>
+  state[LIVE_READ.ACCOUNT_PREFERENCES];
+export const selectAgentOrigins = (state: AppStateSnapshot) => state[LIVE_READ.AGENT_ORIGINS];
+export const selectInboxItems = (state: AppStateSnapshot) => state[LIVE_READ.INBOX_ITEMS];
+export const selectHolderInbox = (state: AppStateSnapshot) => state[LIVE_READ.HOLDER_INBOX];
+export const selectInstalledSkills = (state: AppStateSnapshot) => state[LIVE_READ.INSTALLED_SKILLS];
+export const selectIntegrations = (state: AppStateSnapshot) => state[LIVE_READ.INTEGRATIONS];
+export const selectIntegrationTools = (state: AppStateSnapshot) =>
+  state[LIVE_READ.INTEGRATION_TOOLS];
+export const selectLinkStandings = (state: AppStateSnapshot) => state[LIVE_READ.LINK_STANDINGS];
+export const selectMemories = (state: AppStateSnapshot) => state[LIVE_READ.MEMORIES];
+export const selectModels = (state: AppStateSnapshot) => state[LIVE_READ.MODELS];
+export const selectPages = (state: AppStateSnapshot) => state[LIVE_READ.PAGES];
+export const selectProviderKeys = (state: AppStateSnapshot) => state[LIVE_READ.PROVIDER_KEYS];
+export const selectPullRequest = (state: AppStateSnapshot) => state[LIVE_READ.PULL_REQUEST];
+export const selectRepositoryLists = (state: AppStateSnapshot) => state[LIVE_READ.REPOSITORY_LISTS];
+export const selectGithubToken = (state: AppStateSnapshot) => state[LIVE_READ.GITHUB_TOKEN];
+export const selectPullRequestChapters = (state: AppStateSnapshot) =>
+  state[LIVE_READ.PULL_REQUEST_CHAPTERS];
+export const selectPullRequestChecks = (state: AppStateSnapshot) =>
+  state[LIVE_READ.PULL_REQUEST_CHECKS];
+export const selectPullRequestConversation = (state: AppStateSnapshot) =>
+  state[LIVE_READ.PULL_REQUEST_CONVERSATION];
+export const selectPullRequestPublished = (state: AppStateSnapshot) =>
+  state[LIVE_READ.PULL_REQUEST_PUBLISHED];
+export const selectPullRequestViewed = (state: AppStateSnapshot) =>
+  state[LIVE_READ.PULL_REQUEST_VIEWED];
+export const selectReviewOptions = (state: AppStateSnapshot) => state[LIVE_READ.REVIEW_OPTIONS];
+export const selectBrowserTabs = (state: AppStateSnapshot) => state[LIVE_READ.BROWSER_TABS];
+export const selectDevicePresence = (state: AppStateSnapshot) => state[LIVE_READ.DEVICE_PRESENCE];
+export const selectHosts = (state: AppStateSnapshot) => state[LIVE_READ.HOSTS];
+export const selectWorkspaceInvitations = (state: AppStateSnapshot) =>
+  state[LIVE_READ.WORKSPACE_INVITATIONS];
+export const selectThisMacHost = (state: AppStateSnapshot) => state[LIVE_READ.THIS_MAC_HOST];
+export const selectTranscript = (state: AppStateSnapshot) => state[LIVE_READ.TRANSCRIPT];
+export const selectWorkspaceMembers = (state: AppStateSnapshot) =>
+  state[LIVE_READ.WORKSPACE_MEMBERS];
+export const selectWorkspaceIntegrations = (state: AppStateSnapshot) =>
+  state[LIVE_READ.WORKSPACE_INTEGRATIONS];
+export const selectSlackChannels = (state: AppStateSnapshot) => state[LIVE_READ.SLACK_CHANNELS];
+export const selectTokenRepositories = (state: AppStateSnapshot) =>
+  state[LIVE_READ.TOKEN_REPOSITORIES];
+export const selectWorkspacePhotos = (state: AppStateSnapshot) => state[LIVE_READ.WORKSPACE_PHOTOS];
+export const selectWorkspaceTools = (state: AppStateSnapshot) => state[LIVE_READ.WORKSPACE_TOOLS];
+export const selectMcpClients = (state: AppStateSnapshot) => state[LIVE_READ.MCP_CLIENTS];
+export const selectAutomations = (state: AppStateSnapshot) => state[LIVE_READ.AUTOMATIONS];
+export const selectAutomationWorkspaceRuns = (state: AppStateSnapshot) =>
+  state[LIVE_READ.AUTOMATION_WORKSPACE_RUNS];
+export const selectAutomationRuns = (state: AppStateSnapshot) => state[LIVE_READ.AUTOMATION_RUNS];
+export const selectPlanComments = (state: AppStateSnapshot) => state[LIVE_READ.PLAN_COMMENTS];
+export const selectHistory = (state: AppStateSnapshot) => state[LIVE_READ.HISTORY];
+export const selectPlanDocument = (state: AppStateSnapshot) => state[LIVE_READ.PLAN_DOCUMENT];
+export const selectMacCommands = (state: AppStateSnapshot) => state.macCommands;
+export const selectNotifications = (state: AppStateSnapshot) => state.notifications;
+export const selectNetwork = (state: AppStateSnapshot) => state.network;
+export const selectSessionReplay = (state: AppStateSnapshot) => state.sessionReplay;
+export const selectWindow = (state: AppStateSnapshot) => state.window;
+
+/** Whether the document holds settings: nothing is drawn over one without them (`SETTINGS_HELD`). */
+export const selectSettingsHeld = (state: AppStateSnapshot): boolean =>
+  state.settings !== undefined;
+
+/** The settings as the panel draws them (`APP_SETTINGS_VIEW`). */
+export const selectAppSettingsView = (state: AppStateSnapshot): AppSettingsView | undefined =>
+  state.settings === undefined ? undefined : appSettingsView(state.settings);
+
+/** Every experiment the account chose; signed out, every one is off. */
+export const selectExperimentChoices = (state: AppStateSnapshot): ExperimentChoices =>
+  state.settings?.experiments ?? NO_EXPERIMENTS;
+
+/** Whether the signed-in account is an admin; signed out, or where the host's read of it failed, none is. */
+export const selectAdminAccess = (state: AppStateSnapshot): boolean => state.access.admin === true;
+
+/** Whether the account's access is still being read, as it is for a moment after a sign-in or a launch. */
+export const selectAdminAccessPending = (state: AppStateSnapshot): boolean =>
+  state.access.pending === true;
+
+const experimentSelects = new Map<Experiment, (state: AppStateSnapshot) => boolean>();
+
+/**
+ * Whether the signed-in account has one experiment on: the one way a gated
+ * feature's row, command, and place ask. One function per experiment, made
+ * once and kept, so the `select` a surface hands Query stands still from
+ * render to render. Signed out, every experiment is off.
+ */
+export function selectExperiment(experiment: Experiment): (state: AppStateSnapshot) => boolean {
+  const held = experimentSelects.get(experiment);
+  if (held !== undefined) return held;
+  const select = (state: AppStateSnapshot): boolean =>
+    experimentOn(selectExperimentChoices(state), experiment);
+  experimentSelects.set(experiment, select);
+  return select;
+}
+
+const capabilitySelects = new Map<HostCapability, (state: AppStateSnapshot) => boolean>();
+
+/**
+ * Whether the platform this window runs on offers one capability: the one
+ * way a platform feature's tab, command, or button asks whether to stand at
+ * all. One function per capability, made once and kept, as
+ * `selectExperiment`'s are.
+ */
+export function selectCapability(capability: HostCapability): (state: AppStateSnapshot) => boolean {
+  const held = capabilitySelects.get(capability);
+  if (held !== undefined) return held;
+  const select = (state: AppStateSnapshot): boolean => state.run.capabilities.includes(capability);
+  capabilitySelects.set(capability, select);
+  return select;
 }
