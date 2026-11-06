@@ -54,10 +54,8 @@ export interface FakeSandbox {
   status: string;
   currentSessionId: string;
   tags: Record<string, string>;
-  /** The image it was created from, where it was. */
-  image?: string;
-  /** The snapshot it was created from, where it was. */
-  snapshotId?: string;
+  /** The image it was created from. */
+  image: string;
   deleted: boolean;
   /** The timeout each session of the sandbox opens with, as its create or a later update set it. */
   timeout: number;
@@ -194,8 +192,6 @@ export function runnerSandboxApi() {
    */
   const failDelete = { remaining: 0 };
   const commands: FakeCommand[] = [];
-  /** The snapshots Vercel no longer holds, which a create from one is refused for. */
-  const goneSnapshots = new Set<string>();
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const runs: {
@@ -228,10 +224,25 @@ export function runnerSandboxApi() {
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
     runExit?: ((args: readonly string[]) => number) | undefined;
-    onRun?: ((env: Readonly<Record<string, string>>, command: string) => Promise<void>) | undefined;
+    onRun?:
+      | ((
+          env: Readonly<Record<string, string>>,
+          command: string,
+          args: readonly string[],
+        ) => Promise<void>)
+      | undefined;
   } = {};
   /** The drives standing, by name. */
   const drives = new Set<string>();
+  /** Each drive a fork made, by its name, and the drive it was forked from. */
+  const driveForks = new Map<string, string>();
+  /**
+   * The drives of a sandbox deleted while its session ran, which Vercel's
+   * delete answers before that session stops: the next delete of each is
+   * refused as still attached, as Vercel refuses one a few seconds after,
+   * and the one after it goes through.
+   */
+  const releasingDrives = new Set<string>();
   /** The live running sandbox a drive is mounted in, which Vercel refuses the drive's delete and a second mount for. */
   const mountedIn = (drive: string) =>
     sandboxes.find(
@@ -287,10 +298,6 @@ export function runnerSandboxApi() {
       const asked = await body();
       assert.equal(asked.projectId, PROJECT);
       assert.equal(typeof asked.persistent, "boolean");
-      // As Vercel answers a create from a snapshot it no longer holds (the SDK's `isSnapshotNotFoundError`).
-      if (asked.source !== undefined && goneSnapshots.has(asked.source.snapshotId)) {
-        return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
-      }
       // A name a sandbox still holds is refused, which is what makes a name a lock.
       if (sandboxes.some((each) => !each.deleted && each.name === asked.name)) {
         return Response.json({ error: { code: "conflict" } }, { status: 409 });
@@ -309,9 +316,7 @@ export function runnerSandboxApi() {
         status: "running",
         currentSessionId: mintSession(),
         tags: asked.tags,
-        ...(asked.source === undefined
-          ? { image: asked.image }
-          : { snapshotId: asked.source.snapshotId }),
+        image: asked.image,
         deleted: false,
         createdAt: sandboxes.length + 1,
         timeout: asked.timeout,
@@ -330,13 +335,22 @@ export function runnerSandboxApi() {
       );
       return Response.json(sandboxesListed(found.map(listed)));
     }
+    const fork = /^\/api\/v2\/sandboxes\/drives\/([^/]+)\/fork$/u.exec(path);
+    if (method === "POST" && fork !== null) {
+      const source = decodeURIComponent(fork[1] ?? "");
+      if (!drives.has(source)) return new Response(null, { status: 404 });
+      const { name } = await body();
+      drives.add(name);
+      driveForks.set(name, source);
+      return Response.json(driveFound(name));
+    }
     const drive = /^\/api\/v2\/sandboxes\/drives\/([^/]+)$/u.exec(path);
     if (drive !== null) {
       const name = decodeURIComponent(drive[1] ?? "");
       if (method === "POST") drives.add(name);
       if (!drives.has(name)) return new Response(null, { status: 404 });
       if (method === "DELETE") {
-        if (mountedIn(name) !== undefined) {
+        if (mountedIn(name) !== undefined || releasingDrives.delete(name)) {
           return Response.json({ error: { code: "drive_attached" } }, { status: 409 });
         }
         const found = driveFound(name);
@@ -367,6 +381,9 @@ export function runnerSandboxApi() {
         return Response.json({ error: { code: "bad_request" } }, { status: 400 });
       }
       if (method === "DELETE") {
+        if (sandbox.status === "running") {
+          for (const mount of Object.values(sandbox.mounts ?? {})) releasingDrives.add(mount.drive);
+        }
         sandbox.deleted = true;
         return Response.json(sandboxDeleted(listed(sandbox)));
       }
@@ -465,7 +482,7 @@ export function runnerSandboxApi() {
     if (rest === "cmd") {
       const asked = await body();
       if (asked.wait === true) {
-        await hooks.onRun?.(asked.env ?? {}, asked.command);
+        await hooks.onRun?.(asked.env ?? {}, asked.command, asked.args);
         runs.push({ session: sessionId, args: asked.args, env: asked.env ?? {} });
         const exitCode = hooks.runExit?.(asked.args) ?? 0;
         const stdout =
@@ -556,8 +573,8 @@ export function runnerSandboxApi() {
     policyAtStart,
     sandboxes,
     drives,
+    driveForks,
     commands,
-    goneSnapshots,
     snapshots,
     snapshotExpirations,
     uploads,

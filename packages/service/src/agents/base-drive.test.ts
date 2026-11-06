@@ -1,5 +1,5 @@
 /**
- * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, and gone after a fill that failed.
+ * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill still runs, and gone after a fill that failed.
  */
 
 import assert from "node:assert/strict";
@@ -8,7 +8,13 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Fiber, Redacted } from "effect";
 import { runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
 import { fixtureToken } from "../testing/vercel-sandbox-fake.js";
-import { BASE_DRIVE, type BaseDriveOf, baseDriveName, fillBaseDrive } from "./base-drive.js";
+import {
+  BASE_DRIVE,
+  type BaseDriveOf,
+  baseDriveFilled,
+  baseDriveName,
+  fillBaseDrive,
+} from "./base-drive.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import type { RepositorySandbox } from "./repository-shell.js";
 import { composePolicy } from "./sandbox-firewall.js";
@@ -108,6 +114,36 @@ it.effect("launches that fill at once leave one base drive", () =>
     assert.deepEqual([...fake.drives], [baseDriveName(RELAY)]);
     assert.equal(fake.sandboxes.filter((each) => !each.deleted).length, 0);
   }),
+);
+
+it.effect(
+  "a base drive whose fill is still installing is not filled until its sandbox is gone",
+  () =>
+    Effect.gen(function* () {
+      const { fake, api } = yield* fixture;
+      let arrived = () => {};
+      const installing = new Promise<void>((resolve) => {
+        arrived = resolve;
+      });
+      let release = () => {};
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      fake.hooks.onRun = async (_env, _command, args) => {
+        if (!isInstall(args)) return;
+        arrived();
+        await released;
+      };
+
+      const fill = yield* Effect.forkChild(filled(api));
+      yield* Effect.promise(() => installing);
+      const whileInstalling = yield* baseDriveFilled(api, RELAY);
+      release();
+      yield* Fiber.join(fill);
+
+      assert.equal(whileInstalling, false);
+      assert.equal(yield* baseDriveFilled(api, RELAY), true);
+    }),
 );
 
 it.effect("a fill whose install failed leaves no base drive", () =>

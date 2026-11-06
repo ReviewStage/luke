@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { SETUP_AUDIENCE } from "@repo/settings";
 import { test } from "vitest";
-import { SETUP_AUDIENCE, SETUP_GATE, SETUP_STEP, setupGate, setupSteps } from "./setup-model.js";
+import { SETUP_GATE, SETUP_STEP, setupGate, setupSteps } from "./setup-model.js";
 
 const NEW = {
   id: "user-ada",
@@ -28,6 +29,11 @@ test.each([
     case: "an account with an agent connected, as every account that has worked has",
     account: { ...NEW, agent: true },
     gate: SETUP_GATE.NONE,
+  },
+  {
+    case: "a new account with an agent connected whose preferences are still read, which may say setup started elsewhere",
+    account: { ...NEW, agent: true, accountRead: false },
+    gate: SETUP_GATE.WAIT,
   },
   {
     case: "an account a team invited, holding its tasks, with no agent",

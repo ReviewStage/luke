@@ -325,9 +325,10 @@ body,
 
 /* The mark's ink is `@repo/ui`'s (`marks/product-mark.css`); its size where
    nothing more particular lays it out is the window's, except where it is
-   asked to fill its box (`fill`), which this unlayered size would otherwise
-   beat. */
-.ui-product-mark:not([data-fill="true"]) {
+   asked to fill its box (`fill`) or to stand as a line glyph (`glyph`) at the
+   size its seat gives the glyphs beside it, which this unlayered size would
+   otherwise beat. */
+.ui-product-mark:not([data-fill="true"], [data-glyph="true"]) {
   width: 18px;
   height: 18px;
 }
