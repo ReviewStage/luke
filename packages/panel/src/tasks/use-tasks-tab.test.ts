@@ -367,8 +367,8 @@ function mount(
         onOpen: (view) => adminOpens.push(view),
       },
       // The Board and a person's page are the router's, which the test's window router stands, each left for a place with no link.
-      boardView: useBoardRoute({ onClose: leaveRouted }),
-      personView: usePersonRoute({ onClose: leaveRouted }),
+      boardView: useBoardRoute({ onClose: leaveRouted, onStay: () => undefined }),
+      personView: usePersonRoute({ onClose: leaveRouted, onStay: () => undefined }),
       automationsView,
       versionHistoryView,
     });

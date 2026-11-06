@@ -110,8 +110,14 @@ function mount(
     const [standing, setTasks] = useState(initial);
     restand = setTasks;
     // The Board and a person's page stand where the router does, as the window's root reads them, and are left for the state's place.
-    board = useBoardRoute({ onClose: () => history?.onLeaveRouted() });
-    person = usePersonRoute({ onClose: () => history?.onLeaveRouted() });
+    board = useBoardRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    person = usePersonRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
     automations = useAutomationsRoute({
       narrow: false,
       onClose: () => history?.onLeaveRouted(),

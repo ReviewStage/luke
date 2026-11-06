@@ -409,8 +409,14 @@ function AppWindow(): React.JSX.Element {
     listedSlug: () => listedSlug.current,
     onClose: () => leaveRouted.current(),
   });
-  const boardView = useBoardRoute({ onClose: () => leaveRouted.current() });
-  const personView = usePersonRoute({ onClose: () => leaveRouted.current() });
+  const boardView = useBoardRoute({
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
+  const personView = usePersonRoute({
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
   const automationsView = useAutomationsRoute({
     narrow: room === SHELL_ROOM.NARROW,
     onClose: () => leaveRouted.current(),
