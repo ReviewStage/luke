@@ -988,10 +988,16 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       let replacing: string | undefined;
       for (const attempt of attempts) {
         const opened = yield* Effect.result(gotOn(agent, sessionId, attempt, checkout));
+        // Note that a sandbox standing under the name failed after its create, in its setup, so the
+        // next attempt would resume it with nothing checked out; only a create refused is passed by.
         const gone =
           Result.isFailure(opened) &&
           attempt.snapshot !== undefined &&
-          snapshotUnusable(opened.failure);
+          snapshotUnusable(opened.failure) &&
+          (yield* api.getNamed(agentSandboxName(sessionId)).pipe(
+            Effect.map((standing) => standing === undefined),
+            Effect.orElseSucceed(() => false),
+          ));
         const moved = Result.isSuccess(opened) && opened.success.lockfileMoved;
         if ((gone || moved) && attempt.from === CREATED_FROM.BASE) {
           replacing = attempt.snapshot?.snapshotId;
