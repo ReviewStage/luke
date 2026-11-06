@@ -66,6 +66,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import type { TabActionGroups } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
@@ -77,7 +78,6 @@ import {
 import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
-import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -2811,6 +2811,9 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
 
   await pressAction(tab, "Convert to draft");
 
+  await vi.waitFor(() =>
+    assert.equal(tab.querySelector(".pull-request-write-note") === null, false),
+  );
   const note =
     tab.querySelector<HTMLElement>(".pull-request-write-note") ??
     assert.fail("the tab says GitHub refused");
@@ -3125,7 +3128,7 @@ test("auto-merge is offered while checks run, and turned off once on; a merge qu
   }
 });
 
-test("while a merge's change is out its press stands busy, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
+test("while a merge's change is out its press stands busy, a second press sends nothing, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
   changeAnswer = {
@@ -3139,11 +3142,16 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
     assert.equal(press?.getAttribute("aria-busy"), "true");
     assert.equal(press?.getAttribute("aria-label"), "Merging");
   });
+  // A second change while the first is out is dropped, from any control of the pull request.
+  const [press] = mergePresses(tab);
+  await act(async () => press?.click());
+  assert.equal(changes.length, 1, "one change went");
   resolve();
-  await settle();
-  assert.equal(
-    tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Pull request is not mergeable.”",
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Pull request is not mergeable.”",
+    ),
   );
 });
 
@@ -3326,9 +3334,11 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
   writeReview(panel, "LGTM");
   await submitReview(panel, "Approve");
 
-  assert.equal(
-    panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Review Can not approve your own pull request”",
+  await vi.waitFor(() =>
+    assert.equal(
+      panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Review Can not approve your own pull request”",
+    ),
   );
   assert.equal(tab.querySelector(".pull-request-write-note") === null, true);
   assert.equal(boxWords(panel), "LGTM");
@@ -3897,18 +3907,19 @@ test("a picker's choice shows its button busy once the change has waited the set
     assert.equal(ringed("Updating labels"), true);
     assert.equal(reviewers()?.disabled, true, "the other picker is held, not busy");
     assert.equal(reviewers()?.getAttribute("aria-busy"), null);
-
-    answer.resolve();
-    await settle();
+  } finally {
+    vi.useRealTimers();
+  }
+  // Note that the answer reaches React through the change's mutation, which hands it on a timer of its own, so it lands on real timers.
+  answer.resolve();
+  await vi.waitFor(() =>
     assert.equal(
       picker("Updating labels") === null,
       true,
       "the button is named for what it adds again",
-    );
-    assert.equal(labels()?.getAttribute("aria-busy"), null);
-  } finally {
-    vi.useRealTimers();
-  }
+    ),
+  );
+  assert.equal(labels()?.getAttribute("aria-busy"), null);
 });
 
 test("the label picker lists the repository's labels, those on the pull request checked, and takes one off or puts one on as chosen; a merged pull request is offered no reviewers", async () => {
@@ -3996,12 +4007,13 @@ test("a reviewer chosen stands in the header before GitHub answers, and goes bac
   );
 
   answer.resolve();
-  await settle();
-  assert.deepEqual(faces(), before, "a choice GitHub refused goes back");
-  assert.equal(
-    tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Reviews may only be requested from collaborators.”",
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Reviews may only be requested from collaborators.”",
+    ),
   );
+  assert.deepEqual(faces(), before, "a choice GitHub refused goes back");
 });
 
 test("a label chosen stands under the title before GitHub answers, in the color the repository gives it, and stays once the pull request's read carries it", async () => {
@@ -4228,11 +4240,11 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
 
   writeReply(withId, "Done.");
   act(() => threadPress(withId, "Reply").click());
-  await settle();
-
-  assert.equal(
-    withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Pull request review thread is locked”",
+  await vi.waitFor(() =>
+    assert.equal(
+      withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Pull request review thread is locked”",
+    ),
   );
   assert.equal(boxWords(withId), "Done.");
   assert.equal(withoutId.querySelector(".pull-request-thread-actions") === null, true);
@@ -4966,11 +4978,13 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
 
   writeComment(tab, "Ping?");
   act(() => commentPress(tab).click());
-  await settle();
 
-  assert.equal(
-    tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Conversation is locked to collaborators”",
+  // Note that GitHub's answer reaches React a tick after it lands, as the change's mutation hands it on.
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Conversation is locked to collaborators”",
+    ),
   );
   assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Ping?");
 });
@@ -5467,11 +5481,11 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
 
   writeLineComment(comment, "Here.");
   act(() => commentOffer(comment, "Start a review").click());
-  await settle();
-
-  assert.equal(
-    comment.querySelector(".line-comment-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Pull request review thread line must be part of the diff”",
+  await vi.waitFor(() =>
+    assert.equal(
+      comment.querySelector(".line-comment-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Pull request review thread line must be part of the diff”",
+    ),
   );
   assert.equal(boxWords(comment), "Here.");
   assert.match(lines() ?? "", /\+2/u);
