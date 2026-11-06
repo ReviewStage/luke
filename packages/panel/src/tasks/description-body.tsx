@@ -1269,8 +1269,11 @@ export const DescriptionBody = memo(function DescriptionBody({
     if (!saved.kept) sayNotSaved(pickedOn, saved.cause);
     return saved.kept;
   };
-  // A tick is placed by its item's offset and line as drawn at the press, and
-  // writes nothing where the text no longer holds that line.
+  // A tick is placed by its item's offset and line in its section's words as
+  // its box drew them, and writes nothing where the text no longer holds that
+  // line. Note that the section's start is read from the text the tick is
+  // written over as it runs, because a box is not drawn again when an earlier
+  // section's words move it, and that text may hold a save not drawn yet.
   const tick = (section: number, at: number): DescriptionTick => {
     const unit = tickable(section) ? cut[section] : undefined;
     const item = unit === undefined ? undefined : taskItemAt(unit.text, at);
@@ -1278,10 +1281,12 @@ export const DescriptionBody = memo(function DescriptionBody({
     const queue = writes.current;
     const written = (ticked: boolean, save: DescriptionEditSend): Promise<Kept> | Kept => {
       const now = latestDescription.current;
-      if (!now.saves || unit === undefined || item === undefined || now.id !== pressedOn)
+      if (!now.saves || item === undefined || now.id !== pressedOn)
         return notKept(FAILURE_CONDITION.NOT_KEPT);
       const base = descriptionTextNow(queue, now);
-      const value = taskSet(base, unit.from + at, item.line, ticked);
+      const from = descriptionSections(base)[section]?.from;
+      if (from === undefined) return notKept(FAILURE_CONDITION.NOT_KEPT);
+      const value = taskSet(base, from + at, item.line, ticked);
       if (value === undefined) return notKept(FAILURE_CONDITION.NOT_KEPT);
       if (value === base) return KEPT;
       return savedOver(queue, save, now, { base, value }, value);

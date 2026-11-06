@@ -730,6 +730,26 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
+test("a box in a later section ticks its own item after an earlier section's words grew", async () => {
+  const body = "## Goal\n\nInvite by email.\n\n## Steps\n- [ ] One\n";
+  const grown = body.replace("Invite by email.", "Invite by email, or by a link.");
+  const { container, sent, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  render({ ...DOCUMENT_TASK, document: { body: grown, assumptions: [] } });
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  await vi.waitFor(() => expect(sent.length).toBe(1));
+
+  assert.deepEqual(sent[0]?.document, {
+    base: grown,
+    value: grown.replace("[ ] One", "[x] One"),
+  });
+});
+
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
   const { container, render } = mount();
   const edit = {
