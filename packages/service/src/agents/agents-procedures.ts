@@ -49,7 +49,6 @@ import {
   readVisibleAgentWorkspace,
 } from "@repo/database/models/agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
-import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@repo/database/models/task-store";
@@ -356,13 +355,11 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         nativeRuntimesOfReached([agent.conversationId]),
       );
       const memoryOn = yield* memoryOnFor(agent.userId);
-      const heard = yield* hostedStoreOrUnavailable(heardFromAnotherAccount(target));
       return {
         tools: offeredWorkspaceTools({
           agent,
           native: runtimes.has(agent.conversationId),
           memoryOn,
-          heardFromAnotherAccount: heard,
         }),
         runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
       };

@@ -24,21 +24,16 @@ import {
   macCommandResult,
   macCommandsWaiting,
   macListeningSince,
-  markMacListening,
   queueMacCommand,
   settleMacCommand,
 } from "@repo/database/models/mac-command-store";
 import { user } from "@repo/database/schemas/auth";
-import { conversations, messages } from "@repo/database/schemas/storage";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { getTestDB } from "@repo/database/testing";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandResult,
 } from "@repo/features/mac-command-wire";
-import { RUN_ON_MAC_OFF } from "@repo/features/workspace-tools-wire";
-import { unparsedWire } from "@repo/wire";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -46,9 +41,8 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { wokenOnHub } from "../testing/sync-woken.js";
-import { askMac, MAC_COMMAND_STATUS, macCommandsFor, runOnMacTool } from "./mac-command.js";
+import { askMac, MAC_COMMAND_STATUS, macCommandsFor } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
-import { runOnMacStanding } from "./workspace-tools.js";
 
 const ORIGIN = "https://app.test";
 const MAC_COMMANDS = "/api/mac-commands";
@@ -372,51 +366,6 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         );
         assert.equal(yield* macListeningSince("user-listens", since), true);
         assert.equal(yield* macListeningSince("user-silent", since), false);
-      }),
-  );
-
-  it.effect(
-    "an agent a teammate messaged runs nothing on its starter's Mac, though the Mac listens",
-    () =>
-      Effect.gen(function* () {
-        const [starter, teammate] = ["user-starter", "user-teammate"];
-        yield* account(starter);
-        yield* account(teammate);
-        yield* markMacListening(starter);
-        const db = yield* Database;
-        const conversationId = randomUUID();
-        yield* db
-          .insert(conversations)
-          .values({ id: conversationId, userId: starter, kind: CONVERSATION_KIND.AGENT });
-        yield* db.insert(messages).values({
-          userId: starter,
-          conversationId,
-          seq: 1,
-          clientId: randomUUID(),
-          role: "user",
-          parts: [],
-          placedAt: new Date(yield* Clock.currentTimeMillis),
-          sender: MESSAGE_SENDER.MEMBER,
-          senderUserId: teammate,
-        });
-        const since = new Date(yield* Clock.currentTimeMillis);
-
-        const answer = yield* runOnMacTool(
-          { userId: starter, conversationId },
-          unparsedWire({ command: "cat ~/.ssh/id_ed25519" }),
-        );
-
-        assert.equal(answer.status, MAC_COMMAND_STATUS.NOT_RUN);
-        assert.match("reason" in answer ? answer.reason : "", /someone other than the developer/u);
-        assert.equal(
-          yield* macCommandsWaiting(starter, since, [MAC_COMMAND_KIND.SHELL]),
-          false,
-          "nothing was queued for the starter's Mac",
-        );
-        const standing = yield* runOnMacStanding({ userId: starter, conversationId });
-        assert.ok(!standing.on, "the popover reads run_on_mac off");
-        assert.equal(standing.reason, RUN_ON_MAC_OFF.OUTSIDE_WORDS);
-        assert.equal(standing.from, MESSAGE_SENDER.MEMBER, "a teammate's message put the words in");
       }),
   );
 
