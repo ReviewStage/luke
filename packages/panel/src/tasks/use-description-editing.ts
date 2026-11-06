@@ -238,10 +238,12 @@ function saveLeft(
 export const EDITOR_PLACE = {
   /** The title over the text: a block the keyboard selects. */
   TITLE: "title",
+  /** An empty description's one block, its placeholder, which stands where its first section will. */
+  EMPTY: "empty",
 } as const;
 
-/** A block of the document the keyboard selects: a section, by its unit's id, or the title. */
-export type EditorHost = number | typeof EDITOR_PLACE.TITLE;
+/** A block of the document the keyboard selects: a section, by its unit's id, the title, or an empty description's placeholder. */
+export type EditorHost = number | (typeof EDITOR_PLACE)[keyof typeof EDITOR_PLACE];
 
 /** The document's one editor, the block the keyboard stands on, and their doors. */
 export interface DescriptionEditing {

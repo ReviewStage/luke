@@ -12,32 +12,32 @@ import {
   PageHeader,
   RetryButton,
 } from "@repo/ui";
-import { markdownClass } from "@repo/ui/markdown-class";
 import { openThread, useDescriptionCommentsControl } from "@repo/ui/description-comments";
+import { markdownClass } from "@repo/ui/markdown-class";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import {
+  DESCRIPTION_PLACEHOLDER,
+  type DescriptionEditorHandle,
+  type DescriptionEditorPlacement,
   type EditorAnchor,
   type EditorAnchors,
   PLACEMENT_END,
-  DESCRIPTION_PLACEHOLDER,
   type PlacedWords,
-  type DescriptionEditorHandle,
-  type DescriptionEditorPlacement,
 } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { type MentionDoors, retargetedMention } from "./mention-chip.js";
-import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 import { useTaskMentions } from "./task-mentions.js";
 import {
+  type DescriptionEditing,
   EDITOR_PLACE,
   type EditorHost,
-  type DescriptionEditing,
   useMarkTitleUnsaved,
 } from "./use-description-editing.js";
 
@@ -452,6 +452,45 @@ export function DocumentBlock({
   );
 }
 
+/**
+ * An empty description's placeholder as its one block (`EditableBlock`), as a
+ * written section is: the text cursor and no link's look, selected by the
+ * keyboard, which steps onto it from the title and takes it back as an
+ * editor opened from it closes, and opened by a press or Return with the
+ * caret in the empty text.
+ */
+export function EmptyDocumentBlock({
+  entry,
+  editing,
+  children,
+}: {
+  /** Whether this block is where Tab enters the document. */
+  entry: boolean;
+  editing: DescriptionEditing;
+  children: ReactNode;
+}): React.JSX.Element {
+  const block = useRef<HTMLDivElement>(null);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  useSelectedOnClose(editing, EDITOR_PLACE.EMPTY, () => block.current?.focus());
+  return (
+    <EditableBlock
+      ref={block}
+      label="Description"
+      kind={EDITABLE_BLOCK_KIND.TEXT}
+      entry={entry}
+      onPointerEnter={prefetchEditorBundle}
+      onFocus={() => {
+        prefetchEditorBundle();
+        editing.select(EDITOR_PLACE.EMPTY);
+      }}
+      onPress={() => editing.open(PLACEMENT_END)}
+      onOpen={() => editing.open(PLACEMENT_END)}
+    >
+      {children}
+    </EditableBlock>
+  );
+}
+
 /** The caret at the end of an element's words. */
 function caretAtEnd(element: HTMLElement): void {
   element.focus();
@@ -674,7 +713,7 @@ interface DraftDoors {
  */
 function useDraftHandOver(
   editing: DescriptionEditing,
-  hostOf: (section: number) => EditorHost,
+  hostOf: (section: number, words: string) => EditorHost,
   handed: React.RefObject<string>,
 ): DraftDoors {
   const [pause, restartPause] = useAtom(draftPauseAtom);
@@ -711,7 +750,7 @@ function useDraftHandOver(
     },
     onFinish: (section) => {
       flush();
-      door.current.close(hostOf(section));
+      door.current.close(hostOf(section, handed.current));
     },
     onLeave: () => {
       flush();
@@ -874,7 +913,8 @@ function DocumentNote({
  * The whole text in its editor (`./markdown-editor.tsx`), with every option
  * a description takes, in place of its drawn sections, which stand as `drawn` until
  * the editor's bundle has loaded. `hostOf` names the block of a section,
- * which the keyboard goes back to as the editor finishes. Focus leaving the
+ * or of a description the editor leaves with no words, which the keyboard
+ * goes back to as the editor finishes. Focus leaving the
  * editor closes it, unless it moved to its own buttons or to the menu its
  * toolbar dropped.
  */
@@ -894,7 +934,7 @@ export function DescriptionDocumentEditor({
   editor: DocumentEditor;
   editing: DescriptionEditing;
   drawn: ReactNode;
-  hostOf: (section: number) => EditorHost;
+  hostOf: (section: number, words: string) => EditorHost;
   /** What the description's mentions open, drawn as their chips in the editor, with `@` picking new ones; none where the text takes no mentions. */
   mentions?: MentionDoors | undefined;
   /** The column the document scrolls in, whose empty room moves the caret (`useTextRoom`). */
