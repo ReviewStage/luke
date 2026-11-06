@@ -180,7 +180,8 @@ sit below that threshold only when their meaning is available elsewhere.
 
 Words the window draws are selectable, so any of them can be copied; a
 control's words are not, since a control is pressed rather than read
-(`base.css`). A rule that takes selection away from words says why.
+(`base.css`). A rule that takes selection away from words that are no
+control's gives its reason in the commit that adds it.
 
 A control gives the Mac's arrow in the desktop's window, as Finder, Mail and
 Notes do, and the pointing hand on the web; a real link, one that opens a
@@ -234,9 +235,9 @@ the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
 never the glyph its button. A button floating over something that moves
 beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--ui-button-ground` and fills over that rather than over
-what passes. What is not one of these is a row or a tab and says why where it
-is drawn, such as a tab's ×, which brightens without a fill. A chip, which names a value or a thing rather than an act, is
-`@repo/ui`'s Chip.
+what passes. What is not one of these is a row or a tab, such as a tab's ×,
+which brightens without a fill. A chip, which names a value or a thing
+rather than an act, is `@repo/ui`'s Chip.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item, and anything else in the tab order, draws
@@ -288,10 +289,10 @@ and pads what it holds with steps of the scale rather than a menu's inset.
 ## Copy: delete what describes, keep what instructs
 
 A line of text earns its place on the surface only by saying something its
-control cannot. This is "Trivial comments are the enemy" (`docs/STYLE.md`)
-pointed at the screen: never narrate. A subtitle restating the toggle above
-it repeats what the reader can already see, and costs them the reading every
-time the page opens rather than once.
+control cannot. This is the rule that deletes a trivial comment
+(`docs/STYLE.md`'s Part 3) pointed at the screen: never narrate. A subtitle
+restating the toggle above it repeats what the reader can already see, and
+costs them the reading every time the page opens rather than once.
 
 Three categories, and only the first is ever cut:
 

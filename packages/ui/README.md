@@ -380,8 +380,8 @@ What the barrel holds (`src/index.ts`):
 | Patterns | `Toolbar` (a workspace's top bar, with `NotFound` under it), `PageHeader` (a document's own, which `SettingsPage`, `CollectionPage`, and `DetailPage` head themselves with), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `ProductMark`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
-Each component's design comment, at the top of its `.tsx`, says what it owns
-and what it leaves to its caller.
+Each component's props say what it owns: what a caller may set is a prop,
+and what is not a prop is the component's own.
 
 ### Skeletons
 
@@ -450,9 +450,8 @@ each control answers it with a style query of its own:
 
 A component lands whole in one change:
 
-1. **Module.** `src/components/<name>/<name>.tsx`: line one names it, a design
-   comment says what it owns, its variants are `as const` objects with derived
-   types, and its props take no `className` or `style`.
+1. **Module.** `src/components/<name>/<name>.tsx`: its variants are `as const`
+   objects with derived types, and its props take no `className` or `style`.
 2. **Stylesheet.** `src/components/<name>/<name>.css`: `ui-<name>*` classes
    inside `@layer components`, reading only `--ui-*` roles and palette.
    Import it from `src/styles.css`, where order is cascade order. A role a

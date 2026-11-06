@@ -237,7 +237,7 @@ pnpm check:affected                      # what changed since origin/main, from 
   never touches the network, a live provider, real time, or personal data,
   and passes alone or in any order.
 - `[review]` A test finishes in about a second, and a file in about ten, on
-  CI. One that cannot says why in a comment.
+  CI. One that cannot says why in the PR that adds it.
 - `[check: anti-slop/no-internal-vi-mock]` `[review]` Use real code first, then a fake, then a stub, and replace only
   what crosses a process boundary: provider HTTP, Apple, the model, the OS,
   the clock. An Effect service is replaced by a test `Layer` on its tag;
@@ -408,7 +408,7 @@ reads it: `packages/host/src/acts.ts`,
 The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 
 - `[check: scripts/repository-checks.sh]` Write American English: prose,
-  comments, identifiers, user-facing words, and file names (`color`,
+  identifiers, user-facing words, and file names (`color`,
   `canceled`, `labeled`, `center`, `gray`, `-ize`). A value already stored or
   on the wire keeps the spelling it shipped with (`AGENT_STATUS.CANCELED` is
   `"cancelled"`), as does a name an outside spec or API owns
@@ -416,13 +416,18 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 
 - Fight complexity by not creating it. Every dependency, layer, and
   abstraction earns its lines or is refused.
-- Order a file: header, imports, constants, private helpers, public API,
-  entry points last. Line one: `name.ts -- one line of purpose.`
+- Order a file: imports, constants, private helpers, public API, entry
+  points last.
 - Name by layer then verb. Guard early, one exit. Assert invariants.
 - A function is read in one pass. Files may be long; functions may not.
-- One-line guide comments inside functions. Why comments talk: "Note that
-  we X, because Y." Design comments sit above the function. No trivial
-  comments.
+- Code carries no comments. A name says what a step does, a type or an
+  assertion says what it assumes, a test named as a sentence says what it
+  promises, the commit message says why it changed, and the package's
+  README holds a design that outlives one change. The one comment kept is
+  one a tool reads: a shebang, a license header, a generated file's banner,
+  a lint or type suppression, a pragma (`@vitest-environment`,
+  `/// <reference>`), a JSDoc tag a tool acts on (`@public`, `@deprecated`),
+  and the style guard's `/* off-scale */` and `/* no ring: … */` markers.
 - UI draws with `@repo/ui` (`packages/ui/README.md`): its components, page
   patterns and `--ui-*` tokens; no raw controls where a component exists,
   no literal colors or sizes, no `className` on its controls. A missing

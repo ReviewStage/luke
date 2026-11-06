@@ -1,15 +1,17 @@
 # Style
 
-How this repository is designed, written, and commented. The model is Redis,
-taken from three sources: the Redis Manifesto, antirez's essays "Writing
+How this repository is designed and written. The model is Redis, taken
+from three sources: the Redis Manifesto, antirez's essays "Writing
 system software: code comments" (antirez.com/news/124) and "We are
 destroying software" (antirez.com/news/145), and the conventions the source
 itself follows in every file. Each rule is quoted or cited from one of
 those. Where the C habit does not carry straight into TypeScript, the
-translation follows under "In TypeScript".
+translation follows under "In TypeScript". Comments are where we part from
+Redis on purpose: Part 3 says why.
 
-Three parts: what we build, how a file is shaped, how it is commented.
-Formatting the linter handles is not repeated here.
+Three parts: what we build, how a file is shaped, and where the words a
+comment would hold go instead. Formatting the linter handles is not
+repeated here.
 
 ## Part 1: Design
 
@@ -54,8 +56,8 @@ complex libraries VS creating our stuff."
   sits on top of it.
 - A new dependency is a design decision stated in the PR, not a line in a
   lockfile.
-- Generated code comes from one data file through one generator, says so
-  on its first line, and there is nothing else generated. Redis generates
+- Generated code comes from one data file through one generator, opens
+  with a banner saying so, and there is nothing else generated. Redis generates
   exactly one file, `commands.def`, from the JSON describing each command.
 
 ### Fundamental structures, no intermediate layers
@@ -74,10 +76,10 @@ that are really needed."
   Redis's thin wrappers each add one fact, a default, a unit, a checked
   precondition.
 - A shape that carries the product's core state (a roster, a conversation,
-  a session) is defined in one place, with the reason for its shape and the
-  function that maintains each invariant named above it. Redis hand-writes
-  `sds`, `dict`, and `rax`, and each header opens with that essay; `rax.h`
-  draws the tree.
+  a session) is defined in one place, and its package's README gives the
+  reason for its shape and names the function that maintains each
+  invariant. Redis hand-writes `sds`, `dict`, and `rax`, and each header
+  opens with that essay; `rax.h` draws the tree.
 
 ### Do not rewrite what works, do not break what is used
 
@@ -88,7 +90,7 @@ work." "...by no longer caring about backward APIs compatibility."
   the shape of the problem more directly, and keeps its contract.
 - A wire shape, a stored row, a public function's meaning: once shipped,
   changed only with a migration and a reason.
-- A style pass is not a rewrite. It changes comments and shape, never
+- A style pass is not a rewrite. It changes names and shape, never
   behavior, and is reviewed as such.
 
 ### Simple things must stay simple
@@ -111,18 +113,13 @@ opening it. `t_zset.c`: license, purpose line, design comment, includes,
 constants and tables, forward declarations, private helpers, public API,
 and the command handlers last, at line 3514 of 4824.
 
-- Line one is the file naming itself: `name.ts -- one line of purpose.`
-  Then, when useful, a few lines on why it is its own file. No file is
-  silent, barrels included. Good: `packages/runtime/src/effect/single-flight.ts:2`,
-  `packages/gateway/src/protocol.ts:2`.
-- Then imports, constants and schemas, private helpers, the public
-  functions, and the entry points (route handlers, IPC handlers, React
-  components) last.
+- The file's name says what it holds. Its first line is its first import.
+- Then constants and schemas, private helpers, the public functions, and
+  the entry points (route handlers, IPC handlers, React components) last.
 - Definitions before use. A forward reference gets a declaration, not a
   reordering that breaks the reading order.
-- Separate the sections of a long file with a full-width divider comment:
-  `/* ----- Sorted set API ----- */`. Redis uses them in every file over a
-  few hundred lines.
+- Where Redis would draw a divider between the sections of a long file,
+  each section is a module of its own, named for what it holds.
 - Fields before methods in a class.
 
 ### Name by layer, then verb
@@ -167,9 +164,10 @@ in `t_zset.c` shows all of them in 135 lines.
 - Extract a helper the moment a piece of logic has a name, even for one
   caller. `zslGetElementByRank` is a three-line wrapper; `zslAllocSize` is
   one line; `expireCommand` and its three siblings are thin wrappers over
-  one generic implementation. Every helper carries a one-sentence contract
-  comment above it: what it does, what it assumes ("rank argument needs to
-  be 1-based").
+  one generic implementation. Its name says what it does, and its parameter
+  types or an assertion on entry say what it assumes: where Redis writes
+  "rank argument needs to be 1-based" above the function, the parameter is
+  a branded `OneBasedRank`.
 
 ### A function is read in one pass
 
@@ -226,132 +224,49 @@ command per scenario, named as a sentence: `INCR against non existing key`,
 
 ## Part 3: Comments
 
-antirez names nine kinds of comment and credits the readability of Redis to
-how they are used. Five matter here.
+Here we part from Redis. antirez credits the readability of Redis to its
+comments; this repository keeps none, because a comment is the one line
+nothing checks. It goes stale the day the code under it changes, and
+nothing fails when it does. A name, a type, an assertion, and a test break
+the build instead.
 
-### Guide comments give a function its rhythm
+### What each kind of comment becomes
 
-"If people regard the Redis code as readable, some part of the reason is
-because of all the guide comments." A guide comment is one line inside a
-function introducing the next few statements. It explains nothing the code
-does not. It lets a reader move through the function in steps.
+antirez's essay names the kinds of comment a reader needs. Each has a place
+in this repository that a tool keeps true.
 
-From `t_zset.c`, inside `zslNthInRange`:
+- **Guide**, a line introducing the next few statements: a named function
+  or a named constant. The step's name is the function's name, and the
+  caller reads as a list of steps.
+- **Why**, "Note that we X, because Y": a name that carries the reason
+  (`unlinkWithoutScan`, `RETURN_PAGE_SURVIVES_RESTORE`), or the commit
+  message of the change that made the choice, which `git blame` finds from
+  the line.
+- **Contract**, what a function assumes: a parameter type that cannot hold
+  the wrong value (a branded `OneBasedRank`), or an assertion on entry.
+- **Design and teacher**, an algorithm, a protocol, a state machine, a
+  hazard, and its source: the package's `README.md`, under a heading named
+  for the function or module, citing the paper, RFC, measurement, or
+  incident. `packages/service/README.md` is the model.
+- **Checklist**, "if you change this, also change that": an exhaustive
+  `switch` ending in a `never` check, a shared `as const` table both sites
+  read, a lint rule in `tools/anti-slop/`, or a test that fails when the two
+  drift.
+- **Trivial**, a restatement of the code: deleted.
 
-```c
-/* If everything is out of range, return early. */
-if (!zslIsInRange(zsl,range)) return NULL;
+### The comments a tool reads
 
-/* Go forward while *OUT* of range at level of zsl->level-1. */
-x = zsl->header;
-i = zsl->level - 1;
-while (x->level[i].forward && !zslValueGteMin(...)) {
-    edge_rank += zslGetNodeSpanAtLevel(x, i);
-    x = x->level[i].forward;
-}
-/* Remember the last node which has zsl->level-1 levels and its rank. */
-last_highest_level_node = x;
-last_highest_level_rank = edge_rank;
-```
+A comment stays when a tool reads it and acts on it, since deleting it
+changes what the build does:
 
-Nearly half of all comment blocks in Redis are one-line guide comments
-inside a function.
+- a shebang, a license header, and a generated file's banner;
+- a lint or type suppression (`@ts-expect-error`, a lint directive), each
+  where the lint rules allow one;
+- a pragma: `@vitest-environment`, `/// <reference>`;
+- a JSDoc tag a tool acts on: `@public` for knip, `@deprecated` for the
+  editor;
+- the style guard's markers in a stylesheet: `/* off-scale */` and
+  `/* no ring: … */` (`docs/DESIGN.md`).
 
-- Inside a function, mark each step with one line saying what the next few
-  statements do. One sentence, present tense.
-- A guide comment never carries a reason or a design note. Those go above
-  the function.
-- If a step needs more than one line to introduce, it is a function of its
-  own.
-
-### Why comments talk
-
-From `networking.c`:
-
-```c
-/* Note that we remember the linked list node where the client is stored,
- * this way removing the client in unlinkClient() will not require
- * a linear scan, but just a constant time operation. */
-c->client_list_node = listLast(server.clients);
-```
-
-- Write it as you would say it. "Note that we X, because Y." One fact per
-  sentence. Split at every semicolon or dash that joins two thoughts.
-- Plain verbs: reads, writes, refuses, decides. Not "stands", "holds level
-  with", "answers for".
-- One to three lines, directly above the statement.
-
-Not this, from an earlier `apps/desktop/src/renderer/app.tsx`:
-
-```ts
-/**
- * The settings page whatever is standing in the panel's place was begun
- * from — a key's provider row, the calendar's block under Integrations, or
- * the Feedback section on the front page — so leaving that shape ends back
- * on the page it began on. Written by each begin, because the return is a
- * fact about what was begun rather than about what was begun last: ...
- */
-```
-
-This:
-
-```ts
-// Which settings page to return to when the panel is restored. Each begin
-// writes it, so a note started from Feedback returns to Feedback. A ref,
-// because the restoring callback must stay stable.
-```
-
-### Design and teacher comments sit above the function
-
-Design comments explain the algorithm and its choices. Teacher comments
-teach the domain a reader may lack and cite the source. "Teacher comments
-are of huge value... they increase the amount of programmers that can read
-some code path." They are long because the subject is, and they sit above
-the function, never in a separate document.
-
-```c
-/* This skiplist implementation is almost a C translation of the original
- * algorithm described by William Pugh in "Skip Lists: A Probabilistic
- * Alternative to Balanced Trees", modified in three ways:
- * a) this implementation allows for repeated scores.
- * ...
-```
-
-`expire.c:56` opens `activeExpireCycle` with 38 lines on the adaptive
-algorithm. Inside the function, every comment is a one-line guide comment.
-
-- An algorithm, a state machine, a protocol, or a hazard gets as many lines
-  as it needs, above the function it describes.
-- Cite the source: a paper, an RFC, a measurement, an incident.
-- Never move a design comment out to a document. The reader is at the
-  function. Put it there.
-
-### Checklist comments name the other place
-
-"A checklist comment... tells you a set of actions to do when something is
-modified. It warns you about the way certain changes should be operated."
-
-- When changing here requires changing there, say so at both sites, by
-  file and name. "If you add an encoding, also update `zsetConvert`."
-- Prefer a checklist comment to a lint rule for a coupling that occurs once.
-  Prefer a lint rule when it occurs everywhere.
-
-### Trivial comments are the enemy
-
-A comment is trivial when "the cognitive load of reading the comment is the
-same or higher than just reading the associated code." Redis has almost
-none. This repository's variant is not the obvious kind. It is a comment
-that is correct, well reasoned, and three times longer than the code below
-it, so that reading it costs more than reading the code. The thirteen-line
-`useRef` comment above is the type, and it is the most common comment
-failure in the tree.
-
-- Do not restate what the code plainly does.
-- Do not repeat what a type or a lint rule already enforces.
-- If a comment above a variable, a branch, or a call is longer than the code
-  beneath it, the comment is wrong, not the code. Cut it to the one fact the
-  code cannot show, or move the rest above the function as a design comment.
-- A well-written trivial comment is still trivial. Quality of prose does
-  not excuse its cost.
-- "Comments don't explain what the code is doing. They explain what you
-  can't understand just from what the code does."
+A marker says only what its tool needs. Prose beside it is a comment and
+goes where Part 3 sends it.
