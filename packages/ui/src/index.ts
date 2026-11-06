@@ -184,6 +184,7 @@ export * from "./components/toast/toast-stack.js";
 export * from "./components/toolbar/toolbar.js";
 export * from "./components/tooltip/hint.js";
 export * from "./components/tooltip/tooltip.js";
+export * from "./components/turn-end/turn-end.js";
 export * from "./components/turn-into-menu/turn-into-menu.js";
 export * from "./components/unread-mark/unread-mark.js";
 export * from "./components/video-player/video-player.js";

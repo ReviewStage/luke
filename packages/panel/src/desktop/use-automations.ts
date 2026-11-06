@@ -11,7 +11,7 @@ import type { AutomationSummary } from "@repo/features/automation-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { mutationOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { sendAct, unreachedAs } from "../act.js";
+import { sendAct, type Unreached, unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { automationsQuery, automationsRetryMutation } from "../live-reads.js";
 
@@ -36,6 +36,11 @@ type AutomationsRead =
   | { readonly failure: AutomationCallFailure }
   | undefined;
 
+/** A write as the window hears it: the host's answer, or an act that never arrived, with the error beneath. */
+export type AutomationWriteAnswer =
+  | AutomationView
+  | Unreached<typeof AUTOMATION_CALL_FAILURE.UNANSWERED>;
+
 const unreached = unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED);
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
@@ -43,14 +48,16 @@ const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 /** One automation deleted, as the question asking it holds its own mutation over it, and why where the service refused it. */
 export const AUTOMATION_DELETE_MUTATION = mutationOptions({
   mutationKey: [ACT_KIND.AUTOMATIONS_DELETE],
-  mutationFn: (automationId: string): Promise<AutomationDeletedView> =>
+  mutationFn: (
+    automationId: string,
+  ): Promise<AutomationDeletedView | Unreached<typeof AUTOMATION_CALL_FAILURE.UNANSWERED>> =>
     sendAct(ACT_KIND.AUTOMATIONS_DELETE, { automationId }).catch(unreached),
 });
 
 /** A webhook's new secret, as the question asking it holds its own mutation over it, answered once for the asking page to show; the list keeps the automation alone. */
 export const WEBHOOK_SECRET_MUTATION = mutationOptions({
   mutationKey: [ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET],
-  mutationFn: (automationId: string): Promise<AutomationView> =>
+  mutationFn: (automationId: string): Promise<AutomationWriteAnswer> =>
     sendAct(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, { automationId }).catch(unreached),
 });
 
@@ -80,12 +87,12 @@ export function useAutomations(workspaceId: string | undefined) {
     [retry, workspaceId],
   );
   const create = useCallback(
-    (params: AutomationCreateParams): Promise<AutomationView> =>
+    (params: AutomationCreateParams): Promise<AutomationWriteAnswer> =>
       sendCreate(params).catch(unreached),
     [sendCreate],
   );
   const change = useCallback(
-    (params: AutomationChangeParams): Promise<AutomationView> =>
+    (params: AutomationChangeParams): Promise<AutomationWriteAnswer> =>
       sendChange(params).catch(unreached),
     [sendChange],
   );

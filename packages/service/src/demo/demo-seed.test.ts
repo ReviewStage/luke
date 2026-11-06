@@ -162,7 +162,8 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
             "Promote the chart hotfix to production",
           ]),
         );
-        assert.equal(inbox.plans.find((plan) => plan.planId === invitations?.id)?.toDo, 3);
+        // The invitations' three questions and its update not yet opened.
+        assert.equal(inbox.plans.find((plan) => plan.planId === invitations?.id)?.toDo, 4);
         assert.deepEqual(choice, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,

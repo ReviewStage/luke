@@ -272,7 +272,7 @@ export function composePortForwards(
           HttpClient.HttpClient,
           http,
         );
-        if (answer === undefined) return;
+        if ("failure" in answer) return;
         current.running = answer.running;
         const read = new Set(answer.ports);
         for (const [port, forward] of current.forwards) {

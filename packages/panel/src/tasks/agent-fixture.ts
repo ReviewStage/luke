@@ -1032,11 +1032,11 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.TERMINAL_CREATE]: (_payload, stage) => {
     const terminal = terminalStage(stage);
     if (terminal?.kind === TERMINAL_STAGE.REFUSED) {
-      return { refused: TERMINAL_REFUSAL.SANDBOX_UNANSWERED };
+      return { failure: TERMINAL_REFUSAL.SANDBOX_UNANSWERED };
     }
     if (terminal?.kind === TERMINAL_STAGE.SANDBOX) {
       return {
-        refused:
+        failure:
           terminal.sandbox === SANDBOX_STATE.STOPPED
             ? TERMINAL_REFUSAL.SANDBOX_STOPPED
             : TERMINAL_REFUSAL.AGENT_NOT_READY,

@@ -336,9 +336,9 @@ async function drawnTab(input: {
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
       const words = container.querySelector<HTMLElement>(
-        "[data-ended] :is(.agent-end-words, .ui-failure-note-words)",
+        "[data-ended] :is(.ui-turn-end-words, .ui-failure-note-words)",
       );
-      const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
+      const row = words?.closest<HTMLElement>(".ui-turn-end") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
     },
   };

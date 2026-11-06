@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AGENT_STATUS, type ListedAgent } from "@repo/features/agent-wire";
 import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
@@ -51,7 +51,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { playListMotions } from "../testing/pane-motion.js";
-import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { listedAgent, tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
 /**
@@ -173,6 +173,18 @@ function task(
       pullRequests: [],
     },
   };
+}
+
+/** Every agent the tasks' rows name, as the list follows them live, which the page lists them from. */
+function followedOf(tasks: readonly TaskSummary[]): readonly ListedAgent[] {
+  return tasks.flatMap((summary) =>
+    (summary.agents?.agents ?? []).map(({ at, ...line }) =>
+      listedAgent(
+        { ...line, planId: summary.id, createdAt: at ?? NOW, turnId: null },
+        { workspaceId: ACME.id },
+      ),
+    ),
+  );
 }
 
 const BACKOFF = agent(1, "Jittered backoff", CHARLES, AGENT_STATUS.RUNNING, 12 * MINUTE);
@@ -352,6 +364,7 @@ function mountWith(
   holdPeople(reads.deliverMembers);
   const control = (more: Partial<TasksControl>) =>
     tasksControl({
+      liveAgents: followedOf(more.tasks ?? overrides.tasks ?? TASKS),
       me: DEAN.userId,
       workspace: { ...ACME, memberCount },
       tasks: TASKS,
