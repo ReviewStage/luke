@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_REFUSAL,
@@ -16,12 +15,16 @@ import { PLAN_COMMENT_CALL_FAILURE, type TasksCommentAnswer } from "@repo/featur
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
 import type { PlanCommentsControl } from "@repo/ui/plan-comments";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts.js";
+import {
+  type CommentSubject,
+  planCommentsQuery,
+  planCommentsRetryMutation,
+} from "../live-reads.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { type CommentSubject, HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * use-plan-comments.ts -- a plan's comment threads, or one of its task's pages', as one control: held by the host while the surface shows them, and each write on its way back.
@@ -108,7 +111,8 @@ function refusalWords(refusal: PlanCommentRefusal): string {
 export function usePlanComments(
   subject: CommentSubject | undefined,
 ): PlanCommentsControl | undefined {
-  const read = useHostRead(LIVE_READ.PLAN_COMMENTS, subject);
+  const read = useQuery(planCommentsQuery(subject));
+  const { mutate: retryComments } = useMutation(planCommentsRetryMutation());
   const { mutateAsync: sendStart } = useMutation(actMutation(ACT_KIND.TASKS_COMMENT_START));
   const { mutateAsync: sendCommentAct } = useMutation(actMutation(ACT_KIND.TASKS_COMMENT_ACT));
   const toast = useToast();
@@ -192,7 +196,14 @@ export function usePlanComments(
     [planId, sendCommentAct, note, takenBack, drafts],
   );
 
-  const { rows, status, retry } = read;
+  const rows = read.data;
+  const { isSuccess, isError } = read;
+  // Note that Try again moves with the subject alone, as the read's own did, since a render builds it anew.
+  const pageId = subject?.pageId;
+  const retry = useCallback(() => {
+    if (planId === undefined) return;
+    retryComments(pageId === undefined ? { taskId: planId } : { taskId: planId, pageId });
+  }, [retryComments, planId, pageId]);
   return useMemo(
     () =>
       planId === undefined
@@ -200,13 +211,13 @@ export function usePlanComments(
         : {
             planId,
             threads: rows ?? NO_THREADS,
-            read: status === HOST_READ_STATUS.READY,
-            failed: status === HOST_READ_STATUS.FAILED,
+            read: isSuccess,
+            failed: isError,
             onRetry: retry,
             notes,
             start,
             act,
           },
-    [planId, rows, status, retry, notes, start, act],
+    [planId, rows, isSuccess, isError, retry, notes, start, act],
   );
 }

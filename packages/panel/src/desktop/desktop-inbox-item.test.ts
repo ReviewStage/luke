@@ -391,11 +391,14 @@ test("a page's link alone on its line, naming its task by the task's number, is 
   world.inboxes.set(BILLING.id, [saying(THRESHOLD, `[@${FUNNEL.title}](${link})`), RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD, standing: [numbered, INVITES] });
   await settle();
-  assert.equal(
-    page
-      .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
-      ?.getAttribute("src"),
-    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  // Note that the page is drawn once its task's pages reach their query.
+  await vi.waitFor(() =>
+    assert.equal(
+      page
+        .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
+        ?.getAttribute("src"),
+      pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+    ),
   );
 });
 
