@@ -3587,7 +3587,7 @@ it.effect(
   "an inbox write queued on disk by an older build under its Gateway method's name is laid back and sent on relaunch, a reminder under Snooze's",
   () =>
     Effect.gen(function* () {
-      const pool = yield* entityPool({ replayRefused: Effect.void });
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
       const { asked, queueable } = yield* subject({ pool });
       // Note that the names are spelled here, not read from the composer, because they are what a disk written before this build holds.
       const waiting = [
