@@ -846,26 +846,33 @@ function reported(kind: string, cause: unknown): Effect.Effect<void> {
 
 /**
  * The database's key: as `entities.key` holds it, opened by `cipher`, or
- * minted and written there where it holds none that opens, the database
- * kept under any other deleted first, since nothing opens it now. None where
- * a new key cannot be written.
+ * minted and written there where it holds none, or one that will not open,
+ * the database kept under any other deleted first, since nothing opens it
+ * now. None where the file is there but cannot be read, which leaves the
+ * database as it stands for a later launch, or where a new key cannot be
+ * written.
  */
 const databaseKey = Effect.fn("host/entityDatabaseKey")(function* (
   directory: string,
   cipher: SecretCipher,
 ) {
-  const text = yield* Effect.orElseSucceed(
-    readSettingsFileText(directory, ENTITY_KEY_FILE_NAME),
-    () => undefined,
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const read = yield* Effect.result(
+    fileSystem.readFileString(path.join(directory, ENTITY_KEY_FILE_NAME)),
   );
-  const opened =
-    text === undefined
-      ? undefined
-      : Result.getOrUndefined(
-          Result.flatMap(Base64.decode(text.trim()), (bytes) =>
-            Result.try(() => cipher.decrypt(bytes)),
-          ),
-        );
+  // Note that only a key that is not there is minted again: one that is there but will not read may read at the next launch, and the waiting writes it opens are kept for it.
+  if (Result.isFailure(read) && read.failure.reason._tag !== "NotFound") {
+    yield* reported("key was not read", read.failure.reason);
+    return undefined;
+  }
+  const opened = Result.isFailure(read)
+    ? undefined
+    : Result.getOrUndefined(
+        Result.flatMap(Base64.decode(read.success.trim()), (bytes) =>
+          Result.try(() => cipher.decrypt(bytes)),
+        ),
+      );
   if (opened !== undefined && KEY_PATTERN.test(opened)) return opened;
   yield* databaseRemoved(directory);
   const key = hexOf(crypto.getRandomValues(new Uint8Array(KEY_BYTES)));

@@ -278,6 +278,34 @@ it.effect("a database that is no database is made again, empty", () =>
   }).pipe(Effect.provide(files)),
 );
 
+it.effect("a key that is there but will not read keeps no store, and leaves the database", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("entity-store-");
+    const first = yield* opened(directory, DANA, { queued: () => [RENAME] });
+    yield* first.store.requeued;
+    yield* first.closed;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const key = path.join(directory, ENTITY_KEY_FILE_NAME);
+    const sealedKey = yield* fileSystem.readFileString(key);
+    // A key file that cannot be read, as one the system refuses this launch.
+    yield* fileSystem.remove(key);
+    yield* fileSystem.makeDirectory(key);
+
+    const store = yield* openEntityStore({
+      directory,
+      cipher: testCipher(),
+      driver: testSqliteDriver(),
+      accountId: DANA,
+    });
+    yield* fileSystem.remove(key, { recursive: true });
+    yield* fileSystem.writeFileString(key, sealedKey);
+
+    assert.equal(store, undefined);
+    assert.deepEqual((yield* opened(directory, DANA)).store.queue, [RENAME]);
+  }).pipe(Effect.provide(files)),
+);
+
 it.effect("a driver that cannot load keeps no store", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("entity-store-");
