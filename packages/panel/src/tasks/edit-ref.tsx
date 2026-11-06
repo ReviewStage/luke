@@ -29,12 +29,12 @@ import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import type { AgentsControl } from "./use-agents.js";
 
 /**
- * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
+ * edit-ref.tsx -- who wrote a description's edit, named on their own face wherever the window says it: the "Edited by" line over the description, each section's byline, and the task's ⋯ menu.
  *
  * The writer is read through `@repo/ui/actor-model`'s `editActor`, against
  * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
- * they last did in the plan, and the app's when and what it wrote, both read
+ * they last did in the description, and the app's when and what it wrote, both read
  * off who last changed each section, which the window already holds. A
  * coding agent found among the task's agents wears its harness and where
  * its work stands, hangs its tab's card, and opens its tab on a press where
@@ -59,11 +59,11 @@ export interface EditAgents {
   readonly onOpen: ((agentId: string) => void) | undefined;
 }
 
-/** Who reads a plan's edits, as a place hands them over: the members are the directory's. */
+/** Who reads a description's edits, as a place hands them over: the members are the directory's. */
 export type TaskReader = Pick<EditReader, "readerId">;
 
 /**
- * What a place knows to name a plan's edits: who reads them, who last
+ * What a place knows to name a description's edits: who reads them, who last
  * changed each section, and its agents. Note that it holds no clock: a line
  * that says how long ago reads the minute itself, so the minute draws that
  * line again and not every section that names an edit.
@@ -88,7 +88,7 @@ function agentOf(
   );
 }
 
-/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the plan before history. */
+/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the description before history. */
 function writerOf(edit: DescriptionLastEdit, place: EditPlace): Actor | undefined {
   const agent = agentOf(edit, place.agents);
   const found: EditAgent | undefined =
@@ -140,7 +140,7 @@ export function conflictWords(
   };
 }
 
-/** What an actor last did in the plan, in a card's line; none where no section's last change is theirs. */
+/** What an actor last did in the description, in a card's line; none where no section's last change is theirs. */
 function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): string | undefined {
   const activity = latestActivity(place.sections, actor);
   if (activity === undefined) return undefined;
@@ -148,7 +148,7 @@ function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): 
   return ago ? `${words} · ${agoText(activity.at, now)}` : words;
 }
 
-/** A person named in a line: their card says what they last did in the plan; someone the window cannot name hangs their own. */
+/** A person named in a line: their card says what they last did in the description; someone the window cannot name hangs their own. */
 function PersonRef({
   actor,
   place,
@@ -168,7 +168,7 @@ function PersonRef({
   return <ActorRef actor={actor} card={card} sentence={sentence} faceOnly={faceOnly} />;
 }
 
-/** The writer of an edit as one target in a line, or their face alone; nothing for the plan before history, which nobody wrote. */
+/** The writer of an edit as one target in a line, or their face alone; nothing for the description before history, which nobody wrote. */
 function WriterRef({
   edit,
   place,
@@ -234,7 +234,7 @@ export function editorsOf(
  * `faceOnly` it is the writer's face alone, their name said in the card it
  * hangs, for a section's byline, which keeps to a heading's end. Drawn
  * inside an `.actor-line`, whose words carry their own spaces. Nothing for
- * the plan before history.
+ * the description before history.
  */
 export function EditedBy({
   edit,

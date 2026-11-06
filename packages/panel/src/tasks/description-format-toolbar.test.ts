@@ -28,12 +28,12 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * description-format-toolbar.test.ts -- the format toolbar over words selected in
- * the plan's open text: standing once the pointer is let go over them, never
+ * the description's open text: standing once the pointer is let go over them, never
  * in code, and in place of the read view's Comment bubble; its marks, Turn
  * into, and Comment acting on the words; and ⌘K linking them, or left to the
  * window's command palette where no words are selected. The editor is the
@@ -67,7 +67,7 @@ const PAGE_LINKS = { workspace: "acme", onOpen: () => undefined, reveal: undefin
 
 const roots: Root[] = [];
 
-// Landed before the plan renders, as the panel lands it after its first paint.
+// Landed before the description renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {

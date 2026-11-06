@@ -61,7 +61,7 @@ import { useOpenPlace } from "./use-open-link.js";
 /**
  * replay-card.tsx -- the card an agent started from another opens on after its brief: "Continued from" or "Forked from" the source agent, folded over the steps of the source's work it was handed.
  *
- * The card stands as the plan's card does, at a sent message's measure over
+ * The card stands as the description's card does, at a sent message's measure over
  * the line naming who started the agent and when, as any line sent to the
  * agent is named: a teammate by their face and name, the reader's own by
  * the time alone, and its Copy, which copies the replay as it was handed. Its summary row names the source by the chip its tab

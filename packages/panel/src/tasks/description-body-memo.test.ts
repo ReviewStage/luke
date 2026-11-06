@@ -14,7 +14,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import type { DescriptionEditDoor } from "./use-description-editing.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**

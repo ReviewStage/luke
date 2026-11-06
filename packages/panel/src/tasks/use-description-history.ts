@@ -12,15 +12,15 @@ import { useRegained } from "../use-regained.js";
 import { revisionOfSave } from "./description-history-model.js";
 
 /**
- * use-description-history.ts -- the open plan's history as its version history holds it: the revisions read, the version chosen, and its restore.
+ * use-description-history.ts -- the open description's history as its version history holds it: the revisions read, the version chosen, and its restore.
  *
- * The history is the one main holds for the plan's version history while it
+ * The history is the one main holds for the description's version history while it
  * stands, and a while after (`LIVE_READ.HISTORY`): its newest page, which
  * main follows as each save lands, then each older page the list asked for,
  * which main lays after it, so a save lands at the head of the list as it
  * lands in the document, a version history opened again lists its versions
  * in its first frame, and nothing is read again here. The newest revision,
- * the plan as it stands, is chosen until the developer chooses another, and
+ * the description as it stands, is chosen until the developer chooses another, and
  * a save landing meanwhile moves the view on
  * to the new newest; choosing one reads its content and the content before
  * it, and the version history draws what that revision changed until it is
@@ -29,7 +29,7 @@ import { revisionOfSave } from "./description-history-model.js";
  * section's last save, reading older pages until one shows it, and on the
  * newest where none can be read. Gone back to, it opens where it stood when
  * it was left: on the version chosen then, with the sections then open.
- * Restoring the version is the service's write; the plan it answers arrives
+ * Restoring the version is the service's write; the description it answers arrives
  * in the document through main's view like any other save, and the history
  * reads again on it. A restore is undone by restoring the version that stood
  * before it, which the caller is handed to offer.
@@ -42,7 +42,7 @@ export const HISTORY_READ = {
   FAILED: "failed",
 } as const;
 
-/** The plan's revisions as read: reading the first page, its read failed, or the pages read, newest first, with where the next older page is read from. */
+/** The description's revisions as read: reading the first page, its read failed, or the pages read, newest first, with where the next older page is read from. */
 type HistoryList =
   | { readonly kind: typeof HISTORY_READ.READING }
   | { readonly kind: typeof HISTORY_READ.FAILED }
@@ -52,7 +52,7 @@ type HistoryList =
       readonly earlier: number | undefined;
     };
 
-/** A version's content as read: reading, failed, or the plan after the revision and before it, none before the first. */
+/** A version's content as read: reading, failed, or the description after the revision and before it, none before the first. */
 type VersionRead =
   | { readonly kind: typeof HISTORY_READ.READING }
   | { readonly kind: typeof HISTORY_READ.FAILED }
@@ -62,10 +62,10 @@ type VersionRead =
       readonly previous: DescriptionDocument | null;
     };
 
-/** The version the version history draws: its revision, whether it is the plan as it stands, and its content as read. */
+/** The version the version history draws: its revision, whether it is the description as it stands, and its content as read. */
 export interface ViewedVersion {
   readonly line: DescriptionRevisionLine;
-  /** Whether it is the newest revision, which is the plan as it stands and has nothing to restore. */
+  /** Whether it is the newest revision, which is the description as it stands and has nothing to restore. */
   readonly current: boolean;
   readonly read: VersionRead;
 }
@@ -119,7 +119,7 @@ export interface DescriptionHistoryControl {
   onCloseSections: () => void;
   /**
    * Whether the history stands on its list rather than on the version chosen,
-   * which only a narrow room draws apart: a history opened on the plan as it
+   * which only a narrow room draws apart: a history opened on the description as it
    * stands does, one opened on a save or a version, or with a version or a
    * section chosen, does not.
    */
@@ -133,7 +133,7 @@ export interface DescriptionHistoryControl {
   onRetryVersion: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
-  /** Restores the version `seq`, or the one chosen, as the plan's content; the caller hears it landed through `onRestored`. */
+  /** Restores the version `seq`, or the one chosen, as the description's content; the caller hears it landed through `onRestored`. */
   onRestore: (seq?: number) => Promise<ActedResult>;
 }
 
@@ -226,15 +226,15 @@ function versionOf(answer: TasksRevisionAnswer): VersionRead {
 }
 
 /**
- * The open plan's history. `planId` is the open task, none while no task is
+ * The open description's history. `planId` is the open task, none while no task is
  * drawn; `history` its history as main holds it, which the caller holds
  * while the version history is shown; `editedAt` its last edit, which reads
  * the version drawn again and which a list must be as new as to be sought
  * in; `name` its name, under which a version is formatted, so a rename reads
- * the version drawn again; `shown` whether the plan's version history is on
+ * the version drawn again; `shown` whether the description's version history is on
  * screen, which is what reads it and what a version chosen stands on; and
  * `seek` the moment of the save whose revision it opens on, read as it
- * opens, none to open on the plan as it stands or, given `returnTo`, where
+ * opens, none to open on the description as it stands or, given `returnTo`, where
  * it stood on an earlier visit.
  */
 export function useDescriptionHistory(input: {
@@ -271,7 +271,7 @@ export function useDescriptionHistory(input: {
   const heldFailed = reading && history.status === HOST_READ_STATUS.FAILED;
   const held = useMemo(() => listOf(heldRows, heldFailed), [heldRows, heldFailed]);
   const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
-  // Until one is chosen, the plan as it stands is, whichever revision that is now.
+  // Until one is chosen, the description as it stands is, whichever revision that is now.
   const newest = revisions[0]?.seq;
   if (reading && taskId !== undefined && chosen === undefined) {
     setVersion(openedOn(taskId, seek, returnTo));
@@ -291,7 +291,7 @@ export function useDescriptionHistory(input: {
     setVersion({ ...chosen, seq: sought === newest ? undefined : sought, seeking: undefined });
   }
   // A version gone back to that no page read so far shows is read for on
-  // older pages as a save is, and gives way to the plan as it stands where
+  // older pages as a save is, and gives way to the description as it stands where
   // the whole history read holds none.
   const returned = seeking === undefined ? chosen?.seq : undefined;
   const unread =
@@ -404,7 +404,7 @@ export function useDescriptionHistory(input: {
 
   // A save or a version gone back to that no page read so far shows is
   // sought on the next older page, and one whose page could not be read gives
-  // way to the plan as it stands, unless the view has since been opened on
+  // way to the description as it stands, unless the view has since been opened on
   // another task, another save, or another version.
   useEffect(() => {
     if (readBefore === undefined || taskId === undefined) return;

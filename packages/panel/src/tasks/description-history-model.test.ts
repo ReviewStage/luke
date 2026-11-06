@@ -143,9 +143,9 @@ test("a revision names its writer as the developer knows them, and says what it 
 });
 
 /**
- * A plan's revisions, newest first, as the service lists them: the app's on a
+ * A description's revisions, newest first, as the service lists them: the app's on a
  * call, moved on by saves from three hours ago to two, an agent's five hours
- * ago, and the plan before its history began.
+ * ago, and the description before its history began.
  */
 const REVISIONS = [
   line({ seq: 3, startedAt: NOW - 3 * HOUR }),
@@ -311,7 +311,7 @@ test("a revision is compared by section, its assumptions among them, and a headi
   assert.ok(diff.changed);
 });
 
-test("a revision's changed sections are the units its diff marks, in reading order, and the plan's first revision wrote every one", () => {
+test("a revision's changed sections are the units its diff marks, in reading order, and the description's first revision wrote every one", () => {
   const before = {
     body: "## Goal\n\nOnly admins.\n\n## Risks\n\nSpam.\n\n## Notes\n\nNone.",
     assumptions: [],
@@ -332,7 +332,7 @@ test("a revision's changed sections are the units its diff marks, in reading ord
   );
 });
 
-test("only a revision of several changes opens its sections: not one change, a restore, or the plan before history", () => {
+test("only a revision of several changes opens its sections: not one change, a restore, or the description before history", () => {
   assert.equal(opensSections(line()), true);
   assert.equal(opensSections(line({ changes: 1 })), false);
   assert.equal(opensSections(line({ restoredFrom: { seq: 1, at: NOW } })), false);
@@ -357,7 +357,7 @@ test("a revision's Open goes to its agent's tab, and nowhere for Vespin's own sa
     kind: REVISION_SOURCE.AGENT,
     agentId: AGENT_ID,
   });
-  // An agent the line no longer names, the developer, and the plan before history open nothing.
+  // An agent the line no longer names, the developer, and the description before history open nothing.
   assert.equal(revisionSource({ lastEdit: agentEdit }), undefined);
   assert.equal(
     revisionSource({ lastEdit: { ...agentEdit, actor: DESCRIPTION_ACTOR.DEVELOPER } }),

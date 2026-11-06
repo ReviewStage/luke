@@ -51,7 +51,7 @@ function mount(): void {
   );
 }
 
-/** A version of a plan that is not the newest, as the version history draws it, whose restore answers `answer`; each version asked and each restore landed heard. */
+/** A version of a description that is not the newest, as the version history draws it, whose restore answers `answer`; each version asked and each restore landed heard. */
 function mountVersion(answer: ActionResult, asked: (number | undefined)[], landed: string[]): void {
   function Version(): React.JSX.Element {
     const restore = useVersionRestore(

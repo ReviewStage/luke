@@ -22,7 +22,7 @@ import {
 
 const NOW = 1_800_000_600_000;
 
-/** A step that read 620k of a 1M window whose compaction is at 900k, on an agent handed the plan. */
+/** A step that read 620k of a 1M window whose compaction is at 900k, on an agent handed the description. */
 const CONTEXT: AgentContext = {
   windowTokens: 1_000_000,
   compactionThresholdTokens: 900_000,
@@ -65,7 +65,7 @@ test("the ring has room short of a tenth of the window below eve's compaction, t
   assert.equal(contextLevel(reading(1_200_000)), "over");
 });
 
-test("the popover divides the read into the instructions, the tools, the plan, and the conversation left over, every count an estimate marked with ~", () => {
+test("the popover divides the read into the instructions, the tools, the description, and the conversation left over, every count an estimate marked with ~", () => {
   const rows = contextRows(CONTEXT, undefined);
   assert.deepEqual(
     rows.map((row) => [row.label, rowCount(row)]),

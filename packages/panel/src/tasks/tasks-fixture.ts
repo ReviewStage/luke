@@ -71,8 +71,8 @@ import type { AutomationsPlace } from "./use-tasks-tab.js";
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Tasks, and under the tasks profile it also opens the
- * fixture task, a drafted plan with its version history, which is what the
- * tasks capture shows; under the tasks-comments profile its plan
+ * fixture task, a drafted description with its version history, which is what the
+ * tasks capture shows; under the tasks-comments profile its description
  * holds comment threads, answered as the service answers a read of them.
  * Every name and repository here is invented; nothing is read from an
  * account.
@@ -180,7 +180,7 @@ const FIXTURE_TASK: Task = {
 };
 
 /**
- * The fixture task's plan as it stood after its first `sections` sections,
+ * The fixture task's description as it stood after its first `sections` sections,
  * each a heading and its words, as a revision partway through drafting saved it.
  */
 function draftOf(sections: number): DescriptionDocument {
@@ -189,7 +189,7 @@ function draftOf(sections: number): DescriptionDocument {
 
 /**
  * The fixture task's version history, newest first, each revision beside the
- * plan it saved: its member and a teammate of its workspace by hand, the app on
+ * description it saved: its member and a teammate of its workspace by hand, the app on
  * its call, and a coding agent, over the two days before the call, so the
  * version history shows real versions by more than one writer rather than
  * waiting on a read main answers with nothing. Note that the agent's revision
@@ -406,7 +406,7 @@ const FIXTURE_TASK_LIST: TasksView = {
   taskAgents: [],
 };
 
-/** The open task, whose plan main's document holds as read (`fixtureAppState`). */
+/** The open task, whose description main's document holds as read (`fixtureAppState`). */
 const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
@@ -430,8 +430,8 @@ function memberWrote(
 }
 
 /**
- * A thread on `quote`, words of the fixture's plan under `section`, its
- * anchor where those words stand in the plan's text as the service keeps it,
+ * A thread on `quote`, words of the fixture's description under `section`, its
+ * anchor where those words stand in the description's text as the service keeps it,
  * and its times from its entries.
  */
 function thread(input: {
@@ -443,7 +443,7 @@ function thread(input: {
   readonly entries: readonly DescriptionCommentEntry[];
 }): DescriptionCommentThread {
   const from = FIXTURE_TASK.document.body.indexOf(input.quote);
-  if (from < 0) throw new Error(`The fixture's plan holds no "${input.quote}"`);
+  if (from < 0) throw new Error(`The fixture's description holds no "${input.quote}"`);
   const times = input.entries.map((entry) => entry.at);
   return {
     ...input,
@@ -455,10 +455,10 @@ function thread(input: {
 }
 
 /**
- * The comment threads on the fixture's plan, oldest first, as the host
+ * The comment threads on the fixture's description, oldest first, as the host
  * holds them: one on a whole block, one its coding agent
  * started, one answered by a member and by the app, and one resolved, which
- * only the plan's comments list shows. The open ones stand in the plan's first
+ * only the description's comments list shows. The open ones stand in the description's first
  * sections, so the window's first screen of it shows their marks.
  */
 const FIXTURE_THREADS: readonly DescriptionCommentThread[] = [
@@ -550,12 +550,12 @@ const FIXTURE_THREADS: readonly DescriptionCommentThread[] = [
   }),
 ].sort((older, newer) => older.createdAt - newer.createdAt);
 
-/** Main's held comments with the fixture task's plan's threads among them, one object for each of main's. */
+/** Main's held comments with the fixture task's description's threads among them, one object for each of main's. */
 const STAGED_COMMENTS = new WeakMap<AppDescriptionComments, AppDescriptionComments>();
 
 /**
  * Main's document as the tasks-comments profile draws it: the fixture
- * task's plan's threads held as the window's read of them holds them
+ * task's description's threads held as the window's read of them holds them
  * (`LIVE_READ.DESCRIPTION_COMMENTS`), none on its pages. The same document, the
  * very object, under any other profile.
  */
@@ -608,7 +608,7 @@ export function fixtureTasksView(run: {
 /**
  * The side panel a fixture run opens its task with: on the tab each agent
  * profile names, and shut under any other, the tasks profiles' among them,
- * whose plan the column's Overview shows. Nothing for a live run, which
+ * whose description the column's Overview shows. Nothing for a live run, which
  * opens the panel as the developer last left it.
  */
 export function fixtureSidePanel(run: {
@@ -666,7 +666,7 @@ export function fixtureActAnswer(
   );
 }
 
-/** Main's held plans with the fixture's task's plan held, one object for each of main's. */
+/** Main's held descriptions with the fixture's task's description held, one object for each of main's. */
 const STAGED_DESCRIPTIONS = new WeakMap<AppDescriptionDocuments, AppDescriptionDocuments>();
 /** Main's held histories with the fixture's task's history held, one object for each of main's. */
 const STAGED_HISTORIES = new WeakMap<AppHistories, AppHistories>();
@@ -685,10 +685,10 @@ function stagedOn<Rows>(
 }
 
 /**
- * Main's document with the fixture's task's plan and its history held as the
+ * Main's document with the fixture's task's description and its history held as the
  * window's reads of them hold them (`LIVE_READ.DESCRIPTION_DOCUMENT`,
  * `LIVE_READ.HISTORY`), under the profiles that open the task
- * (`fixtureTasksView`), so it opens on its plan and its version history on
+ * (`fixtureTasksView`), so it opens on its description and its version history on
  * its versions; the very document under any other.
  */
 function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
@@ -712,13 +712,13 @@ function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
 
 /**
  * Main's document as a fixture run draws it (`use-app-state.ts`): the
- * fixture's task's plan and history held under the profiles that open it,
+ * fixture's task's description and history held under the profiles that open it,
  * with the fixture workspaces' members held under every profile, and the
  * synthetic account signed in under the profiles that stage one
  * (`settings-fixture.ts`), the open task's pages held with the page its
  * agent showed under the agent profiles (`agent-fixture.ts`), the
  * workspaces' automations and runs held under the Automations profiles
- * (`automations-fixture.ts`), its plan's comment threads held under the
+ * (`automations-fixture.ts`), its description's comment threads held under the
  * tasks-comments profile, and the fixture workspaces' repositories held
  * under every profile, which main holds as it does under any other.
  */

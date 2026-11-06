@@ -18,11 +18,11 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * description-slash-menu.test.ts -- the `/` menu in the plan's open text: opened by
+ * description-slash-menu.test.ts -- the `/` menu in the description's open text: opened by
  * a `/` at a line's start or after a space, outside code; narrowed by the
  * words after it, by name and by alias, and closed by a space or a run that
  * matches nothing; Enter laying the block in place of the `/` word; Escape
@@ -52,7 +52,7 @@ const PAGE_LINKS = { workspace: "acme", onOpen: () => undefined, reveal: undefin
 
 const roots: Root[] = [];
 
-// Landed before the plan renders, as the panel lands it after its first paint.
+// Landed before the description renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {

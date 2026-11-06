@@ -115,7 +115,7 @@ const SPEAKER = {
 
 type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 
-/** What the brief's heading calls it: the plan an agent was handed, or a prompt in its place, or the task a worker was handed. */
+/** What the brief's heading calls it: the description an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
   PLAN: "Description",
   PROMPT: "Prompt",
@@ -334,7 +334,7 @@ function sentLineWords(message: AgentTranscriptMessage): string | undefined {
 
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
- * the first of the developer's messages is the brief, the plan or the prompt
+ * the first of the developer's messages is the brief, the description or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
  * agent's call carried; an agent started blank has none. The rest are turns: the developer's words,
  * another agent's message under the agent it is from, and the agent's

@@ -21,21 +21,21 @@ import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.j
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * add-to-description.test.ts -- a picture an agent showed, added to its plan from
- * the window's viewer: kept on the plan, its line written at the end of the
- * plan's text as the developer's edit, again on the text as it stands where
- * the plan moved on, said in a toast that stands from the press and turns
+ * add-to-description.test.ts -- a picture an agent showed, added to its description from
+ * the window's viewer: kept on the description, its line written at the end of the
+ * description's text as the developer's edit, again on the text as it stands where
+ * the description moved on, said in a toast that stands from the press and turns
  * into Added with Undo once the line is written, which takes the line back
- * out; a recording kept as it is, within what a plan may be sent, and
- * refused in words past it or past the plan's videos; and offered only where
+ * out; a recording kept as it is, within what a description may be sent, and
+ * refused in words past it or past the description's videos; and offered only where
  * the transcript stands on a plan's page.
  *
- * Synthetic plans and pictures throughout: the picture is a PNG's first
- * bytes, kept as they are, since they are under the plan's bound.
+ * Synthetic descriptions and pictures throughout: the picture is a PNG's first
+ * bytes, kept as they are, since they are under the description's bound.
  */
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
@@ -43,19 +43,19 @@ const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-/** The plan's text as the page last read it; the service's moves on under it where a test says. */
+/** The description's text as the page last read it; the service's moves on under it where a test says. */
 const PAGE_TEXT = "## Approach\n\nThe invite email follows the mock.\n";
 
 /** A recording's first bytes, a WebM's, which is all the window reads of one. */
 const WEBM_BASE64 = "GkXfow==";
 
-/** The plan's text as the service holds it. */
+/** The description's text as the service holds it. */
 let held = PAGE_TEXT;
-/** Every picture the plan was sent to keep, as its `data:` URL. */
+/** Every picture the description was sent to keep, as its `data:` URL. */
 let keeping: string[] = [];
 /** What a keep answers, a kept id unless a test says otherwise. */
 let keepAnswer: TasksPictureKeepAnswer = { id: "" };
-/** The kind of every act the plan was sent, whichever side carried it, in order. */
+/** The kind of every act the description was sent, whichever side carried it, in order. */
 let sent: (AnyAct["kind"] | PortActKind)[] = [];
 const roots: Root[] = [];
 
@@ -183,7 +183,7 @@ async function drawn(
     { value: door },
     createElement(AgentMessage, {
       message: shown,
-      plan: false,
+      description: false,
       lead: AGENT_LEAD,
       moving: true,
       delegation: { models: [] },
@@ -230,7 +230,7 @@ function viewerButton(words: string): HTMLButtonElement | undefined {
 
 const LINE = `![Members page](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
 
-test("Add to plan keeps the picture on the plan and writes its line at the plan's end, and Undo takes it back out", async () => {
+test("Add to description keeps the picture on the description and writes its line at the description's end, and Undo takes it back out", async () => {
   await opened(await drawn(PAGE));
   const add = viewerButton("Add to description");
   assert.ok(add);
@@ -259,7 +259,7 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
   assert.match(newestToastSays() ?? "", /Taken out of the description/u);
 });
 
-test("a plan that moved on under the page is written on as it stands", async () => {
+test("a description that moved on under the page is written on as it stands", async () => {
   held = `${PAGE_TEXT}\nA teammate's newer line.\n`;
   await opened(await drawn(PAGE));
 
@@ -270,14 +270,14 @@ test("a plan that moved on under the page is written on as it stands", async () 
   assert.equal(sent.filter((kind) => kind === ACT_KIND.TASKS_EDIT).length, 2);
 });
 
-test("a transcript off a plan's page offers no Add to plan", async () => {
+test("a transcript off a plan's page offers no Add to description", async () => {
   await opened(await drawn(undefined));
 
   assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
   assert.equal(viewerButton("Add to description"), undefined);
 });
 
-test("a planless agent's transcript, whose page names a workspace and no plan, offers no Add to plan", async () => {
+test("a planless agent's transcript, whose page names a workspace and no plan, offers no Add to description", async () => {
   const AGENT = { agentId: "agent-1" };
   await opened(await drawn({ ...PAGE, holder: AGENT, doors: { ...PAGE.doors, holder: AGENT } }));
 
@@ -300,11 +300,11 @@ async function withBlobs(body: () => Promise<void>): Promise<void> {
 
 const VIDEO_LINE = `![Inviting a member](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
 
-test("Add to plan keeps a recording as it is, never re-encoded, and writes its line at the plan's end", () =>
+test("Add to description keeps a recording as it is, never re-encoded, and writes its line at the description's end", () =>
   withBlobs(async () => {
     await opened(await drawn(PAGE, recorded(WEBM_BASE64)));
     const add = viewerButton("Add to description");
-    assert.ok(add, "the viewer playing the recording offers Add to plan");
+    assert.ok(add, "the viewer playing the recording offers Add to description");
 
     await act(async () => add.click());
     await settled(() => /Added/u.test(newestToastSays() ?? ""));
@@ -314,7 +314,7 @@ test("Add to plan keeps a recording as it is, never re-encoded, and writes its l
     assert.equal(newestToastSays(), "Added to the descriptionUndo");
   }));
 
-test("a recording past what a plan may be sent, or one past the plan's videos, is refused in words and the plan is not written", () =>
+test("a recording past what a description may be sent, or one past the description's videos, is refused in words and the description is not written", () =>
   withBlobs(async () => {
     // Three zero bytes for every four characters, one more than a sent video may hold.
     const large = "AAAA".repeat(1_100_001);

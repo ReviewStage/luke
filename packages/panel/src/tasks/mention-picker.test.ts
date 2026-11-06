@@ -40,7 +40,7 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** The list drawn as a plan's box draws it, over a plan whose one section is Margins, the latest it answered kept for the test to drive. */
+/** The list drawn as a plan's box draws it, over a description whose one section is Margins, the latest it answered kept for the test to drive. */
 function mounted() {
   let latest: MentionPicker | undefined;
   function Picker() {
@@ -130,7 +130,7 @@ test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and
   );
 });
 
-/** The list drawn as a plan's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
+/** The list drawn as a description's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
 async function mountedOnDescription(chosen: MentionNode[]) {
   let latest: MentionPicker | undefined;
   function Picker() {

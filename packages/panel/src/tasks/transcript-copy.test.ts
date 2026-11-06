@@ -97,7 +97,7 @@ function said(
   return { id, role, parts: [{ type: "text", text }] };
 }
 
-test("another agent's message is copied under the agent that sent it, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
+test("another agent's message is copied under the agent that sent it, never as the developer's words nor as the description, and is no step of the agent's own", () => {
   const notice: AgentTranscriptMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
     metadata: { channel: "agent_message" },

@@ -192,7 +192,7 @@ import {
 } from "./words-dates.js";
 
 /**
- * description-comments.tsx -- comments on the open plan, beside its words: each open thread in the margin level with the words it is on, or behind a count at the line's end where the column has no room for a margin, a thread started from words selected or from a block's own button, and each thread answered, resolved, reopened, edited, and deleted where it stands.
+ * description-comments.tsx -- comments on the open description, beside its words: each open thread in the margin level with the words it is on, or behind a count at the line's end where the column has no room for a margin, a thread started from words selected or from a block's own button, and each thread answered, resolved, reopened, edited, and deleted where it stands.
  *
  * The words a thread is on are marked in the read view (`description-body.tsx`
  * draws them through `markdown-message.tsx`'s comment marks), each mark
@@ -200,7 +200,7 @@ import {
  * the open one exactly so and the rest stepped aside so none overlap
  * (`@repo/ui/description-comments`'s `marginTops`). A thread whose words were
  * deleted stands at the top of the section they stood in, saying so over
- * its quote. Where the document's column is narrower than the plan's
+ * its quote. Where the document's column is narrower than the description's
  * reading width, a margin, and the gap between them, the margin folds: each
  * line holding marks wears a count at its end, which opens its thread as a
  * card floating under the words, or over them where the view has no room
@@ -214,10 +214,10 @@ import {
  * (`APP_COMMAND.COMMENT_ON_SELECTION`). In the open editor the format
  * toolbar over the words selected takes the bubble's place, its Comment
  * starting the thread (`useEditorComment`), so two surfaces never stand over
- * one selection; and in a plan the reader may edit, words a press selects in
+ * one selection; and in a description the reader may edit, words a press selects in
  * the read view open the editor on them (`clickPlacement`), so the bubble
  * stands there only until the press ends. Its words are
- * measured in the plan's Markdown by laying the words drawn over the
+ * measured in the description's Markdown by laying the words drawn over the
  * section's source (`@repo/features/description-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
  * agent anything.
@@ -401,7 +401,7 @@ const HUNG_DROP = 28;
 /** How far inside the scroller's edges an open card keeps. */
 const VIEW_EDGE = 16;
 
-/** Where a thread's card stands: in the plan's margin, floating under a folded line's count, or in the plan's comments list. */
+/** Where a thread's card stands: in the description's margin, floating under a folded line's count, or in the description's comments list. */
 const THREAD_PLACE = {
   MARGIN: "margin",
   FLOAT: "float",
@@ -445,11 +445,11 @@ interface CommentFocus {
   readonly active: string | undefined;
   readonly onActive: (thread: string | undefined) => void;
   readonly pending: PendingThread | undefined;
-  /** Opens a thread and asks the plan to scroll to its words, as the plan's comments list and a link to it do. */
+  /** Opens a thread and asks the description to scroll to its words, as the description's comments list and a link to it do. */
   readonly reveal: (thread: string) => void;
   /** The last ask to scroll to a thread, counted so the same thread asked twice scrolls twice. */
   readonly revealed: { readonly thread: string; readonly ask: number } | undefined;
-  /** Which threads the plan lists in its margin's place, open or resolved; none while its open threads stand in the margin beside their words. */
+  /** Which threads the description lists in its margin's place, open or resolved; none while its open threads stand in the margin beside their words. */
   readonly listing: CommentsFilter | undefined;
   readonly onListing: (listing: CommentsFilter | undefined) => void;
 }
@@ -464,14 +464,14 @@ const CommentFocusContext = createContext<CommentFocus>({
   onListing: () => undefined,
 });
 
-/** Where the plan's comments are drawn: which thread is open, and the one being started. */
+/** Where the description's comments are drawn: which thread is open, and the one being started. */
 export function useCommentFocus(): CommentFocus {
   return useContext(CommentFocusContext);
 }
 
 /**
  * The agent that wrote an entry: one of the task's own, or, where an agent
- * of another task wrote on the plan by naming it, as the window's list
+ * of another task wrote on the description by naming it, as the window's list
  * across the workspace names it, rather than as an agent no list holds;
  * and whether it is such an agent, which has no tab on this task.
  */
@@ -683,7 +683,7 @@ function CommentEntry({
             : { action: DESCRIPTION_COMMENT_ACTION.DELETE, entry: entry.id },
         )
         .then((deleted) => {
-          // Words left unsent on what went go with it, so no plan is marked holding a draft no box opens.
+          // Words left unsent on what went go with it, so no description is marked holding a draft no box opens.
           if (deleted)
             drafts.drop((place) => writtenOn(place, thread.id, first ? undefined : entry.id));
         });
@@ -1013,7 +1013,7 @@ const NO_SKILLS: ReadonlySet<string> = new Set();
  * A comment's words as they are typed: Return sends, as `enterSends` reads
  * it, so a finger's keyboard breaks the line with it, Shift-Return breaks
  * the line, and Esc lets the field go. A plain field, so the field's own undo
- * and redo change its words and never the plan's.
+ * and redo change its words and never the description's.
  */
 function PlainCommentText({
   value,
@@ -1393,13 +1393,13 @@ function GoneQuote({
   );
 }
 
-/** What a thread's quote says: the words of the plan it is on; on a page, the way to what it is on, which its comments quote, or that it is on the whole page. */
+/** What a thread's quote says: the words of the description it is on; on a page, the way to what it is on, which its comments quote, or that it is on the whole page. */
 function quoteWords(thread: DescriptionCommentThread): string {
   if (thread.page === undefined) return thread.quote;
   return thread.page.element === undefined ? COMMENT_WORDS.WHOLE_PAGE : COMMENT_WORDS.SHOW_ELEMENT;
 }
 
-/** A thread's quote over it: its words, or a press that shows them in the plan, or its element on the page, where it is offered. */
+/** A thread's quote over it: its words, or a press that shows them in the description, or its element on the page, where it is offered. */
 function ThreadQuote({
   thread,
   gone = false,
@@ -1433,7 +1433,7 @@ function ThreadQuote({
  * How a thread's card stands where it is: open over the page, raised on a
  * menu's shadow, as at rest under a count, where it floats with the open
  * one; at rest in the margin, its edge alone on the column's ground; and in
- * the plan's comments list, where every thread stands whole on the panel's ground,
+ * the description's comments list, where every thread stands whole on the panel's ground,
  * its edge alone.
  */
 function threadFrame(place: ThreadPlace, open: boolean): { look: CardLook; shadow: CardShadow } {
@@ -1481,13 +1481,13 @@ function CommentCard({
   );
 }
 
-/** One row of the plan's comments list, a step from the next: a thread's card, or a placeholder's. */
+/** One row of the description's comments list, a step from the next: a thread's card, or a placeholder's. */
 function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
   return <div className="comments-row [.comments-row+&]:mt-control-gap">{children}</div>;
 }
 
 /**
- * One thread as the margin, a count's card, or the plan's comments list draws it:
+ * One thread as the margin, a count's card, or the description's comments list draws it:
  * open, every entry, the reader's replies on their way after them in the
  * order sent, and the field that answers it; at rest, its first comment and
  * the faces and count of its replies, which opens it.
@@ -1507,15 +1507,15 @@ function ThreadCard({
   open: boolean;
   place: ThreadPlace;
   doors: ThreadDoors;
-  /** Opens the card at rest; none where it always stands open, as in the plan's comments list. */
+  /** Opens the card at rest; none where it always stands open, as in the description's comments list. */
   onOpen?: (() => void) | undefined;
   /** Closes it, as its field's Escape asks. */
   onClose?: (() => void) | undefined;
-  /** Whether the quote stands over it, as in the plan's comments list, where its words are not beside it. */
+  /** Whether the quote stands over it, as in the description's comments list, where its words are not beside it. */
   quote?: boolean;
   /** Whether the pointer is on the thread's words, which the card at rest answers as it answers the pointer itself. */
   pointed?: boolean;
-  /** Shows the thread's words where the plan holds them, which its quote offers; none where the quote is only words. */
+  /** Shows the thread's words where the description holds them, which its quote offers; none where the quote is only words. */
   onShowWords?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
@@ -1523,10 +1523,10 @@ function ThreadCard({
     (entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT,
   );
   const [first] = comments;
-  // Note that a page's thread stands on no words of the plan, so it never reads as having lost them.
+  // Note that a page's thread stands on no words of the description, so it never reads as having lost them.
   const gone = thread.anchor === undefined && thread.page === undefined;
   const note = doors.control.notes.get(thread.id);
-  // Whether a press on the card at rest opened it, which is what hands its reply the caret; a thread open from the first, as every one in the plan's comments list, takes none.
+  // Whether a press on the card at rest opened it, which is what hands its reply the caret; a thread open from the first, as every one in the description's comments list, takes none.
   const [pressed, setPressed] = useState(false);
   useEffect(() => {
     if (!open) setPressed(false);
@@ -1596,7 +1596,7 @@ function ThreadCard({
   }
   return (
     <CommentCard place={place} open data-thread={thread.id}>
-      {/* Note that the entries scroll inside a card taller than the room it stands in, so the field that answers them stays in view under them; a swipe past their end, or over a card with nothing to scroll, moves the plan. */}
+      {/* Note that the entries scroll inside a card taller than the room it stands in, so the field that answers them stays in view under them; a swipe past their end, or over a card with nothing to scroll, moves the description. */}
       <ScrollArea
         size={SCROLL_SIZE.CONTENT}
         fade={SCROLL_FADE.BOTH}
@@ -1658,7 +1658,7 @@ interface FirstComment {
 
 /**
  * The thread being started, its field focused, which posts its first
- * comment: on the plan's words, or on a page or one of its elements, as
+ * comment: on the description's words, or on a page or one of its elements, as
  * `begin` makes the start of it. The thread is started under the key its
  * first comment is sent under, so a send tried again names the same
  * thread, and the host draws it the moment it is asked, so the card hands
@@ -1725,8 +1725,8 @@ function PendingCard({
 }
 
 /**
- * The start of a thread on the plan's words a pending card makes, measured
- * in the plan's text as saved where its words stand there, so the thread
+ * The start of a thread on the description's words a pending card makes, measured
+ * in the description's text as saved where its words stand there, so the thread
  * the host draws at once stands on them as the service will place it, and
  * the open editor marks them where they are. Note that words started on in
  * the editor and not saved yet are measured in its text, which the service
@@ -1798,7 +1798,7 @@ function editorPending(span: EditorSpan, scope: PendingThread["scope"]): Pending
   return { ...span, scope, quote: span.quote.slice(0, DESCRIPTION_COMMENT_BOUNDS.MAX_QUOTE_CHARS) };
 }
 
-/** The words a section's drawn stretch stands for in the plan's text, laid over the section's source; nothing where none of them do. */
+/** The words a section's drawn stretch stands for in the description's text, laid over the section's source; nothing where none of them do. */
 function sourceSpan(
   unit: HTMLElement,
   section: DescriptionSection,
@@ -1810,7 +1810,7 @@ function sourceSpan(
     : { from: section.from + span.from, to: section.from + span.to };
 }
 
-/** What a thread is started on: the words or block drawn, as the plan's text holds them. */
+/** What a thread is started on: the words or block drawn, as the description's text holds them. */
 function pendingOf(
   unit: HTMLElement,
   section: DescriptionSection,
@@ -1829,13 +1829,13 @@ function sameTops(a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>
   return a.size === b.size && [...b].every(([id, top]) => a.get(id) === top);
 }
 
-/** Where an element's top stands in the plan body's own box. */
+/** Where an element's top stands in the description body's own box. */
 function topIn(body: HTMLElement, element: Element): number {
   return element.getBoundingClientRect().top - body.getBoundingClientRect().top;
 }
 
 /**
- * Where the middle of the first line `element`'s words stand on, in the plan
+ * Where the middle of the first line `element`'s words stand on, in the description
  * body's own box: a count or a block's button stands centered on it, so it
  * reads as that line's whether the words go on past it or not. Note that the
  * element holding the first words is measured: an inline one by the first
@@ -1854,7 +1854,7 @@ function lineMiddleIn(body: HTMLElement, element: Element): number {
   return topIn(body, holder) + (Number.isFinite(height) ? height / 2 : 0);
 }
 
-/** The part of the scroller in view, inside its edges, in the plan body's own box; none before either is drawn. */
+/** The part of the scroller in view, inside its edges, in the description body's own box; none before either is drawn. */
 function viewIn(scroller: HTMLElement | null, body: HTMLElement | null): MarginView | undefined {
   if (scroller === null || body === null) return undefined;
   const at = topIn(body, scroller) + scroller.clientTop;
@@ -1879,7 +1879,7 @@ function blockAt(
 }
 
 /**
- * The plan's comments beside its body: the margin or the counts, the
+ * The description's comments beside its body: the margin or the counts, the
  * thread being started, the button a block shows under the pointer, and
  * the bubble over words selected. Drawn inside the body, which it measures,
  * from the scroller around it, whose width says whether a margin fits.
@@ -1939,12 +1939,12 @@ export function DescriptionCommentLayer({
 }: {
   body: RefObject<HTMLDivElement | null>;
   scroller: RefObject<HTMLDivElement | null>;
-  /** Whether the plan is the tab its column shows. */
+  /** Whether the description is the tab its column shows. */
   shown: boolean;
   /** The class each section's drawn words wear, in the order of `sections`. */
   unitClass: string;
   sections: readonly DescriptionSection[];
-  /** The plan's text, which `sections` were read from and a thread's words are measured in. */
+  /** The description's text, which `sections` were read from and a thread's words are measured in. */
   text: string;
   doors: ThreadDoors;
   /**
@@ -2061,7 +2061,7 @@ export function DescriptionCommentLayer({
     [body, anchorOf],
   );
   // Note that the margin is measured again only when what it stands on
-  // changes, or the plan's words or a card are resized, never on every draw,
+  // changes, or the description's words or a card are resized, never on every draw,
   // because each measure lays the page out, a draw for every word typed among
   // it. A resize is measured once in the frame after it, however many land.
   const { threads } = doors.control;
@@ -2131,10 +2131,10 @@ export function DescriptionCommentLayer({
     const room = body.current;
     if (revealed === undefined || element === null || room === null) return;
     if (scrolled.current === revealed.ask) return;
-    // Note that the ask waits for the read to name the thread, since a link may open the plan before its comments land.
+    // Note that the ask waits for the read to name the thread, since a link may open the description before its comments land.
     const asked = doors.control.threads.find((each) => each.id === revealed.thread);
     if (!doors.control.read || asked === undefined) return;
-    // Note that a resolved thread has no words lit in the plan; it is listed instead, under Resolved (`DescriptionCommentList`).
+    // Note that a resolved thread has no words lit in the description; it is listed instead, under Resolved (`DescriptionCommentList`).
     if (!openThread(asked)) return;
     const at = anchorAt(asked.id, asked.section);
     if (at === undefined) return;
@@ -2158,7 +2158,7 @@ export function DescriptionCommentLayer({
   useEffect(() => {
     if (pending !== undefined && listing !== undefined) onListing(undefined);
   }, [pending, listing, onListing]);
-  // The list stands under the plan's Comments toggle, measured as the body draws it.
+  // The list stands under the description's Comments toggle, measured as the body draws it.
   const [listTop, setListTop] = useState(0);
   useLayoutEffect(() => {
     const room = body.current;
@@ -2271,13 +2271,13 @@ export function DescriptionCommentLayer({
       }
       // Note that a press on a control, a line's count say, focuses it before its click, and the press's own rule, the count's toggle say, settles the thread.
       if (pressing.current) return;
-      // Note that the focus staying is the editor's room holding it, not the plan's body, whose title and buttons are Tab stops of their own.
+      // Note that the focus staying is the editor's room holding it, not the description's body, whose title and buttons are Tab stops of their own.
       const room = element.querySelector(`.${EDITOR_ROOM_CLASS}`);
       if (next instanceof Node && room?.contains(next) === true) return;
       letCaretGo();
     };
     const selected = () => {
-      // Note that a plan kept mounted under a hidden tab keeps its selection, but its words are no longer on screen to comment on.
+      // Note that a description kept mounted under a hidden tab keeps its selection, but its words are no longer on screen to comment on.
       if (element.closest("[hidden]") !== null) {
         setBubble(undefined);
         return;
@@ -2363,7 +2363,7 @@ export function DescriptionCommentLayer({
     // Note that in the editor a press places the caret, so marked words there open no thread.
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
-    // Note that hiding the tab the plan stands in changes no selection, so its `hidden` attribute is watched for itself.
+    // Note that hiding the tab the description stands in changes no selection, so its `hidden` attribute is watched for itself.
     // Note that the tab shown again offers the words still selected there, though only a selection, not a caret, is read again, since a caret read opens and closes threads.
     const hiding = new MutationObserver(() => {
       if (element.closest("[hidden]") !== null || window.getSelection()?.isCollapsed === false) {
@@ -2634,7 +2634,7 @@ export function CommentFocusScope({
   children,
   reveal,
 }: {
-  /** The plan the focus is on; another plan opened lets go of the open thread and the one being started. */
+  /** The description the focus is on; another description opened lets go of the open thread and the one being started. */
   planId?: string | undefined;
   children: ReactNode;
   /** A thread to open, as a link to it asks; opened once per ask. */
@@ -2643,10 +2643,10 @@ export function CommentFocusScope({
   const [active, setActive] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<PendingThread | undefined>(undefined);
   const [revealed, setRevealed] = useState<CommentFocus["revealed"]>(undefined);
-  // Note that the list stands across the plans opened, as a document app's comments view does, until it is put back.
+  // Note that the list stands across the descriptions opened, as a document app's comments view does, until it is put back.
   const [listing, setListing] = useState<CommentsFilter | undefined>(undefined);
   const [focusedOn, setFocusedOn] = useState(planId);
-  // Note that the thread being started is let go in the render the plan changes in, so it is never posted to another plan.
+  // Note that the thread being started is let go in the render the description changes in, so it is never posted to another description.
   if (focusedOn !== planId) {
     setFocusedOn(planId);
     setActive(undefined);
@@ -2683,7 +2683,7 @@ export function CommentFocusScope({
   );
 }
 
-/** Which of the threads a list of them shows: the plan's list, or a page's comments pane. */
+/** Which of the threads a list of them shows: the description's list, or a page's comments pane. */
 export const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
 
 export type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
@@ -2745,7 +2745,7 @@ function CommentsSkeleton(): React.JSX.Element {
   );
 }
 
-/** What the plan's list says over a list holding nothing, by its filter. */
+/** What the description's list says over a list holding nothing, by its filter. */
 const NO_COMMENTS = {
   [COMMENTS_FILTER.OPEN]: {
     title: "No comments",
@@ -2787,8 +2787,8 @@ function threadFindRow(thread: DescriptionCommentThread): FindRow {
  * The threads a list draws, each whole, under what is drawn over them: why
  * they could not be read, that there are none, or stand-in cards while they
  * are read. A thread arrives and leaves the list as a card arrives in and
- * leaves the plan's margin, fading in its row, so one resolved fades out of
- * Open where it stood. The plan's list and a page's comments both list
+ * leaves the description's margin, fading in its row, so one resolved fades out of
+ * Open where it stood. The description's list and a page's comments both list
  * theirs so.
  */
 function ThreadList({
@@ -2807,7 +2807,7 @@ function ThreadList({
   doors: ThreadDoors;
   /** What a thread's quote shows when pressed; none where it is only words. */
   onShowWords: (thread: DescriptionCommentThread) => (() => void) | undefined;
-  /** Whether the list stands flush in a column of its own, as the plan's margin, rather than inset in a pane. */
+  /** Whether the list stands flush in a column of its own, as the description's margin, rather than inset in a pane. */
   flush?: boolean;
   /** The scroller the threads stand in, which draws only those near its view (`VirtualRows`). */
   scroller: RefObject<HTMLElement | null>;
@@ -2885,33 +2885,33 @@ function ThreadList({
   );
 }
 
-/** The class of the plan's Comments toggle, which the list stands under. */
+/** The class of the description's Comments toggle, which the list stands under. */
 export const COMMENTS_TOGGLE_CLASS = "comments-toggle";
 
-/** What the plan's list calls the threads it can show. */
+/** What the description's list calls the threads it can show. */
 const LISTING_WORDS = {
   LABEL: "Comments shown",
   [COMMENTS_FILTER.OPEN]: "Open",
   [COMMENTS_FILTER.RESOLVED]: "Resolved",
 } as const;
 
-/** What the plan's Comments toggle says, and what its press does. */
+/** What the description's Comments toggle says, and what its press does. */
 const TOGGLE_WORDS = {
   LIST: "List all comments",
   MARGIN: "Show comments beside the description",
 } as const;
 
-/** The toggle's words: how many threads the plan holds, as the byline's other phrases say what they count. */
+/** The toggle's words: how many threads the description holds, as the byline's other phrases say what they count. */
 function commentCount(threads: number): string {
   return `${threads} ${threads === 1 ? "comment" : "comments"}`;
 }
 
 /**
- * The plan's Comments toggle, a phrase of its byline as its Edited time is,
+ * The description's Comments toggle, a phrase of its byline as its Edited time is,
  * and pressed as Word's and Google Docs' Comments button is: pressed, the
- * plan lists its threads in the margin's place (`DescriptionCommentList`), open or
+ * description lists its threads in the margin's place (`DescriptionCommentList`), open or
  * resolved; pressed again, its open threads stand beside their words. It
- * counts every thread, and stands only while the plan holds any at all.
+ * counts every thread, and stands only while the description holds any at all.
  */
 export function CommentsToggle(): React.JSX.Element | null {
   const control = useDescriptionCommentsControlOrUndefined();
@@ -2933,13 +2933,13 @@ export function CommentsToggle(): React.JSX.Element | null {
 }
 
 /**
- * The plan's threads listed in its margin's place, as a document app's
+ * The description's threads listed in its margin's place, as a document app's
  * comments view lists them: open or resolved, chosen over the list, each
  * thread whole under its quote. On a wide column it stands where the
- * margin's cards stood, under the plan's Comments toggle, scrolling with the
- * plan; where the margin folds it floats over the words under the toggle,
+ * margin's cards stood, under the description's Comments toggle, scrolling with the
+ * description; where the margin folds it floats over the words under the toggle,
  * scrolling inside itself. An open thread's quote shows its words in the
- * plan; a resolved one's says them alone, and its Reopen puts it back
+ * description; a resolved one's says them alone, and its Reopen puts it back
  * beside them. A thread a link asked for is scrolled to once.
  */
 function DescriptionCommentList({
@@ -2958,7 +2958,7 @@ function DescriptionCommentList({
   /** Where the list starts in the body, under the toggle. */
   top: number;
   scroller: RefObject<HTMLDivElement | null>;
-  /** Whether the plan is the tab its column shows, which alone a find over the column searches. */
+  /** Whether the description is the tab its column shows, which alone a find over the column searches. */
   shown: boolean;
 }): React.JSX.Element {
   const { reveal, revealed } = useCommentFocus();
@@ -2969,7 +2969,7 @@ function DescriptionCommentList({
   const listed = listing === COMMENTS_FILTER.OPEN ? open : resolved;
   const list = useRef<HTMLDivElement>(null);
   const run = useRef<VirtualRowsHandle>(null);
-  // Note that the threads' words are read only while a find bar stands open over the plan, which then finds in the plan's words and the threads' alike.
+  // Note that the threads' words are read only while a find bar stands open over the description, which then finds in the description's words and the threads' alike.
   const finding = useFindOpen();
   const findRows = useMemo(
     () => (finding ? listed.map(threadFindRow) : NO_FIND_ROWS),
@@ -3198,8 +3198,8 @@ export function ownWordsIn(text: string): boolean {
 }
 
 /**
- * A page's comments in the pane beside it, as the plan's comments list lists
- * the plan's: open or resolved under the same head, each thread whole under
+ * A page's comments in the pane beside it, as the description's comments list lists
+ * the description's: open or resolved under the same head, each thread whole under
  * its quote. A quote pressed outlines its element on the page, scrolled into
  * the frame's view, until a press anywhere but a thread or the page's pins
  * lets it go. A thread opened from its pin on the page is brought into the
@@ -3317,7 +3317,7 @@ function firstLine(words: string): string {
 /**
  * The pin of the threads on one element: the bubble wearing the face of
  * whoever started the first, told over it by that comment's writer and
- * first line, as the plan's comments draw a comment.
+ * first line, as the description's comments draw a comment.
  */
 function PagePin({
   threads,
@@ -3465,7 +3465,7 @@ function heldByElement(held: readonly HeldComment[]): ReadonlyMap<string, readon
 }
 
 /**
- * A page's comments over the page itself, as the plan's folded margin draws
+ * A page's comments over the page itself, as the description's folded margin draws
  * its own: each element holding open threads pinned with the face of who
  * started them, the pointer over a pin outlining its element faintly and
  * told the first comment, and a press opening its threads in a card by the
@@ -3477,7 +3477,7 @@ function heldByElement(held: readonly HeldComment[]): ReadonlyMap<string, readon
  * them. A comment being started may be held in the reader's review
  * instead, pinned dashed to its element until the review is sent. A card
  * closes on a press away, a press in the page among them, as a
- * plan's does. It stands over the frame's room, where every box the frame
+ * description's does. It stands over the frame's room, where every box the frame
  * says it measured in its own viewport stands as it is, and takes no press
  * but its own.
  */
@@ -3617,7 +3617,7 @@ export function PageCommentLayer({
         open={pending !== undefined}
         anchor={() => inWindow(room.current, pending?.box ?? PAGE_TOP)}
         side={POPOVER_SIDE.BELOW}
-        // Note that a comment being sent, or holding files or a dictation, which no draft keeps, stands through a press away, as a plan's does.
+        // Note that a comment being sent, or holding files or a dictation, which no draft keeps, stands through a press away, as a description's does.
         onPressAway={() => {
           if (starting.current?.querySelector('[data-held="true"]') === null) onCancel();
         }}

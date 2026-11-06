@@ -82,8 +82,8 @@ function tool(tool: string, callId: string, input: WireRecord, output: WireRecor
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
 
-/** The plan the agent was handed, which its transcript opens on as the task's card. */
-const PLAN: AgentTranscriptMessage = {
+/** The description the agent was handed, which its transcript opens on as the task's card. */
+const DESCRIPTION: AgentTranscriptMessage = {
   id: "plan",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Wire the retry audit." }],
@@ -177,7 +177,10 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
 function runningTab() {
   fakeAppBridge({});
   const telling = tellingTranscripts();
-  telling.tell(TRANSCRIPT, page([PLAN, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1"));
+  telling.tell(
+    TRANSCRIPT,
+    page([DESCRIPTION, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1"),
+  );
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -274,7 +277,7 @@ test("a message a page did not touch hangs the card the window hands now, and it
   );
 });
 
-test("a task renamed while its agent's tab stands names the plan's sender anew, hanging the task's new card", async () => {
+test("a task renamed while its agent's tab stands names the description's sender anew, hanging the task's new card", async () => {
   const tab = runningTab();
   const control = tab.controlOf("Invoice export");
   const task = (name: string): BriefTask => ({
@@ -286,7 +289,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   await tab.settle();
   const sender = () => {
     const ref = tab.container.querySelector<HTMLElement>(".agent-origin [data-task-ref]");
-    assert.ok(ref, "the plan's card names its task");
+    assert.ok(ref, "the description's card names its task");
     return ref;
   };
   const cardOf = (ref: HTMLElement) => {
@@ -320,7 +323,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
     startedAt: 3_000,
   });
   const telling = tellingTranscripts();
-  telling.tell(TRANSCRIPT, page([PLAN, messaged(5)], AGENT_STATUS.RUNNING, "1:1"));
+  telling.tell(TRANSCRIPT, page([DESCRIPTION, messaged(5)], AGENT_STATUS.RUNNING, "1:1"));
   // Each call about an agent asks for that agent's card as its row is drawn, so the cards asked for are the rows drawn.
   const asked: string[] = [];
   const cards: TranscriptCards = {

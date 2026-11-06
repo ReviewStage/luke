@@ -20,7 +20,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * A chip of an agent of the plan's page it stands on hangs that agent's
  * tab's card, as the page reads it (`mention-chip.tsx`'s `agentOf`). Any
  * other, an agent of another task of the workspace or of none, in a
- * transcript, the Inbox, or a plan, hangs the same card (`agent-ref.tsx`'s
+ * transcript, the Inbox, or a description, hangs the same card (`agent-ref.tsx`'s
  * `AgentCard`), drawn from the agents the task list carries: every task's,
  * archived ones among them, and those on no task. So hanging one asks the
  * service nothing, and a rename or an archive shows on it as the list's row

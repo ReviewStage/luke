@@ -233,7 +233,7 @@ function drawnSteps(container: Element): string[] {
   );
 }
 
-test("an agent continued from another opens on the plan's card, the folded Continued card under who started it, and the note as the developer's line, with no marker drawn", async () => {
+test("an agent continued from another opens on the description's card, the folded Continued card under who started it, and the note as the developer's line, with no marker drawn", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: AGENT_BRIEF.PLAN,
@@ -246,7 +246,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
 
   const cards = [...container.querySelectorAll(".agent-origin")];
   assert.equal(cards.length, 2);
-  // The plan's card is titled by the brief's first line.
+  // The description's card is titled by the brief's first line.
   assert.match(
     cards[0]?.querySelector("[data-origin-description] > summary")?.textContent ?? "",
     /Invite flow/u,
@@ -365,7 +365,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
 });
 
-test("a first message whose markers do not add up is drawn whole as the plan's card, with no replay card", async () => {
+test("a first message whose markers do not add up is drawn whole as the description's card, with no replay card", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: AGENT_BRIEF.PLAN,

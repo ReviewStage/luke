@@ -111,7 +111,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words or files, with a repository or with none, which the chip offers
- * as No repository and the agent then works in. It starts the task with an empty plan and no
+ * as No repository and the agent then works in. It starts the task with an empty description and no
  * call, Untitled until the
  * agent names it, and the agent on the words, the files, and the model
  * picked on the chip, in the one start (`use-tasks-tab.ts`), then opens the
@@ -139,7 +139,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * other servers among it, mints another, and so does the card mounted afresh.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
- * neither words nor files starts a bare task: an empty plan, no call, and
+ * neither words nor files starts a bare task: an empty description, no call, and
  * no agent, which needs no repository. While the box holds nothing,
  * the round button's hint says so, with its chord, since
  * nothing else on screen would. Escape closes a menu or a

@@ -205,7 +205,7 @@ test("a link to a message on a later page of a long transcript waits for its pag
   assert.deepEqual(revealed, [2]);
 });
 
-test("a link to the plan an agent was handed, its first message, brings the plan's card into view", async () => {
+test("a link to the description an agent was handed, its first message, brings the description's card into view", async () => {
   const { container, revealed } = await drawn(
     { agentId: AGENT.id, messageId: "task-1", ask: 1 },
     [MESSAGES],

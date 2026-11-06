@@ -96,7 +96,7 @@ export function useTaskRenameOffer(): OpenTaskRename | undefined {
   return useAtomValue(openTaskRenameAtom);
 }
 
-/** Version history, opening the plan's versions over the window, printing ⌥⇧⌘H where `keyed`: on the open task's menu, whose versions the chord opens. */
+/** Version history, opening the description's versions over the window, printing ⌥⇧⌘H where `keyed`: on the open task's menu, whose versions the chord opens. */
 export function versionHistoryItem(open: () => void, keyed = false): MenuAction {
   return commandAction(PANEL_COMMAND.VERSION_HISTORY, open, keyed);
 }

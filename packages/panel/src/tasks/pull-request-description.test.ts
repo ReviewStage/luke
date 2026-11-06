@@ -42,7 +42,7 @@ import { PULL_REQUEST_VIEW } from "./use-side-panel.js";
 /**
  * pull-request-description.test.ts -- a pull request's description edited
  * in place from its Pull request tab: a click on GitHub's rendering opens
- * the plan's editor on the Markdown where the member may edit it, and none
+ * the description's editor on the Markdown where the member may edit it, and none
  * where they may not; Esc with nothing changed writes nothing; a change is
  * written to GitHub with the words it began from, and the description is
  * drawn again from the read that follows; and where the description changed

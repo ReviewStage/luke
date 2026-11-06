@@ -135,7 +135,7 @@ import { thingCard } from "./thing-card.js";
 import { useTaskStatus } from "./use-known-names.js";
 
 /**
- * mention-picker.tsx -- the list an `@` opens: the workspace's agents, tasks, and people, the plan and its sections, and the repository's files and folders, grouped by kind, narrowed as the word is typed, the pick written as its mention.
+ * mention-picker.tsx -- the list an `@` opens: the workspace's agents, tasks, and people, the description and its sections, and the repository's files and folders, grouped by kind, narrowed as the word is typed, the pick written as its mention.
  *
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
@@ -148,7 +148,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * as ⌘K scores them (`@repo/ui/search-score`), each row marking what found
  * it, letters typed in order finding only a path, each group in a fixed place
  * so a later read never moves the rows above it: agents first, then tasks,
- * people, the plan, pages, and files and folders, since agents and tasks are
+ * people, the description, pages, and files and folders, since agents and tasks are
  * what is mentioned most and a path's letters in order find it by almost any
  * word.
  * Once the words run past a space and nothing matches them, the list
@@ -190,7 +190,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * tasks too, as the window lists them, once a word is typed: each by its
  * name, its key beside it (`ACME-42`, `@repo/features/workspace-key`),
  * found by either, a pick written as the task's mention; the plan's own is
- * found by its key in the plan's group. Words that are a task's key whole
+ * found by its key in the description's group. Words that are a task's key whole
  * lead the list with that task, as words that read as a date lead it with
  * the date.
  *
@@ -552,7 +552,7 @@ function backFrom(
   return typed ? undefined : { to: undefined };
 }
 
-/** What the plan's row says of its sections: how many, where it holds any. */
+/** What the description's row says of its sections: how many, where it holds any. */
 function sectionCount(count: number): string | undefined {
   return count === 0 ? undefined : countWords(count, TERM.SECTION);
 }
@@ -575,7 +575,7 @@ function pathRow(entry: RepositoryPath): MentionRow {
   };
 }
 
-/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself, found by its name and its key; none where no plan stands. */
+/** The description's rows: each section by its heading, a heading borne twice once for each section, then the description itself, found by its name and its key; none where no description stands. */
 function taskRows(
   taskId: string | undefined,
   taskName: string,
@@ -1025,7 +1025,7 @@ function fileRows(
 
 /** Every row of each kind but the repository's paths, found by the list's words. */
 interface KindRows {
-  readonly plan: readonly MentionRow[];
+  readonly description: readonly MentionRow[];
   /** The workspace's other tasks. */
   readonly tasks: readonly MentionRow[];
   readonly pages: readonly MentionRow[];
@@ -1055,7 +1055,7 @@ function narrowedRows(
     case MENTION_FROM.FILES:
       return paths === undefined ? [] : fileRows(paths, folder, term);
     case MENTION_FROM.PLAN:
-      return best(rows.plan, term, PER_KIND);
+      return best(rows.description, term, PER_KIND);
     case MENTION_FROM.TASKS:
       return best(rows.tasks, term, PER_KIND);
     case MENTION_FROM.PAGES:
@@ -1089,7 +1089,7 @@ function kindRow(kind: MentionKind): MentionRow {
  * few but the files, and a row for each kind, for no words; else each kind's
  * best, the date the words name first, since words that read as a date
  * mean one, and the task whose key they are whole next, then agents, tasks,
- * people, the plan, pages, and files and folders. One kind: up to fifty of
+ * people, the description, pages, and files and folders. One kind: up to fifty of
  * its rows, a folder's where one was walked into.
  */
 function groupsFor(
@@ -1106,14 +1106,16 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
-  const plan = { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) };
+  const description = { label: MENTION_GROUP.PLAN, rows: best(rows.description, term, PER_GROUP) };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
     label: MENTION_GROUP.TASKS,
     rows: bare ? [] : best(rows.tasks, term, PER_GROUP),
   };
   // The group holding the task the words are the key of, the plan's own or another, leads the list.
-  const keyedGroup = [plan, tasks].find((group) => group.rows.some((row) => keyed(row, term)));
+  const keyedGroup = [description, tasks].find((group) =>
+    group.rows.some((row) => keyed(row, term)),
+  );
   // The workspace's threads and automations are offered only once a word is typed, as its tasks are.
   const inbox = bare
     ? []
@@ -1127,7 +1129,7 @@ function groupsFor(
     { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
     tasks,
     { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
-    plan,
+    description,
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
     { label: MENTION_GROUP.FILES, rows: files },
   ].filter((group) => group !== keyedGroup);
@@ -1402,7 +1404,7 @@ export interface MentionPicker {
   readonly pickDate: (opening: DatePickerOpening) => void;
 }
 
-/** Which side of the word the list stands: under it, as in the plan, or over it, as at the foot of an agent's tab. */
+/** Which side of the word the list stands: under it, as in the description, or over it, as at the foot of an agent's tab. */
 export const MENTION_MENU_SIDE = {
   BELOW: "below",
   ABOVE: "above",
@@ -1536,8 +1538,8 @@ function repositoryPathsQueryOptions(place: {
 /**
  * The kinds the place offers, in the list's order: the workspace's agents
  * where it reads them, its other tasks where it holds any, its people where
- * the window has read them, the plan where one stands and the account has
- * Plans on, the pages of what
+ * the window has read them, the description where one stands and the account has
+ * Descriptions on, the pages of what
  * holds it, its repository's files and folders where it names one, its
  * Inbox threads and automations where it holds any, the pull requests
  * the plan's agents or the agent on no task published, the repository's skills where the words go
@@ -1552,7 +1554,7 @@ function kindsOf(
   people: number,
   tasks: number,
   inbox: { readonly threads: number; readonly automations: number },
-  plans: boolean,
+  descriptionsOn: boolean,
 ): readonly MentionKind[] {
   const { holder, repository } = source;
   const taskId = holderTaskId(holder);
@@ -1590,7 +1592,7 @@ function kindsOf(
             detail: countWords(people, TERM.MEMBER),
           },
         ]),
-    ...(taskId === undefined || !plans
+    ...(taskId === undefined || !descriptionsOn
       ? []
       : [
           {
@@ -1698,7 +1700,7 @@ function useRested(wordAt: number | undefined, words: string | undefined): boole
 
 /**
  * The `@` list for an editor on a task's page: its rows read from the
- * plan's words as they stand and the repository's paths, hung by the word
+ * description's words as they stand and the repository's paths, hung by the word
  * (`@repo/ui`'s `RectFloat`) and closed by a press outside it and `room`,
  * and a pick handed to `onChoose` as the mention's node; a list that never
  * opens where there is no task to offer.
@@ -1713,11 +1715,11 @@ export function useMentionPicker({
   onChoose,
 }: {
   source: MentionSource | undefined;
-  /** The agent whose box the list stands in, which it does not offer; none for the plan's own words. */
+  /** The agent whose box the list stands in, which it does not offer; none for the description's own words. */
   self?: string | undefined;
-  /** The repository's skills, where the words go to an agent; none for the plan's own words. */
+  /** The repository's skills, where the words go to an agent; none for the description's own words. */
   skills?: MentionSkills | undefined;
-  /** The account's connected MCP servers, where the words go to an agent; none for the plan's own words. */
+  /** The account's connected MCP servers, where the words go to an agent; none for the description's own words. */
   servers?: readonly NamedServer[];
   /** The box the editor stands in: a press in it is the editor's, and the date picker hangs in it. */
   room: RefObject<HTMLElement | null>;
@@ -1786,7 +1788,7 @@ export function useMentionPicker({
     listed.tasks.find((task) => task.id === taskId)?.workspaceId ??
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
-  // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
+  // While Descriptions is off there is no description to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
   const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const taskRowsOffered = open
     ? workspaceTaskRows(descriptionsOn ? taskId : undefined, tasksWorkspace, listed.tasks)
@@ -1805,7 +1807,7 @@ export function useMentionPicker({
     automationsRead !== undefined && "automations" in automationsRead
       ? automationRows(automationsRead.automations, tasksWorkspace)
       : [];
-  // The plan's own key, which finds the plan's row as another task's finds its.
+  // The plan's own key, which finds the description's row as another task's finds its.
   const planNumber = listed.tasks.find((task) => task.id === taskId)?.number;
   const planKey =
     tasksWorkspace === undefined || planNumber === undefined
@@ -1880,7 +1882,9 @@ export function useMentionPicker({
           scope,
           pathsSearched,
           {
-            plan: descriptionsOn ? taskRows(taskId, source.taskName, planKey, source.text()) : [],
+            description: descriptionsOn
+              ? taskRows(taskId, source.taskName, planKey, source.text())
+              : [],
             tasks: taskRowsOffered,
             pages: pageRows(holder, source.pages ?? NO_PAGES, now),
             agents: agentRows(

@@ -26,10 +26,10 @@ import { DescriptionBody } from "./description-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 /**
- * `@` in the plan's editor over the real editor bundle: the word typed
- * opens the list of the plan's sections and the repository's files,
+ * `@` in the description's editor over the real editor bundle: the word typed
+ * opens the list of the description's sections and the repository's files,
  * grouped by kind and narrowed by the word; Enter writes the highlighted
- * row as its mention, drawn in the editor as its chip. Synthetic plan and
+ * row as its mention, drawn in the editor as its chip. Synthetic description and
  * repository.
  */
 
@@ -68,7 +68,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a plan left as it went answer before its atoms go.
+  // Note that the saves a description left as it went answer before its atoms go.
   for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
@@ -114,7 +114,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   await act(async () => undefined);
   const element = container.querySelector<TiptapEditorHTMLElement>(".description-document-text");
   const editor = element?.editor;
-  assert.ok(element && editor, "the plan's editor is open");
+  assert.ok(element && editor, "the description's editor is open");
   /** The words typed at the end of the text, as the editor's own input inserts them. */
   const typeAtEnd = async (words: string) => {
     act(() => {
@@ -175,7 +175,7 @@ function listed(container: HTMLElement): [string, string[]][] {
   ]);
 }
 
-test("an @ typed in the plan offers the plan's sections and, as the word is typed, the repository's files, grouped by kind", async () => {
+test("an @ typed in the description offers the description's sections and, as the word is typed, the repository's files, grouped by kind", async () => {
   const task = await opened();
 
   await task.typeAtEnd(" See @");
@@ -285,7 +285,7 @@ test("a heading just renamed is offered by its new words, before the editor hand
   );
 });
 
-test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
+test("on the plan's page an @ typed in the description offers its pages and its agents too", async () => {
   const page: TaskMentionsValue = {
     holder: { taskId: TASK.id },
     taskName: TASK.name,
@@ -313,17 +313,17 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
       onOpenFile: undefined,
     },
   };
-  const plan = await opened(page);
+  const description = await opened(page);
 
-  await plan.typeAtEnd(" @");
+  await description.typeAtEnd(" @");
 
   assert.deepEqual(
-    listed(plan.container).map(([group]) => group),
+    listed(description.container).map(([group]) => group),
     ["Agents", "Description", "Pages", "Mention from"],
   );
 });
 
-test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labeled by its task", async () => {
+test("on the plan's page an @ typed in the description offers the workspace's other agents after its own, each labeled by its task", async () => {
   const agent = (id: string, name: string) => ({
     id,
     name,
@@ -349,28 +349,28 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
       onOpenFile: undefined,
     },
   };
-  const plan = await opened(page);
+  const description = await opened(page);
 
-  await plan.typeAtEnd(" @");
+  await description.typeAtEnd(" @");
 
   assert.deepEqual(
-    listed(plan.container).find(([group]) => group === "Agents"),
+    listed(description.container).find(([group]) => group === "Agents"),
     ["Agents", ["Wire the desktop", "Bill by seat", "Sweep flaky tests"]],
   );
 });
 
-test("a section's address pasted whole into the plan is laid in as its chip, called by its heading", async () => {
-  const plan = await opened();
+test("a section's address pasted whole into the description is laid in as its chip, called by its heading", async () => {
+  const description = await opened();
   const goal = encodeMention(
     { kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: "goal" },
     { workspace: "acme", repository: TASK.repository },
   );
 
-  await plan.typeAtEnd(" See ");
-  await plan.pasteAtEnd(goal);
+  await description.typeAtEnd(" See ");
+  await description.pasteAtEnd(goal);
 
   const chips = [
-    ...plan.container.querySelectorAll(".description-document-text [data-mention-ref]"),
+    ...description.container.querySelectorAll(".description-document-text [data-mention-ref]"),
   ];
   assert.deepEqual(
     chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
@@ -378,7 +378,7 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
   );
 });
 
-test("a section's address naming its task by its number, pasted whole into the plan, is laid in as the chip its id lays in, found among the window's tasks", async () => {
+test("a section's address naming its task by its number, pasted whole into the description, is laid in as the chip its id lays in, found among the window's tasks", async () => {
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     tasks: {
       ...IDLE_TASKS_VIEW,
@@ -394,13 +394,13 @@ test("a section's address naming its task by its number, pasted whole into the p
       tasks: [{ ...TASK, workspaceId: "workspace-acme", number: 42 }],
     },
   });
-  const plan = await opened();
+  const description = await opened();
 
-  await plan.typeAtEnd(" See ");
-  await plan.pasteAtEnd("https://vespin.dev/acme/task/42#goal");
+  await description.typeAtEnd(" See ");
+  await description.pasteAtEnd("https://vespin.dev/acme/task/42#goal");
 
   const chips = [
-    ...plan.container.querySelectorAll<HTMLElement>(
+    ...description.container.querySelectorAll<HTMLElement>(
       ".description-document-text [data-mention-ref]",
     ),
   ];
@@ -419,61 +419,61 @@ function crumb(container: HTMLElement): string | undefined {
 }
 
 test("a plan with no repository offers no files and folders to narrow to", async () => {
-  const plan = await opened(undefined, { ...TASK, repository: null });
+  const description = await opened(undefined, { ...TASK, repository: null });
 
-  await plan.typeAtEnd(" See @");
+  await description.typeAtEnd(" See @");
 
   assert.deepEqual(
-    listed(plan.container).find(([group]) => group === "Mention from"),
+    listed(description.container).find(([group]) => group === "Mention from"),
     ["Mention from", ["Description", "Dates"]],
   );
 });
 
-test("a bare @ in the plan narrows by its kind's row to the repository's paths, where → walks into a folder, ⌫ climbs out, and Enter writes the folder", async () => {
-  const plan = await opened();
+test("a bare @ in the description narrows by its kind's row to the repository's paths, where → walks into a folder, ⌫ climbs out, and Enter writes the folder", async () => {
+  const description = await opened();
 
-  await plan.typeAtEnd(" See @");
-  plan.press("ArrowDown");
-  plan.press("ArrowDown");
-  plan.press("ArrowDown");
-  plan.press("ArrowDown");
-  plan.press("ArrowRight");
+  await description.typeAtEnd(" See @");
+  description.press("ArrowDown");
+  description.press("ArrowDown");
+  description.press("ArrowDown");
+  description.press("ArrowDown");
+  description.press("ArrowRight");
   await act(async () => undefined);
-  const narrowed = [crumb(plan.container), listed(plan.container)];
-  plan.press("ArrowRight");
-  plan.press("ArrowDown");
-  plan.press("ArrowRight");
-  const inWeb = [crumb(plan.container), listed(plan.container)];
-  plan.press("Backspace");
-  const climbed = [crumb(plan.container), listed(plan.container)];
-  plan.press("ArrowDown");
-  plan.press("Enter");
+  const narrowed = [crumb(description.container), listed(description.container)];
+  description.press("ArrowRight");
+  description.press("ArrowDown");
+  description.press("ArrowRight");
+  const inWeb = [crumb(description.container), listed(description.container)];
+  description.press("Backspace");
+  const climbed = [crumb(description.container), listed(description.container)];
+  description.press("ArrowDown");
+  description.press("Enter");
   await act(async () => undefined);
 
   assert.deepEqual(narrowed, ["Files and folders", [["Files and folders", ["apps/"]]]]);
   assert.deepEqual(inWeb, ["apps/web", [["apps/web", ["web/", "rollout-store.ts"]]]]);
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".description-document-text [data-mention-ref]")].map(
-      (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
-    ),
+    [
+      ...description.container.querySelectorAll(".description-document-text [data-mention-ref]"),
+    ].map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["web/"],
   );
 });
 
-test("@plan: typed in the plan narrows the list to the plan, searched by the words after the colon", async () => {
-  const plan = await opened();
+test("@plan: typed in the description narrows the list to the description, searched by the words after the colon", async () => {
+  const description = await opened();
 
-  await plan.typeAtEnd(" See @plan:");
-  const all = listed(plan.container);
-  await plan.typeAtEnd("roll");
+  await description.typeAtEnd(" See @plan:");
+  const all = listed(description.container);
+  await description.typeAtEnd("roll");
 
-  assert.equal(crumb(plan.container), "Description");
+  assert.equal(crumb(description.container), "Description");
   assert.deepEqual(all, [["Description", ["Goal", "Rollout", "Teammate invitations"]]]);
-  assert.deepEqual(listed(plan.container), [["Description", ["Rollout"]]]);
+  assert.deepEqual(listed(description.container), [["Description", ["Rollout"]]]);
 });
 
-test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {
+test("on the description's page an @ typed in the description offers the pull requests its agents published, a pick written as its link's chip", async () => {
   const page: TaskMentionsValue = {
     holder: { taskId: TASK.id },
     taskName: TASK.name,
@@ -498,18 +498,18 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
       onOpenFile: undefined,
     },
   };
-  const plan = await opened(page);
+  const description = await opened(page);
 
-  await plan.typeAtEnd(" See @seat");
-  const offered = listed(plan.container);
-  plan.press("Enter");
+  await description.typeAtEnd(" See @seat");
+  const offered = listed(description.container);
+  description.press("Enter");
   await act(async () => undefined);
 
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".description-document-text [data-mention-ref]")].map(
-      (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
-    ),
+    [
+      ...description.container.querySelectorAll(".description-document-text [data-mention-ref]"),
+    ].map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["#3059"],
   );
 });

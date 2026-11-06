@@ -289,7 +289,7 @@ export function loadedSkill(input: WireValue | undefined): string | undefined {
 }
 
 /**
- * What a plan note of each kind did, in the row's words, keyed by the kinds
+ * What a description note of each kind did, in the row's words, keyed by the kinds
  * the agents' journal keeps, a deletion among them as a strike. Note that the
  * keys are held to the template's type and not read from its module, because
  * the template reaches Effect's Schema, which the renderer bundle does not
@@ -308,7 +308,7 @@ function noteKind(note: WireValue): string {
   return kind === "replace" && text !== undefined && text.trim() === "" ? "remove" : kind;
 }
 
-/** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
+/** The notes a description edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
 function descriptionEditSummary(input: WireValue | undefined): string {
   const notes = isRecord(input) ? input.notes : undefined;
   if (notes === undefined || !isWireArray(notes)) return "";
@@ -738,7 +738,7 @@ function messageWords(input: WireValue | undefined): string | undefined {
  * What a `start_agent` or a `message_agent` call sent, whole, which its row's
  * line cuts to its first line: a message's words, or a start's prompt (named
  * `task` by a start journaled before the prompt had its name) and its note;
- * nothing for any other call, or for a start on the plan with no note, which
+ * nothing for any other call, or for a start on the description with no note, which
  * sent nothing of its own.
  */
 export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
@@ -1227,7 +1227,7 @@ export const TOOL_TARGET = {
   PLAN: "plan",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
-  /** Another task of the workspace, opened on its plan as the sidebar opens it, or on one of its agents' tabs where the target names one. */
+  /** Another task of the workspace, opened on its description as the sidebar opens it, or on one of its agents' tabs where the target names one. */
   TASK: "task",
   /** A pull request the agent opened, its Pull request tab where the window has one and GitHub's page otherwise; its row opens it through the link opener (`useOpenLink`), as a link to the pull request does, so no window's `onOpenTarget` is asked for it. */
   PULL_REQUEST: "pull-request",
@@ -1328,17 +1328,17 @@ function changedAgent(call: TargetedCall): ToolTarget | undefined {
   return agentUpdateKind(call.input) === CALL_KIND.ARCHIVE_AGENT ? undefined : namedAgent(call);
 }
 
-/** The plan of the task named, which a row opens; the task's own plan where it names none. */
+/** The description of the task named, which a row opens; the task's own description where it names none. */
 function planOf(task: string | undefined): ToolTarget {
   return task === undefined ? TASK_TARGET : { kind: TOOL_TARGET.TASK, task };
 }
 
-/** The plan a call named by its task, an edit's or a comment tool's, which its row opens; the task's own plan for a call made before every such call named one. */
+/** The description a call named by its task, an edit's or a comment tool's, which its row opens; the task's own description for a call made before every such call named one. */
 function namedDescription(call: TargetedCall): ToolTarget {
   return planOf(stringAt(call.input, "taskId"));
 }
 
-/** The plan a look's address names, which its row opens; the task's own plan where the address names no picture. */
+/** The description a look's address names, which its row opens; the task's own description where the address names no picture. */
 function lookedDescription(call: TargetedCall): ToolTarget {
   const address = stringAt(call.input, "address");
   return planOf(
@@ -1458,7 +1458,7 @@ export function toolTarget(call: TargetedCall): ToolTarget | undefined {
 export interface TargetPlace {
   /** The workspace's slug; empty where the place names none. */
   readonly workspace: string;
-  /** The task whose page draws the transcript, or the agent on no task whose own page does, which the plan and the pages stand on; none where the place holds neither. */
+  /** The task whose page draws the transcript, or the agent on no task whose own page does, which the description and the pages stand on; none where the place holds neither. */
   readonly holder: MentionHolder | undefined;
   /** The agent whose transcript is drawn, whose threads a post names. */
   readonly agentId: string | undefined;
@@ -1467,7 +1467,7 @@ export interface TargetPlace {
 /**
  * The link of what a call made or is about, which its row's chip is drawn
  * from as the window draws that link anywhere: a pull request by its
- * address, another task by its plan, the task's own plan, a page on it or
+ * address, another task by its description, the task's own description, a page on it or
  * on the agent of no task, or the agent's thread by the id its answer named. Nothing for an agent,
  * whose row names it by its own chip (`AgentCallChip`), for the whole
  * Inbox, and where the place names no workspace or what the thing is on.
@@ -1600,7 +1600,7 @@ export function delegationView(
   };
 }
 
-/** The marks a markdown line opens on: a heading's, a quote's, or a list item's, which a plan's or a task's first line may carry. */
+/** The marks a markdown line opens on: a heading's, a quote's, or a list item's, which a description's or a task's first line may carry. */
 const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
 
 /**
@@ -1615,7 +1615,7 @@ const STRAY_MARKS = /\*\*|`/gu;
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
 
 /**
- * How a plan, a worker's task, or a thought is named on its card, its line,
+ * How a description, a worker's task, or a thought is named on its card, its line,
  * and its tab: its first line of words, as plain words, since the line is
  * drawn as text and the markdown is the opened card's. A fence's line is
  * passed over, since its language tag is no words of the text's.

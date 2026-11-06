@@ -86,7 +86,7 @@ function drawn(input: {
   });
   const message = createElement(AgentMessage, {
     message: input.message ?? SETTLED,
-    plan: false,
+    description: false,
     lead: AGENT_LEAD,
     moving: input.moving ?? false,
     delegation: { models: [] },

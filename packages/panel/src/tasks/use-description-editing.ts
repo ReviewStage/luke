@@ -73,7 +73,7 @@ const savingLeftAtom = Atom.keepAlive(Atom.make<readonly symbol[]>([]));
 /** The titles being typed in, each by its own id, from the first word typed until the rename it asks for answers. */
 const titlesUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
 
-/** Whether any plan holds words not saved: an editor open on them, a task left with them, or a title typed in. */
+/** Whether any description holds words not saved: an editor open on them, a task left with them, or a title typed in. */
 const descriptionWordsUnsavedAtom = Atom.make(
   (get) =>
     get(openUnsavedAtom).length > 0 ||
@@ -241,7 +241,7 @@ export interface DescriptionEditing {
 }
 
 /**
- * Whether any plan holds words the service does not: typed and not yet
+ * Whether any description holds words the service does not: typed and not yet
  * saved, a save still out, or words a task was left with that its save
  * refused. A shell asks before a way out of the app while they stand, since
  * no way out of the app saves them.
@@ -265,7 +265,7 @@ export function useMarkTitleUnsaved(): (unsaved: boolean) => void {
 }
 
 /**
- * The door a task's plan saves through, bound to that task's id and steady
+ * The door a task's description saves through, bound to that task's id and steady
  * across its draws. Note that a door calling the newest `edit` with the id
  * open now would send the words a task was left with, which save after it is
  * left, to the task opened since.
@@ -283,7 +283,7 @@ export function useDescriptionEditDoor(
 }
 
 /**
- * The editor over the open plan's text as `text` holds it; none can open
+ * The editor over the open description's text as `text` holds it; none can open
  * without one, and a conflict names its writer for the reader `place`
  * holds. Note that a save's answer lands only on the editor it was sent
  * from: each opening is counted, and an answer for an earlier one is

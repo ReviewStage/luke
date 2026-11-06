@@ -231,7 +231,7 @@ import { sayRestored } from "./version-view.js";
  * or on a draft holding the words with why where the agent was refused.
  * Main is told which agent's tab is shown, so an agent that ends while the
  * developer is looking at it is not marked unseen, and the agents main says
- * ended unseen read in semibold until their tab is shown (`@repo/host/agent-notices`). The open plan's history is the
+ * ended unseen read in semibold until their tab is shown (`@repo/host/agent-notices`). The open description's history is the
  * tab's as well (`use-description-history.ts`): its version history, opened from
  * the task's menu or its "Edited by" line, or from a section's on the
  * revision that last changed the section, takes the whole window in the
@@ -670,9 +670,9 @@ export interface TasksControl {
   /** Whether the list drawn is one the service answered, rather than the empty one before the first read lands. */
   listRead: boolean;
   region: DocumentRegion;
-  /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
+  /** Copies the description drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
-  /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
+  /** Saves the developer's edit of the open description: saved, a conflict with the text as it stands now, or why not. */
   edit: (taskId: string, request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
   /** The task's column's tabs: its agents' and its draft's, and which is shown. */
   mainTabs: MainTabsControl;
@@ -684,11 +684,11 @@ export interface TasksControl {
   pages: readonly PageLine[] | undefined;
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
   agents: AgentsControl;
-  /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
+  /** The open description's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
-  /** Opens a task on its plan: what a chip, a link, the Tasks list, the Board, the Inbox, a crumb, or a related task's row asks. */
+  /** Opens a task on its description: what a chip, a link, the Tasks list, the Board, the Inbox, a crumb, or a related task's row asks. */
   onSelect: (taskId: string) => void;
-  /** Opens a task the developer goes back to work on, from a sidebar row, ⌘K, or Recent, on the agent waiting on them, else one at work, else the one last active, else its plan. */
+  /** Opens a task the developer goes back to work on, from a sidebar row, ⌘K, or Recent, on the agent waiting on them, else one at work, else the one last active, else its description. */
   onResume: (taskId: string) => void;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
@@ -846,7 +846,7 @@ export interface TasksControl {
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
     /**
      * Starts the task on the repository given, or none, in the workspace
-     * given, with an empty plan and no call,
+     * given, with an empty description and no call,
      * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
@@ -1021,17 +1021,17 @@ export function useLeaveGuard(onStanding?: (ask: LeaveAsk | undefined) => void):
   }, []);
 }
 
-/** The open plan's history as the window opens and draws it, over what is read of it. */
+/** The open description's history as the window opens and draws it, over what is read of it. */
 export interface VersionHistoryControl extends DescriptionHistoryControl {
-  /** Whether the plan's version history takes the window in its place. */
+  /** Whether the description's version history takes the window in its place. */
   open: boolean;
   /**
-   * Opens a plan's version history on the plan as it stands, or, given the
+   * Opens a description's version history on the description as it stands, or, given the
    * moment of a save, on the revision that made it, opening the task first
    * where it is not the open one.
    */
   onOpen: (taskId: string, save?: number) => void;
-  /** Opens a plan's version history where it stood when it was left, as Back and Forward go to it. */
+  /** Opens a description's version history where it stood when it was left, as Back and Forward go to it. */
   onReturn: (taskId: string, spot: HistorySpot | undefined) => void;
   /** Leaves the version history for the task, its side panel as it was. */
   onClose: () => void;
@@ -1070,7 +1070,7 @@ function pinOnTask(pin: SidebarPin, taskId: string): boolean {
  * arrive in the conversation: one with a thread waiting on them, a question
  * before a notice, as the Inbox lists what waits; else the agent its row
  * names that was last active, one at work counting as active now; none where
- * its row names none, so it opens on its plan. Note that the row names a few
+ * its row names none, so it opens on its description. Note that the row names a few
  * of its agents, archived ones left out and those at work first
  * (`TaskAgentsSummary`), so the latest it names is the latest it can say.
  */
@@ -1141,7 +1141,7 @@ type AgentPinAsked =
 /** No pin of an agent on a plan, the same array every render. */
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
-/** What the toast says once Copy plan has put the plan on the clipboard. */
+/** What the toast says once Copy description has put the description on the clipboard. */
 const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
@@ -1364,7 +1364,7 @@ export function useTasksTab(input: {
   /**
    * The task whose version history stands in the window, which it does only
    * while that task is the one bound for, and the save whose revision it
-   * opened on, none for the plan as it stands.
+   * opened on, none for the description as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
@@ -1501,7 +1501,7 @@ export function useTasksTab(input: {
     setFounding(undefined);
   }
   const page = tasksPage(tasks);
-  // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
+  // The open task's description is held whenever a task is open, so a task held lately draws its description in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
   const heldDescription = useHostRead(LIVE_READ.DESCRIPTION_DOCUMENT, viewed.activeTaskId);
   const heldDescriptionRows = heldDescription.rows;
@@ -1703,7 +1703,7 @@ export function useTasksTab(input: {
           : { agentId: panelPagesAgent },
     [panelTaskId, panelPagesAgent],
   );
-  // The account's experiments, which hold where a link to the plan's parts lands.
+  // The account's experiments, which hold where a link to the description's parts lands.
   const experiments = useExperimentChoices();
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
@@ -1867,7 +1867,7 @@ export function useTasksTab(input: {
   // back. A fixture's tasks are opened nowhere, so nothing is asked of them.
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
-  // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
+  // The version history is the task's, so another task, or none, leaves it, and so does Descriptions turned off, whose it is.
   const descriptionsOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
   if (historyFor !== undefined && (historyFor.taskId !== boundFor || !descriptionsOn)) {
     setHistoryFor(undefined);
@@ -2677,7 +2677,7 @@ export function useTasksTab(input: {
   // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
-  // names no planning, so the task opens on its empty plan. New task starts the task
+  // names no planning, so the task opens on its empty description. New task starts the task
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
@@ -2912,8 +2912,8 @@ export function useTasksTab(input: {
   // away rather than leaving it to stand again on the way back.
   if (!shown && newTaskAsk !== undefined) setNewTaskAsk(undefined);
 
-  // A plan's version history opens over the task, so another task opens first.
-  // Note that a task's versions are its plan's, so while Plans is off whatever would open them, a link to a version among them, opens the task's Overview.
+  // A description's version history opens over the task, so another task opens first.
+  // Note that a task's versions are its description's, so while Descriptions is off whatever would open them, a link to a version among them, opens the task's Overview.
   const openHistory = (opening: HistoryOpening) => {
     if (!descriptionsOn) {
       showOverview({ kind: LINK_PLACE.TASK, planId: opening.taskId });
@@ -2942,7 +2942,7 @@ export function useTasksTab(input: {
     setHistoryFor(undefined);
     sidePanel.onShow(taskId, tab);
   };
-  // The task's plan shown at the place given: its column's Overview, which
+  // The task's description shown at the place given: its column's Overview, which
   // holds it, chosen in place on the task standing, and on another task as
   // the window goes there (`route.ts`), a panel filling the window over the
   // column giving way.
@@ -3648,7 +3648,7 @@ export function useTasksTab(input: {
       reopenHere(closed);
       return;
     }
-    // Note that the plan's and the Inbox's kinds of old stand nowhere in the panel now, nor a kind whose experiment is off, so they are passed over.
+    // Note that the description's and the Inbox's kinds of old stand nowhere in the panel now, nor a kind whose experiment is off, so they are passed over.
     const closedKind = sidePanel.closedTabs.findLast((tab) => DRAWN_KINDS.includes(tab));
     if (closedKind === undefined) sidePanel.onToggle();
     else sidePanel.onChoose(closedKind);

@@ -21,17 +21,17 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { DescriptionBody, type SectionLinks } from "./description-body.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * A task's sections' links on its own page: a mention of a section drawn as
- * the chip that opens it, one of a heading the plan no longer holds struck
+ * the chip that opens it, one of a heading the description no longer holds struck
  * through and opening the task at its top, a section's ⋯ copying its link,
  * the title's ⋯ copying the task's, an ask to show a section scrolling the document to it, and nothing a
  * mention names riding on an attribute. Mentions are read in the form
  * written before the link was settled as well as the settled one.
- * Synthetic plan.
+ * Synthetic description.
  */
 
 const TASK_ID = DOCUMENT_TASK.id;
@@ -41,7 +41,7 @@ const WORKSPACE = "acme";
 
 const PLACE = { workspace: WORKSPACE, repository: "acme/relay" } as const;
 
-/** A plan whose last section mentions an earlier one, and one since renamed. */
+/** A description whose last section mentions an earlier one, and one since renamed. */
 const TASK: Task = {
   ...DOCUMENT_TASK,
   document: {
@@ -124,7 +124,7 @@ test("a mention of a section is drawn as its chip, and a press opens that sectio
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" }]);
 });
 
-test("a mention of a heading the plan no longer holds is struck through, and a press opens the plan at its top", () => {
+test("a mention of a heading the description no longer holds is struck through, and a press opens the plan at its top", () => {
   const { container, opened } = drawn();
 
   const chip = chipNamed(container, "Old plan");
@@ -299,7 +299,7 @@ test("only the Copy link button beside the document's one Tab stop is a Tab stop
   assert.ok(stops.length <= 1, `${stops.length} of the buttons are Tab stops`);
 });
 
-test("on a plan that cannot be edited, where no block is a Tab stop, every section's Copy link button is one", () => {
+test("on a description that cannot be edited, where no block is a Tab stop, every section's Copy link button is one", () => {
   const { container } = drawn();
 
   const mores = sectionLinks(container);
@@ -308,7 +308,7 @@ test("on a plan that cannot be edited, where no block is a Tab stop, every secti
   assert.ok(mores.every((more) => more.tabIndex === 0));
 });
 
-/** A plan whose words mention a file and a folder of its repository. */
+/** A description whose words mention a file and a folder of its repository. */
 const FILES_TASK: Task = {
   ...TASK,
   document: {
@@ -383,7 +383,7 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
   assert.deepEqual(onGitHub, ["https://github.com/acme/other/blob/HEAD/other.ts"]);
 });
 
-test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {
+test("a heading the description bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {
   const task: Task = {
     ...TASK,
     document: {
@@ -437,7 +437,7 @@ test("a folder's chip, and a file's where no file opens from here, hang their ca
   );
 });
 
-test("a click on a folder's chip in a plan that can be edited opens no editor", () => {
+test("a click on a folder's chip in a description that can be edited opens no editor", () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -517,7 +517,7 @@ test("the title's Copy link button ends the title's line, shown while the keyboa
   assert.deepEqual(copied, [`https://vespin.dev/acme/task/${TASK_ID}`]);
 });
 
-test("on a plan that cannot be edited, the title's Copy link button is a Tab stop", () => {
+test("on a description that cannot be edited, the title's Copy link button is a Tab stop", () => {
   const { container } = drawn();
   const more = container.querySelector<HTMLButtonElement>(TITLE_LINK);
   assert.ok(more);

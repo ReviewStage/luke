@@ -1,5 +1,5 @@
 /**
- * description-unit-look.ts -- the classes a unit of the plan's document wears where it carries its section's byline and ⋯: a section's (`description-body.tsx`) and the title's (`task-title.tsx`, `description-document-editor.tsx`) alike.
+ * description-unit-look.ts -- the classes a unit of the description wears where it carries its section's byline and ⋯: a section's (`description-body.tsx`) and the title's (`task-title.tsx`, `description-document-editor.tsx`) alike.
  *
  * The unit is the group its byline and its ⋯ answer: both are faded out at
  * rest, on opacity alone so nothing moves, and shown while the pointer or

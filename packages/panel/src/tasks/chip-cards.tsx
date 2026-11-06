@@ -85,7 +85,7 @@ export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string
 }
 
 /**
- * The heading a section's anchor names in a plan the window holds the
+ * The heading a section's anchor names in a description the window holds the
  * words of: the plan's page's, or one the host holds for a window that
  * opened it (`LIVE_READ.DESCRIPTION_DOCUMENT`); none where it holds neither, no
  * heading spells the anchor, or no plan is asked for.
@@ -129,7 +129,7 @@ export function useTaskCard(
   return taskId === undefined ? undefined : place?.taskCard(taskId, now, focus);
 }
 
-/** A section's card: its plan's card's head, and the heading the anchor names, or the name it was written with; where the plan no longer holds it, that said. */
+/** A section's card: its plan's card's head, and the heading the anchor names, or the name it was written with; where the description no longer holds it, that said. */
 export function SectionChipCard({
   taskId,
   anchor,
@@ -140,7 +140,7 @@ export function SectionChipCard({
   taskId: string;
   anchor: string;
   name: string;
-  /** What the card says of a section the plan no longer holds; none while it holds it. */
+  /** What the card says of a section the description no longer holds; none while it holds it. */
   gone: string | undefined;
   fallback: ReactNode;
 }): ReactNode {

@@ -39,12 +39,12 @@ import {
 import { useOpenLink } from "./use-open-link.js";
 
 /**
- * version-view.tsx -- one version of a plan, drawn read-only with what it changed marked, under a bar with its restore.
+ * version-view.tsx -- one version of a description, drawn read-only with what it changed marked, under a bar with its restore.
  *
- * The page beside a plan's version history (`desktop-version-history.tsx`),
+ * The page beside a description's version history (`desktop-version-history.tsx`),
  * the way Google Docs shows a version in the page rather than in its narrow
  * list. Its bar names when the version was saved and offers Restore this
- * version, which the newest version, the plan as it stands, holds unavailable
+ * version, which the newest version, the description as it stands, holds unavailable
  * with a hint saying why: unavailable but still focusable, since a
  * disabled button takes no pointer and no focus, so its hint could never
  * show. The version is drawn whole against the version before it, which
@@ -54,13 +54,13 @@ import { useOpenLink } from "./use-open-link.js";
  * whose code the revision changed as its code with the changes marked,
  * since two diagrams side by side would hide what changed (`../description-diagram.tsx`).
  * A version is drawn under the plan's name, as
- * the plan's own tab draws it. The first version has nothing before it, so
+ * the description's own tab draws it. The first version has nothing before it, so
  * it is drawn with nothing marked. A section opened from its revision's
  * list is drawn alone, without the task's name over it, marked as the whole
  * version marks it, and a version still being read stands as
  * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks nothing:
  * a restore is itself a version the history keeps, so it happens at once
- * and its toast's Undo restores the one before it. Everything drawn is the plan's words, so the root is left
+ * and its toast's Undo restores the one before it. Everything drawn is the description's words, so the root is left
  * out of the screen recording (`ph-no-capture`) as a second line behind the
  * recording's text masking. Standing alone on a phone, the page is headed as
  * a phone heads every page (`../desktop/phone-head.tsx`): the way back to the
@@ -82,7 +82,7 @@ const PAGE_SKELETON = [
   { heading: "30%", lines: ["100%", "91%", "72%"] },
 ] as const;
 
-/** The level a plan's section heading stands at (`##`), which a placeholder section's heading is drawn in. */
+/** The level a description's section heading stands at (`##`), which a placeholder section's heading is drawn in. */
 const SECTION_LEVEL = "2";
 
 /** How wide the placeholder bar's moment and its restore stand: a day and a time in the title's type, and Restore this version. */
@@ -115,12 +115,12 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
-/** A version's text, as the plan's own tab sets it: its units a section apart, in the body's type. */
+/** A version's text, as the description's own tab sets it: its units a section apart, in the body's type. */
 function VersionText({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <div className="description-body">{children}</div>;
 }
 
-/** A unit of the plan in a note's own type, as `MarkdownMessage` sets one: its heading at a section's level over what follows it. */
+/** A unit of the description in a note's own type, as `MarkdownMessage` sets one: its heading at a section's level over what follows it. */
 function NoteUnit({
   heading,
   children,

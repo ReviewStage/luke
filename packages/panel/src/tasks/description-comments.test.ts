@@ -50,19 +50,19 @@ import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./description-
 import type { EditAgents } from "./edit-ref.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * A plan's comments on its own page: each open thread's words marked where
- * the plan holds them, a press on them opening the thread beside them, its
+ * A description's comments on its own page: each open thread's words marked where
+ * the description holds them, a press on them opening the thread beside them, its
  * ✓ resolving it and its reply posting the words typed, a thread whose
  * words were deleted saying so over its quote, a resolved thread marking
  * nothing and listed under Resolved in the Comments tab, where Reopen
  * brings it back, and no mark on a page that is not the plan's own; and
  * ⌥⌘M starts a thread on the words selected, as the bubble over them does.
  * The margin is measured again as a card is resized, and never on a draw
- * that moves nothing it stands on. Synthetic plan and threads.
+ * that moves nothing it stands on. Synthetic description and threads.
  */
 
 // Landed before any field renders, as the panel lands it after its first paint.
@@ -84,7 +84,7 @@ const ID = {
   RESOLVED: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
 } as const;
 
-/** A thread on the first place `words` stands in the text, its words and quote as the plan holds them. */
+/** A thread on the first place `words` stands in the text, its words and quote as the description holds them. */
 function threadOn(
   id: string,
   words: string,
@@ -156,7 +156,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** The choice of the plan's comments list that lists the resolved threads. */
+/** The choice of the description's comments list that lists the resolved threads. */
 function resolvedChoice(container: HTMLElement): HTMLElement | undefined {
   return [...container.querySelectorAll<HTMLElement>('[role="radio"]')].find((choice) =>
     choice.textContent?.startsWith("Resolved"),
@@ -222,7 +222,7 @@ function drawn(
       }),
     );
   act(() => root.render(onRegistry(registry, treeOf(control))));
-  // The list stands in the margin's place once the plan's Comments toggle is pressed.
+  // The list stands in the margin's place once the description's Comments toggle is pressed.
   if (view === "list") {
     act(() => container.querySelector<HTMLButtonElement>(".comments-toggle button")?.click());
   }
@@ -265,7 +265,7 @@ function markedWords(container: HTMLElement, thread: string): string {
     .join("");
 }
 
-test("an open thread's words are marked where the plan holds them, a resolved thread's not at all", () => {
+test("an open thread's words are marked where the description holds them, a resolved thread's not at all", () => {
   const { container } = drawn("page");
 
   assert.equal(markedWords(container, ID.OPEN), "single-use link that expires");
@@ -358,7 +358,7 @@ test("a thread whose words were deleted stays in the margin, saying so over its 
   );
 });
 
-test("the plan's comments list, turned to Resolved, lists the resolved thread whole, where Reopen brings it back", async () => {
+test("the description's comments list, turned to Resolved, lists the resolved thread whole, where Reopen brings it back", async () => {
   const { container, asked } = drawn("list");
 
   act(() => resolvedChoice(container)?.click());
@@ -377,7 +377,7 @@ test("the plan's comments list, turned to Resolved, lists the resolved thread wh
   ]);
 });
 
-test("the plan's comments list holds each open thread whole, its reply field under its comments, and no card beside the words", () => {
+test("the description's comments list holds each open thread whole, its reply field under its comments, and no card beside the words", () => {
   const { container } = drawn("list");
 
   const cards = [...container.querySelectorAll<HTMLElement>(".comments-list .comment-card")];
@@ -1120,7 +1120,7 @@ test("on a plan's page a comment's field offers dictation, and the plain field n
   assert.equal(dictate(plain.container), null, "the plain field does not");
 });
 
-test("in the plan's comments list a thread's quote lights its words in the plan, and a deleted thread's quote is a press too", () => {
+test("in the description's comments list a thread's quote lights its words in the description, and a deleted thread's quote is a press too", () => {
   const { container } = drawn("list");
   const quote = (thread: string) =>
     container.querySelector<HTMLButtonElement>(
@@ -1359,7 +1359,7 @@ async function caretInThread() {
   return { container, opened };
 }
 
-test("Tab from the editor to another of the plan's controls closes the thread its caret opened", async () => {
+test("Tab from the editor to another of the description's controls closes the thread its caret opened", async () => {
   const { container, opened } = await caretInThread();
 
   // Note that jsdom moves no focus on a Tab, so the focus goes where Tab takes it: the line's count, the next stop after the text.
@@ -1416,7 +1416,7 @@ function answerPointer(coarse: boolean): void {
   });
 }
 
-/** Where the comment bubble stands once `words` in the plan are selected, the selection laid at `box` and the body at the page's top. */
+/** Where the comment bubble stands once `words` in the description are selected, the selection laid at `box` and the body at the page's top. */
 function bubbleOver(words: string, box: { top: number; bottom: number }): HTMLElement {
   const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
   Range.prototype.getBoundingClientRect = () => new DOMRect(40, box.top, 120, box.bottom - box.top);
@@ -1544,7 +1544,7 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
   );
 });
 
-test("words selected in a plan whose tab is then hidden take the bubble and ⌥⌘M with them, and bring them back as it is shown again", async () => {
+test("words selected in a description whose tab is then hidden take the bubble and ⌥⌘M with them, and bring them back as it is shown again", async () => {
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(keys);
   act(() => keys.render(withQueryClient(createElement(Keymap))));
@@ -1593,7 +1593,7 @@ test("words selected in a plan whose tab is then hidden take the bubble and ⌥�
   assert.equal(
     container.querySelector(`.comment-card[data-thread="pending"]`),
     null,
-    "⌥⌘M starts no thread on the hidden plan",
+    "⌥⌘M starts no thread on the hidden description",
   );
 
   Range.prototype.getBoundingClientRect = () => new DOMRect(40, 100, 120, 20);
@@ -1623,7 +1623,7 @@ async function pickFiles(field: Element, files: readonly File[]): Promise<void> 
   for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
 }
 
-test("a reply carries the files picked into its field, and a comment's files are drawn under its words, each read as the plan's", async () => {
+test("a reply carries the files picked into its field, and a comment's files are drawn under its words, each read as the description's", async () => {
   const notes = Buffer.from("expiry: 7 days\n").toString("base64");
   const read: string[] = [];
   fakeActs({

@@ -27,23 +27,23 @@ import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
 
 /**
- * add-to-description.tsx -- a picture or a recording an agent showed, added to the plan it works on: kept on the plan as one of its own and written at the end of its text, as the developer's edit, with Undo.
+ * add-to-description.tsx -- a picture or a recording an agent showed, added to its task's description: kept on the description as one of its own and written at the end of its text, as the developer's edit, with Undo.
  *
  * The picture is the agent's, read from its transcript, so it is kept on the
- * plan again, as a picture pasted from another plan is, and the plan's
- * readers see it on the plan's own terms. The Mac re-encodes a picture to
- * the plan's bound first (`encodeImage`), since an agent's picture may be
- * larger than a plan's may. A recording is kept as it is, never re-encoded,
- * where it is no larger than a video sent to the plan may be
- * (`PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES`), and the plan plays it in place. The line is written at the end of the plan's text, a paragraph
+ * description again, as a picture pasted from another description is, and the description's
+ * readers see it on the description's own terms. The Mac re-encodes a picture to
+ * the description's bound first (`encodeImage`), since an agent's picture may be
+ * larger than a description's may. A recording is kept as it is, never re-encoded,
+ * where it is no larger than a video sent to the description may be
+ * (`PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES`), and the description plays it in place. The line is written at the end of the description's text, a paragraph
  * of its own, through the same edit a developer's save is; an edit that
  * meets the text moved on is written again on the text as it stands. Note
- * that it is never written at the editor's caret, because the plan's editor
+ * that it is never written at the editor's caret, because the description's editor
  * closes as focus leaves it, and the press that adds the picture is in the
  * agent's tab. The toast says the adding is under way from the press, since
  * re-encoding, keeping, and writing can take a moment, and turns in place
  * into what came of it. Undo takes the line back out where it still stands alone;
- * the kept picture goes with the plan.
+ * the kept picture goes with the description.
  */
 
 /** What the press is called. */
@@ -81,7 +81,7 @@ const KEEP_FAILED_WORDS = {
 } as const;
 
 /**
- * The `data:` URL the file is kept on the plan as, or why it cannot be: a
+ * The `data:` URL the file is kept on the description as, or why it cannot be: a
  * recording as it is, within a sent video's bound, and a picture re-encoded
  * within a picture's.
  */
@@ -102,7 +102,7 @@ function wordsOf(chip: FileChip): string {
   return dot > 0 ? chip.name.slice(0, dot) : chip.name;
 }
 
-/** The plan's text after an edit written on whatever it stands as now; what refused it where no edit saved: the answer that refused it, or the condition where nothing more was said. */
+/** The description's text after an edit written on whatever it stands as now; what refused it where no edit saved: the answer that refused it, or the condition where nothing more was said. */
 async function edited(
   save: (base: string, value: string) => Promise<TasksEditAnswer>,
   change: (text: string) => string | undefined,
@@ -121,9 +121,9 @@ async function edited(
 }
 
 /**
- * The viewer's Add to plan, for a transcript drawn on a plan's page; none
+ * The viewer's Add to description, for a transcript drawn on a plan's page; none
  * where it is drawn off one, as an agent with no plan's is, nor while the
- * account has Plans off.
+ * account has Descriptions off.
  */
 export function useAddToDescription(): ViewerAction | undefined {
   const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
@@ -168,7 +168,7 @@ export function useAddToDescription(): ViewerAction | undefined {
         workspace,
       );
       const line = taskPictureLine(wordsOf(chip), address);
-      // Note that the edit is written on the plan's words as the page last read
+      // Note that the edit is written on the description's words as the page last read
       // them, and a conflict answers the text as it stands for the next.
       // Note that what was added is kept from the edit that saved, since a
       // retry on a moved text may add other line breaks than the first try.

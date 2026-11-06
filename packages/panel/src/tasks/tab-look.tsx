@@ -26,21 +26,21 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * offered beside a strip that may not hold its tab. A task wears its
  * status's mark (`PlanGlyph`), and so does a pin of its Plan tab, which is
  * named for the task wherever the place knows it; the task's Overview, which
- * holds its plan in its column, wears the document's glyph and its word. Each place adds what
+ * holds its description in its column, wears the document's glyph and its word. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
  * and section, ⌘K's task name.
  */
 
 /** The kinds of tab, each drawn its own way. */
 export const TAB_KIND = {
-  /** One of the side panel's fixed kinds: Plan, Inbox, Board, Code, or Comments. */
+  /** One of the side panel's fixed kinds: Description, Inbox, Board, Code, or Comments. */
   PANEL: "panel",
   /** A task, as a row naming it does. */
   PLAN: "plan",
   INBOX: "inbox",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
-  /** The task's Overview, which leads its column and shows its plan document. */
+  /** The task's Overview, which leads its column and shows its description. */
   OVERVIEW: "overview",
   AGENT: "agent",
   SUBAGENT: "subagent",
@@ -70,7 +70,7 @@ export type TabSubject =
   | {
       readonly kind: typeof TAB_KIND.PANEL;
       readonly tab: FixedSidePanelTab;
-      /** The task the panel stands beside, whose name and status its Plan tab wears; none where the place does not know it, and the tab says Plan. */
+      /** The task the panel stands beside, whose name and status its Description tab wears; none where the place does not know it, and the tab says Description. */
       readonly plan?: PlanStanding | undefined;
       /** Whether the Inbox kind holds one thread open, as it does beside the window's Inbox, which it is named for, under the thread's glyph, rather than any task's Inbox. */
       readonly thread?: boolean | undefined;

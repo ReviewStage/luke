@@ -83,7 +83,7 @@ function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMenti
   roots.push(root);
   const turn = createElement(AgentMessage, {
     message,
-    plan: false,
+    description: false,
     lead: AGENT_LEAD,
     moving,
     delegation: { models: [], onOpenTarget: (target) => opened.push(target) },
@@ -135,14 +135,14 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.AGENT, agent: "agent-7" },
   },
   {
-    name: "a start on the plan, which sent no words of its own, opens the agent it began",
+    name: "a start on the description, which sent no words of its own, opens the agent it began",
     tool: "start_coding_agent",
     input: {},
     output: { status: "accepted", agent: { id: "agent-9" } },
     target: { kind: TOOL_TARGET.AGENT, agent: "agent-9" },
   },
   {
-    name: "a plan edit, named by the plan's chip, called Plan until the window holds its name, and no count",
+    name: "a description edit, named by the description's chip, called Description until the window holds its name, and no count",
     tool: "edit_description",
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
@@ -152,7 +152,7 @@ const OPENING_CALLS: readonly {
     opens: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   },
   {
-    name: "a thread resolved on another task, named by that task's chip, called Plan until the window holds its name",
+    name: "a thread resolved on another task, named by that task's chip, called Description until the window holds its name",
     tool: "resolve_thread",
     input: { taskId: "5d1e2f3a-4b5c-4d6e-8f70-000000000002", thread: "thread-1" },
     output: { status: "accepted", thread: "thread-1" },
@@ -212,7 +212,7 @@ for (const call of OPENING_CALLS) {
       ...TASK_PAGE,
       doors: {
         ...TASK_PAGE.doors,
-        onOpenTask: (plan: DescriptionMention) => left.push(plan.taskId),
+        onOpenTask: (description: DescriptionMention) => left.push(description.taskId),
       },
     };
     const { container } = drawn(
@@ -249,7 +249,7 @@ test("a call's row opened while it runs stays open as its answer lands and names
             value: TASK_PAGE,
             children: createElement(AgentMessage, {
               message: assistant([part]),
-              plan: false,
+              description: false,
               lead: AGENT_LEAD,
               moving: true,
               delegation: { models: [], onOpenTarget: () => undefined },
@@ -355,7 +355,7 @@ const FOLDING_CALLS: readonly {
     ),
   },
   {
-    name: "a plan edit still running",
+    name: "a description edit still running",
     part: toolPart("edit_description", {
       notes: [{ kind: "add", section: "Goal", text: "Export" }],
     }),
@@ -483,7 +483,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
     root.render(
       createElement(AgentMessage, {
         message,
-        plan: false,
+        description: false,
         lead: AGENT_LEAD,
         moving: false,
         delegation: {
@@ -534,7 +534,7 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
     root.render(
       createElement(AgentMessage, {
         message,
-        plan: false,
+        description: false,
         lead: AGENT_LEAD,
         moving: false,
         delegation: {
@@ -593,7 +593,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
     root.render(
       createElement(AgentMessage, {
         message,
-        plan: false,
+        description: false,
         lead: AGENT_LEAD,
         moving: true,
         delegation: {
@@ -639,7 +639,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
   );
 });
 
-test("a message or a start another agent was sent shows its words whole under its row once the row is pressed, a start's note under them, with no toggle at the row's end; a start on the plan folds nothing", () => {
+test("a message or a start another agent was sent shows its words whole under its row once the row is pressed, a start's note under them, with no toggle at the row's end; a start on the description folds nothing", () => {
   const long = "Rebase on main.\n\nThe invoice table moved to billing.ts, so take the new path.";
   const message = assistant([
     toolPart("message_agent", { agentId: "agent-7", text: long }, ACCEPTED),
@@ -742,7 +742,7 @@ test("a call about an agent the place lists not, whose answer names no model, we
         AtomRegistry.make(),
         createElement(AgentMessage, {
           message,
-          plan: false,
+          description: false,
           lead: AGENT_LEAD,
           moving: true,
           delegation: { models: [], onOpenTarget: () => undefined },
@@ -830,7 +830,7 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
           value: onTask(taskId),
           children: createElement(AgentMessage, {
             message,
-            plan: false,
+            description: false,
             lead: AGENT_LEAD,
             moving: true,
             delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
@@ -929,7 +929,7 @@ test("a call about the plan or another task hangs that task's card as its Plan t
             value: { taskCard },
             children: createElement(AgentMessage, {
               message,
-              plan: false,
+              description: false,
               lead: AGENT_LEAD,
               moving: false,
               delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
@@ -1065,7 +1065,7 @@ function agentMessageDrawn(
     value: agentId,
     children: createElement(AgentMessage, {
       message,
-      plan: false,
+      description: false,
       lead: AGENT_LEAD,
       moving: false,
       delegation: { models: [] },

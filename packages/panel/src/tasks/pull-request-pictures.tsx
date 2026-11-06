@@ -23,13 +23,13 @@ import { type GitHubPictureDrawer, GitHubPictureLink } from "./transcript-blocks
 import { useOpenLink } from "./use-open-link.js";
 
 /**
- * pull-request-pictures.tsx -- the pictures in a pull request's words, as its Pull request tab draws them: each read through the service, drawn as a plan's picture is, and opened over the window rather than in the browser.
+ * pull-request-pictures.tsx -- the pictures in a pull request's words, as its Pull request tab draws them: each read through the service, drawn as a description's picture is, and opened over the window rather than in the browser.
  *
  * GitHub's rendering (`body_html`) names each picture by an address the
  * window may not read itself, so each is read once through the service on
  * the App's token as the agent's (`githubImageOf`) and kept in the window's
  * picture cache (`@repo/ui/picture-cache`). A picture standing alone is
- * drawn as a plan's picture is (`../picture-block.tsx`), its press
+ * drawn as a description's picture is (`../picture-block.tsx`), its press
  * (Enlarge) opening the window's file viewer (`attachment-viewer.tsx`)
  * over the description or comment it stands in, walking that entry's
  * pictures, with Open on GitHub, to the address GitHub linked it to, beside the
@@ -213,7 +213,7 @@ export function EntryPictures({
 
 /**
  * One picture GitHub's rendering names, read through the service, drawn
- * from its `data:` URL once read: standing alone, as a plan's picture is,
+ * from its `data:` URL once read: standing alone, as a description's picture is,
  * its press opening the entry's viewer; inside a link, inline as GitHub
  * drew it. Its link where GitHub answered none the window draws.
  */

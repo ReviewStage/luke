@@ -99,7 +99,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
  * and one placeholder asking for a follow up, since a started agent's
- * conversation opens on its plan or task, because the tab's glyph and the transcript's "Working…"
+ * conversation opens on its description or task, because the tab's glyph and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words or files, disabled while there are neither and the agent
@@ -117,7 +117,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * a toast of its own, wherever the window is (`expired-server-toasts.ts`).
  * The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
- * opening a tab never takes the caret out of the plan, and a message sent
+ * opening a tab never takes the caret out of the description, and a message sent
  * from the box, by Enter or by Send, hands the caret back to the box as it
  * opens again, unless the developer went somewhere else meanwhile, so the
  * next message is written at once. An agent's box never holds while a
@@ -158,7 +158,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * owner hands its mentions (`task-mentions.tsx`), as New task's does for
  * its workspace, opens the list of what
  * the message can mention, the task's repository's files and folders, the
- * plan's sections, the pages agents showed on it, its other coding agents,
+ * description's sections, the pages agents showed on it, its other coding agents,
  * the repository's skills, and the account's connected MCP servers and
  * their tools
  * (`mention-picker.tsx`), and the one chosen is written into the words as
@@ -510,7 +510,7 @@ export function AgentComposer({
   onStop: () => Promise<boolean>;
   /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
   followsUp: boolean;
-  /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
+  /** The words a dictation is likely to say, read off the description (`dictation-keywords.ts`). */
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
   skills?: SkillSource | undefined;

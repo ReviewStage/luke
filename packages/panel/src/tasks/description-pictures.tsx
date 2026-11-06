@@ -26,22 +26,22 @@ import { AttachmentViewer } from "./attachment-viewer.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
- * description-pictures.tsx -- a plan's pictures where its words are drawn: each read through the host as the plan's, drawn in its own block, and opened over the window walking the plan's pictures in reading order.
+ * description-pictures.tsx -- a description's pictures where its words are drawn: each read through the host as the description's, drawn in its own block, and opened over the window walking the description's pictures in reading order.
  *
- * A plan's text names a picture by its address
- * (`@repo/features/description-attachment-link`), so the place showing the plan, its
+ * A description's text names a picture by its address
+ * (`@repo/features/description-attachment-link`), so the place showing the description, its
  * page or one of its versions, stands `DescriptionPictures` around its words, and
  * every `MarkdownMessage` under it draws a picture through the drawer
  * `useDescriptionPictureDrawer` hands. A press on a picture opens the window's file
- * viewer (`attachment-viewer.tsx`) on it, its arrows walking the plan's
+ * viewer (`attachment-viewer.tsx`) on it, its arrows walking the description's
  * other pictures that have been read, in the order the text names them. A
  * place that knows who last changed each section hands `sectionNote`, and
  * the viewer's header says it of the section the picture shown stands in,
  * which is where a picture's edit is named rather than over it in the text. A
- * picture of another plan, one copied across, is read as that plan's, which
- * only that plan's readers may, and opens nothing here. A picture from
+ * picture of another description, one copied across, is read as that description's, which
+ * only that description's readers may, and opens nothing here. A picture from
  * outside the app is never fetched, since the window's policy refuses it and a
- * fetch would tell its host who reads the plan: it is a link to it, which
+ * fetch would tell its host who reads the description: it is a link to it, which
  * opens in the browser.
  */
 
@@ -51,7 +51,7 @@ const UNNAMED_PICTURE = "Picture";
 /** A picture's type, as its `data:` address spells it. */
 const DATA_URL_TYPE = /^data:([^;,]+)[;,]/u;
 
-/** What the pictures under a plan's words share: the plan, how a picture is read, and how one is opened. */
+/** What the pictures under a description's words share: the description, how a picture is read, and how one is opened. */
 export interface DescriptionPicturesDoor {
   readonly taskId: string;
   readonly read: (owner: string, id: string) => Promise<PictureAnswer>;
@@ -62,7 +62,7 @@ export interface DescriptionPicturesDoor {
 
 const DescriptionPicturesContext = createContext<DescriptionPicturesDoor | undefined>(undefined);
 
-/** The viewer as it stands open: the plan's read pictures, each by its id, and the one shown. */
+/** The viewer as it stands open: the description's read pictures, each by its id, and the one shown. */
 interface Viewing {
   readonly ids: readonly string[];
   readonly files: readonly FileChip[];
@@ -75,7 +75,7 @@ function chipOf(url: string, name: string): FileChip {
 }
 
 /**
- * The heading of the section of `text` that draws the plan's picture `id`,
+ * The heading of the section of `text` that draws the description's picture `id`,
  * empty for the words before the first; none where the text draws it
  * nowhere. Note that only a drawn picture counts, never its address in
  * words or code, and that a picture drawn twice is named by its first
@@ -91,7 +91,7 @@ function sectionOfPicture(text: string, taskId: string, id: string): string | un
 }
 
 /**
- * The plan's pictures for every message drawn under it: `text` is the words
+ * The description's pictures for every message drawn under it: `text` is the words
  * shown, which name the pictures in the order the viewer walks them, and
  * `sectionNote` what the viewer says of a picture by the heading of the
  * section it stands in.
@@ -164,7 +164,7 @@ export function DescriptionPictures({
   );
 }
 
-/** One picture of a plan, read as that plan's; a press opens it only where it is the plan shown's own. */
+/** One picture of a description, read as that description's; a press opens it only where it is the description shown's own. */
 function DescriptionPicture({
   door,
   owner,
@@ -210,7 +210,7 @@ function OutsidePicture({
   );
 }
 
-/** What the pictures under a plan's words share, for a place that draws them itself, as the plan's editor does; none outside `DescriptionPictures`. */
+/** What the pictures under a description's words share, for a place that draws them itself, as the description's editor does; none outside `DescriptionPictures`. */
 export function useDescriptionPicturesDoor(): DescriptionPicturesDoor | undefined {
   return useContext(DescriptionPicturesContext);
 }
