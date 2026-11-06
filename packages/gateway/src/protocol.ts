@@ -13,31 +13,10 @@ import { Effect, Schema } from "effect";
 /** Every method the host answers, by the name a client calls it. */
 export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
-  /** The panel's Tasks tab shows: the task list read now, and the active task's document with it. */
-  TASKS_REFRESH: "tasks.refresh",
   /** The Mac woke or unlocked: a task list already followed is sealed and followed again now, once however many of those land together. */
   TASKS_RESYNC: "tasks.resync",
   /** The app reaches the service again (`networkConnected` turned true): every read a window holds is asked again now, and a task list already followed is sealed and followed again, whatever resync came lately. */
   TASKS_REGAINED: "tasks.regained",
-  /** The windows have said that the changes made offline the service refused when they were sent again are seen: their count is cleared. */
-  TASKS_OFFLINE_REFUSED_CLEAR: "tasks.offlineRefusedClear",
-  /** One task made the active one and its saved document read, replacing whichever was active. */
-  TASKS_OPEN: "tasks.open",
-  /** The developer left the open task, and no task is active. */
-  TASKS_CLOSE: "tasks.close",
-  /** A named task started on the service, on the repository it names where it names one, and made the active one. */
-  TASKS_START: "tasks.start",
-  /** One task deleted on the service; deleting the open task leaves no task active. */
-  TASKS_DELETE: "tasks.delete",
-  /** One task renamed on the service; the list and the open document take the name it answered without reading either again. */
-  TASKS_RENAME: "tasks.rename",
-  /** One task pinned or unpinned on the service; the list and the open document take the task it answered without reading either again. */
-  TASKS_PIN: "tasks.pin",
-  /** The reader's own read mark of one task moved on the service; the list takes the mark at once. */
-  TASKS_MARK_READ: "tasks.markRead",
-  TASKS_PIN_REPOSITORY: "tasks.pinRepository",
-  /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
-  TASKS_WRITE_SECTION: "tasks.writeSection",
   /**
    * The repositories the account reaches in one workspace, or in every one
    * where the params name none, held for a window from now until it is let
@@ -52,26 +31,6 @@ export const GATEWAY_METHOD = {
   TASKS_REPOSITORIES_UNFOLLOW: "tasks.repositoriesUnfollow",
   /** One workspace's held repositories asked again at once, as Try again asks; answered once the ask has landed. */
   TASKS_REPOSITORIES_RETRY: "tasks.repositoriesRetry",
-  /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
-  TASKS_SET_REPOSITORY: "tasks.setRepository",
-  /** One task's status, priority, or both set on the service; the list and the open document take the task it answered without reading either again. */
-  TASKS_SET_STANDING: "tasks.setStanding",
-  /** One task moved to another of the account's workspaces on the service; the list and the open document take the task it answered without reading either again. */
-  TASKS_MOVE: "tasks.move",
-  /** One block of a task added or taken away on the service; the open document takes the task it answered without reading it again. */
-  TASKS_BLOCK: "tasks.block",
-  /** One task's parent set or cleared on the service; the list and the open document take the task it answered without reading either again. */
-  TASKS_SET_PARENT: "tasks.setParent",
-  /** One relation of a task moved to another kind on the service, in one call; the list and the open document take the task it answered without reading either again. */
-  TASKS_CHANGE_RELATION: "tasks.changeRelation",
-  /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
-  TASKS_EDIT: "tasks.edit",
-  /** A window of a file of one task's repository, read from GitHub through the service as it stands now and colored here; answered to the caller, never held in the view. */
-  TASKS_FILE: "tasks.file",
-  /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_TREE: "tasks.tree",
-  /** The skills a developer may choose of one task's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_SKILLS: "tasks.skills",
   /**
    * What GitHub holds of the pull request or issue a link names, through a
    * workspace's installation, held for a window from now until it is let go
@@ -83,14 +42,6 @@ export const GATEWAY_METHOD = {
   TASKS_LINK_STANDING_FOLLOW: "tasks.linkStandingFollow",
   /** One link's standing let go by the window that held it. */
   TASKS_LINK_STANDING_UNFOLLOW: "tasks.linkStandingUnfollow",
-  /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
-  TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
-  /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
-  TASKS_FIND: "tasks.find",
-  /** A page of one description's history, read from the service; answered to the caller, never held in the view. */
-  TASKS_REVISIONS: "tasks.revisions",
-  /** One revision of one description beside the one before it, read from the service; answered to the caller, never held in the view. */
-  TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   TASKS_PAGE: "tasks.page",
   /**
@@ -139,10 +90,6 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** One task's or agent's Browser tabs let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
-  /** One picture of one description, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
-  TASKS_PICTURE: "tasks.picture",
-  /** One picture kept on one description on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
-  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
    * One task's comments, its description's own threads or one page's, held followed
    * for a window from now until it is let go, over Neon Realtime, and a
@@ -155,12 +102,6 @@ export const GATEWAY_METHOD = {
   TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
   /** One held description's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
   TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
-  /** A comment thread started on one task's description, answered with the thread as it stands. */
-  TASKS_COMMENT_START: "tasks.commentStart",
-  /** One thing done to one comment thread of one task's description, answered with the thread as it stands. */
-  TASKS_COMMENT_ACT: "tasks.commentAct",
-  /** One revision of one description put back as its content on the service; the view takes the task as the service answered it. */
-  TASKS_RESTORE: "tasks.restore",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /**
@@ -224,14 +165,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW: "workspaces.tokenRepositoriesUnfollow",
   /** One workspace's held token repositories asked again at once, as Try again asks; answered once the ask has landed. */
   WORKSPACES_TOKEN_REPOSITORIES_RETRY: "workspaces.tokenRepositoriesRetry",
-  /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
-  GITHUB_CONNECT: "github.connect",
-  /** The account's GitHub disconnected on the service under the Mac's session; the view takes the connection, and the next workspaces read is owed at once. */
-  GITHUB_DISCONNECT: "github.disconnect",
-  /** One admin dashboard read, asked of the service now under the account's session and answered to the caller as it came, or why not; never held in the view. */
-  ADMIN_READ: "admin.read",
-  /** The admin dashboard's star set or taken back on one account under the account's session; whether it landed. */
-  ADMIN_FAVORITE: "admin.favorite",
   /**
    * The models a coding agent may run on as the account is offered them, and
    * its devices, held for a window from now until it is let go, asked of the
