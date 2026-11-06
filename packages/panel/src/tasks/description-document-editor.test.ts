@@ -887,6 +887,20 @@ test("an empty description at rest says to write it in a block of the document, 
   );
 });
 
+test("an editor emptied of a description's words gives the keyboard back to its placeholder once the save lands", async () => {
+  const { container, render } = mount();
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(""));
+  act(() => open().onFinish(0, FINISH.ESCAPE));
+  await settle();
+
+  render(EMPTY_TASK);
+  assert.ok(
+    document.activeElement === block(container, "Description"),
+    "the keyboard is on the placeholder",
+  );
+});
+
 test("an empty description pressed while the editor's bundle loads goes on saying to write it", async () => {
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();

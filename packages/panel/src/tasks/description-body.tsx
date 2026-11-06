@@ -1365,10 +1365,9 @@ export const DescriptionBody = memo(function DescriptionBody({
     : onRename === undefined
       ? (views[0]?.id ?? EDITOR_PLACE.EMPTY)
       : EDITOR_PLACE.TITLE;
-  // The block an editor closed by the keyboard gives it back to: the section its caret stood in, or the placeholder of a description it leaves with no words, or the title.
+  // The block an editor closed by the keyboard gives it back to: the placeholder of a description it leaves with no words, which takes it once the save lands even where sections still stand, or the section its caret stood in, or the title.
   const editorHostOf = (section: number, words: string): EditorHost =>
-    views[section]?.id ??
-    (views.length === 0 && words.trim() === "" ? EDITOR_PLACE.EMPTY : EDITOR_PLACE.TITLE);
+    words.trim() === "" ? EDITOR_PLACE.EMPTY : (views[section]?.id ?? EDITOR_PLACE.TITLE);
   const sections = views.map((view, section) =>
     editable ? (
       <DocumentBlock
