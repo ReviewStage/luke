@@ -15,7 +15,7 @@ import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
-import { beforeAll, onTestFinished, test } from "vitest";
+import { beforeAll, onTestFinished, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
@@ -227,7 +227,14 @@ test("an agent changing an item the bar's Resolve asks about withdraws the quest
   );
   await settle();
 
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the question goes");
+  // Note that the item's change reaches its query one notify tick later.
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector('[role="alertdialog"]') === null,
+      true,
+      "the question goes",
+    ),
+  );
   assert.deepEqual(sent, []);
   assert.deepEqual(picked(page), ["Alert at 80%?", "Expire after 7 days?"], "the selection stands");
 });
@@ -320,10 +327,13 @@ test("a plan main says changed is read again, so an item answered on another Mac
     ]),
   );
   await settle();
-  assert.deepEqual(
-    listed(page),
-    ["How is a failed email retried?", "Expire after 7 days?", "▸ *Alert at 80%?"],
-    "the answer moves no row while the pointer is over the list",
+  // Note that the plan's change stands once it reaches its read's query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      listed(page),
+      ["How is a failed email retried?", "Expire after 7 days?", "▸ *Alert at 80%?"],
+      "the answer moves no row while the pointer is over the list",
+    ),
   );
   const everything = ["Expire after 7 days?", "How is a failed email retried?", "▸ *Alert at 80%?"];
 
@@ -339,7 +349,7 @@ test("a plan main says changed is read again, so an item answered on another Mac
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
-  assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
+  await vi.waitFor(() => assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]));
 
   showScope(page, "All");
   assert.deepEqual(scopes(page), ["Inbox", "Needs you", "Open", "[All]"]);
@@ -657,7 +667,8 @@ test("while the account's feed is first read, the list stands placeholder rows i
   world.feedUnread = false;
   act(() => pushAgain());
   await settle();
-  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  // Note that the feed's rows stand once they reach its query.
+  await vi.waitFor(() => assert.equal(list.querySelector('[aria-busy="true"]') === null, true));
   assert.deepEqual(listed(page), [
     "How is a failed email retried?",
     "*Expire after 7 days?",
@@ -1121,7 +1132,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
   assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread", "Remind me"]);
   act(() => menuItem("Mark as unread").click());
   await settle();
-  assert.equal(unreadOf(page, retry), true);
+  await vi.waitFor(() => assert.equal(unreadOf(page, retry), true));
   assert.equal(
     page.querySelector('[aria-current="page"] .ui-list-row-title')?.textContent,
     "Alert at 80%?",
@@ -1131,7 +1142,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
   assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read", "Remind me"]);
   act(() => menuItem("Mark as read").click());
   await settle();
-  assert.equal(unreadOf(page, retry), false);
+  await vi.waitFor(() => assert.equal(unreadOf(page, retry), false));
   assert.deepEqual(rowMenu(page, "Alert at 80%?"), [
     "Copy link",
     "—",
@@ -1143,10 +1154,14 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
 
   pressKey("u");
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), true, "U marks the chosen item unread");
+  await vi.waitFor(() =>
+    assert.equal(unreadOf(page, "Alert at 80%?"), true, "U marks the chosen item unread"),
+  );
   pressKey("u");
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), false, "and U again marks it read");
+  await vi.waitFor(() =>
+    assert.equal(unreadOf(page, "Alert at 80%?"), false, "and U again marks it read"),
+  );
   assert.deepEqual(world.readMarks, [
     `unread:${RETRY.id}`,
     `read:${RETRY.id}`,
@@ -1162,13 +1177,17 @@ test("an item marked unread while it is shown stays unread until it is opened ag
   await settle();
   pressKey("u");
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), true);
+  await vi.waitFor(() => assert.equal(unreadOf(page, "Alert at 80%?"), true));
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), true, "leaving it leaves it unread");
+  await vi.waitFor(() =>
+    assert.equal(unreadOf(page, "Alert at 80%?"), true, "leaving it leaves it unread"),
+  );
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), false, "opening it again reads it");
+  await vi.waitFor(() =>
+    assert.equal(unreadOf(page, "Alert at 80%?"), false, "opening it again reads it"),
+  );
   assert.deepEqual(world.readMarks, [`unread:${THRESHOLD.id}`, `read:${THRESHOLD.id}`]);
   act(() => keys.unmount());
 });
@@ -1429,8 +1448,8 @@ test("an item marked read as it opened stays read once another plan's item is ch
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`]);
-  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  await vi.waitFor(() => assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`]));
+  await vi.waitFor(() => assert.equal(unreadOf(page, "Alert at 80%?"), false));
   // The plan's inbox is pushed on the mark, as the host hears it, holding the item read.
   await act(async () =>
     world.main.push(
@@ -1439,18 +1458,25 @@ test("an item marked read as it opened stays read once another plan's item is ch
     ),
   );
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  await vi.waitFor(() => assert.equal(unreadOf(page, "Alert at 80%?"), false));
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
   assert.equal(readTitle(page), "Expire after 7 days?");
-  assert.equal(unreadOf(page, "Alert at 80%?"), false, "the list's older read brings no dot back");
+  await vi.waitFor(() =>
+    assert.equal(
+      unreadOf(page, "Alert at 80%?"),
+      false,
+      "the list's older read brings no dot back",
+    ),
+  );
 });
 
 test("a mark another window makes later on the same item stands once the plan's push holds it, over the window's own earlier mark", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
+  await vi.waitFor(() => assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`]));
   assert.equal(unreadOf(page, "Alert at 80%?"), false);
   // The plan's inbox is pushed as the test says: its own mark heard, then another window's.
   const billing = { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id };
@@ -1458,11 +1484,13 @@ test("a mark another window makes later on the same item stands once the plan's 
     world.main.push(billing, { items: [{ ...THRESHOLD, unread: false }, RETRY] }),
   );
   await settle();
+  // Note that each push reaches the plan's read one notify tick later, which passes before the next.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
   await act(async () =>
     world.main.push(billing, { items: [{ ...THRESHOLD, unread: true }, RETRY] }),
   );
   await settle();
-  assert.equal(unreadOf(page, "Alert at 80%?"), true);
+  await vi.waitFor(() => assert.equal(unreadOf(page, "Alert at 80%?"), true));
 });
 
 test("a thread's row says the ask itself while one is open, led by its kind's glyph: the steps left and the next as the reader ticks them in its box, the fields, or an answer to write; a teammate's waits on them with no mark, and an answer reads as its stamp, led by a tick", async () => {
