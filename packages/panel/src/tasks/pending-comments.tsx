@@ -173,7 +173,11 @@ export interface PendingActs {
  * keeping nothing, and Delete, which asks first, since GitHub keeps no
  * pending comment it deletes. Outside a tab that writes, it offers neither.
  */
-export function usePendingActs(draft: PendingReviewComment | undefined): PendingActs {
+export function usePendingActs(
+  draft: PendingReviewComment | undefined,
+  /** Opens the card the comment stands in, folded or not, so what Edit or Delete opens is in view. */
+  onAct?: (() => void) | undefined,
+): PendingActs {
   const writing = useThreadWriting();
   const writes = usePullRequestWrites(writing?.agentId ?? "", writing?.onWritten ?? noop);
   const [editing, setEditing] = useState(false);
@@ -191,13 +195,25 @@ export function usePendingActs(draft: PendingReviewComment | undefined): Pending
     draft === undefined || writing === undefined || editing || out !== undefined
       ? []
       : [
-          [{ label: PENDING_WORDS.EDIT, icon: <GLYPH.RENAME />, onSelect: () => setEditing(true) }],
+          [
+            {
+              label: PENDING_WORDS.EDIT,
+              icon: <GLYPH.RENAME />,
+              onSelect: () => {
+                onAct?.();
+                setEditing(true);
+              },
+            },
+          ],
           [
             {
               label: PENDING_WORDS.DELETE,
               icon: <GLYPH.DELETE />,
               danger: true,
-              onSelect: deleting.ask,
+              onSelect: () => {
+                onAct?.();
+                deleting.ask();
+              },
             },
           ],
         ];
