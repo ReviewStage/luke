@@ -15,7 +15,7 @@ import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   ListedPullRequests,
   OpenAddressesHere,
@@ -162,7 +162,7 @@ test("a link naming a listed task by its number is asked of the place it is pres
   let open: ((href: string) => void) | undefined;
   // Note that the part reads the window's document, so it is read by the press.
   function Opener(): null {
-    useAppState();
+    useAppSlice(APP_SLICE.RUN);
     open = useOpenLink();
     return null;
   }

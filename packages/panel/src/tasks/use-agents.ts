@@ -28,7 +28,7 @@ import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useIsMutating, useMutation } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
@@ -47,7 +47,7 @@ import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS } from "../use-host-read.js";
 import {
   ARCHIVE_NOT_READY,
@@ -1541,7 +1541,8 @@ export function useAgents(input: {
   // Note that a plan or an agent with no repository still reads its member's installed skills, and
   // that the plan's repository stays a dependency, so a plan moved to another repository reads afresh.
   // While the Skills experiment is off, no box offers a skill and no sent message draws one.
-  const skillsOn = useExperiment(EXPERIMENT.SKILLS);
+  const skillsOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SKILLS) }).data === true;
   const readSkills = useMemo(() => {
     if (!skillsOn) return undefined;
     if (taskId !== undefined) {

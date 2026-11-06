@@ -24,12 +24,13 @@ import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { addRepositoryFailureWords } from "./agent-model.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import type { AgentsControl } from "./use-agents.js";
@@ -79,7 +80,8 @@ function addedWords(repository: string, checkout: AddedRepositoryCheckout | unde
 function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
   const own = agent.startedBy === undefined || agent.startedBy.userId === agents.me;
   return (
-    useExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) &&
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) })
+      .data === true &&
     agents.onAddRepository !== undefined &&
     agents.onUnarchive === undefined &&
     agent.archivedAt === undefined &&

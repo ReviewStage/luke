@@ -18,6 +18,7 @@ import {
   EXPERIMENT,
   type Experiment,
   type HostCapability,
+  NO_EXPERIMENTS,
 } from "@repo/settings";
 import {
   agentKeyLink,
@@ -33,7 +34,7 @@ import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { forgetPictures } from "@repo/ui/picture-cache";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
@@ -89,12 +90,13 @@ import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
-  experimentOnNow,
+  appStateQuery,
   SETTINGS_HELD,
-  useAdminAccess,
-  useAdminAccessPending,
+  selectAdminAccess,
+  selectAdminAccessPending,
+  selectExperiment,
+  selectExperimentChoices,
   useAppSlice,
-  useExperimentChoices,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
@@ -324,8 +326,10 @@ function AppWindow(): React.JSX.Element {
   // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
   // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
   const openHostConnect = useOpenHostConnect();
+  const queryClient = useQueryClient();
   const openAccountLink = useSteadyDoor(({ place }: AccountLink) => {
-    if (!experimentOnNow(EXPERIMENT.BRING_YOUR_OWN_HOST)) {
+    const state = queryClient.getQueryData(appStateQuery.queryKey);
+    if (state === undefined || !selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST)(state)) {
       openSettings({
         page: SETTINGS_VIEW.EXPERIMENTAL,
         section: SETTINGS_SECTION.BRING_YOUR_OWN_HOST,
@@ -444,7 +448,8 @@ function AppWindow(): React.JSX.Element {
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
@@ -470,8 +475,9 @@ function AppWindow(): React.JSX.Element {
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin
   // (`link-route.ts`).
-  const adminOn = useAdminAccess();
-  const adminPending = useAdminAccessPending();
+  const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
+  const adminPending =
+    useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
   // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
   const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {

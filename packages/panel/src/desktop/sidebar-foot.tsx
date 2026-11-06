@@ -42,7 +42,7 @@ import {
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   LifeBuoyIcon,
   LogOutIcon,
@@ -59,7 +59,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useOpenPerson } from "../person-door.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
-import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
+import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
@@ -148,7 +148,8 @@ function UpdatePill({
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
-  const offered = useCapability(HOST_CAPABILITY.UPDATES);
+  const offered =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.UPDATES) }).data === true;
   if (!offered || !updateInSidebar(update)) return null;
   if (update.status === UPDATE_STATUS.READY) {
     return (
@@ -336,7 +337,9 @@ export function useAccountMenuGroups(
   const { mutate: sendEmail } = useMutation(pressMutation(ACT_KIND.CONTACT_EMAIL));
   const openPerson = useOpenPerson();
   const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const desktopApp =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
+    true;
   return accountMenuGroups(account.status === ACCOUNT_STATUS.SIGNED_IN, desktopApp, {
     onProfile:
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),

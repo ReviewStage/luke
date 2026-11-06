@@ -550,7 +550,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
+test("a plan's document, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", async () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -567,6 +567,7 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
       duringCall: false,
     },
   };
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -587,6 +588,10 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
         }),
       ),
     ),
+  );
+  // Note that the plan's last editor is drawn once Plans reaches the page through the Query client.
+  await vi.waitFor(() =>
+    assert.match(container.querySelector(".plan-byline")?.textContent ?? "", /Edited /u),
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   // A task from before statuses draws no standing chip.
@@ -735,7 +740,7 @@ test("opening another task draws only its own title and sub-tasks, none of the t
   container.remove();
 });
 
-test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", async () => {
   const agent: AgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
@@ -774,6 +779,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       assumptions: [],
     },
   };
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -835,8 +841,12 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
-  const own = chip("relay#42");
-  assert.ok(own, "the agent's pull request is its chip");
+  // Note that the plan's chips are drawn once Plans reaches the page through the Query client.
+  const own = await vi.waitFor(() => {
+    const found = chip("relay#42");
+    assert.ok(found, "the agent's pull request is its chip");
+    return found;
+  });
   act(() => own.click());
   assert.deepEqual(opened, [
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },

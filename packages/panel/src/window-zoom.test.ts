@@ -3,16 +3,18 @@
 import assert from "node:assert/strict";
 import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@repo/settings";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { useAppKeymap } from "./app-commands.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
+import { appStateQuery } from "./use-app-state.js";
 import { useWindowZoom } from "./window-zoom.js";
 
 /**
@@ -31,8 +33,15 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A window at 100% whose zoom keys write into `writes`. */
-function ZoomWindow({ writes }: { writes: ZoomPercent[] }): ReactElement | null {
+/** A window at 100% whose zoom keys write into `writes`, saying in `landed` whether each render held the document. */
+function ZoomWindow({
+  writes,
+  landed,
+}: {
+  writes: ZoomPercent[];
+  landed: boolean[];
+}): ReactElement | null {
+  landed.push(useQuery(appStateQuery).data !== undefined);
   useAppKeymap(true);
   useWindowZoom(100, (zoom) => {
     writes.push(zoom);
@@ -50,10 +59,11 @@ async function drawOn(
   handCapabilities(capabilities);
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  await act(async () => {
-    root.render(onRegistry(AtomRegistry.make(), createElement(ZoomWindow, { writes })));
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  const landed: boolean[] = [];
+  act(() => {
+    root.render(onRegistry(AtomRegistry.make(), createElement(ZoomWindow, { writes, landed })));
   });
+  await vi.waitFor(() => expect(landed.at(-1)).toBe(true));
 }
 
 /** Presses ⌘ and `key`, answering the event, so a test reads whether the window took it. */
@@ -105,8 +115,9 @@ test("a held ⌘+ keeps stepping the browser's zoom on the web, its repeats left
 });
 
 /** A desktop window at 100% whose every write is refused, beside the toasts it raises. */
-function RefusedZoomWindow(): ReactElement {
+function RefusedZoomWindow({ landed }: { landed: boolean[] }): ReactElement {
   function Keys(): null {
+    landed.push(useQuery(appStateQuery).data !== undefined);
     useAppKeymap(true);
     useWindowZoom(100, () =>
       Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Settings are locked." }),
@@ -126,10 +137,11 @@ test("a zoom size the settings refuse is said in a toast", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  await act(async () => {
-    root.render(createElement(RefusedZoomWindow));
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  const landed: boolean[] = [];
+  act(() => {
+    root.render(createElement(RefusedZoomWindow, { landed }));
   });
+  await vi.waitFor(() => expect(landed.at(-1)).toBe(true));
 
   await act(async () => {
     pressCommand("+", "Equal");

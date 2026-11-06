@@ -33,11 +33,12 @@ import {
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { askActResult, useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
-import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
+import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useBusyPress } from "./busy-press.js";
 
@@ -290,7 +291,9 @@ function cliGrant(clients: readonly McpClient[]): McpClient | undefined {
 
 /** Settings › CLI, for the account signed in: Install, then Sign in as the command's grant stands. */
 export function CliPage(): React.JSX.Element {
-  const installs = useCapability(HOST_CAPABILITY.CLI_INSTALL);
+  const installs =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.CLI_INSTALL) }).data ===
+    true;
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const accountId = signedInAccountId(account);
   const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
