@@ -65,6 +65,7 @@ function agents() {
   const unused = () => Effect.die("nothing past the reach stands here");
   const sandbox: AgentSandboxService = {
     terminals: unused,
+    listeningPorts: unused,
     start: unused,
     rename: unused,
     kill: unused,
