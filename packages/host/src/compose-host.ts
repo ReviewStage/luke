@@ -248,6 +248,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         entities: () => entities?.store,
         offlineRefused,
         githubMoved: integrations.githubMoved,
+        recordProductEvent: settings.recordProductEvent,
         client: Object.assign(
           new HostedTaskClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,

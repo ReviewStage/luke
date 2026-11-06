@@ -22,6 +22,11 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
+import {
+  PRODUCT_EVENT,
+  PRODUCT_SETTING_VALUE,
+  type RecordProductEvent,
+} from "@repo/features/analytics";
 import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
 import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
 import {
@@ -100,6 +105,7 @@ import {
   type TasksTreeAnswer,
   type TasksView,
   type TasksWorkspaceAnswer,
+  type TasksWorkspaceExperimentSetParams,
   type TasksWorkspaceGitHubConnectAnswer,
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationsAnswer,
@@ -144,6 +150,7 @@ import {
   tasksStartRequestSchema,
   tasksTreeParamsSchema,
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceExperimentSetParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -165,6 +172,12 @@ import {
 } from "@repo/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import {
+  EXPERIMENT_COUNTED_AS,
+  EXPERIMENT_SCOPE_COUNTED_AS,
+  experimentScope,
+  isExperiment,
+} from "@repo/settings";
 import {
   type AnyWrite,
   anyWrite,
@@ -210,21 +223,6 @@ import {
 } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import { type EntityStore, KEPT_READ } from "./entity-store.js";
-import { fixturePage } from "./fixture-stage.js";
-import type { HostMethodTable } from "./gateway-door.js";
-import { heldFetch } from "./held-fetch.js";
-import type { HostKernel } from "./host-kernel.js";
-import {
-  FileAtCommitKey,
-  type KeptContent,
-  keptOfTask,
-  PageVersionKey,
-  DescriptionPictureKey,
-} from "./kept-content.js";
-import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
-import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, LiveBroken, type TxWait } from "./live-follow.js";
-import { pushLive } from "./live-push.js";
 import {
   type CommentSubjectKey,
   commentSubjectOf,
@@ -232,6 +230,21 @@ import {
 } from "./description-comment-reads.js";
 import { descriptionCommentWrites } from "./description-comment-writes.js";
 import { descriptionDocumentReads } from "./description-document-reads.js";
+import { type EntityStore, KEPT_READ } from "./entity-store.js";
+import { fixturePage } from "./fixture-stage.js";
+import type { HostMethodTable } from "./gateway-door.js";
+import { heldFetch } from "./held-fetch.js";
+import type { HostKernel } from "./host-kernel.js";
+import {
+  DescriptionPictureKey,
+  FileAtCommitKey,
+  type KeptContent,
+  keptOfTask,
+  PageVersionKey,
+} from "./kept-content.js";
+import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
+import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, LiveBroken, type TxWait } from "./live-follow.js";
+import { pushLive } from "./live-push.js";
 import type { PullRequestListing } from "./pull-request-parts.js";
 import { type OfflineRefused, untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
@@ -525,6 +538,7 @@ export type TasksClient = Pick<
     | "create"
     | "rename"
     | "setSlug"
+    | "setExperiment"
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
@@ -577,6 +591,8 @@ export interface TasksDependencies {
   member: () => { readonly userId: string; readonly name: string } | undefined;
   /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
   githubMoved: Effect.Effect<void>;
+  /** Counts a product event, as a workspace experiment an admin turned on or off is counted once the service takes it. */
+  recordProductEvent: RecordProductEvent;
 }
 
 export interface TasksComposer extends Composer {
@@ -2254,6 +2270,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
   });
 
+  /**
+   * One experiment turned on or off for everyone in a workspace, drawn at once
+   * as the member's own change, now, and kept until the follow moves the
+   * workspace; one the service refuses, as it refuses a member who is no
+   * admin, is taken back. Note that the drawn choices stay in the order the
+   * live row lists them, by key, so the row the follow carries reads the same.
+   */
+  const workspaceExperimentSet = workspaceWrite<
+    TasksWorkspaceExperimentSetParams & AskedOver,
+    WireValue
+  >({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    change:
+      ({ experiment, on }) =>
+      (row) => {
+        const member = dependencies.member();
+        const changedBy = member === undefined ? null : { id: member.userId, name: member.name };
+        const chosen = { experiment, on, changedBy, changedAt: kernel.now() };
+        const others = (row.experiments ?? []).filter((each) => each.experiment !== experiment);
+        return {
+          ...row,
+          experiments: [...others, chosen].toSorted((a, b) =>
+            a.experiment < b.experiment ? -1 : a.experiment > b.experiment ? 1 : 0,
+          ),
+        };
+      },
+    send: ({ workspaceId, experiment, on }) =>
+      Effect.tap(
+        workspaceWritten(client.workspaces.setExperiment(workspaceId, experiment, on)),
+        (written) =>
+          Effect.sync(() => {
+            if (!("workspace" in written) || !isExperiment(experiment)) return;
+            dependencies.recordProductEvent(PRODUCT_EVENT.EXPERIMENT_TOGGLE, {
+              experiment: EXPERIMENT_COUNTED_AS[experiment],
+              setting_value: on ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+              experiment_scope: EXPERIMENT_SCOPE_COUNTED_AS[experimentScope(experiment)],
+            });
+          }),
+      ),
+    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+  });
+
   /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
   const workspaceSlugSet = workspaceWrite<TasksWorkspaceSlugSetParams & AskedOver, WireValue>({
     workspaceId: ({ workspaceId }) => workspaceId,
@@ -3571,6 +3629,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             tasksWorkspaceRenameParamsSchema,
             params,
             "renaming a workspace names it and its new name",
+          ),
+          (read) => ({ ...read, rows: workspaceList.rows }),
+        ),
+    ),
+    // An experiment moves no task: the choice is drawn on its workspace at
+    // once, and the follow carries the same choice a moment later.
+    [GATEWAY_METHOD.WORKSPACES_EXPERIMENT_SET]: declaredMethod(
+      dependencies.pool,
+      workspaceExperimentSet,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksWorkspaceExperimentSetParamsSchema,
+            params,
+            "turning an experiment on or off names the workspace, the experiment, and whether it is on",
           ),
           (read) => ({ ...read, rows: workspaceList.rows }),
         ),

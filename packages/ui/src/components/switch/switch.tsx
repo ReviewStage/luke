@@ -2,6 +2,7 @@ import type { SwitchRootProps } from "@base-ui/react/switch";
 import type { MouseEvent } from "react";
 import { pulsePress } from "../../press-pulse.js";
 import { ShadcnSwitch, SWITCH_THUMB, SWITCH_TRACK } from "../../shadcn/switch.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * switch.tsx -- the app's one on/off switch: a pill whose thumb slides right and takes the switch's "on" ink while on.
@@ -16,6 +17,12 @@ import { ShadcnSwitch, SWITCH_THUMB, SWITCH_TRACK } from "../../shadcn/switch.js
  * same classes. Either way it keys its look on its own `data-checked`.
  * What finds a switch for an app (the desktop's settings search) is the
  * app's: it hands the switch the attributes its search lands on.
+ *
+ * A switch the reader may not change is `locked` with why: it stays a
+ * control that takes focus and the pointer, read-only to a reader, drawn
+ * as a disabled switch is, and hangs its why as its tooltip, so the reason
+ * is found where the hand reaches rather than said on a line of its own. A
+ * disabled switch takes no pointer, so no tooltip could hang from it.
  */
 
 /** The switch as a button of its own: `role="switch"`, named by `label`. */
@@ -27,6 +34,8 @@ type SwitchProps = {
   label: string;
   /** The id of the words that say what the switch does, where some stand beside it. */
   describedBy?: string | undefined;
+  /** Why the reader may not change it, where they may not: it then takes no press and hangs these words as its tooltip. */
+  locked?: string | undefined;
 } & Omit<
   SwitchRootProps,
   | "checked"
@@ -48,8 +57,24 @@ export function Switch({
   onChange,
   label,
   describedBy,
+  locked,
   ...button
 }: SwitchProps): React.JSX.Element {
+  if (locked !== undefined) {
+    return (
+      <Tooltip label={locked}>
+        <ShadcnSwitch
+          {...button}
+          nativeButton
+          render={<button type="button" />}
+          checked={checked}
+          readOnly
+          aria-label={label}
+          aria-describedby={describedBy ?? button["aria-describedby"]}
+        />
+      </Tooltip>
+    );
+  }
   return (
     <ShadcnSwitch
       {...button}

@@ -14,8 +14,8 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * switches.tsx -- a switch off, on, and unavailable in each, and the drawing
- * alone as a menu row draws it.
+ * switches.tsx -- a switch off, on, unavailable, and locked in each, its why
+ * its tooltip, and the drawing alone as a menu row draws it.
  */
 
 function Held({ start, label }: { start: boolean; label: string }): React.JSX.Element {
@@ -37,6 +37,18 @@ function Switches(): React.JSX.Element {
           <Held start label="On" />
           <Switch checked={false} label="Off, unavailable" disabled onChange={() => undefined} />
           <Switch checked label="On, unavailable" disabled onChange={() => undefined} />
+          <Switch
+            checked={false}
+            label="Off, locked"
+            locked="Only an admin can change this"
+            onChange={() => undefined}
+          />
+          <Switch
+            checked
+            label="On, locked"
+            locked="Only an admin can change this"
+            onChange={() => undefined}
+          />
         </Inline>
       </CatalogSection>
       <CatalogSection id="switch-labeled" title="Beside its name">

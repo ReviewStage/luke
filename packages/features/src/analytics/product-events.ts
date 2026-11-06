@@ -88,6 +88,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
   EXPERIMENT: "experiment",
+  EXPERIMENT_SCOPE: "experiment_scope",
 } as const;
 
 type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
@@ -283,6 +284,19 @@ export const PRODUCT_EXPERIMENT = {
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
 
 /**
+ * Whose choice an experiment toggled was: a workspace's, which an admin made
+ * for everyone in it, or an account's own. It repeats the settings package's
+ * own set for the reason `PRODUCT_EXPERIMENT` does.
+ */
+export const PRODUCT_EXPERIMENT_SCOPE = {
+  WORKSPACE: "workspace",
+  ACCOUNT: "account",
+} as const;
+
+export type ProductExperimentScope =
+  (typeof PRODUCT_EXPERIMENT_SCOPE)[keyof typeof PRODUCT_EXPERIMENT_SCOPE];
+
+/**
  * The rungs every count travels on. A raw count is a weak fingerprint —
  * "137 Codex sessions" identifies a machine across days — where a rung says
  * the same thing about adoption and says it about a crowd rather than a
@@ -328,6 +342,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: ProductExperiment;
+  [PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE]: ProductExperimentScope;
 }
 
 /**
@@ -337,7 +352,9 @@ interface ProductEventPropertyValue {
  */
 type EnumeratedProductEventProperty = Exclude<
   ProductEventProperty,
-  typeof PRODUCT_EVENT_PROPERTY.APP_VERSION | typeof PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
+  | typeof PRODUCT_EVENT_PROPERTY.APP_VERSION
+  | typeof PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
+  | typeof PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE
 >;
 
 /** Every value each enumerable property may ever hold. */
@@ -381,6 +398,7 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.EXPERIMENT_TOGGLE]: [
     PRODUCT_EVENT_PROPERTY.EXPERIMENT,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
+    PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE,
   ],
 } as const satisfies { [Name in ProductEventName]: readonly ProductEventProperty[] };
 
@@ -473,6 +491,20 @@ function memberReader(values: readonly string[]): (value: UnparsedWireValue) => 
 
 const COUNT_BUCKETS: ReadonlySet<number> = new Set(Object.values(PRODUCT_SESSION_COUNT_BUCKET));
 
+const readsExperimentScope = memberReader(Object.values(PRODUCT_EXPERIMENT_SCOPE));
+
+/**
+ * An experiment toggle's scope, an account's where none is named. Note that
+ * a build from before workspace experiments sends a toggle with no scope,
+ * and every toggle it sends is an account's, so reading the missing scope
+ * as the account's keeps its whole batch rather than refusing it.
+ */
+function experimentScopeReader(value: UnparsedWireValue): ProductExperimentScope | undefined {
+  if (value === undefined) return PRODUCT_EXPERIMENT_SCOPE.ACCOUNT;
+  // SAFETY: the reader answers only a member of the scope set declared above.
+  return readsExperimentScope(value) as ProductExperimentScope | undefined;
+}
+
 function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | undefined {
   if (!isWireNumber(value) || !COUNT_BUCKETS.has(value)) return undefined;
   // SAFETY: the value is a member of the bucket ladder declared above.
@@ -482,7 +514,8 @@ function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | und
 /**
  * How each property's value is read. Every enumerable property's reader comes
  * from that property's own declared set rather than from a second list, so the
- * two can never disagree; the two no set can enumerate are named here, which
+ * two can never disagree; the two no set can enumerate are named here, beside
+ * an experiment's scope, which reads a missing one as the account's, which
  * is what makes "no free text" a property of the type rather than a promise
  * about call sites: a version that is not `x.y.z` and a count that is not a
  * rung are both discarded.
@@ -501,6 +534,7 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: (value) =>
     isWireString(value) && parseReleaseVersion(value) ? value.trim() : undefined,
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: bucketReader,
+  [PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE]: experimentScopeReader,
 };
 
 const readsProductEventName = Schema.is(ProductEventNameSchema);

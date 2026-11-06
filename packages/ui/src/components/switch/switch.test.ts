@@ -116,3 +116,28 @@ test("a switch is described by the words its caller points it at, by either name
     assert.equal(document.getElementById(described)?.textContent, "Sends one notice an hour.");
   }
 });
+
+test("a locked switch keeps the keyboard and the pointer but takes no press, and says why it is locked", () => {
+  const asked: boolean[] = [];
+  const page = render(
+    createElement(Switch, {
+      checked: true,
+      label: "Task descriptions",
+      locked: "Only an admin can change this",
+      onChange: (next) => asked.push(next),
+    }),
+  );
+  const control = switchNamed(page, "Task descriptions");
+
+  act(() => control.click());
+
+  assert.deepEqual(asked, []);
+  assert.equal(control.getAttribute("aria-checked"), "true");
+  assert.equal(control.getAttribute("aria-readonly"), "true");
+  assert.equal(control.hasAttribute("disabled"), false);
+  const described = (control.getAttribute("aria-describedby") ?? "")
+    .split(" ")
+    .map((id) => document.getElementById(id)?.textContent)
+    .join(" ");
+  assert.match(described, /Only an admin can change this/u);
+});

@@ -2,6 +2,7 @@ import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@repo/feature
 import type {
   TasksWorkspaceAnswer,
   TasksWorkspaceCreateParams,
+  TasksWorkspaceExperimentSetParams,
   TasksWorkspaceGitHubConnectAnswer,
   TasksWorkspaceInvitationAnswer,
   TasksWorkspaceInvitationCancelParams,
@@ -59,6 +60,9 @@ export interface WorkspaceProceduresDependencies {
   host: {
     workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
+    workspaceExperimentSet(
+      params: TasksWorkspaceExperimentSetParams,
+    ): Effect.Effect<TasksWorkspaceAnswer>;
     workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceSlugSet(params: TasksWorkspaceSlugSetParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceGitHubConnect(
@@ -238,6 +242,14 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
         return yield* refusedWorkspace(errors.REFUSED, answer.failure);
       },
     ),
+    [WORKSPACE_ACT_KIND.WORKSPACE_EXPERIMENT_SET]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_EXPERIMENT_SET
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceExperimentSet(input);
+      if ("workspace" in answer) return answer.workspace;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
     [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET
     ].effect(function* ({ input, context, errors }) {

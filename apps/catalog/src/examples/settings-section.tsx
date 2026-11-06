@@ -25,7 +25,8 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * settings-section.tsx -- a headed section of rows, one with no heading,
+ * settings-section.tsx -- a headed section of rows, one with a caption under
+ * its heading, one with no heading,
  * one holding a single row, one with a long heading and long rows in a
  * column narrower than the 380px a row's controls drop below its words
  * under, one with no card around a text area that draws its own frame,
@@ -115,6 +116,16 @@ function SettingsSections(): React.JSX.Element {
             <SettingsRow label="Sign out">
               {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Sign out</Button>}
             </SettingsRow>
+          </SettingsSection>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-section-captioned" title="Headed, with a caption">
+        <div className="catalog-settings">
+          <SettingsSection
+            title="For everyone in Acme"
+            caption="These change the app for every member and agent in Acme. Only admins can change them."
+          >
+            <SwitchRow label="Pilot" description="Start a new task with one pilot agent." />
           </SettingsSection>
         </div>
       </CatalogSection>

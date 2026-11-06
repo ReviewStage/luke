@@ -176,7 +176,13 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.EXPERIMENTAL ? (
-        <ExperimentalPage entries={EXPERIMENTS} experiments={experiments} signedIn={signedIn} />
+        <ExperimentalPage
+          entries={EXPERIMENTS}
+          experiments={experiments}
+          signedIn={signedIn}
+          workspace={workspace ? shownWorkspace(workspace) : undefined}
+          readerId={signedIn ? account.id : undefined}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.ABOUT ? (

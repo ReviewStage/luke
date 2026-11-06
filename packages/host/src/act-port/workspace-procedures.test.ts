@@ -192,6 +192,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`rename:${params.workspaceId}:${params.name}`, () =>
         script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },
       ),
+    workspaceExperimentSet: (params) =>
+      ask(`experimentSet:${params.workspaceId}:${params.experiment}:${params.on}`, () =>
+        script.notPermitted ? refusal() : { workspace: ACME },
+      ),
     workspaceSlugSet: (params) =>
       ask(`slugSet:${params.workspaceId}:${params.slug}`, () =>
         script.notPermitted ? refusal() : { workspace: { ...ACME, slug: params.slug } },

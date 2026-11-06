@@ -1,10 +1,17 @@
 import {
   PRODUCT_EXPERIMENT,
+  PRODUCT_EXPERIMENT_SCOPE,
   PRODUCT_SETTINGS_VIEW,
   type ProductExperiment,
+  type ProductExperimentScope,
   type ProductSettingsView,
 } from "@repo/features/analytics";
-import { EXPERIMENT, type Experiment } from "./experiments.js";
+import {
+  EXPERIMENT,
+  EXPERIMENT_SCOPE,
+  type Experiment,
+  type ExperimentScope,
+} from "./experiments.js";
 import { SETTINGS_PAGE, type SettingsPage } from "./schema.js";
 
 /**
@@ -40,3 +47,8 @@ export const EXPERIMENT_COUNTED_AS = {
   [EXPERIMENT.BRING_YOUR_OWN_HOST]: PRODUCT_EXPERIMENT.BRING_YOUR_OWN_HOST,
   [EXPERIMENT.DESCRIPTIONS]: PRODUCT_EXPERIMENT.DESCRIPTIONS,
 } satisfies Record<Experiment, ProductExperiment>;
+
+export const EXPERIMENT_SCOPE_COUNTED_AS = {
+  [EXPERIMENT_SCOPE.WORKSPACE]: PRODUCT_EXPERIMENT_SCOPE.WORKSPACE,
+  [EXPERIMENT_SCOPE.ACCOUNT]: PRODUCT_EXPERIMENT_SCOPE.ACCOUNT,
+} satisfies Record<ExperimentScope, ProductExperimentScope>;

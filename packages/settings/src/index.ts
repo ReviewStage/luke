@@ -15,7 +15,11 @@ export {
   coAuthorCredited,
   isCommitAuthor,
 } from "./commit-author.js";
-export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
+export {
+  EXPERIMENT_COUNTED_AS,
+  EXPERIMENT_SCOPE_COUNTED_AS,
+  SETTINGS_VIEW_COUNTED_AS,
+} from "./counted.js";
 export {
   type AccountExperiment,
   type AccountExperimentChoices,

@@ -264,6 +264,8 @@ interface FakeService extends TasksClient {
   renamedAgain: string | undefined;
   /** What a rename's answer waits on once the store has moved, so a test can have the follow deliver first. */
   renameAnswered: Effect.Effect<void>;
+  /** Waited on before an experiment's write answers, which a test holds open to see it drawn while it is out. */
+  experimentAnswered: Effect.Effect<void>;
   /** What a role change's answer waits on once the store has answered, so a test can see what is drawn before it. */
   roleAnswered: Effect.Effect<void>;
   /** A slug another workspace holds, which the service refuses as taken; none where every slug is free. */
@@ -695,6 +697,7 @@ function fakeService(tasks: Task[]): FakeService {
     workspacesSignedOut: false,
     renamedAgain: undefined,
     renameAnswered: Effect.void,
+    experimentAnswered: Effect.void,
     roleAnswered: Effect.void,
     slugTaken: undefined,
     slugAnswered: Effect.void,
@@ -812,6 +815,24 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }).pipe(Effect.tap(() => service.renameAnswered)),
+      setExperiment: (workspaceId, experiment, on) =>
+        Effect.sync(() => {
+          service.reads.push(`experimentSet:${workspaceId}:${experiment}:${on}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const found = service.memberships.find((each) => each.id === workspaceId);
+          if (found === undefined) return UNANSWERED_WORKSPACE;
+          const chosen = {
+            experiment,
+            on,
+            changedBy: { id: "user-dana", name: "Dana" },
+            changedAt: 5,
+          };
+          const now = { ...found, experiments: [chosen] };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }).pipe(Effect.tap(() => service.experimentAnswered)),
       setSlug: (workspaceId, slug) =>
         Effect.sync(() => {
           service.reads.push(`slugSet:${workspaceId}:${slug}`);
@@ -1338,6 +1359,7 @@ function subject(
       entities: () => options.entities,
       offlineRefused: { clear: () => undefined },
       githubMoved: Effect.void,
+      recordProductEvent: () => undefined,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
@@ -3129,6 +3151,45 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+    }),
+);
+
+it.effect(
+  "an experiment turned on for a workspace is drawn at once as the member's own change, and the service's choice stands once it is answered",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const answered = yield* Deferred.make<void>();
+      service.experimentAnswered = Deferred.await(answered);
+
+      const turning = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_EXPERIMENT_SET, {
+          workspaceId: ACME.id,
+          experiment: "pilot",
+          on: true,
+        }),
+      );
+      yield* settled;
+      const drawn = { experiment: "pilot", on: true, changedAt: 0 };
+      assert.deepEqual(last()?.workspaces, [
+        PERSONAL,
+        { ...ACME, experiments: [{ ...drawn, changedBy: { id: "user-dana", name: "Dana" } }] },
+      ]);
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(turning);
+      yield* settled;
+
+      assert.deepEqual(last()?.workspaces, [
+        PERSONAL,
+        {
+          ...ACME,
+          experiments: [{ ...drawn, changedAt: 5, changedBy: { id: "user-dana", name: "Dana" } }],
+        },
+      ]);
     }),
 );
 

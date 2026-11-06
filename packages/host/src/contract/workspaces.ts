@@ -4,6 +4,7 @@ import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire"
 import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceExperimentSetParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -24,6 +25,7 @@ import {
 } from "@repo/features/tasks-view";
 import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
 import { workspaceMemberSchema, workspaceSchema } from "@repo/features/workspace-wire";
+import { WORKSPACE_EXPERIMENT_LIST } from "@repo/settings";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
@@ -53,6 +55,18 @@ export const workspaceActsContract = {
     "Could not rename that workspace on this system.",
   )
     .input(exactInput(tasksWorkspaceRenameParamsSchema))
+    .output(answersWorkspace),
+  [WORKSPACE_ACT_KIND.WORKSPACE_EXPERIMENT_SET]: actProcedure(
+    "Could not change that experiment on this system.",
+  )
+    .input(
+      exactInput(
+        EffectSchema.Struct({
+          ...tasksWorkspaceExperimentSetParamsSchema.fields,
+          experiment: EffectSchema.Literals(WORKSPACE_EXPERIMENT_LIST),
+        }),
+      ),
+    )
     .output(answersWorkspace),
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITE]: actProcedure(
     "Could not invite that address on this system.",
