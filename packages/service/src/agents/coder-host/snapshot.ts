@@ -19,9 +19,8 @@
  * write credential, set at the sandbox's firewall in the shape the agent's
  * own session and the Terminal tab set it, beside the swaps of the launch
  * running there (`../sandbox-firewall.ts`), so no token
- * enters the sandbox's files or a command's words; a member's own token is
- * taken off again once the push is done, unless a terminal or a turn of the
- * source still uses the sandbox. A sandbox this step woke is stopped
+ * enters the sandbox's files or a command's words; the credential stays
+ * there until the sandbox stops or the next write replaces it. A sandbox this step woke is stopped
  * again, its kept launch deleted first as ahead of every stop, once it is
  * done, however it ended, unless a developer's terminal
  * holds it, a turn of the source began meanwhile, or another Start's copy
@@ -44,17 +43,12 @@ import { latestTurnsOfReached } from "@repo/database/models/message-reads";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { redactCredentials } from "@repo/features/credential-redaction";
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TURN_STATUS } from "@repo/wire";
 import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
-import {
-  type FirewallSession,
-  type RepositoryCredential,
-  sandboxFirewall,
-} from "../sandbox-firewall.js";
+import { type RepositoryCredential, sandboxFirewall } from "../sandbox-firewall.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
@@ -244,31 +238,6 @@ const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     Effect.catch((failure) => stopMissed(String(failure))),
   );
 
-/**
- * A member's own token taken off the sandbox session's firewall once the
- * copy is done, however it ended, unless a terminal or a turn uses the
- * sandbox, which keeps it standing for them; within the stop's bound, and
- * a withdrawal that fails is logged, since the copy's outcome stands.
- */
-const withdrawUnlessInUse = <R>(
-  api: VercelSandboxApi,
-  session: FirewallSession,
-  ask: SnapshotAsk<R>,
-) =>
-  Effect.gen(function* () {
-    if (yield* ask.keepUp) return;
-    yield* sandboxFirewall(api).write(session, {});
-  }).pipe(
-    // Note that a finalizer runs uninterruptibly, so the bound can cut the withdrawal off only once it is made interruptible.
-    Effect.interruptible,
-    Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
-    Effect.catch((failure) =>
-      Effect.logWarning(
-        `a member's token was not taken off the source's sandbox: ${String(failure)}`,
-      ),
-    ),
-  );
-
 /** The copy inside the scope a woken sandbox's stop is registered on. */
 const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -282,10 +251,6 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
     const owner = { userId: ask.userId, name: sandbox.name, sandboxSessionId: session };
     const credential = yield* ask.credential;
-    // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.
-    if (credential.access.kind === GITHUB_ACCESS.TOKEN) {
-      yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, owner, ask));
-    }
     yield* sandboxFirewall(api).write(owner, { github: credential });
     const ran = yield* (yield* api.session({ name: sandbox.name, sessionId: session })).run({
       command: "sh",
