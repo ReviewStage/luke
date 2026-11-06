@@ -335,25 +335,28 @@ test("a refused Effort or Context says so under its own row until that row's nex
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
+  // Note that Low stands once the default the host lays after the save reaches the preferences' query, so High is a change again.
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Low"]),
+  );
 
   refuseWrite = true;
   act(() => segment(segmentedGroup(page, "Effort"), "Medium").click());
   await settle();
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
-  const refused = [effort(), context()];
+  const refusal = "The default could not be saved. Try again.";
+  assert.deepEqual(fastRefused, []);
+  // Note that each row's line moves once its write's answer, and the default the host lays after a save, reach their queries.
+  await vi.waitFor(() => assert.deepEqual([effort(), context()], [[refusal], [refusal]]));
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "High").click());
   await settle();
-  const effortSaved = [effort(), context()];
+  await vi.waitFor(() => assert.deepEqual([effort(), context()], [[], [refusal]]));
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
 
-  const refusal = "The default could not be saved. Try again.";
-  assert.deepEqual(fastRefused, []);
-  assert.deepEqual(refused, [[refusal], [refusal]]);
-  assert.deepEqual(effortSaved, [[], [refusal]]);
-  assert.deepEqual([effort(), context()], [[], []]);
+  await vi.waitFor(() => assert.deepEqual([effort(), context()], [[], []]));
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
 });
 
