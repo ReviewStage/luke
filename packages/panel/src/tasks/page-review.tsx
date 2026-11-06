@@ -311,15 +311,16 @@ export function usePageReview(
     remove,
     discard: () => {
       setFailed(false);
-      // Note that a thread a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says.
-      for (const comment of held) {
-        if (comment.landed === true) {
-          void control?.act(comment.clientKey, {
-            action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD,
+      // Note that a thread a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says; one the service would not delete stays held, for the next Discard to try again.
+      const posted = held.filter((comment) => comment.landed === true);
+      drop((comment) => !heldOn(comment, planId, pageId) || comment.landed === true);
+      for (const comment of posted) {
+        void control
+          ?.act(comment.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD })
+          .then((deleted) => {
+            if (deleted) drop((each) => each.clientKey !== comment.clientKey);
           });
-        }
       }
-      drop((comment) => !heldOn(comment, planId, pageId));
     },
     send,
     editing: edits.size > 0,

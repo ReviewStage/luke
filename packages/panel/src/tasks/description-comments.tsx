@@ -3689,8 +3689,9 @@ export function PageCommentLayer({
                 open={heldOpen === path}
                 stands={pinStands(box)}
                 onOpen={() => {
+                  // Note that an edit standing open holds its card, so no pin takes its place until it is saved or canceled.
+                  if (review.editing) return;
                   onOpen(undefined);
-                  if (review.editing && heldOpen === path) return;
                   setHeldOpen(heldOpen === path ? undefined : path);
                 }}
                 onHint={(over) => onHint(over ? path : undefined)}
@@ -3710,6 +3711,7 @@ export function PageCommentLayer({
             doors={doors}
             open={threads.some((thread) => open?.includes(thread.id) === true)}
             onOpen={() => {
+              if (review?.editing === true) return;
               setHeldOpen(undefined);
               onOpen(
                 threads.some((thread) => open?.includes(thread.id) === true)
