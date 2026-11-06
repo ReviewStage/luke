@@ -13,13 +13,13 @@ import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { EXPERIMENT, type ExperimentChoices, experimentOn, NO_EXPERIMENTS } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useKeptChoice } from "./desktop/chosen-workspace.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import {
-  appStateNow,
+  appStateIn,
   appStateQuery,
   selectExperimentChoices,
   selectSettingsHeld,
@@ -52,9 +52,9 @@ export const UNREAD_ROUTE_ACCESS: RouteAccess = {
   listed: undefined,
 };
 
-/** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
-export function routeAccessNow(): RouteAccess {
-  const state = appStateNow();
+/** The window's access by the document `client` holds now, for a route's `beforeLoad`, which cannot wait a render. */
+export function routeAccessNow(client: QueryClient): RouteAccess {
+  const state = appStateIn(client);
   const access = state?.access;
   return {
     // A reloaded Admin address waits on an access still being read rather than being refused.

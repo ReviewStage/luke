@@ -58,6 +58,7 @@ import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
 import { isTranscriptTab } from "@repo/ui/tab-strip-model";
 import type { TaskMark } from "@repo/ui/tasks-model";
+import { QueryClientProvider } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -92,7 +93,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "./composer.js";
-import { onRegistry, settleQueries } from "./copy-feedback.js";
+import { onRegistry, settleQueries, testQueryClientNow } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
 import { holdFrames, settleFrames } from "./frames.js";
 import { heardWords } from "./heard-words.js";
@@ -1240,7 +1241,12 @@ export function standKeymap(): Root {
     return null;
   }
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => keys.render(createElement(Keymap)));
+  // Note that the keymap stands on the test's client beside the page's own tree, which already holds its one subscription.
+  act(() =>
+    keys.render(
+      createElement(QueryClientProvider, { client: testQueryClientNow() }, createElement(Keymap)),
+    ),
+  );
   return keys;
 }
 

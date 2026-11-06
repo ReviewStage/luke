@@ -16,6 +16,7 @@ import { installShownFailureReporter } from "./failure-report.js";
 import { SignInGate } from "./sign-in-gate.js";
 import { announcedPolitely, mountAnnouncer } from "./testing/announcer.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { testQueryClientNow } from "./testing/copy-feedback.js";
 
 const ignore = () => undefined;
 const SIGNED_OUT: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -156,7 +157,10 @@ test("a sign-in that ended without landing is reported once, under why it ended"
       getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
     }),
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
   try {
     const { root } = mountRoot(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT }));
     // A draw for any other reason, with the same failure still shown, reports nothing more.
