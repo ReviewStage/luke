@@ -352,7 +352,7 @@ it.effect(
 );
 
 it.effect(
-  "turning This Mac off with its folders kept lets go of which ones its host made before the uninstall reads them",
+  "turning This Mac off with its folders kept stops its host, then lets go of which ones it made before the uninstall reads them",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -367,7 +367,11 @@ it.effect(
         assert.deepEqual(yield* mac.turn(false, false), { done: true });
 
         assert.equal(yield* fileSystem.exists(join(stateRoot, "owned-agents")), false);
-        assert.deepEqual(mac.asked, ["uninstall", "leave"]);
+        assert.deepEqual(
+          mac.asked,
+          ["stop", "uninstall", "leave"],
+          "stopped, so it marks no folder after",
+        );
       }).pipe(Effect.provide(FILES)),
     ),
 );

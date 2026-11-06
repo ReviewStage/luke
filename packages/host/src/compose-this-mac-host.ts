@@ -302,7 +302,15 @@ export function composeThisMacHost(
           if (!host.runsHost) return false;
           const record = Option.filter(yield* ownServiceRecord, (kept) => kept.refused !== true);
           if (Option.isSome(record) && !(yield* accountOwns(record.value))) return false;
-          if (!deleteFolders) yield* forgetOwnedAgents(host.stateRoot);
+          // Note that we stop the host before forgetting its folders, because a running host marks each agent's folder it makes, and the uninstall deletes every marked one.
+          if (!deleteFolders) {
+            const stopped = yield* host.stop;
+            if (Result.isFailure(stopped)) {
+              report(`this Mac's host could not be stopped: ${stopped.failure}`);
+              return false;
+            }
+            yield* forgetOwnedAgents(host.stateRoot);
+          }
           const removed = yield* host.uninstall;
           if (Result.isFailure(removed)) {
             report(`this Mac's host could not be removed: ${removed.failure}`);
