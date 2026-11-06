@@ -835,7 +835,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
         snoozeInboxItem(context.userId, itemId, until === null ? null : new Date(until)),
       );
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { id: itemId, unread: false, ...marked };
+      return { id: itemId, ...marked };
     }),
     markAllRead: signedIn.markAllRead.use(writeReceiptMiddleware).effect(function* ({
       input,

@@ -1169,15 +1169,18 @@ function composed(
       queued: ({ itemId, unread }) => ({ id: itemId, unread }),
     },
   );
-  /** An item snoozed until an instant, or its snooze ended. Note that snoozing marks it read, which is drawn at once, while the snooze itself arrives with the read its transaction reaches. */
+  /** An item snoozed until an instant, or its snooze ended, drawn at once; whether it is read stands as it was. */
   const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.SNOOZED, itemId, until, at: kernel.now() }),
     ({ itemId, until }, key) => asked(client.snoozeInboxItem(itemId, until, key)),
     {
       name: GATEWAY_METHOD.AGENTS_INBOX_SNOOZE,
       input: agentInboxSnoozeParamsSchema,
-      queued: ({ itemId }) => ({ id: itemId, unread: false }),
+      queued: ({ itemId }) => ({
+        id: itemId,
+        unread: dependencies.pool.row(INBOX_ITEM, itemId)?.unread === true,
+      }),
     },
   );
   /** Every item the inbox lists marked read. */

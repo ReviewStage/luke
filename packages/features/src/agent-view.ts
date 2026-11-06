@@ -745,7 +745,7 @@ export const agentInboxReadStateParamsSchema = EffectSchema.Struct({
 
 export type AgentInboxReadStateParams = typeof agentInboxReadStateParamsSchema.Type;
 
-/** One item snoozed for the account until an instant, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null. */
+/** One item snoozed for the account until an instant, in epoch milliseconds, or its snooze ended where `until` is null; whether it is read stands as it was. */
 export const agentInboxSnoozeParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
   until: EffectSchema.NullOr(countedNumber),

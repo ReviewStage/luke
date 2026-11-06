@@ -544,7 +544,7 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item snoozed for the account until an instant, which marks it read, or its snooze ended; its read state, or why there is no answer. */
+  /** One item snoozed for the account until an instant, or its snooze ended, whether it is read standing as it was; its read state, or why there is no answer. */
   AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
   /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",

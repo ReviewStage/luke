@@ -229,11 +229,11 @@ function asking(item: { readonly asking?: boolean }): boolean {
   return item.asking !== false;
 }
 
-/** An item's snooze as the window counts it: until when, while it is read, since a change that makes it unread ends the snooze; nothing where it is not snoozed. */
-function snoozeOf(item: { readonly unread?: boolean; readonly snoozedUntil?: number | null }): {
+/** An item's snooze as the window counts it: until when, read or unread alike, since the service answers none once a change woke it; nothing where it is not snoozed. */
+function snoozeOf(item: { readonly snoozedUntil?: number | null }): {
   readonly snoozedUntil?: number;
 } {
-  return item.unread === true || item.snoozedUntil === undefined || item.snoozedUntil === null
+  return item.snoozedUntil === undefined || item.snoozedUntil === null
     ? {}
     : { snoozedUntil: item.snoozedUntil };
 }

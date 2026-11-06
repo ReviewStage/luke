@@ -889,10 +889,10 @@ export const inboxItemSchema = EffectSchema.Struct({
   markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * Until when the member reading it snoozed the item, in epoch
-   * milliseconds, which snoozing marked it read for them: it stays out of
-   * their Inbox while it is read and this is ahead, and comes back unread
-   * once this passes. Absent where they did not snooze it, and from a
-   * service before snoozing.
+   * milliseconds: it stays out of their Inbox while this is ahead, and
+   * comes back once this passes, read or unread as it stands. Absent where
+   * they did not snooze it or a change woke it since, and from a service
+   * before snoozing.
    */
   snoozedUntil: EffectSchema.optionalKey(countedNumber),
 });

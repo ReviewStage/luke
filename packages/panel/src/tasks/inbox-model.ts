@@ -1692,19 +1692,17 @@ export function isSnoozed(item: InboxItem): boolean {
 }
 
 /**
- * An item as it stands for the reader at `now`: snoozed while it is read
- * and its snooze is ahead; back where its snooze has passed, unread and as
- * changed then, so it lists at the top; and no longer snoozed where a
- * change made it unread, which ends a snooze early. Only a snoozed item
- * keeps `snoozedUntil` (`isSnoozed`), and an item it leaves as it was is the
- * very one handed in.
+ * An item as it stands for the reader at `now`: snoozed while its snooze is
+ * ahead, read or unread alike; and back where it has passed, as changed
+ * then, so it lists at the top, read or unread as it was. A change ends a
+ * snooze early by the service answering none. Only a snoozed item keeps
+ * `snoozedUntil` (`isSnoozed`), and an item it leaves as it was is the very
+ * one handed in.
  */
 function itemAtNow(item: InboxItem, now: number): InboxItem {
   const { snoozedUntil, ...rest } = item;
-  if (snoozedUntil === undefined) return item;
-  if (isUnread(item)) return rest;
-  if (snoozedUntil > now) return item;
-  return { ...rest, unread: true, updatedAt: Math.max(item.updatedAt, snoozedUntil) };
+  if (snoozedUntil === undefined || snoozedUntil > now) return item;
+  return { ...rest, updatedAt: Math.max(item.updatedAt, snoozedUntil) };
 }
 
 /** Every holder's items as they stand for the reader at `now` (`itemAtNow`), each group handed in kept where none of its items moved. */
