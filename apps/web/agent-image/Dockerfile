@@ -59,20 +59,25 @@ RUN npm install --prefix /opt/agent/claude-agent-sdk --no-audit --no-fund --save
  && npm cache clean --force
 
 # `gh` with a token of no worth, so it asks GitHub at all: the sandbox's firewall sets the
-# repository's own credential on GitHub's hosts in its place (`sandbox-firewall.ts`). Note that the
+# repository's own credential on GitHub's hosts in its place (`sandbox-firewall.ts`). Its `stack`
+# runs GitHub's own `gh stack` extension below for every user, the `agent` user the SDK makes at
+# launch among them, where an extension `gh` installs is one user's alone. Note that the
 # placeholder is written in two parts, because the repository check refuses a literal shaped as a
 # GitHub token.
 COPY --chmod=0755 <<'EOF' /usr/local/bin/gh
 #!/usr/bin/env bash
 export GH_TOKEN="${GH_TOKEN:-"ghp_"000000000000000000000000000000000000}"
+if [ "${1:-}" = stack ]; then shift; exec /usr/local/lib/gh-stack/gh-stack "$@"; fi
 exec /usr/bin/gh "$@"
 EOF
 
 # GitHub's own `gh stack` extension, its release's Linux binary checked against the digest GitHub
-# publishes, and linked as a local extension, which `gh` installs without reaching GitHub.
+# publishes, which the wrapper above runs; the last line fails the image where an unprivileged user
+# cannot run it.
 ADD --chmod=0755 --checksum=sha256:ffe9d48b6342faffc3b0cb420202ff1df32e24faf32693debd7423274bbdf859 \
     https://github.com/github/gh-stack/releases/download/${GH_STACK_VERSION}/linux-amd64 \
     /usr/local/lib/gh-stack/gh-stack
+RUN runuser -u nobody -- env HOME=/tmp GH_STACK_NO_UPDATE_NOTIFIER=1 gh stack --help > /dev/null
 
 # The runner each launch starts, and the agent's pointer as a recorded video draws it, which an
 # agent's own Playwright script adds to the pages it records. Note that their folders are made
@@ -89,4 +94,3 @@ RUN install -d -o ubuntu -g ubuntu /workspace
 USER ubuntu
 ENV HOME=/vercel
 WORKDIR /vercel
-RUN cd /usr/local/lib/gh-stack && gh extension install . && gh stack --help >/dev/null
