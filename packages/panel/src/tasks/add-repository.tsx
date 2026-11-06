@@ -5,7 +5,6 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { EXPERIMENT } from "@repo/settings";
 import {
   DIALOG_SIZE,
   DIALOG_TONE,
@@ -24,13 +23,13 @@ import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
+import { useConfirmAct } from "../confirm-act.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { addRepositoryFailureWords } from "./agent-model.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { type AgentsControl, agentAddRepositoryMutation } from "./use-agents.js";
@@ -46,7 +45,7 @@ import { type AgentsControl, agentAddRepositoryMutation } from "./use-agents.js"
  * (`agent-repository-add.ts`). A toast then says whether it was checked out
  * beside the agent now or will be at its next turn, where no place of the
  * agent's ran, which tells the agent nothing so an idle one is not woken. A
- * refusal keeps the dialog up saying why under the chooser. It stands only while Several repositories is on, on
+ * refusal keeps the dialog up saying why under the chooser. It stands only on
  * an agent the reader started that runs in the cloud and is not archived,
  * under nothing archived, where the control can add one; the service still
  * refuses an agent in no repository and a repository already among its
@@ -85,8 +84,6 @@ function addedWords(repository: string, checkout: AddedRepositoryCheckout | unde
 function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
   const own = agent.startedBy === undefined || agent.startedBy.userId === agents.me;
   return (
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) })
-      .data === true &&
     agents.addRepository !== undefined &&
     agents.onUnarchive === undefined &&
     agent.archivedAt === undefined &&
@@ -179,25 +176,31 @@ export function useAddRepository(
   const toast = useToast();
   const [picked, setPicked] = useState<string | null>(null);
   const adding = useMutation(agents.addRepository ?? NO_ADD);
-  const add = async (): Promise<ActionResult> => {
-    if (agents.addRepository === undefined || picked === null) {
-      return { status: ACTION_RESULT_STATUS.REJECTED, reason: ADD_WORDS.PICK };
-    }
+  const add = async (): Promise<void> => {
+    if (agents.addRepository === undefined || picked === null) return;
     const answer = await adding.mutateAsync({ agentId: agent.id, repository: picked });
-    if ("failure" in answer) {
-      return { status: ACTION_RESULT_STATUS.REJECTED, reason: addRepositoryFailureWords(answer) };
-    }
+    if ("failure" in answer) return;
     // Note that a repository added to an agent whose place does not run is checked out at its next turn, and the agent hears nothing now.
     toast({
       words: addedWords(picked, answer.addedCheckout),
       tone: STATUS_TONE.COMPLETE,
       hold: TOAST_HOLD.DONE,
     });
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
+  const addAct = useConfirmAct(adding, {
+    send: add,
+    answered: (answer): ActionResult =>
+      "failure" in answer
+        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: addRepositoryFailureWords(answer) }
+        : { status: ACTION_RESULT_STATUS.ACCEPTED },
+    refusedFirst: () =>
+      agents.addRepository === undefined || picked === null
+        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: ADD_WORDS.PICK }
+        : undefined,
+  });
   const confirm = useConfirmDialog(
     { subject: offered, surfaceOpen: shown },
-    add,
+    addAct,
     confirmFailure(FAILURE_SURFACE.AGENT_ADD_REPOSITORY, { agentId: agent.id }),
   );
   const open = confirm.standing && (confirmAsked(confirm.stage) || confirm.rejection !== undefined);

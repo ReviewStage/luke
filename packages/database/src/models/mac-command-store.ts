@@ -235,7 +235,7 @@ const sendingAgent = alias(agentTable, "sending_agent");
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
-/** The agent the root conversation is of, read for whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
+/** The agent the root conversation is of, read for whether it was started on a prompt or a description at all, and what fired the automation's run that started it. */
 const startedAgent = alias(agentTable, "started_agent");
 
 /** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
@@ -320,13 +320,13 @@ const ForeignLineSchema = Schema.Struct({
  * line carries none. A developer's
  * line written before senders were kept, a `user` row with no sender, counts
  * too, because nothing says whose it was; all but the root's first where the
- * agent was started on a prompt or a plan, which that first line is, written
- * untagged by eve's relay for every agent started before the start wrote it
+ * agent was started on a prompt or a description, which that first line is, written
+ * untagged by the retired runtime's relay for every agent started before the start wrote it
  * with its sender (`coder-host/start.ts`), unless the automation's run that
  * started the agent was fired by words its owner did not write, which that
  * first line holds. A blank agent was started on
  * none, so its first line is whoever's first steer, and counts. A line its hand-over withdrew counts as
- * well, unlike in every read that shows a line, because eve may still hand
+ * well, unlike in every read that shows a line, because its runtime may still hand
  * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
  */
 const findForeignLine = SqlSchema.findOneOption({
@@ -387,7 +387,7 @@ const findForeignLine = SqlSchema.findOneOption({
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
                 or(
-                  and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
+                  and(isNull(startedAgent.prompt), isNull(startedAgent.descriptionSnapshot)),
                   STARTED_ON_OUTSIDE_WORDS,
                   exists(
                     db

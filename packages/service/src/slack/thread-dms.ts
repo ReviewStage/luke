@@ -12,7 +12,9 @@
  * or not, so the title is said once. While a reply in its Slack thread holds
  * the thread's open ask, the title DM says that ask's words under the title,
  * and the title alone once it settles (`redrawTitleDms`), so a member reading
- * down their DMs sees which threads wait on them. Before the thread has a
+ * down their DMs sees which threads wait on them; either way it ends in the
+ * open button to the thread, beside the open ask's own buttons while it
+ * waits, so it is answered from the title as from its reply. Before the thread has a
  * DM, a follow-up that asks nothing new on a thread still open writes
  * nothing. A member's
  * reply in a DM's Slack thread is found back to its thread by that DM
@@ -40,7 +42,7 @@
  *
  * Every call here waits on Slack, so each is handed to `afterResponse` by
  * its caller and never yielded inside a transaction; a runtime that holds
- * no bot, a test's or an eve root's, writes nothing.
+ * no bot, such as a test's, writes nothing.
  */
 
 import { randomUUID } from "node:crypto";
@@ -59,6 +61,7 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
+  inboxReadAskSchema,
   knownAsk,
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
@@ -233,7 +236,10 @@ function wordsWithSteps(text: string, steps: readonly string[]): string {
  * Mark done and Couldn't do it, each under an action id of its own. None for
  * any other ask.
  */
-function askControls(itemId: string, message: InboxMessage): AskControls {
+function askControls(
+  itemId: string,
+  message: { readonly id: string; readonly ask?: InboxReadAsk | undefined },
+): AskControls {
   if (message.ask === undefined || message.ask.status !== INBOX_ASK_STATUS.OPEN) {
     return NO_CONTROLS;
   }
@@ -294,16 +300,43 @@ function askControls(itemId: string, message: InboxMessage): AskControls {
   };
 }
 
-/** The DM a thread's Slack thread stands under: its title, after the inbox's emoji, as the header, and the open ask's words under it where given, clipped short. */
-function titleDmContent(title: string, openAsk = ""): SlackMessageContent {
-  const text = `${TITLE_PREFIX}${title}`;
-  const header = slackClipped(text, SLACK_TEXT_BOUND.HEADER);
+/** A thread's title, after the inbox's emoji, as a DM's header block. */
+function titleHeader(title: string): SlackBlock {
+  const text = slackClipped(`${TITLE_PREFIX}${title}`, SLACK_TEXT_BOUND.HEADER);
+  return { type: "header", text: { type: "plain_text", text } };
+}
+
+/** The button that opens the thread in the app, by its link. */
+function openButton(link: string): SlackBlock {
+  return {
+    type: "button",
+    text: { type: "plain_text", text: `Open in ${PRODUCT_NAME}` },
+    url: link,
+  };
+}
+
+/**
+ * The DM a thread's Slack thread stands under: its title as the header, the
+ * open ask's words under it where given, clipped short, the ask's own
+ * controls, its options or Mark done, and the open button. Note that the
+ * button stands whether an ask is open or not, and the ask's controls while
+ * it is, because the title DM is what a member scanning their DMs sees, and
+ * the reply that carries them too is a press further in.
+ */
+function titleDmContent(
+  title: string,
+  link: string,
+  openAsk = "",
+  controls: AskControls = NO_CONTROLS,
+): SlackMessageContent {
   const words = openAsk.trim();
   return {
-    text,
+    text: `${TITLE_PREFIX}${title}`,
     blocks: [
-      { type: "header", text: { type: "plain_text", text: header } },
+      titleHeader(title),
       ...(words === "" ? [] : [slackMarkdownBlock(words, OPEN_ASK_PREVIEW_CHARS)]),
+      ...controls.blocks,
+      { type: "actions", elements: [...controls.buttons, openButton(link)] },
     ],
   };
 }
@@ -324,7 +357,7 @@ function threadDmContent(
 ): SlackMessageContent {
   const words = view.text.trim();
   const blocks: SlackBlock[] = [
-    ...(view.titled === true ? titleDmContent(view.title).blocks : []),
+    ...(view.titled === true ? [titleHeader(view.title)] : []),
     ...(words === "" ? [] : [slackMarkdownBlock(words)]),
     ...(line === undefined
       ? []
@@ -332,14 +365,7 @@ function threadDmContent(
     ...controls.blocks,
     {
       type: "actions",
-      elements: [
-        ...controls.buttons,
-        {
-          type: "button",
-          text: { type: "plain_text", text: `Open in ${PRODUCT_NAME}` },
-          url: view.link,
-        },
-      ],
+      elements: [...controls.buttons, openButton(view.link)],
     },
   ];
   return { text: line === undefined ? view.title : `${view.title} · ${line}`, blocks };
@@ -449,24 +475,18 @@ interface TitleDm {
 }
 
 /**
- * The words, and a do ask's steps, of the item's message whose reply stands
- * in the Slack thread under the title DM and whose ask stands open; nothing
+ * The item's message whose reply stands in the Slack thread under the title
+ * DM and whose ask stands open: its id, its words, and its ask; nothing
  * where none does, so another member's DM never says an ask that waits on
  * someone else.
  */
 const findOpenAskAt = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, channel: Schema.String, ts: Schema.String }),
-  Result: Schema.Struct({
-    text: Schema.String,
-    steps: Schema.NullOr(Schema.Array(Schema.String)),
-  }),
+  Result: Schema.Struct({ id: Schema.String, text: Schema.String, ask: inboxReadAskSchema }),
   execute: ({ itemId, channel, ts }) =>
     Database.use((db) =>
       db
-        .select({
-          text: inboxMessage.text,
-          steps: sql<unknown>`case when ${inboxMessage.ask} ->> 'type' = ${INBOX_ASK.DO} then ${inboxMessage.ask} -> 'steps' end`,
-        })
+        .select({ id: inboxMessage.id, text: inboxMessage.text, ask: inboxMessage.ask })
         .from(inboxMessage)
         .where(
           and(
@@ -589,24 +609,30 @@ function titleDmsOf(dms: readonly (typeof SlackDmSchema.Type)[]): readonly Title
 
 /**
  * Rewrites each title DM to say the open ask whose reply stands in its Slack
- * thread under the item's title, or the title alone where none does, as
- * `titleDmContent` draws it.
+ * thread under the item's title, with that ask's controls, or the title alone
+ * where none does, with the thread's link, as `titleDmContent` draws it.
  */
 function redrawTitleDms(
   bot: SlackBotService,
   itemId: string,
-  title: string,
+  thread: { readonly title: string; readonly link: string },
   titles: readonly TitleDm[],
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.forEach(
     titles,
     (at) =>
       Effect.flatMap(findOpenAskAt({ itemId, ...at }), (open) => {
-        const words = Option.match(open, {
-          onNone: () => "",
-          onSome: ({ text, steps }) => wordsWithSteps(text, steps ?? []),
+        const content = Option.match(open, {
+          onNone: () => titleDmContent(thread.title, thread.link),
+          onSome: (message) =>
+            titleDmContent(
+              thread.title,
+              thread.link,
+              wordsWithSteps(message.text, askSteps(message.ask)),
+              askControls(itemId, message),
+            ),
         });
-        return bot.update(at.channel, at.ts, titleDmContent(title, words));
+        return bot.update(at.channel, at.ts, content);
       }),
     { discard: true },
   );
@@ -661,8 +687,10 @@ export function threadDmAt(
 /**
  * Rewrites one DM the bot wrote about the item's message to say the line
  * given in its buttons' place, as a press on an ask already settled is
- * told, keeping the title of one that stands alone; nothing where the
- * runtime holds no bot or the item is gone.
+ * told, keeping the title of one that stands alone; a press on the title DM
+ * the message's reply stands under draws that title DM again, as
+ * `redrawTitleDms` does, so it keeps its title and says the ask open now,
+ * if any; nothing where the runtime holds no bot or the item is gone.
  */
 export function rewriteThreadDm(
   dm: SlackMessage,
@@ -680,10 +708,16 @@ export function rewriteThreadDm(
     const place = yield* findItemPlace(itemId);
     if (Option.isNone(place)) return;
     const kept = yield* findMessageDm(message.id);
+    const link = threadLink(itemId, place.value);
+    // A press on the title DM, which the message's reply stands under, has it say the thread's open ask anew rather than the reply's line.
+    if (Option.isSome(kept) && kept.value.dm.thread === dm.ts) {
+      yield* redrawTitleDms(bot.value, itemId, { title: place.value.title, link }, [dm]);
+      return;
+    }
     const view = {
       title: place.value.title,
       text: wordsWithSteps(message.text, askSteps(message.ask)),
-      link: threadLink(itemId, place.value),
+      link,
       titled: Option.isSome(kept) && kept.value.dm.thread === undefined,
     };
     yield* bot.value.update(dm.channel, dm.ts, threadDmContent(view, line));
@@ -737,7 +771,12 @@ export function settleThreadDms(
         ),
       { discard: true },
     );
-    yield* redrawTitleDms(bot.value, itemId, title, titleDmsOf(claimed.map(({ dm }) => dm)));
+    yield* redrawTitleDms(
+      bot.value,
+      itemId,
+      { title, link },
+      titleDmsOf(claimed.map(({ dm }) => dm)),
+    );
   });
 }
 
@@ -773,9 +812,10 @@ export function dmThreadPost(
     if (kept === undefined && post.wasOpen && !post.asked) return;
     const place = yield* findItemPlace(item.id);
     if (Option.isNone(place)) return;
+    const link = threadLink(item.id, place.value);
     const opened =
       kept === undefined
-        ? yield* bot.value.dm(organizationId, recipient, titleDmContent(item.title))
+        ? yield* bot.value.dm(organizationId, recipient, titleDmContent(item.title, link))
         : Option.some(kept);
     if (Option.isNone(opened)) return;
     const thread = { channel: opened.value.channel, ts: opened.value.ts };
@@ -786,7 +826,7 @@ export function dmThreadPost(
     const view = {
       title: item.title,
       text: wordsWithSteps(message.text, askSteps(message.ask)),
-      link: threadLink(item.id, place.value),
+      link,
     };
     const content = threadDmContent(view, undefined, askControls(item.id, message));
     const sent = yield* bot.value.dm(organizationId, recipient, content, thread);
@@ -796,7 +836,7 @@ export function dmThreadPost(
       dm: { ...sent.value, to: recipient, thread: thread.ts },
     });
     if (message.ask?.status === INBOX_ASK_STATUS.OPEN) {
-      yield* redrawTitleDms(bot.value, item.id, item.title, [thread]);
+      yield* redrawTitleDms(bot.value, item.id, { title: item.title, link }, [thread]);
     }
     const uploads = yield* messageUploads(recipient, item.id, message);
     yield* bot.value.upload(thread.channel, thread.ts, uploads);

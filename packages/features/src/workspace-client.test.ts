@@ -436,7 +436,10 @@ it.effect("an account that changes during the hand-off sends nothing under the n
 
     const removed = yield* Effect.provide(switched.removeMember(ACME.id, GRACE.userId), api.layer);
 
-    assert.deepEqual(removed, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(removed, {
+      ok: false,
+      failure: WORKSPACE_CALL_FAILURE.UNANSWERED,
+    });
     assert.equal(api.requests().length, 0);
   }),
 );

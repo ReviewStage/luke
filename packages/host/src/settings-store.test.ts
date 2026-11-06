@@ -188,12 +188,16 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
+  // On is the default, so Off is the choice that has to survive a reopen.
+  forwardPorts: false,
   // Steer is the default, so Queue is the choice that has to survive a reopen.
   agentEnter: AGENT_ENTER.QUEUE,
   // You with our bot as co-author is the default, so the bot alone is the choice that has to survive a reopen.
   commitAuthor: COMMIT_AUTHOR.APP,
   // Not yet is the default, so finished is the state that has to survive a reopen.
   setupFinished: true,
+  // Not yet started is the default, so a place midway through a team's setup is the state that has to survive a reopen.
+  setupPlace: '{"audience":"team","at":2,"team":"workspace-ada"}',
   // Each diff setting away from its default, the look a review tool's reader picked.
   lineNumbers: false,
   wordWrap: false,

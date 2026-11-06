@@ -331,7 +331,7 @@ export interface AgentsControl {
   agents: readonly AgentSummary[] | undefined;
   /** The open task's archived agents in the order started, or nothing before the task list carries the task. */
   archived: readonly AgentSummary[] | undefined;
-  /** Every agent the followed task list carries, on any task or none, the archived ones among them, which names an agent of another task that wrote on the open task's plan; none where the list is not followed or does not list the open task. */
+  /** Every agent the followed task list carries, on any task or none, the archived ones among them, which names an agent of another task that wrote on the open task's description; none where the list is not followed or does not list the open task. */
   listed?: readonly AgentSummary[] | undefined;
   /** The workspace the page's one agent belongs to, as the task list carries it; none on a task, where the task says it, and before the list carries the agent. */
   workspaceId?: string | undefined;

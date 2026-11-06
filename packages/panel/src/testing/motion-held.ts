@@ -2,7 +2,7 @@
  * motion-held.ts -- motion held still as a stylesheet holds it, which jsdom draws none of.
  *
  * Reduced motion and a capture run hold motion by zeroing the duration tokens,
- * and a script asks those (`motionHeld`), so a test that wants a plan drawn at
+ * and a script asks those (`motionHeld`), so a test that wants a description drawn at
  * once, or a pointer held still, stands the token at the one the setting leaves.
  */
 

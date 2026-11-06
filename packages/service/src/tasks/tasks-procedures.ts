@@ -6,7 +6,7 @@
  * answers exactly as one that names nothing, and so does an id that is no
  * UUID, so nothing is learned about plans the caller does not hold. The
  * developer writes a document in two ways here, each through the plan's one
- * write (`packages/service/src/tasks/plan-notes.ts`) that the notetaker and
+ * write (`packages/service/src/tasks/description-notes.ts`) that the notetaker and
  * the coding agents save their notes through: `POST /api/plans/{id}/edit` is
  * their edit of the document, saved, or answered as a conflict with the text
  * as it stands now where we wrote it meanwhile and the edit no longer
@@ -36,11 +36,11 @@
  * block that would close a cycle is refused
  * (`@repo/database/models/task-block-store`).
  *
- * `/api/plans/{id}/revisions` is the plan's history for the History tab, a
+ * `/api/plans/{id}/revisions` is the description's history for the History tab, a
  * page at a time; `/api/plans/{id}/revisions/{seq}` one revision's content
  * beside the one before it; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's
- * (`@repo/database/models/plan-revisions`).
+ * (`@repo/database/models/description-revisions`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -55,8 +55,8 @@
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
+import { listRevisions, readRevision } from "@repo/database/models/description-revisions";
 import { devicesNamed } from "@repo/database/models/device-store";
-import { listRevisions, readRevision } from "@repo/database/models/plan-revisions";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   addTaskBlock,
@@ -73,7 +73,7 @@ import {
   deleteTaskCommitted,
   listTasks,
   readTask,
-  readTaskPlan,
+  readTaskDescription,
   type StoredTask,
   setTaskParent,
   type TaskAssigneeNotMember,
@@ -84,7 +84,7 @@ import { ensurePersonalWorkspace, isWorkspaceMember } from "@repo/database/model
 import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
 import { AGENT_ARCHIVER, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@repo/features/agent-wire";
 import { TASK_START_STATUS } from "@repo/features/contract";
-import { PLAN_EDIT_REFUSAL } from "@repo/features/plan-edit";
+import { DESCRIPTION_EDIT_REFUSAL } from "@repo/features/description-edit";
 import {
   startRelationsOf,
   TASK_BLOCK_CHANGE,
@@ -103,9 +103,9 @@ import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import { everyStoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
 import type { SandboxStopReach } from "../agents/session-sandboxes.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED } from "../core.js";
 import { SERVER_TASK_SOURCE } from "../events/server-events.js";
@@ -120,11 +120,11 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import {
-  PLAN_SAVE_REFUSAL,
-  PLAN_SAVE_STATUS,
+  DESCRIPTION_SAVE_REFUSAL,
+  DESCRIPTION_SAVE_STATUS,
   restoreRevision,
   saveDeveloperEdit,
-} from "./plan-notes.js";
+} from "./description-notes.js";
 import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "./task-change.js";
 import { createTaskAsked, type TaskCreateRelationRefused } from "./task-create-relation.js";
 import { moveTaskRelation, type TaskRelationRefused } from "./task-relation.js";
@@ -185,7 +185,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   const task =
     made.value.taskId === null
       ? Option.none()
-      : yield* hostedStoreOrUnavailable(readTaskPlan(userId, made.value.taskId));
+      : yield* hostedStoreOrUnavailable(readTaskDescription(userId, made.value.taskId));
   if (Option.isNone(task) || task.value.workspaceId !== organizationId) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
@@ -194,7 +194,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The agent the key names on the plan, where the Start made one before it
- * failed: a store write or read after eve took the session failed the
+ * failed: a store write or read after the session was opened failed the
  * Start, though the agent works on. Nothing where it made none, or where it
  * could not be read either.
  */
@@ -211,14 +211,14 @@ const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
  * the task as it was made where it cannot be read again just now.
  */
 const taskAfterStart = (userId: string, task: Task) =>
-  readTaskPlan(userId, task.id).pipe(
+  readTaskDescription(userId, task.id).pipe(
     Effect.map(Option.getOrElse(() => task)),
     Effect.catch((failure) => Effect.as(logStoreFailure(failure), task)),
   );
 
 /**
  * The agent a start asks for, started on the plan it just made through the
- * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * agent's own Start (`startRequestedAgent`), reaching the agent's sessions as the developer;
  * a refusal is answered beside the plan rather than in its place, since the
  * plan stands either way and the developer's words are theirs to try again.
  * A Start that failed after its agent was made answers that agent, since it
@@ -232,7 +232,7 @@ const startedAgentOn = (
 ) => {
   const { task } = stored;
   return startRequestedAgent(
-    routedSessions<EveTypedTurn>(userId),
+    routedSessions<TypedTurn>(userId),
     userId,
     { taskId: task.id },
     agent,
@@ -290,14 +290,14 @@ const startedAgentOn = (
 
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
-  [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
-  [PLAN_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
-  [PLAN_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
+  [DESCRIPTION_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
+  [DESCRIPTION_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
+  [DESCRIPTION_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
 ]);
 
 /** What an edit that saved nothing answers, by why, where it is not answered in band; the store out of reach is any other. */
 const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
-  [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
+  [DESCRIPTION_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
 ]);
 
 /**
@@ -556,7 +556,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const taskId = yield* pathUuid(input.params.id);
       const written = yield* blockWritten(userId, taskId, input.body);
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTaskDescription(userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const { txid } = written.value;
       return txid === undefined ? { plan: opened.value } : { plan: opened.value, txid };
@@ -594,7 +594,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         relationRefused,
       );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTaskDescription(userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const { txid } = written.value;
       return txid === undefined ? { plan: opened.value } : { plan: opened.value, txid };
@@ -603,9 +603,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /**
      * Every coding agent of the plan stopped for good first, as a Stop stops
      * one, so none works on for a plan that is gone; then the
-     * plan's eve sessions and its agents' retired (`retire-sessions.ts`),
+     * plan's sessions and its agents' retired (`retire-sessions.ts`),
      * with no transaction open; then the plan, under its lock, which reads
-     * again which agents stand. An eve that refuses a Stop, an agent with a turn still
+     * again which agents stand. A harness that refuses a Stop, an agent with a turn still
      * coming that no Stop can name yet, or an agent started while the others
      * were stopped, leaves the plan standing and refused.
      *
@@ -621,7 +621,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         listAgents(userId, taskId, { includeArchived: true }),
       );
       yield* everyStoppedForGood(writer, userId, agents);
-      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on eve;
+      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on a harness;
       // an agent started meanwhile is none of these, keeps its session, and refuses the delete below.
       yield* hostedStoreOrUnavailable(
         retiredBeforeDelete(retiring)(agents.map(({ conversationId }) => conversationId)),
@@ -639,48 +639,48 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * The developer's edit of the plan's document: answered with the plan as
+     * The developer's edit of the description: answered with the plan as
      * saved and the transaction it was saved in, which a host waits for on
      * the plan's record before it lets a delivery of the plan land, with the
      * text as it now stands and who last wrote it where the edit conflicts
-     * with it, or as refused where the plan would be longer than a plan may be.
+     * with it, or as refused where the description would be longer than a description may be.
      */
-    edit: plans.edit.effect(function* ({ input, context }) {
+    editDescription: plans.editDescription.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
-        case PLAN_SAVE_STATUS.SAVED:
+        case DESCRIPTION_SAVE_STATUS.SAVED:
           return {
             plan: saved.task,
             ...(saved.txid === undefined ? undefined : { txid: saved.txid }),
           };
-        case PLAN_SAVE_STATUS.CONFLICT:
+        case DESCRIPTION_SAVE_STATUS.CONFLICT:
           return {
             conflict:
               saved.by === undefined
                 ? { current: saved.current }
                 : { current: saved.current, by: saved.by },
           };
-        case PLAN_SAVE_STATUS.NOT_SAVED:
-          if (saved.reason === PLAN_SAVE_REFUSAL.TOO_LONG) {
-            return { refused: PLAN_EDIT_REFUSAL.TOO_LONG };
+        case DESCRIPTION_SAVE_STATUS.NOT_SAVED:
+          if (saved.reason === DESCRIPTION_SAVE_REFUSAL.TOO_LONG) {
+            return { refused: DESCRIPTION_EDIT_REFUSAL.TOO_LONG };
           }
           return yield* Effect.fail(EDIT_REFUSAL.get(saved.reason) ?? HOSTED_REFUSAL.UNAVAILABLE);
       }
     }),
 
     /**
-     * A page of the plan's history, the newest first. A plan with no history
+     * A page of the description's history, the newest first. A description with no history
      * yet answers an empty page, and so does a plan id the account does not
      * own, which it answers no differently.
      */
-    revisions: plans.revisions.effect(function* ({ input, context }) {
+    descriptionRevisions: plans.descriptionRevisions.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       return yield* hostedStoreOrUnavailable(listRevisions(context.userId, taskId, input.before));
     }),
 
     /** One revision's content and the content before it. */
-    revision: plans.revision.effect(function* ({ input, context }) {
+    descriptionRevision: plans.descriptionRevision.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const revision = yield* hostedStoreOrUnavailable(
         readRevision(context.userId, taskId, input.seq),
@@ -690,16 +690,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * One revision's content put back as the plan's, a revision of the
+     * One revision's content put back as the description, a revision of the
      * developer's naming it, answered with the plan as it now stands and the
      * transaction its revision was written in, none where it changed
      * nothing. It names nothing in a body: the plan and the revision are the
      * path's.
      */
-    restore: plans.restore.effect(function* ({ input, context }) {
+    restoreDescription: plans.restoreDescription.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const restored = yield* restoreRevision({ userId: context.userId, taskId }, input.seq);
-      if (restored.status !== PLAN_SAVE_STATUS.SAVED) {
+      if (restored.status !== DESCRIPTION_SAVE_STATUS.SAVED) {
         return yield* Effect.fail(
           RESTORE_REFUSAL.get(restored.reason) ?? HOSTED_REFUSAL.UNAVAILABLE,
         );

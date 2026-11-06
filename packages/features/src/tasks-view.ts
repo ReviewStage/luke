@@ -9,31 +9,41 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
+import { repositoryPinsContract } from "./contract/repository-pins.js";
+import { taskFilesContract } from "./contract/task-files.js";
+import { taskSectionsContract } from "./contract/task-sections.js";
+import { tasksContract } from "./contract/tasks.js";
+import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
+import {
+  descriptionCommentActionRequestSchema,
+  descriptionCommentStartRequestSchema,
+  descriptionCommentThreadAnswerSchema,
+} from "./description-comment-wire.js";
+import {
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditConflictSchema,
+  descriptionEditRequestSchema,
+} from "./description-edit.js";
 import { failureFactsSchema } from "./failure-facts.js";
+import { githubConnectionSchema } from "./github-connection-view.js";
 import {
   githubRepositoryFullNameSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
+import { failureSetOf } from "./hosted-failure.js";
 import {
   pagePlaceSchema,
   pageVersionNumberSchema,
-  planPageVersionAnswerSchema,
+  taskPageVersionAnswerSchema,
 } from "./page-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
-import { planAttachmentTypeSchema } from "./plan-attachment-wire.js";
-import {
-  planCommentActionRequestSchema,
-  planCommentStartRequestSchema,
-  planCommentThreadAnswerSchema,
-} from "./plan-comment-wire.js";
-import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
 import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
-import { wireUuidSchema } from "./service-wire.js";
+import { HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 import {
   workspaceSlackBotAnswerSchema,
   workspaceSlackBotChannelRequestSchema,
@@ -42,10 +52,10 @@ import {
 } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
+  descriptionRevisionAnswerSchema,
+  descriptionRevisionSeqSchema,
+  descriptionRevisionsAnswerSchema,
   listedPullRequestSchema,
-  planRevisionAnswerSchema,
-  planRevisionSeqSchema,
-  planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   type Task,
@@ -135,11 +145,11 @@ export const HOST_LIVE = {
 export type HostLive = (typeof HOST_LIVE)[keyof typeof HOST_LIVE];
 
 /**
- * One task's plan as the host holds it for the windows that opened it
- * (`LIVE_READ.PLAN_DOCUMENT`): the task with its text as last read or
+ * One task's description as the host holds it for the windows that opened it
+ * (`LIVE_READ.DESCRIPTION_DOCUMENT`): the task with its text as last read or
  * written, or that the account no longer reaches it.
  */
-export type HeldPlanDocument = { readonly task: Task } | { readonly gone: true };
+export type HeldDescriptionDocument = { readonly task: Task } | { readonly gone: true };
 
 /** One run of a line in one color per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
@@ -156,18 +166,6 @@ export type CodeToken = typeof codeTokenSchema.Type;
 export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
 
 export type CodeLines = typeof codeLinesSchema.Type;
-
-/**
- * Whether the account has a GitHub account linked, and its login where the
- * service holds one: the view's copy of the connection the service answers.
- * Note that it is declared here rather than in `github-connection-wire.ts`,
- * which takes it from here, because the window reads this module and that
- * one's claim vocabulary has no business in the window's bundle.
- */
-export const githubConnectionSchema = EffectSchema.Struct({
-  connected: EffectSchema.Boolean,
-  login: EffectSchema.NullOr(EffectSchema.String),
-});
 
 export const tasksViewSchema = EffectSchema.Struct({
   /** The account's tasks, newest started first, as the last list read answered. */
@@ -221,7 +219,7 @@ export const tasksViewSchema = EffectSchema.Struct({
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The sections the account made in its sidebars and the tasks it keeps in them, as last read or written; absent before the first read lands. */
   taskSections: EffectSchema.optionalKey(taskSectionsAnswerSchema),
-  /** The one active task, absent while the window has none open; its plan is held apart (`LIVE_READ.PLAN_DOCUMENT`). */
+  /** The one active task, absent while the window has none open; its plan is held apart (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
@@ -378,16 +376,55 @@ export const tasksChangeRelationParamsSchema = EffectSchema.Struct({
 
 export type TasksChangeRelationParams = typeof tasksChangeRelationParamsSchema.Type;
 
+/**
+ * The task domain's failures that shipped spelled otherwise than their
+ * refusal's slug: the tree's own rules, each named for the relation it
+ * guards, and a child held to its parent's repository as the parent's.
+ */
+export const TASK_RENAMES = {
+  [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: "parent-cycle",
+  [HOSTED_API_ERROR.TASK_PARENT_HELD]: "parent-held",
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: "parent-repository-differs",
+  [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: "block-cycle",
+} as const;
+
+/**
+ * The task domain's renames as a block's change and a relation's move read
+ * them: a block of a task on itself or across workspaces is refused as an
+ * invalid request, which the window has always drawn as the other task out
+ * of reach.
+ */
+export const TASK_BLOCK_RENAMES = {
+  ...TASK_RENAMES,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_API_ERROR.NOT_FOUND,
+} as const;
+
+/** The task procedures that declare their own refusals, read through `hostedCall`. */
+const declaredTaskCalls = {
+  list: tasksContract.list,
+  create: tasksContract.create,
+  update: tasksContract.update,
+  block: tasksContract.block,
+  parent: tasksContract.parent,
+  relation: tasksContract.relation,
+  files: taskFilesContract,
+  sections: taskSectionsContract,
+  pins: repositoryPinsContract,
+};
+
+/** Every failure those procedures may end with, as the domain spells it. */
+const TASK_FAILURE = failureSetOf(declaredTaskCalls, { as: TASK_RENAMES });
+
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
-  UNANSWERED: "unanswered",
+  UNANSWERED: TASK_FAILURE.UNANSWERED,
   /** The task is not one the account holds: deleted, or never the caller's. */
-  NOT_FOUND: "not-found",
+  NOT_FOUND: TASK_FAILURE.NOT_FOUND,
   /** The repository named is not one our GitHub App reaches for the account. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
-  LOCAL_AGENT_REFUSED: "local-agent-refused",
+  REPOSITORY_NOT_REACHABLE: TASK_FAILURE.REPOSITORY_NOT_REACHABLE,
+  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. No task procedure answers it now, since a start answers its agent's refusal beside the task it made, but the window still reads it. */
+  LOCAL_AGENT_REFUSED: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
 } as const;
 
 export type TaskCallFailure = (typeof TASK_CALL_FAILURE)[keyof typeof TASK_CALL_FAILURE];
@@ -404,9 +441,9 @@ const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILUR
 
 /** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, the parent works in another repository, or, for a start as a task's parent, that task has a parent already. */
 export const TASK_PARENT_FAILURE = {
-  CYCLE: "parent-cycle",
-  REPOSITORY_DIFFERS: "parent-repository-differs",
-  HELD: "parent-held",
+  CYCLE: TASK_RENAMES[HOSTED_API_ERROR.TASK_PARENT_CYCLE],
+  REPOSITORY_DIFFERS: TASK_RENAMES[HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED],
+  HELD: TASK_RENAMES[HOSTED_API_ERROR.TASK_PARENT_HELD],
 } as const;
 
 /** Why a start answered no plan: a repository call's reasons, the workspace it was to start in or the task it was to relate to is none of the account's, the device it named would not take its agents, or the relation it named was refused by the tree's rules (`TASK_PARENT_FAILURE`). */
@@ -464,15 +501,13 @@ export type TasksMoveAnswer = typeof tasksMoveAnswerSchema.Type;
 
 /** Why a block change wrote nothing a call's other reasons do not say: it would close a cycle. */
 export const TASK_BLOCK_FAILURE = {
-  CYCLE: "block-cycle",
+  CYCLE: TASK_RENAMES[HOSTED_API_ERROR.TASK_BLOCK_CYCLE],
 } as const;
 
 /** Why a block change wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or it would close a cycle. */
-const BLOCK_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_BLOCK_FAILURE.CYCLE,
-] as const;
+const BLOCK_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.block, { as: TASK_BLOCK_RENAMES }),
+);
 
 export type BlockCallFailure = (typeof BLOCK_CALL_FAILURES)[number];
 
@@ -488,12 +523,9 @@ export const tasksBlockAnswerSchema = EffectSchema.Union([
 export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
 
 /** Why a parent write wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or the parent's own reasons. */
-const PARENT_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_PARENT_FAILURE.CYCLE,
-  TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
-] as const;
+const PARENT_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.parent, { as: TASK_RENAMES }),
+);
 
 export type ParentCallFailure = (typeof PARENT_CALL_FAILURES)[number];
 
@@ -506,7 +538,9 @@ export const tasksSetParentAnswerSchema = EffectSchema.Union([
 export type TasksSetParentAnswer = typeof tasksSetParentAnswerSchema.Type;
 
 /** Why a relation's move wrote nothing: a block's reasons, or a parent's. */
-const RELATION_CALL_FAILURES = [...BLOCK_CALL_FAILURES, ...PARENT_CALL_FAILURES] as const;
+const RELATION_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.relation, { as: TASK_BLOCK_RENAMES }),
+);
 
 export type RelationCallFailure = (typeof RELATION_CALL_FAILURES)[number];
 
@@ -525,16 +559,16 @@ export type TasksChangeRelationAnswer = typeof tasksChangeRelationAnswerSchema.T
 /** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
-  edit: planEditRequestSchema,
+  edit: descriptionEditRequestSchema,
 });
 
 export type TasksEditParams = typeof tasksEditParamsSchema.Type;
 
-/** Why an edit saved nothing: the service did not answer, the task is gone, or the plan would be longer than a plan may be. */
+/** Why an edit saved nothing: the service did not answer, the task is gone, or the description would be longer than a description may be. */
 const EDIT_FAILURES = [
   TASK_CALL_FAILURE.UNANSWERED,
   TASK_CALL_FAILURE.NOT_FOUND,
-  PLAN_EDIT_REFUSAL.TOO_LONG,
+  DESCRIPTION_EDIT_REFUSAL.TOO_LONG,
 ] as const;
 
 export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
@@ -546,7 +580,7 @@ export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
  */
 export const tasksEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ saved: EffectSchema.Literal(true) }),
-  EffectSchema.Struct({ conflict: planEditConflictSchema }),
+  EffectSchema.Struct({ conflict: descriptionEditConflictSchema }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(EDIT_FAILURES) }),
 ]);
 
@@ -698,51 +732,51 @@ export const tasksFindAnswerSchema = EffectSchema.Union([
 
 export type TasksFindAnswer = typeof tasksFindAnswerSchema.Type;
 
-/** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
+/** A page of a description's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
-  before: EffectSchema.optionalKey(planRevisionSeqSchema),
+  before: EffectSchema.optionalKey(descriptionRevisionSeqSchema),
 });
 
 export type TasksRevisionsParams = typeof tasksRevisionsParamsSchema.Type;
 
 /** The version history's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
 export const tasksRevisionsAnswerSchema = EffectSchema.Union([
-  planRevisionsAnswerSchema,
+  descriptionRevisionsAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
 
-/** One task's plan, held by a window while it has the task open (`LIVE_READ.PLAN_DOCUMENT`), and read again at once on its Try again. */
+/** One task's description, held by a window while it has the task open (`LIVE_READ.DESCRIPTION_DOCUMENT`), and read again at once on its Try again. */
 export const taskDocumentFollowSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
 });
 
 export type TaskDocumentFollow = typeof taskDocumentFollowSchema.Type;
 
-/** One task's plan history, held by a window while its version history stands (`LIVE_READ.HISTORY`), and read again at once on its Try again. */
+/** One task's description history, held by a window while its version history stands (`LIVE_READ.HISTORY`), and read again at once on its Try again. */
 export const taskHistoryFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
 
 export type TaskHistoryFollow = typeof taskHistoryFollowSchema.Type;
 
-/** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
+/** One revision of a description, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
-  seq: planRevisionSeqSchema,
+  seq: descriptionRevisionSeqSchema,
 });
 
 export type TasksRevisionParams = typeof tasksRevisionParamsSchema.Type;
 
 /** The version history's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
 export const tasksRevisionAnswerSchema = EffectSchema.Union([
-  planRevisionAnswerSchema,
+  descriptionRevisionAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
 export type TasksRevisionAnswer = typeof tasksRevisionAnswerSchema.Type;
 
-/** One attachment of a plan, as the window drawing it names it: the plan, and the id its text or a comment's file names. */
+/** One attachment of a description, as the window drawing it names it: the plan, and the id its text or a comment's file names. */
 export const tasksPictureParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   attachmentId: EffectSchema.NonEmptyString,
@@ -751,16 +785,16 @@ export const tasksPictureParamsSchema = EffectSchema.Struct({
 export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
 
 /**
- * One attachment of a plan, as the window hears it: its bytes in base64
+ * One attachment of a description, as the window hears it: its bytes in base64
  * under its media type, which the window draws or offers from a `data:` URL
  * of its own making, or why there is none: not the account's to read, or no
- * answer. A picture the plan's text names is an image or a video; a file a
+ * answer. A picture the description's text names is an image or a video; a file a
  * comment carries is any type a coding agent's file may be. The host fetched it
  * under the account, so the window holds no bearer and no address.
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: planAttachmentTypeSchema,
+    contentType: descriptionAttachmentTypeSchema,
     base64: EffectSchema.String,
   }),
   EffectSchema.Struct({
@@ -770,7 +804,7 @@ export const tasksPictureAnswerSchema = EffectSchema.Union([
 
 export type TasksPictureAnswer = typeof tasksPictureAnswerSchema.Type;
 
-/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture or video as a `data:` URL. */
+/** A picture kept on a description, as the editor that took it asks: the plan, and the picture or video as a `data:` URL. */
 export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   picture: pictureDataUrlSchema,
@@ -778,12 +812,11 @@ export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
 
 export type TasksPictureKeepParams = typeof tasksPictureKeepParamsSchema.Type;
 
-/** Why a picture was not kept: the plan holds its bound of pictures, or of videos, the plan is not the account's to write, or no answer. */
+/** Why a picture was not kept: the description holds its bound of pictures, or of videos, as the service answers in band, or how its procedure failed: the plan is not the account's to write, or no answer. */
 export const PICTURE_KEEP_FAILURE = {
   TOO_MANY: "too-many",
   TOO_MANY_VIDEOS: "too-many-videos",
-  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
+  ...failureSetOf(taskFilesContract.keepPicture),
 } as const;
 
 /** A picture kept, as the editor hears it: the id its text names it by, or why it was not kept. */
@@ -812,7 +845,7 @@ export type TasksPageParams = typeof tasksPageParamsSchema.Type;
 
 /** A page frame's read of one version, as the window's process hears it: the version with its HTML, or that the service did not answer. */
 export const tasksPageAnswerSchema = EffectSchema.Union([
-  planPageVersionAnswerSchema,
+  taskPageVersionAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
@@ -1035,23 +1068,23 @@ export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
 
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;
 
-/** Why a call about a plan's comments answered nothing to draw: no answer, or the plan is not the account's to read or write. */
-export const PLAN_COMMENT_CALL_FAILURE = {
+/** Why a call about a description's comments answered nothing to draw: no answer, or the plan is not the account's to read or write. */
+export const DESCRIPTION_COMMENT_CALL_FAILURE = {
   UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
   NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
-const planCommentFailedSchema = EffectSchema.Struct({
-  failure: EffectSchema.Literals(Object.values(PLAN_COMMENT_CALL_FAILURE)),
+const descriptionCommentFailedSchema = EffectSchema.Struct({
+  failure: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_CALL_FAILURE)),
 });
 
-/** What a task's comment threads stand on: its plan, or one of its pages. */
+/** What a task's comment threads stand on: its description, or one of its pages. */
 export const COMMENT_SUBJECT = {
-  PLAN: "plan",
+  DESCRIPTION: "description",
   PAGE: "page",
 } as const;
 
-/** One task's comments held by a window while a surface of it draws them: its plan's own threads, or one of its pages' where it names one. */
+/** One task's comments held by a window while a surface of it draws them: its description's own threads, or one of its pages' where it names one. */
 export const tasksCommentsFollowSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   pageId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
@@ -1059,27 +1092,27 @@ export const tasksCommentsFollowSchema = EffectSchema.Struct({
 
 export type TasksCommentsFollow = typeof tasksCommentsFollowSchema.Type;
 
-/** A thread started on a plan, as the window asks it. */
+/** A thread started on a description, as the window asks it. */
 export const tasksCommentStartParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
-  start: planCommentStartRequestSchema,
+  start: descriptionCommentStartRequestSchema,
 });
 
 export type TasksCommentStartParams = typeof tasksCommentStartParamsSchema.Type;
 
-/** One thing done to one thread of a plan, as the window asks it. */
+/** One thing done to one thread of a description, as the window asks it. */
 export const tasksCommentActParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   threadId: EffectSchema.NonEmptyString,
-  action: planCommentActionRequestSchema,
+  action: descriptionCommentActionRequestSchema,
 });
 
 export type TasksCommentActParams = typeof tasksCommentActParamsSchema.Type;
 
-/** A write to a plan's comments as the window hears it: the thread as it stands, its deletion, a refusal, or why there is no answer. */
+/** A write to a description's comments as the window hears it: the thread as it stands, its deletion, a refusal, or why there is no answer. */
 export const tasksCommentAnswerSchema = EffectSchema.Union([
-  planCommentThreadAnswerSchema,
-  planCommentFailedSchema,
+  descriptionCommentThreadAnswerSchema,
+  descriptionCommentFailedSchema,
 ]);
 
 export type TasksCommentAnswer = typeof tasksCommentAnswerSchema.Type;

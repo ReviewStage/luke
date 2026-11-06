@@ -1,8 +1,8 @@
-import { type HostedDeviceAgentClient, OWN_ENROLL_OUTCOME } from "@repo/features";
-import { AGENT_CALL_FAILURE, thisMacHostSetParamsSchema } from "@repo/features/agent-view";
+import { type HostedDeviceAgentClient, OWN_ENROLL_FAILURE } from "@repo/features";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { carried, GATEWAY_EVENT } from "@repo/gateway";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
 import {
   Duration,
@@ -10,8 +10,10 @@ import {
   MutableRef,
   Option,
   type Path,
+  PubSub,
   Result,
   Schedule,
+  type Scope,
   Semaphore,
   Stream,
 } from "effect";
@@ -23,16 +25,19 @@ import type { ChildProcessSpawner } from "effect/process";
 import { type AppThisMacHost, type AppThisMacHosts, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { AGENT_ACTS } from "./contract/index.js";
 import { Reporter, ThisMacHost } from "./effect/seams.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import {
   type HostDevice,
+  hostDeviceMoves,
   readHostDevice,
   removeHostDevice,
   writeHostDevice,
 } from "./host-device-record.js";
 import type { HostKernel } from "./host-kernel.js";
-import { forgetOwnedAgents, ownedAgents } from "./local-agent-state.js";
+import { forgetOwnedAgents, ownedAgents, ownedAgentsMoves } from "./local-agent-state.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -41,10 +46,13 @@ import type { RunMode } from "./run-mode.js";
  * There is one such install on a Mac, under the member's own home
  * (`ThisMacHost`'s `stateRoot`, `~/.local/state/vespin-host`), so every build
  * of the app, released, Test, development, and each named instance, reads
- * and controls the same host. Where it stands is read again every `IDLE`,
- * and acted on only when it changed: at launch, at sign-in, and when Bring
- * your own host is turned on or off. While no account is signed in, nothing
- * on this Mac is installed, started, or stopped.
+ * and controls the same host. Where it stands is read at launch and again
+ * on every change that could move it, never on a schedule: the settings told
+ * again (a sign-in, a sign-out, an experiment turned on or off), This Mac
+ * turned on or off, and a move in the install's state folder, which its own
+ * host writes apart from this app; and it is acted on only when it changed.
+ * While no account is signed in, nothing on this Mac is installed, started,
+ * or stopped.
  *
  * This Mac runs agents only where the member turned it on: Settings ›
  * Hosts' Run agents on this Mac (`HOSTS_THIS_MAC_SET`), whose switch reads
@@ -81,14 +89,14 @@ import type { RunMode } from "./run-mode.js";
  *
  * Which machine this Mac is, and the device its record names, are told to
  * the windows under the account signed in (`LIVE_READ.THIS_MAC_HOST`) as
- * the host starts, after its own enroll, and on every pass of `IDLE` where
- * either or the account moved, so a record the install's own host writes
- * as it pairs, or once its secret is refused, reaches them within a pass
- * whether or not a window draws a machine.
+ * the host starts, after its own enroll, and on every one of those changes
+ * where either or the account moved, so a record the install's own host
+ * writes as it pairs, or once its secret is refused, reaches them as the
+ * state folder's watch hears of it, whether or not a window draws a machine.
  */
 
-/** How often what the app keeps This Mac's host at is read again. */
-const IDLE = Duration.seconds(5);
+/** How long the install's state folder stays still before it is read again, so a write of several steps is read once, whole. */
+const SETTLE = Duration.millis(200);
 
 /** How soon a step that failed is tried again: from `FIRST`, twice as long each time, never longer than `LONGEST`. */
 const RETRY_AFTER = {
@@ -130,6 +138,8 @@ export interface ThisMacHostDependencies {
   accountId: () => string | undefined;
   /** Whether the account signed in has the experiment given on, as the settings hold it now. */
   experimentOn: (experiment: Experiment) => Effect.Effect<boolean>;
+  /** A pulse each time the settings are told again, which a sign-in, a sign-out, and an experiment turned on or off each do, subscribed as it is yielded. */
+  settingsTold: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
   /** Whether the service lists the device given among the account's hosts; none where it could not answer. */
   hostListed: (
     deviceId: string,
@@ -145,9 +155,17 @@ type ThisMacHostServices =
   | Path.Path
   | HttpClient.HttpClient;
 
+/** The one act This Mac's host answers, asked only to turn it on or off. */
+export type ThisMacHostActs = Pick<typeof AGENT_ACTS, "HOSTS_THIS_MAC_SET">;
+
+export interface ThisMacHostComposer extends Composer {
+  /** Run agents on this Mac turned on or off, as the panel's port asks it. */
+  readonly acts: HostActTable<ThisMacHostActs>;
+}
+
 export function composeThisMacHost(
   dependencies: ThisMacHostDependencies,
-): Effect.Effect<Composer, never, ThisMacHostServices> {
+): Effect.Effect<ThisMacHostComposer, never, ThisMacHostServices> {
   return Effect.gen(function* () {
     const { report } = yield* Reporter;
     const host = yield* ThisMacHost;
@@ -217,8 +235,10 @@ export function composeThisMacHost(
               HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
             ),
           );
-        if (outcome.outcome === OWN_ENROLL_OUTCOME.NOT_FOUND) return false;
-        if (outcome.outcome !== OWN_ENROLL_OUTCOME.ENROLLED) return yield* Effect.fail("enroll it");
+        if ("failure" in outcome) {
+          if (outcome.failure === OWN_ENROLL_FAILURE.NOT_FOUND) return false;
+          return yield* Effect.fail("enroll it");
+        }
         yield* writeHostDevice(host.stateRoot, {
           deviceId,
           deviceSecret: outcome.deviceSecret,
@@ -259,6 +279,9 @@ export function composeThisMacHost(
 
     /** How many times This Mac was turned on, which the loop reads so a turn on is kept running, the script run after its enroll. */
     const turns = MutableRef.make(0);
+
+    /** A pulse each time This Mac was turned on or off, so the loop reads it again at once. */
+    const turned = yield* PubSub.sliding<void>(1);
 
     /** This Mac turned on: enrolled where none of the account's stands unrefused, never over another account's standing host; whether it is on. */
     const turnedOn = oneAtATime(
@@ -367,30 +390,40 @@ export function composeThisMacHost(
             ),
           );
 
-    // Note that a change interrupts the keep under way, but for an enroll begun, which runs whole; This Mac is told on every pass.
-    const lifetime = Effect.forkScoped(
-      Stream.fromEffectSchedule(Effect.andThen(tellThisMac, keptNow), Schedule.spaced(IDLE)).pipe(
-        Stream.changesWith(sameKept),
-        Stream.switchMap((kept) => Stream.fromEffectDrain(keep(kept))),
-        Stream.runDrain,
-        Effect.provideContext(services),
-      ),
-    );
+    // Note that the in-process changes are subscribed before the first read, so one that lands while it reads is read again after it.
+    // A change interrupts the keep under way, but for an enroll begun, which runs whole; This Mac is told on every pass.
+    const lifetime = Effect.gen(function* () {
+      const settingsTold = yield* dependencies.settingsTold;
+      const turnedOnOrOff = Stream.fromSubscription(yield* PubSub.subscribe(turned));
+      const stateMoved = Stream.merge(
+        hostDeviceMoves(host.stateRoot),
+        ownedAgentsMoves(host.stateRoot),
+      ).pipe(Stream.debounce(SETTLE));
+      const changed = Stream.mergeAll([settingsTold, turnedOnOrOff, stateMoved], {
+        concurrency: "unbounded",
+      });
+      yield* Effect.forkScoped(
+        Stream.concat(Stream.succeed(undefined), changed).pipe(
+          Stream.mapEffect(() => Effect.andThen(tellThisMac, keptNow)),
+          Stream.changesWith(sameKept),
+          Stream.switchMap((kept) => Stream.fromEffectDrain(keep(kept))),
+          Stream.runDrain,
+          Effect.provideContext(services),
+        ),
+      );
+    });
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.THIS_MAC_HOST> = {
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.THIS_MAC_HOST> = {};
+    const acts: HostActTable<ThisMacHostActs> = {
       /** Run agents on this Mac turned on or off; done, or that it could not be, its windows told where it now stands. */
-      [GATEWAY_METHOD.HOSTS_THIS_MAC_SET]: (params) =>
+      HOSTS_THIS_MAC_SET: ({ on, deleteFolders }) =>
         Effect.gen(function* () {
-          const { on, deleteFolders } = yield* readParams(
-            thisMacHostSetParamsSchema,
-            params,
-            "a set says whether This Mac is on",
-          );
           const done = yield* on ? turnedOn : turnedOff(deleteFolders ?? true);
           yield* tellThisMac;
-          return carried(done ? DONE : UNDONE);
+          yield* PubSub.publish(turned, undefined);
+          return done ? DONE : UNDONE;
         }).pipe(Effect.provideContext(services)),
     };
-    return { methods, lifetime: Effect.asVoid(lifetime) } satisfies Composer;
+    return { methods, acts, lifetime: Effect.asVoid(lifetime) } satisfies ThisMacHostComposer;
   });
 }

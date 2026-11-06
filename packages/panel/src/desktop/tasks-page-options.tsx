@@ -14,7 +14,6 @@ import {
   motionKey,
   motionRows,
   NoRepositoryGlyph,
-  RepositoryCard,
   RepositoryPicture,
   ShowMoreRow,
   TaskPriorityMark,
@@ -79,7 +78,9 @@ import {
   toggledFilter,
   valueCounts,
 } from "@repo/ui/tasks-page-model";
-import { Fragment, type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
+import type { VirtualRowMeasurements } from "@repo/ui/virtual-rows";
+import type { Store } from "@tanstack/react-store";
+import { Fragment, type ReactNode, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -93,6 +94,7 @@ import {
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { actionSearchPanel } from "./action-search-menu.js";
 import { type MenuAsk, useAskedMenu } from "./phone-head.js";
+import type { ChosenTasksStore } from "./tasks-selection.js";
 
 /**
  * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
@@ -128,8 +130,12 @@ export interface TasksViewFrame {
   readonly display: TasksDisplay;
   /** Changes the view's display, as the line under a settled group does. */
   readonly onDisplay: (display: TasksDisplay) => void;
-  /** The page's scroller, whose position the page keeps for the view. */
-  readonly scroll: RefCallback<HTMLDivElement>;
+  /** Where the view's chosen tasks are held across the page's visits; the view's own while nothing outlives it. */
+  readonly chosen?: ChosenTasksStore | undefined;
+  /** What each run of the view's rows measured, by the run's key, held across the page's visits; none while nothing outlives the view. */
+  readonly measured?: Map<string, VirtualRowMeasurements> | undefined;
+  /** Where the column a narrow room's Columns view shows is held across the page's visits; the view's own otherwise. */
+  readonly column?: Store<string | undefined> | undefined;
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */
@@ -418,7 +424,6 @@ function fieldValues(
             ),
             label: repositoryParts(repository).name,
             detail: repositoryParts(repository).owner,
-            card: <RepositoryCard repository={repository} pictures={pictures} />,
             icon: <RepositoryPicture repository={repository} pictures={pictures} />,
           })),
         ...(held.has(null)

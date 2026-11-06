@@ -49,17 +49,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
-import {
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  sameTab,
-  TAB_WORDS,
-} from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -73,10 +63,12 @@ import { liveStepTitle, memberName, NAMED_STEP, stepTitle } from "../history-tit
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
+import type { RoutedPlace } from "../places/routed-places.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
+import { stripTabLook } from "../tasks/strip-tab-kinds.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
@@ -164,23 +156,8 @@ interface CardLook extends KindLook {
 
 /** A tab's look where its strip never drew it in this window: its kind's glyph and word, Overview's its own, the Plan's named for its task where the window lists it. */
 function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined): KindLook {
-  if (isOverviewTab(tab)) return tabLook({ kind: TAB_KIND.OVERVIEW });
-  if (typeof tab === "string") {
-    const plan = task === undefined ? undefined : { name: task.name, status: task.status };
-    return tabLook({ kind: TAB_KIND.PANEL, tab, plan });
-  }
-  if (isAgentTab(tab)) return tabLook({ kind: TAB_KIND.AGENT, name: undefined, agent: undefined });
-  if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
-  if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
-  if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, agent: undefined });
-  if (isCloudBrowserTab(tab)) {
-    return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
-  }
-  if (isPageTab(tab)) return tabLook({ kind: TAB_KIND.PAGE, title: "Page" });
-  if (isSubagentTab(tab)) {
-    return tabLook({ kind: TAB_KIND.SUBAGENT, name: "Subagent", model: undefined, state: "rest" });
-  }
-  return tabLook({ kind: TAB_KIND.DRAFT });
+  const plan = task === undefined ? undefined : { name: task.name, status: task.status };
+  return tabLook(stripTabLook(tab, { plan }));
 }
 
 /** The task's name, as the window lists it. */
@@ -311,7 +288,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
   const { mainTabs, sidePanel, personView } = tasks;
   const column = mainTabs.tab;
   return shownStop({
-    over: tab === PANEL_TAB.SETTINGS || tasks.history.open,
+    over: tab === PANEL_TAB.SETTINGS || tasks.adminView.open || tasks.history.open,
     inbox: tasks.inboxView.open,
     agentId: tasks.agentView.agentId,
     person:
@@ -360,11 +337,14 @@ function claim(event: Event): void {
 export function TabSwitcher({
   available,
   tab,
+  place,
   onTabChange,
   tasks,
 }: {
   available: boolean;
   tab: PanelTab;
+  /** The routed place the window stands on, which names its step; none while the window's state says where it stands. */
+  place: RoutedPlace | undefined;
   onTabChange: (tab: PanelTab) => void;
   tasks: TasksControl;
 }): React.JSX.Element | null {
@@ -449,7 +429,7 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const title = stepTitle(tab, tasks);
+  const title = stepTitle(place, tasks);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;
@@ -479,9 +459,10 @@ export function TabSwitcher({
 
   // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave canceled moves nothing, the stops' order included.
   const go = (stop: Stop) => {
-    const { tasks: control, tab: shownTab, onTabChange: changeTab } = doors.current;
+    const { tasks: control, onTabChange: changeTab } = doors.current;
     control.leaveGuard.guard(() => {
-      if (shownTab !== PANEL_TAB.TASKS) changeTab(PANEL_TAB.TASKS);
+      // A routed place standing, Settings or Admin, is left for the stop.
+      changeTab(PANEL_TAB.TASKS);
       switch (stop.kind) {
         case STOP_KIND.TASK:
           showTask(control, stop);
@@ -524,7 +505,9 @@ export function TabSwitcher({
       if (column === undefined) return false;
       // Note that an agent's tab is judged only once the task's agents are read, since none stands open before.
       const { openAgents, tabs } = control.mainTabs;
-      if (isAgentTab(column)) return openAgents !== undefined && !openAgents.includes(column.agent);
+      if (typeof column !== "string" && column.kind === STRIP_TAB_KIND.AGENT) {
+        return openAgents !== undefined && !openAgents.includes(column.agent);
+      }
       return !tabs.some((each) => sameTab(each, column));
     });
     return stops.current;

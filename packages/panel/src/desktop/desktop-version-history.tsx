@@ -2,9 +2,9 @@ import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { sectionAnchors } from "@repo/features/mention-link";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import type { PlanRevisionLine } from "@repo/features/task-wire";
+import type { DescriptionRevisionLine } from "@repo/features/task-wire";
 import { readFailedWords, readingWords } from "@repo/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -80,15 +80,15 @@ import {
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
-} from "../tasks/plan-history-model.js";
+} from "../tasks/description-history-model.js";
 import type { MentionedTask } from "../tasks/task-mentions.js";
 import { useNumberedPlace } from "../tasks/use-link-standing.js";
 import {
   HISTORY_READ,
   type OpenedSections,
-  type PlanHistoryControl,
+  type DescriptionHistoryControl,
   type ViewedVersion,
-} from "../tasks/use-plan-history.js";
+} from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useVersionRestore,
@@ -105,7 +105,7 @@ import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-c
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
- * desktop-version-history.tsx -- a plan's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
+ * desktop-version-history.tsx -- a description's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
  *
  * The left column is as wide as the tasks' sidebar and resizes it from its
  * own edge, never folding, as Settings' page list does. At its head stand
@@ -115,7 +115,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * it, the reader's account picture as You, a teammate's sign-in picture
  * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
- * the moment itself on hover. The newest is the plan as it stands and the
+ * the moment itself on hover. The newest is the description as it stands and the
  * one drawn when the view opens, wearing no tag of its own: its Restore says
  * it is already current. Opened from a section's "Edited by", the view draws
  * the version that made the section's last change instead, its row brought
@@ -139,7 +139,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * chosen in it, so Back returns to wherever it was opened from, the task as
  * it was left, side panel and all; a restore that lands leaves for the task
  * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
- * the plan held, so both are left out of the screen recording
+ * the description held, so both are left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
  * What the history is of is handed in as its subject: the open task's
@@ -163,12 +163,12 @@ const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-rea
  * to its versions.
  */
 export interface VersionSubject {
-  readonly versions: PlanHistoryControl;
+  readonly versions: DescriptionHistoryControl;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
-  readonly summary: (line: PlanRevisionLine) => string;
+  readonly summary: (line: DescriptionRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
   /** The workspace whose members wrote the revisions, whose pictures their rows wear; none where the task's is not listed. */
@@ -251,7 +251,7 @@ function RevisionRow({
   copyLink,
   summary,
 }: {
-  line: PlanRevisionLine;
+  line: DescriptionRevisionLine;
   author: Actor;
   selected: boolean;
   now: number;
@@ -263,7 +263,7 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Restores the version, asking nothing; none for the plan as it stands. */
+  /** Restores the version, asking nothing; none for the description as it stands. */
   onRestore: (() => void) | undefined;
   /** Copy link, the version's; none for a history with no link of its own. */
   copyLink: MenuAction | undefined;
@@ -465,7 +465,7 @@ class OlderVersionsUnread extends Error {
  * The foot of the list while an older page stands: how many older versions
  * wait, read a page of them on its press, and a failed read said above it
  * with Retry. Note that the count is the versions numbered below `before`,
- * the oldest one the list holds, since a plan's versions are numbered from
+ * the oldest one the list holds, since a description's versions are numbered from
  * one without gaps.
  */
 function EarlierRow({
@@ -489,7 +489,10 @@ function EarlierRow({
   return (
     <div className="version-earlier mx-0 mt-control-gap mb-0 px-row-inset py-row-inset text-caption text-muted-foreground">
       {failed ? (
-        <FailureNote failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_OLDER_READ)} onRetry={read}>
+        <FailureNote
+          failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_HISTORY_OLDER_READ)}
+          onRetry={read}
+        >
           Could not read older versions.
         </FailureNote>
       ) : (
@@ -679,7 +682,7 @@ function VersionPage({
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_READ)}
+            failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_HISTORY_READ)}
             onRetry={versions.onRetry}
             placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
@@ -714,7 +717,9 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
             taskId: task.id,
             place: { workspace: workspace?.slug ?? task.workspaceId, repository: task.repository },
             anchors: new Set(
-              sectionAnchors(planSections(task.document.body).map((section) => section.heading)),
+              sectionAnchors(
+                descriptionSections(task.document.body).map((section) => section.heading),
+              ),
             ),
           },
     versions: tasks.history,
@@ -794,7 +799,7 @@ export function DesktopVersionHistory({
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
   const people = useQuery(workspaceMembersQuery(subject.workspace?.id)).data;
-  // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
+  // A version of a description has a link of its own, its description's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();
   const numbered = useNumberedPlace();
@@ -818,7 +823,7 @@ export function DesktopVersionHistory({
   const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const failed = sectionsFailed(versions.viewing, opened);
-  const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
+  const sourceOf = (line: DescriptionRevisionLine, author: Actor): SourceDoor | undefined => {
     const source = revisionSource(line);
     const { onShowSource } = subject;
     if (source === undefined || onShowSource === undefined) return undefined;
@@ -835,7 +840,7 @@ export function DesktopVersionHistory({
       ? undefined
       : sourceOf(openedLine, openedAuthor);
   const openSections = versions.onOpenSections;
-  const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
+  const restoreOf = (line: DescriptionRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
     if (line.seq === newest) return undefined;
     return () => restore.onRestore(line.seq);
@@ -1017,7 +1022,7 @@ export function DesktopVersionHistory({
                     />
                     {failed ? (
                       <ErrorState
-                        failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)}
+                        failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_VERSION_READ)}
                         onRetry={versions.onRetryVersion}
                         placement={ERROR_STATE_PLACEMENT.ROWS}
                       >
@@ -1077,7 +1082,7 @@ export function DesktopVersionHistory({
   );
 }
 
-/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+/** The open description's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
 export function TaskVersionHistory({
   tasks,
   ...view

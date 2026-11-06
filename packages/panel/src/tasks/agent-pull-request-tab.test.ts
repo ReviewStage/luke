@@ -54,7 +54,7 @@ import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppWorkspaceMembers } from "@repo/host/app-state";
-import { timeRuntime } from "@repo/ui";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Clock, Context, Effect } from "effect";
@@ -66,6 +66,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import type { TabActionGroups } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
@@ -77,7 +78,6 @@ import {
 import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -100,6 +100,7 @@ import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -297,7 +298,8 @@ beforeAll(async () => {
     landedBundles({
       diffView: () => Promise.resolve(DIFF_STAND_IN),
       fileTree: () => Promise.resolve(TREE_STAND_IN),
-      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
+      descriptionEditor: () =>
+        import("../description-editor/index.js").then((entry) => entry.descriptionEditor),
     }),
   );
 });
@@ -600,11 +602,9 @@ const NO_GITHUB: GitHubConnectControl = {
 
 /** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  serveEffectsOn(Context.make(Clock.Clock, clock));
   return AtomRegistry.make({
-    initialValues: [
-      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-    ],
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
 }
 
@@ -2574,7 +2574,12 @@ test("where nothing of the pull request is held and its reads fail, each part sa
       getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
     }),
   };
-  onTestFinished(installShownFailureReporter((report) => sendShownFailure(recording, report)));
+  onTestFinished(
+    installShownFailureReporter(
+      (report) => sendShownFailure(recording, report),
+      testQueryClientNow(),
+    ),
+  );
   const control = {
     ...controlAnswering({
       pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(failure, {
@@ -2810,6 +2815,9 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
 
   await pressAction(tab, "Convert to draft");
 
+  await vi.waitFor(() =>
+    assert.equal(tab.querySelector(".pull-request-write-note") === null, false),
+  );
   const note =
     tab.querySelector<HTMLElement>(".pull-request-write-note") ??
     assert.fail("the tab says GitHub refused");
@@ -2896,7 +2904,8 @@ async function answerQuestion(label: string): Promise<void> {
   await settle();
 }
 
-test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does; checks alone holding it up draw no chip, the Checks tab saying them", async () => {
+/** Each case of the merge control: its name, the pull request's control, and what the control shows. */
+function mergeCases() {
   const draft = controlAnswering(
     {
       pullRequest: () =>
@@ -3019,15 +3028,18 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     ],
     ["a draft, which its pill says", draft, undefined],
   ] as const;
-  for (const [name, control, expected] of cases) {
+  return cases;
+}
+
+test.each(mergeCases().map(([name]) => name))(
+  "the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does; checks alone holding it up draw no chip, the Checks tab saying them: %s",
+  async (name) => {
+    const [, control, expected] =
+      mergeCases().find(([each]) => each === name) ?? assert.fail(`no case ${name}`);
     const tab = await draw(control);
     await vi.waitFor(() => assert.deepEqual(mergeShown(tab), expected, name));
-    act(() => root?.unmount());
-    root = undefined;
-    // Note that each case is a window of its own, so none reads the last one's pull request while its own read lands.
-    testQueryClientNow().clear();
-  }
-});
+  },
+);
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
@@ -3124,7 +3136,7 @@ test("auto-merge is offered while checks run, and turned off once on; a merge qu
   }
 });
 
-test("while a merge's change is out its press stands busy, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
+test("while a merge's change is out its press stands busy, a second press sends nothing, nor does a review submitted from the Review panel, and where GitHub refuses it the tab says so in GitHub's own words", async () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
   changeAnswer = {
@@ -3138,11 +3150,24 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
     assert.equal(press?.getAttribute("aria-busy"), "true");
     assert.equal(press?.getAttribute("aria-label"), "Merging");
   });
+  // A second change while the first is out is dropped, from any control of the pull request.
+  const [press] = mergePresses(tab);
+  await act(async () => press?.click());
+  writeReview(openReview(tab), "Looks right.");
+  await submitReview(tab.querySelector<HTMLElement>('[role="dialog"]') ?? tab, "Approve");
   resolve();
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Pull request is not mergeable.”",
+    ),
+  );
   await settle();
-  assert.equal(
-    tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Pull request is not mergeable.”",
+  // Note that the review is read once the merge has settled, since one waiting its turn would go then.
+  assert.deepEqual(
+    changes.map(([, change]) => change.action),
+    [PULL_REQUEST_ACTION.MERGE],
+    "the merge alone went",
   );
 });
 
@@ -3325,9 +3350,11 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
   writeReview(panel, "LGTM");
   await submitReview(panel, "Approve");
 
-  assert.equal(
-    panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Review Can not approve your own pull request”",
+  await vi.waitFor(() =>
+    assert.equal(
+      panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Review Can not approve your own pull request”",
+    ),
   );
   assert.equal(tab.querySelector(".pull-request-write-note") === null, true);
   assert.equal(boxWords(panel), "LGTM");
@@ -3896,18 +3923,19 @@ test("a picker's choice shows its button busy once the change has waited the set
     assert.equal(ringed("Updating labels"), true);
     assert.equal(reviewers()?.disabled, true, "the other picker is held, not busy");
     assert.equal(reviewers()?.getAttribute("aria-busy"), null);
-
-    answer.resolve();
-    await settle();
+  } finally {
+    vi.useRealTimers();
+  }
+  // Note that the answer reaches React through the change's mutation, which hands it on a timer of its own, so it lands on real timers.
+  answer.resolve();
+  await vi.waitFor(() =>
     assert.equal(
       picker("Updating labels") === null,
       true,
       "the button is named for what it adds again",
-    );
-    assert.equal(labels()?.getAttribute("aria-busy"), null);
-  } finally {
-    vi.useRealTimers();
-  }
+    ),
+  );
+  assert.equal(labels()?.getAttribute("aria-busy"), null);
 });
 
 test("the label picker lists the repository's labels, those on the pull request checked, and takes one off or puts one on as chosen; a merged pull request is offered no reviewers", async () => {
@@ -3995,12 +4023,13 @@ test("a reviewer chosen stands in the header before GitHub answers, and goes bac
   );
 
   answer.resolve();
-  await settle();
-  assert.deepEqual(faces(), before, "a choice GitHub refused goes back");
-  assert.equal(
-    tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Reviews may only be requested from collaborators.”",
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-write-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Reviews may only be requested from collaborators.”",
+    ),
   );
+  assert.deepEqual(faces(), before, "a choice GitHub refused goes back");
 });
 
 test("a label chosen stands under the title before GitHub answers, in the color the repository gives it, and stays once the pull request's read carries it", async () => {
@@ -4227,11 +4256,11 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
 
   writeReply(withId, "Done.");
   act(() => threadPress(withId, "Reply").click());
-  await settle();
-
-  assert.equal(
-    withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Pull request review thread is locked”",
+  await vi.waitFor(() =>
+    assert.equal(
+      withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Pull request review thread is locked”",
+    ),
   );
   assert.equal(boxWords(withId), "Done.");
   assert.equal(withoutId.querySelector(".pull-request-thread-actions") === null, true);
@@ -4965,11 +4994,13 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
 
   writeComment(tab, "Ping?");
   act(() => commentPress(tab).click());
-  await settle();
 
-  assert.equal(
-    tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Conversation is locked to collaborators”",
+  // Note that GitHub's answer reaches React a tick after it lands, as the change's mutation hands it on.
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Conversation is locked to collaborators”",
+    ),
   );
   assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Ping?");
 });
@@ -5062,6 +5093,17 @@ function commentOffer(comment: HTMLElement, label: string): HTMLButtonElement {
       (each) => each.textContent === label,
     ) ?? assert.fail(`the comment offers ${label}`)
   );
+}
+
+/** Chooses `label` in the ⋯ of the first pending comment in `comment`, as the member would. */
+function pendingAct(comment: HTMLElement, label: string): void {
+  act(() =>
+    (
+      comment.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      assert.fail("the pending comment offers its ⋯")
+    ).click(),
+  );
+  chooseMenuItem(label);
 }
 
 /** Whether the files' last draw stands a comment under a line. */
@@ -5466,11 +5508,11 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
 
   writeLineComment(comment, "Here.");
   act(() => commentOffer(comment, "Start a review").click());
-  await settle();
-
-  assert.equal(
-    comment.querySelector(".line-comment-note [role='alert']")?.textContent,
-    "GitHub refused this change.\nGitHub said: “Pull request review thread line must be part of the diff”",
+  await vi.waitFor(() =>
+    assert.equal(
+      comment.querySelector(".line-comment-note [role='alert']")?.textContent,
+      "GitHub refused this change.\nGitHub said: “Pull request review thread line must be part of the diff”",
+    ),
   );
   assert.equal(boxWords(comment), "Here.");
   assert.match(lines() ?? "", /\+2/u);
@@ -5876,7 +5918,10 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   await settle();
   await frames();
 
-  assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
+  // Note that the Conversation is chosen through the route a Query notification later than the press.
+  await vi.waitFor(() =>
+    assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true"),
+  );
   assert.deepEqual(listReveals, [], "no file is scrolled to");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
   assert.equal(card.hasAttribute("data-landed"), true, "the thread is shown where it stays");
@@ -6380,7 +6425,14 @@ test("a pending comment edited and saved untouched sends its Markdown back byte 
     "PRRC_start",
   );
 
-  act(() => commentOffer(card, "Edit").click());
+  // Note that the card folded closed opens for its ⋯'s Edit, so the field it opens is in view.
+  act(() =>
+    (card.querySelector<HTMLElement>(".annotation-card-fold > summary") ?? assert.fail()).click(),
+  );
+  await settle();
+  assert.equal(card.querySelector(".pull-request-thread-comment") === null, true, "folded closed");
+  pendingAct(card, "Edit");
+  await settle();
   assert.ok(card.querySelector("pre > code.language-suggestion"), "the edit opens on its Markdown");
   act(() => commentOffer(card, "Save").click());
   await settle();
@@ -6450,18 +6502,18 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
 
   // Edit opens the words in place; Cancel keeps nothing, Save sends the new words.
-  act(() => commentOffer(card, "Edit").click());
+  pendingAct(card, "Edit");
   typeInto(card, "Pending comment", "Thrown away");
   act(() => commentOffer(card, "Cancel").click());
   assert.equal(boxWordsElement(card) === null, true);
-  act(() => commentOffer(card, "Edit").click());
+  pendingAct(card, "Edit");
   assert.equal(boxWords(card), "Why four?", "the edit opens on the comment's own words");
   typeInto(card, "Pending comment", "Why **five**?");
   act(() => commentOffer(card, "Save").click());
   await settle();
 
   // Delete asks first, since it cannot be undone.
-  act(() => commentOffer(comments[1] ?? assert.fail(), "Delete").click());
+  pendingAct(comments[1] ?? assert.fail(), "Delete");
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Delete asks first");
   act(() => commentOffer(question, "Delete comment").click());
@@ -6499,7 +6551,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
 
   // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
   const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();
-  act(() => commentOffer(entry, "Edit").click());
+  pendingAct(entry, "Edit");
   typeInto(entry, "Pending comment", "Still once, really?");
   pressInBox(entry, { key: "Enter", metaKey: true }, "Pending comment");
   await settle();
@@ -6516,7 +6568,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   act(() => commentOffer(panel, "Cancel").click());
 
   // A Delete asked in Files changed goes as another view of the tab is chosen.
-  act(() => commentOffer(card, "Delete").click());
+  pendingAct(card, "Delete");
   assert.ok(document.querySelector('[role="alertdialog"]'), "Delete asks first");
   await act(async () => option(tab, "Conversation").click());
   await settle();
@@ -6594,7 +6646,6 @@ test("on a phone no Preview stands beside the title, and Files changed draws no 
     "Refresh",
     "Preview – luke-web",
     "Show files",
-    "Open files on GitHub",
     "View options",
     "Collapse all files",
     "Copy patch",

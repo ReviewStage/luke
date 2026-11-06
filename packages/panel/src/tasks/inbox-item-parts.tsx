@@ -3,8 +3,8 @@
  *
  * The Inbox's own list draws an item as a row of its agent's tile, its
  * title, the last word in its thread, and at its end the teammate's face
- * whose agent asks it, the Draft pencil, the attention mark, its task's
- * status and how long ago it changed (`InboxItemEnd`), with the item's card
+ * whose agent asks it, the Draft pencil, its task's status and how long ago
+ * it changed (`InboxItemEnd`), with the item's card
  * hung beside the row (`InboxItemCard`). ⌘K, the person page, the Next row,
  * and a chip of an item draw those same pieces, so an item reads alike
  * wherever it stands; the list itself composes them in `inbox-list.tsx`.
@@ -19,12 +19,10 @@ import {
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
 import {
-  AttentionMark,
   cn,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
-  HoverCardNote,
   HoverCardRow,
   HoverCardRule,
   HoverCardSkeleton,
@@ -34,6 +32,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TIME_LOOK,
   Time,
   VisuallyHidden,
 } from "@repo/ui";
@@ -57,10 +56,10 @@ import {
   holderName,
   INBOX_HOLDER,
   INBOX_LINE,
+  INBOX_SETTLED_STANDING,
   type InboxHolder,
   type InboxLineKind,
   type InboxListed,
-  inboxCardWords,
   inboxLineKind,
   inboxSettledStanding,
   inboxSettledWords,
@@ -76,12 +75,15 @@ import { cardTitle } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
- * An item that needs the developer wears the attention mark before its time,
- * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge
- * reads at the time's height.
+ * An item put away until a reminder says when it comes back in its age's
+ * place, after the clock glyph the reminder's acts wear, in the accent's
+ * ink, so a row put away reads apart from one that changed.
  */
-const INBOX_ROW_ATTENTION =
-  "inbox-row-attention inline-flex [&_.attention-mark]:size-ui-12 [&_.attention-mark_svg]:size-attention-glyph-small";
+const INBOX_ROW_DUE =
+  "inbox-row-due inline-flex items-center gap-tight-gap text-accent-ink [&>svg]:size-caption-glyph";
+
+/** What a reminded row says to a reader before its time, the glyph being drawn for the eye alone. */
+const REMINDER_DUE = "Reminder";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
@@ -179,7 +181,7 @@ export function ItemMark({
   );
 }
 
-/** The glyph saying what an item asks, as its row's second line leads with it: its open ask's kind, a tick where an answer settled it, and none before words alone. */
+/** The glyph saying what an item asks, as its row's second line leads with it: its open ask's kind, a tick where an answer settled it, Resolve's mark where a member resolved it, and none before words alone. */
 export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
   switch (kind) {
     case INBOX_LINE.DECIDE:
@@ -190,13 +192,25 @@ export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
       return <PenLineIcon aria-hidden="true" />;
     case INBOX_LINE.SETTLED:
       return <CheckIcon aria-hidden="true" />;
+    case INBOX_LINE.RESOLVED:
+      return <GLYPH.RESOLVED />;
     case INBOX_LINE.SAID:
       return null;
   }
 }
 
+/** The mark of how a settled item ended, as its card's line wears it: Resolve's for a member's resolve, Withdrawn's for an ask its agent took back, and a tick for an answer. */
+function settledGlyph(item: InboxItem): React.JSX.Element {
+  if (item.status !== INBOX_STATUS.CLOSED) return <CheckIcon />;
+  return inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED ? (
+    <GLYPH.RESOLVED />
+  ) : (
+    <GLYPH.WITHDRAWN />
+  );
+}
+
 /**
- * An item's own glyph, as its chip wears it and its card leads with it:
+ * An item's own glyph, as its chip wears it:
  * what it asks, as its row's second line leads with it (`inboxLineGlyph`),
  * or the thread's glyph where it asks nothing.
  */
@@ -216,13 +230,14 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
 /**
  * An Inbox row's card, hung beside the row as a sidebar task's row hangs
  * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with the item's glyph, what it asks as its chip wears
- * it, its title, where it stands, waiting on the reader, on a teammate, or
- * settled, and when it last moved; then what holds it, a task as its key
+ * thread. It leads with its title, wearing no glyph, where it stands,
+ * waiting on the reader, on a teammate, or settled, and when it last
+ * moved; then what holds it, a task as its key
  * and its chip, which wears its status, or an automation by its name;
- * how it ended, once it has; and the agent's latest words, three lines at
- * most. Note that it draws no open ask's options or steps, because a card
- * takes no press and they would read as controls; the item's box answers. The agent that asked
+ * and how it ended, once it has. Note that it draws no message of the
+ * thread, which the row's own second line already previews, and no open
+ * ask's options or steps, because a card takes no press and they would
+ * read as controls; the item's box answers. The agent that asked
  * stands at its foot, the loading spinner beside it while it works.
  */
 export function InboxItemCard({
@@ -242,7 +257,6 @@ export function InboxItemCard({
   const { needsYou, starter, nameOf } = useInboxStanding(listed, readerId);
   const settled = inboxSettledWords(item, nameOf);
   const subject = itemSubject(holder, item.agentId, models, readerId);
-  const words = inboxCardWords(item);
   // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
   const line =
     holder.kind === INBOX_HOLDER.TASK
@@ -252,7 +266,6 @@ export function InboxItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}
         sub={<span>{standingWords(item, needsYou, starter)}</span>}
         corner={<Time at={item.updatedAt} now={now} hint={false} />}
@@ -261,11 +274,10 @@ export function InboxItemCard({
       {settled === undefined ? null : (
         <HoverCardRow
           look={HOVER_CARD_ROW_LOOK.DETAIL}
-          glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
+          glyph={settledGlyph(item)}
           label={settled}
         />
       )}
-      {words === "" ? null : <HoverCardNote>{words}</HoverCardNote>}
       <HoverCardRule />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
@@ -287,7 +299,7 @@ export function InboxItemCard({
 
 /**
  * What holds an item, as its card says it under the head, a quieter row
- * on the name's column: a task by its key, as the task's own card says it
+ * flush with the name, which wears no glyph: a task by its key, as the task's own card says it
  * (`TaskKey`), and by its chip as a mention of it is drawn (`HolderRef`),
  * which wears the task's status as its mark, so the card says no status in
  * words; an automation, or the agents no automation names, by their chip
@@ -309,7 +321,6 @@ function HolderDetail({
   return (
     <HoverCardRow
       look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={null}
       label={
         <span className={cn(TASK_CARD_STANDING, "flex-nowrap")} data-holder-detail="">
           {holder.kind === INBOX_HOLDER.TASK ? (
@@ -487,7 +498,7 @@ interface InboxItemEndProps {
   open?: boolean;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
+  /** Whether the end draws the task's status, which a row saying it elsewhere leaves to a reader's ears. */
   standing?: boolean;
   /** Whether a reader hears Needs you where the item needs them, which a row under a name already saying it leaves out. */
   needsYouSaid?: boolean;
@@ -500,11 +511,12 @@ interface InboxItemEndProps {
  * The marks at an item row's end, in the Inbox's own order: the face of the
  * teammate whose agent asks it, the Draft pencil where an answer or message
  * waits unsent in its box and that box is not the one open beside the list,
- * the attention mark where it needs the reader, its task's status, and how
- * long ago it changed. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
+ * its task's status, and how long ago it changed; where it needs the reader,
+ * a reader hears Needs you, the eye reading it from the list's Open scope
+ * and the counts that lead there rather than from a mark on every row. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
  * A row that says where its item stands on a line of its own (`standing`
- * off), the Inbox's own, draws neither the attention mark nor the status at
- * its end, a reader still hearing both there.
+ * off), the Inbox's own, draws no status at its end, a reader still hearing
+ * it there.
  */
 export function InboxItemEnd(props: InboxItemEndProps): React.JSX.Element {
   return <InboxItemMarks {...props} drafted={useInboxItemDrafted(props.listed.item)} />;
@@ -540,17 +552,18 @@ export function InboxItemMarks({
         <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
       )}
       {drafted && !open ? <DraftMark /> : null}
-      {needsYou && standing ? (
-        <span className={INBOX_ROW_ATTENTION}>
-          <AttentionMark />
-          {needsYouSaid ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
-        </span>
-      ) : null}
-      {needsYou && !standing && needsYouSaid ? (
-        <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-      ) : null}
+      {needsYou && needsYouSaid ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
       <TaskStatusChip holder={holder} drawn={standing} />
-      <Time at={item.updatedAt} now={now} hint={false} />
+      {/* Note that an item put away until a reminder says when it comes back in its age's place, as Mail's Remind Me list does. */}
+      {item.remindAt === undefined ? (
+        <Time at={item.updatedAt} now={now} hint={false} />
+      ) : (
+        <span className={INBOX_ROW_DUE}>
+          <GLYPH.TIME />
+          <VisuallyHidden>{REMINDER_DUE}</VisuallyHidden>
+          <Time at={item.remindAt} look={TIME_LOOK.DUE} now={now} hint={false} />
+        </span>
+      )}
       {after}
     </InboxRowMeta>
   );

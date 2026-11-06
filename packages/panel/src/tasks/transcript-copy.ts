@@ -115,9 +115,9 @@ const SPEAKER = {
 
 type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 
-/** What the brief's heading calls it: the plan an agent was handed, or a prompt in its place, or the task a worker was handed. */
+/** What the brief's heading calls it: the description an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
-  PLAN: "Description",
+  DESCRIPTION: "Description",
   PROMPT: "Prompt",
   SUBAGENT_TASK: "Subagent task",
 } as const;
@@ -334,7 +334,7 @@ function sentLineWords(message: AgentTranscriptMessage): string | undefined {
 
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
- * the first of the developer's messages is the brief, the plan or the prompt
+ * the first of the developer's messages is the brief, the description or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
  * agent's call carried; an agent started blank has none. The rest are turns: the developer's words,
  * another agent's message under the agent it is from, and the agent's
@@ -362,7 +362,7 @@ export function agentTranscript(input: {
       ? BRIEF_LABEL.SUBAGENT_TASK
       : brief === AGENT_BRIEF.PROMPT
         ? BRIEF_LABEL.PROMPT
-        : BRIEF_LABEL.PLAN;
+        : BRIEF_LABEL.DESCRIPTION;
   const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
   // An agent started from another opens on its brief, the replay, and the note, each copied apart.
   const opening = first === undefined || task !== undefined ? undefined : replayOpening(first);
@@ -552,7 +552,8 @@ function fullTurn(turn: CopiedTurn): string[] {
 
 /** The replay as a copy reads it: its heading, how many steps were left out, and each step, one line in the concise copy and its words fenced in the full one. */
 function replaySaid(replay: Replay, copy: TranscriptCopy): string[] {
-  const heading = `## ${replayVerb(replay)} ${REPLAY_SOURCE_WORDS} · ${replayCount(replay)}`;
+  const count = replayCount(replay);
+  const heading = `## ${replayVerb(replay)} ${REPLAY_SOURCE_WORDS}${count === undefined ? "" : ` · ${count}`}`;
   const left = leftOutLine(replay);
   const steps = replay.steps.map((step) => {
     const { who, line } = stepLine(step);

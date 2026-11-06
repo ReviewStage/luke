@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement, useState } from "react";
@@ -44,6 +45,7 @@ function Tab({ start }: { start: string }): React.JSX.Element {
       note: undefined,
       write: () => Promise.reject(new Error("Not in this test.")),
       dismiss: () => undefined,
+      confirmAct: () => neverBusyAct(() => undefined),
     },
     body,
     setBody,

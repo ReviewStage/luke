@@ -3,6 +3,7 @@ import {
   type AgentTodoStatus,
   type AgentTodos,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import type { IntegrationProvider } from "@repo/features/integration-wire";
 import { readLink } from "@repo/features/link-grammar";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@repo/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { formatBytes } from "@repo/features/number-format";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -67,7 +67,7 @@ import {
   useDisclosureState,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
-import { githubShapes, wholeRendering } from "@repo/ui/github-html";
+import { githubShapes, INLINE_PICTURE, inlinePictures, wholeRendering } from "@repo/ui/github-html";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -165,11 +165,11 @@ import {
 import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
+import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
-import { usePlanPictureDrawer } from "./plan-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { cardTitle, type SentWords, todosCount } from "./tool-call-model.js";
@@ -211,7 +211,7 @@ export const INERT_LINK_CLASS =
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
  * that opens in the browser over the act channel (`use-open-link.ts`), as
- * it is in a plan, bare or labeled; any other address is drawn as words
+ * it is in a description, bare or labeled; any other address is drawn as words
  * that go nowhere, with the address as its hint. `words` are its label's,
  * which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
@@ -375,9 +375,9 @@ function definitionsIn(
  * names it as a link to where it points and never fetches it, because a
  * picture an agent writes is a request to wherever its address points the
  * moment the tab opens, and a model's words must make none; the pictures an
- * agent shows are its `show_image` calls'. The pictures drawn are a plan's
- * own, inside the plan's card, and an Inbox item's own, inside its pane,
- * each read through the host (`plan-pictures.tsx`, `inbox-pictures.tsx`)
+ * agent shows are its `show_image` calls'. The pictures drawn are a description's
+ * own, inside the description's card, and an Inbox item's own, inside its pane,
+ * each read through the host (`description-pictures.tsx`, `inbox-pictures.tsx`)
  * rather than from its address. Note that the mark is
  * made on the markdown, before the drawing's hardening reads a picture at
  * all, which draws a relative one as a placeholder of its own and an
@@ -575,20 +575,20 @@ function markDocument(tree: MarkdownNode): void {
 const UNNAMED_PICTURE = "Picture";
 
 /**
- * A picture in a transcript's words: a plan's own picture drawn as the plan
- * draws it where its words stand inside `PlanPictures`, as the plan's card
+ * A picture in a transcript's words: a description's own picture drawn as the description
+ * draws it where its words stand inside `DescriptionPictures`, as the description's card
  * does, and an Inbox item's own where they stand inside `InboxPictures`
  * (`inbox-pictures.tsx`); any other a link to where it points, with the
  * picture's glyph, never drawn.
  */
 function PictureElement({ node }: MarkdownNodeProps): ReactNode {
-  const planPicture = usePlanPictureDrawer();
+  const descriptionPicture = useDescriptionPictureDrawer();
   const inboxPicture = useInboxPictureDrawer();
   const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
   const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
   const caption = String(node?.properties[PICTURE_ELEMENT.CAPTION] ?? "");
-  if (planPicture !== undefined && planAttachmentOf(address) !== undefined) {
-    return planPicture(address, said, caption === "" ? undefined : caption);
+  if (descriptionPicture !== undefined && descriptionAttachmentOf(address) !== undefined) {
+    return descriptionPicture(address, said, caption === "" ? undefined : caption);
   }
   // An Inbox item's own picture, where its words stand inside `InboxPictures`.
   const itemPicture = inboxPicture?.(address, said, caption === "" ? undefined : caption);
@@ -718,14 +718,15 @@ const TRANSCRIPT_COMPONENTS: MarkdownComponents = {
 /**
  * How a picture GitHub's rendering names is drawn by the place drawing the
  * words: its own image, read through the service, or nothing where the
- * place draws none, which draws its link instead. `linked` says it stands
- * inside a link the words keep, which a press on it follows, so the place
- * gives it no press of its own.
+ * place draws none, which draws its link instead. `inline` says it stands
+ * in a line of words or inside a link the words keep, a press on which
+ * follows the link, so the place draws it in that line as GitHub does, with
+ * no press of its own.
  */
 export type GitHubPictureDrawer = (
   src: string,
   alt: string,
-  linked: boolean,
+  inline: boolean,
 ) => ReactNode | undefined;
 
 /** Whether what is drawn stands inside a link of GitHub's words. */
@@ -735,14 +736,16 @@ const InsideGitHubLink = createContext(false);
 function GitHubImage({
   src,
   alt,
+  inWords,
   picture,
 }: {
   src: string;
   alt: string;
+  inWords: boolean;
   picture: GitHubPictureDrawer;
 }): ReactNode {
   const linked = useContext(InsideGitHubLink);
-  return picture(src, alt, linked) ?? <GitHubPictureLink src={src} alt={alt} />;
+  return picture(src, alt, inWords || linked) ?? <GitHubPictureLink src={src} alt={alt} />;
 }
 
 /** A picture GitHub's rendering names that its place draws none of: a link to where it points, as a transcript's picture is. */
@@ -760,12 +763,14 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
  * The steps GitHub's rendering is drawn through: the library's own HTML
  * parse, GitHub's dress reshaped into the window's own while its classes
  * still say what each part is (`@repo/ui/github-html`), then the library's
- * own sanitizer, GitHub's own allowlist, and its link hardening.
+ * own sanitizer, GitHub's own allowlist, the pictures that share a line with
+ * words marked as standing in it, and the library's link hardening.
  */
 const GITHUB_REHYPE_PLUGINS: MarkdownSteps = [
   MARKDOWN_HTML_STEP.PARSE,
   githubShapes,
   MARKDOWN_HTML_STEP.SANITIZE,
+  inlinePictures,
   MARKDOWN_HTML_STEP.HARDEN,
 ];
 
@@ -778,7 +783,8 @@ const GITHUB_REMARK_PLUGINS = [wholeRendering];
  * the transcript's: GitHub's own HTML read through the library's parse and
  * sanitizer, never set as HTML. Mentions, references, emoji, task lists,
  * and folded details stand as GitHub rendered them. A picture is the
- * place's to draw (`picture`), and stands as its link where it draws none.
+ * place's to draw (`picture`), in its line where it shares one with words,
+ * and stands as its link where the place draws none.
  */
 export function GitHubWords({
   html,
@@ -797,8 +803,13 @@ export function GitHubWords({
           </TranscriptLink>
         </InsideGitHubLink.Provider>
       ),
-      img: ({ src, alt }) => (
-        <GitHubImage src={String(src ?? "")} alt={String(alt ?? "")} picture={picture} />
+      img: ({ src, alt, node }) => (
+        <GitHubImage
+          src={String(src ?? "")}
+          alt={String(alt ?? "")}
+          inWords={node?.properties[INLINE_PICTURE] === true}
+          picture={picture}
+        />
       ),
     }),
     [picture],
@@ -1001,7 +1012,7 @@ const CALL_ICON = {
   [CALL_KIND.WEB_PAGE]: GlobeIcon,
   [CALL_KIND.LOAD_SKILL]: BookOpenIcon,
   [CALL_KIND.LOOK_AT_PICTURE]: ImageIcon,
-  [CALL_KIND.EDIT_PLAN]: FilePenIcon,
+  [CALL_KIND.EDIT_DESCRIPTION]: FilePenIcon,
   [CALL_KIND.TODOS]: () => <GLYPH.TODOS />,
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
@@ -1047,7 +1058,7 @@ const CALL_ICON = {
   [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
   [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
   [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
-  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
+  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.RESOLVED />,
   [CALL_KIND.REOPEN_THREAD]: () => <GLYPH.COMMENT />,
   [CALL_KIND.SEARCH_TOOLS]: () => <GLYPH.MCP_SERVER />,
   [CALL_KIND.MCP_TOOL]: () => <GLYPH.MCP_SERVER />,
@@ -1197,7 +1208,7 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     agent?: Actor | undefined;
     /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
     agentCard?: ReactNode;
-    /** For a call that made or is about a page, the plan, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
+    /** For a call that made or is about a page, the description, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
     made?: { readonly kind: MadeCallKind; readonly chip: ReactNode } | undefined;
     /** For a call that read, wrote, or edited files, their paths, which the row names by the first one's chip and how many more. */
     files?: readonly string[] | undefined;
@@ -1768,7 +1779,7 @@ export function TranscriptSubagent({
  * turn's lead. Note that it stays in the muted ink, summary and all,
  * unlike a call's line, because it counts rows rather than saying what one
  * did, and the rows it opens onto are what a reader scans. It wears the
- * fold's chevron in a row's icon column, as the plan's card does at its
+ * fold's chevron in a row's icon column, as the description's card does at its
  * head, because its count already says what it holds, so what is left to
  * say is whether it is open, and an icon of its own would read as one more
  * of the calls it opens onto. Note that it says nothing of a call that

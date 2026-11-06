@@ -9,7 +9,7 @@ import {
   modelsQuery,
   modelsRetryMutation,
 } from "./live-reads.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectAccount } from "./use-app-state.js";
 
 /**
  * account-choices.ts -- the account's own choices as every surface draws them: its preferences row, which the host holds for the session, the models it is offered and its devices, which a surface holds while it draws one, and the default a new agent runs on, worked out from both.
@@ -35,7 +35,7 @@ export interface DrawnAgentDefault {
 
 /** The account signed in, by the id the host holds its reads under; none while nobody is. */
 function useAccountKey(): string | undefined {
-  return signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  return signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
 }
 
 /** The account's preferences row, which the host holds for the session (`accountPreferencesQuery`). */

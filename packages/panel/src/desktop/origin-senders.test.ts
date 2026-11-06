@@ -7,6 +7,7 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import type { Task } from "@repo/features/task-wire";
+import { agentTab, subagentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -29,7 +30,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
  * origin-senders.test.ts -- in a task's column, an agent's tab opens on its
- * plan as a message the task sent: the task's name under the card, which
+ * description as a message the task sent: the task's name under the card, which
  * opens the plan, with the teammate who started the agent beside it and
  * never the reader; and a worker's tab in the side panel opens on its task
  * as a message the agent that delegated it sent, whose name opens that
@@ -61,7 +62,7 @@ const AGENT: AgentSummary = {
   startedBy: CHARLES,
 };
 
-/** When the plan was handed to the agent. */
+/** When the description was handed to the agent. */
 const BRIEF_SENT_AT = Date.UTC(2026, 9, 14, 16, 5);
 
 const BRIEF: AgentTranscriptMessage = {
@@ -102,7 +103,7 @@ async function mount(input: {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [{ agent: AGENT.id }],
+      tabs: [agentTab(AGENT.id)],
       tab: input.main,
       openAgents: [AGENT.id],
       onChoose: (tab) => chosen.push(tab),
@@ -110,7 +111,7 @@ async function mount(input: {
     sidePanel: {
       ...tasksControl().sidePanel,
       open: input.side !== undefined,
-      subagents: [{ subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } }],
+      subagents: [subagentTab("call-1", { agent: AGENT.id, task: "Audit retries" })],
       tab: input.side,
       onChoose: (tab) => chosen.push(tab),
     },
@@ -161,8 +162,8 @@ function senderLine(place: Element): HTMLElement {
   );
 }
 
-test("a task's agent opens on its plan sent by the task, which opens the plan in the task's Overview, with the teammate who started the agent", async () => {
-  const { container, chosen } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
+test("a task's agent opens on its description sent by the task, which opens the description in the task's Overview, with the teammate who started the agent", async () => {
+  const { container, chosen } = await mount({ reader: DEAN.userId, main: agentTab(AGENT.id) });
 
   const line = senderLine(container);
   assert.equal(words(line), "Teammate invitations · started by Charles Pan");
@@ -173,17 +174,17 @@ test("a task's agent opens on its plan sent by the task, which opens the plan in
   assert.deepEqual(chosen, [MAIN_TAB.OVERVIEW]);
 });
 
-test("the reader's own agent opens on its plan sent by the task alone, never by them", async () => {
-  const { container } = await mount({ reader: CHARLES.userId, main: { agent: AGENT.id } });
+test("the reader's own agent opens on its description sent by the task alone, never by them", async () => {
+  const { container } = await mount({ reader: CHARLES.userId, main: agentTab(AGENT.id) });
 
   assert.equal(words(senderLine(container)), "Teammate invitations");
 });
 
-test("the line naming who sent the plan stands under its card, then when it was sent, as a sent message's stands under its bubble", async () => {
-  const { container } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
+test("the line naming who sent the description stands under its card, then when it was sent, as a sent message's stands under its bubble", async () => {
+  const { container } = await mount({ reader: DEAN.userId, main: agentTab(AGENT.id) });
 
   const card =
-    container.querySelector<HTMLElement>(".agent-origin [data-origin-plan]") ??
+    container.querySelector<HTMLElement>(".agent-origin [data-origin-description]") ??
     assert.fail("the page opens on its card");
   const line = senderLine(container);
   assert.ok(
@@ -192,7 +193,8 @@ test("the line naming who sent the plan stands under its card, then when it was 
   );
   const meta =
     line.closest(".ui-message-line") ?? assert.fail("the sender's line is the card's meta");
-  const time = meta.querySelector("time") ?? assert.fail("the meta says when the plan was sent");
+  const time =
+    meta.querySelector("time") ?? assert.fail("the meta says when the description was sent");
   assert.equal(time.getAttribute("datetime"), new Date(BRIEF_SENT_AT).toISOString());
   assert.ok(
     line.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -203,7 +205,7 @@ test("the line naming who sent the plan stands under its card, then when it was 
 test("the card a transcript opens on offers Copy, which copies the brief's text", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
-  const { container } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
+  const { container } = await mount({ reader: DEAN.userId, main: agentTab(AGENT.id) });
 
   const copy = container.querySelector<HTMLButtonElement>(
     '.agent-origin button[aria-label="Copy message"]',
@@ -221,7 +223,7 @@ test("a worker's tab opens on its task sent by the agent that delegated it, whos
   const { container, chosen } = await mount({
     reader: DEAN.userId,
     main: undefined,
-    side: { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } },
+    side: subagentTab("call-1", { agent: AGENT.id, task: "Audit retries" }),
   });
 
   const panel = container.querySelector(".desktop-side-panel") ?? container;
@@ -230,5 +232,5 @@ test("a worker's tab opens on its task sent by the agent that delegated it, whos
   assert.equal(parent?.dataset.kind, "agent");
   act(() => parent?.click());
 
-  assert.deepEqual(chosen, [{ agent: AGENT.id }]);
+  assert.deepEqual(chosen, [agentTab(AGENT.id)]);
 });

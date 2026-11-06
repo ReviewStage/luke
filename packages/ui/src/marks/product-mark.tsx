@@ -17,7 +17,7 @@ interface ProductMarkProps {
   inherit?: boolean;
   /** Draws the small cut, its V opened wider, for a mark 32 pixels across or smaller. */
   small?: boolean;
-  /** Draws the mark inset to a line glyph's weight, for a seat it shares with line glyphs, such as a nav row's. */
+  /** Draws the mark inset to a line glyph's weight, at the size its seat gives line glyphs, for a seat it shares with them, such as a nav row's. */
   glyph?: boolean;
 }
 
@@ -47,6 +47,7 @@ export function ProductMark({
       data-muted={muted || undefined}
       data-fill={fill || undefined}
       data-inherit={inherit || undefined}
+      data-glyph={glyph || undefined}
     >
       <path d={small ? MARK_ART.SMALL_PATH : MARK_ART.PATH} fill="currentColor" />
     </svg>

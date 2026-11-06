@@ -1,5 +1,5 @@
 /**
- * agents-app-inbox.test.ts -- the developer's inbox through the hosted router, over a fake eve.
+ * agents-app-inbox.test.ts -- the developer's inbox through the hosted router, over a fake harness.
  */
 
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import {
 } from "@repo/database/models/automation-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText, updateTask } from "@repo/database/models/task-store";
+import { saveDescriptionText, updateTask } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { conversations } from "@repo/database/schemas/storage";
@@ -81,7 +81,7 @@ import {
   AGENT_MESSAGES,
   countedFor,
   countedProperties,
-  fakeEve,
+  fakeAgentSessions,
   INBOX_ATTACHMENT,
   INBOX_CLOSE,
   INBOX_ITEM,
@@ -107,18 +107,18 @@ import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import { harnessFor } from "../testing/native-harness-fake.js";
 import { CODER } from "./coder-host/bounds.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
+import { SESSION_SEND_OUTCOME } from "./sessions/agent-sessions.js";
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
-  const openInbox = (eve = fakeEve(), titleModel?: InboxTitleModelOf) =>
+  const openInbox = (agentSessions = fakeAgentSessions(), titleModel?: InboxTitleModelOf) =>
     Effect.gen(function* () {
       const opened = yield* openTask({
-        eve,
+        agentSessions,
         ...(titleModel === undefined ? undefined : { titleModel }),
       });
       const { agent, target } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
-      const sessionId = eve.opened[0]?.sessionId ?? "";
+      const sessionId = agentSessions.opened[0]?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
       const owned = { userId: opened.owner, taskId: opened.task.id, agentId: agent.id };
       /** A thread posted for the agent, as its tool posts one, with the pictures its words name read. */
@@ -195,8 +195,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "over a browser's session cookie an answer to an item and a message on its thread reach its agent through its harness acting for its starter, each line kept as the thread's",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, ask, post, sessionId, target } = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const { owner, ask, post, sessionId, target } = yield* openInbox(agentSessions);
         const posted = yield* post(QUESTION);
         assert.ok(Result.isSuccess(posted));
         const cookie = sessionCookieOf(owner);
@@ -226,7 +226,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
         assert.equal(messaged.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(messaged.body));
         assert.deepEqual(
-          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          agentSessions.sent.map((each) => [each.authorization, each.sessionId]),
           [
             [harnessFor(owner), sessionId],
             [harnessFor(owner), sessionId],
@@ -263,7 +263,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
-        yield* savePlanText(owner, second.id, SAVED);
+        yield* saveDescriptionText(owner, second.id, SAVED);
         const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
         const onSecond = (value: ThreadPost) =>
           postInboxThread({ userId: owner, taskId: second.id, agentId: secondAgent.id }, value);
@@ -361,8 +361,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a notice waits on the account until Got it settles it, which messages nobody, and a reply with words settles another as it reaches the agent",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, answer, message, waiting } = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, agent, answer, message, waiting } = yield* openInbox(agentSessions);
         const owned = { userId: owner, taskId: task.id, agentId: agent.id };
         const notice = (key: string) =>
           postInboxThread(owned, {
@@ -377,7 +377,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           read.items.map((item) => item.id).sort(),
         );
         assert.deepEqual(yield* waitingIds, [nodded.success.id, replied.success.id].sort());
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
 
         const pressed = readAnswer(
           inboxAnsweredSchema,
@@ -389,7 +389,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           }),
         );
         assert.deepEqual([pressed.taken, pressed.item.status], [true, INBOX_STATUS.ANSWERED]);
-        assert.equal(eve.sent.length, before, "Got it messages nobody");
+        assert.equal(agentSessions.sent.length, before, "Got it messages nobody");
 
         const sent = readAnswer(
           inboxMessagedSchema,
@@ -401,8 +401,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           }),
         );
         assert.equal(sent.item.status, INBOX_STATUS.ANSWERED);
-        assert.equal(eve.sent.length, before + 1, "a reply with words reaches the agent");
-        assert.ok(JSON.stringify(eve.sent.at(-1)?.message.message).includes("Nice work."));
+        assert.equal(agentSessions.sent.length, before + 1, "a reply with words reaches the agent");
+        assert.ok(
+          JSON.stringify(agentSessions.sent.at(-1)?.message.message).includes("Nice work."),
+        );
         assert.deepEqual(yield* waitingIds, []);
       }),
   );
@@ -411,8 +413,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "Got it settles a notice at the revision it names, taken once under its key and counted once, a stale revision answering the notice as it stands, an item holding an ask open refused, and an agent that waits on the notice told",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, post, answer, read } = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const { owner, post, answer, read } = yield* openInbox(agentSessions);
         const notice = (key: string) =>
           Effect.map(
             post({ key, title: "The preview is up", body: "It deploys from main." }),
@@ -421,7 +423,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const nod = (item: InboxItem, revision = item.revision, clientKey = randomUUID()) =>
           answer(item.id, { revision, clientKey, reply: INBOX_REPLY.ACKNOWLEDGED });
         const quiet = yield* notice("preview-quiet");
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
 
         const stale = readAnswer(
           inboxAnsweredSchema,
@@ -447,7 +449,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         );
         assert.deepEqual([again.taken, again.item.status], [true, INBOX_STATUS.ANSWERED]);
         assert.equal(countedFor(owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1, "counted once");
-        assert.equal(eve.sent.length, before, "an agent not waiting on the notice is told nothing");
+        assert.equal(
+          agentSessions.sent.length,
+          before,
+          "an agent not waiting on the notice is told nothing",
+        );
 
         const asked = yield* post(QUESTION);
         assert.ok(Result.isSuccess(asked));
@@ -471,12 +477,16 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* nod(waited, waited.revision, heardKey),
         );
         assert.deepEqual([heard.taken, heard.item.status], [true, INBOX_STATUS.ANSWERED]);
-        assert.equal(eve.sent.length, before + 1, "the waiting agent hears the nod");
-        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.equal(agentSessions.sent.length, before + 1, "the waiting agent hears the nod");
+        const handed = JSON.stringify(agentSessions.sent.at(-1)?.message.message);
         assert.ok(handed.includes(`${INBOX_ANSWER_LEAD} on`), "it reads as an Inbox answer");
         assert.ok(handed.includes("(key preview-waited)"), "it names the notice's key");
         yield* nod(waited, waited.revision, heardKey);
-        assert.equal(eve.sent.length, before + 1, "a nod sent again reaches the agent once");
+        assert.equal(
+          agentSessions.sent.length,
+          before + 1,
+          "a nod sent again reaches the agent once",
+        );
       }),
   );
 
@@ -484,11 +494,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "an answer carrying a file and no words reaches the agent with the file, even to an ask the agent does not wait to hear back, and the answering message names the file",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { post, message, read } = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const { post, message, read } = yield* openInbox(agentSessions);
         const todo = yield* post(TODO("flag-file"));
         assert.ok(Result.isSuccess(todo));
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const trace = {
           name: "flag-trace.txt",
           mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
@@ -502,7 +512,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           answers: { ask: openAskOf(todo.success), reply: INBOX_REPLY.DONE, steps: [] },
         });
         assert.equal(sent.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(sent.body));
-        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        const handed = JSON.stringify(
+          agentSessions.sent.slice(before).map((each) => each.message.message),
+        );
         assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
         assert.ok(handed.includes("flag on in staging"), "it carries the file");
         const kept = (yield* read()).items.find((item) => item.key === "flag-file");
@@ -557,7 +569,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const turnId = randomUUID();
       const turn = { conversationId: sessionKey(target.conversationId), turnId };
-      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.enqueueTurn(target, {
+        turnId,
+        origin: TURN_ORIGIN.TYPED,
+        runtimeTurnId: "turn_0",
+      });
       yield* writer.consume(target, {
         ...turn,
         kind: RUN_EVENT.TURN_STARTED,
@@ -586,9 +602,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a member's message on an answered item wakes the agent that stopped, reaching it under its own lead with its files, and leaves the item answered at its revision, its thread naming the member; a teammate writes as the starter does, a repeat under its key reaches the agent once, and an outsider, no bearer, and an empty message are refused",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { owner, other, task, target, ask, post, read, message, transcript } =
-          yield* openInbox(eve);
+          yield* openInbox(agentSessions);
         const asked = yield* post(TODO("flag-thread"));
         assert.ok(Result.isSuccess(asked));
         const { id, key, title } = asked.success;
@@ -609,7 +625,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           );
         yield* turnEnded(target);
         assert.equal((yield* transcript()).status, AGENT_STATUS.COMPLETED);
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const trace = {
           name: "copy-review.txt",
           mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
@@ -638,7 +654,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ]),
           [[owner, body.text, [trace.name]]],
         );
-        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        const handed = JSON.stringify(
+          agentSessions.sent.slice(before).map((each) => each.message.message),
+        );
         assert.ok(handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${title}\\" (key ${key})`));
         assert.ok(handed.includes(body.text), "it carries the words");
         assert.ok(handed.includes("subject line too long"), "it carries the file");
@@ -647,7 +665,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.ok(woken.lines.some((line) => line?.includes(body.text)));
 
         yield* message(id, body);
-        assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.equal(
+          agentSessions.sent.length,
+          before + 1,
+          "a repeat under the key reaches the agent once",
+        );
         assert.deepEqual(
           countedProperties(owner, SERVER_EVENT.THREAD_POST),
           [
@@ -661,7 +683,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           "other words under a key already taken are refused, so the agent never hears what the thread does not show",
         );
-        assert.equal(eve.sent.length, before + 1);
+        assert.equal(agentSessions.sent.length, before + 1);
 
         assert.deepEqual(
           yield* message(id, { text: "Before I joined.", clientKey: randomUUID() }, other),
@@ -705,7 +727,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "an Inbox answer is counted once it stands: not where its hand-off failed and was withdrawn, and once however often it is sent again under its key",
     () =>
       Effect.gen(function* () {
-        const refused = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const refused = yield* openInbox(fakeAgentSessions({ sends: SESSION_SEND_OUTCOME.FAILED }));
         const lost = yield* refused.post(QUESTION);
         assert.ok(Result.isSuccess(lost));
         const withdrawn = yield* refused.message(lost.success.id, {
@@ -738,12 +760,12 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a member closes an item without an answer: an agent waiting to hear back is told under the close's own lead, once however often it is sent under its key, one that asks nothing back is not, and a close of an item the agent changed since is not taken",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, post, close, waiting } = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const { owner, post, close, waiting } = yield* openInbox(agentSessions);
         const asked = yield* post(QUESTION);
         const quiet = yield* post(TODO("flag"));
         assert.ok(Result.isSuccess(asked) && Result.isSuccess(quiet));
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
 
         const stale = yield* close(asked.success.id, {
           revision: asked.success.revision + 1,
@@ -762,8 +784,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(closed.taken, true);
         assert.equal(closed.item.status, INBOX_STATUS.CLOSED);
         assert.equal(closed.item.closedBy?.userId, owner);
-        assert.equal(eve.sent.length, before + 1, "the waiting agent is told");
-        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.equal(agentSessions.sent.length, before + 1, "the waiting agent is told");
+        const handed = JSON.stringify(agentSessions.sent.at(-1)?.message.message);
         assert.ok(handed.includes(`${INBOX_CLOSE_LEAD} on`), "it reads as an Inbox close");
         assert.ok(handed.includes(`(key ${QUESTION.key})`), "it names the item's key");
         const again = readAnswer(
@@ -772,7 +794,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* close(asked.success.id, body),
         );
         assert.equal(again.taken, true, "a close sent again under its key is the one taken");
-        assert.equal(eve.sent.length, before + 1, "and reaches the agent once");
+        assert.equal(agentSessions.sent.length, before + 1, "and reaches the agent once");
 
         const pressed = readAnswer(
           inboxAnsweredSchema,
@@ -783,7 +805,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           }),
         );
         assert.equal(pressed.taken, true);
-        assert.equal(eve.sent.length, before + 1, "an item that asks nothing back messages nobody");
+        assert.equal(
+          agentSessions.sent.length,
+          before + 1,
+          "an item that asks nothing back messages nobody",
+        );
 
         const withdrawn = yield* closeInboxItem(
           { userId: owner, agentId: asked.success.agentId },
@@ -807,7 +833,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           false,
           "a retry never takes the agent's later close for its own",
         );
-        assert.equal(eve.sent.length, before + 1, "and tells the agent nothing");
+        assert.equal(agentSessions.sent.length, before + 1, "and tells the agent nothing");
         assert.deepEqual((yield* waiting()).items, [], "nothing waits on the developer");
       }),
   );
@@ -816,11 +842,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a member's close carrying a note stands the note on the thread as theirs and reaches the agent as one message, the close's lead and then the note",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, post, read, close, transcript } = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const { owner, post, read, close, transcript } = yield* openInbox(agentSessions);
         const asked = yield* post(QUESTION);
         assert.ok(Result.isSuccess(asked));
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         yield* TestClock.adjust(Duration.seconds(1));
         const words = "We dropped invitations from this release.";
         const plan = {
@@ -842,8 +868,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
 
         assert.equal(closed.taken, true);
         assert.equal(closed.item.status, INBOX_STATUS.CLOSED);
-        assert.equal(eve.sent.length, before + 1, "the agent is told once");
-        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.equal(agentSessions.sent.length, before + 1, "the agent is told once");
+        const handed = JSON.stringify(agentSessions.sent.at(-1)?.message.message);
         const lead = handed.indexOf(`${INBOX_CLOSE_LEAD} on`);
         assert.ok(lead !== -1, "it reads as an Inbox close");
         assert.ok(handed.indexOf(words) > lead, "the note follows the close's line");
@@ -871,7 +897,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a close the agent's session did not take opens the item again and takes its note back off the thread, so it never reads closed while the waiting agent was not told",
     () =>
       Effect.gen(function* () {
-        const { post, read, close } = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const { post, read, close } = yield* openInbox(
+          fakeAgentSessions({ sends: SESSION_SEND_OUTCOME.FAILED }),
+        );
         const asked = yield* post(QUESTION);
         assert.ok(Result.isSuccess(asked));
 
@@ -898,7 +926,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const { post, read, message } = yield* openInbox(
-          fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }),
+          fakeAgentSessions({ sends: SESSION_SEND_OUTCOME.FAILED }),
         );
         const asked = yield* post(QUESTION);
         assert.ok(Result.isSuccess(asked));
@@ -921,13 +949,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key, even after the agent retitled the thread, reaches the agent once and other words under it are refused, one with no subject is titled by its first line, and an outsider, an agent of no workspace of theirs, a blank subject, and no words are refused",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { owner, other, task, agent, target, ask, post, read, transcript } =
-          yield* openInbox(eve);
+          yield* openInbox(agentSessions);
         const theirs = yield* post({ ...QUESTION, key: "annual-plan-copy" });
         assert.ok(Result.isSuccess(theirs));
         yield* turnEnded(target);
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const start = (body: WireBoundaryInput, bearer = owner) =>
           ask(request(ACCOUNT_INBOX, bearer, { method: "POST", body }));
         const body = {
@@ -946,7 +974,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           started.item.thread?.map((each) => [each.author, each.member?.userId, each.text]),
           [[INBOX_MESSAGE_AUTHOR.MEMBER, owner, body.text]],
         );
-        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        const handed = JSON.stringify(
+          agentSessions.sent.slice(before).map((each) => each.message.message),
+        );
         assert.ok(
           handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${body.title}\\" (key annual-plan-copy-2)`),
         );
@@ -955,7 +985,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
 
         const again = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
         assert.equal(again.item.id, started.item.id);
-        assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.equal(
+          agentSessions.sent.length,
+          before + 1,
+          "a repeat under the key reaches the agent once",
+        );
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.THREAD_POST), [
           { answered_ask: false, has_media: false },
         ]);
@@ -964,7 +998,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           "other words under a key taken are refused, so the agent never hears what the thread does not show",
         );
-        assert.equal(eve.sent.length, before + 1);
+        assert.equal(agentSessions.sent.length, before + 1);
         assert.deepEqual(
           (yield* read()).items
             .filter((item) => item.key.startsWith("annual-plan-copy"))
@@ -998,7 +1032,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.ok(Result.isSuccess(retitled));
         const late = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
         assert.deepEqual(
-          [late.item.id, late.item.title, eve.sent.length],
+          [late.item.id, late.item.title, agentSessions.sent.length],
           [started.item.id, "Final plan copy", before + 1],
           "a start retried once its agent retitled the thread is the thread it started, heard once",
         );
@@ -1037,7 +1071,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "a thread started with no subject is titled by the agent-title model over its message on the sender's own key, after the answer, its key, its place, and its read state kept; one with a subject, and one whose sender has no key, keep the title they were started under",
+    "a thread started with no subject is titled by the agent-title model over its message on Vespin's own key, after the answer, its key, its place, and its read state kept; one with a subject, and one started while the deployment holds no title key, keep the title they were started under",
     () =>
       Effect.gen(function* () {
         const asked: string[] = [];
@@ -1055,12 +1089,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             };
           },
         });
-        const keyed = new Set<string>();
-        const titleModel: InboxTitleModelOf = (userId) =>
-          Effect.succeed(keyed.has(userId) ? model : undefined);
-        const eve = fakeEve();
-        const { owner, agent, target, ask, read } = yield* openInbox(eve, titleModel);
-        keyed.add(owner);
+        let held = true;
+        const titleModel: InboxTitleModelOf = () => Effect.succeed(held ? model : undefined);
+        const agentSessions = fakeAgentSessions();
+        const { owner, agent, target, ask, read } = yield* openInbox(agentSessions, titleModel);
         yield* turnEnded(target);
         const start = (body: WireBoundaryInput) =>
           Effect.map(ask(request(ACCOUNT_INBOX, owner, { method: "POST", body })), (answered) =>
@@ -1076,7 +1108,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           text,
           clientKey: randomUUID(),
         });
-        keyed.delete(owner);
+        held = false;
         const keyless = yield* start({
           agentId: agent.id,
           text: "Ship it tonight.",
@@ -1092,7 +1124,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         );
         assert.equal(items.get(titled.item.id)?.title, subject);
         assert.equal(items.get(keyless.item.id)?.title, "Ship it tonight.");
-        assert.equal(asked.length, 1, "only the untitled thread with a key asks the model");
+        assert.equal(
+          asked.length,
+          1,
+          "only the untitled thread started while the key is held asks the model",
+        );
         assert.ok(asked[0]?.includes("annual plan"), "the model is asked over the message");
       }),
   );
@@ -1102,7 +1138,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, agent, ask, read } = yield* openInbox(
-          fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }),
+          fakeAgentSessions({ sends: SESSION_SEND_OUTCOME.FAILED }),
         );
 
         const sent = yield* ask(
@@ -1165,10 +1201,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a reply that answers the open ask settles it as one message carrying the answer and the words and reaches the agent under the answer's lead; sent again under its key it is taken and heard once, and a second answer is refused",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const inbox = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const inbox = yield* openInbox(agentSessions);
         const { item, askId } = yield* postAsk(inbox);
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const answers = { ask: askId, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] };
         const body = {
           text: "Ship it, and watch the error rate.",
@@ -1187,7 +1223,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.ANSWERED, undefined],
           [INBOX_MESSAGE_AUTHOR.MEMBER, body.text, undefined, answers],
         ]);
-        const handed = eve.sent.slice(before).map((each) => JSON.stringify(each.message.message));
+        const handed = agentSessions.sent
+          .slice(before)
+          .map((each) => JSON.stringify(each.message.message));
         assert.equal(handed.length, 1, "the answer reaches the agent once");
         assert.ok(handed[0]?.includes(`${INBOX_ANSWER_LEAD} on \\"${DEPLOY.title}\\"`));
         assert.ok(handed[0]?.includes(`Chose \\"Ship it\\".`), "it says what they picked");
@@ -1199,7 +1237,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* inbox.message(item.id, body),
         );
         assert.deepEqual(threadOf(again.item), threadOf(sent.item), "a resend writes nothing");
-        assert.equal(eve.sent.length, before + 1, "and reaches the agent once");
+        assert.equal(agentSessions.sent.length, before + 1, "and reaches the agent once");
         assert.equal(countedFor(inbox.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
         const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
         assert.deepEqual(
@@ -1212,7 +1250,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           invalid,
           "another answer under that key is refused",
         );
-        assert.equal(eve.sent.length, before + 1, "and neither reaches the agent");
+        assert.equal(agentSessions.sent.length, before + 1, "and neither reaches the agent");
         const standing = (yield* inbox.read()).items.find((each) => each.id === item.id);
         assert.deepEqual(threadOf(standing), threadOf(sent.item), "the thread holds what it heard");
 
@@ -1225,7 +1263,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           invalid,
           "an ask answered already takes no second answer",
         );
-        assert.equal(eve.sent.length, before + 1);
+        assert.equal(agentSessions.sent.length, before + 1);
       }),
   );
 
@@ -1233,10 +1271,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "an answer the open ask does not take, or one naming another message, is refused and leaves the ask open; a plain reply while it stands open leaves it open and reaches the agent as an Inbox message",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const inbox = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const inbox = yield* openInbox(agentSessions);
         const { item, askId } = yield* postAsk(inbox);
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
         const answering = (answers: WireBoundaryInput) =>
           inbox.message(item.id, { text: "", clientKey: randomUUID(), answers });
@@ -1273,7 +1311,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.OPEN, undefined],
           [INBOX_MESSAGE_AUTHOR.MEMBER, words, undefined, undefined],
         ]);
-        const handed = eve.sent.slice(before).map((each) => JSON.stringify(each.message.message));
+        const handed = agentSessions.sent
+          .slice(before)
+          .map((each) => JSON.stringify(each.message.message));
         assert.equal(handed.length, 1, "only the plain reply reached the agent");
         assert.ok(handed[0]?.includes(`${INBOX_MESSAGE_LEAD} on`), "it reads as an Inbox message");
         assert.ok(handed[0]?.includes(words));
@@ -1284,8 +1324,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "a bare answer by reply to an ask that asks nothing back is kept for the agent to read, and a typed one reaches it",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const inbox = yield* openInbox(eve);
+        const agentSessions = fakeAgentSessions();
+        const inbox = yield* openInbox(agentSessions);
         const owned = { userId: inbox.owner, taskId: inbox.task.id, agentId: inbox.agent.id };
         const todo = (key: string) =>
           Effect.map(
@@ -1305,7 +1345,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           );
         const bare = yield* todo("flag-bare");
         const typed = yield* todo("flag-typed");
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const done = (ask: string) => ({ ask, reply: INBOX_REPLY.DONE, steps: [0, 1] });
 
         const kept = readAnswer(
@@ -1318,15 +1358,15 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           }),
         );
         assert.equal(kept.item.status, INBOX_STATUS.ANSWERED);
-        assert.equal(eve.sent.length, before, "a bare Mark done messages nobody");
+        assert.equal(agentSessions.sent.length, before, "a bare Mark done messages nobody");
 
         yield* inbox.message(typed.id, {
           text: "Done, and on preview too.",
           clientKey: randomUUID(),
           answers: done(typed.ask),
         });
-        assert.equal(eve.sent.length, before + 1, "words reach the agent");
-        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.equal(agentSessions.sent.length, before + 1, "words reach the agent");
+        const handed = JSON.stringify(agentSessions.sent.at(-1)?.message.message);
         assert.ok(handed.includes(`${INBOX_ANSWER_LEAD} on`), "it reads as an Inbox answer");
         assert.ok(handed.includes("Done, and on preview too."));
       }),
@@ -1336,7 +1376,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     "an answer by reply the agent's session did not take is taken back: the ask stands open again, the thread holds no answer, and nothing is counted",
     () =>
       Effect.gen(function* () {
-        const inbox = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const inbox = yield* openInbox(fakeAgentSessions({ sends: SESSION_SEND_OUTCOME.FAILED }));
         const { item, askId } = yield* postAsk(inbox);
 
         const sent = yield* inbox.message(item.id, {

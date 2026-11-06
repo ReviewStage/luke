@@ -1,63 +1,91 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@repo/database/testing";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
+import { runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
+import {
+  fixtureToken,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+  sandboxStopRefusal,
+  sessionAnswered,
+} from "../testing/vercel-sandbox-fake.js";
+import { AGENT_DRIVE, agentDriveName } from "./agent-drive.js";
 import { CODER } from "./coder-host/bounds.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
-import { SandboxUnavailable } from "./vercel-sandbox-api.js";
+import { SANDBOX_CALL, SandboxUnavailable, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
 /**
- * A session's sandboxes stopped through Vercel Sandbox's REST API, as the
- * deployment asks it under its own OIDC token: the sandboxes carrying the
- * session's tag are listed in the token's project, the one up has its
- * running session stopped by a POST sent as JSON, which Vercel refuses
- * with 415 otherwise, one already stopped is left, and a stop Vercel
- * refused fails with its status alone. A running session is kept alive by
- * the timeout from now on the test clock, from the end its listing names. The token is a synthetic one the
- * environment carries, unexpired, so nothing refreshes it.
+ * A session's sandboxes stopped through `@vercel/sandbox`, as the deployment
+ * asks it under its own OIDC token: the sandboxes carrying the session's tag
+ * are listed in the token's project, the one up has its credential taken
+ * off and then its running session stopped, one already stopped is left,
+ * and a stop Vercel refused fails with its status alone. A running session
+ * is kept alive by the timeout from now on the test clock, from the end its
+ * listing names. The token is a synthetic one, unexpired, so nothing
+ * refreshes it.
  */
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 const SESSION = "wrun_fixture";
 
-/** An unsigned token naming the fixture's project and team, a year from expiring. */
-function fixtureToken(): string {
-  const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: PROJECT, owner_id: TEAM, exp }),
-  ).toString("base64url");
-  return `${header}.${payload}.`;
-}
-
 interface Asked {
   readonly method: string;
   readonly url: URL;
-  readonly contentType: string | null;
+}
+
+/** A sandbox as a test names it, its creation where it names none the epoch's. */
+interface NamedSandbox {
+  readonly name: string;
+  readonly status: string;
+  readonly currentSessionId: string;
+  readonly createdAt?: number;
+  readonly expiresAt?: number;
+}
+
+const listedOf = (sandbox: NamedSandbox) => ({ createdAt: 0, ...sandbox });
+
+/** The sandbox a path names, its lookup, where the sandboxes given hold it. */
+function namedIn(sandboxes: readonly NamedSandbox[], path: string): NamedSandbox | undefined {
+  const name = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path)?.[1];
+  return sandboxes.find((sandbox) => sandbox.name === decodeURIComponent(name ?? ""));
 }
 
 /** Vercel answering the list with the sandboxes given and every stop with the status given, keeping what it was asked. */
-function vercel(sandboxes: readonly object[], stopStatus = 200) {
+function vercel(sandboxes: readonly NamedSandbox[], stopStatus = 200) {
+  // The layer asks under the deployment's own token, read where the platform hands it.
+  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const layer = Layer.provide(
     sessionSandboxesLayer,
-    fakeHttpClientLayer((url, init) => {
+    sandboxFetchOver(async (url, init) => {
       const parsed = new URL(url);
-      const contentType = new Headers(init.headers).get("content-type");
-      asked.push({ method: init.method ?? "GET", url: parsed, contentType });
-      if (parsed.pathname.endsWith("/network-policy")) return Response.json({});
-      return parsed.pathname.endsWith("/stop")
-        ? (sandboxStopRefusal(init) ?? new Response("{}", { status: stopStatus }))
-        : (sandboxListRefusal(parsed) ?? Response.json({ sandboxes }));
+      asked.push({ method: init.method ?? "GET", url: parsed });
+      const session = /\/sessions\/([^/]+)\//u.exec(parsed.pathname)?.[1] ?? "";
+      if (parsed.pathname.endsWith("/stop")) {
+        return (
+          sandboxStopRefusal(init) ??
+          (stopStatus === 200
+            ? Response.json(sessionAnswered({ id: session, status: "stopped" }))
+            : Response.json({ error: { code: "bad_request" } }, { status: stopStatus }))
+        );
+      }
+      const named = namedIn(sandboxes, parsed.pathname);
+      if (named !== undefined) return Response.json(sandboxFound(listedOf(named)));
+      return sandboxListRefusal(parsed) ?? Response.json(sandboxesListed(sandboxes.map(listedOf)));
     }),
   );
   return { layer, asked };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /** The session's sandboxes stopped, the firewall's record kept in a database of the call's own. */
 const stopFor = (sessionId: string) =>
@@ -65,15 +93,10 @@ const stopFor = (sessionId: string) =>
     Effect.provide(getTestDB()),
   );
 
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
-
 it.effect(
-  "the session's sandbox that is up has its credential taken off its firewall and then its running session stopped, in the token's project and team, and one already stopped is left",
+  "the session's sandbox that is up has its running session stopped, in the token's project and team, and one already stopped is left",
   () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel([
         { name: "eve-sbx-vercel-up", status: "running", currentSessionId: "sbs_up" },
         { name: "eve-sbx-vercel-down", status: "stopped", currentSessionId: "sbs_down" },
@@ -82,73 +105,104 @@ it.effect(
       const stopped = yield* stopFor(SESSION).pipe(Effect.provide(api.layer));
 
       assert.equal(stopped, 1);
-      const [list, policy, stop, ...rest] = api.asked;
-      assert.ok(list !== undefined && policy !== undefined && stop !== undefined);
-      assert.deepEqual(rest, []);
-      assert.equal(policy.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/network-policy");
-      assert.equal(list.url.pathname, "/api/v2/sandboxes");
-      assert.equal(list.url.searchParams.get("tags"), `sessionId:${SESSION}`);
-      assert.equal(list.url.searchParams.get("project"), PROJECT);
-      assert.equal(list.url.searchParams.get("teamId"), TEAM);
-      assert.equal(stop.method, "POST");
-      assert.equal(stop.contentType, "application/json");
-      assert.equal(stop.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/stop");
-      assert.equal(stop.url.searchParams.get("teamId"), TEAM);
+      const [list] = api.asked;
+      assert.equal(list?.url.searchParams.get("tags"), `sessionId:${SESSION}`);
+      assert.equal(list?.url.searchParams.get("project"), PROJECT);
+      assert.equal(list?.url.searchParams.get("teamId"), TEAM);
+      assert.deepEqual(
+        api.asked.filter((asked) => asked.method !== "GET").map((asked) => asked.url.pathname),
+        ["/api/v2/sandboxes/sessions/sbs_up/stop"],
+      );
+    }),
+);
+
+it.effect(
+  "a retired session's running sandbox is deleted, and the drive it mounted on the queue's next pass, once the sandbox has let go of it",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const fake = runnerSandboxApi();
+      const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(
+        Effect.provide(fake.layer),
+      );
+      const drive = agentDriveName(SESSION);
+      yield* api.getOrCreateDrive(drive);
+      yield* api.create({
+        name: "agent-sandbox-fixture",
+        image: "agent-image:fixture",
+        tags: { sessionId: SESSION },
+        timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+        vcpus: 2,
+        keepLastSnapshots: { count: 1, deleteEvicted: true },
+        env: {},
+        mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive },
+      });
+
+      const deleteFor = Effect.flatMap(SessionSandboxes, (sandboxes) =>
+        sandboxes.deleteFor(SESSION),
+      ).pipe(Effect.provide(Layer.provide(sessionSandboxesLayer, fake.layer)));
+
+      const first = yield* Effect.flip(deleteFor);
+      const afterFirst = [...fake.drives];
+      const next = yield* deleteFor;
+
+      assert.deepEqual(
+        [first.call, first.status, first.code],
+        [SANDBOX_CALL.DRIVE_DELETE, 409, "drive_attached"],
+      );
+      assert.equal(fake.sandboxes[0]?.deleted, true);
+      assert.deepEqual(afterFirst, [drive]);
+      assert.equal(next, 0);
+      assert.deepEqual([...fake.drives], []);
     }),
 );
 
 it.effect("a stop Vercel refused fails with its status alone", () =>
   Effect.gen(function* () {
-    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+    // Note that the refusal is one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer.
     const api = vercel(
       [{ name: "eve-sbx-vercel-up", status: "running", currentSessionId: "sbs_up" }],
-      503,
+      409,
     );
 
     const failure = yield* stopFor(SESSION).pipe(Effect.provide(api.layer), Effect.flip);
 
     assert.ok(failure instanceof SandboxUnavailable);
-    assert.equal(failure.status, 503);
+    assert.equal(failure.status, 409);
   }),
 );
 
-it.effect(
-  "a sandbox that is up with no session named fails the stop rather than counting as stopped",
-  () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = vercel([{ name: "eve-sbx-vercel-up", status: "running" }]);
-
-      const failure = yield* stopFor(SESSION).pipe(Effect.provide(api.layer), Effect.flip);
-
-      assert.ok(failure instanceof SandboxUnavailable);
-    }),
-);
-
 /**
- * Vercel answering the list with the sandboxes given, and an extension of a
- * session by lengthening it, or refusing every one with the status given.
+ * Vercel answering the list with the sandboxes given, a lookup of each by
+ * name with the session its record names, and an extension of a session by
+ * lengthening it, or refusing every one with the status given.
  */
-function vercelSessions(sandboxes: readonly object[], extendStatus?: number) {
+function vercelSessions(sandboxes: readonly NamedSandbox[], extendStatus?: number) {
+  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const extensions: { readonly session: string; readonly duration: number }[] = [];
   const layer = Layer.provide(
     sessionSandboxesLayer,
-    fakeHttpClientLayer(async (url, init) => {
+    sandboxFetchOver(async (url, init) => {
       const parsed = new URL(url);
-      const contentType = new Headers(init.headers).get("content-type");
-      asked.push({ method: init.method ?? "GET", url: parsed, contentType });
+      asked.push({ method: init.method ?? "GET", url: parsed });
       const [, id, action] =
         /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname) ?? [];
       if (id === undefined || action !== "extend-timeout") {
-        return sandboxListRefusal(parsed) ?? Response.json({ sandboxes });
+        const named = namedIn(sandboxes, parsed.pathname);
+        if (named !== undefined) return Response.json(sandboxFound(listedOf(named)));
+        return (
+          sandboxListRefusal(parsed) ?? Response.json(sandboxesListed(sandboxes.map(listedOf)))
+        );
       }
       const refused = sandboxStopRefusal(init);
       if (refused !== undefined) return refused;
-      if (extendStatus !== undefined) return new Response("{}", { status: extendStatus });
+      if (extendStatus !== undefined) {
+        return Response.json({ error: { code: "bad_request" } }, { status: extendStatus });
+      }
       const { duration } = JSON.parse(String(init.body)) as { duration: number };
       extensions.push({ session: id, duration });
-      return Response.json({ session: { id, status: "running", createdAt: 0, timeout: duration } });
+      return Response.json(sessionAnswered({ id, status: "running", timeout: duration }));
     }),
   );
   return { layer, asked, extensions };
@@ -167,10 +221,9 @@ const UP = {
 } as const;
 
 it.effect(
-  "a running session is extended to end the timeout from now, by a JSON POST in the token's team, read from the list alone, and a stopped sandbox is left",
+  "a running session is extended to end the timeout from now, read from the list alone, through its sandbox looked up without a resume, and a stopped sandbox is never looked up",
   () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercelSessions([
         UP,
         { name: "eve-sbx-vercel-down", status: "stopped", currentSessionId: "sbs_down" },
@@ -181,14 +234,11 @@ it.effect(
 
       assert.equal(extended, 1);
       assert.deepEqual(api.extensions, [{ session: "sbs_up", duration: 25 * MINUTE }]);
-      const [list, extension, ...rest] = api.asked;
-      assert.ok(list !== undefined && extension !== undefined);
-      assert.deepEqual(rest, []);
-      assert.equal(list.url.pathname, "/api/v2/sandboxes");
-      assert.equal(extension.method, "POST");
-      assert.equal(extension.contentType, "application/json");
-      assert.equal(extension.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/extend-timeout");
-      assert.equal(extension.url.searchParams.get("teamId"), TEAM);
+      const looked = api.asked.filter((asked) => asked.url.pathname.includes("eve-sbx-vercel-"));
+      assert.deepEqual(
+        looked.map((asked) => [asked.url.pathname, asked.url.searchParams.get("resume")]),
+        [["/api/v2/sandboxes/eve-sbx-vercel-up", "false"]],
+      );
     }),
 );
 
@@ -196,7 +246,6 @@ it.effect(
   "a session already ending within a keep-alive interval of the timeout from now is left as it is",
   () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercelSessions([UP]);
       yield* TestClock.adjust(
         Duration.subtract(CODER.SANDBOX_KEEP_ALIVE_EVERY, Duration.millis(1)),
@@ -211,7 +260,6 @@ it.effect(
 
 it.effect("an extension Vercel refused fails with its status alone", () =>
   Effect.gen(function* () {
-    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
     const api = vercelSessions([UP], 422);
     yield* TestClock.adjust(Duration.minutes(30));
 

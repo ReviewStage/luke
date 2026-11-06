@@ -5,11 +5,17 @@
  * (`{ account: accountProcedures(seams) }`) and the layer of the services
  * its procedures yield, the test's clock among them; the answer is the
  * `Response` the handler wrote, its bytes as they left it.
+ *
+ * A refusal a procedure answers that its contract does not declare, which
+ * the deployment reports as a defect and answers all the same
+ * (`orpc/errors.ts`'s `UndeclaredRefusal`), fails the test instead, so a
+ * route test that provokes one names the refusal its contract is missing.
  */
 
 import type { Router } from "@orpc/server";
-import { type Context, Effect, type Layer } from "effect";
+import { Cause, Context, Effect, ErrorReporter, type Layer } from "effect";
 import type { HostedContext } from "../orpc/base.js";
+import { UndeclaredRefusal } from "../orpc/errors.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 
@@ -23,6 +29,20 @@ export function hostedAnswer<Services>(
     const context = yield* Effect.context<Services>().pipe(Effect.provide(services));
     // SAFETY: a test provides only the services its procedures yield, which is all they read of the web runtime's.
     const webServices = context as Context.Context<WebServices>;
-    return yield* Effect.promise(() => hostedFetch(router)(request, webServices));
+    const undeclared: UndeclaredRefusal[] = [];
+    const recorder = ErrorReporter.make(({ cause }) => {
+      const defect = Cause.squash(cause);
+      if (defect instanceof UndeclaredRefusal) undeclared.push(defect);
+    });
+    const reporters = Context.get(webServices, ErrorReporter.CurrentErrorReporters);
+    const watched = Context.add(
+      webServices,
+      ErrorReporter.CurrentErrorReporters,
+      new Set([...reporters, recorder]),
+    );
+    const response = yield* Effect.promise(() => hostedFetch(router)(request, watched));
+    const [first] = undeclared;
+    if (first !== undefined) return yield* Effect.die(first);
+    return response;
   });
 }

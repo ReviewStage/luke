@@ -18,7 +18,12 @@ import {
  * nothing is never chosen; one unavailable is passed over by every way in.
  *
  * A plain press is the row's own, opening it as it always has, and leaves
- * the set as it stands; it only marks where a run starts, the anchor. ⌘
+ * the set as it stands; it only marks where a run starts, the anchor. A
+ * list that draws no bar to let the set go, as a Mac's sidebar list draws
+ * none, has a plain press let it go instead (`PLAIN_PRESS.CLEARS`), since
+ * Esc reaches the list only while the focus stands in it; a plain press on
+ * a row it holds that cannot be chosen, a place or an agent, lets it go too
+ * (`passOver`). ⌘
  * (or Ctrl, off a Mac) and a press puts the row in or takes it out and
  * anchors there. ⇧ and a press chooses the run from the anchor to the row,
  * over whatever was chosen as the anchor was set, so a second ⇧-press
@@ -48,6 +53,14 @@ import {
  * field inside the list is the field's.
  */
 
+/** What a plain press does to the rows chosen: leaves them, where a bar stands to let them go, or lets them go, where none does. */
+export const PLAIN_PRESS = {
+  KEEPS: "keeps",
+  CLEARS: "clears",
+} as const;
+
+export type PlainPress = (typeof PLAIN_PRESS)[keyof typeof PLAIN_PRESS];
+
 /** Which rows of a `List` are chosen, kept by its owner: the keys chosen, and what hears the next set. */
 export interface ListSelection {
   readonly selected: ReadonlySet<string>;
@@ -61,6 +74,8 @@ export interface ListSelecting {
   readonly press: (key: string, event: MouseEvent<HTMLElement>) => boolean;
   /** Puts the row keyed `key` in or takes it out, as its box and X do, anchoring a run there. */
   readonly toggle: (key: string) => void;
+  /** Hears a press on a row of the list that cannot be chosen, which lets the set go as a plain press on a chosen one does. */
+  readonly passOver: (event: MouseEvent<HTMLElement>) => void;
 }
 
 /** The selection of the `List` a row stands in, where that list chooses rows at all. */
@@ -193,12 +208,13 @@ export function holdRun(event: MouseEvent<HTMLElement>): void {
  * among them, run by run where the rows stand in runs (`selectionRun`),
  * which ⇧-click, ⇧↑↓, and ⌘A read in place of the rows drawn, and
  * `bringIn` draws a row ⇧↑↓ reach that is not drawn and calls `then` once
- * it is.
+ * it is. `plain` says what a plain press does to the rows chosen.
  */
 export function useListSelection(
   selection: ListSelection | undefined,
   order?: readonly (readonly string[])[],
   bringIn?: (key: string, then: () => void) => boolean,
+  plain: PlainPress = PLAIN_PRESS.KEEPS,
 ): {
   readonly selecting: ListSelecting | undefined;
   readonly onKeyDown: (event: KeyboardEvent<HTMLElement>) => boolean;
@@ -211,6 +227,8 @@ export function useListSelection(
   listed.current = order;
   const bringing = useRef(bringIn);
   bringing.current = bringIn;
+  const plainPress = useRef(plain);
+  plainPress.current = plain;
 
   // Note that an anchor stands only while the set is the one it left, so a
   // set its owner changed itself, a Clear, starts the next run afresh.
@@ -258,10 +276,25 @@ export function useListSelection(
         toggle(key);
         return true;
       }
+      if (plainPress.current === PLAIN_PRESS.CLEARS && chosen.size > 0) {
+        const none = new Set<string>();
+        hand(none, { key, base: none, head: key, left: none });
+        return false;
+      }
       anchor.current = { key, base: chosen, head: key, left: chosen };
       return false;
     },
     [hand, standing, toggle],
+  );
+
+  const passOver = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      const current = latest.current;
+      if (plainPress.current !== PLAIN_PRESS.CLEARS || current === undefined) return;
+      if (event.shiftKey || command(event) || current.selected.size === 0) return;
+      hand(new Set(), undefined);
+    },
+    [hand],
   );
 
   const onKeyDown = useCallback(
@@ -323,8 +356,8 @@ export function useListSelection(
 
   const selected = selection?.selected;
   const selecting = useMemo(
-    () => (selected === undefined ? undefined : { selected, press, toggle }),
-    [selected, press, toggle],
+    () => (selected === undefined ? undefined : { selected, press, toggle, passOver }),
+    [selected, press, toggle, passOver],
   );
   return { selecting, onKeyDown };
 }

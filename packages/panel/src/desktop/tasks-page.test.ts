@@ -151,11 +151,15 @@ const TASKS = [
   task(35, "Migrate auth SDK", TASK_STATUS.DONE, TASK_PRIORITY.HIGH),
 ];
 
+/** When a reminder set for later comes due: long after any run of these tests. */
+const REMIND_AT = Date.UTC(2100, 0, 1);
+
 /**
  * Main's read of the open items that wait on the reader: two questions on
  * the invitations' task; on Safari's a notice, beside a question of
  * Charles's agent that waits on him alone, so main lists it nowhere and
- * counts it only among the task's items; and one question on billing's.
+ * counts it only among the task's items; and one question on billing's,
+ * which Dean set a reminder on for later.
  */
 const WAITING: readonly AppInboxTask[] = [
   {
@@ -178,15 +182,22 @@ const WAITING: readonly AppInboxTask[] = [
   {
     taskId: "t-40",
     items: [
-      { id: "i-5", agentId: "a-4", title: "Refund the difference?", postedAt: 1, asking: true },
+      {
+        id: "i-5",
+        agentId: "a-4",
+        title: "Refund the difference?",
+        postedAt: 1,
+        asking: true,
+        remindAt: REMIND_AT,
+      },
     ],
   },
 ];
 
-/** What main counts on each of those tasks as Dean's to do. */
+/** What main counts on each of those tasks as Dean's to do, a reminder set for later among it, since main's count cannot read the clock. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [
   { taskId: "t-44", items: 2, toDo: 2, updatedAt: 3 },
-  { taskId: "t-42", items: 2, toDo: 0, updatedAt: 1 },
+  { taskId: "t-42", items: 2, toDo: 1, updatedAt: 1 },
   { taskId: "t-40", items: 1, toDo: 1, updatedAt: 1 },
 ];
 
@@ -212,7 +223,12 @@ async function mountPage(
       listRead: true,
       taskSections: sections,
       onSelect: (taskId) => opened.push(taskId),
-      boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
+      boardView: {
+        open: true,
+        onOpen: () => undefined,
+        onClose: () => (closed += 1),
+        onPreload: () => undefined,
+      },
       onSetTaskStanding: (taskId, standing) => {
         sent.push([taskId, standing]);
         return askKept(Promise.resolve(keeps));
@@ -300,7 +316,7 @@ test("a refresh that failed after the tasks were read keeps the rows drawn under
   assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
-test("a row and a card count the questions waiting on the reader, a notice and a teammate's question counting nowhere, while the sidebar counts the notice too, as Needs you lists it", async () => {
+test("a row and a card count the threads waiting on the reader, as the sidebar counts them: a notice counts, and a teammate's question and one reminded for later count nowhere", async () => {
   const page = await mountPage();
   const sidebar = { count: -1 };
   function Sidebar() {
@@ -312,22 +328,18 @@ test("a row and a card count the questions waiting on the reader, a notice and a
   const sidebarRoot = createRoot(document.createElement("div"));
   roots.push(sidebarRoot);
   act(() => sidebarRoot.render(onRegistry(AtomRegistry.make(), createElement(Sidebar))));
-  // Note that the badge's words are read as a text of their own, since a row's key runs into them.
+  // Note that the count's words are read as an element's own, since a row's key runs into them.
   const says = (holder: Element | undefined) => {
-    const texts = document.createTreeWalker(
-      holder ?? document.createElement("i"),
-      NodeFilter.SHOW_TEXT,
-    );
-    for (let text = texts.nextNode(); text !== null; text = texts.nextNode()) {
-      const count = /^(\d+) needs? you$/u.exec(text.textContent ?? "")?.[1];
+    for (const each of holder?.querySelectorAll("*") ?? []) {
+      const count = /^(\d+) needs? you$/u.exec(each.textContent ?? "")?.[1];
       if (count !== undefined) return Number(count);
     }
     return 0;
   };
   const listSays = (key: string) => says(rowOf(page, key));
 
-  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 0, 1]);
-  assert.equal(sidebar.count, 4);
+  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 1, 0]);
+  assert.equal(sidebar.count, 3);
 
   act(() => buttonNamed(page, "Columns").click());
   const cardSays = (key: string) =>
@@ -336,7 +348,7 @@ test("a row and a card count the questions waiting on the reader, a notice and a
         (card) => card.querySelector("[data-task-key]")?.textContent === key,
       ),
     );
-  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(cardSays), [2, 0, 1]);
+  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(cardSays), [2, 1, 0]);
 });
 
 test("a press on a row opens its task", async () => {
@@ -923,38 +935,6 @@ function scroller(page: HTMLElement): HTMLElement {
   return found;
 }
 
-/** Scrolls the page's scroller as a reader's wheel does. */
-function scrollTo(page: HTMLElement, position: { scrollTop?: number; scrollLeft?: number }): void {
-  const at = scroller(page);
-  act(() => {
-    Object.assign(at, position);
-    at.dispatchEvent(new Event("scroll"));
-  });
-}
-
-test("leaving the Tasks page scrolled and coming back stands each view where it was left, the Board's its own, and a refresh moves nothing", async () => {
-  const page = await mountPage();
-  scrollTo(page, { scrollTop: 320 });
-  act(() => buttonNamed(page, "Columns").click());
-  assert.equal(scroller(page).scrollTop, 0, "the Board starts at its own place, not the List's");
-  scrollTo(page, { scrollLeft: 150 });
-  act(() => buttonNamed(page, "List").click());
-  assert.equal(scroller(page).scrollTop, 320, "the List is put back where it was left");
-
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-  const again = await mountPage();
-  assert.equal(scroller(again).scrollTop, 320, "the page opened again stands where it was left");
-
-  scrollTo(again, { scrollTop: 40 });
-  listWorkspace(ACME);
-  assert.equal(scroller(again).scrollTop, 40, "a refresh leaves the reader where they are");
-
-  act(() => buttonNamed(again, "Columns").click());
-  assert.equal(scroller(again).scrollLeft, 150, "the Board is put back where it was left");
-});
-
 /**
  * The List laid out for a drag: each group 200px tall, one under another
  * from the window's top, 1000px wide, each row 30px tall, 36px apart, from
@@ -1349,29 +1329,6 @@ test("the Filter's Repository names each repository as the repository chip does,
     .map((item) => item.querySelector(".ui-combobox-option-detail")?.textContent);
 
   assert.deepEqual(offered, ["acme", "beta"]);
-});
-
-test("the Filter's Repository rows each hang the repository's card, its name with its owner under it", async () => {
-  const page = await mountPage([
-    ...TASKS,
-    { ...task(50, "Docs for web", TASK_STATUS.TODO, TASK_PRIORITY.NONE), repository: "beta/web" },
-  ]);
-
-  openOptions(page, "Filter");
-  choose("Repository");
-  const row = searchedRows().find(
-    (item) => item.querySelector(".ui-combobox-option-detail")?.textContent === "beta",
-  );
-  restOn(row ?? assert.fail("the Filter offers beta/web"));
-  const card = document.querySelector(".ui-tooltip-card [data-repository-card]");
-
-  assert.deepEqual(
-    [
-      card?.querySelector(".ui-hover-card-name")?.textContent,
-      card?.querySelector(".ui-hover-card-sub")?.textContent,
-    ],
-    ["web", "beta"],
-  );
 });
 
 test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {

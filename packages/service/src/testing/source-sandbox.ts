@@ -1,8 +1,10 @@
 /**
- * source-sandbox.ts -- a coding agent's sandbox at Vercel's REST boundary, its shell a real one over a git checkout on disk, for the suites that copy a source agent's work.
+ * source-sandbox.ts -- a coding agent's sandbox at Vercel's REST boundary, as `@vercel/sandbox` reads it, its shell a real one over a git checkout on disk, for the suites that copy a source agent's work.
  *
  * The double answers Vercel Sandbox's API as the scenario has it: the
- * session's sandbox in the status given, a resume that brings it up under a
+ * session's drive where it is named, or none, as for a source from before
+ * drives; the session's sandbox
+ * in the status given, a resume that brings it up under a
  * fresh session, a stop that stops it where it is sent as JSON and is
  * refused with 415 where not, as Vercel refuses it, a firewall policy
  * written down, and each command run in a checkout the test made by a real
@@ -18,12 +20,21 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Deferred, Effect } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
-import { sandboxListRefusal, sandboxStopRefusal } from "./vercel-sandbox-fake.js";
+import {
+  commandRunStreamed,
+  sandboxesListed,
+  sandboxFound,
+  sandboxListRefusal,
+  sandboxStopRefusal,
+  sessionAnswered,
+} from "./vercel-sandbox-fake.js";
 
 export const SOURCE_SANDBOX = {
   NAME: "eve-sbx-vercel-fixture",
   RUNNING: "sbs_running",
   WOKEN: "sbs_woken",
+  /** The session a stopped sandbox last ran, which Vercel's list names as its current one. */
+  STOPPED: "sbs_stopped",
 } as const;
 
 /** git as the sandbox runs it, kept from the host's own configuration. */
@@ -76,17 +87,6 @@ export function sourceCheckout(root: string): SourceCheckout {
   return { root, remote, checkout, sh };
 }
 
-/** A command's stream as Vercel answers a waited run: the command, what it printed, and its end. */
-function commandStream(exitCode: number, stdout: string, stderr: string): Response {
-  const lines = [
-    { command: { id: "cmd_1", exitCode: null } },
-    ...(stdout === "" ? [] : [{ stream: "stdout", data: stdout }]),
-    ...(stderr === "" ? [] : [{ stream: "stderr", data: stderr }]),
-    { command: { id: "cmd_1", exitCode } },
-  ];
-  return new Response(lines.map((line) => JSON.stringify(line)).join("\n"));
-}
-
 /** A request of the double as it was sent: its address, method, headers, and body as text. */
 export interface SentToSandbox {
   readonly url: string;
@@ -109,8 +109,12 @@ export interface SourceSandbox {
   readonly answer: (sent: SentToSandbox) => Response | undefined;
 }
 
-/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one. */
-export function sourceSandbox(source: SourceCheckout, status: string | undefined): SourceSandbox {
+/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one, and the session's drive standing where it is named. */
+export function sourceSandbox(
+  source: SourceCheckout,
+  status: string | undefined,
+  drive?: string,
+): SourceSandbox {
   const state: SourceSandbox["state"] = {
     status,
     session: status === "running" ? SOURCE_SANDBOX.RUNNING : undefined,
@@ -133,7 +137,10 @@ export function sourceSandbox(source: SourceCheckout, status: string | undefined
         env: gitEnvironment(source.root),
         encoding: "utf8",
       });
-      return commandStream(done.status ?? 1, done.stdout, done.stderr);
+      return commandRunStreamed(
+        { id: "cmd_1", sessionId: session },
+        { exitCode: done.status ?? 1, stdout: done.stdout, stderr: done.stderr },
+      );
     }
     if (parsed.pathname.endsWith("/stop") && method === "POST") {
       const refused = sandboxStopRefusal({ headers });
@@ -143,35 +150,45 @@ export function sourceSandbox(source: SourceCheckout, status: string | undefined
       }
       // Settled once the stop is recorded, since a fiber awaiting it may resume before this returns.
       Deferred.doneUnsafe(stopAsked, Effect.void);
-      return refused ?? Response.json({});
+      return refused ?? Response.json(sessionAnswered({ id: session, status: "stopped" }));
     }
     if (parsed.pathname.endsWith("/network-policy")) {
       // An open policy carries a credential on no host.
       policies.push({ session, hosts: Object.keys(JSON.parse(body).allow ?? {}) });
-      return Response.json({});
+      return Response.json(sessionAnswered({ id: session, status: "running" }));
+    }
+    // A source from before drives has no drive of its own, so its work is copied.
+    if (parsed.pathname.startsWith("/api/v2/sandboxes/drives/")) {
+      return parsed.pathname.endsWith(`/${drive}`)
+        ? Response.json({
+            drive: {
+              id: `drv_${drive}`,
+              name: drive,
+              projectId: "prj_fixture",
+              region: "iad1",
+              maxSizeBytes: 2 ** 40,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          })
+        : new Response(null, { status: 404 });
     }
     if (parsed.searchParams.get("resume") === "true") {
       state.status = "running";
       state.session = SOURCE_SANDBOX.WOKEN;
-      return Response.json({
-        sandbox: { name: SOURCE_SANDBOX.NAME, status: "stopped" },
-        session: { id: SOURCE_SANDBOX.WOKEN, status: "running" },
-      });
+    }
+    const listed = {
+      name: SOURCE_SANDBOX.NAME,
+      status: state.status ?? "stopped",
+      currentSessionId: state.session ?? SOURCE_SANDBOX.STOPPED,
+      createdAt: 0,
+    };
+    if (parsed.pathname === `/api/v2/sandboxes/${SOURCE_SANDBOX.NAME}`) {
+      return Response.json(sandboxFound(listed));
     }
     return (
       sandboxListRefusal(parsed) ??
-      Response.json({
-        sandboxes:
-          state.status === undefined
-            ? []
-            : [
-                {
-                  name: SOURCE_SANDBOX.NAME,
-                  status: state.status,
-                  currentSessionId: state.session,
-                },
-              ],
-      })
+      Response.json(sandboxesListed(state.status === undefined ? [] : [listed]))
     );
   };
   return { state, stops, stopAsked, policies, ran, answer };

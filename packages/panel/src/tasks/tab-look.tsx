@@ -24,29 +24,31 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * stand (`AgentGlyph`, `SubagentGlyph`) in every one of those places, the
  * "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. A task wears its
- * status's mark (`PlanGlyph`), and so does a pin of its Plan tab, which is
+ * status's mark (`PlanGlyph`), and so does a pin of its Description tab, which is
  * named for the task wherever the place knows it; the task's Overview, which
- * holds its plan in its column, wears the document's glyph and its word. Each place adds what
+ * holds its description in its column, wears the document's glyph and its word. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
  * and section, ⌘K's task name.
  */
 
 /** The kinds of tab, each drawn its own way. */
 export const TAB_KIND = {
-  /** One of the side panel's fixed kinds: Plan, Inbox, Board, Code, or Comments. */
+  /** One of the side panel's fixed kinds: Description, Inbox, Board, Code, or Comments. */
   PANEL: "panel",
   /** A task, as a row naming it does. */
   PLAN: "plan",
   INBOX: "inbox",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
-  /** The task's Overview, which leads its column and shows its plan document. */
+  /** The task's Overview, which leads its column and shows its description. */
   OVERVIEW: "overview",
   AGENT: "agent",
   SUBAGENT: "subagent",
   CHANGES: "changes",
   /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
   TERMINAL: "terminal",
+  /** One cloud agent's shells on this Mac in its mirror, which wears the agent's own glyph too. */
+  LOCAL: "local",
   FILE: "file",
   PAGE: "page",
   /** A Browser tab, named by its page's title once it has one. */
@@ -70,7 +72,7 @@ export type TabSubject =
   | {
       readonly kind: typeof TAB_KIND.PANEL;
       readonly tab: FixedSidePanelTab;
-      /** The task the panel stands beside, whose name and status its Plan tab wears; none where the place does not know it, and the tab says Plan. */
+      /** The task the panel stands beside, whose name and status its Description tab wears; none where the place does not know it, and the tab says Description. */
       readonly plan?: PlanStanding | undefined;
       /** Whether the Inbox kind holds one thread open, as it does beside the window's Inbox, which it is named for, under the thread's glyph, rather than any task's Inbox. */
       readonly thread?: boolean | undefined;
@@ -99,8 +101,13 @@ export type TabSubject =
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
-      /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
-      readonly agent: AgentStanding | undefined;
+      /** The terminal's name ("Cloud 1"), which names the tab. */
+      readonly title: string;
+    }
+  | {
+      readonly kind: typeof TAB_KIND.LOCAL;
+      /** The terminal's name ("Local 1"), which names the tab. */
+      readonly title: string;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string }
@@ -126,7 +133,7 @@ export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
 }
 
 /**
- * The open task as its Plan tab wears it: its name, and its status as the
+ * The open task as its Description tab wears it: its name, and its status as the
  * task list holds it, which a status set from the sidebar moves first; none
  * while no task is open.
  */
@@ -195,7 +202,7 @@ export function tabLook(subject: TabSubject): KindLook {
   switch (subject.kind) {
     case TAB_KIND.PANEL: {
       const { tab, plan } = subject;
-      if (tab === SIDE_PANEL_TAB.PLAN && plan !== undefined) {
+      if (tab === SIDE_PANEL_TAB.DESCRIPTION && plan !== undefined) {
         return { icon: <PlanGlyph status={plan.status} />, label: plan.name };
       }
       if (tab === SIDE_PANEL_TAB.INBOX && subject.thread === true) {
@@ -235,10 +242,11 @@ export function tabLook(subject: TabSubject): KindLook {
             ? TAB_WORDS.PULL_REQUEST
             : pullRequestLabelOf(subject.pullRequest),
       };
+    // Note that a terminal wears the terminal's own still glyph rather than its agent's, which
+    // moves while the agent works, and is named by its terminal; each place drawing it names the agent beside it.
     case TAB_KIND.TERMINAL:
-      // Note that the agent's name is not the label, because the tab says
-      // what it is first; each place drawing it names the agent beside it.
-      return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
+    case TAB_KIND.LOCAL:
+      return { icon: <GLYPH.TERMINAL />, label: subject.title };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);

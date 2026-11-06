@@ -198,18 +198,25 @@ We do not use your code or conversations to train AI models.
 We do not sell your personal information or use it for advertising. We share
 data with:
 
-- **AI providers:** your agents, web search, dictation, titles, and pull
-  request chapters run on Anthropic or OpenAI, always on the API key or
-  subscription you saved, never ours. Each call carries what the model needs,
-  such as the description, the conversation, attached files, and what the agent read.
-  These providers process it under their own policies.
+- **AI providers:** your agents, web search, dictation, and pull request
+  chapters run on Anthropic or OpenAI, always on the API key or subscription
+  you saved, never ours. Titles, of your agents, tasks, and the threads you
+  start, are generated on Anthropic under Vespin's own API key, from excerpts
+  of an agent's opening message, your latest message, and its latest answer,
+  or of a thread's first message.
+  Each call carries what the model needs, such as the description, the conversation,
+  attached files, and what the agent read. These providers process it under
+  their own policies.
 - **GitHub:** to check out repositories, push branches, and open pull requests
   through the Vespin GitHub App. Your devices also contact GitHub directly to
   check for updates and load avatars.
 - **Infrastructure providers:** Vercel (hosting, agent sandboxes, and Vercel
   Connect, which holds integration tokens), Neon (database), PostHog (usage
   data, screen recordings, and feedback), Sentry (error and performance
-  monitoring), Resend (email), and Slack (feedback and Vespin's Slack bot).
+  monitoring), Resend (email: for the onboarding emails a new account is sent,
+  Resend is told your email address, your first name, when you signed up, whether
+  you accepted a workspace invitation, and on which days you started a task),
+  and Slack (feedback and Vespin's Slack bot).
 - **Integrations and connected apps:** the services and MCP clients you connect
   receive what your agents send them, or what our tools answer, and keep it
   under their own policies.

@@ -20,7 +20,7 @@ import { holdExits } from "@repo/ui/testing/held-exits";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import type { ComposerTrigger, MentionNode } from "../description-editor/contract.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handHostReads, handState, holdAutomations, registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -40,7 +40,7 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** The list drawn as a plan's box draws it, over a plan whose one section is Margins, the latest it answered kept for the test to drive. */
+/** The list drawn as a plan's box draws it, over a description whose one section is Margins, the latest it answered kept for the test to drive. */
 function mounted() {
   let latest: MentionPicker | undefined;
   function Picker() {
@@ -130,8 +130,8 @@ test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and
   );
 });
 
-/** The list drawn as a plan's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
-async function mountedOnPlan(chosen: MentionNode[]) {
+/** The list drawn as a description's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
+async function mountedOnDescription(chosen: MentionNode[]) {
   let latest: MentionPicker | undefined;
   function Picker() {
     const room = useRef<HTMLDivElement>(null);
@@ -215,7 +215,7 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
     },
   });
   const chosen: MentionNode[] = [];
-  const { picker, page } = await mountedOnPlan(chosen);
+  const { picker, page } = await mountedOnDescription(chosen);
 
   act(() => picker().onTrigger(word("stag-42")));
   assert.deepEqual(detailedRows(page).slice(0, 2), [
@@ -287,7 +287,7 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
     },
   );
   const chosen: MentionNode[] = [];
-  const { picker, page } = await mountedOnPlan(chosen);
+  const { picker, page } = await mountedOnDescription(chosen);
 
   act(() => picker().onTrigger(word("threads:keep")));
   assert.deepEqual(detailedRows(page), [
@@ -347,7 +347,7 @@ test("on a plan, an Inbox feed that could not be read is said with Retry, never 
       [LIVE_READ.INBOX_ITEMS]: { failed: true },
     },
   );
-  const { picker, page } = await mountedOnPlan([]);
+  const { picker, page } = await mountedOnDescription([]);
 
   act(() => picker().onTrigger(word("keep")));
   assert.match(page.textContent ?? "", /Inbox threads could not be read\./u);
@@ -388,7 +388,7 @@ test("on a plan, the workspace's automations are found by their name, a pick wri
     }),
   });
   const chosen: MentionNode[] = [];
-  const { picker, page } = await mountedOnPlan(chosen);
+  const { picker, page } = await mountedOnDescription(chosen);
 
   await act(async () => {
     picker().onTrigger(word("automations:deploy"));

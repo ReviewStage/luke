@@ -192,16 +192,16 @@ function writtenFor(id: string, clientKey: string, text: string): AgentTranscrip
 }
 
 test("a sent line is read back by the row written under its key alone, so two lines of the same words are each read back by their own", () => {
-  const plan = developer("m-plan", "Go on.");
+  const description = developer("m-plan", "Go on.");
   const first = sentUnder("key-1", "Go on.");
   const second = sentUnder("key-2", "Go on.");
-  // The plan already says the same words, and a row of the same words under another key is another line's.
-  assert.deepEqual(unreadSentLines([first, second], [plan]), [first, second]);
-  const secondLanded = [plan, writtenFor("m-2", "key-2", "Go on.")];
+  // The description already says the same words, and a row of the same words under another key is another line's.
+  assert.deepEqual(unreadSentLines([first, second], [description]), [first, second]);
+  const secondLanded = [description, writtenFor("m-2", "key-2", "Go on.")];
   assert.deepEqual(unreadSentLines([first, second], secondLanded), [first]);
   const both = [...secondLanded, writtenFor("m-1", "key-1", "Go on.")];
   assert.deepEqual(unreadSentLines([first, second], both), []);
-  assert.equal(messageWords(both[2] ?? plan), "Go on.");
+  assert.equal(messageWords(both[2] ?? description), "Go on.");
 });
 
 test("the line an agent was started on stands until the transcript reads back the developer's first row, whatever key that row was written under", () => {
@@ -216,7 +216,7 @@ test("the line an agent was started on stands until the transcript reads back th
   );
   const reply: AgentTranscriptMessage = { id: "m-0", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
   assert.equal(unreadOpeningLine(opening, [reply]), opening, "no row of the developer's yet");
-  // eve writes the first row under no key of the start's.
+  // An agent from before the native harnesses wrote the first row under no key of the start's.
   assert.equal(unreadOpeningLine(opening, [developer("m-1", "Fix the sidebar.")]), undefined);
   assert.equal(unreadOpeningLine(undefined, []), undefined);
 });
@@ -523,7 +523,7 @@ test("the working line counts from the press of the line that opened the turn, t
   assert.equal(agentWorkingSince([opened]), 1_000, "a turn no line opened counts from its start");
 });
 
-test("a planning transcript's raw parts read as the agent tab reads them: eve's own worker call is a delegation, and a start names the agent it began once it answered one", () => {
+test("a planning transcript's raw parts read as the agent tab reads them: the retired runtime's own worker call is a delegation, and a start names the agent it began once it answered one", () => {
   const [worker, started, refused, coding] = agentParts({
     id: "turn-raw",
     role: MESSAGE_ROLE.ASSISTANT,

@@ -36,6 +36,8 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 interface Posted {

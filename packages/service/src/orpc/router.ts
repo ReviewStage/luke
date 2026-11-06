@@ -94,9 +94,9 @@ import {
 } from "../member-mcp/clients-procedures.js";
 import { type SlackBotProcedureSeams, slackBotProcedures } from "../slack/slack-bot-procedures.js";
 import {
-  type PlanCommentsProcedureSeams,
-  planCommentsProcedures,
-} from "../tasks/plan-comments-procedures.js";
+  type DescriptionCommentsProcedureSeams,
+  descriptionCommentsProcedures,
+} from "../tasks/description-comments-procedures.js";
 import {
   type TaskFilesProcedureSeams,
   taskFilesProcedures,
@@ -135,7 +135,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   McpClientsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
-  PlanCommentsProcedureSeams &
+  DescriptionCommentsProcedureSeams &
   PullRequestChaptersProcedureSeams &
   RepositoryPinsProcedureSeams &
   RepositoryPullRequestProcedureSeams &
@@ -176,7 +176,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     mcpClients: mcpClientsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
-    planComments: planCommentsProcedures(seams),
+    descriptionComments: descriptionCommentsProcedures(seams),
     plans: tasksProcedures(seams),
     pullRequestChapters: pullRequestChaptersProcedures(published),
     pullRequests: repositoryPullRequestProcedures(seams),

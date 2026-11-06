@@ -5,7 +5,7 @@ import { type Actor, accountActor, creatorActor, personActor } from "@repo/ui/ac
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
 import { workspaceMembersQuery, workspaceMembersRetryMutation } from "./live-reads.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectAccount } from "./use-app-state.js";
 
 /**
  * member-directory.tsx -- the members of the workspace the open task lives in, read once for everything in the task that names a person.
@@ -120,7 +120,7 @@ export function useCreator(
   readerId?: string | undefined,
 ): Actor {
   const directory = useMemberDirectory();
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   return creatorActor(task, { ...directory, readerId: directory.readerId ?? readerId }, you);
 }

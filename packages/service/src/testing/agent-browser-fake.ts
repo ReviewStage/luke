@@ -18,6 +18,7 @@
 
 import type { CdpEvent, PageTarget } from "@repo/features/browser-cdp";
 import { type Cause, Effect, Layer, Queue, Redacted, Ref, Schema, Stream } from "effect";
+import { agentSandboxName } from "../agents/agent-sandbox-open.js";
 import {
   AgentBrowser,
   agentBrowserOver,
@@ -37,11 +38,12 @@ import {
   RECORDING_START_OUTPUT,
   SANDBOX_RECORDING,
 } from "../agents/browser/sandbox-recorder.js";
+import type { AgentImageService } from "../agents/coder-host/agent-image.js";
 import type { SandboxPtyService } from "../agents/sandbox-pty.js";
 import {
   type CommandAsk,
   type CommandRun,
-  type ListedSandbox,
+  type OpenedSandbox,
   SandboxUnavailable,
 } from "../agents/vercel-sandbox-api.js";
 import type { RelayFrame } from "../terminal/relay.js";
@@ -260,10 +262,16 @@ export interface FakeSandboxScenario {
   readonly startExit?: number;
   /** Whether every call is unavailable, as Vercel answering the status given. */
   readonly unavailable?: number;
-  /** Whether every resume is unavailable, as Vercel answering the status given. */
+  /** Whether every resume is unavailable, as Vercel answering the status given, a reopen through `getOrCreate` among them. */
   readonly resumeUnavailable?: number;
   /** The error code Vercel's body names on that refusal, where it names one. */
   readonly resumeCode?: string;
+  /** Whether the sandbox stands under its session's name (`agentSandboxName`), which a reopen goes through `getOrCreate` for; under a UUID where unsaid. */
+  readonly named?: true;
+  /** Whether its snapshot is gone, so a `getOrCreate` deletes it and makes it again. */
+  readonly snapshotGone?: true;
+  /** How many vCPUs it is listed with. */
+  readonly vcpus?: number;
   /** What the recording's commands answer: the start's output (`started` where none is named), the stop's JSON (none recorded where none is named), and the video the stop leaves behind. */
   readonly recording?: {
     readonly start?: CommandRun;
@@ -276,7 +284,12 @@ export const FAKE_SANDBOX = {
   NAME: "eve-sbx-browser-fixture",
   RUNNING_SESSION: "sbs_running",
   RESUMED_SESSION: "sbs_resumed",
+  CREATED_SESSION: "sbs_created",
+  TAGS: { sessionId: "fixture", agentId: "agent-fixture" },
 } as const;
+
+/** The agents' image the fake's browser makes a sandbox again from. */
+export const FAKE_IMAGE: AgentImageService = { reference: Effect.succeed("agent-image:fixture") };
 
 /** Vercel's REST API over one sandbox as the scenario has it, and the commands it ran, by the session each ran in. */
 /** Where the fake sandbox's recorder leaves its video, under the sandbox user's home, as a read prints it. */
@@ -288,77 +301,105 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
   let current: string = FAKE_SANDBOX.RUNNING_SESSION;
   let resumes = 0;
   let browserUp = false;
+  /** Every `getOrCreate` that made the sandbox again, as it was asked. */
+  const creates: Parameters<BrowserSandboxApi["getOrCreate"]>[0][] = [];
+  const name = scenario.named === true ? agentSandboxName(scenario.sessionId) : FAKE_SANDBOX.NAME;
   const refused = () =>
     scenario.unavailable === undefined
       ? undefined
       : Effect.fail(new SandboxUnavailable({ status: scenario.unavailable }));
-  const listed = (): ListedSandbox => ({
-    name: FAKE_SANDBOX.NAME,
+  const resumeRefused = () =>
+    scenario.resumeUnavailable === undefined
+      ? undefined
+      : Effect.fail(
+          new SandboxUnavailable({
+            status: scenario.resumeUnavailable,
+            ...(scenario.resumeCode === undefined ? undefined : { code: scenario.resumeCode }),
+          }),
+        );
+  const listed = (): OpenedSandbox => ({
+    name,
     status,
     currentSessionId: current,
+    tags: FAKE_SANDBOX.TAGS,
+    ...(scenario.vcpus === undefined ? undefined : { vcpus: scenario.vcpus }),
   });
+  /** The sandbox resumed: running at once where it runs, and otherwise after the pending resumes the scenario names. */
+  const resumed = () =>
+    Effect.sync(() => {
+      if (status === "running") return listed();
+      resumes += 1;
+      status = resumes > (scenario.pendingResumes ?? 0) ? "running" : "pending";
+      current = FAKE_SANDBOX.RESUMED_SESSION;
+      // A resume starts from the snapshot, where no browser runs.
+      browserUp = false;
+      return listed();
+    });
   const api: BrowserSandboxApi = {
     listTagged: (sessionId) =>
       refused() ??
       Effect.succeed(sessionId === scenario.sessionId && status !== undefined ? [listed()] : []),
-    resume: () =>
+    resume: () => refused() ?? resumeRefused() ?? resumed(),
+    // A sandbox whose snapshot is gone is made again under its name, a fresh disk where no browser runs.
+    getOrCreate: (ask, onCreate) =>
       refused() ??
-      (scenario.resumeUnavailable === undefined
-        ? undefined
-        : Effect.fail(
-            new SandboxUnavailable({
-              status: scenario.resumeUnavailable,
-              ...(scenario.resumeCode === undefined ? undefined : { code: scenario.resumeCode }),
-            }),
-          )) ??
-      Effect.sync(() => {
-        if (status === "running") return listed();
-        resumes += 1;
-        status = resumes > (scenario.pendingResumes ?? 0) ? "running" : "pending";
-        current = FAKE_SANDBOX.RESUMED_SESSION;
-        // A resume starts from the snapshot, where no browser runs.
-        browserUp = false;
-        return listed();
-      }),
-    run: (sandboxSessionId, ask) =>
+      resumeRefused() ??
+      (scenario.snapshotGone === true && status !== "running"
+        ? Effect.promise(async () => {
+            creates.push(ask);
+            status = "running";
+            current = FAKE_SANDBOX.CREATED_SESSION;
+            browserUp = false;
+            await onCreate?.(listed());
+            return listed();
+          })
+        : resumed()),
+    session: ({ sessionId: sandboxSessionId }) =>
       refused() ??
-      Effect.sync(() => {
-        ran.push({ sandboxSessionId, ask });
-        if (ask.args.includes(RECORDER_SOURCE)) {
-          return (
-            scenario.recording?.start ?? {
-              exitCode: 0,
-              stdout: `${RECORDING_START_OUTPUT.STARTED}\n`,
-              stderr: "",
+      Effect.succeed({
+        run: (ask: CommandAsk) =>
+          refused() ??
+          Effect.sync((): CommandRun => {
+            ran.push({ sandboxSessionId, ask });
+            if (ask.args.includes(RECORDER_SOURCE)) {
+              return (
+                scenario.recording?.start ?? {
+                  exitCode: 0,
+                  stdout: `${RECORDING_START_OUTPUT.STARTED}\n`,
+                  stderr: "",
+                }
+              );
             }
-          );
-        }
-        if (ask.args.includes(SANDBOX_RECORDING.VIDEO)) {
-          const video = scenario.recording?.video;
-          return video === undefined
-            ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
-            : {
-                exitCode: 0,
-                stdout: `${FAKE_RECORDING_PATH}\n${Buffer.from(video).toString("base64")}`,
-                stderr: "",
-              };
-        }
-        // The stop is the recording's other script, named as the start is.
-        if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
-          const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
-          return { exitCode: 0, stdout: `${stop}\n`, stderr: "" };
-        }
-        const exitCode = scenario.startExit ?? 0;
-        if (exitCode !== 0) return { exitCode, stdout: "", stderr: "Chromium did not start\n" };
-        const stdout = browserUp ? BROWSER_START_OUTPUT.ATTACHED : BROWSER_START_OUTPUT.STARTED;
-        browserUp = true;
-        return { exitCode, stdout: `${stdout}\n`, stderr: "" };
+            if (ask.args.includes(SANDBOX_RECORDING.VIDEO)) {
+              const video = scenario.recording?.video;
+              return video === undefined
+                ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
+                : {
+                    exitCode: 0,
+                    stdout: `${FAKE_RECORDING_PATH}\n${Buffer.from(video).toString("base64")}`,
+                    stderr: "",
+                  };
+            }
+            // The stop is the recording's other script, named as the start is.
+            if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
+              const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
+              return { exitCode: 0, stdout: `${stop}\n`, stderr: "" };
+            }
+            const exitCode = scenario.startExit ?? 0;
+            if (exitCode !== 0) return { exitCode, stdout: "", stderr: "Chromium did not start\n" };
+            const stdout = browserUp ? BROWSER_START_OUTPUT.ATTACHED : BROWSER_START_OUTPUT.STARTED;
+            browserUp = true;
+            return { exitCode, stdout: `${stdout}\n`, stderr: "" };
+          }),
+        openInteractive: () =>
+          refused() ??
+          Effect.succeed({
+            url: "wss://sbx-fixture.vercel.run/ws",
+            token: Redacted.make("pty-token"),
+          }),
       }),
-    openInteractive: () =>
-      refused() ??
-      Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
   };
-  return { api, ran };
+  return { api, ran, creates };
 }
 
 /**
@@ -371,7 +412,7 @@ export function agentBrowserTestLayer(
   sessionId: string,
 ): Layer.Layer<AgentBrowser> {
   const { api } = fakeSandboxApi({ status: "running", sessionId });
-  return Layer.succeed(AgentBrowser, agentBrowserOver(api, fakeBridgePty(peer)));
+  return Layer.succeed(AgentBrowser, agentBrowserOver(api, fakeBridgePty(peer), FAKE_IMAGE));
 }
 
 /**

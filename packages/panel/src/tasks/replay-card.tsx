@@ -57,11 +57,12 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
+import { useListedAgent } from "./use-workspace-agents.js";
 
 /**
  * replay-card.tsx -- the card an agent started from another opens on after its brief: "Continued from" or "Forked from" the source agent, folded over the steps of the source's work it was handed.
  *
- * The card stands as the plan's card does, at a sent message's measure over
+ * The card stands as the description's card does, at a sent message's measure over
  * the line naming who started the agent and when, as any line sent to the
  * agent is named: a teammate by their face and name, the reader's own by
  * the time alone, and its Copy, which copies the replay as it was handed. Its summary row names the source by the chip its tab
@@ -148,12 +149,14 @@ function unlistedActor(agentId: string, read: AgentSummary | undefined): Actor {
 }
 
 /**
- * The source agent: as the place lists it, or, where it does not, as one
- * might be read on an agent's own page, which lists that agent alone, read
- * once; nothing until it answers, or where it cannot be read.
+ * The source agent: as the place lists it, else as the window's task list
+ * carries it, or, where neither does, as one might be read on an agent's
+ * own page, which lists that agent alone, read once; nothing until it
+ * answers, or where it cannot be read.
  */
 function useSource(agentId: string, place: ReplayPlace): AgentSummary | undefined {
-  const listed = place.agents.find((each) => each.id === agentId);
+  const inWindow = useListedAgent(agentId);
+  const listed = place.agents.find((each) => each.id === agentId) ?? inWindow;
   const [read, setRead] = useState<AgentSummary | undefined>(undefined);
   const reader = place.readAgent;
   const unlisted = listed === undefined;
@@ -487,6 +490,7 @@ export function ReplayCard({
             );
   const left = leftOutLine(replay);
   const summary = summaryLine(replay);
+  const count = replayCount(replay);
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
       <Plan
@@ -505,7 +509,7 @@ export function ReplayCard({
           {/* Note that the head names the source in words, its chip standing beside the head, because the head is the card's summary, which holds no control. */}
           <OneLine
             className="flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap"
-            words={`${replayVerb(replay)} ${name} · ${replayCount(replay)}`}
+            words={`${replayVerb(replay)} ${name}${count === undefined ? "" : ` · ${count}`}`}
           >
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {replayVerb(replay)}{" "}
@@ -513,10 +517,12 @@ export function ReplayCard({
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
               {name}
             </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {" "}
-              · {replayCount(replay)}
-            </Text>
+            {count === undefined ? null : (
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                {" "}
+                · {count}
+              </Text>
+            )}
           </OneLine>
         </PlanHeader>
         <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>

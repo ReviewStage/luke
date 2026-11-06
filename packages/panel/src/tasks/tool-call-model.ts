@@ -12,6 +12,8 @@ import {
   type AgentTodos,
   agentTodosInputSchema,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
+import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -35,8 +37,6 @@ import {
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
 import { linkLabels } from "@repo/features/mention-link";
 import type { ModelChoice } from "@repo/features/models-wire";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
-import type { PlanAgentEdit } from "@repo/features/plan-notes";
 import {
   browserCallWords,
   CALL_KIND,
@@ -48,7 +48,7 @@ import { skillWord } from "@repo/ui/skill-mention";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
-import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
+import { INLINE_SPAN, readInline } from "../description-editor/composer-markdown.js";
 import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
@@ -63,8 +63,8 @@ import { holderTaskId, type MentionHolder } from "./mention-holder.js";
  * verb is `turn-rows.ts`'s, but for a command
  * the model said the purpose of, whose line says that instead; the body's two
  * blocks are read from the input and the output in the tool's own terms
- * (a command, a patch, a file's words) where the tool is one eve gives the
- * agent, and as their JSON where it is not. A delegation's row is read the
+ * (a command, a patch, a file's words) where the tool is one the retired runtime gave the
+ * agent or a native harness's read as one (`native-tool-calls.ts`), and as their JSON where it is not. A delegation's row is read the
  * same way from the part S1's `delegate` tool stores: the task, the pair
  * the worker runs on, and its answer once it has one. A to-do write's list
  * is read through the wire's own schema, since its input is the list the
@@ -289,7 +289,7 @@ export function loadedSkill(input: WireValue | undefined): string | undefined {
 }
 
 /**
- * What a plan note of each kind did, in the row's words, keyed by the kinds
+ * What a description note of each kind did, in the row's words, keyed by the kinds
  * the agents' journal keeps, a deletion among them as a strike. Note that the
  * keys are held to the template's type and not read from its module, because
  * the template reaches Effect's Schema, which the renderer bundle does not
@@ -299,7 +299,7 @@ const NOTE_VERB = {
   add: "added",
   replace: "corrected",
   remove: "struck",
-} as const satisfies Record<PlanAgentEdit["notes"][number]["kind"], string>;
+} as const satisfies Record<DescriptionAgentEdit["notes"][number]["kind"], string>;
 
 /** What one note of a call's input did, by its kind: a replacement with no words is a strike. */
 function noteKind(note: WireValue): string {
@@ -308,8 +308,8 @@ function noteKind(note: WireValue): string {
   return kind === "replace" && text !== undefined && text.trim() === "" ? "remove" : kind;
 }
 
-/** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
-function planEditSummary(input: WireValue | undefined): string {
+/** The notes a description edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
+function descriptionEditSummary(input: WireValue | undefined): string {
   const notes = isRecord(input) ? input.notes : undefined;
   if (notes === undefined || !isWireArray(notes)) return "";
   const pictured = isRecord(input) ? input.pictures : undefined;
@@ -738,7 +738,7 @@ function messageWords(input: WireValue | undefined): string | undefined {
  * What a `start_agent` or a `message_agent` call sent, whole, which its row's
  * line cuts to its first line: a message's words, or a start's prompt (named
  * `task` by a start journaled before the prompt had its name) and its note;
- * nothing for any other call, or for a start on the plan with no note, which
+ * nothing for any other call, or for a start on the description with no note, which
  * sent nothing of its own.
  */
 export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
@@ -754,7 +754,7 @@ export function sentWords(tool: string, input: WireValue | undefined): SentWords
   return { words, note };
 }
 
-/** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
+/** The job of each worker, by the retired runtime's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 
 /** What a stop names: the job of the worker it stopped where it is known, and the task's id otherwise. */
@@ -848,7 +848,7 @@ function nativeMcpView(
   };
 }
 
-/** A call eve ran on a connection, named by the connection its input names as its card names it, and by the one field of the input a reader looks for first. */
+/** A call the retired runtime ran on a connection, named by the connection its input names as its card names it, and by the one field of the input a reader looks for first. */
 function connectionCall(
   kind: CallKind,
   field: string,
@@ -914,7 +914,7 @@ const SEARCH_MEMORY_CALL: ToolReader = ({ input, output }) =>
  * a tool's kind is chosen: a `Record` over every tool, so a tool added to
  * `AGENT_TOOL` does not compile until it says how it reads, never the
  * wrench and "Used" a tool this build does not know wears. A native
- * harness's own call is read as the eve call that does the same before it
+ * harness's own call is read as the call of the same kind before it
  * reaches here (`native-tool-calls.ts`).
  */
 const AGENT_TOOL_VIEWS = {
@@ -1036,9 +1036,9 @@ const AGENT_TOOL_VIEWS = {
     };
   },
   [AGENT_TOOL.DELEGATE]: delegateView,
-  [AGENT_TOOL.EDIT_PLAN]: ({ input, output }) => ({
-    kind: CALL_KIND.EDIT_PLAN,
-    subject: planEditSummary(input),
+  [AGENT_TOOL.EDIT_DESCRIPTION]: ({ input, output }) => ({
+    kind: CALL_KIND.EDIT_DESCRIPTION,
+    subject: descriptionEditSummary(input),
     input: input === undefined ? textBlock("") : jsonBlock(input),
     output: output === undefined ? undefined : jsonBlock(output),
   }),
@@ -1131,6 +1131,7 @@ const RETIRED_TOOL_VIEWS = {
   [RETIRED_TOOL.SEARCH_WEB]: READ_WEB_SEARCH,
   [RETIRED_TOOL.LIST_CODING_AGENTS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
+  [RETIRED_TOOL.EDIT_PLAN]: AGENT_TOOL_VIEWS[AGENT_TOOL.EDIT_DESCRIPTION],
   [RETIRED_TOOL.READ_CODING_AGENT]: ({ input, output }) =>
     namedCall(CALL_KIND.READ_AGENT, input, output, "agentId"),
   [RETIRED_TOOL.MESSAGE_CODING_AGENT]: ({ input, output }) =>
@@ -1167,7 +1168,7 @@ const RETIRED_TOOL_VIEWS = {
     namedCall(CALL_KIND.REOPEN_THREAD, input, output, undefined),
 } as const satisfies Record<RetiredTool, ToolReader>;
 
-/** The tools eve gives a session and a native harness's subagent, a message to one and a stop of what runs in Claude Code's background, which a transcript carries beside the agent's own, and the connection tools: a connection's search and its run, each naming the server its input does. */
+/** The tools the retired runtime gave a session and a native harness's subagent, a message to one and a stop of what runs in Claude Code's background, which a transcript carries beside the agent's own, and the retired runtime's connection tools: a connection's search and its run, each naming the server its input does. */
 const OTHER_TOOL_VIEWS: Readonly<Record<string, ToolReader>> = {
   [CLAUDE_CODE_TOOL.AGENT]: ({ input, output }) => subagentCallView(input, output),
   [CODEX_TOOL.SUBAGENT]: ({ input, output }) => subagentCallView(input, output),
@@ -1223,11 +1224,11 @@ export const TOOL_TARGET = {
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
-  /** The task's own tab, its document. */
-  PLAN: "plan",
+  /** The task's own tab, its description. */
+  DESCRIPTION: "description",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
-  /** Another task of the workspace, opened on its plan as the sidebar opens it, or on one of its agents' tabs where the target names one. */
+  /** Another task of the workspace, opened on its description as the sidebar opens it, or on one of its agents' tabs where the target names one. */
   TASK: "task",
   /** A pull request the agent opened, its Pull request tab where the window has one and GitHub's page otherwise; its row opens it through the link opener (`useOpenLink`), as a link to the pull request does, so no window's `onOpenTarget` is asked for it. */
   PULL_REQUEST: "pull-request",
@@ -1236,7 +1237,7 @@ export const TOOL_TARGET = {
 export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
-  | { readonly kind: typeof TOOL_TARGET.PLAN }
+  | { readonly kind: typeof TOOL_TARGET.DESCRIPTION }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
@@ -1265,7 +1266,7 @@ export function placeOfTaskTarget(
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.PLAN]: "Open the description",
+  [TOOL_TARGET.DESCRIPTION]: "Open the description",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",
@@ -1279,7 +1280,7 @@ interface TargetedCall {
   readonly output: WireValue | undefined;
 }
 
-const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.DESCRIPTION };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
 /** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens, by the id its answer lists the thread under; the whole Inbox where it names none. */
@@ -1328,20 +1329,22 @@ function changedAgent(call: TargetedCall): ToolTarget | undefined {
   return agentUpdateKind(call.input) === CALL_KIND.ARCHIVE_AGENT ? undefined : namedAgent(call);
 }
 
-/** The plan of the task named, which a row opens; the task's own plan where it names none. */
+/** The description of the task named, which a row opens; the task's own description where it names none. */
 function planOf(task: string | undefined): ToolTarget {
   return task === undefined ? TASK_TARGET : { kind: TOOL_TARGET.TASK, task };
 }
 
-/** The plan a call named by its task, an edit's or a comment tool's, which its row opens; the task's own plan for a call made before every such call named one. */
-function namedPlan(call: TargetedCall): ToolTarget {
+/** The description a call named by its task, an edit's or a comment tool's, which its row opens; the task's own description for a call made before every such call named one. */
+function namedDescription(call: TargetedCall): ToolTarget {
   return planOf(stringAt(call.input, "taskId"));
 }
 
-/** The plan a look's address names, which its row opens; the task's own plan where the address names no picture. */
-function lookedPlan(call: TargetedCall): ToolTarget {
+/** The description a look's address names, which its row opens; the task's own description where the address names no picture. */
+function lookedDescription(call: TargetedCall): ToolTarget {
   const address = stringAt(call.input, "address");
-  return planOf(address === undefined ? undefined : planAttachmentOf(address.trim())?.taskId);
+  return planOf(
+    address === undefined ? undefined : descriptionAttachmentOf(address.trim())?.taskId,
+  );
 }
 
 /** The task a change answered, which its row opens as the sidebar opens it. */
@@ -1413,13 +1416,14 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
-  [AGENT_TOOL.EDIT_PLAN, namedPlan],
-  [AGENT_TOOL.LOOK_AT_PICTURE, lookedPlan],
-  [AGENT_TOOL.READ_COMMENTS, namedPlan],
-  [AGENT_TOOL.REPLY_TO_COMMENT, namedPlan],
-  [AGENT_TOOL.UPDATE_COMMENT, namedPlan],
-  [RETIRED_TOOL.RESOLVE_THREAD, namedPlan],
-  [RETIRED_TOOL.REOPEN_THREAD, namedPlan],
+  [AGENT_TOOL.EDIT_DESCRIPTION, namedDescription],
+  [RETIRED_TOOL.EDIT_PLAN, namedDescription],
+  [AGENT_TOOL.LOOK_AT_PICTURE, lookedDescription],
+  [AGENT_TOOL.READ_COMMENTS, namedDescription],
+  [AGENT_TOOL.REPLY_TO_COMMENT, namedDescription],
+  [AGENT_TOOL.UPDATE_COMMENT, namedDescription],
+  [RETIRED_TOOL.RESOLVE_THREAD, namedDescription],
+  [RETIRED_TOOL.REOPEN_THREAD, namedDescription],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],
   [RETIRED_TOOL.POST_TO_INBOX, namedThread],
@@ -1456,7 +1460,7 @@ export function toolTarget(call: TargetedCall): ToolTarget | undefined {
 export interface TargetPlace {
   /** The workspace's slug; empty where the place names none. */
   readonly workspace: string;
-  /** The task whose page draws the transcript, or the agent on no task whose own page does, which the plan and the pages stand on; none where the place holds neither. */
+  /** The task whose page draws the transcript, or the agent on no task whose own page does, which the description and the pages stand on; none where the place holds neither. */
   readonly holder: MentionHolder | undefined;
   /** The agent whose transcript is drawn, whose threads a post names. */
   readonly agentId: string | undefined;
@@ -1465,7 +1469,7 @@ export interface TargetPlace {
 /**
  * The link of what a call made or is about, which its row's chip is drawn
  * from as the window draws that link anywhere: a pull request by its
- * address, another task by its plan, the task's own plan, a page on it or
+ * address, another task by its description, the task's own description, a page on it or
  * on the agent of no task, or the agent's thread by the id its answer named. Nothing for an agent,
  * whose row names it by its own chip (`AgentCallChip`), for the whole
  * Inbox, and where the place names no workspace or what the thing is on.
@@ -1477,7 +1481,7 @@ export function targetLink(target: ToolTarget, place: TargetPlace): string | und
   switch (target.kind) {
     case TOOL_TARGET.TASK:
       return linked({ kind: LINK_PLACE.TASK, planId: target.task });
-    case TOOL_TARGET.PLAN: {
+    case TOOL_TARGET.DESCRIPTION: {
       const taskId = holderTaskId(place.holder);
       return taskId === undefined ? undefined : linked({ kind: LINK_PLACE.TASK, planId: taskId });
     }
@@ -1536,7 +1540,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries: an eve agent's `delegate` call's task, model, effort, and result, and the message the brain's worker is handed in the task's place. */
+/** The fields a delegation's part carries: the task, model, effort, and result of a `delegate` call by an agent on the retired runtime, and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",
@@ -1598,7 +1602,7 @@ export function delegationView(
   };
 }
 
-/** The marks a markdown line opens on: a heading's, a quote's, or a list item's, which a plan's or a task's first line may carry. */
+/** The marks a markdown line opens on: a heading's, a quote's, or a list item's, which a description's or a task's first line may carry. */
 const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
 
 /**
@@ -1613,7 +1617,7 @@ const STRAY_MARKS = /\*\*|`/gu;
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
 
 /**
- * How a plan, a worker's task, or a thought is named on its card, its line,
+ * How a description, a worker's task, or a thought is named on its card, its line,
  * and its tab: its first line of words, as plain words, since the line is
  * drawn as text and the markdown is the opened card's. A fence's line is
  * passed over, since its language tag is no words of the text's.

@@ -24,9 +24,14 @@
  * generation for its head, and tells the chapters in one model call on
  * the API key the member who pressed it saved, never ours
  * (`chapters-generator.ts`), on Claude Haiku, or OpenAI's model of its tier
- * where they saved only an OpenAI key, then answers as the read does. A member who saved no API key, as one
- * on a subscription alone, is answered `generatable: false` and their
- * Generate is refused as unavailable. A claim another request holds answers as generating, without reading the
+ * where they saved only an OpenAI key or chose OpenAI's where they saved
+ * both, then answers as the read does. Both
+ * answer what the asker's own Generate would run on (`runsOn`): the model
+ * and the provider of the key it would spend, the one they last picked on
+ * the Chapters tab where they saved both, with both offered to pick from
+ * (`runsOnChoices`). A member who saved no API key, as one
+ * on a subscription alone, is answered `generatable: false` with nothing to
+ * run on, and their Generate is refused as unavailable. A claim another request holds answers as generating, without reading the
  * diff or asking the model; a head pushed while the diff is read is answered
  * as it now stands rather than told under the head it no longer is, since
  * GitHub serves a pull request's files by its number, not its head; a generation that fails lands its kind on the row, and any other
@@ -47,6 +52,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
+import { accountChaptersProvider } from "@repo/database/models/account-store";
 import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
@@ -64,10 +70,16 @@ import {
   PULL_REQUEST_CHAPTERS_STATUS,
   type PullRequestChaptersFailure,
 } from "@repo/database/pull-request-chapters-vocabulary";
-import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
-import { chapterSchema } from "@repo/features/pull-request-chapters";
 import {
+  CHAPTERS_MODEL,
+  type ChaptersModelId,
+  chaptersModelOn,
+} from "@repo/features/chapters-model-choice";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
+import { chapterSchema } from "@repo/features/pull-request-chapters";
+import type { ChaptersGenerator } from "@repo/features/pull-request-chapters-live";
+import {
+  type ChaptersRunsOn,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersAnswer,
   type PullRequestChaptersState,
@@ -80,7 +92,7 @@ import {
   githubReadRefusal,
   pullRequestNumberOf,
 } from "../agents/asked-pull-request.js";
-import { ownKeyOf } from "../agents/coder-host/account-keys.js";
+import { ownKeysOf } from "../agents/coder-host/account-keys.js";
 import type { OwnKey } from "../agents/coder-host/model.js";
 import {
   agentPullRequestReach,
@@ -233,22 +245,16 @@ const stateOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
 });
 
-/** The answer both procedures give: whether this deployment generates chapters, and the workspace's newest chapters for the pull request. */
+/** The answer both procedures give: whether the asker can generate chapters and on what, and the workspace's newest chapters for the pull request. */
 const answerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   of: ChaptersOf,
   number: number,
-  generatable: boolean,
+  generator: ChaptersGenerator,
 ): Effect.fn.Return<PullRequestChaptersAnswer, HostedRefusal, DatabaseServices> {
   const row = yield* hostedStoreOrUnavailable(
     latestPullRequestChapters(of.organizationId, of.repository, number),
   );
-  return {
-    pullRequest: {
-      number,
-      generatable,
-      chapters: yield* stateOf(row),
-    },
-  };
+  return { pullRequest: { number, ...generator, chapters: yield* stateOf(row) } };
 });
 
 /**
@@ -271,39 +277,84 @@ const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: Chap
   );
 });
 
-/** The member's own API key a model is called on, Anthropic's first, or none where they saved none. */
-const ownKeyFor = (userId: string) =>
+/**
+ * The member's own API keys a model may be called on, the one it is called
+ * on first: the provider they last picked where they saved both,
+ * Anthropic's until they pick, and the other's where the picked one cannot
+ * be opened; none where they saved none.
+ */
+const ownKeysFor = (userId: string) =>
   Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
-    return yield* hostedStoreOrUnavailable(
-      ownKeyOf(userId, MODEL_PROVIDER.ANTHROPIC, environment.providerKeyEncryptionKeys),
-    );
+    const preferred = yield* hostedStoreOrUnavailable(accountChaptersProvider(userId));
+    return yield* hostedStoreOrUnavailable(ownKeysOf(userId, preferred, environment));
   });
 
-/** Haiku, which every Generate runs on, on the member's own API key, Anthropic's first, or none where they saved none. */
+/** What a Generate on the member's own key runs on: Haiku's tier, on the provider of that key. */
+const runsOnOf = (own: OwnKey): ChaptersRunsOn => ({
+  provider: own.provider,
+  model: chaptersModelOn(own.provider, CHAPTERS_MODEL.HAIKU),
+});
+
+/** The providers in their own order, which the choices are offered in whichever runs first. */
+const PROVIDER_ORDER: readonly ModelProvider[] = Object.values(MODEL_PROVIDER);
+
+/**
+ * What the member's Generate stands on, from their keys that open, the one
+ * it runs on first: whether it can run at all, on what, and every model it
+ * may run on where there are two to choose between.
+ */
+function generatorOf(keys: readonly OwnKey[]): ChaptersGenerator {
+  const [own] = keys;
+  if (own === undefined) return { generatable: false };
+  const choices = [...keys]
+    .sort((a, b) => PROVIDER_ORDER.indexOf(a.provider) - PROVIDER_ORDER.indexOf(b.provider))
+    .map(runsOnOf);
+  return {
+    generatable: true,
+    runsOn: runsOnOf(own),
+    ...(choices.length > 1 ? { runsOnChoices: choices } : {}),
+  };
+}
+
+/** What the member's Generate stands on: nothing to run on where they saved no API key. */
+const generatorFor = (userId: string) => Effect.map(ownKeysFor(userId), generatorOf);
+
+/** The model a Generate tells chapters on, and what it stands on as the answer names it. */
+interface GenerateOn {
+  readonly model: ChaptersModel;
+  readonly generator: ChaptersGenerator;
+}
+
+/** Haiku's tier, which every Generate runs on, on the member's own API key, the one they picked first; none where they saved none. */
 const modelOf = (seams: PullRequestChaptersProcedureSeams, userId: string) =>
-  Effect.map(ownKeyFor(userId), (own) =>
-    own === undefined
+  Effect.map(ownKeysFor(userId), (keys): GenerateOn | undefined => {
+    const [own] = keys;
+    return own === undefined
       ? undefined
-      : (seams.chaptersModel ?? chaptersModelOf)(own, CHAPTERS_MODEL.HAIKU),
-  );
+      : {
+          model: (seams.chaptersModel ?? chaptersModelOf)(own, CHAPTERS_MODEL.HAIKU),
+          generator: generatorOf(keys),
+        };
+  });
 
 /**
  * What a reader of an agent's pull request's chapters is admitted to, as
  * the agent's read and its live read (`live-procedures.ts`) admit one: the
  * workspace and repository the chapters are kept under, once a token minted
  * for the repository confirms the workspace still reaches it, none for an
- * agent with no repository; and whether the reader can generate chapters at
- * all, on a key of their own.
+ * agent with no repository; and what the reader's Generate stands on, on
+ * keys of their own: what it would run on and what it may, none where they
+ * can generate no chapters.
  */
 export const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: Agent,
 ) {
-  const [kept, own] = yield* Effect.all([keptUnder(userId, agent), ownKeyFor(userId)], {
+  const [kept, generator] = yield* Effect.all([keptUnder(userId, agent), generatorFor(userId)], {
     concurrency: "unbounded",
   });
-  return { kept, generatable: own !== undefined };
+  return { kept, generator };
 });
 
 /** What a generation's counted event carries but its length: how it came out, and how many chapters and hunks it told. */
@@ -419,17 +470,18 @@ const generationInput = (subject: ChaptersSubject) => {
  */
 const generatedFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  model: ChaptersModel,
+  on: GenerateOn,
   subject: ChaptersSubject,
 ) {
   const { organizationId, repository, token, pullRequest } = subject;
+  const { model, generator } = on;
   // Note that GitHub names the base on every read of one pull request; one that does not is a GitHub off its shape.
   if (pullRequest.baseSha === undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.GITHUB_UNANSWERED);
   }
   // A generation another request holds for this head answers as it stands, before GitHub is asked for a diff this request will not use.
   if (yield* generatingNow(subject)) {
-    return yield* answerOf(subject, pullRequest.number, true);
+    return yield* answerOf(subject, pullRequest.number, generator);
   }
   const read = yield* generationInput(subject);
   // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
@@ -438,7 +490,7 @@ const generatedFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Option.isNone(after)) return { pullRequest: null };
   if (after.value.headSha !== pullRequest.headSha) {
-    return yield* answerOf(subject, pullRequest.number, true);
+    return yield* answerOf(subject, pullRequest.number, generator);
   }
   const now = yield* Clock.currentTimeMillis;
   const claimed = yield* hostedStoreOrUnavailable(
@@ -455,7 +507,7 @@ const generatedFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (claimed.outcome === CHAPTER_CLAIM_OUTCOME.CLAIMED) {
     yield* generated(claimed.claim, model, { userId, workspaceId: organizationId }, read);
   }
-  return yield* answerOf(subject, pullRequest.number, true);
+  return yield* answerOf(subject, pullRequest.number, generator);
 });
 
 /** The chapters resource: the read and the Generate through an agent and by the repository and number, each to a signed-in caller. */
@@ -468,26 +520,25 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       const number = yield* pullRequestNumberOf([input.number]);
       // One number named always reads as one or is refused.
       if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const { kept, generatable } = yield* agentChaptersAdmission(context.userId, agent);
+      const { kept, generator } = yield* agentChaptersAdmission(context.userId, agent);
       if (Option.isNone(kept)) return { pullRequest: null };
-      return yield* answerOf(kept.value, number, generatable);
+      return yield* answerOf(kept.value, number, generator);
     }),
 
     generate: signedIn.generate.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.params.id);
       // The model runs on the presser's own key, while the chapters it tells are the workspace's.
-      const model = yield* modelOf(seams, context.userId);
-      if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      const on = yield* modelOf(seams, context.userId);
+      if (on === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       const subject = yield* subjectOf(published, context.userId, agent, input.query?.number);
       if (Option.isNone(subject)) return { pullRequest: null };
-      return yield* generatedFor(context.userId, model, subject.value);
+      return yield* generatedFor(context.userId, on, subject.value);
     }),
 
     repositoryRead: signedIn.repositoryRead.effect(function* ({ input, context }) {
       const { subject } = yield* reachedRepository(context.userId, input);
-      // Whether the reader can generate at all, as the agent's read asks it.
-      const model = yield* modelOf(seams, context.userId);
-      return yield* answerOf(subject, input.number, model !== undefined);
+      // What the reader's Generate would run on, as the agent's read asks it.
+      return yield* answerOf(subject, input.number, yield* generatorFor(context.userId));
     }),
 
     repositoryGenerate: signedIn.repositoryGenerate.effect(function* ({ input, context }) {
@@ -497,9 +548,9 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
         input.query,
         pullRequestByNumber,
       );
-      const model = yield* modelOf(seams, context.userId);
-      if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* generatedFor(context.userId, model, {
+      const on = yield* modelOf(seams, context.userId);
+      if (on === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* generatedFor(context.userId, on, {
         repository: subject.repository,
         organizationId: subject.organizationId,
         token,

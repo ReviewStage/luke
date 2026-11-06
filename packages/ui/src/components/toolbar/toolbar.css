@@ -43,6 +43,9 @@
     --ui-toolbar-start: var(--ui-toolbar-page-inset);
     --ui-toolbar-end: var(--ui-toolbar-page-inset);
     --ui-toolbar-edge-block: var(--ui-toolbar-block-inset, var(--ui-space-8));
+    /* A bar tucked under another may stand its controls flush with its top,
+       the room above them the bar over it already keeps (`--ui-toolbar-top-inset`). */
+    --ui-toolbar-edge-top: var(--ui-toolbar-top-inset, var(--ui-toolbar-edge-block));
     --ui-toolbar-edge-start: var(--ui-toolbar-start-at, var(--ui-toolbar-start));
     --ui-toolbar-edge-end: var(--ui-toolbar-end-at, var(--ui-toolbar-end));
 
@@ -52,7 +55,7 @@
     align-items: center;
     gap: var(--ui-control-gap);
     min-height: var(--ui-toolbar-height);
-    padding: var(--ui-toolbar-edge-block) var(--ui-toolbar-edge-end) var(--ui-toolbar-edge-block)
+    padding: var(--ui-toolbar-edge-top) var(--ui-toolbar-edge-end) var(--ui-toolbar-edge-block)
       var(--ui-toolbar-edge-start);
     background: var(--ui-toolbar-ground, transparent);
   }
@@ -100,12 +103,16 @@
 
   /* A phone's look: one control in each corner, one control wide, and the
      title centered between them, cut where it meets them. Each part stands
-     in its own column, so a corner left empty leaves the title centered. */
+     in its own column, so a corner left empty leaves the title centered.
+     Note that a corner's labeled control draws its glyph alone, named still,
+     because its words have no room there, and a button that kept them would
+     keep their padding too and stand its glyph off the corner's center. */
   .ui-toolbar[data-look="phone"] {
     /* The corners stand at the column's own edge: a phone draws no window
        buttons over them. */
     --ui-toolbar-start-at: initial;
     --ui-toolbar-end-at: initial;
+    --ui-fold: folded;
 
     display: grid;
     grid-template-columns: var(--ui-control-height) minmax(0, 1fr) var(--ui-control-height);
@@ -119,8 +126,27 @@
     gap: var(--ui-space-8);
   }
 
+  /* A phone's tag stands under its title, both centered, as a phone's
+     header says what a page covers under its name, so the name stays the
+     row's center rather than moving aside for the tag beside it. */
   .ui-toolbar[data-look="phone"] > .ui-toolbar-heading:has(> .ui-toolbar-tag) {
-    align-items: last baseline;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Note that a centered column sizes each part to its words, which one
+     line never wraps, so each is held to the heading's width, to be cut
+     there rather than drawn over the corners: the parts the heading holds,
+     and a picked-up name or a trail of crumbs it holds through the replay
+     mask, whose box is its children's. */
+  .ui-toolbar[data-look="phone"]
+    > .ui-toolbar-heading
+    > :is(.ui-toolbar-title, .ui-toolbar-title-menu, .ui-toolbar-pick-up, .ui-toolbar-tag),
+  .ui-toolbar[data-look="phone"]
+    > .ui-toolbar-heading
+    > [data-replay-mask]
+    > :is(.ui-toolbar-pick-up, .ui-breadcrumbs) {
+    max-width: 100%;
   }
 
   .ui-toolbar[data-look="phone"]
@@ -259,7 +285,10 @@
      room kept for the window's buttons at the start, the actions at the end.
      The title moves aside only once it would meet them, and is cut short only
      once it no longer fits between them. The bar is inset alike on both
-     sides, so centered in the bar is centered in the column. */
+     sides, so centered in the bar is centered in the column: at the
+     column's own inset, or nearer its edge where the window stands the
+     bar's start nearer (`--ui-toolbar-start-at`), as a card's way back
+     does. */
   @container style(--ui-toolbar-center: on) {
     .ui-toolbar {
       display: grid;
@@ -274,7 +303,7 @@
         )
         minmax(0, max-content)
         minmax(max-content, 1fr);
-      padding-left: var(--ui-toolbar-column-inset);
+      padding-left: min(var(--ui-toolbar-edge-start), var(--ui-toolbar-column-inset));
     }
 
     .ui-toolbar > .ui-toolbar-heading {

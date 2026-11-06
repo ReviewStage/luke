@@ -29,9 +29,10 @@ import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { readMarkOf } from "./read-mark.js";
 import { countedNumber } from "./service-wire.js";
+import { standingFailures } from "./task-agents-model.js";
 import {
+  DESCRIPTION_ACTOR,
   type ListedPullRequest,
-  PLAN_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
   type TaskAgentPin,
@@ -103,9 +104,13 @@ const taskLiveRowSchema = EffectSchema.Struct({
   priority: taskPrioritySchema,
   /** The task's number in its workspace, from 1, as the list says it; absent from a row the host draws for a task it started before the service numbered it. */
   number: EffectSchema.optionalKey(EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1))),
-  /** Who made the task for its owner (`PLAN_ACTOR`); absent from a service before it was sent, read as made by hand. */
+  /** Who made the task for its owner (`DESCRIPTION_ACTOR`); absent from a service before it was sent, read as made by hand. */
   creatorActor: EffectSchema.optionalKey(
-    EffectSchema.Literals([PLAN_ACTOR.DEVELOPER, PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+    EffectSchema.Literals([
+      DESCRIPTION_ACTOR.DEVELOPER,
+      DESCRIPTION_ACTOR.NOTETAKER,
+      DESCRIPTION_ACTOR.AGENT,
+    ]),
   ),
   /** The coding agent that made the task; null for any other maker and once its row is gone. */
   creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
@@ -140,8 +145,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** Whether the agent is its task's pilot; absent from a statement before pilots. */
   pilot: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Whether the agent was handed a prompt rather than its plan. */
-  /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
+  /** Whether the agent was handed a prompt rather than its description. */
+  /** What the agent was handed as its first message: the description, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),
   /** The repository the agent works in; null for one that works in none. */
   repository: EffectSchema.NullOr(EffectSchema.String),
@@ -335,7 +340,8 @@ interface AgentGroup {
  * named first, then the rest, newest started first within each; each pull
  * request once by its page, those still open first, newest agent's first
  * within a rank; the latest settled activity of every agent, archived
- * or not; and how many failed.
+ * or not; and how many failed with no agent started since
+ * (`standingFailures`).
  */
 function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
   const { agents: rows, pullRequests } = group;
@@ -348,7 +354,10 @@ function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
   return {
     total: newest.length,
     working: working.length,
-    failed: newest.filter(({ line }) => line.status === AGENT_STATUS.FAILED).length,
+    failed: standingFailures(
+      newest.map(({ row, line }) => ({ createdAt: row.createdAt, line })),
+      Math.max(...rows.map((row) => row.createdAt)),
+    ),
     ...(rows.length === 0 ? undefined : { activityAt: Math.max(...rows.map(activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)
@@ -361,7 +370,7 @@ function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
 /** Who made a task for its owner, as the summary names them: nothing for a task made by hand. */
 function originOf(row: TaskLiveRow): { readonly origin?: TaskOrigin } {
   const actor = row.creatorActor;
-  if (actor === undefined || actor === PLAN_ACTOR.DEVELOPER) return {};
+  if (actor === undefined || actor === DESCRIPTION_ACTOR.DEVELOPER) return {};
   const agentId = row.creatorAgentId;
   return {
     origin: { actor, ...(agentId === undefined || agentId === null ? undefined : { agentId }) },

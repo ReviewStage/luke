@@ -126,7 +126,7 @@ const openAgentIn = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
@@ -244,7 +244,7 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Sweep the flaky tests.",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
@@ -465,7 +465,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Billing export\n",
+          descriptionSnapshot: "# Billing export\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1060,7 +1060,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           effort: "high",
           repository: "acme/relay",
           githubAccess: GITHUB_ACCESS.APP,
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1748,7 +1748,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "each task the account's read lists counts the questions waiting on the reader, a settled task's among them, never a notice or a settled item read or not, alike live and held, and no one counts another's",
+    "each task the account's read lists counts the open items waiting on the reader, a question or a notice not yet opened, a settled task's among them, never a settled item read or not, alike live and held, and no one counts another's",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1766,7 +1766,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository: "acme/relay",
-              planSnapshot: null,
+              descriptionSnapshot: null,
               prompt: null,
               runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             });
@@ -1777,10 +1777,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const shelved = yield* startTask(owner, { name: "Shelved work" });
         const shelvedAgent = yield* agentOn(owner, shelved.id);
 
-        // The owner's open ask counts; their open notice, unread, asks nothing.
+        // The owner's open ask counts, and so does their open notice, not yet opened.
         yield* postedId(agent, "ask");
         yield* post(agent, { ...NOTICE, key: "notice" });
-        // A thread they answered, which its agent writes on again, unread, and one they answered and read: neither is a question now.
+        // A thread they answered, which its agent writes on again, unread, and one they answered and read: neither waits on them now.
         const followedItem = yield* postedItem(agent, "followed");
         const followed = followedItem.id;
         for (const item of [followedItem, yield* postedItem(agent, "seen")]) {
@@ -1804,10 +1804,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         assert.deepEqual(
           toDoOf(held),
           new Map([
-            [taskId, 1],
+            [taskId, 2],
             [shelved.id, 1],
           ]),
-          "the ask alone, not the teammate's beside it; and the settled task's open ask",
+          "the ask and the notice, not the teammate's ask beside them; and the settled task's open ask",
         );
         assert.equal(
           toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
@@ -1820,7 +1820,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* markInboxItemRead(owner, followed);
         const read = yield* accountInboxPast(owner, held.cursor);
         assert.notEqual(read.cursor, held.cursor);
-        assert.equal(toDoOf(read).get(taskId), 1);
+        assert.equal(toDoOf(read).get(taskId), 2);
       }),
   );
 });

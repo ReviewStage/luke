@@ -34,9 +34,10 @@ import {
   shortcutLayered,
   shortcutSwitching,
 } from "@repo/settings/shortcuts";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
-import { capabilityNow } from "./use-app-state.js";
+import { appStateIn, selectCapability } from "./use-app-state.js";
 
 /** One offer: the latest `run` a press calls, and the latest `over`, which says at the press whether it answers over the offers that say nothing. */
 type CommandRun = {
@@ -95,10 +96,12 @@ const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter((command) => {
   return !shortcutLayered(chord) && !shortcutSwitching(chord);
 });
 
-/** Whether the platform offers what the command's feature stands on: a chord of one it lacks is the browser's or the system's, never the window's. */
-function platformCarries(command: KeyedCommand): boolean {
+/** Whether the platform offers what the command's feature stands on, by the document `client` holds: a chord of one it lacks is the browser's or the system's, never the window's. */
+function platformCarries(client: QueryClient, command: KeyedCommand): boolean {
   const { capability } = APP_SHORTCUTS[command] as { capability?: HostCapability };
-  return capability === undefined || capabilityNow(capability);
+  if (capability === undefined) return true;
+  const state = appStateIn(client);
+  return state !== undefined && selectCapability(capability)(state);
 }
 
 /** Whether the press landed in something taking typing, which keeps the keys it edits with. */
@@ -192,6 +195,7 @@ export function useOverlayHold(standing: boolean): void {
  * repeats claimed whether or not an offer still stands.
  */
 export function useAppKeymap(enabled: boolean): void {
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!enabled) return;
     const handleKey = (event: KeyboardEvent) => {
@@ -209,13 +213,14 @@ export function useAppKeymap(enabled: boolean): void {
       // the window behind it.
       // Note that a command the platform lacks has its repeats left alone, because the browser's own zoom keeps stepping while ⌘+ is held.
       if (!event.repeat && !offers.get(command)?.length) return;
-      if (event.repeat && !offers.get(command)?.length && !platformCarries(command)) return;
+      if (event.repeat && !offers.get(command)?.length && !platformCarries(queryClient, command))
+        return;
       event.preventDefault();
       if (!event.repeat) runAppCommand(command);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [enabled]);
+  }, [enabled, queryClient]);
 }
 
 /**

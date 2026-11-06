@@ -278,7 +278,7 @@ function loadedTurn(skill: string, state = "output-available"): AgentTranscriptM
 function agentTurn(message: AgentTranscriptMessage): ReactNode {
   return createElement(AgentMessage, {
     message,
-    plan: false,
+    description: false,
     lead: AGENT_LEAD,
     moving: false,
     delegation: undefined,

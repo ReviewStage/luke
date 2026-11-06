@@ -106,8 +106,8 @@ test("filtered to one creator, the list holds only the tasks they created; filte
   expect(createdByOnly(tasks, undefined)).toHaveLength(3);
 });
 
-test("a task whose agent ended a turn after another task's plan was edited stands first, showing its agent's time", () => {
-  const edited = task("Plan edited at 500", "acme/relay", 1, 500);
+test("a task whose agent ended a turn after another task's description was edited stands first, showing its agent's time", () => {
+  const edited = task("Description edited at 500", "acme/relay", 1, 500);
   const worked = {
     ...task("Agent finished at 800", "acme/relay", 1, 100),
     agents: {
@@ -120,12 +120,12 @@ test("a task whose agent ended a turn after another task's plan was edited stand
     },
   };
   const groups = groupsByRepository([edited, worked]);
-  expect(names(groups)).toEqual([["Agent finished at 800", "Plan edited at 500"]]);
+  expect(names(groups)).toEqual([["Agent finished at 800", "Description edited at 500"]]);
   expect(taskTime(worked, TASK_ORDER.UPDATED)).toBe(800);
   expect(taskTime(edited, TASK_ORDER.UPDATED)).toBe(500);
 });
 
-test("an agent's activity older than the plan's own edit leaves the plan's time standing", () => {
+test("an agent's activity older than the description's own edit leaves the description's time standing", () => {
   const summary = {
     ...task("Edited after its agent", "acme/relay", 1, 900),
     agents: {

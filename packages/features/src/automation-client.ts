@@ -10,6 +10,7 @@ import {
 } from "./automation-live.js";
 import {
   AUTOMATION_CALL_FAILURE,
+  AUTOMATION_RENAMES,
   type AutomationCallFailure,
   type AutomationChangeParams,
   type AutomationCreateParams,
@@ -24,14 +25,9 @@ import {
   automationChangeParamsSchema,
   automationCreateParamsSchema,
 } from "./automation-view.js";
-import type { automationAnswerSchema, automationChangeRequestSchema } from "./automation-wire.js";
-import {
-  askHosted,
-  askLive,
-  type HostedClient,
-  type HostedFailure,
-  hostedClient,
-} from "./hosted-link.js";
+import type { automationChangeRequestSchema } from "./automation-wire.js";
+import { hostedCall } from "./hosted-call.js";
+import { askLive, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import type { RepositoryUnreached } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
@@ -67,7 +63,7 @@ const UNANSWERED: Failed = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED };
 /** The refusals a call may answer with, by the service's own word for each. */
 type NamedRefusals = Readonly<Partial<Record<HostedApiError, AutomationCallFailure>>>;
 
-/** The refusals every automation call can answer with. */
+/** The refusals a live read can answer with, until live reads move onto `hostedCall`. */
 const REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AUTOMATION_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.NO_REPOSITORY]: AUTOMATION_CALL_FAILURE.NO_REPOSITORY,
@@ -75,17 +71,6 @@ const REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: AUTOMATION_CALL_FAILURE.INVALID,
   [HOSTED_API_ERROR.NOT_PERMITTED]: AUTOMATION_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
-
-/**
- * A procedure's answer, or the refusal it failed with where it is one this
- * client names, with why a repository is out of reach where the service
- * said; unanswered for everything else.
- */
-function answered<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed) => Effect.succeed(failedAs(failed, REFUSALS)));
-}
 
 function failedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   if (failed._tag !== "HostedRefused") return UNANSWERED;
@@ -98,18 +83,10 @@ function failedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   return unreached === undefined ? { failure } : { failure, unreached };
 }
 
-/** A write's answer as the window hears it: the summary, and a webhook secret the write minted, the window's to show once by root AGENTS.md's carve-out. */
-function summaryOnly(
-  serviceBaseUrl: string,
-  read: typeof automationAnswerSchema.Type | Failed,
-): AutomationView {
+/** A write's answer as the window hears it: the summary with its webhook's address, and a webhook secret the write minted, the window's to show once by root AGENTS.md's carve-out. */
+function summaryOnly(serviceBaseUrl: string, read: AutomationView): AutomationView {
   if ("failure" in read) return read;
-  const automation = withWebhookUrl(serviceBaseUrl, read.automation);
-  return {
-    automation,
-    ...(read.webhookSecret === undefined ? undefined : { webhookSecret: read.webhookSecret }),
-    ...(read.txid === undefined ? undefined : { txid: read.txid }),
-  };
+  return { ...read, automation: withWebhookUrl(serviceBaseUrl, read.automation) };
 }
 
 /** A live read's seal, or why there is none: signed out where the session is not the account it names. */
@@ -148,7 +125,7 @@ export class HostedAutomationClient {
       ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
     };
     return Effect.map(
-      answered(askHosted(this.#hosted.automations.list, query)),
+      hostedCall(this.#hosted.automations.list, query, { as: AUTOMATION_RENAMES }),
       (read): AutomationListView =>
         "failure" in read
           ? read
@@ -166,8 +143,9 @@ export class HostedAutomationClient {
   ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(automationCreateParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed({ failure: AUTOMATION_CALL_FAILURE.INVALID });
-    return Effect.map(answered(askHosted(this.#hosted.automations.create, admitted)), (read) =>
-      summaryOnly(this.#serviceBaseUrl, read),
+    return Effect.map(
+      hostedCall(this.#hosted.automations.create, admitted, { as: AUTOMATION_RENAMES }),
+      (read) => summaryOnly(this.#serviceBaseUrl, read),
     );
   }
 
@@ -197,7 +175,11 @@ export class HostedAutomationClient {
     params: AutomationIdParams,
   ): Effect.Effect<AutomationDeletedView, never, HttpClient.HttpClient> {
     return Effect.map(
-      answered(askHosted(this.#hosted.automations.remove, { id: params.automationId })),
+      hostedCall(
+        this.#hosted.automations.remove,
+        { id: params.automationId },
+        { as: AUTOMATION_RENAMES },
+      ),
       (read): AutomationDeletedView =>
         "failure" in read
           ? read
@@ -212,11 +194,13 @@ export class HostedAutomationClient {
     params: AutomationRunParams,
   ): Effect.Effect<AutomationRunView, never, HttpClient.HttpClient> {
     return Effect.map(
-      answered(
-        askHosted(this.#hosted.automations.run, {
+      hostedCall(
+        this.#hosted.automations.run,
+        {
           params: { id: params.automationId },
           body: { idempotencyKey: params.idempotencyKey },
-        }),
+        },
+        { as: AUTOMATION_RENAMES },
       ),
       (read): AutomationRunView => ("failure" in read ? read : read.body),
     );
@@ -226,7 +210,11 @@ export class HostedAutomationClient {
   runs(
     params: AutomationIdParams,
   ): Effect.Effect<AutomationRunsView, never, HttpClient.HttpClient> {
-    return answered(askHosted(this.#hosted.automations.runs, { id: params.automationId }));
+    return hostedCall(
+      this.#hosted.automations.runs,
+      { id: params.automationId },
+      { as: AUTOMATION_RENAMES },
+    );
   }
 
   /** One automation's change sent, answering it as it then stands. */
@@ -235,8 +223,10 @@ export class HostedAutomationClient {
     change: typeof automationChangeRequestSchema.Encoded,
   ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
     return Effect.map(
-      answered(
-        askHosted(this.#hosted.automations.change, { params: { id: automationId }, body: change }),
+      hostedCall(
+        this.#hosted.automations.change,
+        { params: { id: automationId }, body: change },
+        { as: AUTOMATION_RENAMES },
       ),
       (read) => summaryOnly(this.#serviceBaseUrl, read),
     );

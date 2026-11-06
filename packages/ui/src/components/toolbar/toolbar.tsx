@@ -3,7 +3,7 @@
  *
  * Inbox, Tasks, Automations, an agent's page, Version history, Admin,
  * an Inbox item, and the Automations list each stand under this one bar; a
- * document (a plan, Settings, a person, the automation editor) heads itself
+ * document (a description, Settings, a person, the automation editor) heads itself
  * in its page instead (`PageHeader`). The bar is one row at the window's bar
  * height (`--ui-toolbar-height`, which the shell sets level with its title
  * bar), and its slots stand in one order, each drawn only where it says
@@ -58,10 +58,18 @@
  * folded sidebar's toggle, the side panel's), the shell moves that edge
  * clear of them.
  *
+ * A bar heading a room inside a card, under the window's own bar (`quiet`:
+ * an agent's threads), sets its title and its picked-up name in a bar
+ * title's type, as a phone's bar does, so it reads no louder than the
+ * window's bar over it.
+ *
  * A phone's bar (`TOOLBAR_LOOK.PHONE`) lays the same slots as one control a
- * corner, its title centered between them, and is named by the place it
- * heads (`place`). A task's bar leads with its tab strip (`TOOLBAR_LOOK.TABS`),
- * which a narrow room wraps to a row of its own.
+ * corner, its title centered between them in a bar title's type whatever
+ * the page, and its tag under the title, so the title stays centered; it is
+ * named by the place it heads (`place`). A corner is one control wide, so
+ * every labeled control in it draws its glyph alone, named still, centered
+ * where every corner's is. A task's bar leads with its tab strip
+ * (`TOOLBAR_LOOK.TABS`), which a narrow room wraps to a row of its own.
  *
  * What the window around the bar knows and the bar does not, it says in
  * custom properties on the room the bar stands in (`toolbar.css`): the
@@ -129,6 +137,9 @@ const TAG = "ui-toolbar-tag flex-none";
 const DETAIL = "ui-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
 const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
+/** A title in a bar title's type: a phone's, as every phone heads a page, so one place's name reads no larger than another's, and a quiet bar's. */
+const BAR_TITLE =
+  "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-toolbar-title font-toolbar-title tracking-title";
 
 /** A title that opens what it names, set as a bar's title rather than a page's heading, so it reads no louder than the tabs beside it. */
 const TITLE_PRESS_HEADING =
@@ -216,7 +227,9 @@ export interface ToolbarProps {
   readonly place?: string | undefined;
   /** Whether the bar is a container its slots' rules answer the width of (`@container ui-toolbar`), so a control folds before the title or tabs beside it do. */
   readonly measure?: boolean | undefined;
-  /** Whether every labeled control of the bar draws its glyph alone, named still. */
+  /** Whether the title in words and the picked-up name take a bar title's type rather than a page's, as a phone's do: a bar heading a room inside a card, under the window's own bar (an agent's threads). */
+  readonly quiet?: boolean | undefined;
+  /** Whether every labeled control of the bar draws its glyph alone, named still; a phone's bar always does. */
   readonly folded?: boolean | undefined;
   /** Whether a bar that would cut the page's own name under the readable floor stands its heading on a row of its own under the lead and actions, and under 360px folds its lead to glyphs. */
   readonly wrapHeading?: boolean | undefined;
@@ -233,8 +246,11 @@ function ToolbarTitle({
   unmasked,
   press,
   menu,
+  barType,
 }: {
   title: ReactNode;
+  /** Whether the title takes a bar title's type, a phone's bar's or a quiet bar's, rather than a page's. */
+  barType: boolean;
   /** Whether a title in words shows in a screen recording (`titleReplayUnmasked`). */
   unmasked: boolean;
   /** What a title in words opens, which makes it a press; none for words alone. */
@@ -265,7 +281,12 @@ function ToolbarTitle({
     );
   }
   return (
-    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE} words={title}>
+    <OneLine
+      as={ONE_LINE_ELEMENT.H1}
+      hint={wholeWordsHint(title)}
+      className={barType ? BAR_TITLE : TITLE}
+      words={title}
+    >
       <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
     </OneLine>
   );
@@ -354,14 +375,24 @@ function ToolbarTrail({
 }
 
 /** The name the bar picks up from a document's header: words on one line, there to fade in and out, hidden from a reader until shown. */
-function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Element {
+function ToolbarPickedUp({
+  pickUp,
+  barType,
+}: {
+  pickUp: ToolbarPickUp;
+  /** Whether the title takes a bar title's type, a phone's bar's or a quiet bar's, rather than a page's. */
+  barType: boolean;
+}): React.JSX.Element {
   return (
     <span
       className="ui-toolbar-pick-up"
       data-shown={pickUp.shown ? "true" : "false"}
       aria-hidden={pickUp.shown ? undefined : "true"}
     >
-      <OneLine hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined} className={TITLE}>
+      <OneLine
+        hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined}
+        className={barType ? BAR_TITLE : TITLE}
+      >
         {pickUp.name}
       </OneLine>
     </span>
@@ -385,10 +416,12 @@ export function Toolbar({
   look,
   place,
   measure,
+  quiet = false,
   folded,
   wrapHeading,
 }: ToolbarProps): React.JSX.Element {
   const frame = useRef<HTMLElement>(null);
+  const barType = quiet || look === TOOLBAR_LOOK.PHONE;
   const wrapped = useWrapWhenCut(frame, HEADING_SEAT, wrapHeading === true);
   return (
     <ToolbarFrame
@@ -422,10 +455,11 @@ export function Toolbar({
               unmasked={titleReplayUnmasked}
               press={titlePress}
               menu={titleMenu}
+              barType={barType}
             />
           ) : pickUp !== undefined && pickUp.name !== "" ? (
             <ReplayMask>
-              <ToolbarPickedUp pickUp={pickUp} />
+              <ToolbarPickedUp pickUp={pickUp} barType={barType} />
             </ReplayMask>
           ) : null}
         </TitleMenu>

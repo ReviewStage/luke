@@ -68,7 +68,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
@@ -89,17 +89,17 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * `@` in an agent's message box and its transcript, on a task's page and
  * off it, over the real editor bundle: the word typed opens the list of the
- * plan's sections and the repository's files, the row chosen is written
+ * description's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
  * opens it. Off a task's page an `@` is a letter, and a sent mention is
  * still its chip, opened through the window's own doors.
- * Synthetic plan and repository.
+ * Synthetic description and repository.
  */
 
 const TASK_ID = "pl_1";
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
@@ -333,10 +333,14 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 /** Settles, then waits for an open @ list to stop reading, since it draws the repository's files only once their read lands. */
@@ -354,7 +358,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
-    text: () => PLAN_TEXT,
+    text: () => DESCRIPTION_TEXT,
     doors: {
       holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },
@@ -488,7 +492,7 @@ function listedCount(container: HTMLElement): number {
   );
 }
 
-test("an @ typed in the box on a plan's page offers the plan's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
+test("an @ typed in the box on a plan's page offers the description's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
@@ -601,7 +605,7 @@ test("the box is a combobox naming the @ list it opened and the row highlighted 
   assert.equal(field.getAttribute("aria-activedescendant"), null);
 });
 
-test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
+test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no description's sections", async () => {
   const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,
@@ -706,12 +710,12 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("an @ in the box offers the account's connected integrations, and once a word is typed their tools, a pick sent as its link", async () => {
+test("an @ in the box offers the account's connected MCP servers, and once a word is typed their tools, a pick sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Use @");
   await settle();
-  const servers = groupsListed(container).find(([group]) => group === "Integrations");
+  const servers = groupsListed(container).find(([group]) => group === "MCP servers");
   typeInComposer(container, "list");
   await settle();
   const tools = listed(container);
@@ -720,7 +724,7 @@ test("an @ in the box offers the account's connected integrations, and once a wo
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(servers, ["Integrations", ["Linear"]]);
+  assert.deepEqual(servers, ["MCP servers", ["Linear"]]);
   assert.deepEqual(tools, ["Linear · list_issues"]);
   assert.deepEqual(sent, [
     `Use ${mentionMarkdown({ kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" }, "Linear · list_issues", PLACE)}`,
@@ -909,7 +913,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["Agents", ["Wire the desktop"]],
     ["Description", ["Goal", "Rollout", "Invitations"]],
     ["Pages", ["Invites by week"]],
-    ["Integrations", ["Linear"]],
+    ["MCP servers", ["Linear"]],
     ["Mention from", ["Agents", "Description", "Pages", "Files and folders", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
@@ -1530,7 +1534,7 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
     ["Pages", "1 page"],
     ["Files and folders", "acme/relay"],
     ["Dates", ""],
-    ["Linear", "Integration"],
+    ["Linear", "MCP server"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓Move", "⏎⇥Mention", "→Open", "EscClose"]);
   assert.equal(crumb(container), "Pages");

@@ -3,11 +3,11 @@ import {
   BookBookmark,
   BookOpen,
   Bot,
+  CircleArrowOutUpLeft,
   CircleDashed,
   CircleDot,
   CircleDotDashed,
   CircleMinus,
-  CircleSlash,
   ClipboardCheck,
   Clock,
   Cloud,
@@ -26,6 +26,7 @@ import {
   Globe,
   GripVertical,
   Hash,
+  History,
   Layers,
   ListChecks,
   ListEnd,
@@ -99,7 +100,7 @@ function GitHubMarkGlyph(): React.JSX.Element {
  * stop, open somewhere else). Where the audit found one thing drawn three
  * ways, the entry here is the winner, and where one drawing meant several
  * things, it keeps the one it is most used for and the others have their
- * own row. A state wears its own glyph (`SETTLED`, `FAILED`, `DISMISSED`), and
+ * own row. A state wears its own glyph (`RESOLVED`, `FAILED`, `WITHDRAWN`), and
  * the glyph a state is drawn with is never a thing's: `CircleDot` is a GitHub
  * issue and nothing else.
  *
@@ -132,8 +133,8 @@ export const GLYPH = {
   PAGE: lucideGlyph(AppWindow),
   // A page of the web, outside the app, as a website chip names it.
   WEBSITE: lucideGlyph(Globe),
-  PLAN: DocumentIcon,
-  // What one version of a plan changed: its changed sections.
+  DESCRIPTION: DocumentIcon,
+  // What one version of a description changed: its changed sections.
   VERSION_CHANGES: lucideGlyph(FilePenLine),
   INBOX: InboxIcon,
   AUTOMATION: lucideGlyph(Zap),
@@ -159,7 +160,7 @@ export const GLYPH = {
   HOST: lucideGlyph(Server),
   // A task's or an item's status as a field: what a filter or a grouping is by.
   STATUS: lucideGlyph(CircleDotDashed),
-  // An agent's to-do list, the same ticked list a plan's to-do block wears.
+  // An agent's to-do list, the same ticked list a description's to-do block wears.
   TODOS: lucideGlyph(ListChecks),
   // An ask that wants a choice among options, the Inbox's "decide".
   DECIDE: lucideGlyph(Split),
@@ -170,9 +171,11 @@ export const GLYPH = {
 
   // States.
   DONE: MarkDoneIcon,
-  SETTLED: CircleCheckIcon,
+  // A thing resolved, a comment thread or an Inbox item, and the Resolve that does it: one mark for the act and the state it leaves, never Close's ×.
+  RESOLVED: CircleCheckIcon,
   FAILED: AlertIcon,
-  DISMISSED: lucideGlyph(CircleSlash),
+  // An Inbox item its agent took back before anyone answered it.
+  WITHDRAWN: lucideGlyph(CircleArrowOutUpLeft),
 
   // Acts.
   ADD: PlusIcon,
@@ -189,6 +192,8 @@ export const GLYPH = {
   END_CALL: lucideGlyph(PhoneOff),
   RETRY: RetryIcon,
   GO_BACK: lucideGlyph(RotateCcw),
+  // What was put away and can be opened again: a task's closed and archived agents.
+  HISTORY: lucideGlyph(History),
   // The way back to the place above, which `BackButton` alone draws.
   BACK: BackIcon,
   PIN: lucideGlyph(Pin),

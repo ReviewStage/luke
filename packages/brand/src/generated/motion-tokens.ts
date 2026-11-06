@@ -12,6 +12,7 @@ export const MOTION_DURATION_MS = {
   QUICK: 140,
   HOVER: 70,
   PANE: 240,
+  SHOWCASE: 1000,
 } as const;
 
 export const MOTION_DELAY_MS = {

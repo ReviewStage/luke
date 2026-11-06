@@ -319,39 +319,6 @@ test("Settings names its page once, by the page's own header, which also holds t
   );
 });
 
-test("a page group's head folds its pages, its one chevron turning with the fold, and a press brings them back", () => {
-  const page = mount(createElement(SettingsHarness));
-  const head = (name: string) =>
-    [
-      ...page.querySelectorAll<HTMLButtonElement>(
-        'nav[aria-label="Settings pages"] button[aria-expanded]',
-      ),
-    ].find((each) => each.textContent === name) ?? assert.fail(`${name} heads a group`);
-  const account = head("Account");
-  const turns = () => [...account.querySelectorAll(".ui-disclosure-turn")];
-  assert.equal(turns().length, 1, "the head draws one chevron");
-  assert.deepEqual(
-    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
-    ["true", "true"],
-  );
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
-
-  act(() => account.click());
-  assert.deepEqual(
-    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
-    ["false", "false"],
-  );
-  assert.ok(!pageButtons(page).some((each) => each.textContent === "Account"));
-  assert.ok(
-    pageButtons(page).some((each) => each.textContent === "Workspace"),
-    "the other groups stand",
-  );
-
-  act(() => account.click());
-  assert.equal(turns()[0]?.getAttribute("data-open"), "true");
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
-});
-
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   assert.deepEqual(
@@ -643,7 +610,7 @@ function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
 }
 
 const SIDEBAR_SEARCH = "Search settings";
-const PAGE_SEARCH = "Search integrations and tools";
+const PAGE_SEARCH = "Search integrations";
 
 /** Presses the sidebar's result named `name` under the Integrations page's heading. */
 function openIntegrationResult(page: HTMLElement, name: string): void {
@@ -832,7 +799,7 @@ test("on a phone the page list is headed by its way out alone, named for the ste
         ...NO_HISTORY,
         canGoBack: true,
         steps: {
-          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "routed", of: "/acme/inbox" } }],
           forward: [],
         },
       },

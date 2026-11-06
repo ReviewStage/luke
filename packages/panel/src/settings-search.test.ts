@@ -187,7 +187,6 @@ test("an experiment is found by its name, what it brings, and what other apps ca
       experimentalFound(query, true),
       [
         "Task descriptions",
-        "Several repositories",
         "Bring your own host",
         "Skills",
         "Pilot",

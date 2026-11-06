@@ -3,7 +3,7 @@
  *
  * A failure that is an expected, named outcome (a usage limit, a key the
  * member must fix) is logged and nothing more, so an alert stays worth
- * reading. One that is not, such as a session eve failed or a turn whose end
+ * reading. One that is not, such as a session an agent's harness failed or a turn whose end
  * never came, is also reported through Effect's `ErrorReporter`, which the
  * deployment's runtimes hand to Sentry (`observability/sentry.ts`). The kind
  * is the report's message and every report is the one class, so Sentry groups

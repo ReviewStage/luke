@@ -29,8 +29,8 @@ import { Schema as EffectSchema } from "effect";
 
 /**
  * The services an account may connect. A provider's value is also the name
- * its eve connection is registered under, which is its file's name in every
- * agent's `connections/`, and the path segment its routes are addressed by.
+ * its MCP server is handed to an agent under, and the path segment its
+ * routes are addressed by.
  */
 export const INTEGRATION_PROVIDER = {
   EXECUTOR: "executor",
@@ -216,13 +216,13 @@ export function integrationProviderFromWire(value: string | null): IntegrationPr
 export const integrationProviderSchema = EffectSchema.Literals(INTEGRATION_PROVIDER_LIST);
 
 /**
- * The name one account at a provider goes by everywhere: the eve connection
+ * The name one account at a provider goes by everywhere: the MCP server
  * an agent reaches it through, a coding agent's switch and mention, and the
  * routes' `connection` query. The first account at a provider is named after
  * the provider (`notion`), so every name stored before a second account was
  * possible keeps naming it; another is the provider and its place, `notion-2`.
- * eve allows a connection's name lowercase letters, digits, and dashes, from
- * a letter, up to 64 characters, and qualifies a tool's name with two
+ * A connection's name is lowercase letters, digits, and dashes, from a
+ * letter, up to 64 characters, and a tool's name was qualified with two
  * underscores, which this grammar never spells.
  */
 const CONNECTION_NAME_PATTERN = new RegExp(
@@ -247,8 +247,8 @@ export function integrationConnectionOf(
 /**
  * The name a new account at the provider takes: the provider's own while no
  * account holds it, else the lowest free place. Note that this is the one
- * place a name is spelled from its parts, because eve takes a connection by
- * one flat name; everywhere else reads it back from the row it was minted on.
+ * place a name is spelled from its parts, because an agent is handed a
+ * connection by one flat name; everywhere else reads it back from the row it was minted on.
  */
 export function mintIntegrationConnectionName(
   provider: IntegrationProvider,
@@ -312,7 +312,7 @@ export const integrationRemoteCallSchema = EffectSchema.Struct({
   remoteTool: EffectSchema.String.check(EffectSchema.isPattern(REMOTE_TOOL_PATTERN)),
   /** The `connection_execute` call it ran under. */
   parentCallId: EffectSchema.String,
-  /** The input eve validated against the tool's schema and sent; empty where it sent none. */
+  /** The input the call sent the tool; empty where it sent none. */
   input: verbatimJsonSchema(WireValueSchema, { type: "object", additionalProperties: true }),
   /** The account it ran against, by connection name, where it was not the provider's first. */
   connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
@@ -507,56 +507,17 @@ export type IntegrationToolsProblemReason =
   (typeof INTEGRATION_TOOLS_PROBLEM)[keyof typeof INTEGRATION_TOOLS_PROBLEM];
 
 /**
- * The hints an MCP server gives of what one of its tools does, the spec's
- * `ToolAnnotations`: whether it only reads, whether a write it makes
- * destroys, whether calling it again changes nothing more, and whether it
- * reaches past the server's own world. Each stands only where the server
- * sent it, so an absent hint is never read as its spec default.
- */
-export const integrationToolAnnotationsSchema = EffectSchema.Struct({
-  readOnlyHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-  destructiveHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-  idempotentHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-  openWorldHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
-
-export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema.Type;
-
-/**
- * One argument a tool takes, as its server's input schema declares it, for a
- * person to read: its name, its type in a few words (`string`, `string[]`,
- * `string | null`, `enum`, `object`), whether a call must give it, and, where
- * the schema says, what it is, the values it may take, and its default, each
- * value written as the JSON it is unless it is a string.
- */
-const integrationToolParameterSchema = EffectSchema.Struct({
-  name: EffectSchema.String,
-  type: EffectSchema.String,
-  required: EffectSchema.Boolean,
-  description: EffectSchema.optionalKey(EffectSchema.String),
-  values: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
-  default: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type IntegrationToolParameter = typeof integrationToolParameterSchema.Type;
-
-/**
  * The tools one provider's server offers the account's agents (GET): each
- * one's name, the title a person reads where its server gave one, what it
- * does as its server wrote it, the hints its server annotated it with where
- * it sent any, and the arguments it takes where its server's input schema
- * was readable; or why the server listed none, with the server's own
- * one-line message where it sent one.
+ * one's name, which a mention of it carries, and what it does as its server
+ * wrote it, which a released desktop still requires; or why the server
+ * listed none, with the server's own one-line message where it sent one.
  */
 export const integrationToolsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     tools: EffectSchema.Array(
       EffectSchema.Struct({
         name: EffectSchema.String,
-        title: EffectSchema.optionalKey(EffectSchema.String),
         description: EffectSchema.String,
-        annotations: EffectSchema.optionalKey(integrationToolAnnotationsSchema),
-        parameters: EffectSchema.optionalKey(EffectSchema.Array(integrationToolParameterSchema)),
       }),
     ),
   }),

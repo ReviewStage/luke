@@ -1,8 +1,10 @@
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
+  type ChaptersGenerator,
   type PullRequestChaptersLiveAnswer,
   pullRequestChaptersOfLive,
+  sameGenerator,
 } from "@repo/features/pull-request-chapters-live";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import { Data, Effect, Option, type Scope } from "effect";
@@ -18,7 +20,7 @@ import { pushLive } from "./live-push.js";
  * while any window holds them and a while after (`heldSlice`), so another
  * member's claim, finish, or failure draws on every open view within the
  * service's coalesce window, with no Refresh. The service answers whether
- * the reader can generate chapters beside the rows on every answer, since
+ * the reader can generate chapters, and on what, beside the rows on every answer, since
  * it comes from the reader's own keys, which no statement reads, so the
  * follow draws it anew from each answer rather than only the first.
  */
@@ -57,10 +59,10 @@ function goneAfter(failure: string): boolean {
 /**
  * Follows `key`'s chapters live until let go, each change told through
  * `answers`: the newest claim as the agent's read answers it, with whether
- * the reader can generate them as the latest answer says. Note that an
- * answer whose rows stand carries no rows, so a change to whether the
- * reader can generate is drawn as the answer is sealed, over the rows last
- * taken.
+ * the reader can generate them, and on what, as the latest answer says.
+ * Note that an answer whose rows stand carries no rows, so a change to
+ * what the reader can generate on is drawn as the answer is sealed, over
+ * the rows last taken.
  */
 function followChapters(
   dependencies: ChaptersFollowDependencies,
@@ -70,10 +72,10 @@ function followChapters(
   // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
   const userId = dependencies.accountId();
   let rows: readonly unknown[] | undefined;
-  let generatable: boolean | undefined;
+  let generator: ChaptersGenerator | undefined;
   const draw = () => {
-    if (rows === undefined || generatable === undefined) return;
-    const drawn = pullRequestChaptersOfLive(rows, key.number, generatable);
+    if (rows === undefined || generator === undefined) return;
+    const drawn = pullRequestChaptersOfLive(rows, key.number, generator);
     if ("failure" in drawn) answers.unanswered();
     else answers.answered(drawn);
   };
@@ -84,8 +86,8 @@ function followChapters(
             if ("failure" in sealed) {
               return { failure: sealed.failure, gone: goneAfter(sealed.failure) };
             }
-            if (sealed.generatable !== generatable) {
-              generatable = sealed.generatable;
+            if (generator === undefined || !sameGenerator(sealed, generator)) {
+              generator = sealed;
               draw();
             }
             return sealed;

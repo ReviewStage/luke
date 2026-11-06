@@ -14,7 +14,7 @@ import {
 
 /**
  * What the agent box's context ring and its popover say of a page's
- * context: the share in words, the ring's color by how near eve's
+ * context: the share in words, the ring's color by how near the harness's
  * compaction the last step read, the parts the read divides into with a
  * "~" on every estimate, and the lines under them. Synthetic counts
  * throughout.
@@ -22,7 +22,7 @@ import {
 
 const NOW = 1_800_000_600_000;
 
-/** A step that read 620k of a 1M window whose compaction is at 900k, on an agent handed the plan. */
+/** A step that read 620k of a 1M window whose compaction is at 900k, on an agent handed the description. */
 const CONTEXT: AgentContext = {
   windowTokens: 1_000_000,
   compactionThresholdTokens: 900_000,
@@ -57,7 +57,7 @@ test("the ring's hover says near the limit once the ring is amber or red, and sa
   assert.equal(contextHint(reading(950_000)), "95% of context used, near the limit");
 });
 
-test("the ring has room short of a tenth of the window below eve's compaction, turns amber from there, and red at the compaction and past it", () => {
+test("the ring has room short of a tenth of the window below the harness's compaction, turns amber from there, and red at the compaction and past it", () => {
   assert.equal(contextLevel(reading(799_999)), "room");
   assert.equal(contextLevel(reading(800_000)), "near");
   assert.equal(contextLevel(reading(899_999)), "near");
@@ -65,7 +65,7 @@ test("the ring has room short of a tenth of the window below eve's compaction, t
   assert.equal(contextLevel(reading(1_200_000)), "over");
 });
 
-test("the popover divides the read into the instructions, the tools, the plan, and the conversation left over, every count an estimate marked with ~", () => {
+test("the popover divides the read into the instructions, the tools, the description, and the conversation left over, every count an estimate marked with ~", () => {
   const rows = contextRows(CONTEXT, undefined);
   assert.deepEqual(
     rows.map((row) => [row.label, rowCount(row)]),
@@ -81,7 +81,7 @@ test("the popover divides the read into the instructions, the tools, the plan, a
   assert.ok(Math.abs(filled - 62) < 1e-9);
 });
 
-test("an agent handed a prompt names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
+test("an agent handed a prompt names its brief so; once the harness compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
   assert.deepEqual(
     contextRows(CONTEXT, AGENT_BRIEF.PROMPT).map((row) => row.label),
     ["System prompt", "Tool definitions", "Prompt", "Conversation"],
@@ -92,7 +92,7 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
     compactedAt: NOW - 120_000,
   };
   assert.deepEqual(
-    contextRows(compacted, AGENT_BRIEF.PLAN).map((row) => [row.label, rowCount(row)]),
+    contextRows(compacted, AGENT_BRIEF.DESCRIPTION).map((row) => [row.label, rowCount(row)]),
     [
       ["System prompt", "~1.2K"],
       ["Tool definitions", "~2.8K"],
@@ -112,7 +112,7 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
   assert.ok(Math.abs(filled - 0.3) < 1e-9);
 });
 
-test("under the legend: what the cache read and wrote, the last step's output, where eve compacts, and when it last did, where it has", () => {
+test("under the legend: what the cache read and wrote, the last step's output, where the harness compacts, and when it last did, where it has", () => {
   assert.deepEqual(contextStats(CONTEXT, NOW), [
     { label: "Read from cache", value: "600K" },
     { label: "Written to cache", value: "18K" },

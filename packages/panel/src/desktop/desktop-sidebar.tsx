@@ -44,6 +44,7 @@ import {
   opensMenu,
   PanePin,
   PinIcon,
+  PLAIN_PRESS,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   RepositoryName,
@@ -76,7 +77,7 @@ import {
 } from "@repo/ui";
 import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, STRIP_TAB_KIND, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -168,7 +169,6 @@ import {
   useNestedRows,
 } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
-import { ADMIN_PLACE, TASKS_ROUTE } from "./pages-on-demand.js";
 import { PhoneAccount } from "./phone-account.js";
 import { PhoneHead } from "./phone-head.js";
 import { useInboxWaiting } from "./places-waiting.js";
@@ -240,9 +240,6 @@ export function useSidebarEdge(
   });
 }
 
-/** The display a browser tab answers, as against an installed web app's own window, which draws no Back of its own. */
-const BROWSER_DISPLAY = "(display-mode: browser)";
-
 /**
  * Back and forward, at the right of the left column's title-bar row, level
  * with the traffic lights, the way Cursor and Codex keep them: in the
@@ -250,10 +247,9 @@ const BROWSER_DISPLAY = "(display-mode: browser)";
  * it when it folds, after the column's drag strip so they claim their
  * presses back from the window frame. A way with nothing along it is dimmed
  * rather than gone, so neither button moves. The chords are the shell's to
- * offer, since they answer while the column is folded too. A phone's
- * browser tab draws none, since its own Back and Forward walk the same
- * history (`navigation-history.ts`) and the drawer's head is short of room;
- * a phone's installed web app keeps them, having no browser around it.
+ * offer, since they answer while the column is folded too. A phone draws
+ * none: its places bar and each page's own Back are how it moves, and the
+ * drawer's head is short of room.
  */
 export function HistoryButtons({
   history,
@@ -262,7 +258,7 @@ export function HistoryButtons({
   history: NavigationHistory;
   room: ShellRoom;
 }): React.JSX.Element | null {
-  if (room === SHELL_ROOM.NARROW && window.matchMedia(BROWSER_DISPLAY).matches) return null;
+  if (room === SHELL_ROOM.NARROW) return null;
   return (
     <div className="title-bar-controls" data-edge="column">
       <HistoryButton
@@ -599,7 +595,7 @@ function accountPinOf(
 function agentPinOf(pin: TaskAgentPin, agent: AgentSummary, tasks: TasksControl): AgentPin {
   const drawn = {
     task: pin.taskId,
-    tab: { agent: agent.id },
+    tab: agentTab(agent.id),
     label: agentName(agent, tasks.agents.models),
     at: pin.pinnedAt,
     model: agent.model,
@@ -658,7 +654,7 @@ function pinnedRows(
       return agent === undefined ? [] : [{ kind: TASK_ROW.AGENT, agent, pin, place }];
     }
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return task === undefined || pin.tab === SIDE_PANEL_TAB.PLAN
+    return task === undefined || pin.tab === SIDE_PANEL_TAB.DESCRIPTION
       ? []
       : [{ kind: TASK_ROW.TASK, task, pin, place }];
   });
@@ -1515,13 +1511,16 @@ function SidebarTasksRow({
   current,
   disabled,
   onOpen,
+  onPreload,
 }: {
   current: boolean;
   disabled: boolean;
   onOpen: () => void;
+  /** Reads the Board's route ahead of a press, its chunk among it. */
+  onPreload: () => void;
 }): React.JSX.Element {
   useWhenIdle(() => {
-    if (!disabled) TASKS_ROUTE.prefetch();
+    if (!disabled) onPreload();
   }, IDLE_TIMEOUT_MS.PREFETCH);
   return (
     <NavItem
@@ -1530,7 +1529,7 @@ function SidebarTasksRow({
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.TASKS)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.TASKS].chord} />}
       disabled={disabled}
-      onPointerEnter={TASKS_ROUTE.prefetch}
+      onPointerEnter={onPreload}
       onClick={onOpen}
     >
       Tasks
@@ -1589,9 +1588,11 @@ function SidebarAutomationsRow({
 function SidebarAdminRow({
   current,
   onOpen,
+  onPreload,
 }: {
   current: boolean;
   onOpen: () => void;
+  onPreload: () => void;
 }): React.JSX.Element | null {
   const admin = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   if (!admin) return null;
@@ -1600,7 +1601,7 @@ function SidebarAdminRow({
       icon={<ShieldUserIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       // The pointer on the row is the way to the place, so its chunk, charts and all, is read now rather than at the press.
-      onPointerEnter={ADMIN_PLACE.prefetch}
+      onPointerEnter={onPreload}
       onClick={onOpen}
     >
       Admin
@@ -1843,11 +1844,13 @@ function SidebarColumn({
     },
   });
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
-  // The window's Inbox, an agent's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
-  const inInbox = onTasks && tasks.inboxView.open;
+  // The window's Inbox, an agent's or a person's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
+  // Note that Admin, the Board, a person's page, and the Automations pages stand over the window's state, which stays as it was under them, so no place of that state is shown then.
+  const inAdmin = tasks.adminView.open;
+  const inInbox = onTasks && !inAdmin && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
-  const inBoard = onTasks && tasks.boardView.open;
-  const inAdmin = onTasks && tasks.adminView.open;
+  const inBoard = onTasks && !inAdmin && tasks.boardView.open;
+  const inPerson = onTasks && !inAdmin && tasks.personView.userId !== undefined;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1867,56 +1870,36 @@ function SidebarColumn({
     inInbox ||
     inAutomations ||
     inBoard ||
+    inPerson ||
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   const waiting = useInboxWaiting(tasks);
-  // The Inbox's row marks its threads read from its right-click.
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing; a task's row goes back to work
   // on it, on the agent waiting on the developer where one does (`onResume`).
-  const openTask = (taskId: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onResume(taskId);
-  };
-  const showTasks = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-  };
-  const newTask = () => {
-    showTasks();
-    tasks.onNewTask();
-  };
-  const openPinnedTab = (pin: SidebarPin) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onOpenPinnedTab(pin);
-  };
-  const openInbox = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.inboxView.onOpen();
-  };
-  const openBoard = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.boardView.onOpen();
-  };
-  const openAutomations = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.automationsView.onOpen();
-  };
-  const openAdmin = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.adminView.onOpen();
-  };
-  const goHome = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onGoHome();
-  };
+  // A press for a place of the window's state leaves a routed place standing for it, Settings or Admin (`panel-router.tsx`).
+  // Note that the leave and the door are one way out, asked once, because a page holding unsaved work holds one question, which a second ask would take the place of.
+  const leaveFor = (door: () => void) =>
+    tasks.leaveGuard.guard(() => {
+      onTabChange(PANEL_TAB.TASKS);
+      door();
+    })();
+  const openTask = (taskId: string) => leaveFor(() => tasks.onResume(taskId));
+  // Note that New task's card stands over whatever place stands, so it leaves only Settings, which takes the window, for it.
+  const newTaskOver = (door: () => void) => (onTasks ? door() : leaveFor(door));
+  const newTask = () => newTaskOver(() => tasks.onNewTask());
+  const openPinnedTab = (pin: SidebarPin) => leaveFor(() => tasks.onOpenPinnedTab(pin));
+  // Note that the Inbox, the Board, and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
+  const openInbox = () => tasks.inboxView.onOpen();
+  const openBoard = () => tasks.boardView.onOpen();
+  const openAutomations = () => tasks.automationsView.onOpen();
+  const openAdmin = () => tasks.adminView.onOpen();
+  const goHome = () => leaveFor(() => tasks.onGoHome());
   // Home is the place shown while no task is open and nothing stands in its
   // place. New task's composer is on it, so its row draws no Draft pencil
   // for the words shown there.
   const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
-  const newTaskIn = (repository: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onNewTaskIn(repository);
-  };
+  const newTaskIn = (repository: string) => newTaskOver(() => tasks.onNewTaskIn(repository));
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
   // The Tasks head's own menu, on a right-click and a long press, drawn only once it offers more than the buttons beside it.
@@ -1936,13 +1919,10 @@ function SidebarColumn({
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
   // An agent with no plan stands on its own page, which is the place shown while it stands.
-  const agentShown = onTasks ? tasks.agentView.agentId : undefined;
+  const agentShown = onTasks && !inAdmin ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
     row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
-  const openAgent = (agentId: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.agentView.onOpen(agentId);
-  };
+  const openAgent = (agentId: string) => leaveFor(() => tasks.agentView.onOpen(agentId));
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows, listedAgents } = tasks;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
@@ -2060,7 +2040,10 @@ function SidebarColumn({
     },
     unread,
     unseenAgent: (agentId) =>
-      tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
+      tasks.unreadTabs.some(
+        (tab) =>
+          typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.AGENT && tab.agent === agentId,
+      ),
     now,
     faces: { creator: true, assignee: assignedTo.kind !== ASSIGNED_TO.MEMBER },
     inSight: overlay.inSight,
@@ -2259,6 +2242,7 @@ function SidebarColumn({
             current={inBoard}
             disabled={!tasks.signedIn}
             onOpen={chosen(openBoard)}
+            onPreload={tasks.boardView.onPreload}
           />
         )}
         <SidebarAutomationsRow
@@ -2268,7 +2252,11 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        <SidebarAdminRow current={inAdmin} onOpen={chosen(openAdmin)} />
+        <SidebarAdminRow
+          current={inAdmin}
+          onOpen={chosen(openAdmin)}
+          onPreload={tasks.adminView.onPreload}
+        />
       </SidebarPlaces>
       <SidebarRule />
     </>
@@ -2335,6 +2323,7 @@ function SidebarColumn({
                   selection={{ selected: selection.selected, onChange: selection.onChange }}
                   order={[chooseOrder]}
                   bringIn={runs.bringIn}
+                  plain={PLAIN_PRESS.CLEARS}
                 >
                   <div
                     {...roving}

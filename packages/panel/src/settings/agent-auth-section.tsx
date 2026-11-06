@@ -25,7 +25,6 @@ import {
   ANNOUNCE,
   BANNER_LOOK,
   Banner,
-  BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
   ButtonLink,
@@ -33,7 +32,10 @@ import {
   CHOICE_BAR_SIZE,
   ChoiceBar,
   CONFIRM_LOSS,
+  COPY_FIELD_PROMPT,
+  COPY_FIELD_WIDTH,
   ConfirmDialog,
+  CopyField,
   DIALOG_SIZE,
   Dialog,
   DialogActions,
@@ -62,7 +64,10 @@ import {
   SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSection,
+  STEP_STATE,
   Stack,
+  Step,
+  Steps,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -76,12 +81,14 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { providerKeysQuery, providerKeysRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { ConnectCodexDialog } from "./connect-codex-dialog.js";
 
@@ -184,6 +191,10 @@ interface Harness {
   readonly plan: SubscriptionKeySummary["kind"];
   readonly keyName: string;
   readonly keyUrl: string;
+  /** What the site a key is made on is called, which its link names. */
+  readonly keySite: string;
+  /** How a key of its begins, which its empty field shows. */
+  readonly keyShape: string;
   readonly anchor: string;
   /** What its setup row says it takes while nothing is connected. */
   readonly takes: string;
@@ -201,6 +212,8 @@ const HARNESS = {
     plan: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
     keyName: "Anthropic",
     keyUrl: "https://console.anthropic.com/settings/keys",
+    keySite: "Anthropic Console",
+    keyShape: "sk-ant-api03-…",
     anchor: SETTINGS_SECTION.CLAUDE,
     takes: "Claude plan or Anthropic API key",
   },
@@ -210,6 +223,8 @@ const HARNESS = {
     plan: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
     keyName: "OpenAI",
     keyUrl: "https://platform.openai.com/api-keys",
+    keySite: "OpenAI Platform",
+    keyShape: "sk-proj-…",
     anchor: SETTINGS_SECTION.CODEX,
     takes: "ChatGPT plan or OpenAI API key",
   },
@@ -240,10 +255,8 @@ const WORDS = {
   NEEDS_ATTENTION: "Needs attention",
   SIGNED_OUT_OF_PLAN: "Signed out",
   API_KEY: "API key",
-  GET_KEY: "Get key",
   CANCEL: "Cancel",
-  SAVE: "Save",
-  TOKEN_PLACEHOLDER: 'Paste the token from "claude setup-token"',
+  TOKEN_SHAPE: "sk-ant-oat01-…",
   SAVING_TOKEN: "Saving the token",
   CHECKING_KEY: "Checking the key",
   DISCONNECT: "Disconnect",
@@ -254,11 +267,13 @@ const WORDS = {
   REPLACE: "Replace",
   REPLACE_TOKEN: "Replace token",
   SAVED: "Saved",
-  NEW_KEY: "New key",
-  PLAN_LIMITS: "Counts against your plan's limits",
-  RUN_SETUP_TOKEN: "Run claude setup-token in a terminal, then paste what it prints.",
-  REPLACES_TOKEN: `Saving replaces the token ${PRODUCT_NAME} holds.`,
-  REPLACES_KEY: `Saving replaces the key ${PRODUCT_NAME} holds.`,
+  RUN_SETUP_TOKEN: "Run this in a terminal",
+  PASTE_TOKEN: "Paste the token it prints",
+  CREATE_KEY: "Create an API key",
+  PASTE_KEY: "Paste the key",
+  SETUP_TOKEN_COMMAND: "claude setup-token",
+  SETUP_TOKEN_COMMAND_LABEL: "Setup-token command",
+  COMMAND: "command",
   CONNECTED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.CONNECTED],
   USAGE_LIMIT: "Usage limit reached",
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
@@ -279,6 +294,23 @@ const WORDS = {
   CHATGPT_DISCONNECT_FAILED: "Couldn't disconnect your ChatGPT plan. Try again.",
   DEFAULT_FAILED: "Couldn't change the default. Try again.",
 } as const;
+
+/** What a confirmed removal answers where it went. */
+const ACCEPTED_KEY: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/** What a confirmed removal answers where it did not go, by what it removed. */
+const CLAUDE_DISCONNECT_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: WORDS.CLAUDE_DISCONNECT_FAILED,
+};
+const CHATGPT_DISCONNECT_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: WORDS.CHATGPT_DISCONNECT_FAILED,
+};
+const KEY_REMOVE_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: WORDS.REMOVE_KEY_FAILED,
+};
 
 /* ----- Reading the credentials ----- */
 
@@ -548,32 +580,29 @@ function CredentialQuestion({
   );
 }
 
-/** Where a provider's keys are made, opened through the window's own link door. */
-function GetKeyLink({ url }: { url: string }): React.JSX.Element {
+/** Where a provider's keys are made, named for the site and opened through the window's own link door. */
+function GetKeyLink({
+  provider,
+  onOpened,
+}: {
+  provider: ProviderKeyProvider;
+  onOpened: () => void;
+}): React.JSX.Element {
   const openLink = useOpenLink();
+  const { keyUrl, keySite } = HARNESS[provider];
   return (
     <TextLink
       look={TEXT_LINK_LOOK.UNDERLINED}
-      href={url}
+      href={keyUrl}
       external
       onClick={(event) => {
         event.preventDefault();
-        openLink(url);
+        openLink(keyUrl);
+        onOpened();
       }}
     >
-      {WORDS.GET_KEY}
+      {`Open ${keySite}`}
     </TextLink>
-  );
-}
-
-/** What an unheld API key costs, and where one is made. */
-function KeyCost({ provider }: { provider: ProviderKeyProvider }): React.JSX.Element {
-  const harness = HARNESS[provider];
-  return (
-    <>
-      {`Billed by ${harness.keyName} per token. `}
-      <GetKeyLink url={harness.keyUrl} />
-    </>
   );
 }
 
@@ -592,6 +621,8 @@ interface PastedSecret {
   readonly cancel: () => void;
   readonly change: (value: string) => void;
   readonly save: () => void;
+  /** Saves what a paste left in the field, as it lands. */
+  readonly paste: (value: string) => void;
 }
 
 /**
@@ -632,8 +663,8 @@ function usePastedSecret({
     setRejection(undefined);
     setEditing(false);
   }, []);
-  const save = () => {
-    const key = pasted.trim();
+  const save = (value = pasted) => {
+    const key = value.trim();
     if (key === "" || saving) return;
     setSaving(true);
     setRejection(undefined);
@@ -665,33 +696,44 @@ function usePastedSecret({
       setPasted(value);
       setRejection(undefined);
     },
-    save,
+    save: () => save(),
+    paste: (value) => save(value),
   };
 }
 
+/** A paste form's first step: what to do, and what it needs, told once it is done. */
+interface FirstStep {
+  readonly title: string;
+  readonly body: (done: () => void) => React.ReactNode;
+}
+
 /**
- * A pasted secret's form: the field, then Save, the form's submit, so Enter
- * in the field presses it. Note that going back to a held secret is Escape
- * or the row's Cancel at its end, never a second button here.
+ * A pasted secret's form, every credential's alike: two steps, getting the
+ * secret and pasting it. The first checks off once its command is copied or
+ * its link opened, and the second is the field, which a paste saves as it
+ * lands, as Enter saves what was typed. Note that going back to a held
+ * secret is Escape or the row's Cancel at its end, never a button here.
  */
-function SecretForm({
+function PasteSteps({
   field,
   secret,
+  first,
   label,
-  description,
   held,
   placeholder,
   running,
 }: {
   field: React.RefObject<HTMLInputElement | null>;
   secret: PastedSecret;
+  first: FirstStep;
+  /** What the field is called, which says what to paste. */
   label: string;
-  description: React.ReactNode;
   /** Whether a secret is already held, which the empty field says in its place and Escape goes back to. */
   held: boolean;
   placeholder: string;
   running: string;
 }): React.JSX.Element {
+  const [firstDone, setFirstDone] = useState(false);
   return (
     <Stack
       as={LAYOUT_ELEMENT.FORM}
@@ -700,29 +742,30 @@ function SecretForm({
         secret.save();
       }}
     >
-      <SecretField
-        ref={field}
-        label={label}
-        description={description}
-        error={refusedShown(secret.rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
-        saved={held}
-        placeholder={placeholder}
-        disabled={secret.saving}
-        value={secret.pasted}
-        onEscape={held ? secret.cancel : undefined}
-        onChange={secret.change}
-      />
-      <Inline justify={JUSTIFY.END}>
-        <Button
-          type={BUTTON_TYPE.SUBMIT}
-          variant={BUTTON_VARIANT.PRIMARY}
-          disabled={secret.pasted.trim() === ""}
-          busy={secret.saving}
-          busyLabel={running}
+      <Steps>
+        <Step
+          number={1}
+          title={first.title}
+          state={firstDone ? STEP_STATE.DONE : STEP_STATE.CURRENT}
         >
-          {WORDS.SAVE}
-        </Button>
-      </Inline>
+          {first.body(() => setFirstDone(true))}
+        </Step>
+        <Step number={2} state={firstDone ? STEP_STATE.CURRENT : STEP_STATE.TO_DO}>
+          <SecretField
+            ref={field}
+            label={label}
+            description={secret.saving ? running : undefined}
+            error={refusedShown(secret.rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
+            saved={held}
+            placeholder={placeholder}
+            disabled={secret.saving}
+            value={secret.pasted}
+            onEscape={held ? secret.cancel : undefined}
+            onChange={secret.change}
+            onPasted={secret.paste}
+          />
+        </Step>
+      </Steps>
     </Stack>
   );
 }
@@ -741,6 +784,29 @@ function HeldLine({
       <Inline wrap={false}>{presses}</Inline>
     </Inline>
   );
+}
+
+/** A setup-token's first step: its command, copied to run in a terminal. */
+const SETUP_TOKEN_FIRST: FirstStep = {
+  title: WORDS.RUN_SETUP_TOKEN,
+  body: (done) => (
+    <CopyField
+      label={WORDS.SETUP_TOKEN_COMMAND_LABEL}
+      value={WORDS.SETUP_TOKEN_COMMAND}
+      what={WORDS.COMMAND}
+      copy={(text) => copyThroughShell(text).then(done)}
+      width={COPY_FIELD_WIDTH.FULL}
+      prompt={COPY_FIELD_PROMPT.SHELL}
+    />
+  ),
+};
+
+/** An API key's first step: the provider's site, opened to make one. */
+function keyFirst(provider: ProviderKeyProvider): FirstStep {
+  return {
+    title: WORDS.CREATE_KEY,
+    body: (done) => <GetKeyLink provider={provider} onOpened={done} />,
+  };
 }
 
 /* ----- The plan's row ----- */
@@ -766,7 +832,7 @@ function useClaudePlan(
   plan: SubscriptionKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+  const { mutateAsync: sendProviderKeysRemove, ...keyRemoving } = useMutation(
     actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
   );
   const secret = usePastedSecret({
@@ -800,9 +866,15 @@ function useClaudePlan(
         }),
     [sendProviderKeysRemove, cancel],
   );
+  const removalAct = useConfirmAct(keyRemoving, {
+    send: disconnect,
+    answered: (removed): ActionResult =>
+      "failure" in removed ? CLAUDE_DISCONNECT_REFUSED : ACCEPTED_KEY,
+    failed: () => CLAUDE_DISCONNECT_REFUSED,
+  });
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
-    disconnect,
+    removalAct,
     confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
   );
   return { secret, removal };
@@ -832,9 +904,7 @@ function ClaudePlanRow({
         label={HARNESS[PROVIDER_KEY_PROVIDER.ANTHROPIC].planName}
         indent={SETTINGS_ROW_INDENT.MARK}
         description={
-          plan === undefined ? (
-            WORDS.PLAN_LIMITS
-          ) : (
+          plan === undefined ? undefined : (
             <State ok={ok && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
               {tokenWords(plan)}
             </State>
@@ -843,13 +913,13 @@ function ClaudePlanRow({
         below={
           secret.open
             ? () => (
-                <SecretForm
+                <PasteSteps
                   field={field}
                   secret={secret}
-                  label="Claude setup-token"
-                  description={plan === undefined ? undefined : WORDS.REPLACES_TOKEN}
+                  first={SETUP_TOKEN_FIRST}
+                  label={WORDS.PASTE_TOKEN}
                   held={plan !== undefined}
-                  placeholder={WORDS.TOKEN_PLACEHOLDER}
+                  placeholder={WORDS.TOKEN_SHAPE}
                   running={WORDS.SAVING_TOKEN}
                 />
               )
@@ -885,13 +955,13 @@ function ClaudePlanInPlace({
   return (
     <>
       {plan === undefined || secret.open ? (
-        <SecretForm
+        <PasteSteps
           field={field}
           secret={secret}
-          label="Claude setup-token"
-          description={plan === undefined ? WORDS.RUN_SETUP_TOKEN : WORDS.REPLACES_TOKEN}
+          first={SETUP_TOKEN_FIRST}
+          label={WORDS.PASTE_TOKEN}
           held={plan !== undefined}
-          placeholder={WORDS.TOKEN_PLACEHOLDER}
+          placeholder={WORDS.TOKEN_SHAPE}
           running={WORDS.SAVING_TOKEN}
         />
       ) : (
@@ -963,7 +1033,7 @@ interface ChatGptPlan {
  * says so.
  */
 function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
-  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+  const { mutateAsync: sendProviderKeysRemove, ...keyRemoving } = useMutation(
     actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
   );
   const [connecting, setConnecting] = useState(false);
@@ -999,9 +1069,15 @@ function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
         }),
     [sendProviderKeysRemove],
   );
+  const removalAct = useConfirmAct(keyRemoving, {
+    send: disconnect,
+    answered: (removed): ActionResult =>
+      "failure" in removed ? CHATGPT_DISCONNECT_REFUSED : ACCEPTED_KEY,
+    failed: () => CHATGPT_DISCONNECT_REFUSED,
+  });
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
-    disconnect,
+    removalAct,
     confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
   );
   const dismissNotice = useCallback(() => {
@@ -1107,11 +1183,7 @@ function ChatGptPlanRow({
         }
         label={HARNESS[PROVIDER_KEY_PROVIDER.OPENAI].planName}
         description={
-          plan === undefined ? (
-            WORDS.PLAN_LIMITS
-          ) : (
-            <ChatGptState plan={plan} connected={connected} />
-          )
+          plan === undefined ? undefined : <ChatGptState plan={plan} connected={connected} />
         }
         below={
           chatGpt.notice || chatGpt.unconfirmed
@@ -1195,7 +1267,7 @@ function useApiKey(
   stored: ProviderKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+  const { mutateAsync: sendProviderKeysRemove, ...keyRemoving } = useMutation(
     actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
   );
   const secret = usePastedSecret({
@@ -1217,9 +1289,14 @@ function useApiKey(
         }),
     [sendProviderKeysRemove, provider],
   );
+  const removalAct = useConfirmAct(keyRemoving, {
+    send: remove,
+    answered: (answer): ActionResult => ("failure" in answer ? KEY_REMOVE_REFUSED : ACCEPTED_KEY),
+    failed: () => KEY_REMOVE_REFUSED,
+  });
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
-    remove,
+    removalAct,
     confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
   );
   return { secret, removal };
@@ -1287,22 +1364,18 @@ function ApiKeyRow({
         label={keyName}
         indent={SETTINGS_ROW_INDENT.MARK}
         description={
-          stored === undefined ? (
-            <KeyCost provider={provider} />
-          ) : (
-            <KeyState provider={provider} stored={stored} />
-          )
+          stored === undefined ? undefined : <KeyState provider={provider} stored={stored} />
         }
         below={
           secret.open
             ? () => (
-                <SecretForm
+                <PasteSteps
                   field={field}
                   secret={secret}
-                  label={stored === undefined ? WORDS.API_KEY : WORDS.NEW_KEY}
-                  description={stored === undefined ? undefined : WORDS.REPLACES_KEY}
+                  first={keyFirst(provider)}
+                  label={WORDS.PASTE_KEY}
                   held={stored !== undefined}
-                  placeholder={`Paste your ${keyName}`}
+                  placeholder={HARNESS[provider].keyShape}
                   running={WORDS.CHECKING_KEY}
                 />
               )
@@ -1337,13 +1410,13 @@ function ApiKeyInPlace({
   return (
     <>
       {stored === undefined || secret.open ? (
-        <SecretForm
+        <PasteSteps
           field={field}
           secret={secret}
-          label={stored === undefined ? keyName : WORDS.NEW_KEY}
-          description={stored === undefined ? <KeyCost provider={provider} /> : WORDS.REPLACES_KEY}
+          first={keyFirst(provider)}
+          label={WORDS.PASTE_KEY}
           held={stored !== undefined}
-          placeholder={`Paste your ${keyName}`}
+          placeholder={HARNESS[provider].keyShape}
           running={WORDS.CHECKING_KEY}
         />
       ) : (
@@ -1540,7 +1613,7 @@ function useCredentials({
   onKeys?: ((keys: readonly ProviderKeySummary[]) => void) | undefined;
   onConnected?: ((connected: boolean) => void) | undefined;
 }): Credentials {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const keys = useQuery(providerKeysQuery(signedIn ? accountId : undefined));
   const retryKeys = useMutation(providerKeysRetryMutation());
   const answer = keys.data;

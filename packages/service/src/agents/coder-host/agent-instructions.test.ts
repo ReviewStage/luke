@@ -1,6 +1,6 @@
 /**
  * agent-instructions.test.ts -- an agent's instructions read its brief from its row
- * alike on every harness, so a native session is told what an eve one is.
+ * alike on every harness, so a Claude Code session is told what a Codex one is.
  */
 
 import assert from "node:assert/strict";
@@ -8,10 +8,11 @@ import type { Agent } from "@repo/database/models/agent-store";
 import { AGENT_KIND, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { test } from "vitest";
+import { standingFor } from "../../testing/agent-standing.js";
 import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 
 /** An agent on a repository, handed what the test names, started by hand on no task. */
-function agentHanded(handed: Pick<Agent, "planSnapshot" | "prompt">): Agent {
+function agentHanded(handed: Pick<Agent, "descriptionSnapshot" | "prompt">): Agent {
   return {
     id: "agent-1",
     userId: "user-1",
@@ -45,32 +46,31 @@ const CONTEXT = {
   ciReadable: false,
   authorship: undefined,
   workspace: "acme",
-  memoryOn: false,
-  plansOn: true,
+  standing: standingFor("acme/relay"),
 } as const;
 
-const PLAN_JOB = "implement the plan given as the first message";
+const DESCRIPTION_JOB = "implement the task's description given as the first message";
 const BLANK_JOB = "do what the developer asks of you in this conversation";
 
-test("an agent started with neither a plan nor a prompt is told to do what the developer asks, on every harness", () => {
-  const blank = agentHanded({ planSnapshot: null, prompt: null });
+test("an agent started with neither a description nor a prompt is told to do what the developer asks, on every harness", () => {
+  const blank = agentHanded({ descriptionSnapshot: null, prompt: null });
   for (const harness of Object.values(CODER_HARNESS)) {
     const instructions = agentCoderInstructions(blank, { ...CONTEXT, harness });
     assert.ok(instructions.includes(BLANK_JOB), harness);
-    assert.ok(!instructions.includes(PLAN_JOB), harness);
+    assert.ok(!instructions.includes(DESCRIPTION_JOB), harness);
   }
 });
 
-test("an agent handed a plan is told to implement it, on every harness", () => {
-  const planned = agentHanded({ planSnapshot: "# Plan", prompt: null });
+test("an agent handed a description is told to implement it, on every harness", () => {
+  const planned = agentHanded({ descriptionSnapshot: "# Invitations", prompt: null });
   for (const harness of Object.values(CODER_HARNESS)) {
     const instructions = agentCoderInstructions(planned, { ...CONTEXT, harness });
-    assert.ok(instructions.includes(PLAN_JOB), harness);
+    assert.ok(instructions.includes(DESCRIPTION_JOB), harness);
   }
 });
 
 test("an agent in several repositories is told where each of the others is checked out, and on which branch", () => {
-  const planned = agentHanded({ planSnapshot: "# Plan", prompt: null });
+  const planned = agentHanded({ descriptionSnapshot: "# Invitations", prompt: null });
   const instructions = agentCoderInstructions(planned, {
     ...CONTEXT,
     harness: CODER_HARNESS.CLAUDE_CODE,

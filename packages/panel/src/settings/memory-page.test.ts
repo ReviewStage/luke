@@ -16,7 +16,7 @@ import type { PortActKind, PortActResult } from "@repo/host/contract";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -329,7 +329,7 @@ test("Delete asks first, then deletes the memory for good and lists what the hos
       .map((request) => request.payload),
     [{ workspaceId: ACME.id, id: DEPLOYS.id }],
   );
-  assert.deepEqual(words(page), [TESTS.text]);
+  await vi.waitFor(() => expect(words(page)).toEqual([TESTS.text]));
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
@@ -420,7 +420,7 @@ test("several memories chosen are forgotten on one question, one after another, 
       { workspaceId: ACME.id, id: pricing.id },
     ],
   );
-  assert.deepEqual(words(page), [TESTS.text]);
+  await vi.waitFor(() => expect(words(page)).toEqual([TESTS.text]));
 });
 
 test("showing another workspace holds that workspace's memories in place of the first's", async () => {

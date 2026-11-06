@@ -2,7 +2,7 @@
  * claude-code-sessions.ts -- a coding agent's sessions on Claude Code: the runner in its Claude Code mode, launched on the account's setup-token.
  *
  * The `claude_code` implementation of `AgentSessions`
- * (`eve-host/eve-sessions.ts`), on the launch machinery every native
+ * (`sessions/agent-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
  * runner's config names the image's `claude` and appends our coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
@@ -11,9 +11,10 @@
  * `ANTHROPIC_API_KEY`; a plan's is refused in its plan's words where the
  * row is gone, refused, unreadable, or at a limit whose named reset is
  * still ahead, so the agent waits on its plan and never turns to another
- * payer; in a sandbox the credential is held at its firewall, the CLI's
- * variable carrying a placeholder minted for the launch (`launchCredential`),
- * and on a host it is the variable's own; and every message to a running runner
+ * payer; the launch declares the credential, which the agent's machine
+ * hands over (`launchCredential`): held at a sandbox's firewall, the CLI's
+ * variable carrying a placeholder minted for the launch, and on a host the
+ * variable's own; and every message to a running runner
  * goes behind a `model` line with the agent's model, effort, and fast mode
  * as they stand: a fast version runs its base model with Claude Code's own
  * fast mode on, which Anthropic bills to the account's usage credits. The
@@ -31,10 +32,14 @@ import {
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
 import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
-import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
+import {
+  openProviderKey,
+  PROVIDER_KEY_UNREADABLE,
+  parseKeyRing,
+} from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { MODEL_SPEED } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -42,15 +47,15 @@ import {
   PROVIDER_KEY_STATUS,
   planLimitResetsAt,
 } from "@repo/features/provider-key-wire";
-import { Clock, Effect, Option, Redacted, Result } from "effect";
+import { Clock, Effect, Option, type Redacted, Result } from "effect";
+import { ownApiKeyOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
-import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
+import { CREDENTIAL_RENEWAL, LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
-import { LAUNCH_SWAP, newPlaceholder, placeholderSwap } from "../sandbox-firewall.js";
+import { LAUNCH_SWAP } from "../sandbox-firewall.js";
+import { KEY_REFUSAL, PLAN_REFUSAL, type SessionTurn } from "../sessions/agent-sessions.js";
 import { BEARER_PREFIX } from "../workspace-mcp/bearer.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -80,37 +85,33 @@ const CLI_CREDENTIAL = {
 type CliCredential = (typeof CLI_CREDENTIAL)[keyof typeof CLI_CREDENTIAL];
 
 /**
- * The credential as a launch hands it. On a host, which has no firewall of
- * ours, the CLI reads it from its variable itself. In a sandbox the
- * variable holds a placeholder minted for the launch, which keeps the CLI
- * in the same mode, and the firewall sets the real value in its place on
- * requests to Anthropic's API that carry the placeholder in the CLI's
- * header, so the credential never enters the sandbox.
+ * The credential as a launch declares it: read from the CLI's variable, sent
+ * to Anthropic's API in the CLI's header, and fixed for the launch. The
+ * agent's machine hands it over (`AgentMachineService`'s
+ * `deliverCredentials`): a host, which has no firewall of ours, puts it in
+ * the variable itself; a sandbox puts a placeholder minted for the launch
+ * there, which keeps the CLI in the same mode, and its firewall sets the
+ * real value in its place on requests to Anthropic's API that carry the
+ * placeholder in the CLI's header, so the credential never enters the
+ * sandbox.
  */
 function launchCredential(
-  agent: Agent,
   sent: CliCredential,
-  credential: Redacted.Redacted,
+  credential: Redacted.Redacted<string>,
 ): HarnessLaunch {
-  if (agent.machine === AGENT_MACHINE.DEVICE) {
-    return { env: { [sent.variable]: Redacted.value(credential) } };
-  }
-  const placeholder = newPlaceholder();
-  const header = (value: Redacted.Redacted) =>
-    Redacted.make(`${sent.scheme}${Redacted.value(value)}`);
   return {
     env: {},
-    held: {
-      env: { [sent.variable]: Redacted.value(placeholder) },
-      kind: LAUNCH_SWAP.CLAUDE,
-      entry: placeholderSwap({
-        domain: ANTHROPIC_API,
+    credentials: [
+      {
+        variable: sent.variable,
+        value: credential,
+        target: { domain: ANTHROPIC_API },
         header: sent.header,
-        placeholder: header(placeholder),
-        value: header(credential),
-      }),
-      fingerprint: credential,
-    },
+        scheme: sent.scheme,
+        slot: LAUNCH_SWAP.CLAUDE,
+        renewal: CREDENTIAL_RENEWAL.FIXED,
+      },
+    ],
   };
 }
 
@@ -200,53 +201,46 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   /**
    * The account's Anthropic API key opened, as the CLI's documented
    * `ANTHROPIC_API_KEY` (https://code.claude.com/docs/en/agent-sdk/quickstart),
-   * for an agent its starter's key pays for; refused where the key is gone
-   * or unreadable, and never turned to the plan.
+   * for an agent its starter's key pays for, or a Preview's stand-in where
+   * that key is gone or unreadable (`accounts/own-api-key.ts`); refused
+   * where neither is, and never turned to the plan.
    */
-  const apiKeyCredential = (agent: Agent) =>
-    Effect.gen(function* () {
-      const ring = yield* keyRing;
-      const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
-      const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-      if (row === undefined) {
-        return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
-      }
-      const opened = openProviderKey(
-        ring,
-        { userId, provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind: PROVIDER_KEY_KIND.API_KEY },
-        row,
-      );
-      if (Result.isFailure(opened)) {
-        return yield* new LaunchRefused({
-          reason: "API key unreadable",
-          keyRefusal: KEY_REFUSAL.UNREADABLE,
-        });
-      }
-      return launchCredential(agent, CLI_CREDENTIAL.API_KEY, opened.success);
-    });
+  const apiKeyCredential = Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    const key = yield* ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, environment);
+    if (key === undefined) {
+      return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
+    }
+    if (key === PROVIDER_KEY_UNREADABLE) {
+      return yield* new LaunchRefused({
+        reason: "API key unreadable",
+        keyRefusal: KEY_REFUSAL.UNREADABLE,
+      });
+    }
+    return launchCredential(CLI_CREDENTIAL.API_KEY, key);
+  });
 
   /** The CLI's credential and the variable it is read from: the account's plan token opened. */
-  const planCredential = (agent: Agent) =>
-    Effect.gen(function* () {
-      const ring = yield* keyRing;
-      const row = yield* standingPlan;
-      const opened = openProviderKey(
-        ring,
-        {
-          userId,
-          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
-        },
-        row,
-      );
-      if (Result.isFailure(opened)) {
-        return yield* new LaunchRefused({
-          reason: "setup-token unreadable",
-          planRefusal: PLAN_REFUSAL.UNREADABLE,
-        });
-      }
-      return launchCredential(agent, CLI_CREDENTIAL.PLAN, opened.success);
-    });
+  const planCredential = Effect.gen(function* () {
+    const ring = yield* keyRing;
+    const row = yield* standingPlan;
+    const opened = openProviderKey(
+      ring,
+      {
+        userId,
+        provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+      },
+      row,
+    );
+    if (Result.isFailure(opened)) {
+      return yield* new LaunchRefused({
+        reason: "setup-token unreadable",
+        planRefusal: PLAN_REFUSAL.UNREADABLE,
+      });
+    }
+    return launchCredential(CLI_CREDENTIAL.PLAN, opened.success);
+  });
 
   const config = (
     agent: Agent,
@@ -310,8 +304,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     launch: (agent) =>
       Effect.gen(function* () {
         return yield* (yield* savedPayer(agent)) === AGENT_PAYER.API_KEY
-          ? apiKeyCredential(agent)
-          : planCredential(agent);
+          ? apiKeyCredential
+          : planCredential;
       }),
     config,
     // Note that Claude Code reads a checkout's skills from `.claude/skills` alone.
@@ -321,7 +315,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
 }
 
 /** The sessions for one account, over the calling fiber's services. */
-export const claudeCodeSessions = <Turn extends EveHostTurn = EveHostTurn>(
+export const claudeCodeSessions = <Turn extends SessionTurn = SessionTurn>(
   options: RunnerSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);

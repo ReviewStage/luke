@@ -2,7 +2,6 @@
  * app-state.ts -- what a test of a surface gated by an experiment or a platform capability, or one that names the signed-in account or draws a call, stands on: main's document as the bridge hands it, with the account's experiments, the platform's capabilities, its identity, and its call as given.
  */
 
-import { RegistryContext } from "@effect/atom-react";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AccountPreferencesLive } from "@repo/features/account-preferences-live";
 import {
@@ -31,6 +30,7 @@ import {
   type AppAutomationReads,
   type AppBrowserTabs,
   type AppChapters,
+  type AppDescriptionComments,
   type AppDevicePresence,
   type AppGitHubToken,
   type AppHolderInboxes,
@@ -40,7 +40,6 @@ import {
   type AppInboxItems,
   type AppIntegrationTools,
   type AppPages,
-  type AppPlanComments,
   type AppProviderKeyList,
   type AppPullRequestParts,
   type AppRepositoryLists,
@@ -58,10 +57,10 @@ import {
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
+  NO_DESCRIPTION_COMMENTS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
-  NO_PLAN_COMMENTS,
   NO_TRANSCRIPTS,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
@@ -86,11 +85,7 @@ import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import type * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { createElement, useContext } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { vi } from "vitest";
 import type { IntegrationServer } from "../live-reads.js";
-import { APP_SLICE } from "../use-app-state.js";
 import {
   fakeActPort,
   fakeActPortCalls,
@@ -173,9 +168,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.DESCRIPTION_COMMENTS]: NO_DESCRIPTION_COMMENTS,
     [LIVE_READ.HISTORY]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -222,63 +217,31 @@ export function handState(
   });
 }
 
-/** The registry a surface drawn under no `RegistryContext.Provider` reads from. */
-function defaultRegistry(): AtomRegistry.AtomRegistry {
-  let held: AtomRegistry.AtomRegistry | undefined;
-  const Probe = () => {
-    held = useContext(RegistryContext);
-    return null;
-  };
-  renderToStaticMarkup(createElement(Probe));
-  if (held === undefined) throw new Error("No default registry was drawn.");
-  return held;
-}
-
 /**
  * Hands the window main's document with the account's experiments as given,
- * as `handState` does, and reads it into `registry` before it answers, the
- * default one where none is named: for a suite whose draws are synchronous,
- * so a surface an experiment gates stands in its first frame. Note that the
- * document is held for the registry's life, so a suite drawing under the
- * default registry reads it once (`beforeAll`).
+ * as `handState` does, and starts every test's Query client of this file on
+ * that document: for a suite whose draws are synchronous, so a surface an
+ * experiment gates stands in its first frame.
  */
-export async function readExperiments(
-  experiments: ExperimentChoices,
-  registry: AtomRegistry.AtomRegistry = defaultRegistry(),
-): Promise<void> {
+export function readExperiments(experiments: ExperimentChoices): void {
   handState(experiments);
-  // Note that every test's Query client of this file starts on the same document, so a reader through Query draws it at once too.
   holdAppStateForFile(stateWith(experiments, {}));
-  const release = registry.mount(APP_SLICE.SETTINGS);
-  // Note that the read lands a task after it is asked for, since the renderer's runtime runs it.
-  await vi.waitFor(
-    () => {
-      if (registry.get(APP_SLICE.SETTINGS) === undefined)
-        throw new Error("The document is unread.");
-    },
-    { interval: 1 },
-  );
-  release();
 }
 
 /**
- * A registry whose settings hold these experiments from its first draw, for
- * a case that draws under a registry of its own synchronously. Note that the
- * settings are read again once main's document lands, so the bridge must hand
- * the same experiments (`handState`, `readExperiments`) for them to stand.
- * `initialValues` are laid beside them, as a case's own clock is.
+ * A registry for a case that draws under a registry of its own
+ * synchronously, the test's Query client holding a document whose settings
+ * hold these experiments from its first draw. Note that the document is read
+ * again once main's lands, so the bridge must hand the same experiments
+ * (`handState`, `readExperiments`) for them to stand. `initialValues` are
+ * laid in the registry, as a case's own clock is.
  */
 export function registryWith(
   experiments: ExperimentChoices,
   initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
 ): AtomRegistry.AtomRegistry {
-  const snapshot = snapshotWith(experiments);
-  const { settings } = snapshot;
-  // Note that the test's Query client is handed the same document, so a reader through Query draws it at once too.
-  writeAppState(snapshot);
-  return AtomRegistry.make({
-    initialValues: [[APP_SLICE.SETTINGS, settings], ...initialValues],
-  });
+  writeAppState(snapshotWith(experiments));
+  return AtomRegistry.make({ initialValues });
 }
 
 /** Hands the window main's document on a platform offering `capabilities`, the experiments given on and no other, beside whatever else the bridge already holds. */
@@ -335,7 +298,7 @@ export interface HostReadsHanded {
   readonly deliverChapters: (next: AppChapters) => void;
   readonly deliverBrowserTabs: (next: AppBrowserTabs) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
-  readonly deliverComments: (next: AppPlanComments) => void;
+  readonly deliverComments: (next: AppDescriptionComments) => void;
   readonly deliverTools: (next: AppIntegrationTools) => void;
   readonly deliverParts: (next: Partial<AppPullRequestParts>) => void;
   /** The signed-in account's keys, held under its id. */
@@ -457,7 +420,7 @@ export function handHostReads(first: {
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
     deliverBrowserTabs: (next) => deliver({ [LIVE_READ.BROWSER_TABS]: next }),
     deliverAutomations: (next) => deliver(next),
-    deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
+    deliverComments: (next) => deliver({ [LIVE_READ.DESCRIPTION_COMMENTS]: next }),
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverParts: (next) => deliver(next),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),

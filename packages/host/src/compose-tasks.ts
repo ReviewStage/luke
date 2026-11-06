@@ -6,14 +6,10 @@ import {
   type TaskCallResult,
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "@repo/features";
-import {
-  ADMIN_UNANSWERED,
-  type AdminReadAnswer,
-  adminFavoriteParamsSchema,
-  adminReadParamsSchema,
-} from "@repo/features/admin-wire";
+import { ADMIN_UNANSWERED } from "@repo/features/admin-wire";
 import {
   type AgentBrowserTab,
   BROWSER_TABS_PLACE,
@@ -22,24 +18,23 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
+import {
+  AGENT_BROWSER_TABS_READ,
+  browserTabsOfLiveRows,
+  nextBrowserTabLapse,
+  TASK_BROWSER_TABS_READ,
+} from "@repo/features/browser-tabs-live";
+import { TASK_COMMENTS_READ } from "@repo/features/description-comment-live";
 import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
 import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
-import {
-  browserTabsOfLiveRows,
-  type LIVE_READ,
-  LIVE_SIGNED_OUT,
-  nextBrowserTabLapse,
-  pagesOfLiveRows,
-  revisionsOfLiveRows,
-  taskBrowserTabsLiveRowsSchema,
-  taskHistoryLiveRowsSchema,
-  taskPagesLiveRowsSchema,
-} from "@repo/features/live-wire";
+import type { AnyLiveRead, LiveReadAnswer, LiveReadAsked } from "@repo/features/live-read";
+import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   PAGE_OWNER,
   type PageLine,
   type PageOwner,
   type PagePlace,
+  pagePlaceId,
 } from "@repo/features/page-wire";
 import { markedAs, readMarkOf } from "@repo/features/read-mark";
 import type {
@@ -47,9 +42,12 @@ import type {
   SlackListedChannel,
   WorkspaceSlackBot,
 } from "@repo/features/slack-bot-wire";
+import { revisionsOfLiveRows, TASK_HISTORY_READ } from "@repo/features/task-history-live";
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { AGENT_PAGES_READ, pagesOfLiveRows, TASK_PAGES_READ } from "@repo/features/task-pages-live";
+import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import {
-  type PlanRevisionsAnswer,
+  type DescriptionRevisionsAnswer,
   startRelationsOf,
   TASK_BLOCK_CHANGE,
   TASK_CREATE_RELATION_KIND,
@@ -64,46 +62,35 @@ import {
   UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
+  type CodeLines,
+  GITHUB_DISCONNECT_FAILURE,
   HOST_LIVE,
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksBlockAnswer,
   type TasksBlockParams,
-  type TasksBrowserTabOpenAnswer,
   type TasksChangeRelationAnswer,
   type TasksChangeRelationParams,
   type TasksCommentAnswer,
-  type TasksEditAnswer,
-  type TasksFileAnswer,
-  type TasksFindAnswer,
-  type TasksGitHubDisconnectAnswer,
-  type TasksGitHubPageAnswer,
   type TasksMarkReadParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
-  type TasksPictureAnswer,
-  type TasksPictureKeepAnswer,
+  type TasksPageParams,
+  type TasksPageSourceAnswer,
   type TasksPinParams,
   type TasksRenameParams,
-  type TasksRevisionAnswer,
-  type TasksRevisionsAnswer,
   type TasksSetParentAnswer,
   type TasksSetParentParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
   type TasksSetStandingParams,
-  type TasksSkillsAnswer,
   type TasksStartAnswer,
   type TasksStartRequest,
-  type TasksTreeAnswer,
   type TasksView,
   type TasksWorkspaceAnswer,
-  type TasksWorkspaceGitHubConnectAnswer,
-  type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceLeaveAnswer,
   type TasksWorkspaceMemberRemoveParams,
   type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
@@ -112,69 +99,39 @@ import {
   type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
+  type TasksWorkspaceTokenRepositorySetParams,
   taskBrowserTabsFollowSchema,
   taskDocumentFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
-  tasksBlockParamsSchema,
-  tasksBrowserTabOpenParamsSchema,
-  tasksChangeRelationParamsSchema,
-  tasksCommentActParamsSchema,
-  tasksCommentStartParamsSchema,
   tasksCommentsFollowSchema,
-  tasksEditParamsSchema,
-  tasksFileParamsSchema,
-  tasksFindParamsSchema,
   tasksLinkStandingParamsSchema,
   tasksMarkReadParamsSchema,
-  tasksMoveParamsSchema,
   tasksPageParamsSchema,
-  tasksPictureKeepParamsSchema,
-  tasksPictureParamsSchema,
   tasksPinParamsSchema,
-  tasksPinRepositoryParamsSchema,
   tasksRenameParamsSchema,
   tasksRepositoriesParamsSchema,
-  tasksRevisionParamsSchema,
-  tasksRevisionsParamsSchema,
-  tasksSetParentParamsSchema,
-  tasksSetRepositoryParamsSchema,
   tasksSetStandingParamsSchema,
-  tasksSkillsParamsSchema,
-  tasksStartRequestSchema,
-  tasksTreeParamsSchema,
-  tasksWorkspaceCreateParamsSchema,
-  tasksWorkspaceInvitationCancelParamsSchema,
-  tasksWorkspaceInviteParamsSchema,
-  tasksWorkspaceLeaveParamsSchema,
-  tasksWorkspaceMemberRemoveParamsSchema,
-  tasksWorkspaceMemberRoleParamsSchema,
   tasksWorkspaceParamsSchema,
-  tasksWorkspacePhotoSetParamsSchema,
-  tasksWorkspaceRenameParamsSchema,
-  tasksWorkspaceSentryDisconnectParamsSchema,
-  tasksWorkspaceSlackBotChannelParamsSchema,
-  tasksWorkspaceSlackBotNotificationsParamsSchema,
-  tasksWorkspaceSlackBotRepositoryParamsSchema,
-  tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
-  tasksWorkspaceTokenRepositorySetParamsSchema,
-  tasksWorkspaceTransferParamsSchema,
-  tasksWriteSectionParamsSchema,
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
-import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import {
+  WORKSPACE_SLUG_PROBLEM,
+  type Workspace,
+  type WorkspaceMember,
+} from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
   type AnyWrite,
   anyWrite,
-  declaredMethod,
+  declaredWrite,
   type EntityPool,
   type FieldChange,
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import { keepIdentity, type WireRecord, type WireValue } from "@repo/wire";
+import { keepIdentity, type WireRecord } from "@repo/wire";
 import {
   Cache,
   Clock,
@@ -198,6 +155,12 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { slackNotificationsWritten } from "./account-preferences-follow.js";
 import {
+  ALREADY_INVITED_REFUSAL,
+  GITHUB_LAST_SIGN_IN_REFUSAL,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+  WORKSPACE_SLUG_REFUSAL,
+} from "./acts.js";
+import {
   type AppLinkStanding,
   type AppLinkStandings,
   type AppRepositoryLists,
@@ -210,30 +173,32 @@ import {
 } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { TASKS_ACTS, WORKSPACE_ACTS } from "./contract/index.js";
+import {
+  type CommentSubjectKey,
+  commentSubjectOf,
+  descriptionCommentReads,
+} from "./description-comment-reads.js";
+import { descriptionCommentWrites } from "./description-comment-writes.js";
+import { descriptionDocumentReads } from "./description-document-reads.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { heldFetch } from "./held-fetch.js";
+import { ActRefused, type HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
+  DescriptionPictureKey,
   FileAtCommitKey,
   type KeptContent,
   keptOfTask,
   PageVersionKey,
-  PlanPictureKey,
 } from "./kept-content.js";
 import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
 import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, LiveBroken, type TxWait } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
-import {
-  type CommentSubjectKey,
-  commentSubjectOf,
-  planCommentReads,
-} from "./plan-comment-reads.js";
-import { planCommentWrites } from "./plan-comment-writes.js";
-import { planDocumentReads } from "./plan-document-reads.js";
 import type { PullRequestListing } from "./pull-request-parts.js";
-import { type OfflineRefused, untaken } from "./queued-writes.js";
+import { type OfflineRefused, TASK_QUEUED_WRITE, untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
@@ -263,18 +228,18 @@ import {
 import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
 
 /**
- * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and the plans the windows opened.
+ * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and the descriptions the windows opened.
  *
- * Nothing here writes a plan but a restore or an edit the developer asks
- * for: the task's coding agents are its writers, on the service. Each plan
- * a window opened is held for it per task (`plan-document-reads.ts`), read
- * as it is first held and again as its record's plan mark moves, and never
+ * Nothing here writes a description but a restore or an edit the developer asks
+ * for: the task's coding agents are its writers, on the service. Each description
+ * a window opened is held for it per task (`description-document-reads.ts`), read
+ * as it is first held and again as its record's description mark moves, and never
  * on a clock. The list itself is followed over Neon Realtime from the
  * account gate opening until a sign-out (`task-list-follow.ts`), and is read
  * by none of those asks. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
  * task pinned. Each
- * task's plan history a version history shows is held for it per task and
+ * task's description history a version history shows is held for it per task and
  * told on the app state (`LIVE_READ.HISTORY`): its newest page followed, and
  * the older pages read past it laid after it. A revision's text is answered
  * to the version history that asks and held nowhere here; a revision
@@ -285,7 +250,7 @@ import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
  * newest version alone, and told on the app state (`LIVE_READ.PAGES`); a
  * page's HTML is answered to the frame that draws it and kept in this
  * process's memory by its version (`kept-content.ts`), never in the view, as
- * a plan's pictures and a file read at a commit are.
+ * a description's pictures and a file read at a commit are.
  *
  * The workspaces the account is a member of are carried on the view beside
  * the tasks and followed apart from them over Neon Realtime, so the tasks
@@ -428,6 +393,36 @@ function browserTabsPlaceOf(owner: BrowserTabsOwnerKey): BrowserTabsPlace {
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
+/** The sentence a workspace act is refused in for a failure that says why, each other failure refused in the act's own. */
+const WORKSPACE_REFUSAL: Partial<Record<WorkspaceCallFailure, string>> = {
+  [WORKSPACE_CALL_FAILURE.NOT_PERMITTED]: WORKSPACE_NOT_PERMITTED_REFUSAL,
+  [WORKSPACE_CALL_FAILURE.ALREADY_INVITED]: ALREADY_INVITED_REFUSAL,
+  [WORKSPACE_CALL_FAILURE.SLUG_MALFORMED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.MALFORMED],
+  [WORKSPACE_CALL_FAILURE.SLUG_RESERVED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.RESERVED],
+  [WORKSPACE_CALL_FAILURE.SLUG_TAKEN]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN],
+};
+
+/** A workspace act refused for `failure`: in words that say why where the failure says it, and in the act's own sentence otherwise. */
+function workspaceRefused(failure: WorkspaceCallFailure): Effect.Effect<never, ActRefused> {
+  const sentence = WORKSPACE_REFUSAL[failure];
+  return Effect.fail(new ActRefused(sentence === undefined ? {} : { sentence }));
+}
+
+/**
+ * A workspace answer as its act answers the panel: the value under `field`,
+ * or refused for the failure it carries (`workspaceRefused`), as the act
+ * port refused it before the act was declared.
+ */
+function workspaceAnswered<const Field extends string>(field: Field) {
+  return <Value>(
+    answer: { readonly [Key in Field]: Value } | { readonly failure: WorkspaceCallFailure },
+  ): Effect.Effect<Value, ActRefused> =>
+    // SAFETY: an answer that carries no failure is the value under `field`, by its type.
+    "failure" in answer
+      ? workspaceRefused(answer.failure)
+      : Effect.succeed((answer as { readonly [Key in Field]: Value })[field]);
+}
+
 /** A channel of a workspace's Slack team as the held list keeps it, with no repository, which is the workspace's held integrations'. */
 function listedChannel({
   repository: _repository,
@@ -436,11 +431,8 @@ function listedChannel({
   return channel;
 }
 
-/** Opening or deleting a task names it and nothing else. */
-const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
-
-/** The plan a task starts on, empty, as the service makes it. */
-const EMPTY_PLAN = { body: "", assumptions: [] } as const satisfies Task["document"];
+/** The description a task starts on, empty, as the service makes it. */
+const EMPTY_DESCRIPTION = { body: "", assumptions: [] } as const satisfies Task["document"];
 
 /** A start's request as the service is sent it, under the id the host minted for its task where the window named none. */
 type StartRequest = Omit<TasksStartRequest, "quiet"> & { readonly id: string };
@@ -471,8 +463,19 @@ const startKeptSchema = Schema.Struct({
   row: Schema.UndefinedOr(taskListLiveRowsSchema.fields.plans.value),
 }).check(Schema.makeFilter(startMayWait));
 
-/** Where a start sent from the waiting writes opened its task: as it was asked, before any ask of the screen standing now, its plan laid as held. */
+/** Where a start sent from the waiting writes opened its task: as it was asked, before any ask of the screen standing now, its description laid as held. */
 const OPENED_EARLIER: StartOpened = { asked: -1, drawn: true, before: undefined };
+
+/** A live read the service did not seal, `gone` where what it names is no longer the account's or the session another's. */
+interface LiveUnsealed {
+  readonly failure: string;
+  readonly gone: boolean;
+}
+
+/** Whether a live read's seal is why it failed rather than its answer, which names no failure. */
+function unsealed(sealed: unknown): sealed is { readonly failure: string } {
+  return typeof sealed === "object" && sealed !== null && "failure" in sealed;
+}
 
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
@@ -489,10 +492,7 @@ export type TasksClient = Pick<
   | "pinRepository"
   | "sidebarLive"
   | "writeTaskSection"
-  | "recordLive"
-  | "pagesLive"
-  | "historyLive"
-  | "browserTabsLive"
+  | "liveRead"
   | "readFile"
   | "readTree"
   | "readSkills"
@@ -508,7 +508,6 @@ export type TasksClient = Pick<
   | "readPageVersion"
   | "readPicture"
   | "keepPicture"
-  | "commentsLive"
   | "startComment"
   | "actOnComment"
   | "restore"
@@ -580,6 +579,8 @@ export interface TasksDependencies {
 }
 
 export interface TasksComposer extends Composer {
+  /** The Tasks tab's plain asks and the workspaces' plain acts, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof TASKS_ACTS> & HostActTable<typeof WORKSPACE_ACTS>;
   /** The view as this Mac holds it now. */
   snapshot: () => TasksView;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
@@ -603,6 +604,15 @@ export interface TasksComposer extends Composer {
   pullRequestListings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
   /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them, answering once each has landed. */
   repositoriesMoved: Effect.Effect<void>;
+}
+
+/**
+ * A page's HTML as its tab's source reads it: line by line, plain, since the
+ * panel draws it as every code is, through Pierre's diffs, which colors it
+ * (`@repo/panel`'s `whole-file.tsx`).
+ */
+function pageSourceLines(html: string): CodeLines {
+  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
 }
 
 /** The statuses a task stands finished in, which the service stamps `completedAt` as it enters. */
@@ -686,9 +696,9 @@ function relationDrawn(change: RelationChange): (row: PlanRow) => Partial<PlanRo
  * older page is read from with them.
  */
 function withNewestPage(
-  held: PlanRevisionsAnswer | undefined,
-  page: PlanRevisionsAnswer,
-): PlanRevisionsAnswer {
+  held: DescriptionRevisionsAnswer | undefined,
+  page: DescriptionRevisionsAnswer,
+): DescriptionRevisionsAnswer {
   const oldest = page.revisions.at(-1)?.seq;
   if (held === undefined || oldest === undefined || page.earlier === undefined) return page;
   const older = held.revisions.filter((line) => line.seq < oldest);
@@ -704,10 +714,10 @@ function withNewestPage(
  * the page says.
  */
 function withOlderPage(
-  held: PlanRevisionsAnswer,
+  held: DescriptionRevisionsAnswer,
   before: number,
-  page: PlanRevisionsAnswer,
-): PlanRevisionsAnswer {
+  page: DescriptionRevisionsAnswer,
+): DescriptionRevisionsAnswer {
   const revisions = [...held.revisions.filter((line) => line.seq >= before), ...page.revisions];
   return page.earlier === undefined ? { revisions } : { revisions, earlier: page.earlier };
 }
@@ -721,7 +731,7 @@ const RESYNC_SETTLE = Duration.seconds(10);
 /**
  * The panel's tasks as one concern. The view is told to every client whole
  * whenever it moves, and exactly one task is active at a time: opening or
- * starting one replaces whichever was, and the plans the windows opened are
+ * starting one replaces whichever was, and the descriptions the windows opened are
  * held apart, per task, on the app state. The list, the workspaces, and the sidebar
  * are followed from the account gate opening, whether or not a window shows
  * them. Behind a closed account gate, or on a run that sends nothing, nothing
@@ -735,6 +745,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** One ask of the service, over the host's own HTTP client. */
   const served = <Answer, Failure>(call: Effect.Effect<Answer, Failure, HttpClient.HttpClient>) =>
     Effect.provideService(call, HttpClient.HttpClient, http);
+  /** A declared live read sealed, or polled where `poll` asks past `after`, as a follow reads it: its answer, or why not and whether the read is gone for good, a task or an agent the account no longer reaches or a session another's. */
+  const sealedLive = <Read extends AnyLiveRead>(
+    read: Read,
+    params: LiveReadAsked<Read>,
+    poll: boolean,
+    after: string | undefined,
+  ): Effect.Effect<LiveReadAnswer<Read> | LiveUnsealed> =>
+    Effect.map(
+      served(client.liveRead(read, params, poll ? { after } : undefined)),
+      (sealed): LiveReadAnswer<Read> | LiveUnsealed =>
+        unsealed(sealed)
+          ? {
+              failure: sealed.failure,
+              gone:
+                sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                sealed.failure === LIVE_SIGNED_OUT.failure,
+            }
+          : sealed,
+    );
   const idleView = (): TasksView => IDLE_TASKS_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -883,8 +912,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * One read of the service at a time, whichever ask made it. Note that the
    * answers are applied in the order the reads were made, because a list
    * that left before a task started would otherwise land last and roll the
-   * view back. A held plan is read outside it, ordered by its task's own
-   * numbers instead (`plan-document-reads.ts`).
+   * view back. A held description is read outside it, ordered by its task's own
+   * numbers instead (`description-document-reads.ts`).
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
 
@@ -913,14 +942,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** Leaves the open task, returning the window to its list; its plan stays held while the window lets it go. */
+  /** Leaves the open task, returning the window to its list; its description stays held while the window lets it go. */
   function closeActive(): void {
     const { activeTaskId: _closed, ...rest } = view;
     view = rest;
     publish();
   }
 
-  const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
+  const decodeHistory = Schema.decodeUnknownOption(TASK_HISTORY_READ.rows);
   /** How to wait for a write's transaction on each task's held history, while its follow stands. */
   const historyTxWaits = new Map<string, TxWait>();
 
@@ -929,7 +958,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * laid over the older ones held (`withNewestPage`) and told through
    * `answers`, and its wait for a write's transaction kept while it stands.
    */
-  function followHistory(taskId: string, answers: HeldAnswers<PlanRevisionsAnswer>) {
+  function followHistory(taskId: string, answers: HeldAnswers<DescriptionRevisionsAnswer>) {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
     /** The wait this follow handed last, so letting it go takes back its own alone. */
@@ -937,16 +966,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
-          ? Effect.map(served(client.historyLive(taskId, userId, poll, after)), (sealed) =>
-              sealed.ok
-                ? sealed.answer
-                : {
-                    failure: sealed.failure,
-                    gone:
-                      sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                      sealed.failure === LIVE_SIGNED_OUT.failure,
-                  },
-            )
+          ? sealedLive(TASK_HISTORY_READ, { id: taskId, userId }, poll, after)
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
       publish: (page) =>
@@ -966,7 +986,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Each task's plan history a window's version history shows, and the few
+   * Each task's description history a window's version history shows, and the few
    * shown latest, told whole on the app state every window draws
    * (`LIVE_READ.HISTORY`): its newest page followed from the first window's
    * hold (`heldSlice`), and the older pages read past it laid after it, so a
@@ -982,7 +1002,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The windows' hold on each task's history, one fiber standing until let go. */
   const historyHolds = yield* FiberMap.make<string>();
 
-  const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
+  const decodeBrowserTabs = Schema.decodeUnknownOption(TASK_BROWSER_TABS_READ.rows);
 
   /**
    * Follows the Browser tabs of `owner`, one agent's or a task's agents',
@@ -995,7 +1015,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     owner: BrowserTabsOwnerKey,
     answers: HeldAnswers<readonly AgentBrowserTab[]>,
   ) {
-    type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
+    type Rows = typeof TASK_BROWSER_TABS_READ.rows.Type;
     const place = browserTabsPlaceOf(owner);
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
@@ -1026,15 +1046,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* pushLive({
           seal: (poll, after) =>
             gate() && userId !== undefined
-              ? Effect.map(served(client.browserTabsLive(place, userId, poll, after)), (sealed) =>
-                  sealed.ok
-                    ? sealed.answer
-                    : {
-                        failure: sealed.failure,
-                        gone:
-                          sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                          sealed.failure === LIVE_SIGNED_OUT.failure,
-                      },
+              ? sealedLive(
+                  "taskId" in place ? TASK_BROWSER_TABS_READ : AGENT_BROWSER_TABS_READ,
+                  { id: browserTabsPlaceId(place), userId },
+                  poll,
+                  after,
                 )
               : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
           decode: decodeBrowserTabs,
@@ -1049,7 +1065,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
-  const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
+  const decodePages = Schema.decodeUnknownOption(TASK_PAGES_READ.rows);
 
   /** Follows the pages of `owner`, a task or an agent on no task, live until let go, each change told through `answers`. */
   function followPages(owner: PageOwnerKey, answers: HeldAnswers<readonly PageLine[]>) {
@@ -1059,15 +1075,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
-          ? Effect.map(served(client.pagesLive(place, userId, poll, after)), (sealed) =>
-              sealed.ok
-                ? sealed.answer
-                : {
-                    failure: sealed.failure,
-                    gone:
-                      sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                      sealed.failure === LIVE_SIGNED_OUT.failure,
-                  },
+          ? sealedLive(
+              "taskId" in place ? TASK_PAGES_READ : AGENT_PAGES_READ,
+              { id: pagePlaceId(place), userId },
+              poll,
+              after,
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
@@ -1115,32 +1127,32 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const browserTabsHolds = yield* FiberMap.make<BrowserTabsOwnerKey>();
 
   /**
-   * Each plan's or page's comments the windows show, and the few let go
+   * Each description's or page's comments the windows show, and the few let go
    * latest, each thread a row of the pool with every write standing drawn
    * over it, told whole on the app state every window draws
-   * (`LIVE_READ.PLAN_COMMENTS`), on the terms the pages are held.
+   * (`LIVE_READ.DESCRIPTION_COMMENTS`), on the terms the pages are held.
    */
-  const comments = yield* planCommentReads({
+  const comments = yield* descriptionCommentReads({
     pool: dependencies.pool,
     seal: (subject, userId, poll, after) =>
-      Effect.map(served(client.commentsLive(subject, userId, poll, after)), (sealed) =>
-        sealed.ok
-          ? sealed.answer
-          : {
-              failure: sealed.failure,
-              gone:
-                sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                sealed.failure === LIVE_SIGNED_OUT.failure,
-            },
+      sealedLive(
+        TASK_COMMENTS_READ,
+        {
+          id: subject.taskId,
+          ...(subject.pageId === undefined ? undefined : { page: subject.pageId }),
+          userId,
+        },
+        poll,
+        after,
       ),
     accountId: dependencies.accountId,
     gate,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.PLAN_COMMENTS_CHANGED, carried(held)),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED, carried(held)),
   });
   /** The windows' hold on each subject's comments, one fiber standing until let go. */
   const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
   /** The windows' writes to a task's comments, each drawn over its thread at once; behind a closed gate each answers unanswered, taken back as it is drawn. */
-  const commentWrites = planCommentWrites({
+  const commentWrites = descriptionCommentWrites({
     start: (planId, start) =>
       gate() ? served(client.startComment(planId, start)) : Effect.succeed(COMMENT_UNANSWERED),
     act: (planId, threadId, action) =>
@@ -1152,24 +1164,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /**
-   * The plan of each task a window opened, and of the few opened latest,
+   * The description of each task a window opened, and of the few opened latest,
    * told whole on the app state every window draws
-   * (`LIVE_READ.PLAN_DOCUMENT`), so a task opened again draws its plan in
-   * its first frame (`plan-document-reads.ts`).
+   * (`LIVE_READ.DESCRIPTION_DOCUMENT`), so a task opened again draws its description in
+   * its first frame (`description-document-reads.ts`).
    */
-  const documents = yield* planDocumentReads({
+  const documents = yield* descriptionDocumentReads({
     gate,
     accountId: dependencies.accountId,
     open: (taskId) => served(client.open(taskId)),
     recordLive: (taskId, userId, poll, after) =>
-      served(client.recordLive(taskId, userId, poll, after)),
+      served(
+        client.liveRead(TASK_RECORD_READ, { id: taskId, userId }, poll ? { after } : undefined),
+      ),
     listed: asListed,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED, carried(held)),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED, carried(held)),
   });
   /** Each edit's waits for its transaction, on its task's record and on the list, by the task, a newer edit's replacing an older one's. */
   const editWaits = yield* FiberMap.make<string>();
 
-  /** A task's row or plan without the assignee it stood with. */
+  /** A task's row or description without the assignee it stood with. */
   function withoutAssignee<T extends { readonly assignee?: unknown }>(
     standing: T,
   ): Omit<T, "assignee"> {
@@ -1197,8 +1211,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * from a launch or a sign-in until a sign-out closes their scope, so a
    * write still out for the account signed out draws on nothing the next
    * account sees. Each draw lays the list in the view, and what the service
-   * holds of each task whose plan is held, its name, pin, status, assignee,
-   * and repository, reaches its plan as the list carries it.
+   * holds of each task whose description is held, its name, pin, status, assignee,
+   * and repository, reaches its description as the list carries it.
    */
   /** Each drawing of the task list, told to every listener of the Pull request tabs' parts. */
   const listings = yield* Effect.acquireRelease(
@@ -1586,7 +1600,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
   });
   /** A token repository added or removed, sent where the gate stands open. */
-  const tokenRepositorySet = tokenRepositoryWritten.set<WireValue>(
+  const tokenRepositorySet = tokenRepositoryWritten.set<TasksWorkspaceTokenRepositoriesAnswer>(
     ({ workspaceId, repository, added }) =>
       gate()
         ? Effect.gen(function* () {
@@ -1595,22 +1609,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             if (!changed.ok) {
               return {
-                refused: carried<TasksWorkspaceTokenRepositoriesAnswer>({
+                refused: {
                   failure: changed.failure,
-                }),
+                },
               };
             }
             return {
-              answer: carried<TasksWorkspaceTokenRepositoriesAnswer>({
+              answer: {
                 repositories: changed.answer,
-              }),
+              },
               repositories: changed.answer,
             };
           })
         : Effect.succeed({
-            refused: carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
+            refused: WORKSPACE_UNANSWERED,
           }),
-    carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
+    WORKSPACE_UNANSWERED,
   );
 
   /** A workspace's Slack bot as the window hears it from the service's answer, or why there is none. */
@@ -1731,24 +1745,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       HttpClient.HttpClient
     >,
     userIds: readonly string[],
-  ): Effect.Effect<MemberWritten<WireValue>> {
+  ): Effect.Effect<MemberWritten<TasksWorkspaceMembersAnswer>> {
     if (!gate()) {
       return Effect.succeed({
-        refused: carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED),
+        refused: WORKSPACE_UNANSWERED,
       });
     }
     return Effect.map(workspaceCall(call), (written) =>
       written.ok
         ? {
-            answer: carried<TasksWorkspaceMembersAnswer>({ members: written.answer }),
+            answer: { members: written.answer },
             moved: membersMoved(written.answer, userIds),
           }
-        : { refused: carried<TasksWorkspaceMembersAnswer>({ failure: written.failure }) },
+        : { refused: { failure: written.failure } },
     );
   }
 
   /** A member's role changed, drawn on their row at once, kept until the people's read carries it. */
-  const memberRoleChanged = membersReads.write<TasksWorkspaceMemberRoleParams, WireValue>({
+  const memberRoleChanged = membersReads.write<
+    TasksWorkspaceMemberRoleParams,
+    TasksWorkspaceMembersAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     moves: ({ userId, role }) => [{ userId, role }],
     send: ({ workspaceId, userId, role }) =>
@@ -1756,7 +1773,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /** A member removed, drawn gone at once, kept until the people's read no longer carries them. */
-  const memberRemoved = membersReads.write<TasksWorkspaceMemberRemoveParams, WireValue>({
+  const memberRemoved = membersReads.write<
+    TasksWorkspaceMemberRemoveParams,
+    TasksWorkspaceMembersAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     moves: ({ userId }) => [{ userId, gone: true }],
     send: ({ workspaceId, userId }) =>
@@ -1768,18 +1788,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * read no longer carries it. Note that the list it answers is never laid
    * whole, since the read alone says what stands.
    */
-  const invitationCanceled = invitationsReads.cancel<WireValue>(({ workspaceId, invitationId }) =>
-    gate()
-      ? Effect.map(
-          served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
-          (pending) =>
-            pending.ok
-              ? {
-                  answer: carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer }),
-                }
-              : { refused: carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure }) },
-        )
-      : Effect.succeed({ refused: carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED) }),
+  const invitationCanceled = invitationsReads.cancel<TasksWorkspaceInvitationsAnswer>(
+    ({ workspaceId, invitationId }) =>
+      gate()
+        ? Effect.map(
+            served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
+            (pending) =>
+              pending.ok
+                ? {
+                    answer: { invitations: pending.answer },
+                  }
+                : { refused: { failure: pending.failure } },
+          )
+        : Effect.succeed({ refused: WORKSPACE_UNANSWERED }),
   );
 
   /**
@@ -1946,10 +1967,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * `task` given everything its row of the list now reads, its name,
    * status, assignee, and repository among them, so a change a teammate or
-   * an agent made reaches a held plan as it reaches the list; the very task
+   * an agent made reaches a held description as it reaches the list; the very task
    * where the list holds no row of it. Note that the row is the whole of
-   * what the task carries but its plan, so a field the row leaves out is one
-   * the task no longer has, and that the last save is the plan's own, kept
+   * what the task carries but its description, so a field the row leaves out is one
+   * the task no longer has, and that the last save is the description's own, kept
    * with its body, as are its blocks, which a row of the list never carries.
    */
   function asListed(task: Task): Task {
@@ -2096,7 +2117,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Opens a starting task at once under the id minted for it, as the list
-   * draws its row, on its empty plan laid as held (`documents.started`), so
+   * draws its row, on its empty description laid as held (`documents.started`), so
    * the window turns to it in the frame of the press, before the service has
    * made it. Where the list draws no row of it, as for a start that names no
    * workspace, it opens once the service answers.
@@ -2108,8 +2129,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const listed = view.tasks.find((row) => row.id === taskId);
       if (listed === undefined) return { ...opened, drawn: false };
       const { agents: _agents, ...row } = listed;
-      // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
-      yield* documents.started({ ...row, document: EMPTY_PLAN });
+      // Note that the description is laid before the task opens, so the window's first frame of it draws its description.
+      yield* documents.started({ ...row, document: EMPTY_DESCRIPTION });
       write({ activeTaskId: taskId });
       return { ...opened, drawn: true };
     });
@@ -2118,7 +2139,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * Puts the reader back on the task they stood on, or on none, where a
    * start that opened its task at once was refused and nothing else was
-   * asked of the screen since; the plan it laid is let go either way.
+   * asked of the screen since; the description it laid is let go either way.
    */
   function startedBack(opened: StartOpened, taskId: string): Effect.Effect<void> {
     return Effect.suspend(() => {
@@ -2163,7 +2184,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Draws `task` as the service answered it on its plan wherever that is
+   * Draws `task` as the service answered it on its description wherever that is
    * held, and answers what it says of the task's row of the list, which the
    * caller holds over the list (`heldOverList`). Note that the assignee
    * standing is dropped first, because an answer names one only where the
@@ -2178,10 +2199,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Lays `answered`, a write's answer about `taskId`, on its plan wherever
+   * Lays `answered`, a write's answer about `taskId`, on its description wherever
    * that is held, over the copy held by `lay`, so no read that left before
-   * the answer lands over it; a plan whose first read is still out takes the
-   * answer whole (`plan-document-reads.ts`).
+   * the answer lands over it; a description whose first read is still out takes the
+   * answer whole (`description-document-reads.ts`).
    */
   function documentTook(taskId: string, answered: Task, lay: (held: Task) => Task): void {
     documents.written(taskId, (held) => (held === undefined ? answered : lay(held)));
@@ -2202,10 +2223,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Draws the pin `task` was answered with on its plan wherever a copy is
+   * Draws the pin `task` was answered with on its description wherever a copy is
    * held, which keeps everything else it holds, because a draft drawn
    * meanwhile may be ahead of the copy the service answered. Note that a
-   * plan whose first read is still out takes the pin from the list's row as
+   * description whose first read is still out takes the pin from the list's row as
    * the read lands (`asListed`).
    */
   function takeMarks(task: Task): void {
@@ -2230,51 +2251,52 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function workspaceWritten(
     call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<WorkspaceWritten<WireValue>> {
+  ): Effect.Effect<WorkspaceWritten<TasksWorkspaceAnswer>> {
     if (!gate()) {
-      return Effect.succeed({ refused: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED) });
+      return Effect.succeed({ refused: WORKSPACE_UNANSWERED });
     }
     return Effect.map(served(call), (written) =>
       written.ok
         ? {
-            answer: carried<TasksWorkspaceAnswer>({ workspace: written.answer }),
+            answer: { workspace: written.answer },
             workspace: written.answer,
           }
-        : { refused: carried<TasksWorkspaceAnswer>({ failure: written.failure }) },
+        : { refused: { failure: written.failure } },
     );
   }
 
   /** A workspace renamed, its name drawn at once and kept until the follow moves it. */
-  const workspaceRenamed = workspaceWrite<TasksWorkspaceRenameParams & AskedOver, WireValue>({
+  const workspaceRenamed = workspaceWrite<
+    TasksWorkspaceRenameParams & AskedOver,
+    TasksWorkspaceAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     change:
       ({ name }) =>
       (row) => ({ ...row, name }),
     send: ({ workspaceId, name }) => workspaceWritten(client.workspaces.rename(workspaceId, name)),
-    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+    unsent: WORKSPACE_UNANSWERED,
   });
 
   /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
-  const workspaceSlugSet = workspaceWrite<TasksWorkspaceSlugSetParams & AskedOver, WireValue>({
+  const workspaceSlugSet = workspaceWrite<
+    TasksWorkspaceSlugSetParams & AskedOver,
+    TasksWorkspaceAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     change:
       ({ slug }) =>
       (row) => ({ ...row, slug }),
     send: ({ workspaceId, slug }) => workspaceWritten(client.workspaces.setSlug(workspaceId, slug)),
-    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+    unsent: WORKSPACE_UNANSWERED,
   });
 
   /**
    * A task renamed, its name drawn on its row at once and kept once the list
-   * carries it (`task-list-collections.ts`); its held plan takes the
+   * carries it (`task-list-collections.ts`); its held description takes the
    * service's answer in place, and nothing is read again.
    */
-  const renamed: WriteDeclaration<
-    PlanRow,
-    FieldChange<PlanRow>,
-    TasksRenameParams,
-    { readonly renamed: boolean }
-  > = {
+  const renamed: WriteDeclaration<PlanRow, FieldChange<PlanRow>, TasksRenameParams, boolean> = {
     kind: PLAN,
     keys: ({ taskId }) => [taskId],
     change:
@@ -2287,8 +2309,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               const renamedAs = yield* served(client.rename(taskId, { name }, key));
               if (!renamedAs.ok) {
                 return untaken(renamedAs.failure, {
-                  kept: { renamed: true },
-                  refused: { renamed: false },
+                  kept: true,
+                  refused: false,
                 });
               }
               const written = renamedAs.answer;
@@ -2299,32 +2321,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 document: answered.document,
               }));
               return {
-                answer: { renamed: true },
+                answer: true,
                 txid: written.txid,
                 taken: () => planFieldsOf(answered),
               };
             }),
           )
-        : Effect.succeed({ refused: { renamed: false } }),
+        : Effect.succeed({ refused: false }),
     queue: {
-      name: GATEWAY_METHOD.TASKS_RENAME,
+      name: TASK_QUEUED_WRITE.RENAME,
       input: tasksRenameParamsSchema,
-      queued: () => ({ renamed: true }),
+      queued: () => true,
     },
   };
 
   /**
    * Where a task stands, drawn on its row at once, a member assigned by the
    * name the window knows them by, and kept once the list carries it; its
-   * held plan takes the service's answer in place, and nothing is read
+   * held description takes the service's answer in place, and nothing is read
    * again.
    */
-  const stood: WriteDeclaration<
-    PlanRow,
-    FieldChange<PlanRow>,
-    TasksSetStandingParams,
-    { readonly changed: boolean }
-  > = {
+  const stood: WriteDeclaration<PlanRow, FieldChange<PlanRow>, TasksSetStandingParams, boolean> = {
     kind: PLAN,
     keys: ({ taskId }) => [taskId],
     change:
@@ -2357,39 +2374,34 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               const stoodAs = yield* served(client.setStanding(taskId, standing, key));
               if (!stoodAs.ok) {
                 return untaken(stoodAs.failure, {
-                  kept: { changed: true },
-                  refused: { changed: false },
+                  kept: true,
+                  refused: false,
                 });
               }
               const answered = stoodAs.answer;
               const { task } = answered;
               documentTook(taskId, task, (held) => ({ ...withoutAssignee(held), ...task }));
               return {
-                answer: { changed: true },
+                answer: true,
                 txid: answered.txid,
                 taken: () => planFieldsOf(task),
               };
             }),
           )
-        : Effect.succeed({ refused: { changed: false } }),
+        : Effect.succeed({ refused: false }),
     queue: {
-      name: GATEWAY_METHOD.TASKS_SET_STANDING,
+      name: TASK_QUEUED_WRITE.SET_STANDING,
       input: tasksSetStandingParamsSchema,
-      queued: () => ({ changed: true }),
+      queued: () => true,
     },
   };
 
   /**
    * A task pinned or unpinned, drawn on its row at once, a pin newest pinned
    * and standing where it was dragged, and kept once the list carries it;
-   * its held plan takes the service's answer.
+   * its held description takes the service's answer.
    */
-  const pinned: WriteDeclaration<
-    PlanRow,
-    FieldChange<PlanRow>,
-    TasksPinParams,
-    { readonly changed: boolean }
-  > = {
+  const pinned: WriteDeclaration<PlanRow, FieldChange<PlanRow>, TasksPinParams, boolean> = {
     kind: PLAN,
     keys: ({ taskId }) => [taskId],
     change:
@@ -2414,37 +2426,37 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               );
               if (!markedAs.ok) {
                 return untaken(markedAs.failure, {
-                  kept: { changed: true },
-                  refused: { changed: false },
+                  kept: true,
+                  refused: false,
                 });
               }
               const marked = markedAs.answer;
               takeMarks(marked.task);
               return {
-                answer: { changed: true },
+                answer: true,
                 txid: marked.txid,
                 taken: () => planFieldsOf(marked.task),
               };
             }),
           )
-        : Effect.succeed({ refused: { changed: false } }),
+        : Effect.succeed({ refused: false }),
     queue: {
-      name: GATEWAY_METHOD.TASKS_PIN,
+      name: TASK_QUEUED_WRITE.PIN,
       input: tasksPinParamsSchema,
-      queued: () => ({ changed: true }),
+      queued: () => true,
     },
   };
 
   /**
    * The reader's read mark of a task, drawn on its row at once and kept once
-   * the list carries the service's; the held plan reads no mark, so only the
+   * the list carries the service's; the held description reads no mark, so only the
    * row takes the answer.
    */
   const markedRead: WriteDeclaration<
     PlanRow,
     FieldChange<PlanRow>,
     TasksMarkReadParams,
-    { readonly changed: boolean }
+    boolean
   > = {
     kind: PLAN,
     keys: ({ taskId }) => [taskId],
@@ -2459,23 +2471,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               const answered = yield* served(client.mark(taskId, { readMark }, key));
               if (!answered.ok) {
                 return untaken(answered.failure, {
-                  kept: { changed: true },
-                  refused: { changed: false },
+                  kept: true,
+                  refused: false,
                 });
               }
               const marked = answered.answer;
               return {
-                answer: { changed: true },
+                answer: true,
                 txid: marked.txid,
                 taken: () => readMarkOf(marked.task),
               };
             }),
           )
-        : Effect.succeed({ refused: { changed: false } }),
+        : Effect.succeed({ refused: false }),
     queue: {
-      name: GATEWAY_METHOD.TASKS_MARK_READ,
+      name: TASK_QUEUED_WRITE.MARK_READ,
       input: tasksMarkReadParamsSchema,
-      queued: () => ({ changed: true }),
+      queued: () => true,
     },
   };
 
@@ -2495,7 +2507,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * from the answer, and is sent under that agent's own key alone, which
    * the service answers a start sent again with its agent by.
    */
-  const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, WireValue> = {
+  const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, TasksStartAnswer> = {
     kind: PLAN,
     keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
     // Note that a start that draws no row names no key, so its change is never drawn.
@@ -2525,23 +2537,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                       yield* documents.retry(id);
                     }
                   } else if (opened !== undefined && !waits) yield* startedBack(opened, id);
-                  return untaken<FieldChange<PlanRow>, WireValue>(went, {
-                    kept: carried<TasksStartAnswer>({ planId: id }),
-                    refused: carried<TasksStartAnswer>({
+                  return untaken<FieldChange<PlanRow>, TasksStartAnswer>(went, {
+                    kept: { planId: id },
+                    refused: {
                       failure,
                       ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
                       ...(cause === undefined ? undefined : { cause }),
-                    }),
+                    },
                   });
                 }
                 const { task, agent, txid } = created.answer;
                 if (opened !== undefined) yield* startedAs(opened, task);
                 const row = planRowOf(task);
                 return {
-                  answer: carried<TasksStartAnswer>({
+                  answer: {
                     planId: task.id,
                     ...(agent === undefined ? undefined : { agentStart: agent }),
-                  }),
+                  },
                   txid,
                   ...(row === undefined ? undefined : { taken: { made: row } }),
                 };
@@ -2549,12 +2561,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
           })
         : Effect.succeed({
-            refused: carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+            refused: { failure: TASK_CALL_FAILURE.UNANSWERED },
           }),
     queue: {
-      name: GATEWAY_METHOD.TASKS_START,
+      name: TASK_QUEUED_WRITE.START,
       input: startKeptSchema,
-      queued: ({ request }) => carried<TasksStartAnswer>({ planId: request.id }),
+      queued: ({ request }) => ({ planId: request.id }),
       holds: ({ request }) => request.agent !== undefined,
     },
   };
@@ -2569,7 +2581,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     PlanRow,
     FieldChange<PlanRow>,
     { readonly taskId: string },
-    { readonly deleted: boolean }
+    boolean
   > = {
     kind: PLAN,
     keys: ({ taskId }) => [taskId],
@@ -2579,34 +2591,34 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         ? serial(
             Effect.gen(function* () {
               const written = yield* served(client.delete(taskId));
-              if (written === undefined) return { refused: { deleted: false } };
+              if (written === undefined) return { refused: false };
               yield* kept.forget(keptOfTask(taskId));
               if (view.activeTaskId === taskId) closeActive();
-              return { answer: { deleted: true }, txid: written.txid };
+              return { answer: true, txid: written.txid };
             }),
           )
-        : Effect.succeed({ refused: { deleted: false } }),
+        : Effect.succeed({ refused: false }),
   };
 
   /**
    * A task changed by a call the service answers with the task, drawn at
    * once on every row `keys` names, the task's and the other task's a
-   * relation joins, and kept once the list carries it; its held plan takes
+   * relation joins, and kept once the list carries it; its held description takes
    * the service's answer in place, and a refusal answers why and puts
    * every row back. Note that the change is read off the input alone, which
    * holds what the list knew as it was asked, so the change taken where the
    * list hands no wait is the one drawn: the task's own row as the service
    * answered it laid over it, and every other row as drawn.
    */
-  const taskChanged = <Input extends { readonly taskId: string }, Failure>(declared: {
+  const taskChanged = <Input extends { readonly taskId: string }, Failure, Answer>(declared: {
     readonly keys: (input: Input) => readonly string[];
     readonly drawn: (input: Input) => (row: PlanRow) => Partial<PlanRow> | typeof ROW_GONE;
     readonly call: (
       input: Input,
     ) => Effect.Effect<TaskCallResult<TaskWritten, Failure>, never, HttpClient.HttpClient>;
-    readonly answered: (task: Task) => WireValue;
-    readonly refused: (failure: Failure | typeof TASK_CALL_FAILURE.UNANSWERED) => WireValue;
-  }): WriteDeclaration<PlanRow, FieldChange<PlanRow>, Input, WireValue> => ({
+    readonly answered: (task: Task) => Answer;
+    readonly refused: (failure: Failure | typeof TASK_CALL_FAILURE.UNANSWERED) => Answer;
+  }): WriteDeclaration<PlanRow, FieldChange<PlanRow>, Input, Answer> => ({
     kind: PLAN,
     keys: declared.keys,
     change: declared.drawn,
@@ -2638,8 +2650,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ({ repository }) =>
       () => ({ repository }),
     call: ({ taskId, repository }) => client.setRepository(taskId, repository),
-    answered: (task) => carried<TasksSetRepositoryAnswer>({ repository: task.repository }),
-    refused: (failure) => carried<TasksSetRepositoryAnswer>({ failure }),
+    answered: (task): TasksSetRepositoryAnswer => ({ repository: task.repository }),
+    refused: (failure): TasksSetRepositoryAnswer => ({ failure }),
   });
 
   /**
@@ -2653,8 +2665,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       () =>
         member ? { workspaceId } : ROW_GONE,
     call: ({ taskId, workspaceId }) => client.move(taskId, workspaceId),
-    answered: (task) => carried<TasksMoveAnswer>({ workspaceId: task.workspaceId }),
-    refused: (failure) => carried<TasksMoveAnswer>({ failure }),
+    answered: (task): TasksMoveAnswer => ({ workspaceId: task.workspaceId }),
+    refused: (failure): TasksMoveAnswer => ({ failure }),
   });
 
   /** A block added or taken away, drawn at once on the task that waits, and standing over both tasks it joins. */
@@ -2671,9 +2683,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         reach,
       }),
     call: ({ taskId, block }) => client.block(taskId, block),
-    answered: (task) =>
-      carried<TasksBlockAnswer>({ blockedBy: task.blockedBy ?? [], blocks: task.blocks ?? [] }),
-    refused: (failure) => carried<TasksBlockAnswer>({ failure }),
+    answered: (task): TasksBlockAnswer => ({
+      blockedBy: task.blockedBy ?? [],
+      blocks: task.blocks ?? [],
+    }),
+    refused: (failure): TasksBlockAnswer => ({ failure }),
   });
 
   /** A task's parent set or cleared, the task drawn nested at once, and standing over the parent it now sits under. */
@@ -2685,8 +2699,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       (row) =>
         row.id === taskId ? { parentTaskId } : {},
     call: ({ taskId, parentTaskId }) => client.setParent(taskId, { parentTaskId }),
-    answered: (task) => carried<TasksSetParentAnswer>({ parentTaskId: task.parentTaskId ?? null }),
-    refused: (failure) => carried<TasksSetParentAnswer>({ failure }),
+    answered: (task): TasksSetParentAnswer => ({ parentTaskId: task.parentTaskId ?? null }),
+    refused: (failure): TasksSetParentAnswer => ({ failure }),
   });
 
   /** A relation moved to another kind, its taking away and its adding drawn at once on both tasks it joins. */
@@ -2706,13 +2720,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         reach,
       }),
     call: ({ taskId, relation }) => client.changeRelation(taskId, relation),
-    answered: (task) =>
-      carried<TasksChangeRelationAnswer>({
-        blockedBy: task.blockedBy ?? [],
-        blocks: task.blocks ?? [],
-        parentTaskId: task.parentTaskId ?? null,
-      }),
-    refused: (failure) => carried<TasksChangeRelationAnswer>({ failure }),
+    answered: (task): TasksChangeRelationAnswer => ({
+      blockedBy: task.blockedBy ?? [],
+      blocks: task.blocks ?? [],
+      parentTaskId: task.parentTaskId ?? null,
+    }),
+    refused: (failure): TasksChangeRelationAnswer => ({ failure }),
   });
 
   /** What the list knows now of the two tasks a relation joins, which its draw reads. */
@@ -2728,79 +2741,273 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     };
   }
 
-  const methods: HostMethodTable = {
+  /** The workspaces' plain acts, each answering what the panel reads or refused as `workspaceAnswered` words it. */
+  const workspaceActs: HostActTable<typeof WORKSPACE_ACTS> = {
+    WORKSPACE_CREATE: ({ name }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const made = yield* workspaceCall(client.workspaces.create(name));
+        return yield* workspaceAnswered("workspace")(
+          made.ok ? { workspace: made.answer } : { failure: made.failure },
+        );
+      }),
+    // A rename moves no task: its name is drawn at once, and the follow
+    // carries the same name a moment later.
+    WORKSPACE_RENAME: declaredWrite(dependencies.pool, workspaceRenamed, {
+      read: (rename: TasksWorkspaceRenameParams) =>
+        Effect.succeed({ ...rename, rows: workspaceList.rows }),
+      answered: workspaceAnswered("workspace"),
+    }),
+    // A slug moves no task either: links resolve by id, or by a former
+    // slug the workspace keeps, so it is drawn at once as a rename is.
+    WORKSPACE_SLUG_SET: declaredWrite(dependencies.pool, workspaceSlugSet, {
+      read: (slugSet: TasksWorkspaceSlugSetParams) =>
+        Effect.succeed({ ...slugSet, rows: workspaceList.rows }),
+      answered: workspaceAnswered("workspace"),
+    }),
+    // A photo moves no task either, but it uploads, so its workspace is
+    // drawn once the service answers it, its photo's new version or none,
+    // and the photo at that version is fetched for the windows' tiles
+    // (`photosListed`).
+    WORKSPACE_PHOTO_SET: ({ workspaceId, photo }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const written = yield* served(client.workspaces.setPhoto(workspaceId, photo));
+        if (!written.ok) return yield* workspaceRefused(written.failure);
+        yield* workspaceList.rows.answered(written.answer);
+        return written.answer;
+      }),
+    // The install address is answered to the procedure that opens it and
+    // held nowhere: the connection lands in the browser, and the follow
+    // carries the organization.
+    WORKSPACE_GITHUB_CONNECT: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const begun = yield* served(client.workspaces.githubConnect(workspaceId));
+        if (!begun.ok) return yield* workspaceRefused(begun.failure);
+        return begun.answer;
+      }),
+    WORKSPACE_GITHUB_DISCONNECT: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const disconnected = yield* workspaceCall(client.workspaces.githubDisconnect(workspaceId));
+        if (!disconnected.ok) return yield* workspaceRefused(disconnected.failure);
+      }),
+    // Sentry's install address is answered to the procedure that opens it
+    // and held nowhere: the install lands in the browser.
+    WORKSPACE_SENTRY_INSTALL: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const begun = yield* served(client.workspaces.sentryInstall(workspaceId));
+        if (!begun.ok) return yield* workspaceRefused(begun.failure);
+        return begun.answer;
+      }),
+    WORKSPACE_SENTRY_DISCONNECT: declaredWrite(
+      dependencies.pool,
+      sentryDisconnect(({ workspaceId, installationId }) =>
+        gate()
+          ? Effect.map(
+              served(client.workspaces.sentryDisconnect(workspaceId, installationId)),
+              (sentry): TasksWorkspaceSentryAnswer =>
+                sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
+            )
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      { answered: workspaceAnswered("sentry") },
+    ),
+    WORKSPACE_SLACK_BOT_CONNECT: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const connected = yield* served(client.workspaces.slackBotConnect(workspaceId));
+        // Note that the bot's row is known only once Slack named its team, so the answer waits for the held read to carry it, and the window draws the team as the answer lands.
+        if (connected.ok) yield* integrations.confirmed(workspaceId, connected.answer.txid);
+        return yield* workspaceAnswered("slackBot")(slackBotAnswered(slackBotOf(connected)));
+      }),
+    WORKSPACE_SLACK_BOT_DISCONNECT: declaredWrite(
+      dependencies.pool,
+      slackBotDisconnect(({ workspaceId }) =>
+        gate()
+          ? Effect.map(served(client.workspaces.slackBotDisconnect(workspaceId)), slackBotOf)
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    // Note that the switch lives on the account's preferences row, so it is drawn over that row at once, whichever workspace's Settings turned it.
+    WORKSPACE_SLACK_BOT_NOTIFICATIONS: declaredWrite(
+      dependencies.pool,
+      slackNotificationsWritten(
+        (write) =>
+          gate()
+            ? Effect.map(
+                served(
+                  client.workspaces.slackBotNotifications(write.workspaceId, write.notifications),
+                ),
+                slackBotOf,
+              )
+            : Effect.succeed(WORKSPACE_UNANSWERED),
+        dependencies.accountId,
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    WORKSPACE_SLACK_BOT_REPOSITORY: declaredWrite(
+      dependencies.pool,
+      slackBotRepository((repository) =>
+        gate()
+          ? Effect.map(served(client.workspaces.slackBotRepository(repository)), slackBotOf)
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    // Note that whether the bot is in a channel is Slack's own, so the channels a write's answer carries are laid on the held list, and asked again where it carries none.
+    WORKSPACE_SLACK_BOT_CHANNEL: declaredWrite(
+      dependencies.pool,
+      slackBotChannel(
+        (channel) =>
+          gate()
+            ? Effect.map(served(client.workspaces.slackBotChannel(channel)), slackBotOf)
+            : Effect.succeed(WORKSPACE_UNANSWERED),
+        ({ workspaceId }, answer) => {
+          if (!("slackBot" in answer)) return Effect.void;
+          const { channels } = answer.slackBot;
+          return channels === undefined
+            ? slackChannels.wake((held) => held === workspaceId)
+            : slackChannels.answered(workspaceId, channels.map(listedChannel));
+        },
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    // An addition is drawn as the reader's own, newest first and removable,
+    // until the service answers the list as it then stands.
+    WORKSPACE_TOKEN_REPOSITORY_SET: declaredWrite(dependencies.pool, tokenRepositorySet, {
+      read: (set: TasksWorkspaceTokenRepositorySetParams) =>
+        Effect.map(Clock.currentTimeMillis, (addedAt) => ({
+          ...set,
+          addedBy: dependencies.accountId() ?? "",
+          addedAt,
+          session: tokenRepositoryWritten.session(),
+        })),
+      answered: workspaceAnswered("repositories"),
+    }),
+    WORKSPACE_MEMBER_REMOVE: declaredWrite(dependencies.pool, memberRemoved, {
+      answered: workspaceAnswered("members"),
+    }),
+    // A role changed moves no task; the people's read carries it, as a
+    // removal's, drawn at once until then.
+    WORKSPACE_MEMBER_ROLE: declaredWrite(dependencies.pool, memberRoleChanged, {
+      answered: workspaceAnswered("members"),
+    }),
+    // Note that a handover changes the account's own role in the workspace,
+    // which the view's workspaces carry and every owner's and admin's act is
+    // drawn from, and which the follow carries; it moves no task. The heir's
+    // role and the account's own are drawn from its answer until the
+    // people's read carries them.
+    WORKSPACE_TRANSFER: ({ workspaceId, userId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
+        if (!handedOver.ok) return yield* workspaceRefused(handedOver.failure);
+        yield* membersReads.moved(
+          workspaceId,
+          membersMoved(handedOver.answer, [userId, dependencies.accountId()]),
+        );
+        return handedOver.answer;
+      }),
+    // Note that a leave closes the open task where it is that workspace's, as
+    // a delete of it does, because the account can no longer read or write a
+    // task of a workspace it left; a refused leave closes nothing. The
+    // account is drawn gone from the workspace's people, which its read,
+    // ended as the account no longer reaches it, never takes back.
+    WORKSPACE_LEAVE: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const openTaskId = view.activeTaskId;
+        const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
+        const closeOpenTask = Effect.gen(function* () {
+          yield* serial(
+            Effect.sync(() => {
+              if (view.activeTaskId === openTaskId) closeActive();
+            }),
+          );
+        });
+        const leave = Effect.tap(client.workspaces.leave(workspaceId), (answer) =>
+          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
+        );
+        const left = yield* workspaceCall(leave);
+        if (!left.ok) return yield* workspaceRefused(left.failure);
+        const readerId = dependencies.accountId();
+        if (readerId !== undefined) {
+          yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
+        }
+      }),
+    // An invitation made or canceled moves no workspace or task, so nothing
+    // else is read with it; the invitations' read carries it, an invitation
+    // made drawn from its answer until then where a window holds them.
+    WORKSPACE_INVITE: ({ workspaceId, email, role }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const made = yield* served(client.workspaces.invite(workspaceId, email, role));
+        if (!made.ok) return yield* workspaceRefused(made.failure);
+        yield* invitationsReads.made(workspaceId, made.answer);
+        return made.answer;
+      }),
+    WORKSPACE_INVITATION_CANCEL: declaredWrite(dependencies.pool, invitationCanceled, {
+      answered: workspaceAnswered("invitations"),
+    }),
+  };
+
+  /** A page's version, answered to the frame or the source tab that asked and kept by its version, which is never written again, so its HTML never enters the view every window is told. */
+  const pageRead = (read: TasksPageParams): Effect.Effect<TasksPageAnswer> =>
+    Effect.gen(function* () {
+      // A run that sends nothing reads the page its fixture stages, frame and source alike.
+      if (!kernel.runMode.sendsNetwork) return fixturePage(read);
+      if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+      const { pageId, version } = read;
+      const place = "taskId" in read ? { taskId: read.taskId } : { agentId: read.agentId };
+      const owner = pageOwnerOf(read);
+      return yield* kept.answer(
+        new PageVersionKey({ ownerKind: owner.kind, ownerId: owner.id, pageId, version }),
+        dependencies.accountId,
+        Effect.map(
+          served(client.readPageVersion(place, pageId, version)),
+          (page): TasksPageAnswer =>
+            page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
+        ),
+        (page) => ("page" in page ? page : undefined),
+      );
+    });
+
+  /** The Tasks tab's plain asks, answered as the panel's port asks them (`TASKS_ACTS`). */
+  const taskActs: HostActTable<typeof TASKS_ACTS> = {
     // The list's Try again: what is followed already stands (`open`), so it
     // starts only a follow that is not running, and reads GitHub's
-    // connection again where the last read is stale. A held plan has a Try
+    // connection again where the last read is stale. A held description has a Try
     // again of its own (`TASKS_DOCUMENT_RETRY`).
-    [GATEWAY_METHOD.TASKS_REFRESH]: () =>
+    TASKS_REFRESH: () =>
       Effect.gen(function* () {
-        if (!gate()) return {};
+        if (!gate()) return;
         yield* followAccount;
         yield* readGithubWhenStale;
-        return {};
-      }),
-    // A follow may have died in a sleep or a lost network without a word,
-    // and one waiting out a pause need not wait on: a list already followed
-    // is sealed again now, once for a wake's several events.
-    [GATEWAY_METHOD.TASKS_RESYNC]: () =>
-      Effect.gen(function* () {
-        const at = yield* Clock.currentTimeMillis;
-        if (resyncedAt !== undefined && at - resyncedAt < Duration.toMillis(RESYNC_SETTLE)) {
-          return {};
-        }
-        yield* resealList;
-        return {};
-      }),
-    // The connection came back, which no settle folds away, since a read a
-    // wake started just before may have hung on the network that was not
-    // yet there. Every read a window holds is asked again as a window
-    // coming forward asks it (`window-focus.ts`), and the live follows
-    // waiting out a backoff ask as the service answered (`live-follow.ts`).
-    [GATEWAY_METHOD.TASKS_REGAINED]: () =>
-      Effect.gen(function* () {
-        yield* dependencies.focus.raise;
-        yield* resealList;
-        return {};
       }),
     // A window said the changes made offline the service refused, so the count it said is cleared for every window.
-    [GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR]: () =>
+    TASKS_OFFLINE_REFUSED_CLEAR: () => Effect.sync(() => dependencies.offlineRefused.clear()),
+    TASKS_SELECT: ({ taskId }) =>
       Effect.sync(() => {
-        dependencies.offlineRefused.clear();
-        return {};
-      }),
-    // The panel coming forward, which may follow GitHub connected in the
-    // browser, reads the connection no oftener than the bound allows; the
-    // workspaces are followed and need no read. It is also the host's one
-    // word that a window came forward, which every read asked again on
-    // focus hears (`window-focus.ts`).
-    [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
-      Effect.gen(function* () {
-        yield* dependencies.focus.raise;
-        if (gate()) yield* readGithubWhenStale;
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_OPEN]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksOpenParamsSchema,
-          params,
-          "opening a task names one task",
-        );
-        if (!gate()) return { opened: false };
+        if (!gate()) return false;
         screenAsks += 1;
-        // Note that the open reads nothing: the window holds the task's plan (`TASKS_DOCUMENT_FOLLOW`), which draws at once where it was held lately.
-        write({ activeTaskId: read.taskId });
-        return { opened: true };
+        // Note that the open reads nothing: the window holds the task's description (`TASKS_DOCUMENT_FOLLOW`), which draws at once where it was held lately.
+        write({ activeTaskId: taskId });
+        return true;
       }),
-    [GATEWAY_METHOD.TASKS_FILE]: (params) =>
+    // Leaving the task returns to the list, which was read when the tab
+    // showed.
+    TASKS_CLOSE: () =>
       Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksFileParamsSchema,
-          params,
-          "reading a file names a task, or a workspace and its repository, a path, and a window of its lines",
-        );
-        if (!gate()) return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        screenAsks += 1;
+        yield* serial(Effect.sync(closeActive));
+      }),
+    TASKS_FILE: (read) =>
+      Effect.gen(function* () {
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
         const { path, firstLine, lastLine, raw, ref } = read;
         const window = {
           path,
@@ -2833,19 +3040,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               (file) =>
                 file !== undefined && ("file" in file || "text" in file) ? file : undefined,
             );
-        return carried<TasksFileAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
+        return answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
     // the tree keeps the folders it has opened.
-    [GATEWAY_METHOD.TASKS_TREE]: (params) =>
+    TASKS_TREE: (asked) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksTreeParamsSchema,
-          params,
-          "listing a folder names a task, or a workspace and its repository, and the folder's path",
-        );
-        if (!gate()) return carried<TasksTreeAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const asked = read;
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
         const folder = {
           path: asked.path,
           ...(asked.recursive === undefined ? undefined : { recursive: asked.recursive }),
@@ -2855,21 +3056,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ? client.readTree(asked.planId, folder)
             : client.readRepositoryTree(asked, folder),
         );
-        return carried<TasksTreeAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
+        return answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
       }),
     // The repository's skills are held for every window and read again behind
     // each answer (`heldSkills`), a plan's under the repository the list
     // names it on, so a plan moved to another repository reads that one's.
-    [GATEWAY_METHOD.TASKS_SKILLS]: (params) =>
+    TASKS_SKILLS: (asked) =>
       Effect.gen(function* () {
-        const asked = yield* readParams(
-          tasksSkillsParamsSchema,
-          params,
-          "reading a repository's skills names the task, or a workspace and its repository",
-        );
-        if (!gate()) {
-          return carried<TasksSkillsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
         const listed =
           "planId" in asked ? view.tasks.find((each) => each.id === asked.planId) : undefined;
         const key: SkillsKey =
@@ -2887,7 +3081,257 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const held = MutableHashMap.get(heldSkills, key);
         const read = yield* skillsRead(key);
         const answer = Option.isSome(held) ? held.value : yield* Fiber.join(read);
-        return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
+        return answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
+      }),
+    // A tab a member opens in an agent's browser is answered to the panel
+    // that asked and held nowhere; the held list names it once it moves.
+    TASKS_BROWSER_TAB_OPEN: (read) =>
+      gate() ? served(client.openBrowserTab(read)) : Effect.succeed(BROWSER_TABS_UNANSWERED),
+    // The task a link names by its number is found on the service and answered to the window that asked, held nowhere.
+    TASKS_FIND: (read) =>
+      Effect.gen(function* () {
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+        const taskId = yield* served(client.find(read.workspace, read.number));
+        return taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId };
+      }),
+    // A page of the history is answered to the caller that asked, and an
+    // older page is laid on the task's held history too, past the revisions
+    // held from where it was read before, so a version history scrolled back
+    // keeps it as saves land. A revision beside the one before it is
+    // answered to the version history that asked and held nowhere.
+    TASKS_REVISIONS: ({ taskId, before }) =>
+      Effect.gen(function* () {
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+        const page = yield* served(client.readRevisions(taskId, before));
+        const held = heldHistories.rowsOf(taskId);
+        if (page !== undefined && before !== undefined && held !== undefined) {
+          heldHistories.lay(taskId, withOlderPage(held, before, page));
+        }
+        return page ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
+      }),
+    TASKS_REVISION: (read) =>
+      Effect.gen(function* () {
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+        const revision = yield* served(client.readRevision(read.taskId, read.seq));
+        return revision === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { revision };
+      }),
+    // The version is read as its frame reads it (`pageRead`), so its HTML reaches the tab that asked alone, line by line and plain.
+    TASKS_PAGE_SOURCE: (read) =>
+      Effect.map(
+        pageRead(read),
+        (answer): TasksPageSourceAnswer =>
+          "page" in answer ? { lines: pageSourceLines(answer.page.html) } : answer,
+      ),
+    // A picture's bytes are answered to the window that asked and kept by
+    // its id, which no other upload is given, so they never enter the view
+    // every window is told.
+    TASKS_PICTURE_READ: (read) =>
+      gate()
+        ? kept.answer(
+            new DescriptionPictureKey({ planId: read.planId, attachmentId: read.attachmentId }),
+            dependencies.accountId,
+            served(client.readPicture(read.planId, read.attachmentId)),
+            (answer) => ("base64" in answer ? answer : undefined),
+          )
+        : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    // A write to a task's comments is drawn over its thread at once, a
+    // thread started drawn under the id its window minted, standing until
+    // the subject's read carries it, or taken back where the service
+    // refused it (`description-comment-writes.ts`).
+    TASKS_COMMENT_START: declaredWrite(dependencies.pool, commentWrites.started),
+    TASKS_COMMENT_ACT: declaredWrite(dependencies.pool, commentWrites.acted),
+    // The picture is kept and its id answered to the editor that took it;
+    // the description's text names it once the editor lays its address in.
+    TASKS_PICTURE_KEEP: (read) =>
+      gate()
+        ? served(client.keepPicture(read.planId, read.picture))
+        : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    // The service answers the task as restored, so the list's row and its
+    // held description take it in place and nothing is read again. It is confirmed
+    // once its transaction reached the history the windows hold, or held
+    // lately; at once where none is.
+    TASKS_RESTORE: ({ taskId, seq }) =>
+      Effect.gen(function* () {
+        if (!gate()) return false;
+        const restored = yield* serial(
+          Effect.gen(function* () {
+            const answer = yield* served(client.restore(taskId, seq));
+            if (answer === undefined) return undefined;
+            return { ...answer, held: takeAnswered(answer.task) };
+          }),
+        );
+        if (restored === undefined) return false;
+        // Note that the waits stand outside the serial reads, so no read waits on them.
+        const { held, txid } = restored;
+        yield* Effect.all(
+          [
+            confirmWrite(historyTxWaits.get(taskId), txid),
+            heldOverList(held.taskId, held.fields, txid),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return true;
+      }),
+    // A start draws its task's row the moment it is asked, under the id minted for it where the
+    // window named none, and stands until the list carries it (`started`). A quiet start, a
+    // group's quick add or New task set to stay, opens nothing, and answers with its agent's
+    // start where it asked for one; any other opens its task at once.
+    TASKS_START: declaredWrite(dependencies.pool, started, {
+      read: ({ quiet, ...asked }) =>
+        Effect.sync((): Start => {
+          const request = { ...asked, id: asked.id ?? kernel.createId() };
+          // Note that a start behind a closed gate draws nothing, since it never reaches the service.
+          return { request, quiet: quiet === true, row: gate() ? startedRow(request) : undefined };
+        }),
+    }),
+    TASKS_DELETE: declaredWrite(dependencies.pool, deleted),
+    TASKS_RENAME: declaredWrite(dependencies.pool, renamed),
+    TASKS_SET_STANDING: declaredWrite(dependencies.pool, stood),
+    TASKS_PIN: declaredWrite(dependencies.pool, pinned),
+    TASKS_MARK_READ: declaredWrite(dependencies.pool, markedRead),
+    // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
+    TASKS_PIN_REPOSITORY: declaredWrite(dependencies.pool, sidebarWritten.pinned, {
+      read: (read) => Effect.sync(() => ({ ...read, at: kernel.now() })),
+    }),
+    TASKS_WRITE_SECTION: declaredWrite(dependencies.pool, sidebarWritten.sectionsWritten, {
+      read: (read) =>
+        Effect.sync(() => ({ ...read, ownerId: dependencies.accountId(), at: kernel.now() })),
+    }),
+    TASKS_SET_REPOSITORY: declaredWrite(dependencies.pool, repositorySet),
+    // A move reads, as it is asked, whether the reader is a member of the
+    // workspace it moves to, where the list goes on holding the task; while
+    // the workspaces are not read yet it takes the reader for one.
+    TASKS_MOVE: declaredWrite(dependencies.pool, moved, {
+      read: (read) =>
+        Effect.sync(() => ({
+          ...read,
+          member:
+            view.workspacesStatus !== TASKS_READ.READY ||
+            view.workspaces.some((workspace) => workspace.id === read.workspaceId),
+        })),
+    }),
+    // A block or a relation reads, as it is asked, what the list knows of
+    // the tasks it joins, which its draw reads.
+    TASKS_BLOCK: declaredWrite(dependencies.pool, blockChanged, {
+      read: (read) =>
+        Effect.sync(() => ({ ...read, reach: relationReachOf(read.taskId, read.block.taskId) })),
+    }),
+    TASKS_SET_PARENT: declaredWrite(dependencies.pool, parentSet),
+    TASKS_CHANGE_RELATION: declaredWrite(dependencies.pool, relationChanged, {
+      read: (read) =>
+        Effect.sync(() => ({
+          ...read,
+          reach: relationReachOf(read.taskId, read.relation.taskId),
+        })),
+    }),
+    // The task the service answered is drawn in place, so the edit stands on
+    // its description at once and the notetaker's drafts drawn before it drop. It
+    // stands until the task's record and the list carry its transaction,
+    // which is waited for behind the answer.
+    TASKS_EDIT: ({ taskId, edit }) =>
+      Effect.gen(function* () {
+        if (!gate()) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+        const edited = yield* serial(
+          Effect.gen(function* () {
+            const written = yield* served(client.edit(taskId, edit));
+            if (!written.ok) return { answer: { failure: written.failure } };
+            const answer = written.answer;
+            if ("conflict" in answer) return { answer: { conflict: answer.conflict } };
+            if ("refused" in answer) return { answer: { failure: answer.refused } };
+            return {
+              answer: { saved: true } as const,
+              held: takeAnswered(answer.plan),
+              txid: answer.txid,
+            };
+          }),
+        );
+        // Note that the waits stand outside the serial reads and behind the answer, so neither a read nor the editor waits on them.
+        if (edited.held !== undefined) {
+          const { held, txid } = edited;
+          yield* FiberMap.run(
+            editWaits,
+            taskId,
+            Effect.all(
+              [documents.confirmed(taskId, txid), heldOverList(held.taskId, held.fields, txid)],
+              { concurrency: "unbounded" },
+            ),
+          );
+        }
+        return edited.answer;
+      }),
+    // The browser connects or disconnects GitHub, so the panel coming
+    // forward again reads the connection whatever the bound says.
+    GITHUB_CONNECT: () =>
+      Effect.gen(function* () {
+        if (!gate()) return GITHUB_PAGE_UNANSWERED;
+        const page = yield* served(client.github.connect());
+        githubAskedAt = undefined;
+        return page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED;
+      }),
+    // The view takes the connection the service answers at once, so Settings
+    // reads disconnected without waiting for the next read of it. Note that
+    // GitHub as the last way to sign in is refused in words that say so.
+    GITHUB_DISCONNECT: () =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* new ActRefused({});
+        const disconnected = yield* served(client.github.disconnect());
+        githubAskedAt = undefined;
+        // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
+        yield* dependencies.githubMoved;
+        if (!disconnected.ok) {
+          return yield* new ActRefused(
+            disconnected.failure === GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED
+              ? { sentence: GITHUB_LAST_SIGN_IN_REFUSAL }
+              : {},
+          );
+        }
+        // Note that a read started before the answer is made stale, because
+        // the status it read may predate the unlink.
+        githubRead += 1;
+        write({ github: disconnected.answer });
+      }),
+    // An admin read is answered to the caller as the service answered it and
+    // held nowhere, since it is other accounts' data, which no view keeps.
+    ADMIN_READ: (read) =>
+      gate() ? served(client.admin.read(read)) : Effect.succeed({ refused: ADMIN_UNANSWERED }),
+    ADMIN_FAVORITE: (read) =>
+      gate() ? served(client.admin.favorite(read.id, read.favorite)) : Effect.succeed(false),
+  };
+
+  const methods: HostMethodTable = {
+    // A follow may have died in a sleep or a lost network without a word,
+    // and one waiting out a pause need not wait on: a list already followed
+    // is sealed again now, once for a wake's several events.
+    [GATEWAY_METHOD.TASKS_RESYNC]: () =>
+      Effect.gen(function* () {
+        const at = yield* Clock.currentTimeMillis;
+        if (resyncedAt !== undefined && at - resyncedAt < Duration.toMillis(RESYNC_SETTLE)) {
+          return {};
+        }
+        yield* resealList;
+        return {};
+      }),
+    // The connection came back, which no settle folds away, since a read a
+    // wake started just before may have hung on the network that was not
+    // yet there. Every read a window holds is asked again as a window
+    // coming forward asks it (`window-focus.ts`), and the live follows
+    // waiting out a backoff ask as the service answered (`live-follow.ts`).
+    [GATEWAY_METHOD.TASKS_REGAINED]: () =>
+      Effect.gen(function* () {
+        yield* dependencies.focus.raise;
+        yield* resealList;
+        return {};
+      }),
+    // The panel coming forward, which may follow GitHub connected in the
+    // browser, reads the connection no oftener than the bound allows; the
+    // workspaces are followed and need no read. It is also the host's one
+    // word that a window came forward, which every read asked again on
+    // focus hears (`window-focus.ts`).
+    [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
+      Effect.gen(function* () {
+        yield* dependencies.focus.raise;
+        if (gate()) yield* readGithubWhenStale;
+        return {};
       }),
     // A link's standing is held for the windows while a chip draws it, and told only on the app state (`LINK_STANDINGS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW]: (params) =>
@@ -2917,75 +3361,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(linkHolds, new LinkStandingKey(link));
         return {};
       }),
-    // A tab a member opens in an agent's browser is answered to the panel
-    // that asked and held nowhere; the held list names it once it moves.
-    [GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksBrowserTabOpenParamsSchema,
-          params,
-          "opening a Browser tab names the agent and the address",
-        );
-        if (!gate()) return carried<TasksBrowserTabOpenAnswer>(BROWSER_TABS_UNANSWERED);
-        return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
-      }),
-    // The task a link names by its number is found on the service and answered to the window that asked, held nowhere.
-    [GATEWAY_METHOD.TASKS_FIND]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksFindParamsSchema,
-          params,
-          "finding a task by its number names the workspace and the number",
-        );
-        if (!gate()) {
-          return carried<TasksFindAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const taskId = yield* served(client.find(read.workspace, read.number));
-        return carried<TasksFindAnswer>(
-          taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId },
-        );
-      }),
-    // A page of the history is answered to the caller that asked, and an
-    // older page is laid on the task's held history too, past the revisions
-    // held from where it was read before, so a version history scrolled back
-    // keeps it as saves land. A revision beside the one before it is
-    // answered to the version history that asked and held nowhere.
-    [GATEWAY_METHOD.TASKS_REVISIONS]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksRevisionsParamsSchema,
-          params,
-          "reading a plan's history names the task, and where an older page is read from",
-        );
-        if (!gate()) {
-          return carried<TasksRevisionsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const { taskId, before } = read;
-        const page = yield* served(client.readRevisions(taskId, before));
-        const held = heldHistories.rowsOf(taskId);
-        if (page !== undefined && before !== undefined && held !== undefined) {
-          heldHistories.lay(taskId, withOlderPage(held, before, page));
-        }
-        return carried<TasksRevisionsAnswer>(page ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
-      }),
-    [GATEWAY_METHOD.TASKS_REVISION]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksRevisionParamsSchema,
-          params,
-          "reading a revision names a task and its number",
-        );
-        if (!gate()) {
-          return carried<TasksRevisionAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const revision = yield* served(client.readRevision(read.taskId, read.seq));
-        return carried<TasksRevisionAnswer>(
-          revision === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { revision },
-        );
-      }),
-    // A page's version is answered to the frame that asked and kept by its
-    // version, which is never written again, so its HTML never enters the view
-    // every window is told.
+    // A page's version, answered to the frame that asked (`pageRead`).
     [GATEWAY_METHOD.TASKS_PAGE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2993,27 +3369,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "reading a page names a task or an agent, the page, and its version",
         );
-        // A run that sends nothing reads the page its fixture stages, frame and source alike.
-        if (!kernel.runMode.sendsNetwork) return carried<TasksPageAnswer>(fixturePage(read));
-        if (!gate()) return carried<TasksPageAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { pageId, version } = read;
-        const place = "taskId" in read ? { taskId: read.taskId } : { agentId: read.agentId };
-        const owner = pageOwnerOf(read);
-        const answer = yield* kept.answer(
-          new PageVersionKey({ ownerKind: owner.kind, ownerId: owner.id, pageId, version }),
-          dependencies.accountId,
-          Effect.map(
-            served(client.readPageVersion(place, pageId, version)),
-            (page): TasksPageAnswer =>
-              page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
-          ),
-          (page) => ("page" in page ? page : undefined),
-        );
-        return carried<TasksPageAnswer>(answer);
+        return carried<TasksPageAnswer>(yield* pageRead(read));
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
-    // A task's plan history is held for a window while its version history
+    // A task's description history is held for a window while its version history
     // shows, and told only on the app state (`HISTORIES_CHANGED`). Note that
     // the windows' hold is one fiber standing until let go, so a window
     // holding it again holds nothing anew.
@@ -3113,8 +3473,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(pageHolds, pageOwnerOf(read));
         return {};
       }),
-    // A task's plan is held for a window while it has the task open, and
-    // told only on the app state (`PLAN_DOCUMENTS_CHANGED`). Note that the
+    // A task's description is held for a window while it has the task open, and
+    // told only on the app state (`DESCRIPTION_DOCUMENTS_CHANGED`). Note that the
     // windows' hold is one fiber standing until let go, so a window holding
     // it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW]: (params) =>
@@ -3122,7 +3482,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           taskDocumentFollowSchema,
           params,
-          "following a plan names the task",
+          "following a description names the task",
         );
         yield* documents.follow(read.taskId);
         return {};
@@ -3132,7 +3492,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           taskDocumentFollowSchema,
           params,
-          "letting a plan go names the task",
+          "letting a description go names the task",
         );
         yield* documents.unfollow(read.taskId);
         return {};
@@ -3142,35 +3502,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           taskDocumentFollowSchema,
           params,
-          "reading a plan again names the task",
+          "reading a description again names the task",
         );
         if (gate()) yield* documents.retry(read.taskId);
         return {};
       }),
-    // A picture's bytes are answered to the window that asked and kept by
-    // its id, which no other upload is given, so they never enter the view
-    // every window is told.
-    [GATEWAY_METHOD.TASKS_PICTURE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksPictureParamsSchema,
-          params,
-          "reading a picture names a task and the picture",
-        );
-        if (!gate()) {
-          return carried<TasksPictureAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const picture = yield* kept.answer(
-          new PlanPictureKey({ planId: read.planId, attachmentId: read.attachmentId }),
-          dependencies.accountId,
-          served(client.readPicture(read.planId, read.attachmentId)),
-          (answer) => ("base64" in answer ? answer : undefined),
-        );
-        return carried<TasksPictureAnswer>(picture);
-      }),
-    // A plan's comments, or a page's, are held for a window while it shows
-    // them, the open task's plan's, or a page tab's beside the task or an
-    // Inbox item, and told only on the app state (`PLAN_COMMENTS_CHANGED`).
+    // A description's comments, or a page's, are held for a window while it shows
+    // them, the open task's description's, or a page tab's beside the task or an
+    // Inbox item, and told only on the app state (`DESCRIPTION_COMMENTS_CHANGED`).
     // Note that the windows' hold is one fiber standing until let go, so a
     // window holding it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW]: (params) =>
@@ -3209,165 +3548,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* comments.retry(commentSubjectOf(read));
         return {};
       }),
-    // A write to a task's comments is drawn over its thread at once, a
-    // thread started drawn under the id its window minted, standing until
-    // the subject's read carries it, or taken back where the service
-    // refused it (`plan-comment-writes.ts`).
-    [GATEWAY_METHOD.TASKS_COMMENT_START]: declaredMethod(
-      dependencies.pool,
-      commentWrites.started,
-      (params: WireRecord) =>
-        readParams(
-          tasksCommentStartParamsSchema,
-          params,
-          "starting a comment names a plan and the thread",
-        ),
-    ),
-    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: declaredMethod(
-      dependencies.pool,
-      commentWrites.acted,
-      (params: WireRecord) =>
-        readParams(
-          tasksCommentActParamsSchema,
-          params,
-          "changing a comment names a plan, a thread, and what to do",
-        ),
-    ),
-    // The picture is kept and its id answered to the editor that took it;
-    // the plan's text names it once the editor lays its address in.
-    [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksPictureKeepParamsSchema,
-          params,
-          "keeping a picture names a task and the picture",
-        );
-        if (!gate()) {
-          return carried<TasksPictureKeepAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const kept = yield* served(client.keepPicture(read.planId, read.picture));
-        return carried<TasksPictureKeepAnswer>(kept);
-      }),
-    // The service answers the task as restored, so the list's row and its
-    // held plan take it in place and nothing is read again. It is confirmed
-    // once its transaction reached the history the windows hold, or held
-    // lately; at once where none is.
-    [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksRevisionParamsSchema,
-          params,
-          "restoring a revision names a task and its number",
-        );
-        if (!gate()) return { restored: false };
-        const { taskId, seq } = read;
-        const restored = yield* serial(
-          Effect.gen(function* () {
-            const answer = yield* served(client.restore(taskId, seq));
-            if (answer === undefined) return undefined;
-            return { ...answer, held: takeAnswered(answer.task) };
-          }),
-        );
-        if (restored === undefined) return { restored: false };
-        // Note that the waits stand outside the serial reads, so no read waits on them.
-        const { held, txid } = restored;
-        yield* Effect.all(
-          [
-            confirmWrite(historyTxWaits.get(taskId), txid),
-            heldOverList(held.taskId, held.fields, txid),
-          ],
-          { concurrency: "unbounded" },
-        );
-        return { restored: true };
-      }),
-    // Leaving the task returns to the list, which was read when the tab
-    // showed.
-    [GATEWAY_METHOD.TASKS_CLOSE]: () =>
-      Effect.gen(function* () {
-        screenAsks += 1;
-        yield* serial(Effect.sync(closeActive));
-        return {};
-      }),
-    // A start draws its task's row the moment it is asked, under the id minted for it where the
-    // window named none, and stands until the list carries it (`started`). A quiet start, a
-    // group's quick add or New task set to stay, opens nothing, and answers with its agent's
-    // start where it asked for one; any other opens its task at once.
-    [GATEWAY_METHOD.TASKS_START]: declaredMethod(dependencies.pool, started, (params: WireRecord) =>
-      Effect.map(
-        readParams(
-          tasksStartRequestSchema,
-          params,
-          "starting a task names it, and its repository where it has one",
-        ),
-        ({ quiet, ...asked }): Start => {
-          const request = { ...asked, id: asked.id ?? kernel.createId() };
-          // Note that a start behind a closed gate draws nothing, since it never reaches the service.
-          return { request, quiet: quiet === true, row: gate() ? startedRow(request) : undefined };
-        },
-      ),
-    ),
-    [GATEWAY_METHOD.TASKS_DELETE]: declaredMethod(
-      dependencies.pool,
-      deleted,
-      (params: WireRecord) =>
-        readParams(tasksOpenParamsSchema, params, "deleting a task names one task"),
-    ),
-    [GATEWAY_METHOD.TASKS_RENAME]: declaredMethod(
-      dependencies.pool,
-      renamed,
-      (params: WireRecord) =>
-        readParams(tasksRenameParamsSchema, params, "renaming a task names it and its name"),
-    ),
-    [GATEWAY_METHOD.TASKS_SET_STANDING]: declaredMethod(
-      dependencies.pool,
-      stood,
-      (params: WireRecord) =>
-        readParams(
-          tasksSetStandingParamsSchema,
-          params,
-          "setting where a task stands names it and its status, priority, or assignee",
-        ),
-    ),
-    [GATEWAY_METHOD.TASKS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
-      readParams(tasksPinParamsSchema, params, "pinning a task names it and whether it is pinned"),
-    ),
-    [GATEWAY_METHOD.TASKS_MARK_READ]: declaredMethod(
-      dependencies.pool,
-      markedRead,
-      (params: WireRecord) =>
-        readParams(
-          tasksMarkReadParamsSchema,
-          params,
-          "marking a task read names it and how its mark moves",
-        ),
-    ),
-    // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
-    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: declaredMethod(
-      dependencies.pool,
-      sidebarWritten.pinned,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksPinRepositoryParamsSchema,
-            params,
-            "pinning a repository names it and whether it is pinned",
-          ),
-          (read) => ({ ...read, at: kernel.now() }),
-        ),
-    ),
-    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: declaredMethod(
-      dependencies.pool,
-      sidebarWritten.sectionsWritten,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksWriteSectionParamsSchema,
-            params,
-            "a change to the sections names what it changes",
-          ),
-          (read) => ({ ...read, ownerId: dependencies.accountId(), at: kernel.now() }),
-        ),
-    ),
     // A workspace's repositories, or every one's, are held for the windows while a chip or a picker stands, and told only on the app state (`REPOSITORY_LISTS_CHANGED`). Note that the windows' hold is one fiber standing until let go.
     [GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -3390,374 +3570,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* repositoryLists.retry(yield* repositoryScopeOf(params));
         return {};
       }),
-    [GATEWAY_METHOD.TASKS_SET_REPOSITORY]: declaredMethod(
-      dependencies.pool,
-      repositorySet,
-      (params: WireRecord) =>
-        readParams(
-          tasksSetRepositoryParamsSchema,
-          params,
-          "giving a task its repository names the task and the repository",
-        ),
-    ),
-    // A move reads, as it is asked, whether the reader is a member of the
-    // workspace it moves to, where the list goes on holding the task; while
-    // the workspaces are not read yet it takes the reader for one.
-    [GATEWAY_METHOD.TASKS_MOVE]: declaredMethod(dependencies.pool, moved, (params: WireRecord) =>
-      Effect.map(
-        readParams(tasksMoveParamsSchema, params, "moving a task names the task and the workspace"),
-        (read) => ({
-          ...read,
-          member:
-            view.workspacesStatus !== TASKS_READ.READY ||
-            view.workspaces.some((workspace) => workspace.id === read.workspaceId),
-        }),
-      ),
-    ),
-    // A block or a relation reads, as it is asked, what the list knows of
-    // the tasks it joins, which its draw reads.
-    [GATEWAY_METHOD.TASKS_BLOCK]: declaredMethod(
-      dependencies.pool,
-      blockChanged,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksBlockParamsSchema,
-            params,
-            "a block change names the task, the other task, and the side it stands on",
-          ),
-          (read) => ({ ...read, reach: relationReachOf(read.taskId, read.block.taskId) }),
-        ),
-    ),
-    [GATEWAY_METHOD.TASKS_SET_PARENT]: declaredMethod(
-      dependencies.pool,
-      parentSet,
-      (params: WireRecord) =>
-        readParams(
-          tasksSetParentParamsSchema,
-          params,
-          "a parent change names the task and its parent, or null for none",
-        ),
-    ),
-    [GATEWAY_METHOD.TASKS_CHANGE_RELATION]: declaredMethod(
-      dependencies.pool,
-      relationChanged,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksChangeRelationParamsSchema,
-            params,
-            "a relation change names the task, the other task, and the kinds it moves between",
-          ),
-          (read) => ({ ...read, reach: relationReachOf(read.taskId, read.relation.taskId) }),
-        ),
-    ),
-    // The task the service answered is drawn in place, so the edit stands on
-    // its plan at once and the notetaker's drafts drawn before it drop. It
-    // stands until the task's record and the list carry its transaction,
-    // which is waited for behind the answer.
-    [GATEWAY_METHOD.TASKS_EDIT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksEditParamsSchema,
-          params,
-          "an edit names a task, and its document's base and value",
-        );
-        if (!gate()) return carried<TasksEditAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { taskId, edit } = read;
-        const edited = yield* serial(
-          Effect.gen(function* () {
-            const written = yield* served(client.edit(taskId, edit));
-            if (!written.ok)
-              return { answer: carried<TasksEditAnswer>({ failure: written.failure }) };
-            const answer = written.answer;
-            if ("conflict" in answer)
-              return { answer: carried<TasksEditAnswer>({ conflict: answer.conflict }) };
-            if ("refused" in answer)
-              return { answer: carried<TasksEditAnswer>({ failure: answer.refused }) };
-            return {
-              answer: carried<TasksEditAnswer>({ saved: true }),
-              held: takeAnswered(answer.plan),
-              txid: answer.txid,
-            };
-          }),
-        );
-        // Note that the waits stand outside the serial reads and behind the answer, so neither a read nor the editor waits on them.
-        if (edited.held !== undefined) {
-          const { held, txid } = edited;
-          yield* FiberMap.run(
-            editWaits,
-            taskId,
-            Effect.all(
-              [documents.confirmed(taskId, txid), heldOverList(held.taskId, held.fields, txid)],
-              { concurrency: "unbounded" },
-            ),
-          );
-        }
-        return edited.answer;
-      }),
-    // The browser connects or disconnects GitHub, so the panel coming
-    // forward again reads the connection whatever the bound says.
-    [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
-      Effect.gen(function* () {
-        if (!gate()) return carried<TasksGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
-        const page = yield* served(client.github.connect());
-        githubAskedAt = undefined;
-        return carried<TasksGitHubPageAnswer>(
-          page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
-        );
-      }),
-    // The view takes the connection the service answers at once, so Settings
-    // reads disconnected without waiting for the next read of it.
-    [GATEWAY_METHOD.GITHUB_DISCONNECT]: () =>
-      Effect.gen(function* () {
-        if (!gate()) return carried<TasksGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
-        const disconnected = yield* served(client.github.disconnect());
-        githubAskedAt = undefined;
-        // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
-        yield* dependencies.githubMoved;
-        if (!disconnected.ok) {
-          return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });
-        }
-        // Note that a read started before the answer is made stale, because
-        // the status it read may predate the unlink.
-        githubRead += 1;
-        write({ github: disconnected.answer });
-        return carried<TasksGitHubDisconnectAnswer>({ connection: disconnected.answer });
-      }),
-    // An admin read is answered to the caller as the service answered it and
-    // held nowhere, since it is other accounts' data, which no view keeps.
-    [GATEWAY_METHOD.ADMIN_READ]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          adminReadParamsSchema,
-          params,
-          "an admin read names its procedure and query",
-        );
-        if (!gate()) return carried<AdminReadAnswer>({ refused: ADMIN_UNANSWERED });
-        return carried<AdminReadAnswer>(yield* served(client.admin.read(read)));
-      }),
-    [GATEWAY_METHOD.ADMIN_FAVORITE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          adminFavoriteParamsSchema,
-          params,
-          "a star names an account and whether it is set",
-        );
-        if (!gate()) return carried<boolean>(false);
-        return carried<boolean>(yield* served(client.admin.favorite(read.id, read.favorite)));
-      }),
-    [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceCreateParamsSchema,
-          params,
-          "making a workspace names it",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const made = yield* workspaceCall(client.workspaces.create(read.name));
-        return carried<TasksWorkspaceAnswer>(
-          made.ok ? { workspace: made.answer } : { failure: made.failure },
-        );
-      }),
-    // A rename moves no task: its name is drawn at once, and the follow
-    // carries the same name a moment later.
-    [GATEWAY_METHOD.WORKSPACES_RENAME]: declaredMethod(
-      dependencies.pool,
-      workspaceRenamed,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksWorkspaceRenameParamsSchema,
-            params,
-            "renaming a workspace names it and its new name",
-          ),
-          (read) => ({ ...read, rows: workspaceList.rows }),
-        ),
-    ),
-    // A slug moves no task either: links resolve by id, or by a former
-    // slug the workspace keeps, so it is drawn at once as a rename is.
-    [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: declaredMethod(
-      dependencies.pool,
-      workspaceSlugSet,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksWorkspaceSlugSetParamsSchema,
-            params,
-            "changing a workspace's slug names it and its new slug",
-          ),
-          (read) => ({ ...read, rows: workspaceList.rows }),
-        ),
-    ),
-    // A photo moves no task either, but it uploads, so its workspace is
-    // drawn once the service answers it, its photo's new version or none,
-    // and the photo at that version is fetched for the windows' tiles
-    // (`photosListed`).
-    [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspacePhotoSetParamsSchema,
-          params,
-          "setting a workspace's photo names it and a photo or none",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, photo } = read;
-        const written = yield* served(client.workspaces.setPhoto(workspaceId, photo));
-        if (!written.ok) return carried<TasksWorkspaceAnswer>({ failure: written.failure });
-        yield* workspaceList.rows.answered(written.answer);
-        return carried<TasksWorkspaceAnswer>({ workspace: written.answer });
-      }),
-    // The install address is answered to the caller that opens it and held
-    // nowhere: the connection lands in the browser, and the follow carries
-    // the organization.
-    [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting GitHub names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.githubConnect(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting GitHub names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const disconnected = yield* workspaceCall(
-          client.workspaces.githubDisconnect(read.workspaceId),
-        );
-        return carried<TasksWorkspaceAnswer>(
-          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // Sentry's install address is answered to the caller that opens it and
-    // held nowhere: the install lands in the browser.
-    [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "installing Sentry names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.sentryInstall(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: declaredMethod(
-      dependencies.pool,
-      sentryDisconnect(({ workspaceId, installationId }) =>
-        gate()
-          ? Effect.map(
-              served(client.workspaces.sentryDisconnect(workspaceId, installationId)),
-              (sentry): TasksWorkspaceSentryAnswer =>
-                sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
-            )
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSentryDisconnectParamsSchema,
-          params,
-          "disconnecting Sentry names a workspace and an installation",
-        ),
-    ),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting the Slack bot names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const connected = yield* served(client.workspaces.slackBotConnect(read.workspaceId));
-        // Note that the bot's row is known only once Slack named its team, so the answer waits for the held read to carry it, and the window draws the team as the answer lands.
-        if (connected.ok) yield* integrations.confirmed(read.workspaceId, connected.answer.txid);
-        return slackBotAnswered(slackBotOf(connected));
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: declaredMethod(
-      dependencies.pool,
-      slackBotDisconnect(({ workspaceId }) =>
-        gate()
-          ? Effect.map(served(client.workspaces.slackBotDisconnect(workspaceId)), slackBotOf)
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting the Slack bot names a workspace",
-        ),
-    ),
-    // Note that the switch lives on the account's preferences row, so it is drawn over that row at once, whichever workspace's Settings turned it.
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: declaredMethod(
-      dependencies.pool,
-      slackNotificationsWritten(
-        (write) =>
-          gate()
-            ? Effect.map(
-                served(
-                  client.workspaces.slackBotNotifications(write.workspaceId, write.notifications),
-                ),
-                slackBotOf,
-              )
-            : Effect.succeed(WORKSPACE_UNANSWERED),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlackBotNotificationsParamsSchema,
-          params,
-          "changing Slack notifications names a workspace and the switch",
-        ),
-    ),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: declaredMethod(
-      dependencies.pool,
-      slackBotRepository((repository) =>
-        gate()
-          ? Effect.map(served(client.workspaces.slackBotRepository(repository)), slackBotOf)
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlackBotRepositoryParamsSchema,
-          params,
-          "naming the Slack bot's default repository names a workspace and a repository or none",
-        ),
-    ),
-    // Note that whether the bot is in a channel is Slack's own, so the channels a write's answer carries are laid on the held list, and asked again where it carries none.
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL]: declaredMethod(
-      dependencies.pool,
-      slackBotChannel(
-        (channel) =>
-          gate()
-            ? Effect.map(served(client.workspaces.slackBotChannel(channel)), slackBotOf)
-            : Effect.succeed(WORKSPACE_UNANSWERED),
-        ({ workspaceId }, answer) => {
-          if (!("slackBot" in answer)) return Effect.void;
-          const { channels } = answer.slackBot;
-          return channels === undefined
-            ? slackChannels.wake((held) => held === workspaceId)
-            : slackChannels.answered(workspaceId, channels.map(listedChannel));
-        },
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlackBotChannelParamsSchema,
-          params,
-          "changing a Slack channel names a workspace, the channel, and what changes",
-        ),
-    ),
     // A workspace's own integrations are held for the windows while they
     // draw them, and told only on the app state
     // (`WORKSPACE_INTEGRATIONS_CHANGED`). Note that the windows' hold is one
@@ -3955,138 +3767,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* tokenRepositories.retry(workspaceId);
         return {};
       }),
-    // An addition is drawn as the reader's own, newest first and removable,
-    // until the service answers the list as it then stands.
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: declaredMethod(
-      dependencies.pool,
-      tokenRepositorySet,
-      (params: WireRecord) =>
-        Effect.all({
-          read: readParams(
-            tasksWorkspaceTokenRepositorySetParamsSchema,
-            params,
-            "adding or removing a token repository names the workspace, the repository, and which",
-          ),
-          addedAt: Clock.currentTimeMillis,
-        }).pipe(
-          Effect.map(({ read, addedAt }) => ({
-            ...read,
-            addedBy: dependencies.accountId() ?? "",
-            addedAt,
-            session: tokenRepositoryWritten.session(),
-          })),
-        ),
-    ),
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: declaredMethod(
-      dependencies.pool,
-      memberRemoved,
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceMemberRemoveParamsSchema,
-          params,
-          "removing a member names the workspace and the member",
-        ),
-    ),
-    // A role changed moves no task; the people's read carries it, as a
-    // removal's, drawn at once until then.
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: declaredMethod(
-      dependencies.pool,
-      memberRoleChanged,
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceMemberRoleParamsSchema,
-          params,
-          "changing a role names the workspace, the member, and the role",
-        ),
-    ),
-    // Note that a handover changes the account's own role in the workspace,
-    // which the view's workspaces carry and every owner's and admin's act is
-    // drawn from, and which the follow carries; it moves no task. The heir's
-    // role and the account's own are drawn from its answer until the
-    // people's read carries them.
-    [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceTransferParamsSchema,
-          params,
-          "handing a workspace over names it and the admin",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId } = read;
-        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
-        if (!handedOver.ok) {
-          return carried<TasksWorkspaceMembersAnswer>({ failure: handedOver.failure });
-        }
-        yield* membersReads.moved(
-          workspaceId,
-          membersMoved(handedOver.answer, [userId, dependencies.accountId()]),
-        );
-        return carried<TasksWorkspaceMembersAnswer>({ members: handedOver.answer });
-      }),
-    // Note that a leave closes the open task where it is that workspace's, as
-    // a delete of it does, because the account can no longer read or write a
-    // task of a workspace it left; a refused leave closes nothing. The
-    // account is drawn gone from the workspace's people, which its read,
-    // ended as the account no longer reaches it, never takes back.
-    [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceLeaveParamsSchema,
-          params,
-          "leaving a workspace names it",
-        );
-        if (!gate()) return carried<TasksWorkspaceLeaveAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId } = read;
-        const openTaskId = view.activeTaskId;
-        const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
-        const closeOpenTask = Effect.gen(function* () {
-          yield* serial(
-            Effect.sync(() => {
-              if (view.activeTaskId === openTaskId) closeActive();
-            }),
-          );
-        });
-        const leave = Effect.tap(client.workspaces.leave(workspaceId), (answer) =>
-          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
-        );
-        const left = yield* workspaceCall(leave);
-        if (!left.ok) return carried<TasksWorkspaceLeaveAnswer>({ failure: left.failure });
-        const readerId = dependencies.accountId();
-        if (readerId !== undefined) {
-          yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
-        }
-        return carried<TasksWorkspaceLeaveAnswer>({ left: true });
-      }),
-    // An invitation made or canceled moves no workspace or task, so nothing
-    // else is read with it; the invitations' read carries it, an invitation
-    // made drawn from its answer until then where a window holds them.
-    [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceInviteParamsSchema,
-          params,
-          "an invitation names a workspace, an address, and a role",
-        );
-        if (!gate()) return carried<TasksWorkspaceInvitationAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, email, role } = read;
-        const made = yield* served(client.workspaces.invite(workspaceId, email, role));
-        if (!made.ok) return carried<TasksWorkspaceInvitationAnswer>({ failure: made.failure });
-        yield* invitationsReads.made(workspaceId, made.answer);
-        return carried<TasksWorkspaceInvitationAnswer>({ invitation: made.answer });
-      }),
-    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: declaredMethod(
-      dependencies.pool,
-      invitationCanceled,
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceInvitationCancelParamsSchema,
-          params,
-          "canceling an invitation names the workspace and the invitation",
-        ),
-    ),
   };
 
   return {
+    acts: { ...taskActs, ...workspaceActs },
     methods,
     snapshot: () => view,
     // The gate opening follows the account's task list, workspaces, and
@@ -4128,7 +3812,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, histories, comments, people, token repositories, invitations, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, people, token repositories, invitations, and descriptions stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
       yield* heldHistories.end;

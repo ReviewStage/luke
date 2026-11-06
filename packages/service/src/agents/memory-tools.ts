@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import type { Agent } from "@repo/database/models/agent-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { MEMORY_BOUNDS, type MemorySummary, memoryIdSchema } from "@repo/features/memory-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { describeWire } from "@repo/wire/effect";
@@ -13,7 +14,6 @@ import {
 } from "../accounts/workspace-memories.js";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { type AgentCall, callerAgent, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
@@ -76,7 +76,7 @@ const readRemember = Schema.decodeUnknownResult(REMEMBER_INPUT);
 const readRecall = Schema.decodeUnknownResult(RECALL_INPUT);
 
 /** Why a memory call did nothing, in words the model can act on. */
-const MEMORY_REFUSAL = {
+export const MEMORY_REFUSAL = {
   UNREADABLE_REMEMBER: `Not remembered: give the memory as text of at most ${MEMORY_BOUNDS.MAX_CHARS} characters.`,
   UNREADABLE_RECALL: `Not recalled: give the query as text of at most ${MEMORY_BOUNDS.MAX_QUERY_CHARS} characters.`,
   CREDENTIAL:
@@ -213,11 +213,10 @@ export function runRecall(
  * A coding agent's memory call: the workspace the agent reaches tasks in and
  * its starter, read from the service's record of the agent as every agent
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
- * workspace cannot be read for its starter now keeps and recalls nothing, and
- * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
- * and our MCP server (`workspace-mcp/tools.ts`) list neither tool to such an
- * agent, but a harness may still call a tool it was not listed, or Memory
- * may go off mid-run, so the refusal stands here as well.
+ * workspace cannot be read for its starter now keeps and recalls nothing.
+ * Note that one whose starter has Memory off (`EXPERIMENT.MEMORY`) never
+ * reaches here, because the catalog refuses its call at the `MEMORY` gate
+ * (`tool-catalog/catalog.ts`'s `callTool`).
  */
 function agentMemory(
   call: AgentCall,
@@ -227,7 +226,6 @@ function agentMemory(
   return orUnavailable(
     Effect.gen(function* () {
       const userId = callerUserId(call.caller);
-      if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
       // A refusal reads the calling agent's turn; a member's call is their own words, and has none.
       const agent = callerAgent(call.caller);
       const refused =

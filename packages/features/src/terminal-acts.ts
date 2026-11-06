@@ -63,6 +63,8 @@ export const TERMINAL_PORT_MESSAGE = {
   RESIZE: "resize",
   /** renderer → main: how many bytes of output xterm has written since the last ack. */
   ACK: "ack",
+  /** renderer → main: the tab is shown in the window the developer is using, said every minute while it is. */
+  SHOWN: "shown",
 } as const;
 
 const size = (maximum: number) =>
@@ -100,6 +102,7 @@ export const terminalPortInboundSchema = EffectSchema.Union([
     type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.ACK),
     bytes: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
   }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.SHOWN) }),
 ]);
 
 /** @public Read by the Terminal tab and the host's terminal client, above this contract. */

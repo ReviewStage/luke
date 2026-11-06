@@ -31,8 +31,6 @@ const MAC_COMMAND_ASK_NOTICE = {
 /** The host's methods the notices read and refresh through. */
 type NoticeHost = Pick<
   HostOperator,
-  | "agentList"
-  | "agentPage"
   | "agentAccountInboxFollow"
   | "agentAccountInboxUnfollow"
   | "onAccountInboxChanged"

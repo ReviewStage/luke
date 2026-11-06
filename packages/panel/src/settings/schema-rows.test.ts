@@ -228,9 +228,12 @@ test("a switch the store refuses flips back and says why in a toast, and can be 
   );
   held.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED });
   await vi.waitFor(() => assert.equal(newestToastSays(), REFUSED));
+  // Note that the switch flips back once the setting's query hears the refusal, which may land after the toast.
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "true"),
+  );
 
   const login = control(page, "Open Vespin at login");
-  assert.equal(login.getAttribute("aria-checked"), "true");
   assert.equal(login.disabled, false);
   assert.equal(newestToastSays(), REFUSED);
 
@@ -249,9 +252,12 @@ test("a switch whose write the host refuses outright flips back with the host's 
 
   act(() => control(page, "Open Vespin at login").click());
   await vi.waitFor(() => assert.equal(newestToastSays(), REFUSED));
+  // Note that the switch flips back once the setting's query hears the refusal, which may land after the toast.
+  await vi.waitFor(() =>
+    assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "true"),
+  );
 
   const login = control(page, "Open Vespin at login");
-  assert.equal(login.getAttribute("aria-checked"), "true");
   assert.equal(login.disabled, false);
 });
 

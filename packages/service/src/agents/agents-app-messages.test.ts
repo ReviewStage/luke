@@ -1,5 +1,5 @@
 /**
- * agents-app-messages.test.ts -- messaging a coding agent through the hosted router: what a message reaches, queues, refuses, and writes to the transcript, over a fake eve.
+ * agents-app-messages.test.ts -- messaging a coding agent through the hosted router: what a message reaches, queues, refuses, and writes to the transcript, over a fake harness.
  */
 
 import assert from "node:assert/strict";
@@ -17,7 +17,7 @@ import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
 import { createAutomation } from "@repo/database/models/automation-store";
 import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import { sentLineStands } from "@repo/database/models/message-reads";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { readTask } from "@repo/database/models/task-store";
 import { agentPin } from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -30,7 +30,6 @@ import { task as taskTable } from "@repo/database/schemas/task";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
 import { HOSTED_API_ERROR } from "@repo/features";
-import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_ARCHIVER,
   AGENT_ATTACHMENT_TYPE,
@@ -69,7 +68,7 @@ import {
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
 } from "@repo/features/task-wire";
-import { workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
+import { RUN_ON_MAC_OFF, workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option, Queue, Result } from "effect";
@@ -88,7 +87,7 @@ import {
   AGENT_WORKSPACE_TOOLS,
   agentStartedOn,
   countedWith,
-  fakeEve,
+  fakeAgentSessions,
   messageAs,
   messagedAgent,
   openTask,
@@ -115,16 +114,17 @@ import { harnessFor } from "../testing/native-harness-fake.js";
 import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import { receivedMessage } from "./attached-files.js";
 import { CODER } from "./coder-host/bounds.js";
-import { EVE_HOST_TURN } from "./eve-host/bounds.js";
-import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
+import { SESSION_SEND_OUTCOME, SESSION_TURN } from "./sessions/agent-sessions.js";
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
   it.effect(
     "over a browser's session cookie a message reaches the agent as one over the bearer does, its harness acting for the agent's starter",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, agent, ask, sessionId } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, agent, ask, sessionId } = yield* messagedAgent(agentSessions, {
+          running: false,
+        });
         const message = (text: string) => ({ text, clientKey: randomUUID() });
 
         const overCookie = yield* ask(
@@ -148,7 +148,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           JSON.stringify(overBearer.body),
         );
         assert.deepEqual(
-          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.message]),
+          agentSessions.sent.map((each) => [
+            each.authorization,
+            each.sessionId,
+            each.message.message,
+          ]),
           [
             [harnessFor(owner), sessionId, "Use the new table."],
             [harnessFor(owner), sessionId, "And drop the old one."],
@@ -166,11 +170,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an image sent to an agent is kept once beside its conversation and handed to eve with a line naming its id, which reads back as the image and by which eve's receipt takes the line; a repeat under its key hands eve nothing, and the same image in a later message is named by the same row",
+    "an image sent to an agent is kept once beside its conversation and handed to the harness with a line naming its id, which reads back as the image and by which the retired runtime's receipt takes the line; a repeat under its key hands the harness nothing, and the same image in a later message is named by the same row",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, agent, ask, target, writer, turnId } = yield* messagedAgent(eve, {
+        const agentSessions = fakeAgentSessions();
+        const { owner, agent, ask, target, writer, turnId } = yield* messagedAgent(agentSessions, {
           running: true,
         });
         const shot = {
@@ -190,7 +194,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
         const [row, ...more] = yield* kept;
         assert.ok(row !== undefined && more.length === 0, "one picture is kept");
-        const handed = receiptOf(eve.sent.at(-1)?.message.message);
+        const handed = receiptOf(agentSessions.sent.at(-1)?.message.message);
         assert.deepEqual(
           handed.map((part) => (part.type === "text" ? part.text : part.filename)),
           ["Match this.", "flow.png", `Image flow.png is attachment ${row.id}`],
@@ -200,7 +204,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.equal(picture.contentType, AGENT_ATTACHMENT_TYPE.PNG);
         assert.deepEqual(new Uint8Array(picture.bytes), SIZED_PNG);
-        // eve's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
+        // The retired runtime's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
         const taken = yield* writer.takeAwaitingLine(target, {
           text: receivedMessage({ message: "", parts: handed }).text,
           turnId,
@@ -208,12 +212,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.ok(Result.isSuccess(taken));
         assert.equal(taken.success.length, 1, "the receipt takes the one line awaiting it");
 
-        const sends = eve.sent.length;
+        const sends = agentSessions.sent.length;
         assert.equal(
           (yield* ask(messageAs(owner, agent.id, body))).status,
           HOSTED_HTTP_STATUS.ACCEPTED,
         );
-        assert.equal(eve.sent.length, sends, "a repeat reaches eve no second time");
+        assert.equal(
+          agentSessions.sent.length,
+          sends,
+          "a repeat reaches the harness no second time",
+        );
         assert.deepEqual(
           countedWith(owner, SERVER_EVENT.MESSAGE_SEND),
           [
@@ -230,7 +238,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* ask(
           messageAs(owner, agent.id, { ...body, text: "Again.", clientKey: randomUUID() }),
         );
-        assert.deepEqual(receiptOf(eve.sent.at(-1)?.message.message).at(-1), {
+        assert.deepEqual(receiptOf(agentSessions.sent.at(-1)?.message.message).at(-1), {
           type: "text",
           text: `Image flow.png is attachment ${row.id}`,
         });
@@ -239,13 +247,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an image sent to an agent is kept on its row by the picture's id with no bytes, which the transcript read answers and the agent's picture route serves, a PDF beside it keeps its bytes, and eve's receipt still takes the line",
+    "an image sent to an agent is kept on its row by the picture's id with no bytes, which the transcript read answers and the agent's picture route serves, a PDF beside it keeps its bytes, and the retired runtime's receipt still takes the line",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, agent, ask, fetch, target, writer, turnId } = yield* messagedAgent(eve, {
-          running: true,
-        });
+        const agentSessions = fakeAgentSessions();
+        const { owner, agent, ask, fetch, target, writer, turnId } = yield* messagedAgent(
+          agentSessions,
+          {
+            running: true,
+          },
+        );
         const data = Buffer.from(SIZED_PNG).toString("base64");
         const pdf = Buffer.from("%PDF-1.4").toString("base64");
         const sent = yield* ask(
@@ -285,8 +296,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           SIZED_PNG,
         );
         const taken = yield* writer.takeAwaitingLine(target, {
-          text: receivedMessage({ message: "", parts: receiptOf(eve.sent.at(-1)?.message.message) })
-            .text,
+          text: receivedMessage({
+            message: "",
+            parts: receiptOf(agentSessions.sent.at(-1)?.message.message),
+          }).text,
           turnId,
         });
         assert.ok(Result.isSuccess(taken));
@@ -298,9 +311,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way through its harness acting for the cookie's account, the Archive keeping the reason it gives",
     () =>
       Effect.gen(function* () {
-        const stopped = yield* messagedAgent(fakeEve(), { running: true });
-        const archived = yield* messagedAgent(fakeEve(), { running: true });
-        const withTask = yield* messagedAgent(fakeEve(), { running: true });
+        const stopped = yield* messagedAgent(fakeAgentSessions(), { running: true });
+        const archived = yield* messagedAgent(fakeAgentSessions(), { running: true });
+        const withTask = yield* messagedAgent(fakeAgentSessions(), { running: true });
 
         const stop = yield* stopped.ask(
           request(AGENT_STOP, undefined, {
@@ -329,9 +342,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [stop.status, archive.status, taskArchive.status],
           [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
         );
-        for (const { eve, owner, sessionId } of [stopped, archived, withTask]) {
-          assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
-          assert.deepEqual(eve.canceledAs, [harnessFor(owner)]);
+        for (const { agentSessions, owner, sessionId } of [stopped, archived, withTask]) {
+          assert.deepEqual(agentSessions.canceled, [[sessionId, "turn_0"]]);
+          assert.deepEqual(agentSessions.canceledAs, [harnessFor(owner)]);
         }
         const archivedRow = Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id));
         assert.notEqual(archivedRow.archivedAt, null);
@@ -356,7 +369,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const sandboxes = yield* scriptedSessionSandboxes();
         const { owner, task, ask } = yield* messagedAgent(
-          fakeEve(),
+          fakeAgentSessions(),
           { running: false },
           sandboxes.layer,
         );
@@ -371,7 +384,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a task's delete retires its agent's session with no transaction open, so no lock waits on eve",
+    "a task's delete retires its agent's session with no transaction open, so no lock waits on the harness",
     () =>
       Effect.gen(function* () {
         const services = yield* Effect.context<DatabaseServices>();
@@ -384,8 +397,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             return first !== undefined && second !== undefined && first.xid !== second.xid;
           }),
         ).pipe(Effect.provide(services), Effect.orDie);
-        const eve = fakeEve({ resetSees: alone });
-        const { owner, task, ask, sessionId } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions({ resetSees: alone });
+        const { owner, task, ask, sessionId } = yield* messagedAgent(agentSessions, {
+          running: true,
+        });
 
         const deleted = yield* ask(request(TASK(task.id), owner, { method: "DELETE" }));
 
@@ -393,19 +408,19 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
           true,
         );
-        assert.deepEqual(eve.reset, [sessionId]);
-        assert.deepEqual(eve.resetSaw, [true]);
+        assert.deepEqual(agentSessions.reset, [sessionId]);
+        assert.deepEqual(agentSessions.resetSaw, [true]);
         assert.ok(Option.isNone(yield* readTask(owner, task.id)));
       }),
   );
 
   it.effect(
-    "a task's delete stops its running agents at once, eve answering no cancel until both have asked",
+    "a task's delete stops its running agents at once, the harness answering no cancel until both have asked",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve({ cancelsTogether: 2 });
-        const first = yield* messagedAgent(eve, { running: true });
-        const second = yield* agentStartedOn(first, eve, { running: true });
+        const agentSessions = fakeAgentSessions({ cancelsTogether: 2 });
+        const first = yield* messagedAgent(agentSessions, { running: true });
+        const second = yield* agentStartedOn(first, agentSessions, { running: true });
 
         const deleted = yield* first.ask(
           request(TASK(first.task.id), first.owner, { method: "DELETE" }),
@@ -416,7 +431,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           true,
         );
         assert.deepEqual(
-          eve.canceled.toSorted(([one], [other]) => one.localeCompare(other)),
+          agentSessions.canceled.toSorted(([one], [other]) => one.localeCompare(other)),
           [
             [first.sessionId, "turn_0"],
             [second.sessionId, "turn_0"],
@@ -430,10 +445,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         // An idle agent of the owner's, which the teammate messages.
-        const messaged = yield* messagedAgent(fakeEve(), { running: false });
+        const messaged = yield* messagedAgent(fakeAgentSessions(), { running: false });
         yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
         // A running agent of the owner's, which the teammate stops, and then deletes its task.
-        const stopped = yield* messagedAgent(fakeEve(), { running: true });
+        const stopped = yield* messagedAgent(fakeAgentSessions(), { running: true });
         yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
         const teammate = sessionCookieOf(stopped.other);
 
@@ -458,7 +473,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
         assert.deepEqual(
-          messaged.eve.sent.map((each) => [each.authorization, each.sessionId]),
+          messaged.agentSessions.sent.map((each) => [each.authorization, each.sessionId]),
           [[harnessFor(messaged.owner), messaged.sessionId]],
         );
         assert.equal(agentStop.status, HOSTED_HTTP_STATUS.OK);
@@ -466,19 +481,21 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
           true,
         );
-        assert.deepEqual(stopped.eve.canceled, [[stopped.sessionId, "turn_0"]]);
-        assert.deepEqual(stopped.eve.canceledAs, [harnessFor(stopped.other)]);
-        assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);
-        assert.deepEqual(stopped.eve.resetAs, [harnessFor(stopped.other)]);
+        assert.deepEqual(stopped.agentSessions.canceled, [[stopped.sessionId, "turn_0"]]);
+        assert.deepEqual(stopped.agentSessions.canceledAs, [harnessFor(stopped.other)]);
+        assert.deepEqual(stopped.agentSessions.reset, [stopped.sessionId]);
+        assert.deepEqual(stopped.agentSessions.resetAs, [harnessFor(stopped.other)]);
       }),
   );
 
   it.effect(
-    "another account's session cookie reaches none of an agent's or its task's controls, which answer as nothing there and ask eve nothing",
+    "another account's session cookie reaches none of an agent's or its task's controls, which answer as nothing there and ask the harness nothing",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask } = yield* messagedAgent(agentSessions, {
+          running: true,
+        });
         const cookie = sessionCookieOf(other);
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
@@ -507,9 +524,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
         }
         assert.deepEqual(
-          [eve.sent, eve.canceled, eve.reset],
+          [agentSessions.sent, agentSessions.canceled, agentSessions.reset],
           [[], [], []],
-          "the owner's Start is all eve heard",
+          "the owner's Start is all the harness heard",
         );
         assert.ok(Option.isSome(yield* readTask(owner, task.id)));
       }),
@@ -519,10 +536,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a teammate's delete of a running agent stops it, retires its session, and takes it with its pins and its inbox, stamping its conversation deleted",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, target, sessionId, ask } = yield* messagedAgent(eve, {
-          running: true,
-        });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, target, sessionId, ask } = yield* messagedAgent(
+          agentSessions,
+          {
+            running: true,
+          },
+        );
         yield* joinWorkspace(task.workspaceId, other);
         // An agent with no task, so it holds a pin of its own.
         yield* Database.use((db) =>
@@ -546,8 +566,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
         assert.match(JSON.stringify(deleted.body), /^\{"deleted":true,"txid":"\d+"\}$/u);
-        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
-        assert.deepEqual(eve.reset, [sessionId]);
+        assert.deepEqual(agentSessions.canceled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(agentSessions.reset, [sessionId]);
         assert.ok(Option.isNone(yield* readAgent(owner, agent.id)));
         const db = yield* Database;
         const [conversation] = yield* db
@@ -573,18 +593,18 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an account outside the workspace reaches no agent to delete and asks eve nothing; the owner's delete of an idle agent on a task leaves the task, and a second delete finds nothing",
+    "an account outside the workspace reaches no agent to delete and asks the harness nothing; the owner's delete of an idle agent on a task leaves the task, and a second delete finds nothing",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, sessionId, ask } = yield* messagedAgent(agentSessions, {
           running: false,
         });
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
         const outside = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
         assert.deepEqual(outside, notFound);
-        assert.deepEqual([eve.canceled, eve.reset], [[], []]);
+        assert.deepEqual([agentSessions.canceled, agentSessions.reset], [[], []]);
         assert.ok(Option.isSome(yield* readAgent(owner, agent.id)));
 
         const deleted = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
@@ -592,7 +612,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
         assert.deepEqual(again, notFound);
-        assert.deepEqual([eve.canceled, eve.reset], [[], [sessionId]]);
+        assert.deepEqual([agentSessions.canceled, agentSessions.reset], [[], [sessionId]]);
         assert.ok(Option.isSome(yield* readTask(owner, task.id)));
       }),
   );
@@ -601,8 +621,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent still starting, with no turn a Stop can name, is refused as not ready and stands, its session unretired",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, agent, ask } = yield* messagedAgent(eve, undefined);
+        const agentSessions = fakeAgentSessions();
+        const { owner, agent, ask } = yield* messagedAgent(agentSessions, undefined);
 
         const refused = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
 
@@ -610,7 +630,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           refused,
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
-        assert.deepEqual(eve.reset, []);
+        assert.deepEqual(agentSessions.reset, []);
         assert.ok(Option.isSome(yield* readAgent(owner, agent.id)));
       }),
   );
@@ -619,8 +639,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a task's archive naming an assignee who is no member is refused before any of its agents is stopped",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, ask } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, ask } = yield* messagedAgent(agentSessions, { running: true });
 
         const refused = yield* ask(
           request(TASK(task.id), owner, {
@@ -633,7 +653,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           refused,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(eve.canceled, [], "no agent's turn was stopped");
+        assert.deepEqual(agentSessions.canceled, [], "no agent's turn was stopped");
         const standing = Option.getOrUndefined(yield* readTask(owner, task.id))?.task;
         // The agent's Start by hand assigned its starter, which the refused change leaves standing.
         assert.equal(standing?.assignee?.userId, owner);
@@ -644,7 +664,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime",
     () =>
       Effect.gen(function* () {
-        const onClaudeCode = yield* messagedAgent(fakeEve(), undefined);
+        const onClaudeCode = yield* messagedAgent(fakeAgentSessions(), undefined);
         const change = (
           started: typeof onClaudeCode,
           body: { model: string; effort: string; contextWindow?: string },
@@ -692,7 +712,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
       Effect.gen(function* () {
-        const { other, task, agent, ask } = yield* messagedAgent(fakeEve(), { running: false });
+        const { other, task, agent, ask } = yield* messagedAgent(fakeAgentSessions(), {
+          running: false,
+        });
         yield* joinWorkspace(task.workspaceId, other);
         const changed = (archived: boolean) =>
           Effect.map(
@@ -714,9 +736,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's archive of a plan, as an older build asks it, stops its running agent first and settles the plan instead, Canceled with no merged pull request and Done with one, stamping no archive, and its unarchive puts the plan back to work",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask, eve, sessionId } = yield* messagedAgent(fakeEve(), {
-          running: true,
-        });
+        const { owner, other, task, agent, ask, agentSessions, sessionId } = yield* messagedAgent(
+          fakeAgentSessions(),
+          {
+            running: true,
+          },
+        );
         yield* joinWorkspace(task.workspaceId, other);
         const marked = (body: { archived?: boolean; status?: string }) =>
           Effect.map(
@@ -730,7 +755,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           });
 
         assert.equal(yield* marked({ archived: true }), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(agentSessions.canceled, [[sessionId, "turn_0"]]);
         assert.deepEqual(yield* standing(), {
           status: TASK_STATUS.CANCELED,
           finished: true,
@@ -779,9 +804,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, sent, eve } = yield* messagedAgent(fakeEve(), {
-          running: true,
-        });
+        const { owner, task, agent, ask, sent, agentSessions } = yield* messagedAgent(
+          fakeAgentSessions(),
+          {
+            running: true,
+          },
+        );
         yield* sent("Rename the subject line too.");
 
         assert.deepEqual(
@@ -789,7 +817,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).archivedAt, null);
-        assert.deepEqual(eve.canceled, []);
+        assert.deepEqual(agentSessions.canceled, []);
       }),
   );
 
@@ -798,7 +826,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const { agent, ask, owner, target, writer, turnId, sent } = yield* messagedAgent(
-          fakeEve(),
+          fakeAgentSessions(),
           {
             running: true,
           },
@@ -850,9 +878,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member of the plan's workspace lists, reads, and messages an agent a teammate started, named as its starter, the line landing in the starter's conversation",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { owner, other, task, agent, sessionId, ask, transcript } = yield* messagedAgent(
-          eve,
+          agentSessions,
           {
             running: false,
           },
@@ -894,7 +922,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(sent.agent.status, AGENT_STATUS.RUNNING);
         assert.equal(sent.agent.startedBy?.userId, owner);
         assert.deepEqual(
-          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          agentSessions.sent.map((each) => [each.authorization, each.sessionId]),
           [[harnessFor(owner), sessionId]],
         );
         assert.deepEqual(yield* transcript(), {
@@ -908,9 +936,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a line no turn ever took reads its agent running for the line's grace and failed past it, alike on its page, in its task's list, and on its transcript",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, transcript, sent } = yield* messagedAgent(fakeEve(), {
-          running: false,
-        });
+        const { owner, task, agent, ask, transcript, sent } = yield* messagedAgent(
+          fakeAgentSessions(),
+          {
+            running: false,
+          },
+        );
         // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
         yield* TestClock.adjust(Duration.seconds(1));
         assert.equal(
@@ -955,7 +986,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeAgentSessions(), {
           running: false,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -981,7 +1012,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent an automation's run started names the automation on the plan's agent list and on the plan list's line, and one started by hand names none",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask } = yield* messagedAgent(fakeEve(), { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(fakeAgentSessions(), {
+          running: false,
+        });
         const automationIds = () =>
           Effect.gen(function* () {
             const agents = readAnswer(
@@ -1023,8 +1056,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent with no plan is messaged and read like any other, its summary naming no plan, by a member of its workspace",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, agent, sessionId, ask } = yield* messagedAgent(agentSessions, {
           running: false,
         });
         // An automation's run leaves an agent so: in its workspace, on no task.
@@ -1051,7 +1084,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual([sent.agent.id, sent.agent.planId], [agent.id, null]);
         assert.deepEqual(userTexts(read), [SNAPSHOT, "Rebase on main."]);
         assert.deepEqual(
-          eve.sent.map((each) => each.sessionId),
+          agentSessions.sent.map((each) => each.sessionId),
           [sessionId],
         );
       }),
@@ -1061,8 +1094,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent reads as its own page by its id, its plan named, and with no plan once an automation's run left it so, with the branch its last turn ended on, for a member of its workspace and no one else",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask } = yield* messagedAgent(agentSessions, {
+          running: false,
+        });
         const page = () =>
           Effect.map(ask(request(AGENT, owner, { id: agent.id })), (answered) =>
             readAnswer(agentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
@@ -1102,8 +1137,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an automation's agent reads as its page with the run that started it: the automation's name, the prompt alone, the pull request its event named, and who asked for a run now",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, agent, ask } = yield* messagedAgent(agentSessions, { running: false });
         const ranAs = (firing: AutomationFiring) =>
           Effect.gen(function* () {
             yield* Database.use((db) =>
@@ -1151,7 +1186,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list names the teammate who archived an agent with no plan, as its own page does",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeAgentSessions(), {
           running: false,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -1181,8 +1216,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list carries an agent with no plan beside the plans, as its own page reads it and when it last moved, for a member of its workspace, an archived one only where asked for, and for no one else",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask } = yield* messagedAgent(agentSessions, {
+          running: false,
+        });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1228,8 +1265,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's PATCH pins an agent with no plan in their own plan list and unpins it again, and pins nothing for an account outside its workspace",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask } = yield* messagedAgent(agentSessions, {
+          running: false,
+        });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1270,8 +1309,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's PATCH drags their pin of an agent with no plan to a position the list then carries, and one given with an unpin is refused",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, agent, ask } = yield* messagedAgent(agentSessions, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1301,8 +1340,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask } = yield* messagedAgent(agentSessions, {
+          running: false,
+        });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1341,11 +1382,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's Vespin tools read for its starter, and as not found for a member who reaches the agent but not its task",
+    "an agent's run_on_mac standing reads for its starter, and as not found for a member who reaches the agent but not its task",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask } = yield* messagedAgent(agentSessions, {
+          running: false,
+        });
         yield* joinWorkspace(task.workspaceId, other);
         // The task is seen on its starter's own token, which the teammate holds none of, while the agent is seen through the App.
         yield* Database.use((db) =>
@@ -1362,7 +1405,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const teammate = yield* ask(request(AGENT_WORKSPACE_TOOLS, other, { id: agent.id }));
 
-        assert.ok(read.tools.includes(AGENT_TOOL.RUN_ON_MAC));
+        assert.deepEqual(read.runOnMac, { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY });
         assert.deepEqual(
           teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
@@ -1374,8 +1417,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message to an agent whose plan's workspace holds no installation any more is refused, saying nothing is connected, and sends nothing",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, agent, ask } = yield* messagedAgent(agentSessions, { running: true });
         yield* Database.use((db) =>
           db
             .delete(githubInstallation)
@@ -1393,7 +1436,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY_FULL_NAME },
           },
         });
-        assert.deepEqual(eve.sent, []);
+        assert.deepEqual(agentSessions.sent, []);
       }),
   );
 
@@ -1401,17 +1444,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message while GitHub does not answer still reaches the agent, since only GitHub's definite no keeps the words from it",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         let githubDown = false;
         const { owner, ask, agent } = yield* agentStartedOn(
           yield* openTask({
-            eve,
+            agentSessions,
             github: (sent) =>
               githubDown && new URL(sent.url).pathname.startsWith("/app/installations/")
                 ? Response.json({ message: "Service Unavailable" }, { status: 503 })
                 : undefined,
           }),
-          eve,
+          agentSessions,
           { running: true },
         );
         githubDown = true;
@@ -1424,7 +1467,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ),
         );
 
-        assert.equal(eve.sent.length, 1);
+        assert.equal(agentSessions.sent.length, 1);
       }),
   );
 
@@ -1432,9 +1475,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member steers the running turn of an agent a teammate started: the words reach the starter's session and stand under the starter, so a repeat under the key sends nothing",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { owner, other, task, agent, target, sessionId, ask, transcript } =
-          yield* messagedAgent(eve, { running: true });
+          yield* messagedAgent(agentSessions, { running: true });
         yield* joinWorkspace(task.workspaceId, other);
         const clientKey = randomUUID();
         const steer = () =>
@@ -1448,7 +1491,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // The send that wrote the line answers the transaction that wrote it.
         assert.match(first.txid ?? "", /^\d+$/u);
         assert.deepEqual(
-          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
+          agentSessions.sent.map((each) => [
+            each.authorization,
+            each.sessionId,
+            each.message.conversationId,
+          ]),
           [[harnessFor(owner), sessionId, target.conversationId]],
         );
         assert.equal(
@@ -1467,7 +1514,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         // A repeat wrote nothing, so there is no transaction to wait for.
         assert.equal(again.txid, undefined);
-        assert.equal(eve.sent.length, 1);
+        assert.equal(agentSessions.sent.length, 1);
       }),
   );
 
@@ -1475,10 +1522,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "each member's line to an agent names them as its sender and when it was sent, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, agent, ask, sent, writer, target } = yield* messagedAgent(eve, {
-          running: true,
-        });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, agent, ask, sent, writer, target } = yield* messagedAgent(
+          agentSessions,
+          {
+            running: true,
+          },
+        );
         yield* joinWorkspace(task.workspaceId, other);
         yield* Database.use((db) =>
           db.update(user).set({ name: "Dean Stratakos" }).where(eq(user.id, owner)),
@@ -1497,9 +1547,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
         // Our line from a call, an automation's run's, and another coding agent's, written as their sends write them.
+        const automationId = randomUUID();
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.APP }],
-          ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
+          [
+            "Triage the failures.",
+            { kind: MESSAGE_SENDER.AUTOMATION, automationId, name: "Nightly triage" },
+          ],
           [
             "Take the split view.",
             {
@@ -1531,9 +1585,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ["Sweep the flaky tests.", undefined],
           ["Use seven days.", { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
           ["Not five.", { userId: other, name: "Charles Pan", kind: AGENT_SENDER.MEMBER }],
-          // The app and an automation are named by kind, so the window draws each as itself.
+          // The app and an automation are named by kind, so the window draws each as itself, an automation by its id too, which its card and page are read by.
           ["Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.APP }],
-          ["Triage the failures.", { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION }],
+          [
+            "Triage the failures.",
+            { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION, automationId },
+          ],
           // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
             "Take the split view.",
@@ -1566,22 +1623,22 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message while a turn runs reaches the agent's harness acting for its starter, named by its line, with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, sessionId, sent, transcript } = yield* messagedAgent(eve, {
+        const agentSessions = fakeAgentSessions();
+        const { owner, sessionId, sent, transcript } = yield* messagedAgent(agentSessions, {
           running: true,
         });
         const clientKey = randomUUID();
         const answered = yield* sent("  Use the helper.  ", clientKey);
         assert.equal(answered.agent.status, AGENT_STATUS.RUNNING);
         assert.deepEqual(
-          eve.sent.map((each) => [each.authorization, each.sessionId, each.message]),
+          agentSessions.sent.map((each) => [each.authorization, each.sessionId, each.message]),
           [
             [
               harnessFor(owner),
               sessionId,
               {
-                conversationId: eve.opened[0]?.message.conversationId,
-                turn: EVE_HOST_TURN.TYPED,
+                conversationId: agentSessions.opened[0]?.message.conversationId,
+                turn: SESSION_TURN.TYPED,
                 message: "Use the helper.",
                 lineId: sentLineId(clientKey),
               },
@@ -1596,20 +1653,20 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a section of the agent's plan hands eve the section as it stands beside the words, and the line reads as the words alone",
+    "a message mentioning a section of the agent's description hands the harness the section as it stands beside the words, and the line reads as the words alone",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { task, transcript, sent } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { task, transcript, sent } = yield* messagedAgent(agentSessions, { running: true });
         const words = `Do what ${mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: task.id, anchor: "goal" }, "Goal", { workspace: "acme", repository: task.repository })} says.`;
 
         yield* sent(words);
 
-        assert.deepEqual(eve.sent.at(-1)?.message.message, [
+        assert.deepEqual(agentSessions.sent.at(-1)?.message.message, [
           { type: "text", text: words },
           {
             type: "text",
-            text: `${MENTIONED_HEADING}\n\nThe plan's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
+            text: `${MENTIONED_HEADING}\n\nThe description's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
           },
         ]);
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT, words]);
@@ -1617,11 +1674,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a page and another agent of the plan hands eve the page by its id and version with how to read it, never its HTML, and the agent by its id and branch, never its conversation",
+    "a message mentioning a page and another agent of the plan hands the harness the page by its id and version with how to read it, never its HTML, and the agent by its id and branch, never its conversation",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, ask, sent } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, ask, sent } = yield* messagedAgent(agentSessions, { running: true });
         const other = yield* startedAgentOf(owner, task.id, ask);
         yield* updateAgentBranch(owner, other.agent.id, "luke/store-invitations");
         const shown = yield* writePage(
@@ -1639,7 +1696,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         yield* sent(words);
 
-        const message = eve.sent.at(-1)?.message.message;
+        const message = agentSessions.sent.at(-1)?.message.message;
         assert.ok(Array.isArray(message));
         const [said, part] = message;
         assert.deepEqual(said, { type: "text", text: words });
@@ -1668,8 +1725,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message mentioning agents on another task and on none of the workspace hands each by its task with how to message it, and one of another workspace the sender is also in as not found",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, ask, sent } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, ask, sent } = yield* messagedAgent(agentSessions, {
+          running: true,
+        });
         const billing = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
         const onBilling = yield* startedAgentOf(owner, billing.id, ask);
         const oneOff = yield* startedAgentOf(owner, task.id, ask);
@@ -1693,7 +1752,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         yield* sent(words);
 
-        const message = eve.sent.at(-1)?.message.message;
+        const message = agentSessions.sent.at(-1)?.message.message;
         assert.ok(Array.isArray(message));
         const part = message[1];
         assert.ok(part?.type === "text");
@@ -1718,8 +1777,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message mentioning people hands a member of the agent's workspace by their role, never their email, and someone of another workspace the sender is also in as not a member",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, task, sent } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, task, sent } = yield* messagedAgent(agentSessions, { running: true });
         // The sender and the other account share a second workspace, which is not the agent's.
         const elsewhere = yield* openWorkspace(other);
         yield* joinWorkspace(elsewhere, owner);
@@ -1730,7 +1789,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         yield* sent(words);
 
-        const message = eve.sent.at(-1)?.message.message;
+        const message = agentSessions.sent.at(-1)?.message.message;
         assert.ok(Array.isArray(message));
         const part = message[1];
         assert.ok(part?.type === "text");
@@ -1744,11 +1803,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning an MCP server that eve does not take leaves no server for a later turn",
+    "a message mentioning an MCP server that the harness does not take leaves no server for a later turn",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY });
-        const { owner, agent, ask, target } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions({ sends: SESSION_SEND_OUTCOME.NOT_READY });
+        const { owner, agent, ask, target } = yield* messagedAgent(agentSessions, {
+          running: true,
+        });
         const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         const answered = yield* ask(
@@ -1767,8 +1828,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent started on a prompt mentioning a switched-off MCP server leaves the server for its first turn to take, its switch left off",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const opened = yield* openTask({ eve });
+        const agentSessions = fakeAgentSessions();
+        const opened = yield* openTask({ agentSessions });
         const task = `Triage ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         const agent = readAnswer(
@@ -1794,17 +1855,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning an MCP server hands eve a note naming its connection beside the words, and the server is left for the agent's next turn to take",
+    "a message mentioning an MCP server hands the harness a note naming its connection beside the words, and the server is left for the agent's next turn to take",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { target, sent } = yield* messagedAgent(eve, { running: true });
+        const agentSessions = fakeAgentSessions();
+        const { target, sent } = yield* messagedAgent(agentSessions, { running: true });
         const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         yield* sent(words);
 
-        const handed = eve.sent.at(-1)?.message.message;
-        assert.ok(Array.isArray(handed), "eve was handed parts");
+        const handed = agentSessions.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(handed), "the harness was handed parts");
         assert.deepEqual(handed[0], { type: "text", text: words });
         assert.match(
           JSON.stringify(handed[1]),
@@ -1817,11 +1878,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message is the owner's alone and bounded: another account and no bearer are refused by name, as are words past the bound, no words, and a key missing or past its bound, and eve hears none of them",
+    "a message is the owner's alone and bounded: another account and no bearer are refused by name, as are words past the bound, no words, and a key missing or past its bound, and the harness hears none of them",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, other, agent, ask, transcript } = yield* messagedAgent(eve, {
+        const agentSessions = fakeAgentSessions();
+        const { owner, other, agent, ask, transcript } = yield* messagedAgent(agentSessions, {
           running: true,
         });
         const line = { text: "Rename the helper.", clientKey: randomUUID() };
@@ -1858,7 +1919,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ),
           invalid,
         );
-        assert.deepEqual(eve.sent, []);
+        assert.deepEqual(agentSessions.sent, []);
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
         // The bounds themselves are taken.
         readAnswer(
@@ -1871,7 +1932,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             }),
           ),
         );
-        assert.equal(eve.sent.length, 1);
+        assert.equal(agentSessions.sent.length, 1);
       }),
   );
 });

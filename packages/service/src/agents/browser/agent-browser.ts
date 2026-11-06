@@ -1,13 +1,17 @@
 /**
  * agent-browser.ts -- an agent's browser as the service reaches it: a Chromium kept running in the agent's own sandbox, and a DevTools protocol session with it over the sandbox's PTY.
  *
- * A sandbox is found as the Terminal tab finds it, by the eve session it is
+ * A sandbox is found as the Terminal tab finds it, by the session it is
  * tagged with (`vercel-sandbox-api.ts`): a root session's own id, which a
  * worker's session names as its root, since a worker works in its parent's
  * sandbox. The brain's
  * sandbox and a coding agent's are reached alike. Making sure of the
- * browser resumes a stopped sandbox, as an agent's own step would, waits for
- * it to run, and runs the start (`sandbox-browser.ts`), which attaches to a
+ * browser opens a stopped sandbox again as the agent's next turn does,
+ * through the same `getOrCreate` (`../agent-sandbox-open.ts`), which makes
+ * one standing under its session's name again on the session's drive, with
+ * the tags and the size it stood with, where its snapshot is gone, or
+ * resumes one opened before, under a UUID, by its own name; it waits for it
+ * to run, and runs the start (`sandbox-browser.ts`), which attaches to a
  * browser already running or starts one.
  *
  * A session opens the running sandbox session's PTY, as the Terminal tab
@@ -58,11 +62,17 @@ import type { HttpClient } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
 import { jsonOf } from "../../http/http-effect.js";
 import type { RelaySocket } from "../../terminal/relay.js";
+import { agentSandboxName, openAgentSandbox } from "../agent-sandbox-open.js";
+import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js";
 import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
+  IMAGE_NOT_READY,
+  type ListedSandbox,
   SANDBOX_STATUS,
+  type SandboxSessionApi,
   type SandboxUnavailable,
+  type SessionRef,
   snapshotGone,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -87,19 +97,22 @@ import {
 } from "./sandbox-recorder.js";
 
 const AGENT_BROWSER = {
-  /** How often a resuming sandbox is asked whether it runs yet, and how many times before it is given up on: a minute in all. */
+  /**
+   * How often a resuming sandbox is asked whether it runs yet, and how many
+   * times before it is given up on: a minute in all, beside the wait on an
+   * image the registry still prepares, which the open makes itself
+   * (`agent-sandbox-open.ts`) and this never makes again.
+   */
   RESUME_SPACING: Duration.seconds(2),
   RESUME_TRIES: 30,
   /** How long the bridge may take to say it is ready once its PTY is open. */
   READY_TIMEOUT: Duration.seconds(15),
   /**
    * A bridge that did not come up is tried again on a fresh PTY this many
-   * times, this far apart, while the first failure is no older than the
-   * window, so a browser that is down still answers within a bridge's bound.
+   * times, this far apart, all within a bridge's bound.
    */
   BRIDGE_RETRIES: 2,
   BRIDGE_RETRY_SPACING: Duration.seconds(1),
-  BRIDGE_RETRY_WINDOW: Duration.seconds(10),
   /** The most the bridge's attempts take in all once the browser runs, so a hung one never stacks its timeouts. */
   BRIDGE_BOUND: Duration.seconds(20),
   /** How long a command waits on its answer. */
@@ -422,8 +435,7 @@ function ownScope<A, E>(
 }
 
 /**
- * The session whose sandbox an agent's browser runs in, as eve hands a tool
- * its session: a root session's own id, and a worker's root's, since a
+ * The session whose sandbox an agent's browser runs in: a root session's own id, and a worker's root's, since a
  * worker works in its parent's sandbox and opens none of its own.
  */
 export function browserSessionOf(session: {
@@ -433,38 +445,47 @@ export function browserSessionOf(session: {
   return session.parent?.rootSessionId ?? session.id;
 }
 
-/** The calls of Vercel Sandbox's API the browser makes: a sandbox found, resumed, run in, and its PTY minted. */
-export type BrowserSandboxApi = Pick<
-  VercelSandboxApi,
-  "listTagged" | "resume" | "run" | "openInteractive"
->;
+/** The calls of Vercel Sandbox's API the browser makes: a sandbox found and opened again, and its session run in and its PTY minted. */
+export interface BrowserSandboxApi
+  extends Pick<VercelSandboxApi, "listTagged" | "resume" | "getOrCreate"> {
+  readonly session: (
+    ref: SessionRef,
+  ) => Effect.Effect<Pick<SandboxSessionApi, "run" | "openInteractive">, SandboxUnavailable>;
+}
 
-/** The service over the REST calls the API makes and the PTY the sandbox serves. */
+/** The service over the calls `vercel-sandbox-api.ts` makes, the PTY the sandbox serves, and the agents' image a sandbox is made again from. */
 export function agentBrowserOver(
   api: BrowserSandboxApi,
   pty: SandboxPtyService,
+  image: AgentImageService,
 ): AgentBrowserService {
-  /** The running session of the sandbox tagged with the session, resumed and waited for where it is not running. */
+  /** The sandbox opened again as the agent's next turn opens it, where it stands under its session's name, or resumed by its own name where it was opened before. */
+  const reopened = (sessionId: string, sandbox: ListedSandbox) =>
+    sandbox.name === agentSandboxName(sessionId)
+      ? openAgentSandbox(api, { sessionId, tags: { ...sandbox.tags }, vcpus: sandbox.vcpus }).pipe(
+          Effect.provideService(AgentImage, image),
+          Effect.map((opened) => opened.sandbox),
+        )
+      : api.resume(sandbox.name);
+
+  /** The running session of the sandbox tagged with the session, opened again and waited for where it is not running. */
   const runningSession = (sessionId: string) =>
     Effect.gen(function* () {
       const [sandbox] = yield* api.listTagged(sessionId).pipe(Effect.mapError(sandboxUnavailable));
       if (sandbox === undefined) return yield* unreachable(BROWSER_UNREACHABLE.NOT_OPENED);
       if (sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined) {
-        return sandbox.currentSessionId;
+        return { name: sandbox.name, sessionId: sandbox.currentSessionId };
       }
-      // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
+      // Note that each try opens it again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
       // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
-      // gone is the one refusal answered at once, since no later try finds it again.
-      const resumed = api.resume(sandbox.name).pipe(
-        Effect.mapError((error) =>
-          snapshotGone(error)
-            ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, error.status)
-            : sandboxUnavailable(error),
-        ),
+      // gone, which only a sandbox opened before `getOrCreate` answers, is answered at once, since no
+      // later try finds it again, as is an image still being prepared, which the open has already
+      // waited on as long as it ever does.
+      const resumed = reopened(sessionId, sandbox).pipe(
         Effect.flatMap((found) =>
-          found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId !== undefined
-            ? Effect.succeed(found.currentSessionId)
+          found.status === SANDBOX_STATUS.RUNNING
+            ? Effect.succeed({ name: found.name, sessionId: found.currentSessionId })
             : Effect.fail(unreachable(BROWSER_UNREACHABLE.NOT_RESUMED)),
         ),
       );
@@ -472,19 +493,33 @@ export function agentBrowserOver(
         Effect.retry({
           schedule: Schedule.spaced(AGENT_BROWSER.RESUME_SPACING),
           times: AGENT_BROWSER.RESUME_TRIES,
-          while: (failure) => failure.reason !== BROWSER_UNREACHABLE.SNAPSHOT_GONE,
+          while: (failure) =>
+            failure._tag === "BrowserUnreachable" ||
+            !(snapshotGone(failure) || failure.code === IMAGE_NOT_READY),
         }),
+        Effect.mapError((failure) =>
+          failure._tag === "BrowserUnreachable"
+            ? failure
+            : snapshotGone(failure)
+              ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, failure.status)
+              : sandboxUnavailable(failure),
+        ),
       );
     });
 
-  const ensure = (sessionId: string) =>
+  /** The browser made sure of, and the running session it is in, held for the caller's calls after. */
+  const ensured = (sessionId: string) =>
     Effect.gen(function* () {
-      const sandboxSessionId = yield* runningSession(sessionId);
-      const run = yield* api
-        .run(sandboxSessionId, startBrowser())
-        .pipe(Effect.mapError(sandboxUnavailable));
+      const running = yield* runningSession(sessionId);
+      const session = yield* api.session(running).pipe(Effect.mapError(sandboxUnavailable));
+      const run = yield* session.run(startBrowser()).pipe(Effect.mapError(sandboxUnavailable));
       const start = browserStartOf(run);
-      if (start.ok) return { sandboxSessionId, started: start.started };
+      if (start.ok) {
+        return {
+          standing: { sandboxSessionId: running.sessionId, started: start.started },
+          session,
+        };
+      }
       return yield* unreachable(
         start.exitCode === BROWSER_START_EXIT.NO_CHROMIUM
           ? BROWSER_UNREACHABLE.NO_CHROMIUM
@@ -492,25 +527,26 @@ export function agentBrowserOver(
       );
     });
 
+  const ensure = (sessionId: string) =>
+    Effect.map(ensured(sessionId), ({ standing }): BrowserStanding => standing);
+
   const startRecordingIn = (sessionId: string, maxSeconds: number, maxBytes: number) =>
     Effect.gen(function* () {
-      const { sandboxSessionId } = yield* ensure(sessionId);
-      const run = yield* api
-        .run(sandboxSessionId, startRecording(maxSeconds, maxBytes))
+      const { session } = yield* ensured(sessionId);
+      const run = yield* session
+        .run(startRecording(maxSeconds, maxBytes))
         .pipe(Effect.mapError(sandboxUnavailable));
       return recordingStartOf(run);
     });
 
   const stopRecordingIn = (sessionId: string, maxBytes: number) =>
     Effect.gen(function* () {
-      const { sandboxSessionId } = yield* ensure(sessionId);
-      const run = yield* api
-        .run(sandboxSessionId, stopRecording())
-        .pipe(Effect.mapError(sandboxUnavailable));
+      const { session } = yield* ensured(sessionId);
+      const run = yield* session.run(stopRecording()).pipe(Effect.mapError(sandboxUnavailable));
       const stopped = recordingStopOf(run);
       if (!stopped.ok) return stopped;
-      const read = yield* api
-        .run(sandboxSessionId, readRecording(maxBytes))
+      const read = yield* session
+        .run(readRecording(maxBytes))
         .pipe(Effect.mapError(sandboxUnavailable));
       const file = recordingBytesOf(read, maxBytes);
       if (file === undefined) {
@@ -530,10 +566,10 @@ export function agentBrowserOver(
         ensure(sessionId),
         ownScope(
           Effect.gen(function* () {
-            const { sandboxSessionId } = yield* ensure(sessionId);
+            const { session } = yield* ensured(sessionId);
             // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
-            const shell = yield* api
-              .openInteractive(sandboxSessionId)
+            const shell = yield* session
+              .openInteractive()
               .pipe(Effect.mapError(sandboxUnavailable));
             const socket = yield* pty
               .connect(shell)
@@ -560,7 +596,6 @@ export function agentBrowserOver(
             schedule: Schedule.max([
               Schedule.spaced(AGENT_BROWSER.BRIDGE_RETRY_SPACING),
               Schedule.recurs(AGENT_BROWSER.BRIDGE_RETRIES),
-              Schedule.during(AGENT_BROWSER.BRIDGE_RETRY_WINDOW),
             ]),
             while: (failure) => failure.reason === BROWSER_UNREACHABLE.BRIDGE_FAILED,
           }),
@@ -574,27 +609,30 @@ export function agentBrowserOver(
 }
 
 /**
- * The service as the deployment runs it, on the function's own OIDC token
- * and the PTY it reaches (`sandboxPtyLayer`), which the agent's `browser`
- * tool composes.
+ * The service as the deployment runs it, on the function's own OIDC token,
+ * the PTY it reaches (`sandboxPtyLayer`), and the agents' image its build
+ * names, which the agent's `browser` tool composes.
  * @public
  */
 export const agentBrowserLayer: Layer.Layer<
   AgentBrowser,
   never,
-  HttpClient.HttpClient | SandboxPty
+  HttpClient.HttpClient | SandboxPty | AgentImage
 > = Layer.effect(
   AgentBrowser,
   Effect.gen(function* () {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
-    return agentBrowserOver(api, yield* SandboxPty);
+    return agentBrowserOver(api, yield* SandboxPty, yield* AgentImage);
   }),
 );
 
 /**
  * The service over the PTY as the deployment reaches it, on the runtime's
- * HTTP client: what each eve root composes into its runtime over the
- * deployment's services, so the `browser` tool reaches the agent's browser.
+ * HTTP client and the agents' image the edge names: what each edge composes,
+ * so the `browser` tool and the tabs reach the agent's browser.
  */
-export const agentBrowserServices: Layer.Layer<AgentBrowser, never, HttpClient.HttpClient> =
-  agentBrowserLayer.pipe(Layer.provide(sandboxPtyLayer));
+export const agentBrowserServices: Layer.Layer<
+  AgentBrowser,
+  never,
+  HttpClient.HttpClient | AgentImage
+> = agentBrowserLayer.pipe(Layer.provide(sandboxPtyLayer));

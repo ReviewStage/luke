@@ -5,6 +5,6 @@
   "packages/panel/src/desktop/tab-switcher.tsx": 1,
   "packages/panel/src/keyboard-modality.ts": 1,
   "packages/panel/src/navigation-history.ts": 1,
-  "packages/panel/src/tasks/plan-comments.tsx": 1,
+  "packages/panel/src/tasks/description-comments.tsx": 1,
   "packages/panel/src/tasks/selection-toolbar.tsx": 1
 }

@@ -25,10 +25,11 @@ import { workspacePhotoQuery } from "../live-reads.js";
  * from a screen reader, since the row beside it already says the name.
  */
 
-/** The tile's sizes: a line of words', a row's glyph, a mark a step smaller under a row, or the sidebar's head and Settings › Workspace's first row. */
+/** The tile's sizes: a line of words', a row's glyph, a mark a step smaller under a row, the sidebar's head, or a card's and Settings › Workspace's first row. */
 export const TILE_SIZE = {
   INLINE: "inline",
   ROW: "row",
+  SIDEBAR: "sidebar",
   HEAD: "head",
   NESTED: "nested",
 } as const;
@@ -39,6 +40,7 @@ type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];
 const AVATAR_OF = {
   [TILE_SIZE.INLINE]: AVATAR_SIZE.MARK,
   [TILE_SIZE.ROW]: AVATAR_SIZE.INLINE,
+  [TILE_SIZE.SIDEBAR]: AVATAR_SIZE.ROW,
   [TILE_SIZE.HEAD]: AVATAR_SIZE.CARD,
   [TILE_SIZE.NESTED]: AVATAR_SIZE.STACK,
 } as const satisfies Record<TileSize, (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE]>;
@@ -49,6 +51,14 @@ function useWorkspacePhoto(workspaceId: string, version: string | undefined): st
   return rows?.version === version ? rows?.url : undefined;
 }
 
+/** The picture a workspace's tile draws: its photo where one is set, its owner's picture on a personal one, and nothing while its letter stands. */
+export function useWorkspaceTileUrl(
+  workspace: Pick<Workspace, "id" | "photoVersion" | "pictureUrl">,
+): string | undefined {
+  const photo = useWorkspacePhoto(workspace.id, workspace.photoVersion);
+  return workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
+}
+
 /** A workspace's tile, at a row's glyph size unless said otherwise. */
 export function WorkspaceTile({
   workspace,
@@ -57,8 +67,7 @@ export function WorkspaceTile({
   workspace: Pick<Workspace, "id" | "name" | "photoVersion" | "pictureUrl">;
   size?: TileSize;
 }): React.JSX.Element {
-  const photo = useWorkspacePhoto(workspace.id, workspace.photoVersion);
-  const url = workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
+  const url = useWorkspaceTileUrl(workspace);
   // Note that the letter and its hue stand until the picture has loaded, because an avatar on the network may take a while, and go once it has, because a transparent photo would show them through.
   return (
     <Avatar

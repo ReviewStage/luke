@@ -24,7 +24,7 @@ import {
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
-import { ReloadState } from "@repo/ui/error-boundary";
+import { RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { BLANK_WINDOW, startDesktopSentry } from "./desktop-sentry";
@@ -79,7 +79,7 @@ export function mountWindow(
   // What the panel times, recorded through the same SDK once it stands, and
   // every failure it shows, reported through it.
   installPanelSpanRecorder(sentry.recordSpan);
-  installShownFailureReporter(sentry.reportShownFailure);
+  installShownFailureReporter(sentry.reportShownFailure, queryClient);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
@@ -119,7 +119,9 @@ export function mountWindow(
         BLANK_WINDOW.FIRST_READ,
       );
       sentry.load();
-      draw(<ReloadState failure={WINDOW_FAILED} onReload={reloadWindow} />);
+      draw(
+        <ReloadState failure={WINDOW_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadWindow} />,
+      );
       return;
     }
     endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);

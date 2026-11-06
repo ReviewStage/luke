@@ -255,7 +255,7 @@ test("each workspace in the menu says who shares it under its name, to the eye a
   ]);
 });
 
-test("the head says who shares the workspace, to the eye and to a screen reader: its members counted beside a people glyph, the account's own first workspace of one as personal in words alone, a team of one as its one member, and nothing where the service counts none", () => {
+test("the head says who shares the workspace to a screen reader: its members counted, the account's own first workspace of one as personal, a team of one as its one member, and nothing where the service counts none", () => {
   const shared = (memberCount?: number, first = true) => {
     const workspace = memberCount === undefined ? ACME : { ...ACME, memberCount };
     const page = mount({
@@ -263,20 +263,14 @@ test("the head says who shares the workspace, to the eye and to a screen reader:
       workspace,
     });
     const head = page.switcher();
-    const line = head?.querySelector(".sidebar-workspace-shared");
-    const said = line ? [line.textContent, line.querySelectorAll("svg").length] : null;
     const heard = head?.getAttribute("aria-label");
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";
-    return [head?.querySelector(".ui-avatar[data-shape='tile']")?.textContent, said, heard];
+    return heard;
   };
 
-  assert.deepEqual(shared(5), ["A", ["5 members", 1], "Workspace: acme, 5 members"]);
-  assert.deepEqual(shared(1), [
-    "A",
-    ["Personal workspace", 0],
-    "Workspace: acme, Personal workspace",
-  ]);
-  assert.deepEqual(shared(1, false), ["A", ["1 member", 1], "Workspace: acme, 1 member"]);
-  assert.deepEqual(shared(undefined), ["A", null, "Workspace: acme"]);
+  assert.equal(shared(5), "Workspace: acme, 5 members");
+  assert.equal(shared(1), "Workspace: acme, Personal workspace");
+  assert.equal(shared(1, false), "Workspace: acme, 1 member");
+  assert.equal(shared(undefined), "Workspace: acme");
 });

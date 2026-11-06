@@ -34,7 +34,14 @@ import {
   useMenu,
 } from "@repo/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
-import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  draftTab,
+  pageTab,
+  type StripTab,
+  sameTab,
+  subagentTab,
+} from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -242,7 +249,7 @@ function AgentPageBar({
   trail: readonly ToolbarPlace[] | undefined;
   /** What stands before the ⋯: the arrows through its automation's runs, an automation's agent's alone. */
   steps: React.ReactNode;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
   /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
@@ -508,17 +515,17 @@ export function DesktopAgentPage({
     origin: run.data ?? undefined,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   });
-  const tab = useMemo(() => ({ agent: agentId }), [agentId]);
+  const tab = useMemo(() => agentTab(agentId), [agentId]);
   // A Fork or a Continue opens the page's draft in the agent's place, through the same doors a task's column opens its own by.
   const draftDoors = useAgentDraftDoors(agents, agent?.archivedAt !== undefined, (draftId) =>
     setDrafting({ agentId, draftId }),
   );
   // The draft stands in the pane while it is the one the page opened, and the agent again once it starts or is let go.
-  const draftTab =
+  const draftShownHere =
     draftShown !== undefined && agents.draft?.id === draftShown ? draftShown : undefined;
   const paneTab = useMemo(
-    () => (draftTab === undefined ? tab : { draft: draftTab }),
-    [draftTab, tab],
+    () => (draftShownHere === undefined ? tab : draftTab(draftShownHere)),
+    [draftShownHere, tab],
   );
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -529,7 +536,7 @@ export function DesktopAgentPage({
   // that opens another task, as a link to it opens (`route.ts`), a worker's opening through its delegation.
   const openPlace = useOpenPlace();
   const openTarget = useSteadyDoor((target: ToolTarget) => {
-    // An inbox call's row opens the window's Inbox on the thread its answer names, narrowed to the agent's task where it has one.
+    // An inbox call's row opens the window's Inbox on the thread its answer names, as a link to it does, without narrowing it (`openInboxItemOn`); one naming no thread opens the Inbox narrowed to the agent's task where it has one.
     if (target.kind === TOOL_TARGET.INBOX) {
       const { item } = target;
       openPlace?.(
@@ -544,19 +551,19 @@ export function DesktopAgentPage({
     }
     if (target.kind === TOOL_TARGET.TASK) openPlace?.(placeOfTaskTarget(target));
     // Its plan's card names its task, an archived agent's among them, whose press opens the plan.
-    if (target.kind === TOOL_TARGET.PLAN && planId !== null) {
+    if (target.kind === TOOL_TARGET.DESCRIPTION && planId !== null) {
       openPlace?.({ kind: LINK_PLACE.TASK, planId });
     }
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
-    if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
+    if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose(pageTab(target.page));
   });
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = useSteadyDoor(
     (agent: string, callId: string, task: string, status: AgentStatus) => {
       views.onWorkerStatus(callId, status);
-      sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+      sidePanel.onChoose(subagentTab(callId, { agent, task }));
     },
   );
   const openPullRequest = useSteadyDoor((published: string, number?: number) =>
@@ -567,7 +574,7 @@ export function DesktopAgentPage({
   // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
   // A page of a task, or of another agent, opens beside the agent, read on its own place.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview({ page }, place),
+    sidePanel.onPreview(pageTab(page), place),
   );
   const { pullRequests, agentIds, heldIds } = control;
   const openHere = useMemo(

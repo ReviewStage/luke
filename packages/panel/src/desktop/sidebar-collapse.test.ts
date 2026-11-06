@@ -10,7 +10,7 @@ import { UPDATE_STATUS } from "@repo/settings/update";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
@@ -21,6 +21,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
+import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
@@ -93,6 +94,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
+const routed = shellRouterEachTest();
+
+/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
+function underRouter(shell: ReactElement, standing?: string): ReactElement {
+  return routed().under(shell, standing);
+}
+
 /** Resizes the panel's stage, as the developer dragging the window's frame does on the desktop. */
 function resizeStage(width: number): void {
   stageWidth = width;
@@ -121,7 +130,11 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
         onCancelSignIn: ignore,
       },
       tab,
-      onTabChange: setTab,
+      // The window turns to Settings by the router, as its own doors do.
+      onTabChange: (next: PanelTab) => {
+        setTab(next);
+        routed().go(next === PANEL_TAB.SETTINGS ? SHELL_AT.SETTINGS : SHELL_AT.PLACES);
+      },
       tasks: tasksControl({
         page: TASKS_PAGE.HOME,
         inboxView: { ...tasksControl().inboxView, open: true, onOpen: onOpenInbox },
@@ -134,6 +147,8 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
         steps: { back: [], forward: [] },
         onGoTo: ignore,
         onLeaveVersionHistory: ignore,
+        onLeaveRouted: ignore,
+        onStayRouted: ignore,
         away: undefined,
         onLeave: ignore,
       },
@@ -144,7 +159,7 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
     });
     return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
   }
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Window)))));
   return container;
 }
 
@@ -346,14 +361,13 @@ test("a floating sidebar left for Settings by its chord is away when the plans c
   assert.equal(standing(page), "floating");
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   // Settings is its own chunk, so the test waits for it as the window does.
-  await act(async () => {
-    await import("./desktop-settings.js");
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await act(() => routed().settled());
   assert.equal(page.querySelector("aside.desktop-sidebar"), null, "Settings draws its own list");
   const back = rowNamed(page.querySelector('nav[aria-label="Settings pages"]') ?? page, "Back");
   assert.ok(back, "Settings has its way back");
+  // The plans come back once the router has gone back to them.
   act(() => back.click());
+  await act(() => routed().settled());
   assert.equal(standing(page), "away");
 });
 

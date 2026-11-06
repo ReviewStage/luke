@@ -1,4 +1,5 @@
 import {
+  terminalAgentParamsSchema,
   terminalAttachParamsSchema,
   terminalShellParamsSchema,
 } from "@repo/features/terminal-acts";
@@ -19,14 +20,19 @@ import { MAC_SHELL_ACT_KIND } from "./kinds.js";
 /** The longest folder a shell opens in, as macOS's `PATH_MAX` bounds a path. */
 const FOLDER_MAX_CHARS = 1024;
 
-/** A shell opened for an agent, in a folder named by its absolute path. */
+/** A shell opened for an agent, in a folder named by its absolute path, at the size its screen was first fitted to. */
 const macShellOpenParamsSchema = EffectSchema.Struct({
   agentId: terminalShellParamsSchema.fields.agentId,
   folder: EffectSchema.String.check(
     EffectSchema.isPattern(/^\//u),
     EffectSchema.isMaxLength(FOLDER_MAX_CHARS),
   ),
+  cols: terminalAttachParamsSchema.fields.cols,
+  rows: terminalAttachParamsSchema.fields.rows,
 });
+
+/** The agent's mirror, by the absolute path of its folder. */
+const macShellMirrorSchema = EffectSchema.Struct({ folder: EffectSchema.String });
 
 /** The shell opened, by the id an attach and a close name it by. */
 const macShellOpenedSchema = EffectSchema.Struct({
@@ -34,6 +40,9 @@ const macShellOpenedSchema = EffectSchema.Struct({
 });
 
 export const macShellActsContract = {
+  [MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR]: actProcedure("Could not mirror this agent’s files.")
+    .input(exactInput(terminalAgentParamsSchema))
+    .output(macShellMirrorSchema),
   [MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN]: actProcedure("Could not open a shell in that folder.")
     .input(exactInput(macShellOpenParamsSchema))
     .output(macShellOpenedSchema),

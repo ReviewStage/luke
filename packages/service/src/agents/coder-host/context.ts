@@ -12,10 +12,10 @@ import { CODER } from "./bounds.js";
  * the next step reads against and what its harness compacts it against: the window
  * the catalog lists for the model, or the fallback a step is told where it
  * lists none, and the count past which its harness compacts: Claude Code's
- * window less what it holds back, or for Codex and eve the share eve was
- * told (`bounds.ts`). The brief's estimate is told only while the harness
+ * window less what it holds back, or for Codex and the retired runtime the share
+ * the retired runtime compacted at (`bounds.ts`). The brief's estimate is told only while the harness
  * has never compacted the conversation, because a compaction's summary may
- * have folded the plan or task in with the rest. Nothing here reaches eve,
+ * have folded the description or task in with the rest. Nothing here reaches a harness,
  * since the routes read it.
  */
 

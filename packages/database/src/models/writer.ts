@@ -277,8 +277,8 @@ type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS];
 interface TurnEnqueue {
   /** The turn's id where the runtime minted one already; minted here otherwise. */
   readonly turnId?: string;
-  /** eve's own id for the turn, where the relay queues the row at eve's start; the opener's inbox row names none, since eve has not yet started a turn for it. */
-  readonly eveTurnId?: string;
+  /** The runtime's own id for the turn, which for a native turn is the turn's own id; the opener's inbox row names none. */
+  readonly runtimeTurnId?: string;
   readonly origin: TurnOrigin;
   readonly model?: string;
   readonly reasoningEffort?: string;
@@ -289,7 +289,7 @@ interface TurnEnqueue {
 interface TurnCancelRequest {
   readonly turnId: string;
   readonly at: Date;
-  /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
+  /** The key of the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
   readonly key?: string;
   /** The coding agent whose `stop_agent`, or whose Start continuing the turn's agent, made the Stop; none for the developer's or our own. */
   readonly by?: string;
@@ -304,15 +304,19 @@ type TurnEnqueueResult = Result.Result<
 
 /**
  * What sent a line to a coding agent, as its row keeps it: the member by
- * their account, the brain, an automation by its name as it stands at the send,
- * GitHub by the login of who caused what it tells of, or another coding
+ * their account, the brain, an automation by its id and its name as it stands
+ * at the send, GitHub by the login of who caused what it tells of, or another coding
  * agent by its name, its id, and the model it runs on, as they stand at the
  * send.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.APP }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AUTOMATION;
+      readonly automationId: string | undefined;
+      readonly name: string;
+    }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
@@ -339,7 +343,7 @@ function senderNameOf(sender: LineSender | undefined): string | null {
  * write it: its words, the files attached to it, each image with what was
  * kept of it, the client's key for the send, what sent it, and what the row
  * says carried it: the developer's typed ask where it names nothing else,
- * or another coding agent's message, a thread, a plan comment, a Start's
+ * or another coding agent's message, a thread, a description comment, a Start's
  * brief, GitHub, the brain, or an
  * automation's run.
  */
@@ -347,7 +351,7 @@ interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly HandedFile[] | undefined;
-  /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
+  /** What the line mentioned, as the runtime was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing the agent cannot read. */
   readonly mentioned?: string | undefined;
   readonly sender: LineSender;
   readonly metadata?: AwaitingLineMetadata | undefined;
@@ -397,8 +401,8 @@ type AwaitingLineWritten = Result.Result<
 >;
 
 /**
- * The line a turn received and the turn that received it: as eve's relay
- * reads it off eve's stream, by its text parts joined (`attached-files.ts`);
+ * The line a turn received and the turn that received it: as the retired
+ * runtime's relay read it off its stream, by its text parts joined (`attached-files.ts`);
  * or as a native harness's runner names it, by the
  * client id of the row it was written under, which the runner was handed
  * with the line.
@@ -408,10 +412,9 @@ type AwaitingLineTake =
   | { readonly clientId: string; readonly turnId: string };
 
 /**
- * The longest the hand-over to eve inside an awaiting line's write may take
- * before it is given up: eve answers a follow-up in well under a second and
- * its own not-ready loop ends at twenty, so one not answered in thirty is
- * not going to.
+ * The longest the hand-over to the runtime inside an awaiting line's write may
+ * take before it is given up: the thirty seconds a claim's expiry and the
+ * client's send deadline are reckoned against (`DISPATCH_CLAIM`).
  */
 const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
 
@@ -443,22 +446,22 @@ export interface StoreWriter {
   requestTurnCancel(target: ConversationTarget, cancel: TurnCancelRequest): Write<TurnCancelResult>;
   /**
    * Writes the developer's line to a coding agent as a row awaiting its
-   * turn, kept only where the dispatch handed in answers that eve took it:
-   * the dispatch is the hand-over to eve, run under the conversation's
+   * turn, kept only where the dispatch handed in answers that the runtime took it:
+   * the dispatch is the hand-over to the runtime, run under the conversation's
    * dispatch claim (`dispatch-claim.ts`) with no transaction open, after
    * the row is written with the claim, so the take of the line into the
-   * turn eve opens on it finds the row standing; and a dispatch that
+   * turn the runtime opens on it finds the row standing; and a dispatch that
    * answers nothing withdraws the row, which every read then leaves out
-   * unless a turn eve hands the line to after all takes it, and which a
-   * send repeated under its key writes afresh. No lock is held while eve answers,
+   * unless a turn the runtime hands the line to after all takes it, and which a
+   * send repeated under its key writes afresh. No lock is held while the runtime answers,
    * so the journal of a turn under way, and every other write of the
    * conversation, lands meanwhile. The row stands under the client's key
    * for the send (`sentLineId`), and a line already standing under that key
    * is answered as repeated without the dispatch being run, so two sends
-   * carrying one key, however they race, hand eve the words once. The whole
-   * write cannot be interrupted, because eve takes the message before the
+   * carrying one key, however they race, hand the runtime the words once. The whole
+   * write cannot be interrupted, because the runtime takes the message before the
    * claim records what it answered: a caller that went in between would
-   * leave the claim to expire and the line standing with eve's answer
+   * leave the claim to expire and the line standing with the runtime's answer
    * unread, so the dispatch is bounded by a deadline of its own instead,
    * past which it is read as having answered nothing.
    */
@@ -470,9 +473,9 @@ export interface StoreWriter {
   /**
    * Takes into the turn the lines awaiting one the receipt is of: the oldest
    * run of the conversation's user rows no turn owns whose words, joined as
-   * eve coalesces messages, are the ones received, eve having received the
-   * lines in the order they were sent. A run of one is a line eve handed
-   * the turn alone; a longer run is steers eve folded into one step's input.
+   * the retired runtime coalesced messages, are the ones received, it having received the
+   * lines in the order they were sent. A run of one is a line it handed
+   * the turn alone; a longer run is steers it folded into one step's input.
    * Each row takes the turn in place at a bumped revision, so a device
    * reading from its revision sees the line again where it stands, now the
    * turn's, and keeps how many of the turn's steps had begun before it, so
@@ -480,7 +483,7 @@ export interface StoreWriter {
    * arrived rather than ahead of the turn. A take by client id takes the one awaiting row written
    * under it. A withdrawn line is taken as any other, standing again with
    * what carried it and who sent it, where it lengthens the run the lines
-   * eve did take make. Answers the rows taken, or none where no such run awaits, which
+   * the runtime did take make. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -630,6 +633,7 @@ const MessageInsertSchema = Schema.Struct({
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
   senderAgentId: Schema.NullOr(Schema.String),
+  senderAutomationId: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
@@ -740,6 +744,7 @@ const insertMessageRow = SqlSchema.findOneOption({
           senderName: row.senderName,
           senderModel: row.senderModel,
           senderAgentId: row.senderAgentId,
+          senderAutomationId: row.senderAutomationId,
         })
         .returning({ id: messages.id, txid: CURRENT_TXID }),
     ),
@@ -890,7 +895,7 @@ const insertQueuedTurn = SqlSchema.void({
     userId: Schema.String,
     conversationId: Schema.String,
     origin: TurnOriginSchema,
-    eveTurnId: Schema.NullOr(Schema.String),
+    runtimeTurnId: Schema.NullOr(Schema.String),
     model: Schema.NullOr(Schema.String),
     reasoningEffort: Schema.NullOr(Schema.String),
     promptHash: Schema.NullOr(Schema.String),
@@ -905,7 +910,7 @@ const insertQueuedTurn = SqlSchema.void({
         conversationId: row.conversationId,
         origin: row.origin,
         status: TURN_STATUS.QUEUED,
-        eveTurnId: row.eveTurnId,
+        runtimeTurnId: row.runtimeTurnId,
         model: row.model,
         reasoningEffort: row.reasoningEffort,
         promptHash: row.promptHash,
@@ -971,7 +976,7 @@ function pendingToolPart(name: string, callId: string, input: UnparsedWireValue)
 
 /**
  * Why the record settled a call nothing answered: its turn ended or was
- * canceled first, or eve ran the step that asked for it again.
+ * canceled first, or the retired runtime ran the step that asked for it again.
  */
 const UNANSWERED_REASON = {
   ENDED: "The turn ended before the call answered; it may have run.",
@@ -1178,7 +1183,7 @@ function landJournals(context: WriterContext): Write<void> {
               parts: held.row.parts,
             }),
             Effect.andThen(
-              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation was only ever opened for an eve agent's worker.
+              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation was only ever opened for the worker of an agent on the retired runtime.
               TRANSCRIPT_KINDS.has(context.kind)
                 ? Metric.update(
                     JOURNAL_METRIC.REWRITE_BYTES,
@@ -1233,6 +1238,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     senderName: senderNameOf(row.sender),
     senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.model : null,
     senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.agentId : null,
+    senderAutomationId:
+      row.sender?.kind === MESSAGE_SENDER.AUTOMATION ? nullable(row.sender.automationId) : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq, txid: written.txid };
@@ -1435,7 +1442,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
  * dropped between. The turn's completed projection replaces the journal
  * whole, boundaries and all, when the turn answers.
  *
- * The newest step told again is eve running it again. A step interrupted
+ * The newest step told again is the retired runtime running it again. A step interrupted
  * part way re-runs whole, asking the model afresh, while whatever the first
  * attempt wrote stays on the stream, and the relay's state rolls back with
  * the step, so the relay tells its boundary a second time. Every call past
@@ -1700,7 +1707,7 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
     userId: context.target.userId,
     conversationId: context.target.conversationId,
     origin: enqueue.origin,
-    eveTurnId: nullable(enqueue.eveTurnId),
+    runtimeTurnId: nullable(enqueue.runtimeTurnId),
     model: nullable(enqueue.model),
     reasoningEffort: nullable(enqueue.reasoningEffort),
     promptHash: nullable(enqueue.promptHash),
@@ -1809,8 +1816,8 @@ const giveLineToTurn = SqlSchema.void({
 /**
  * The steps a turn's journal has begun, which a line the turn takes now
  * arrived after; none where no journal stands yet, as for the line that
- * opened the turn. Note that eve hands a steer to the step it is about to
- * start, so the boundaries already standing are the steps before it.
+ * opened the turn. Note that the retired runtime handed a steer to the step it
+ * was about to start, so the boundaries already standing are the steps before it.
  */
 const stepsBegun = (context: WriterContext, turnId: string): Write<number | null> =>
   Effect.map(journalRow(context, turnId), (journal) => {
@@ -1820,11 +1827,11 @@ const stepsBegun = (context: WriterContext, turnId: string): Write<number | null
   });
 
 /**
- * The oldest run of consecutive awaiting lines whose parts, joined as eve
- * coalesces them, are the parts received; none where no run matches. A
- * line's parts are its words and the files it carried, as eve was handed
+ * The oldest run of consecutive awaiting lines whose parts, joined as the retired
+ * runtime coalesced them, are the parts received; none where no run matches. A
+ * line's parts are its words and the files it carried, as the runtime was handed
  * them (`attached-files.ts`). Note
- * that the run is read oldest first, because every send is a steer eve
+ * that the run is read oldest first, because every send is a steer the runtime
  * receives in the order sent, so two lines sharing their words are taken in
  * that order.
  */
@@ -1902,7 +1909,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const clientId = sentLineId(line.clientKey);
   yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
-  // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
+  // A line already under the key is the send a lost answer was for: the runtime has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
   if (Option.isSome(standing)) {
     return Result.succeed({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED });
@@ -2036,8 +2043,8 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? lines.filter((line) => line.clientId === take.clientId)
       : coalescedRun(lines, take.text);
   // Note that a line whose hand-over answered nothing is taken only where it lengthens the run,
-  // because eve heard one only where its answer was lost, and one it never heard standing among the
-  // lines it took would part a run eve did coalesce; the lines it took win where the two runs tie.
+  // because the runtime heard one only where its answer was lost, and one it never heard standing among the
+  // lines it took would part a run the retired runtime did coalesce; the lines it took win where the two runs tie.
   const standing = runAmong(awaiting.filter((line) => !line.withdrawn));
   const widened = runAmong(awaiting);
   const run = widened.length > standing.length ? widened : standing;
@@ -2086,7 +2093,7 @@ const stampTurnCancel = SqlSchema.findAll({
  * The Stop on a turn's row: the instant it was asked, the key of the
  * tool call that asked it where one did, and the agent that asked it where
  * one did, written once, so the record says a
- * Stop was asked whatever eve does with it. A second Stop finds the first
+ * Stop was asked whatever the harness does with it. A second Stop finds the first
  * instant standing and writes nothing, its key included; a turn the
  * conversation does not hold is refused.
  */

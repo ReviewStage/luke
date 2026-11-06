@@ -12,12 +12,13 @@
  * holds the plan's swap sets the account's token as it stands behind the
  * same placeholder, renewed first where less than the launch's margin is
  * left of it, and sends the session's whole policy with the agent's
- * repository credential minted afresh (`renewPlanSwap`). A swap that already
+ * repository credential minted afresh (`renewPlanSwap`), to the sandbox its
+ * agent's session tag finds running that session, which the deployment's
+ * machines reach (`deploymentLifecycle`, `MachineFirewall`'s `renew`). A swap that already
  * carries it is left, so a session is written, and its policy sent, only as
- * its account's token moves on, about every quarter hour. The swap stands no
- * longer than its runner: it is cleared ahead of its sandbox's stop, and let
- * go where a Terminal keeps the sandbox up past the runner's end, so a
- * launch's renewals end with it.
+ * its account's token moves on, about every quarter hour. Renewals end with
+ * the sandbox: its launch's row is deleted ahead of its stop, so the sweep
+ * reads it no more.
  *
  * Note that a swap is set with at least the margin left on its token, and
  * the window is as wide as reads every standing session within a quarter
@@ -44,8 +45,7 @@ import {
 import { Effect, type Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { PLAN_RENEWAL, renewPlanSwap } from "../agents/coder-host/codex-sessions.js";
-import { sandboxFirewall } from "../agents/sandbox-firewall.js";
-import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
+import { deploymentLifecycle } from "../agents/machine/agent-machines.js";
 import type { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 
@@ -104,7 +104,7 @@ export const sweepCodexPlanSwaps = /* @__PURE__ */ Effect.fn("web/sweepCodexPlan
     );
     return { renewed: 0, failed: 0 };
   }
-  const firewall = sandboxFirewall(yield* vercelSandboxApi(deploymentOidcToken));
+  const machine = yield* deploymentLifecycle;
   const standing = yield* countStandingFirewalls();
   const { width, pages } = windowOf(standing, now);
   if (standing > width * CODEX_PLAN_SWEEP.ROUND_MINUTES) {
@@ -116,7 +116,7 @@ export const sweepCodexPlanSwaps = /* @__PURE__ */ Effect.fn("web/sweepCodexPlan
   const renewals = yield* Effect.forEach(
     sessions,
     (session) =>
-      Effect.result(renewPlanSwap(firewall, session, ring.success)).pipe(
+      Effect.result(renewPlanSwap(machine, session, ring.success)).pipe(
         Effect.tap((renewal) =>
           Result.isFailure(renewal)
             ? Effect.logWarning(`a Codex plan's swap was not renewed: ${renewal.failure.message}`)

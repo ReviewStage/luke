@@ -33,6 +33,7 @@ import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { COPY_BUTTONS_EXAMPLE } from "./examples/copy-buttons";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
+import { COUNT_FIGURES_EXAMPLE } from "./examples/count-figures";
 import { COUNT_PARTS_EXAMPLE } from "./examples/count-parts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
@@ -44,6 +45,7 @@ import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
 import { DROP_SLOTS_EXAMPLE } from "./examples/drop-slots";
 import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
+import { EMAIL_CHIPS_EXAMPLE } from "./examples/email-chips";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_LINES_EXAMPLE } from "./examples/error-lines";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
@@ -125,6 +127,7 @@ import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SOCIAL_SIGN_IN_EXAMPLE } from "./examples/social-sign-in";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { STEPS_EXAMPLE } from "./examples/steps";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
@@ -139,6 +142,7 @@ import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLBARS_EXAMPLE } from "./examples/toolbars";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
+import { TURN_ENDS_EXAMPLE } from "./examples/turn-ends";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 import { VIDEO_PLAYER_EXAMPLE } from "./examples/video-player";
 import { WRITING_GLYPHS_EXAMPLE } from "./examples/writing-glyphs";
@@ -210,11 +214,13 @@ export const EXAMPLES: readonly Example[] = [
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
   DROP_SLOTS_EXAMPLE,
+  EMAIL_CHIPS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_LINES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
   FAILURE_NOTES_EXAMPLE,
+  TURN_ENDS_EXAMPLE,
   FILE_PICKERS_EXAMPLE,
   FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
@@ -284,6 +290,7 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
+  STEPS_EXAMPLE,
   LOADING_INDICATORS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
@@ -295,6 +302,7 @@ export const EXAMPLES: readonly Example[] = [
   GLYPH_SLOTS_EXAMPLE,
   ICONS_EXAMPLE,
   CORNER_COUNTS_EXAMPLE,
+  COUNT_FIGURES_EXAMPLE,
   RESIZE_EDGES_EXAMPLE,
   REVEALS_EXAMPLE,
   ZOOM_IMAGES_EXAMPLE,

@@ -67,8 +67,8 @@ import { type StartServices, type StartWhere, startAgent } from "../agents/coder
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { AgentSessions, EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { fenceable } from "../agents/fenced-text.js";
+import type { AgentSessions, TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
@@ -141,7 +141,7 @@ const WORKING: ReadonlySet<AgentStatus> = new Set([AGENT_STATUS.STARTING, AGENT_
 export type SessionsForAccount = (
   userId: string,
 ) => Effect.Effect<
-  AgentSessions<EveTypedTurn>,
+  AgentSessions<TypedTurn>,
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 >;
@@ -443,15 +443,15 @@ const steerClaimed = Effect.fnUntraced(function* (
   const found = yield* readVisibleAgent(automation.userId, agentId);
   if (Option.isNone(found) || found.value.archivedAt !== null)
     return Option.none<AutomationRunOutcome>();
-  const eve = yield* Effect.result(sessionsFor(automation.userId));
-  if (Result.isFailure(eve)) {
+  const agentSessions = yield* Effect.result(sessionsFor(automation.userId));
+  if (Result.isFailure(agentSessions)) {
     return Option.some<AutomationRunOutcome>(
-      yield* failedRun(run, reasonOfSteerRefusal(eve.failure)),
+      yield* failedRun(run, reasonOfSteerRefusal(agentSessions.failure)),
     );
   }
   const sent = yield* Effect.result(
     steerAgent(
-      eve.success,
+      agentSessions.success,
       storeWriter({ tools: CODER_TOOL_SET }),
       automation.userId,
       found.value,
@@ -459,7 +459,11 @@ const steerClaimed = Effect.fnUntraced(function* (
         text: automationStart(automation, run, found.value.githubAccess).prompt,
         serverWords: automation.action.prompt,
         clientKey: run.id,
-        sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+        sender: {
+          kind: MESSAGE_SENDER.AUTOMATION,
+          automationId: automation.id,
+          name: automation.name,
+        },
         metadata: automationLineMetadata(run.firing),
       },
     ),
@@ -658,7 +662,7 @@ function runStartWords(automation: Automation, firedAt: Date): string {
  * run alone, named for the automation and when the run fired; or, where the
  * agent it starts takes every later run (`standing`), the automation's
  * standing task, named for the automation alone. Either is assigned to the
- * automation's owner, in its repository, and in progress, its plan blank,
+ * automation's owner, in its repository, and in progress, its description blank,
  * since the run's prompt reaches its agent as its first message. Note that the
  * task is made under an id drawn from the run's, because a run acted on
  * again must find the task it made rather than make a second, that the run
@@ -903,7 +907,7 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
   }
   const started = yield* readAgentByKey(stranded.userId, stranded.id);
   // Note that an agent made under the key whose session never ran a turn was never opened, the
-  // function gone between making it and eve taking it, so it is let go rather than taken as started.
+  // function gone between making it and its session taking it, so it is let go rather than taken as started.
   const opened = Option.isSome(started)
     ? (yield* latestTurnsOfReached([started.value.conversationId])).size > 0
     : false;

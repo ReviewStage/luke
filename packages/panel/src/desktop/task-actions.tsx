@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
   type Task,
@@ -76,7 +76,8 @@ import {
   PANEL_COMMAND,
   type PanelCommand,
 } from "../command-items.js";
-import { usePlanDrafted } from "../composer-drafts.js";
+import { useDescriptionDrafted } from "../composer-drafts.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChordLinks } from "../copy-link-item.js";
 import { leftMark } from "../draft-mark.js";
@@ -84,9 +85,10 @@ import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { renameWrite } from "../rename-write.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
+import { lastEditOf } from "../tasks/description-body.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { useTaskSendFailed } from "../tasks/failed-lines.js";
-import { lastEditOf } from "../tasks/plan-body.js";
+import { needsYouWords } from "../tasks/inbox-model.js";
 import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import {
@@ -113,10 +115,11 @@ import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import { TASK_RENAME_SHAPE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount, selectExperiment } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
+import { useTasksWaiting } from "./places-waiting.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import { chipSubmenu, keyedStatusSubmenu, STANDING_WORDS } from "./standing-submenus.js";
@@ -126,7 +129,7 @@ import {
   TaskRowStatus,
   taskCardOf,
 } from "./task-card.js";
-import { taskSubject, useStandingDoor } from "./task-row-parts.js";
+import { taskSubject, useStandingDoor, WaitingCount } from "./task-row-parts.js";
 import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
 import { useRefusalHeard } from "./use-refusal-heard.js";
 
@@ -149,7 +152,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * draws it the same way and Permanently delete can be drawn red.
  * Each item is worded, marked, and keyed as the window's one list has it
  * (`command-items.tsx`), as ⌘K offers the same command; the open task's menu
- * prints the chords of Copy plan, Version history, and Permanently delete, which act on the open task, and another task's prints
+ * prints the chords of Copy description, Version history, and Permanently delete, which act on the open task, and another task's prints
  * none, as a tab's menu prints its chords for the chosen tab alone. U and P,
  * which act on the focused sidebar row and otherwise on the open task, print
  * on the open task's menu and on a sidebar row's, and S, which opens Status
@@ -158,12 +161,12 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * the chord copies the same link (`copy-link-item.tsx`).
  *
  * Copy link copies the plan's address on vespin.dev, as the ⋯
- * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
+ * beside the description's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
- * the Plan tab's ⋯ puts the caret in the plan's own title. Version history
- * opens the plan's versions over the whole window, opening the task first
+ * the Plan tab's ⋯ puts the caret in the description's own title. Version history
+ * opens the description's versions over the whole window, opening the task first
  * where it is not the open one, the one item that moves it. New sub-task
  * opens New task's card for a child of the task, in its workspace and
  * repository (`new-task-composer.tsx`). Task relation hangs the add menu
@@ -243,8 +246,8 @@ export interface TaskRowTab
   > {
   /** The tab's tasks as they stand when read. */
   readonly tasksNow: () => readonly TaskSummary[];
-  /** Copies the open plan, as Copy plan does. */
-  readonly onCopyPlan: () => void;
+  /** Copies the open description, as Copy description does. */
+  readonly onCopyDescription: () => void;
   readonly onOpenHistory: TasksControl["history"]["onOpen"];
   /** Opens a repository's page on GitHub. */
   readonly onOpenGitHub: TasksControl["repositories"]["openGitHub"];
@@ -278,7 +281,7 @@ export function taskRowTab(
     moveTask: tasks.moveTask,
     onWriteSections: tasks.onWriteSections,
     tasksNow,
-    onCopyPlan: tasks.copy.onPress,
+    onCopyDescription: tasks.copy.onPress,
     onOpenHistory: tasks.history.onOpen,
     onOpenGitHub: tasks.repositories.openGitHub,
     pictures: tasks.repositories.pictures,
@@ -299,7 +302,7 @@ export function useTaskRowTab(tasks: TasksControl): TaskRowTab {
 /**
  * The task the window has open, as a row of it reads it: its document, and
  * its agents, which name who last edited it. A page hands it only to the
- * open task's row, so a save of the open plan draws that row alone.
+ * open task's row, so a save of the open description draws that row alone.
  */
 export interface OpenedTask {
   readonly task: Task;
@@ -603,7 +606,7 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * menu's panel, and Remove parent where the task has one, New sub-task being the
  * add menu's and ⌘K's; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
- * any row. The Plan tab's document menu leads with Copy plan, since Copy
+ * any row. The Plan tab's document menu leads with Copy description, since Copy
  * formats the document drawn, and holds the same but for Status, Priority,
  * and Assignee, which the plan's chips stand for. Change repository says
  * Choose a repository on a task with none, on either.
@@ -632,15 +635,17 @@ function taskActionGroups(
     relationId: string;
     /** The open task, where it is this one. */
     opened: OpenedTask | undefined;
-    /** Whether the account has Plans on, without which there is no plan to copy and no version history. */
-    plans: boolean;
+    /** Whether the account has Descriptions on, without which there is no description to copy and no version history. */
+    descriptions: boolean;
   },
   surface: TaskMenuSurface,
 ): MenuEntry[][] {
-  const { opened, plans } = doors;
+  const { opened, descriptions } = doors;
   const drawn = opened !== undefined;
   const copy: MenuAction[] =
-    drawn && plans ? [commandAction(PANEL_COMMAND.COPY_PLAN, tasks.onCopyPlan, drawn)] : [];
+    drawn && descriptions
+      ? [commandAction(PANEL_COMMAND.COPY_DESCRIPTION, tasks.onCopyDescription, drawn)]
+      : [];
   const link: MenuAction[] =
     task === undefined
       ? []
@@ -659,7 +664,7 @@ function taskActionGroups(
     task?.parentTaskId === undefined
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
-  const versions: MenuAction[] = plans
+  const versions: MenuAction[] = descriptions
     ? [versionHistoryItem(() => tasks.onOpenHistory(taskId), drawn)]
     : [];
   const change = commandAction(
@@ -718,19 +723,19 @@ function TaskMenuFooter({
 }): React.JSX.Element {
   const now = useMinute();
   const reader = useEditReader({ readerId: tasks.me });
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
-  // Note that the open task's last editor is its plan's, so while Plans is off it is said only by when the task last changed, as another task is.
-  const plans =
+  // Note that the open task's last editor is its description's, so while Descriptions is off it is said only by when the task last changed, as another task is.
+  const descriptions =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
-  const edit = opened === undefined || !plans ? undefined : lastEditOf(opened.task);
+  const edit = opened === undefined || !descriptions ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
     sections: opened?.task.sectionEdits ?? [],
     agents: opened === undefined ? undefined : { control: opened.agents, onOpen: undefined },
   };
-  const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
+  const named = edit !== undefined && edit.actor !== DESCRIPTION_ACTOR.EARLIER;
   return (
     <>
       <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]">
@@ -835,9 +840,13 @@ export function useTaskMenuItems(
     about: { taskId },
   });
   const deleting = useMutation(tasks.deleteTask);
+  const deletionAct = useConfirmAct(deleting, {
+    send: () => deleting.mutateAsync(taskId).then(heard),
+    answered: sameAnswer,
+  });
   const deletion = useConfirmDialog(
     { subject: task !== undefined, surfaceOpen: tasks.shown },
-    () => deleting.mutateAsync(taskId).then(heard),
+    deletionAct,
     confirmFailure(FAILURE_SURFACE.TASK_DELETE, { taskId }),
   );
   // Mark done as the chord runs it: on a task not already done, and nothing otherwise.
@@ -857,7 +866,7 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
-  const plans =
+  const descriptions =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
@@ -881,7 +890,7 @@ export function useTaskMenuItems(
           standing,
           relationId,
           opened,
-          plans,
+          descriptions,
           read: {
             unread: doors.unread,
             onMark: (unread) => {
@@ -944,7 +953,7 @@ export function TaskActions({
 }: {
   tasks: TasksControl;
   task: TaskSummary;
-  /** Puts the caret in the plan's own title, or opens a phone's head as the task's name field. */
+  /** Puts the caret in the description's own title, or opens a phone's head as the task's name field. */
   onRename: () => void;
   /** Where the items are handed up, for the menus that draw them. */
   hand: React.RefObject<TaskMenuItems | undefined>;
@@ -1019,8 +1028,13 @@ function SidebarTaskCard({
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
- * the first named in the row's card, before that a stop sign while a task
- * it waits on is still open (`BlockedMark`), which the press says after
+ * the first named in the row's card, before that how many of its threads
+ * wait on the reader, the Tasks page's count (`useTasksWaiting`) in the
+ * attention ink, left out at none, and part of the row's press rather than
+ * one of its own; the press says it after the status, as "2 need you",
+ * since its end leaves the press's words while the row holds the keyboard
+ * (`list-row.css`), and the figure is decoration to a reader; before that a stop
+ * sign while a task it waits on is still open (`BlockedMark`), which the press says after
  * the status, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
  * their own words, or the failed mark in its place while a message sent to
@@ -1106,8 +1120,9 @@ export function SidebarTask({
   const coarse = useCoarsePointer();
   const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const chosen = useContext(ChosenTasksContext)(task.id);
-  const drafted = usePlanDrafted(task.id) && !open;
+  const drafted = useDescriptionDrafted(task.id) && !open;
   const sendFailed = useTaskSendFailed(task.id) && !open;
+  const waiting = useTasksWaiting(tasks).get(task.id) ?? 0;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, whose keys it hears while focused.
@@ -1162,6 +1177,7 @@ export function SidebarTask({
                   <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
                 )}
                 {task.blocked === true ? <VisuallyHidden>, {BLOCKED_WORDS}</VisuallyHidden> : null}
+                {waiting === 0 ? null : <VisuallyHidden>, {needsYouWords(waiting)}</VisuallyHidden>}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : (
                   <ReplayMask>
@@ -1190,6 +1206,9 @@ export function SidebarTask({
                     label={`${childCount.finished} of ${childCount.total} sub-tasks finished`}
                   />
                 )}
+                <span aria-hidden="true" className="contents">
+                  <WaitingCount count={waiting} />
+                </span>
                 <TaskRowStatus task={task} />
                 <Time at={at} now={now} hint={false} />
               </span>

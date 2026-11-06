@@ -78,7 +78,7 @@ function draw(first: AppStateSnapshot): (next: AppStateSnapshot) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const bundles = sideBundles({
-    planEditor: () => {
+    descriptionEditor: () => {
       editorImports += 1;
       return new Promise(() => undefined);
     },

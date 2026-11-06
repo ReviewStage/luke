@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
-import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { hostsLiveStatement } from "@repo/database/models/host-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
@@ -18,11 +16,11 @@ import {
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import { workspacesLiveStatements } from "@repo/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
+import { LIVE_PARAM } from "@repo/features/live-read";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
-import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
@@ -30,10 +28,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
-import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
-import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
-import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
-import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
+import { BOUND_READS } from "../sync/live-queries.js";
 
 /**
  * Every statement the live endpoints answer calls only functions Postgres
@@ -43,6 +38,23 @@ import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
  */
 
 const USER_ID = "user-live-statements";
+
+/** Every bound read's statements (`../live-read-binding.ts`), by its read and part, each param the reader or a fresh id. */
+function boundStatements() {
+  return Object.fromEntries(
+    BOUND_READS.flatMap((query) => {
+      const params = Object.fromEntries(
+        Object.entries(query.declaration.params).map(([key, param]) => [
+          key,
+          param === LIVE_PARAM.USER ? USER_ID : randomUUID(),
+        ]),
+      );
+      return Object.entries(Option.getOrThrow(query.statements(params))).map(
+        ([part, statement]) => [`${query.name}.${part}`, statement],
+      );
+    }),
+  );
+}
 
 /** Every live statement the endpoints answer, by the part it answers. */
 function liveStatements() {
@@ -62,23 +74,6 @@ function liveStatements() {
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
-    "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
-    "agent.pages": Option.getOrThrow(agentPagesLiveStatements(USER_ID, randomUUID())).pages,
-    "agent.origin": Option.getOrThrow(agentOriginLiveStatements(USER_ID, randomUUID())).origin,
-    "task.browserTabs": Option.getOrThrow(
-      browserTabsLiveStatement(USER_ID, { taskId: randomUUID() }),
-    ),
-    "agent.browserTabs": Option.getOrThrow(
-      browserTabsLiveStatement(USER_ID, { agentId: randomUUID() }),
-    ),
-    "task.history": Option.getOrThrow(taskHistoryLiveStatements(USER_ID, randomUUID())).revisions,
-    ...Object.fromEntries(
-      Object.entries(
-        Option.getOrThrow(
-          taskCommentsLiveStatements(USER_ID, { taskId: randomUUID(), pageId: randomUUID() }),
-        ),
-      ).map(([part, query]) => [`task.comments.${part}`, query]),
-    ),
     "agent.pullRequestChapters": Option.getOrThrow(
       pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
     ),
@@ -88,11 +83,6 @@ function liveStatements() {
     "account.preferences": Option.getOrThrow(accountPreferencesLiveStatement(USER_ID)),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
-    ),
-    ...Object.fromEntries(
-      Object.entries(Option.getOrThrow(taskRecordLiveStatements(USER_ID, randomUUID()))).map(
-        ([part, query]) => [`task.${part}`, query],
-      ),
     ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
@@ -128,7 +118,7 @@ function liveStatements() {
     "workspace-integrations.slackChannelRepositories": Option.getOrThrow(
       slackChannelRepositoriesLiveStatement(USER_ID, randomUUID()),
     ),
-    "hosts.hosts": Option.getOrThrow(hostsLiveStatement(USER_ID)),
+    ...boundStatements(),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(
         ([part, query]) => [`sidebar.${part}`, query],

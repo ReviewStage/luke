@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,7 +85,7 @@ const AGENT: AgentSummary = {
 };
 
 /** The agent's tab in the task's column. */
-const AGENT_TAB: MainTab = { agent: AGENT.id };
+const AGENT_TAB: MainTab = agentTab(AGENT.id);
 
 const roots: Root[] = [];
 
@@ -126,7 +127,7 @@ function openTab(
     workspaces,
     workspace: workspaces.find((workspace) => workspace.id === task.workspaceId),
     onMoveTask,
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
 }
 
@@ -372,9 +373,9 @@ test("a plan whose repository its workspace cannot reach and another of the acco
 
 test("a stranded plan's banner stands over every tab of the plan: an agent's beside the plan, and over the side panel filling the window", () => {
   const tasks = openTab(TASK, [STUDIO, ACME]);
-  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.PLAN }));
+  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION }));
   const full = openTask(
-    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
+    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.DESCRIPTION }),
   );
 
   assert.deepEqual(

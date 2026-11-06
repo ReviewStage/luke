@@ -74,6 +74,8 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** What the routes counted, across the file; a case reads its own account's. */
@@ -194,7 +196,7 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       ...(deviceId === null ? {} : { machine: AGENT_MACHINE.DEVICE, deviceId }),
@@ -204,7 +206,11 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const target = { userId, conversationId };
     const turnId = randomUUID();
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.enqueueTurn(target, {
+      turnId,
+      origin: TURN_ORIGIN.TYPED,
+      runtimeTurnId: "turn_0",
+    });
     yield* writer.consume(target, {
       conversationId: sessionKey(conversationId),
       turnId,
@@ -346,7 +352,7 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        planSnapshot: "# Invitations\n",
+        descriptionSnapshot: "# Invitations\n",
         prompt: null,
         repository: null,
         machine: AGENT_MACHINE.DEVICE,

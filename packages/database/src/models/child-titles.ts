@@ -6,7 +6,7 @@
  * written on that row (`coder-host/title.ts`), filled only where none
  * stands, and read back under the parent: a child of another account's, of
  * another parent's, or cleared reads as untitled. A leaf over the store
- * alone, so the routes that read a task's work reach none of eve's code.
+ * alone, so the routes that read a task's work load nothing past the store.
  */
 
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";

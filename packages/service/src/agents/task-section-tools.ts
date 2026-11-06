@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { deleteTaskSectionIn, writeTaskSections } from "@repo/database/models/task-section-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_ICON_KIND,
@@ -16,7 +17,6 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,
@@ -42,8 +42,8 @@ import { calledId } from "./called-id.js";
  * workspace is none of the caller's, even where the member is also in it. Every write is the one the sidebar's own drag or
  * menu makes (`PUT /api/task-sections`, `task-section-store.ts`), under the
  * same lock and bound, so the Mac reads the agent's change as it reads its
- * own. A section is made under an id drawn from eve's key for the call, so
- * a call eve runs again makes the one section; and deleting a section puts its tasks back
+ * own. A section is made under an id drawn from the call's key, so
+ * a call run again makes the one section; and deleting a section puts its tasks back
  * under Tasks and deletes none of them. Every answer is data the model
  * reads, never a credential.
  */

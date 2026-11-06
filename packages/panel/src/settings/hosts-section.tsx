@@ -42,6 +42,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
@@ -56,7 +57,7 @@ import {
 } from "../machine-name.js";
 import { DeviceGlyph } from "../tasks/runs-on.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -427,10 +428,12 @@ function AddHostSection({
 
 /** The Hosts page: the member's machines as the host holds them, or why they cannot be drawn, and Add a host, first while there is none. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
-  const { mutateAsync: sendHostsRemove } = useMutation(actMutation(ACT_KIND.HOSTS_REMOVE));
+  const { mutateAsync: sendHostsRemove, ...hostRemoving } = useMutation(
+    actMutation(ACT_KIND.HOSTS_REMOVE),
+  );
   // Note that the clock only redraws the rows as a beat ages, since each standing is read off the book's own monotonic clock.
   useSecond();
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const read = useQuery(hostsQuery(signedIn ? accountId : undefined));
   const retry = useMutation(hostsRetryMutation());
   const hosts = read.data?.hosts;
@@ -453,14 +456,15 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
 
   // Note that Remove asks over the section rather than its row, because the host draws a removal gone on the list the moment it is asked, so the row is gone before a refusal comes back to be said.
   const [asked, setAsked] = useState<RemoveAsked | undefined>(undefined);
+  const removingAct = useConfirmAct(hostRemoving, {
+    send: () => (asked === undefined ? Promise.resolve() : sendHostsRemove({ id: asked.host.id })),
+    answered: (answer) => ("failure" in answer ? REFUSED : ACCEPTED),
+    failed: () => REFUSED,
+    refusedFirst: () => (asked === undefined ? REFUSED : undefined),
+  });
   const removing = useConfirmDialog(
     { subject: asked !== undefined && asked.accountId === accountId, surfaceOpen: true },
-    () =>
-      asked === undefined
-        ? Promise.resolve(REFUSED)
-        : sendHostsRemove({ id: asked.host.id })
-            .catch(() => undefined)
-            .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
+    removingAct,
     confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
   );
   const askRemove = (host: HostLine, label: string) => {
@@ -471,7 +475,9 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
 
   // Note that This Mac reads as turned on while its enroll is out, and as its host stands once it answers.
   const turningOn = useMutation(actMutation(ACT_KIND.HOSTS_THIS_MAC_SET));
-  const { mutateAsync: turnThisMacOff } = useMutation(actMutation(ACT_KIND.HOSTS_THIS_MAC_SET));
+  const { mutateAsync: turnThisMacOff, ...offWriting } = useMutation(
+    actMutation(ACT_KIND.HOSTS_THIS_MAC_SET),
+  );
   const thisMacOn = turningOn.isPending || thisMac?.enrolled === true;
   const turnThisMacOn = () => {
     turningOn
@@ -491,15 +497,18 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   // Note that turning This Mac off asks first, since it takes the host off this Mac, and its agents' folders unless the member keeps them.
   const [deleteFolders, setDeleteFolders] = useState(true);
   const agentFolders = thisMac?.agentFolders ?? 0;
-  const turningOff = useConfirmDialog(
-    { subject: thisMac?.enrolled === true, surfaceOpen: true },
-    () =>
+  const turningOffAct = useConfirmAct(offWriting, {
+    send: () =>
       turnThisMacOff({
         on: false,
         deleteFolders: deleteFolders || agentFolders === 0,
-      })
-        .catch(() => undefined)
-        .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
+      }),
+    answered: (answer) => ("failure" in answer ? REFUSED : ACCEPTED),
+    failed: () => REFUSED,
+  });
+  const turningOff = useConfirmDialog(
+    { subject: thisMac?.enrolled === true, surfaceOpen: true },
+    turningOffAct,
     confirmFailure(FAILURE_SURFACE.THIS_MAC_SET),
   );
   const switchThisMac = (next: boolean) => {

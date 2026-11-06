@@ -24,8 +24,11 @@ import {
   PROVIDER_KEY_PROVIDER,
 } from "@repo/features/provider-key-wire";
 import type { WireBoundaryInput } from "@repo/wire";
-import { type Context, Effect, Layer, Option } from "effect";
+import { eq } from "drizzle-orm";
+import { type Context, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
+import { USER_ROLE } from "../admin/admin-access.js";
+import { HostedEnvironment } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
@@ -167,7 +170,7 @@ const wire = (models: readonly CatalogModel[]) =>
 
 it.layer(getTestDB())("the models route", (it) => {
   it.effect(
-    "the signed-in desktop reads the offered models, each with its efforts, every one marked unconnected while the account connects nothing, and a provider whose API key it saved unmarked",
+    "the signed-in desktop reads the offered models, each with its efforts, every one marked unconnected while the account connects nothing, and a provider whose API key it saved, or for an admin of ours a Preview's stand-in key, unmarked",
     () =>
       Effect.gen(function* () {
         assert.deepEqual(yield* answer(modelCatalogOf(CATALOG), request(MODELS)), {
@@ -182,6 +185,34 @@ it.layer(getTestDB())("the models route", (it) => {
             body: { models: [...wire([OPUS]), { ...wire([SOL])[0], credentialMissing: true }] },
           },
         );
+        // A Preview holding an OpenAI stand-in key pays for no GPT agent of a member who saved no OpenAI key.
+        const onPreview = Layer.merge(
+          modelCatalogOf(CATALOG),
+          Layer.succeed(HostedEnvironment, {
+            posthogPersonalApiKey: undefined,
+            posthogProjectId: undefined,
+            posthogApiHost: undefined,
+            posthogProjectApiKey: undefined,
+            posthogIngestHost: undefined,
+            cronSecret: undefined,
+            githubWebhookSecret: undefined,
+            providerKeyEncryptionKeys: undefined,
+            titleAnthropicApiKey: undefined,
+            previewApiKeys: { [MODEL_PROVIDER.OPENAI]: Redacted.make("sk-proj-preview-stand-in") },
+          }),
+        );
+        assert.deepEqual(yield* answer(onPreview, request(MODELS, { userId: "user-keyed" })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { models: [...wire([OPUS]), { ...wire([SOL])[0], credentialMissing: true }] },
+        });
+        // Only an admin of ours spends it, since every member who can sign in to a Preview would otherwise run on it.
+        yield* Effect.flatMap(Database, (db) =>
+          db.update(user).set({ role: USER_ROLE.ADMIN }).where(eq(user.id, "user-keyed")),
+        );
+        assert.deepEqual(yield* answer(onPreview, request(MODELS, { userId: "user-keyed" })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { models: wire(CATALOG) },
+        });
       }),
   );
 

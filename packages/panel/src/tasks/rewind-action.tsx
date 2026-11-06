@@ -6,8 +6,9 @@ import {
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { andList, countWords, type Noun } from "@repo/features/words";
 import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@repo/wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
 import { MessageAction } from "../ai-elements/message.js";
 import { confirmFailure } from "../failure-report.js";
@@ -141,7 +142,7 @@ function takesWords(takes: Takes): string | undefined {
  * Where a transcript's rewinds land: the lines a person wrote that opened a
  * turn, the first included, each one Edit may write again, and, for each
  * reply, the next line that opened a turn, whoever sent it, which its Revert
- * to here drops from. Note that a plan the agent was handed is drawn as its
+ * to here drops from. Note that a description the agent was handed is drawn as its
  * card, which offers no Edit, so only a first line drawn as a bubble is
  * written again. Every message but the last is followed by one, which a
  * rewind to just before it drops, and so is the last while lines sent and not
@@ -239,10 +240,9 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
   // Note that the revert answers at once: the box takes it in turn behind any send, and says there if it did not go.
   const confirm = useConfirmDialog(
     { subject: lineId !== undefined, surfaceOpen: true },
-    () => {
+    neverBusyAct(() => {
       if (lineId !== undefined) doors?.onRevert(lineId);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.AGENT_REWIND),
   );
   if (doors === undefined || lineId === undefined) return null;

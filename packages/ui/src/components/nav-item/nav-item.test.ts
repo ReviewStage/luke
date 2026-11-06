@@ -74,6 +74,23 @@ test("a count of none is left out", () => {
   expect(button(container).textContent).toBe("Inbox");
 });
 
+test("a count past 99 is drawn 99+ and still read whole", () => {
+  const drawn = (value: number) => {
+    const container = mount(
+      createElement(NavItem, { count: { value, noun: "waiting on you" }, children: "Inbox" }),
+    );
+    return {
+      read: button(container).textContent,
+      seen: container.querySelector("[aria-hidden='true']")?.textContent ?? null,
+    };
+  };
+
+  expect([drawn(99), drawn(128)]).toEqual([
+    { read: "Inbox99 waiting on you", seen: null },
+    { read: "Inbox99+128 waiting on you", seen: "99+" },
+  ]);
+});
+
 test("the place shown is announced as the page, a search's find as the location", () => {
   const container = mount(
     createElement(

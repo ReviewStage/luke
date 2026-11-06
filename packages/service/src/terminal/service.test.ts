@@ -56,7 +56,6 @@ const ADA_AGENT_READ: RelayAgent = {
   sessionId: undefined,
   repositoryCredential: Effect.die("no credential is minted before a sandbox stands"),
   memberToken: false,
-  turnUnderWay: Effect.succeed(false),
 };
 
 /** The relay's world: Ada's agent, which Grace, of another workspace, does not reach; every reach kept, and nothing past the reach standing. */
@@ -73,7 +72,6 @@ function agents() {
     attach: unused,
     open: unused,
     setCredential: unused,
-    withdrawCredential: unused,
   };
   const dependencies: RelayDependencies = {
     reach: (userId, agentId) =>
@@ -88,6 +86,7 @@ function agents() {
     hold: unused,
     keepAlive: unused,
     claimRenewal: unused,
+    renewedAt: unused,
     releaseRenewal: unused,
   };
   return { reached, dependencies };

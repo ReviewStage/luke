@@ -13,7 +13,7 @@
  * a throw no boundary stood above.
  */
 
-import { ErrorBoundary } from "@repo/ui/error-boundary";
+import { ErrorBoundary, RELOAD_ROOM } from "@repo/ui/error-boundary";
 import { type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BLANK_WINDOW, type DesktopSentryReports } from "./desktop-sentry";
@@ -68,7 +68,7 @@ export function createReportingRoot(
   return (surface) => {
     root.render(
       <>
-        <ErrorBoundary failure={WINDOW_FAILED} onReload={reloadWindow}>
+        <ErrorBoundary failure={WINDOW_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadWindow}>
           {surface}
         </ErrorBoundary>
         <LoadAfterFirstCommit load={sentry.load} />

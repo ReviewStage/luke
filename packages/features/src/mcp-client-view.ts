@@ -1,5 +1,7 @@
 import { Schema as EffectSchema } from "effect";
-import { mcpClientIdSchema, mcpClientsAnswerSchema } from "./mcp-client-wire.js";
+import { mcpClientsContract } from "./contract/mcp-clients.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
+import { mcpClientIdSchema } from "./mcp-client-wire.js";
 
 /**
  * mcp-client-view.ts -- the outside MCP clients the account allowed, as the window asks the host for them and hears back.
@@ -10,19 +12,14 @@ import { mcpClientIdSchema, mcpClientsAnswerSchema } from "./mcp-client-wire.js"
  * with its Revoke.
  */
 
-/** Why a read or a revoke has no answer: the service never gave one the window can draw. */
-export const MCP_CLIENTS_CALL_FAILURE = {
-  UNANSWERED: "unanswered",
-} as const;
+/** Why a read or a revoke has no answer: the service never gave one the window can draw, since neither declares a refusal of its own. */
+export const MCP_CLIENTS_CALL_FAILURE = failureSetOf(mcpClientsContract);
 
 export type McpClientsCallFailure =
   (typeof MCP_CLIENTS_CALL_FAILURE)[keyof typeof MCP_CLIENTS_CALL_FAILURE];
 
 /** The clients as the window hears them read or one revoked: the clients as they stand, or why there are none. */
-export const mcpClientsViewSchema = EffectSchema.Union([
-  mcpClientsAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literals(Object.values(MCP_CLIENTS_CALL_FAILURE)) }),
-]);
+export const mcpClientsViewSchema = answerView(mcpClientsContract.list);
 
 export type McpClientsView = typeof mcpClientsViewSchema.Type;
 

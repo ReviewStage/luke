@@ -29,8 +29,10 @@ import {
   integrationConnectOf,
   integrationConnectOver,
 } from "../../testing/integration-connect.js";
-import { EVE_HOST_REFUSAL } from "../eve-host/bounds.js";
-import type { ConversationAdmission } from "../eve-host/conversation.js";
+import {
+  ADMISSION_REFUSAL,
+  type ConversationAdmission,
+} from "../sessions/admitted-conversation.js";
 import { CONNECTION_POLICY } from "./role.js";
 import { type ServerStanding, turnServers } from "./servers.js";
 
@@ -57,7 +59,7 @@ const codingSession = Effect.gen(function* () {
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: "acme/relay",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -81,7 +83,7 @@ const codingSession = Effect.gen(function* () {
 
 /** A call no conversation admitted, as one over another account's conversation is. */
 const REFUSED_ADMISSION = Effect.succeed<ConversationAdmission>(
-  Result.fail(EVE_HOST_REFUSAL.NOT_OWNER),
+  Result.fail(ADMISSION_REFUSAL.NOT_OWNER),
 );
 
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;

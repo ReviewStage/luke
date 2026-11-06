@@ -109,14 +109,16 @@ import {
   useVirtualRuns,
   VIRTUAL_ROW_KEY_ATTRIBUTE,
   VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowMeasurements,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
   type VirtualRuns,
 } from "@repo/ui/virtual-rows";
 import { useMutation } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { SquareKanbanIcon } from "lucide-react";
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -396,7 +398,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
   workspaceName: string;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
-  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  /** How many of its threads wait on the reader, questions and updates alike, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   /** How many of its sub-tasks are finished, of all of them, `subTasksTotal`; none where it has none. */
   subTasksFinished: number;
@@ -711,6 +713,7 @@ function TaskBoardColumnView({
   chosenOf,
   finding,
   holdRun,
+  measured,
   onSelect,
   onStanding,
   onShowOlder,
@@ -729,7 +732,7 @@ function TaskBoardColumnView({
   panelId: string;
   properties: readonly TaskProperty[];
   people: ColumnPeople;
-  /** How many of a task's questions wait on the reader, by its id (`useTasksWaiting`). */
+  /** How many of a task's threads wait on the reader, by its id (`useTasksWaiting`). */
   waitingOn: ReadonlyMap<string, number>;
   /** How many of a task's sub-tasks are finished, of all of them, by its id; none for a task with none. */
   subTasksOf: ReadonlyMap<string, ChildTaskCount>;
@@ -739,6 +742,8 @@ function TaskBoardColumnView({
   finding: boolean;
   /** Holds the column's run of cards while it stands, so a card out of view can be brought in (`useVirtualRuns`). */
   holdRun: VirtualRuns["hold"];
+  /** What each column's run measured, by the column's value, held across the page's visits. */
+  measured: Map<string, VirtualRowMeasurements> | undefined;
   /** Opens a task by its id. */
   onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
@@ -876,6 +881,8 @@ function TaskBoardColumnView({
                   className="tasks-board-cards data-[dragging=true]:cursor-grabbing"
                   onPointerDown={narrow ? undefined : drag}
                   handle={run}
+                  measurements={measured?.get(columnValue(column.head))}
+                  onMeasurements={(rows) => measured?.set(columnValue(column.head), rows)}
                 >
                   {(index, place) => {
                     const task = cards[index]?.value;
@@ -933,7 +940,11 @@ export function TasksBoard({
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
   const crossing = useRovingColumns<HTMLDivElement>();
-  const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
+  // The column a narrow room shows, held across the page's visits where the page holds it.
+  const ownColumn = useCreateStore<string | undefined>(undefined);
+  const columnStore = frame.column ?? ownColumn;
+  const chosen = useSelector(columnStore) ?? FIRST_SHOWN;
+  const setChosen = (next: string) => columnStore.setState(() => next);
   const listed = tasks.listed.tasks;
   // Note that a card counts every sub-task listed, as the List's row does, whatever the filter leaves on the board.
   const subTasksOf = useMemo(() => childTaskCounts(listed), [listed]);
@@ -969,8 +980,8 @@ export function TasksBoard({
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
   const chosenStands = values.includes(chosen);
   useEffect(() => {
-    if (!chosenStands) setChosen(FIRST_SHOWN);
-  }, [chosenStands]);
+    if (!chosenStands) columnStore.setState(() => FIRST_SHOWN);
+  }, [chosenStands, columnStore]);
   const shown = chosenStands ? chosen : values.includes(FIRST_SHOWN) ? FIRST_SHOWN : values[0];
   const panelId = `${ids}panel`;
   // Note that the motion is handed what lays the cards out, so a draw that moved none measures none.
@@ -989,7 +1000,7 @@ export function TasksBoard({
   // Note that the runs draw only the cards near the view, and every card while a find bar stands open over the page.
   const finding = useFindOpen();
   // Note that only cards a drawn column lists stay chosen, so a task the filter or another tab's column took away is never acted on.
-  const selection = useTasksSelection(tasks, new Set(order.flat()));
+  const selection = useTasksSelection(tasks, new Set(order.flat()), frame.chosen);
   const tabs =
     narrow && columns.length > 0 ? (
       <div className="tasks-board-tabs flex min-w-0 grow basis-full flex-col">
@@ -1027,7 +1038,6 @@ export function TasksBoard({
       width={PAGE_WIDTH.FULL}
       label={title}
       toolbar={frame.toolbar}
-      scrollRef={frame.scroll}
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
@@ -1090,6 +1100,7 @@ export function TasksBoard({
                 chosenOf={selection.chosenOf}
                 finding={finding}
                 holdRun={runs.hold}
+                measured={frame.measured}
                 onSelect={tasks.onSelect}
                 onStanding={setStanding}
                 onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}

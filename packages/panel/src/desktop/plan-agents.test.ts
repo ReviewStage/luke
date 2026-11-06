@@ -19,7 +19,7 @@ import { PlanAgents } from "./plan-agents.js";
 
 /**
  * plan-agents.test.ts -- the plan's agents list those waiting on the
- * developer first, each naming the thread it waits in, then those at work,
+ * developer first, each counting what needs them, then those at work,
  * then the newest started, each saying where it runs itself; a row opens its agent, its pull request's chip opens
  * the pull request and not the agent, and a task with no agent and no start
  * draws no list; the group ends with New agent, even on a task with no
@@ -172,7 +172,7 @@ test("the agents at work come first, then the newest, each saying where it runs,
   assert.deepEqual(opened.agents, [OLDEST.id]);
 });
 
-test("an agent waiting on the developer comes first, naming the thread it waits in and that it needs them, and a phone's Inbox row leaves that thread to it", () => {
+test("an agent waiting on the developer comes first, counting what needs them but not naming the thread, and a phone's Inbox row leaves that thread to it", () => {
   const { host } = mount([OLDEST, WORKING, NEWEST], {
     phone: true,
     waiting: waitingOn(OLDEST.id, 1),
@@ -181,7 +181,7 @@ test("an agent waiting on the developer comes first, naming the thread it waits 
   assert.deepEqual(
     rows.map((row) => row.textContent?.replace(/#42$/u, "")),
     [
-      "Research providersNeeds youRemoved deviceWhich retry budget, 0?",
+      "Research providers1 needs youRemoved device",
       "Expired invite pageStudio",
       "Invite emailCloud",
     ],

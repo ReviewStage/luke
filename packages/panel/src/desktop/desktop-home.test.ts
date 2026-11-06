@@ -13,18 +13,26 @@ import {
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handInboxItems, handMembers, handState } from "../testing/app-state.js";
+import {
+  handHostReads,
+  handInboxItems,
+  handMembers,
+  handState,
+  holdRepositoryLists,
+} from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopHome } from "./desktop-home.js";
@@ -113,14 +121,30 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task and item it opens recorded. */
+/** Home for Dean over `tasks` in `room`, each place of Settings it opens heard by `onSettings`. */
+function home(tasks: TasksControl, room: ShellRoom, onSettings: (link: SettingsLink) => void) {
+  return onRegistry(
+    AtomRegistry.make(),
+    createElement(
+      OpenSettingsProvider,
+      { value: onSettings },
+      createElement(DesktopHome, { tasks, room, accountName: DEAN.name, staged: true }),
+    ),
+  );
+}
+
+/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task, item, and place of Settings it opens recorded. */
 function mount(
   overrides: Partial<TasksControl> = {},
   items: readonly InboxItem[] = [RETRY_429],
   room: ShellRoom = SHELL_ROOM.WIDE,
   refused = false,
 ) {
-  const opened: { tasks: string[]; items: InboxChoice[] } = { tasks: [], items: [] };
+  const opened: { tasks: string[]; items: InboxChoice[]; settings: SettingsLink[] } = {
+    tasks: [],
+    items: [],
+    settings: [],
+  };
   handInboxItems(
     refused
       ? { failed: true }
@@ -156,21 +180,18 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopHome, { tasks, room, accountName: DEAN.name, staged: true }),
-      ),
-    ),
-  );
+  act(() => root?.render(home(tasks, room, (link) => opened.settings.push(link))));
   return { page: container, opened, tasks };
 }
 
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 /** Each section Home draws, by its name, with its rows' names. */
@@ -236,10 +257,64 @@ test("while the task list is read, Home greets the reader over the composer, ask
   assert.deepEqual(sections(page), {});
 });
 
+test("a workspace that reaches no repository says so over Home's composer, telling a member whom to ask and sending one with no token known to be saved to save one", async () => {
+  holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
+    repositories: {
+      installed: false,
+      repositories: [],
+      installationUrl: "https://github.com/apps/vespin/installations/new",
+    },
+  }));
+  handMembers(() => ({
+    rows: {
+      members: [
+        { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.MEMBER },
+        {
+          userId: "user-ada",
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          role: WORKSPACE_ROLE.OWNER,
+        },
+      ],
+    },
+  }));
+  const base = tasksControl();
+  const newTask = {
+    ...base.newTask,
+    repositoriesIn: (scope: string | undefined) => ({
+      ...base.newTask.repositoriesIn(scope),
+      scope: ACME.id,
+      manages: false,
+    }),
+  };
+  const { page, opened } = mount({ newTask });
+  const notice = () => page.querySelector(".new-task-notices")?.textContent ?? "";
+
+  // Note that the owner is named by their person chip, whose disc's initial stands before the name.
+  const chip = () =>
+    page.querySelector('.new-task-notices [data-actor-ref][data-kind="person"]')?.textContent;
+  await vi.waitFor(() => assert.equal(chip(), "AAda Lovelace"));
+  assert.equal(
+    notice(),
+    "This workspace has no repositories yetAsk AAda Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
+  );
+  // Note that the workspace's Add repository stands only once a token is known to be saved, so a member whose token read is still out saves one first.
+  const add = [...page.querySelectorAll<HTMLButtonElement>(".new-task-notices button")].find(
+    (each) => each.textContent === "Add with your token",
+  );
+  await vi.waitFor(() => {
+    act(() => add?.click());
+    assert.deepEqual(opened.settings.at(-1), {
+      page: SETTINGS_VIEW.ACCOUNT,
+      section: SETTINGS_SECTION.GITHUB_TOKEN,
+    });
+  });
+});
+
 test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async () => {
   const { page } = mount();
-  await settle();
-  const first = row(page, RETRY_429.title);
+  // Note that the Inbox's row stands once the account's feed reaches its query, as the first test waits for it.
+  const first = await vi.waitFor(() => row(page, RETRY_429.title));
   act(() => first.focus());
 
   act(() => {
@@ -252,6 +327,28 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
     );
   });
   assert.ok(document.activeElement === first, "↑ goes back to the Inbox's item");
+});
+
+test("a right-click on an Inbox row opens the Inbox row's own menu, and opens no item", async () => {
+  const { page, opened } = mount();
+  const press = await vi.waitFor(() => row(page, RETRY_429.title));
+  act(() => {
+    press.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 12, clientY: 8 }),
+    );
+  });
+
+  const words = [
+    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) [role="menuitem"]'),
+  ].map((entry) => entry.textContent ?? "");
+  // Note that the fixture's item is read, so its row offers to mark it unread.
+  for (const offered of ["Copy link", "Mark as unread", "Remind me", "Resolve"]) {
+    assert.ok(
+      words.some((each) => each.startsWith(offered)),
+      `the menu offers ${offered}: ${words.join(", ")}`,
+    );
+  }
+  assert.deepEqual(opened.items, []);
 });
 
 test("nothing waiting draws no Inbox section, but an Inbox that could not be read says so, and a list that could not be read says so under Recent", async () => {
@@ -320,18 +417,6 @@ test("New task pressed while Home stands hands the composer's words the caret, o
   await settle();
   assert.ok(document.activeElement !== composerEditor(page));
   const pressed = { ...tasks, newTask: { ...tasks.newTask, homeAsks: 1 } };
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopHome, {
-          tasks: pressed,
-          room: SHELL_ROOM.NARROW,
-          accountName: DEAN.name,
-          staged: true,
-        }),
-      ),
-    ),
-  );
+  act(() => root?.render(home(pressed, SHELL_ROOM.NARROW, () => undefined)));
   assert.ok(document.activeElement === composerEditor(page), "the words take the caret");
 });

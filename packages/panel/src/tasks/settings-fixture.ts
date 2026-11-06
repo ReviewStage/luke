@@ -288,18 +288,9 @@ function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
 
 /** The tools a connected server lists, a few of each, as its server describes them. */
 const TOOLS = [
-  {
-    name: "search",
-    title: "Search",
-    description: "Find pages, issues, and messages by their words.",
-  },
-  { name: "read", title: "Read", description: "Read one item whole, by its id or address." },
-  {
-    name: "create",
-    title: "Create",
-    description: "Create an item where the account may write.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
-  },
+  { name: "search", description: "Find pages, issues, and messages by their words." },
+  { name: "read", description: "Read one item whole, by its id or address." },
+  { name: "create", description: "Create an item where the account may write." },
 ] as const;
 
 /* ----- Settings › Agents ----- */
@@ -577,7 +568,7 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
         daily: days.map((day, index) => ({
           day,
           [ACTIVITY_FEATURE.AGENTS_STARTED]: wave(index, 20, 0.6),
-          [ACTIVITY_FEATURE.PLAN_REVISIONS]: wave(index, 34, 0.5),
+          [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: wave(index, 34, 0.5),
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: wave(index, 15, 0.4),
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: wave(index, 4, 0.2),
         })),

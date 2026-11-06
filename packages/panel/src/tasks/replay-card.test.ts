@@ -234,10 +234,10 @@ function drawnSteps(container: Element): string[] {
   );
 }
 
-test("an agent continued from another opens on the plan's card, the folded Continued card under who started it, and the note as the developer's line, with no marker drawn", async () => {
+test("an agent continued from another opens on the description's card, the folded Continued card under who started it, and the note as the developer's line, with no marker drawn", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     from: { agentId: SOURCE.id, steps: 3, totalSteps: 3 },
   });
   const { container, opened } = await drawn(
@@ -247,9 +247,9 @@ test("an agent continued from another opens on the plan's card, the folded Conti
 
   const cards = [...container.querySelectorAll(".agent-origin")];
   assert.equal(cards.length, 2);
-  // The plan's card is titled by the brief's first line.
+  // The description's card is titled by the brief's first line.
   assert.match(
-    cards[0]?.querySelector("[data-origin-plan] > summary")?.textContent ?? "",
+    cards[0]?.querySelector("[data-origin-description] > summary")?.textContent ?? "",
     /Invite flow/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
@@ -283,7 +283,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
 test("opened, the card draws each step as a transcript does, a line as a sent message under its sender, the agent's words as words, and a call as a call's row opening onto its input and result, under a foot naming no way to the full transcript, which the source's chip already opens", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const { container } = await drawn(agent, firstMessageText("# Invite flow", replay(), undefined));
   press(container.querySelector("[data-replay-card] > summary"));
@@ -358,7 +358,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
     firstMessageText("Triage the failing check.", replay(), undefined),
     run,
   );
-  const prompt = container.querySelector(".agent-origin [data-origin-plan]");
+  const prompt = container.querySelector(".agent-origin [data-origin-description]");
   assert.equal(prompt?.getAttribute("aria-label"), "Prompt");
   assert.match(
     container.querySelector(".agent-origin .ui-message-line-sender")?.textContent ?? "",
@@ -367,10 +367,10 @@ test("an agent continued from an automation's run opens on the run's Prompt card
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
 });
 
-test("a first message whose markers do not add up is drawn whole as the plan's card, with no replay card", async () => {
+test("a first message whose markers do not add up is drawn whole as the description's card, with no replay card", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const text = firstMessageText("# Invite flow", replay(), undefined).replace(
     "steps=3 total-steps=3",
@@ -379,9 +379,9 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
   const { container } = await drawn(agent, text);
   assert.equal(container.querySelector("[data-replay-card]"), null);
   assert.equal(container.querySelectorAll(".agent-origin").length, 1);
-  press(container.querySelector("[data-origin-plan] > summary"));
+  press(container.querySelector("[data-origin-description] > summary"));
   assert.match(
-    container.querySelector("[data-origin-plan]")?.textContent ?? "",
+    container.querySelector("[data-origin-description]")?.textContent ?? "",
     /Use seven days\./u,
   );
 });
@@ -389,7 +389,7 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
 test("on an agent's own page, which lists no source, the card names the source as a read of it does and opens it as a link to it would", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const { container, opened, places } = await drawn(
     agent,
@@ -406,7 +406,7 @@ test("on an agent's own page, which lists no source, the card names the source a
 test("a replay holding Vespin's summary of the oldest steps opens on one folded row naming it as its, which opens onto the summary", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const { container } = await drawn(
     agent,
@@ -440,7 +440,7 @@ test("a replay holding Vespin's summary of the oldest steps opens on one folded 
 test("a replayed line is named under its sender as a transcript names one: Vespin, an automation, GitHub, and a teammate by their own marks, the reader's own by nobody, and a line from before senders were marked by its name", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const line = (summary: string, sender?: NonNullable<Replay["steps"][number]["sender"]>) => ({
     kind: REPLAY_STEP_KIND.LINE,
@@ -489,7 +489,7 @@ test("a replayed line is named under its sender as a transcript names one: Vespi
 test("the line under the card says when the reader's own agent was started, naming nobody, as the reader's own lines are", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const { container } = await drawn(
     agent,
@@ -511,7 +511,7 @@ test("the line under the card says when the reader's own agent was started, nami
 test("the line under the card names a teammate who started the agent by their face and name, then when, as a teammate's line is", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     startedBy: CHARLES,
   });
   const { container } = await drawn(
@@ -535,7 +535,7 @@ test("the line under the card names a teammate who started the agent by their fa
 test("opened, a long replay draws its newest twenty steps under a row that draws twenty more a press, until every step is drawn and the keys land on them", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const { container } = await drawn(
     agent,
@@ -572,7 +572,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
 test("Vespin's summary and the steps left out stand over the earlier-steps row, which pages only the steps the replay kept", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const { container } = await drawn(
     agent,
@@ -620,7 +620,7 @@ test("Vespin's summary and the steps left out stand over the earlier-steps row, 
 test("a replayed call whose marker names its tool is drawn as the live transcript draws it: a command by its description, a patch as a patch, and an agent it is about by its tab's chip", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const steps: Replay["steps"] = [
     toolStep({
@@ -671,7 +671,7 @@ test("a replayed line stands under who sent it, over when and Copy, and the card
   fakeAppPlatform(copyingInto(copied));
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   const steps: Replay["steps"] = [
     {

@@ -6,6 +6,7 @@ import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
   FAKE_BRIDGE,
+  FAKE_IMAGE,
   FAKE_SANDBOX,
   type FakeBridge,
   type FakeCdpPeer,
@@ -42,7 +43,10 @@ function browserOver(
   bridge: FakeBridge = FAKE_BRIDGE.READY,
 ) {
   const sandbox = fakeSandboxApi({ status: "running", sessionId: SESSION, ...scenario });
-  return { service: agentBrowserOver(sandbox.api, fakeBridgePty(peer, bridge)), ran: sandbox.ran };
+  return {
+    service: agentBrowserOver(sandbox.api, fakeBridgePty(peer, bridge), FAKE_IMAGE),
+    ran: sandbox.ran,
+  };
 }
 
 /** Why the effect failed, where it failed as unreachable. */
@@ -307,6 +311,61 @@ it.effect("a resume whose snapshot is gone is given up on at once, saying so", (
 
     assert.equal(unreachable.reason, BROWSER_UNREACHABLE.SNAPSHOT_GONE);
   }),
+);
+
+it.effect(
+  "a reopen whose image is still being prepared is given up on once the open stops waiting on it",
+  () =>
+    Effect.gen(function* () {
+      const peer = yield* fakeCdpPeer();
+      const { service } = browserOver(peer, {
+        status: "stopped",
+        named: true,
+        resumeUnavailable: 400,
+        resumeCode: "image_not_ready",
+      });
+
+      const opening = yield* Effect.forkChild(Effect.flip(service.ensure(SESSION)));
+      // Note that the open asks again every 10 s for 3 min, and the clock moves no further, so a
+      // resume tried again after it would never answer.
+      yield* TestClock.adjust(Duration.minutes(3));
+      const unreachable = yield* Fiber.join(opening);
+
+      assert.equal(unreachable.reason, BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE);
+      assert.equal(unreachable.status, 400);
+    }),
+);
+
+it.effect(
+  "a sandbox under its session's name whose snapshot is gone is made again under that name on the session's drive, with the tags and size it stood with and the agent's user, and its browser started afresh",
+  () =>
+    Effect.gen(function* () {
+      const peer = yield* fakeCdpPeer();
+      const sandbox = fakeSandboxApi({
+        status: "stopped",
+        sessionId: SESSION,
+        named: true,
+        snapshotGone: true,
+        vcpus: 4,
+      });
+      const [standing] = yield* sandbox.api.listTagged(SESSION);
+      const service = agentBrowserOver(sandbox.api, fakeBridgePty(peer), FAKE_IMAGE);
+
+      const ensured = yield* service.ensure(SESSION);
+
+      assert.deepEqual(ensured, { sandboxSessionId: FAKE_SANDBOX.CREATED_SESSION, started: true });
+      const [created] = sandbox.creates;
+      assert.deepEqual(
+        [
+          created?.name,
+          created?.tags,
+          created?.vcpus,
+          Object.keys(created?.mounts ?? {}),
+          created?.user?.name,
+        ],
+        [standing?.name, FAKE_SANDBOX.TAGS, 4, ["/workspace"], "agent"],
+      );
+    }),
 );
 
 it.effect(

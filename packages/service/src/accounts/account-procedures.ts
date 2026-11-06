@@ -90,7 +90,7 @@ import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 export interface AccountProcedureSeams {
   resolveUserId: UserIdResolver;
-  /** The eve sessions the account's standing conversations run in, which the delete retires first. */
+  /** The sessions the account's standing conversations run in, which the delete retires first. */
   standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
   /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
@@ -278,7 +278,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * where the account's links open, `agentEnter`, what Enter does in an
      * agent's box while it works, `commitAuthor`, who authors an agent's
      * commits, `setupFinished`, whether the account
-     * finished setup, `agent`, a choice the catalog
+     * finished setup, `setupPlace`, where it stands in setup, `agent`, a choice the catalog
      * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
@@ -292,6 +292,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         body.agentEnter === undefined &&
         body.commitAuthor === undefined &&
         body.setupFinished === undefined &&
+        body.setupPlace === undefined &&
         body.agent === undefined &&
         body.chaptersModel === undefined &&
         body.experiments === undefined
@@ -324,6 +325,11 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         const setupFinished = ownPreferenceFromWire("setupFinished", body.setupFinished);
         if (setupFinished === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
         write.setupFinished = setupFinished;
+      }
+      if (body.setupPlace !== undefined) {
+        const setupPlace = ownPreferenceFromWire("setupPlace", body.setupPlace);
+        if (setupPlace === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+        write.setupPlace = setupPlace;
       }
       if (body.agent !== undefined) {
         write.agent = yield* acceptedAgentChoice(seams, context.userId, body.agent);

@@ -4,9 +4,8 @@ import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationConnectView,
   type IntegrationProviderParams,
-  type IntegrationStatusView,
+  type IntegrationRenameParams,
   integrationProviderParamsSchema,
-  integrationRenameParamsSchema,
 } from "@repo/features/integration-view";
 import {
   INTEGRATION_STATUS,
@@ -14,11 +13,7 @@ import {
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
 import type { LIVE_READ } from "@repo/features/live-wire";
-import {
-  MCP_CLIENTS_CALL_FAILURE,
-  type McpClientsView,
-  mcpClientRevokeParamsSchema,
-} from "@repo/features/mcp-client-view";
+import type { McpClientsView } from "@repo/features/mcp-client-view";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import {
   carried,
@@ -27,7 +22,7 @@ import {
   type GatewayMethodTable,
   readParams,
 } from "@repo/gateway";
-import { declaredMethod, type EntityPool } from "@repo/sync";
+import { declaredWrite, type EntityPool } from "@repo/sync";
 import { Effect, FiberHandle, FiberMap, Option, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import {
@@ -38,8 +33,10 @@ import {
 } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { INTEGRATION_ACTS } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   type HeldIntegrations,
@@ -109,6 +106,8 @@ export interface IntegrationsDependencies {
 }
 
 export interface IntegrationsComposer extends Composer {
+  /** The integrations' plain asks, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof INTEGRATION_ACTS>;
   /** Every server's tools a window holds followed anew, and the windows' holds on where the integrations stand and on the outside MCP clients taken anew under the account signed in, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Every server's tools, the held integrations, and the outside MCP clients let go, as a sign-out lets them go; the windows' holds stand. */
@@ -118,8 +117,6 @@ export interface IntegrationsComposer extends Composer {
 }
 
 const UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
-
-const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
 
 /** A call of the service asked behind the gate, or unanswered where the gate stands closed. */
 type Asked = <Answer>(
@@ -308,11 +305,49 @@ function composed(
   const revoke = (clientId: string): Effect.Effect<McpClientsView> =>
     Effect.gen(function* () {
       const answer = yield* asked(mcpClients.revoke(clientId));
-      if ("failure" in answer) return MCP_CLIENTS_UNANSWERED;
+      if ("failure" in answer) return answer;
       const userId = accountId();
       if (userId !== undefined) yield* clients.read.answered(userId, answer);
       return answer;
     });
+
+  /** The integrations' plain asks, answered as the panel's port asks them (`INTEGRATION_ACTS`). */
+  const acts: HostActTable<typeof INTEGRATION_ACTS> = {
+    INTEGRATIONS_CONNECT: connect,
+    // A Cancel answers once the held read draws the account where the Cancel left it.
+    INTEGRATIONS_CANCEL: ({ provider, connection }) =>
+      Effect.gen(function* () {
+        const answer = yield* asked(client.cancel(provider, { connection }));
+        if (!("failure" in answer)) {
+          yield* confirmed(
+            connection ?? provider,
+            answer.txid,
+            (row) => (row?.status ?? INTEGRATION_STATUS.DISCONNECTED) !== answer.status,
+          );
+        }
+        return answer;
+      }),
+    // A Disconnect answers once the held read no longer holds the account.
+    INTEGRATIONS_DISCONNECT: ({ provider, connection }) =>
+      Effect.gen(function* () {
+        const answer = yield* asked(client.disconnect(provider, { connection }));
+        if (!("failure" in answer)) {
+          yield* confirmed(connection ?? provider, answer.txid, (row) => row !== undefined);
+        }
+        return answer;
+      }),
+    // A rename names the account's row the windows hold, where they hold one, which the pool draws it over.
+    INTEGRATIONS_RENAME: declaredWrite(pool, rename, {
+      read: (asked: IntegrationRenameParams) =>
+        Effect.sync((): IntegrationRename => {
+          const userId = accountId();
+          const held =
+            userId === undefined ? undefined : integrations.synced(userId, asked.connection);
+          return { ...asked, id: held?.id };
+        }),
+    }),
+    MCP_CLIENTS_REVOKE: ({ clientId }) => revoke(clientId),
+  };
 
   const methods: HostMethodTable = {
     // The outside MCP clients are held for the windows while Settings › MCP shows them, under the account signed in, and told only on the app state (`MCP_CLIENTS_CHANGED`); a revoke's own answer is laid there too.
@@ -322,15 +357,6 @@ function composed(
       Effect.suspend(() => {
         const userId = accountId();
         return Effect.as(userId === undefined ? Effect.void : clients.read.retry(userId), {});
-      }),
-    [GATEWAY_METHOD.MCP_CLIENTS_REVOKE]: (params) =>
-      Effect.gen(function* () {
-        const { clientId } = yield* readParams(
-          mcpClientRevokeParamsSchema,
-          params,
-          "a revoke names one client",
-        );
-        return carried<McpClientsView>(yield* revoke(clientId));
       }),
     // Where the integrations stand is held for the windows while any draws one, under the account signed in, and told only on the app state (`INTEGRATIONS_CHANGED`).
     [GATEWAY_METHOD.INTEGRATIONS_FOLLOW]: () =>
@@ -350,11 +376,6 @@ function composed(
         const userId = dependencies.accountId();
         if (userId !== undefined) yield* integrations.retry(userId);
         return {};
-      }),
-    [GATEWAY_METHOD.INTEGRATIONS_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const target = yield* targetOf(params);
-        return carried<IntegrationConnectView>(yield* connect(target));
       }),
     // A server's tools are held for the windows while a surface listing it shows, and told only on the app state (`INTEGRATION_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW]: (params) =>
@@ -378,46 +399,11 @@ function composed(
         yield* tools.retry(serverName(yield* targetOf(params)));
         return {};
       }),
-    // A Cancel answers once the held read draws the account where the Cancel left it.
-    [GATEWAY_METHOD.INTEGRATIONS_CANCEL]: (params) =>
-      Effect.gen(function* () {
-        const { provider, connection } = yield* targetOf(params);
-        const answer = yield* asked(client.cancel(provider, { connection }));
-        if (!("failure" in answer)) {
-          yield* confirmed(
-            connection ?? provider,
-            answer.txid,
-            (row) => (row?.status ?? INTEGRATION_STATUS.DISCONNECTED) !== answer.status,
-          );
-        }
-        return carried<IntegrationStatusView>(answer);
-      }),
-    // A Disconnect answers once the held read no longer holds the account.
-    [GATEWAY_METHOD.INTEGRATIONS_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const { provider, connection } = yield* targetOf(params);
-        const answer = yield* asked(client.disconnect(provider, { connection }));
-        if (!("failure" in answer)) {
-          yield* confirmed(connection ?? provider, answer.txid, (row) => row !== undefined);
-        }
-        return carried<IntegrationStatusView>(answer);
-      }),
-    // A rename names the account's row the windows hold, where they hold one, which the pool draws it over.
-    [GATEWAY_METHOD.INTEGRATIONS_RENAME]: declaredMethod(pool, rename, (params) =>
-      Effect.map(
-        readParams(integrationRenameParamsSchema, params, "the ask names an account and a label"),
-        (read): IntegrationRename => {
-          const userId = accountId();
-          const held =
-            userId === undefined ? undefined : integrations.synced(userId, read.connection);
-          return { ...read, id: held?.id };
-        },
-      ),
-    ),
   };
 
   return {
     methods,
+    acts,
     lifetime: Effect.void,
     // Note that where the integrations stand is held anew under whoever signed in, in place of the hold before, rather than followed again under the account it was held for.
     open: Effect.gen(function* () {

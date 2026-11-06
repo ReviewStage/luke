@@ -16,15 +16,15 @@ import { device } from "./device.js";
  * settle, and keeps who settled it. The box's next poll after an approve is
  * handed the host's device secret once, which deletes the row. A pairing
  * lasts ten minutes from its start (`expires_at`), an approve leaving the box
- * a minute past it to collect; the maintenance sweep deletes it once it
- * lapsed, the address with it, and an approved host whose box never
- * collected its secret. The row goes with its settler's account.
+ * a minute past it to collect; a later start deletes it once it lapsed,
+ * the address with it, and an approved host whose box never collected its
+ * secret. The row goes with its settler's account.
  *
  * A guess is a read, an approve, or a deny by user code; each account's
  * guesses that named no pending pairing are counted per window in
  * `host_pairing_guess`, shared by every function instance, so an account
  * past the limit is refused until its window ends. Its row goes with the
- * account, and the sweep deletes it once its window ended.
+ * account, and a later start deletes it once its window ended.
  */
 
 /** Where a pairing stands: waiting for a member, approved and waiting for its box to collect its secret, or denied. */
@@ -54,7 +54,7 @@ export const hostPairing = pgTable(
     ip: text("ip"),
     status: text("status").$type<HostPairingStatus>().notNull(),
     createdAt: timestamptz("created_at").notNull(),
-    /** When the code stops being approved, and the row is swept. */
+    /** When the code stops being approved, and a later start may delete the row. */
     expiresAt: timestamptz("expires_at").notNull(),
     /** When the box last polled and was answered; null before its first poll. */
     polledAt: timestamptz("polled_at"),

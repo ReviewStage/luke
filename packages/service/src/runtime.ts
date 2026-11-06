@@ -3,13 +3,14 @@
  *
  * This module builds nothing and runs nothing: each edge that runs an effect
  * against the deployment's services (`apps/web/server/runtime.ts` for the web
- * functions, each eve root's own `runtime.ts` for its agent) builds its one
+ * functions) builds its one
  * `ManagedRuntime` over this layer.
  */
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { invitationMailFromEnvironment } from "./accounts/invitation-mail.js";
+import { onboardingEventsFromEnvironment } from "./accounts/onboarding-events.js";
 import { welcomeMailFromEnvironment } from "./accounts/welcome-mail.js";
 import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
@@ -47,8 +48,7 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * tracer's logger is named beside the JSON one: it is what puts a line on the
  * span it was written under. The third sends every line to Sentry's logs
  * with its annotations (`observability/sentry.ts`), which the runtime's edge
- * starts. An eve root's runtime is built over these services too, so its lines
- * reach Sentry through the same logger.
+ * starts.
  */
 const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 
@@ -149,6 +149,7 @@ export const webServices = Layer.mergeAll(
   ),
   invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
   welcomeMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
+  onboardingEventsFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */

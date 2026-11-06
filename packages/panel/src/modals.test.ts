@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { FEEDBACK_KIND } from "@repo/features/feedback";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { recordedFailure } from "@repo/ui/testing/reported-failure";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -60,7 +60,7 @@ function owned(open: () => void, dialog: ReactElement | null): ReactElement {
 function ConfirmOwner({ shown }: OwnerProps): ReactElement {
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    neverBusyAct(() => undefined),
     () => recordedFailure().failure,
   );
   return owned(

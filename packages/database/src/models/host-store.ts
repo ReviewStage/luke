@@ -40,7 +40,6 @@ import {
 import { and, asc, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
@@ -519,39 +518,6 @@ export function hostsOf(userId: string): HostEffect<readonly HostRow[]> {
 export function removeHost(userId: string, id: string): HostEffect<string | undefined> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(stampRemoved({ userId, id, now }), ([removed]) => removed?.txid),
-  );
-}
-
-/**
- * The account's hosts as Settings › Hosts follows them over Neon Realtime
- * (`hostsLive`): each one's id, name, platform, machine and model, where its
- * host reported them, and where its update stands, under the keys the wire
- * reads them by (`@repo/features/host-live`), by name and then id. Note that
- * a version stands for `listed()` here, which a statement Realtime follows
- * cannot carry, since it reads `host_pairing`: a register never writes a
- * version, an enroll writes it beside the secret, a pairing's approve
- * inserts the row with the box's (`./host-pairing-store.ts`), a removal
- * stamps `removed_at`, and the sweep deletes an approved host that never
- * collected its secret. The secret's hash is never selected, since what a
- * statement selects is what leaves. None where a statement names a value
- * Realtime cannot carry.
- */
-export function hostsLiveStatement(userId: string): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          id: device.id,
-          name: device.name,
-          platform: device.platform,
-          machineId: device.machineId,
-          model: device.model,
-          update: device.updatePhase,
-        }),
-      )
-      .from(device)
-      .where(and(eq(device.userId, userId), isNull(device.removedAt), isNotNull(device.version)))
-      .orderBy(asc(device.name), asc(device.id)),
   );
 }
 

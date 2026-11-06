@@ -39,7 +39,7 @@
  * as a Stop's is, which the runner ends on.
  *
  * Whether a runner runs is read off the agent's newest launch line, which
- * stands for the record a sandbox keeps in its tags: it runs while that
+ * stands for the record a sandbox's runner keeps in our store: it runs while that
  * line is unsettled and no stop line was queued after it, so a Stop is
  * honored the moment it is queued, whenever the Mac gets to it. A record
  * that no longer tells of a runner still running, as a retire's, queues a
@@ -118,6 +118,8 @@ import {
 } from "../vercel-sandbox-api.js";
 import {
   type AgentMachineService,
+  CREDENTIAL_RENEWAL,
+  type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
   type MachineKept,
@@ -128,8 +130,10 @@ import {
   type MachineRunning,
   type OpenedPlace,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerLaunch,
+  SWAP_RENEWAL,
 } from "./agent-machine.js";
 
 export const MAC_MACHINE = {
@@ -172,7 +176,12 @@ const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchS
 
 /** A local agent's place on its Mac, under our session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
+  return {
+    machine: AGENT_MACHINE.DEVICE,
+    session,
+    name: nameOfAgent(agentId),
+    running: runningOfAgent(agentId),
+  };
 }
 
 /** The line that writes the text given to a runner's stdin, as a message or a Stop is written and later looked for. */
@@ -216,6 +225,20 @@ function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFi
 function objectOf(value: object): DeviceAgentObject {
   // SAFETY: every payload is a struct's encoded form, a JSON object of string keys.
   return value as DeviceAgentObject;
+}
+
+/**
+ * A launch's credentials as a Mac's runner takes them, which no firewall of
+ * ours stands in front of: a fixed one's value in its variable, sealed with
+ * the launch, and a renewed one not at all, since the runner asks our token
+ * route for it.
+ */
+function handedOnMac(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const fixed = credentials.filter((each) => each.renewal === CREDENTIAL_RENEWAL.FIXED);
+  return {
+    env: Object.fromEntries(fixed.map((each) => [each.variable, Redacted.value(each.value)])),
+    swaps: new Map(),
+  };
 }
 
 /**
@@ -271,8 +294,11 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
+        // Note that a Mac's Codex keeps its threads at its default under the agent's own home.
+        codexHome: undefined,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
+        transcriptsKept: false,
       };
       return layout;
     });
@@ -391,6 +417,8 @@ function deviceMachineOver(
 
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
 
+    deliverCredentials: (_agent, credentials) => handedOnMac(credentials),
+
     // The worktree is the device's to make of its shared clone as it takes the launch line, on the
     // agent's own GitHub token, or the device's own GitHub sign-in for an agent on its starter's
     // token, so the open asks the device nothing and leaves nothing to finish.
@@ -411,7 +439,8 @@ function deviceMachineOver(
         );
       }),
 
-    findPlaces: (session) =>
+    // The session's pin names its account, so the account given is not needed to find it.
+    findPlaces: (_userId, session) =>
       Effect.gen(function* () {
         const pin = yield* pinOfSession(session);
         if (Option.isNone(pin)) return [];
@@ -462,13 +491,15 @@ function deviceMachineOver(
     firewall: {
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
-      endLaunch: () => Effect.void,
       clear: () => Effect.void,
+      renew: () => Effect.succeed({ outcome: SWAP_RENEWAL.LEFT }),
     },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
     resume: (found) =>
-      found.running === undefined ? Effect.fail(unavailable()) : Effect.succeed(found.running),
+      found.running === undefined
+        ? Effect.fail(unavailable())
+        : Effect.succeed({ place: found.running, created: false }),
 
     stop: () => Effect.void,
 
@@ -506,12 +537,12 @@ function deviceMachineOver(
 
     // The secrets and the first lines are sealed together, bound to the agent, before the line is
     // queued; a launch whose line was not queued undoes what its caller recorded of it. Who the
-    // agent's commits are by is read beside the caller's steps, as a sandbox's deepen reads it
+    // agent's commits are by is read beside the caller's steps, as a sandbox's checkout finish reads it
     // (`agentCommitIdentity`), and kept as it ended, so a read that failed fails the launch where
     // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
     // so an agent whose repository was made before the field gets it too.
     // Note that only an agent in the cloud works in repositories beside its own, so a device clones none.
-    checkOutExtras: () => Effect.void,
+    checkOutMissing: () => Effect.void,
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);

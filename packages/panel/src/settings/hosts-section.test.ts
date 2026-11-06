@@ -58,6 +58,8 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
+  // Note that the account the list is read under reaches the page on Query's timing, which no count of ticks keeps up with.
+  await vi.waitFor(() => assert.equal(pageText().includes("Reading your hosts"), false));
 }
 
 /**
@@ -272,8 +274,8 @@ test("This Mac stands first on the row of the machine it is, its switch on, with
     (row) => row.textContent?.includes("This Mac") ?? false,
   );
   assert.equal(
-    thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null,
-    null,
+    (thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null) === null,
+    true,
     "This Mac's row offers no Remove",
   );
 });
@@ -320,7 +322,7 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
       await new Promise((done) => setTimeout(done, 0));
       hosts = [kept, removed];
       lay();
-      return { failure: AGENT_CALL_FAILURE.NOT_PERMITTED };
+      return { failure: AGENT_CALL_FAILURE.NOT_FOUND };
     },
   });
   await settle();
@@ -371,6 +373,8 @@ test("This Mac's switch turns it on at once, and off only once the question is a
   await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true }, [], {
     [ACT_KIND.HOSTS_THIS_MAC_SET]: answered,
   });
+  // Note that one client holds both worlds, so the switch is pressed once this world's record has replaced the last one's.
+  await vi.waitFor(() => assert.equal(thisMacSwitch().getAttribute("aria-checked"), "true"));
   await act(async () => thisMacSwitch().click());
   await settle();
   assert.deepEqual(sent, [{ on: true }], "nothing is turned off before it is asked");

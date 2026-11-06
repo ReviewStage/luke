@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useAppCommand, useAppKeymap } from "./app-commands.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * command-key.test.ts -- the key a chord's Command is pressed with is the
@@ -49,7 +50,7 @@ function drawWindow(commandKey: CommandKey | undefined): string[] {
   const opened: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(PaletteWindow, { opened })));
+  act(() => root.render(withQueryClient(createElement(PaletteWindow, { opened }))));
   return opened;
 }
 

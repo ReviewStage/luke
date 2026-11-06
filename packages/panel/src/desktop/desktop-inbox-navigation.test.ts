@@ -28,7 +28,6 @@ import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseInboxTask } from "../tasks/use-inbox-task.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -954,14 +953,13 @@ test("an item a link names under an agent nothing waits on any more, read before
   );
 });
 
-test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face with no attention mark; Needs you leaves it out", async () => {
+test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face; Needs you leaves it out", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
   const rows = listed(page);
   assert.ok(rows.includes("Quarantine the flaky test?"), rows.join(" | "));
   const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".ui-list-row-meta");
-  assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(meta?.querySelector(".ui-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
@@ -1180,7 +1178,7 @@ test("a task chosen narrows the Inbox to every item of its own, open and settled
   chooseView(page, "Addressed to", "Me");
   await settle();
 
-  act(() => chooseInboxTask(BILLING.id));
+  act(() => world.narrowTo(BILLING.id));
   await settle();
   const narrowed = rowTitles(page).toSorted();
   const menu = page.querySelector('button[aria-label="View options"]');

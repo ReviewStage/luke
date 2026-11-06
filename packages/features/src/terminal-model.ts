@@ -1,12 +1,11 @@
 /**
  * terminal-model.ts -- where a Terminal tab's connection stands, and what the tab says of it, the way a terminal says it.
  *
- * A state that needs nothing from the developer is one dim line the
- * terminal prints at the end of its own scrollback, as a terminal prints
- * "[Process completed]"; a state with something to do is one slim bar over
- * the screen with one text action and its key. The scrollback stays under
- * either, dimmed while no shell is connected, the line itself kept readable. The bar beside the agent's
- * name says the state in a word or two. There are no cards, icons, or pills.
+ * A state the developer should know of is one slim bar over the screen, with
+ * one text action and its key where it has something to do; nothing is ever
+ * written into the shell's own screen. The scrollback stays under the bar,
+ * dimmed while no shell is connected. The bar beside the agent's name says
+ * the state in a word or two. There are no cards, icons, or pills.
  *
  * Most states are the host's, said on the shell's port
  * (`TERMINAL_CONNECTION`); "resuming" is the tab's own, between the click on
@@ -25,12 +24,10 @@ export const TERMINAL_STATE = {
   ATTACHED: "attached",
   /** The socket dropped and the host is reconnecting by itself. */
   RECONNECTING: "reconnecting",
-  /** Closed after five minutes without typing; a key reconnects. */
+  /** Ended after ten minutes with nothing typed, printed, or shown, or by the host as a sign-out ends it; a key reconnects. */
   IDLE: "idle",
-  /** The sandbox is stopped; only the developer's click resumes it. */
+  /** The sandbox is stopped; the tab resumes it once it is shown. */
   STOPPED: "stopped",
-  /** Resume was asked for and has not answered. */
-  RESUMING: "resuming",
   /** The agent has not opened its sandbox yet. */
   STARTING: "starting",
   /** The shell ended; a key opens a new one. */
@@ -53,6 +50,10 @@ export const TERMINAL_UNREACHED = {
   NOT_FOUND: "not-found",
   /** The deployment serves no terminal relay. */
   RELAY: "relay",
+  /** A Local tab's: the agent's files could not be mirrored on this Mac. */
+  MIRROR: "mirror",
+  /** A Local tab's: no shell could be opened in the mirror. */
+  SHELL: "shell",
 } as const;
 
 type TerminalUnreached = (typeof TERMINAL_UNREACHED)[keyof typeof TERMINAL_UNREACHED];
@@ -61,51 +62,38 @@ export type TerminalState =
   | {
       readonly kind: Exclude<
         TerminalStateKind,
-        | typeof TERMINAL_STATE.EXITED
-        | typeof TERMINAL_STATE.RESUMING
-        | typeof TERMINAL_STATE.UNREACHABLE
+        typeof TERMINAL_STATE.EXITED | typeof TERMINAL_STATE.UNREACHABLE
       >;
     }
   | { readonly kind: typeof TERMINAL_STATE.EXITED; readonly code: number | undefined }
-  | { readonly kind: typeof TERMINAL_STATE.RESUMING; readonly since: number }
   | { readonly kind: typeof TERMINAL_STATE.UNREACHABLE; readonly why: TerminalUnreached };
 
 /** What the bar's one action does. */
 export const TERMINAL_ACTION = {
   RETRY: "retry",
-  RESUME: "resume",
 } as const;
 
 export type TerminalAction = (typeof TERMINAL_ACTION)[keyof typeof TERMINAL_ACTION];
 
-/** The slim bar over the screen: its words, a note after them, its one action, and whether it is waiting on something. */
+/** The slim bar over the screen: its words, its one action, and whether it is waiting on something. */
 export interface TerminalBar {
   readonly words: string;
-  readonly note?: string | undefined;
-  /** When what the bar waits on began, which its note counts from in place of words. */
-  readonly since?: number | undefined;
   readonly action?: { readonly kind: TerminalAction; readonly label: string } | undefined;
   readonly busy: boolean;
   /** Whether it shows only once the state has held a second, so a blip that heals at once is never seen. */
   readonly late: boolean;
 }
 
-/** What the tab says of a state: its word beside the agent's name, its bar or its line, and whether the scrollback is dimmed. */
+/** What the tab says of a state: its word beside the agent's name, its bar, and whether the scrollback is dimmed. */
 export interface TerminalLook {
   readonly words: string;
   readonly bar: TerminalBar | undefined;
   /** The bar a phone draws where the wide layout's title bar is the only place that says the state; the wide layout leaves it out. */
   readonly phoneBar: TerminalBar | undefined;
-  /** The line the terminal prints at the end of its scrollback, as it enters the state. */
-  readonly line: string | undefined;
   readonly dim: boolean;
 }
 
-/** About how long a stopped sandbox takes to resume from its snapshot, which the stopped bar says before the click. */
-const RESUME_TAKES = "~5 s";
-
 const RETRY = { kind: TERMINAL_ACTION.RETRY, label: "Retry now" } as const;
-const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as const;
 
 /** What the unreachable bar says, by why. */
 const UNREACHED_WORDS = {
@@ -115,12 +103,18 @@ const UNREACHED_WORDS = {
     "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
   [TERMINAL_UNREACHED.NOT_FOUND]: "Could not find this agent’s shell.",
   [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",
+  [TERMINAL_UNREACHED.MIRROR]: "Could not mirror this agent’s files on this Mac.",
+  [TERMINAL_UNREACHED.SHELL]: "Could not open a shell in this agent’s files.",
 } as const satisfies Record<TerminalUnreached, string>;
 
-/** The line a shell that ended leaves, its status where the host said it. */
-function exitedLine(code: number | undefined): string {
+/** The bar a shell that ended leaves, its status where the host said it. */
+function exitedBar(code: number | undefined): TerminalBar {
   const status = code === undefined ? "" : ` with code ${code}`;
-  return `[Process exited${status}. Press any key for a new shell …]`;
+  return {
+    words: `Process exited${status}. Press any key for a new shell.`,
+    busy: false,
+    late: false,
+  };
 }
 
 /** What the tab says of the state. */
@@ -132,7 +126,6 @@ export function terminalLook(state: TerminalState): TerminalLook {
         bar: undefined,
         // Note that it is late, so a connect that lands at once draws no bar, and the screen does not jump for it.
         phoneBar: { words: "Connecting…", busy: true, late: true },
-        line: undefined,
         dim: false,
       };
     case TERMINAL_STATE.ATTACHED:
@@ -140,7 +133,6 @@ export function terminalLook(state: TerminalState): TerminalLook {
         words: "connected",
         bar: undefined,
         phoneBar: undefined,
-        line: undefined,
         dim: false,
       };
     case TERMINAL_STATE.RECONNECTING:
@@ -148,42 +140,25 @@ export function terminalLook(state: TerminalState): TerminalLook {
         words: "reconnecting…",
         bar: { words: "Connection lost. Reconnecting…", action: RETRY, busy: true, late: true },
         phoneBar: undefined,
-        line: undefined,
         dim: true,
       };
     case TERMINAL_STATE.IDLE:
       return {
         words: "disconnected",
-        bar: undefined,
-        phoneBar: undefined,
-        line: "[Disconnected after 5 min without typing. Press any key to reconnect.]",
-        dim: true,
-      };
-    case TERMINAL_STATE.STOPPED:
-      return {
-        words: "sandbox stopped",
         bar: {
-          words: "Sandbox stopped.",
-          note: RESUME_TAKES,
-          action: RESUME,
+          words: "Disconnected. Press any key to reconnect.",
           busy: false,
           late: false,
         },
         phoneBar: undefined,
-        line: undefined,
         dim: true,
       };
-    case TERMINAL_STATE.RESUMING:
+    case TERMINAL_STATE.STOPPED:
+      // Note that it draws no bar, because a tab shown is resuming it already, and a hidden tab draws nothing.
       return {
-        words: "resuming…",
-        bar: {
-          words: "Resuming sandbox… restoring snapshot",
-          since: state.since,
-          busy: true,
-          late: false,
-        },
+        words: "sandbox stopped",
+        bar: undefined,
         phoneBar: undefined,
-        line: undefined,
         dim: true,
       };
     case TERMINAL_STATE.STARTING:
@@ -191,15 +166,13 @@ export function terminalLook(state: TerminalState): TerminalLook {
         words: "waiting for sandbox",
         bar: { words: "Waiting for the agent to open its sandbox…", busy: true, late: false },
         phoneBar: undefined,
-        line: undefined,
         dim: false,
       };
     case TERMINAL_STATE.EXITED:
       return {
         words: SHELL_EXITED_WORDS,
-        bar: undefined,
+        bar: exitedBar(state.code),
         phoneBar: undefined,
-        line: exitedLine(state.code),
         dim: false,
       };
     case TERMINAL_STATE.UNREACHABLE:
@@ -207,7 +180,6 @@ export function terminalLook(state: TerminalState): TerminalLook {
         words: "unreachable",
         bar: { words: UNREACHED_WORDS[state.why], action: RETRY, busy: false, late: false },
         phoneBar: undefined,
-        line: undefined,
         dim: true,
       };
   }

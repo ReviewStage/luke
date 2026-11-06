@@ -28,10 +28,10 @@ const KEPT = { CHOICE: keptKey("app.chosenWorkspace", storedChoice) } as const;
  * which the service lists first because it was made for the account; nothing while the view lists none, as before the
  * first read lands, which the sidebar answers by filtering nothing.
  */
-function resolveChoice(
-  workspaces: readonly Workspace[],
+function resolveChoice<Listed extends Pick<Workspace, "id">>(
+  workspaces: readonly Listed[],
   kept: string | undefined,
-): Workspace | undefined {
+): Listed | undefined {
   return workspaces.find((workspace) => workspace.id === kept) ?? workspaces[0];
 }
 
@@ -59,4 +59,17 @@ export function useChosenWorkspace(
     keep(workspaceId);
   };
   return { chosen: resolveChoice(workspaces, staged ? stagedChoice : kept), choose };
+}
+
+/**
+ * The chosen one of `workspaces` as the kept choice names it, read where
+ * the window's own choosing is out of reach, as its router's gates are
+ * (`route-gates.ts`). Note that a fixture run's choice is its own state,
+ * not kept, so it reads here as the first workspace, where every run starts.
+ */
+export function useKeptChoice<Listed extends Pick<Workspace, "id">>(
+  workspaces: readonly Listed[],
+): Listed | undefined {
+  const [kept] = useKept(KEPT.CHOICE, "");
+  return resolveChoice(workspaces, kept);
 }

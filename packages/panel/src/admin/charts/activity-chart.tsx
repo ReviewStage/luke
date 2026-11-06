@@ -34,7 +34,7 @@ const ACTIVITY_CHART = {
     label: "Agents started",
     color: "var(--ui-color-chart-1)",
   },
-  [ACTIVITY_FEATURE.PLAN_REVISIONS]: {
+  [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: {
     label: "Description revisions",
     color: "var(--ui-color-chart-2)",
   },

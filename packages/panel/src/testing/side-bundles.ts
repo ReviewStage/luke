@@ -9,6 +9,7 @@ import {
   SideBundlesContext,
   sideBundles,
 } from "../bundle-loader.js";
+import type { TerminalModule } from "../terminal/contract.js";
 
 /**
  * side-bundles.ts -- the panel's own bundles under jsdom: one landed as a window that has shown it holds it, and stand-ins for others at their importers.
@@ -19,7 +20,9 @@ import {
  * landed before the surface is drawn is had at once, as one is in a window
  * that has shown it before. A test of a surface that only draws around a
  * bundle draws it over `unlandedBundles`, so no bundle lands under it while
- * it runs.
+ * it runs. A terminal tab draws over `fittedTerminalBundles`, its real
+ * screen fitted at the size a window would lay it out at, since jsdom lays
+ * out no box to fit a screen to.
  */
 
 /** Imports a bundle and settles once it has landed, so every later reader has it at once. */
@@ -44,11 +47,40 @@ export function landedBundles(
 export function unlandedBundles(): SideBundles {
   const unlanded = () => Promise.withResolvers<never>().promise;
   return sideBundles({
-    planEditor: unlanded,
+    descriptionEditor: unlanded,
     fileTree: unlanded,
     terminal: unlanded,
     diagram: unlanded,
     diffView: unlanded,
+  });
+}
+
+/** The size a terminal tab's screen is laid out at here, in cells. */
+export const FITTED_SIZE = { cols: 80, rows: 24 } as const;
+
+/** The terminal bundle's own screen, said to be fitted at `FITTED_SIZE` the first time it is shown, as a window's layout would fit it. */
+function fittedTerminal(terminal: TerminalModule): TerminalModule {
+  return {
+    create: (props) => {
+      const screen = terminal.create(props);
+      let fitted = false;
+      return {
+        ...screen,
+        attach: (host) => {
+          screen.attach(host);
+          if (fitted) return;
+          fitted = true;
+          props.onResize(FITTED_SIZE);
+        },
+      };
+    },
+  };
+}
+
+/** The bundles a terminal tab draws over: the window's own, its terminal fitted as a window lays it out. */
+export function fittedTerminalBundles(): Effect.Effect<SideBundles, Error> {
+  return landedBundles({
+    terminal: () => import("../terminal/index.js").then((entry) => fittedTerminal(entry.terminal)),
   });
 }
 

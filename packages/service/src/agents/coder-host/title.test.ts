@@ -15,7 +15,8 @@ import { sessionKey } from "@repo/runtime/vocabulary";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { MockLanguageModelV4 } from "ai/test";
-import { Clock, Effect, Option, Result } from "effect";
+import { Clock, Effect, Option, Redacted, Result, Schema } from "effect";
+import { afterEach, vi } from "vitest";
 import {
   AssistantMessageBuilder,
   MESSAGE_CHANNEL,
@@ -39,10 +40,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * its brief and note, never the replay between them; the model's answer is
  * the agent's title, and the name of its task where that still stands
  * untitled; a message to the Slack bot is named from its member's words
- * alone; and an account with no API key is titled from its opening's
- * first words, with no model. The
- * model is a script that keeps what it was asked; the store is PGlite.
- * Synthetic throughout.
+ * alone; and an account with no API key is titled on our own key, or
+ * from its opening's first words, with no model, where the deployment holds
+ * none. The model is a script that keeps what it was asked, or Anthropic
+ * faked at the global fetch; the store is PGlite. Synthetic throughout.
  */
 
 /** The automation's prompt, long enough to fill the title model's excerpt by itself. */
@@ -51,7 +52,7 @@ const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every
 /** What the agent was handed: the prompt, then what we add of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
 
-/** The deployment's environment, which holds no model key of ours for a title to spend. */
+/** The deployment's environment, which holds no key of ours for a title to spend unless a test gives it one. */
 const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -61,7 +62,79 @@ const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/** The key a deployment holds for titles, our own; synthetic. */
+const VESPIN_TITLE_KEY = "sk-ant-vespin-title-key-1111";
+
+/** What a native agent is titled as, and what Anthropic is asked, on a deployment holding our title key and on one holding none. */
+const NATIVE_TITLE_CASES = [
+  {
+    named: "is titled by Anthropic's small model on Vespin's own key",
+    titleAnthropicApiKey: Redacted.make(VESPIN_TITLE_KEY),
+    title: "Retry invite email on timeout",
+    asked: [
+      {
+        key: VESPIN_TITLE_KEY,
+        host: "api.anthropic.com",
+        model: "claude-haiku-5-5",
+        thinking: "disabled",
+      },
+    ],
+  },
+  {
+    named: "is titled from its opening's first words on a deployment holding no title key",
+    titleAnthropicApiKey: undefined,
+    title: "Retry the invite email when the",
+    asked: [],
+  },
+] as const;
+
+/** What a request asked Anthropic for: the model its body names, and its thinking where it set any. */
+const readRequestBody = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      model: Schema.String,
+      thinking: Schema.optional(Schema.Struct({ type: Schema.String })),
+    }),
+  ),
+);
+
+/** Anthropic's API faked at the global fetch, answering every message with `title` and keeping the key, host, model, and thinking each request carried. */
+function anthropicAnswering(title: string) {
+  const asked: {
+    readonly key: string | null;
+    readonly host: string;
+    readonly model: string;
+    readonly thinking: string | undefined;
+  }[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    const body = readRequestBody(await request.text());
+    asked.push({
+      key: request.headers.get("x-api-key"),
+      host: new URL(request.url).host,
+      model: body.model,
+      thinking: body.thinking?.type,
+    });
+    return Response.json({
+      id: "msg_fixture",
+      type: "message",
+      role: "assistant",
+      model: "claude-haiku-5-5",
+      content: [{ type: "text", text: title }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  });
+  return { asked };
+}
 
 /** A model answering every call with `title`, keeping each prompt it was asked. */
 function scriptedTitleModel(title: string) {
@@ -83,7 +156,7 @@ function scriptedTitleModel(title: string) {
   return { model, asked };
 }
 
-/** The agent's session opened on `prompt`, as eve records it. */
+/** The agent's session opened on `prompt`, as the store records it. */
 const openedOn = (owner: string, agent: Agent, prompt: string) =>
   Effect.gen(function* () {
     const placedAt = new Date(yield* Clock.currentTimeMillis);
@@ -102,13 +175,13 @@ const openedOn = (owner: string, agent: Agent, prompt: string) =>
     return agent;
   });
 
-/** An agent started on the task with `prompt`, its session opened on the prompt as eve records it. */
+/** An agent started on the task with `prompt`, its session opened on the prompt as the store records it. */
 const startOnTask = (owner: string, taskId: string, prompt: string) =>
   Effect.gen(function* () {
     const started = Option.getOrThrow(
       yield* createAgent(owner, {
         taskId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
@@ -236,9 +309,9 @@ it.layer(getTestDB())("an agent's title", (it) => {
       }),
   );
 
-  it.effect(
-    "a native agent of an account that saved no API key is titled from its opening's first words, never on Vespin's key",
-    () =>
+  it.effect.each(NATIVE_TITLE_CASES)(
+    "a native agent of an account that saved no API key $named",
+    ({ titleAnthropicApiKey, title, asked }) =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const organizationId = yield* openWorkspace(owner);
@@ -248,14 +321,21 @@ it.layer(getTestDB())("an agent's title", (it) => {
           task.id,
           "Retry [the invite email](https://example.test/mail_(draft)) when the provider times out.",
         );
+        const anthropic = anthropicAnswering("Retry invite email on timeout");
 
         yield* titleNativeAgent(
           { userId: owner, conversationId: agent.conversationId },
           agent,
-        ).pipe(Effect.provideService(HostedEnvironment, DEPLOYMENT_ENVIRONMENT));
+        ).pipe(
+          Effect.provideService(HostedEnvironment, {
+            ...DEPLOYMENT_ENVIRONMENT,
+            titleAnthropicApiKey,
+          }),
+        );
 
         const titled = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        assert.equal(titled.title, "Retry the invite email when the");
+        assert.equal(titled.title, title);
+        assert.deepEqual(anthropic.asked, asked);
       }),
   );
 
@@ -269,7 +349,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           yield* createAgent(owner, {
             taskId: null,
             organizationId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: HANDED,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -288,7 +368,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
-        // The session opened on the handed prompt, as eve records an agent's first message.
+        // The session opened on the handed prompt, as the store records an agent's first message.
         yield* Database.use((db) =>
           db.insert(messages).values({
             userId: owner,
@@ -327,7 +407,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           yield* createAgent(owner, {
             taskId: null,
             organizationId: yield* openWorkspace(owner),
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: handed,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -384,7 +464,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           yield* createAgent(owner, {
             taskId: null,
             organizationId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: handed,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -422,8 +502,8 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 });
 
-/** The developer's plan, which an agent's first turn opens on. */
-const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
+/** The developer's description, which an agent's first turn opens on. */
+const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
 /** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
 const AGENT_MESSAGE =
@@ -449,8 +529,8 @@ const journaledAgent = Effect.gen(function* () {
   const started = yield* createAgent(owner, {
     taskId: null,
     organizationId,
-    planSnapshot: null,
-    prompt: PLAN_TEXT,
+    descriptionSnapshot: null,
+    prompt: DESCRIPTION_TEXT,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -476,7 +556,11 @@ const journaledAgent = Effect.gen(function* () {
       const written = yield* writer.writeAwaitingLine(
         target,
         sender === "developer"
-          ? { text: PLAN_TEXT, clientKey, sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner } }
+          ? {
+              text: DESCRIPTION_TEXT,
+              clientKey,
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }
           : {
               text: AGENT_MESSAGE,
               clientKey,
@@ -491,7 +575,11 @@ const journaledAgent = Effect.gen(function* () {
   /** A turn opened, taking the line given first, which opens it. */
   const opened = (turnId: string, lineId: string) =>
     Effect.gen(function* () {
-      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
+      yield* writer.enqueueTurn(target, {
+        turnId,
+        origin: TURN_ORIGIN.TYPED,
+        runtimeTurnId: turnId,
+      });
       yield* writer.consume(target, {
         ...next(turnId),
         kind: RUN_EVENT.TURN_STARTED,
@@ -527,7 +615,7 @@ const journaledAgent = Effect.gen(function* () {
         at: 0,
       });
     });
-  /** The agent's first turn: the developer's plan, read and answered. */
+  /** The agent's first turn: the developer's description, read and answered. */
   const firstTurn = Effect.gen(function* () {
     const turnId = randomUUID();
     yield* opened(turnId, yield* line("developer"));

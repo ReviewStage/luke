@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
@@ -10,6 +10,7 @@ import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   claimCredentialRenewal,
+  credentialRenewedAt,
   holdSandbox,
   releaseCredentialRenewal,
   sandboxHeld,
@@ -19,7 +20,7 @@ import {
  * The lease a developer's typing holds on a coding agent's sandbox, over a
  * real dialect: it moves on and never back and holds until its instant, it
  * goes with its conversation, and the GitHub token's renewal at its
- * firewall is claimed once while due. Every conversation is minted per test and every
+ * firewall is claimed once while due and read back on its own session. Every conversation is minted per test and every
  * read is of its ids, since the lease is the deployment's and not an
  * account's.
  *
@@ -166,5 +167,26 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
 
       assert.equal(claimedAgain, false, "the resumed session's claim still stands");
     }),
+  );
+
+  it.effect(
+    "the token's last renewal reads on its own session alone, and none once its claim is given back",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openAgent();
+        yield* holdSandbox(conversationId, at(5));
+
+        const never = yield* credentialRenewedAt(conversationId, "sbs_1");
+        yield* claimCredentialRenewal(conversationId, "sbs_1", at(0), at(-50));
+        const renewed = yield* credentialRenewedAt(conversationId, "sbs_1");
+        const otherSession = yield* credentialRenewedAt(conversationId, "sbs_resumed");
+        yield* releaseCredentialRenewal(conversationId, "sbs_1", at(0));
+        const givenBack = yield* credentialRenewedAt(conversationId, "sbs_1");
+
+        assert.deepEqual(
+          [never, renewed, otherSession, givenBack],
+          [Option.none(), Option.some(at(0)), Option.none(), Option.none()],
+        );
+      }),
   );
 });

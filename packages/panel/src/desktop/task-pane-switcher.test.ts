@@ -5,6 +5,7 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import type { Task } from "@repo/features/task-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { agentTab, draftTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -54,7 +55,7 @@ const AGENT: AgentSummary = {
 };
 
 /** The draft's tab, a New agent not yet started. */
-const DRAFT = { draft: "draft" } as const;
+const DRAFT = draftTab("draft");
 
 /** A page an agent showed on the plan, whose tab offers a link to itself. */
 const PAGE = {
@@ -99,8 +100,8 @@ afterEach(() => {
 test("the screen standing follows the column and the panel: a tab of the panel while it is open, else Overview on the task's Overview and the agent's on an agent's tab", () => {
   assert.equal(taskPaneOf({ open: true, column: MAIN_TAB.OVERVIEW }), TASK_PANE.PANEL);
   assert.equal(taskPaneOf({ open: false, column: MAIN_TAB.OVERVIEW }), TASK_PANE.OVERVIEW);
-  assert.equal(taskPaneOf({ open: false, column: { agent: AGENT.id } }), TASK_PANE.AGENT);
-  assert.equal(taskPaneOf({ open: false, column: { draft: "draft" } }), TASK_PANE.AGENT);
+  assert.equal(taskPaneOf({ open: false, column: agentTab(AGENT.id) }), TASK_PANE.AGENT);
+  assert.equal(taskPaneOf({ open: false, column: draftTab("draft") }), TASK_PANE.AGENT);
 });
 
 /** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the comments, a page of the plan's where `paged`, and its column on the agent's tab where `agent`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
@@ -167,8 +168,8 @@ function mount(
                     : { taskId: TASK.id, request: repositoryAsk },
                 mainTabs: {
                   ...tasksControl().mainTabs,
-                  tabs: [MAIN_TAB.OVERVIEW, { agent: AGENT.id }, ...(draft ? [DRAFT] : [])],
-                  tab: draft ? DRAFT : onAgent ? { agent: AGENT.id } : MAIN_TAB.OVERVIEW,
+                  tabs: [MAIN_TAB.OVERVIEW, agentTab(AGENT.id), ...(draft ? [DRAFT] : [])],
+                  tab: draft ? DRAFT : onAgent ? agentTab(AGENT.id) : MAIN_TAB.OVERVIEW,
                   openAgents: [AGENT.id],
                   onChoose: (chosen) => told.push(`column ${JSON.stringify(chosen)}`),
                   onClose: (closed) => told.push(`close column ${JSON.stringify(closed)}`),
@@ -185,7 +186,7 @@ function mount(
                   fullScreenOnly: shown && narrow,
                   tabs: [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
                   strip: [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
-                  pages: paged ? [{ page: PAGE.id }] : [],
+                  pages: paged ? [pageTab(PAGE.id)] : [],
                   tab: on,
                   onChoose: (chosen) =>
                     told.push(
@@ -259,12 +260,12 @@ function mount(
   };
 }
 
-test("on a phone Overview is headed by the way out of the task and one ⋯ of the task's own actions, naming the task in its plan's heading alone", () => {
+test("on a phone Overview is headed by the way out of the task and one ⋯ of the task's own actions, naming the task in its description's heading alone", () => {
   const page = mount(SHELL_ROOM.NARROW);
   assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: undefined });
   const menu = page.menu();
   assert.ok(menu.includes("Rename") && menu.includes("Permanently delete"), "the task's own");
-  assert.equal(page.labeled("Title actions"), false, "the plan's title draws no second ⋯");
+  assert.equal(page.labeled("Title actions"), false, "the description's title draws no second ⋯");
   assert.equal(page.labeled(`${TASK.name} actions`), false, "the column draws no ⋯ of Overview's");
 
   page.back();
@@ -312,7 +313,7 @@ test("on a phone ⌘T starts New agent at once, the panel shut over it, since no
 });
 
 test("on a phone a tab of the panel is pushed over the column, titled by the tab, going back shutting the panel, its ⋯ the tab's own", () => {
-  const page = mount(SHELL_ROOM.NARROW, true, { page: PAGE.id }, true);
+  const page = mount(SHELL_ROOM.NARROW, true, pageTab(PAGE.id), true);
   assert.deepEqual(page.head(), {
     buttons: [`Back to ${TASK.name}`, "Tab actions"],
     title: PAGE.title,
@@ -325,7 +326,7 @@ test("on a phone a tab of the panel is pushed over the column, titled by the tab
   assert.deepEqual(page.told, ["toggle"]);
 });
 
-test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the plan is in sight", async () => {
+test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the description is in sight", async () => {
   const page = mount(SHELL_ROOM.NARROW, true);
   page.draw(true, SIDE_PANEL_TAB.COMMENTS, 1);
   await act(async () => undefined);
@@ -352,13 +353,13 @@ test("on a phone the ⋯'s Rename edits the task's name in the row's title", asy
   assert.deepEqual(page.told, [`rename ${TASK.id} Invite teammates`]);
 });
 
-test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find bar over the plan with the caret in its field", () => {
+test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find bar over the description with the caret in its field", () => {
   const page = mount(SHELL_ROOM.NARROW);
   page.choose("Find");
   const field = page.container.querySelector<HTMLInputElement>(
     '.find-bar input[aria-label="Find"]',
   );
-  assert.ok(field, "the plan's find bar stands");
+  assert.ok(field, "the description's find bar stands");
   assert.equal(document.activeElement, field);
 });
 
@@ -408,7 +409,7 @@ test("on a phone a task still read, or one that cannot be, is headed by its way 
 });
 
 test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offers each of its controls by name, a press there acting as the bar's did", async () => {
-  const page = mount(SHELL_ROOM.NARROW, true, { page: PAGE.id }, true);
+  const page = mount(SHELL_ROOM.NARROW, true, pageTab(PAGE.id), true);
   await act(async () => undefined);
   assert.equal(page.container.querySelector(".page-view .file-view-bar"), null);
   const menu = page.menu();
@@ -430,24 +431,24 @@ function chooseOverviewRename(container: HTMLElement): void {
   act(() => rename.click());
 }
 
-/** The plan's own title, which a wide window renames the task in. */
-function planTitle(container: HTMLElement): HTMLElement | null {
+/** The description's own title, which a wide window renames the task in. */
+function descriptionTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
 
-test("on a wide window the topbar's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
+test("on a wide window the topbar's ⋯ › Rename puts the caret in the description's own title, and draws no phone's field", () => {
   const page = mount(SHELL_ROOM.WIDE);
   chooseOverviewRename(page.container);
 
-  assert.ok(planTitle(page.container), "the plan's title is drawn");
+  assert.ok(descriptionTitle(page.container), "the description's title is drawn");
   assert.ok(
-    document.activeElement === planTitle(page.container),
-    "the caret is in the plan's title",
+    document.activeElement === descriptionTitle(page.container),
+    "the caret is in the description's title",
   );
   assert.equal(page.container.querySelector('input[aria-label="Task name"]'), null);
 });
 
-test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the plan's title once it stands", () => {
+test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the description's title once it stands", () => {
   const page = mount(SHELL_ROOM.WIDE, false, undefined, false, true);
   page.renameFromPalette();
   assert.deepEqual(page.told, [`column "${MAIN_TAB.OVERVIEW}"`]);
@@ -455,8 +456,8 @@ test("on a wide window whose column shows an agent, the rename ⌘K asks shows O
   page.draw(false, undefined, undefined, false);
 
   assert.ok(
-    document.activeElement === planTitle(page.container),
-    "the caret is in the plan's title",
+    document.activeElement === descriptionTitle(page.container),
+    "the caret is in the description's title",
   );
 });
 
@@ -478,13 +479,13 @@ function RefusingTask(): React.JSX.Element {
   });
 }
 
-test("on a wide window a refused rename keeps the name typed in the plan's title, with the refusal beside it", async () => {
+test("on a wide window a refused rename keeps the name typed in the description's title, with the refusal beside it", async () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RefusingTask))));
-  const title = planTitle(container);
-  assert.ok(title, "the plan's title is drawn");
+  const title = descriptionTitle(container);
+  assert.ok(title, "the description's title is drawn");
 
   act(() => {
     title.focus();
@@ -493,6 +494,9 @@ test("on a wide window a refused rename keeps the name typed in the plan's title
   });
   await act(async () => title.blur());
 
-  assert.equal(planTitle(container)?.textContent, "Invite teammates");
+  // Note that the refusal reaches the title through the rename's mutation, a moment after it is answered.
+  await vi.waitFor(() =>
+    assert.equal(descriptionTitle(container)?.textContent, "Invite teammates"),
+  );
   assert.match(container.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });

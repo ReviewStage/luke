@@ -24,7 +24,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
-import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import {
+  copyingInto,
+  DESKTOP_LINKS,
+  fakeAppPlatform,
+  QUIET_PANEL,
+} from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handHostReads, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentConnectSection } from "./agent-auth-section.js";
@@ -93,6 +98,8 @@ let sent: AnyAct[] = [];
 let waitOpen: PromiseWithResolvers<FakeActAnswer> | undefined;
 /** How the keys the host holds are delivered to the window again, as each write's own answer lays them. */
 let deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void = () => undefined;
+/** Every copy the page made, in order. */
+let copied: string[] = [];
 
 /** A write's answer of the keys, laid where the host holds them before it answers, as the host lays it. */
 function written(value: ProviderKeysAnswer): Promise<FakeActAnswer> {
@@ -166,8 +173,9 @@ beforeEach(() => {
   sent = [];
   waitOpen = undefined;
   deliverKeys = () => undefined;
+  copied = [];
   window.localStorage.clear();
-  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS, ...copyingInto(copied) });
   fakeActs({ act: answer });
 });
 
@@ -197,6 +205,7 @@ async function mount(
     root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return container;
 }
 
@@ -221,7 +230,15 @@ async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }
     ),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return { page: container, connected };
+}
+
+/** Whether the harnesses' rows stand, which they do once the signed-in account's keys are read. */
+function harnessRowsStand(page: HTMLElement): boolean {
+  return [...page.querySelectorAll(".ui-settings-row")].some((row) =>
+    row.textContent?.startsWith("Claude"),
+  );
 }
 
 /** A harness's row button, or the link it draws in a button's place, the check it may end in having none. */
@@ -300,18 +317,20 @@ function labeled(within: Element, words: string): HTMLInputElement {
   return control;
 }
 
-/** Types into a field as a paste would. */
-function paste(field: HTMLInputElement, value: string): void {
+/** Puts `value` in a field as typing does. */
+function type(field: HTMLInputElement, value: string): void {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
-/** Types into a field as a paste would, then submits its form. */
-async function pasteAndSave(field: HTMLInputElement, value: string): Promise<void> {
-  paste(field, value);
-  act(() => field.form?.requestSubmit());
+/** Puts `value` in a field as a paste does, which saves it, and waits on the save. */
+async function paste(field: HTMLInputElement, value: string): Promise<void> {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
+    field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+  });
   await settle();
 }
 
@@ -353,7 +372,11 @@ test("each harness's row names the credential in use, then what is wrong with it
     keys: [{ ...ANTHROPIC_KEY, provider: PROVIDER_KEY_PROVIDER.OPENAI, hint: "sk-proj-…7Qx2" }],
     subscriptions: [CLAUDE_PLAN],
   };
+  // Note that one client holds the test's worlds, so each later world waits for its own keys to replace the last one's.
   const connected = await mount();
+  await vi.waitFor(() =>
+    assert.deepEqual(rowState(connected, "Claude"), connectedWith("Claude plan")),
+  );
   assert.equal(rowButton(connected, "Claude").textContent, "Manage");
   assert.equal(rowButton(connected, "Codex").textContent, "Manage");
   assert.equal(rowButton(connected, "Claude").getAttribute("aria-label"), "Manage Claude");
@@ -377,7 +400,12 @@ test("each harness's row names the credential in use, then what is wrong with it
     ],
   };
   const attention = await mount();
-  assert.deepEqual(rowState(attention, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      rowState(attention, "Claude"),
+      connectedWith("Anthropic API key sk-ant-…wxyz"),
+    ),
+  );
   assert.deepEqual(rowState(attention, "Codex"), needsHand("ChatGPT plan · Signed out"));
   assert.equal(rowButton(attention, "Codex").textContent, "Sign in again");
   assert.equal(rowButton(attention, "Codex").getAttribute("aria-label"), "Sign in to Codex again");
@@ -392,7 +420,9 @@ test("each harness's row names the credential in use, then what is wrong with it
     ],
   };
   const limited = await mount();
-  assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached"));
+  await vi.waitFor(() =>
+    assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached")),
+  );
   assert.equal(rowButton(limited, "Claude").textContent, "Manage");
   assert.deepEqual(rowState(limited, "Codex"), needsHand("ChatGPT plan · Usage limit reached"));
   assert.equal(rowButton(limited, "Codex").textContent, "Manage usage");
@@ -403,7 +433,11 @@ test("each harness's row names the credential in use, then what is wrong with it
     sent.filter((each) => each.kind === ACT_KIND.WEB_OPEN).map((each) => each.payload),
     [{ url: "https://chatgpt.com/settings/usage" }],
   );
-  assert.equal(document.querySelector('[role="dialog"]'), null, "Manage usage opens no dialog");
+  assert.equal(
+    document.querySelector('[role="dialog"]') === null,
+    true,
+    "Manage usage opens no dialog",
+  );
 });
 
 test("each harness's row stands where a link to its section lands", async () => {
@@ -419,7 +453,11 @@ test("while both credentials are saved, the dialog's own default control picks t
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
   let dialog = await open(page, "Claude");
-  assert.equal(dialog.querySelector('[role="radio"]'), null, "one credential is the one used");
+  assert.equal(
+    dialog.querySelector('[role="radio"]') === null,
+    true,
+    "one credential is the one used",
+  );
   await press(dialog, "Done");
 
   held = { keys: [ANTHROPIC_KEY], subscriptions: [CLAUDE_PLAN] };
@@ -463,22 +501,17 @@ test("an API key is pasted into a masked field with an eye under its row, sent o
   const page = await mount();
   const dialog = await open(page, "Claude");
   const keyCard = row(dialog, "Anthropic API key");
-  assert.match(keyCard.textContent ?? "", /Billed by Anthropic per token\./u);
-  const field = labeled(keyCard, "API key");
+  const field = labeled(keyCard, "Paste the key");
   assert.equal(field.type, "password");
   assert.equal(field.autocomplete, "off");
-  assert.ok(
-    !keyCard.textContent?.includes("Saving replaces"),
-    "with no key stored there is nothing to replace",
-  );
-  paste(field, KEY);
+  type(field, KEY);
   await press(keyCard, "Show");
   assert.equal(field.type, "text", "Show reveals what is being pasted");
   await press(keyCard, "Hide");
   assert.equal(field.type, "password", "Hide masks it again");
   assert.ok(keyCard.querySelector('a[href="https://console.anthropic.com/settings/keys"]'));
 
-  await pasteAndSave(field, `  ${KEY}  `);
+  await paste(field, `  ${KEY}  `);
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_SAVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key: KEY }],
@@ -486,7 +519,11 @@ test("an API key is pasted into a masked field with an eye under its row, sent o
   await vi.waitFor(() =>
     assert.deepEqual(lineOf(row(dialog, "Anthropic API key")), connectedWith("Saved sk-ant-…wxyz")),
   );
-  assert.equal(row(dialog, "Anthropic API key").querySelector("input"), null, "the field closes");
+  assert.equal(
+    row(dialog, "Anthropic API key").querySelector("input") === null,
+    true,
+    "the field closes",
+  );
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
   for (const spy of logged) {
@@ -520,23 +557,22 @@ test("a saved key's row draws its hint from the keys the host holds, the window 
   );
 });
 
-test("replacing a saved API key opens a New key field showing Saved where the key would be, offers no Show until one is typed, and turns the row's end into Cancel", async () => {
+test("replacing a saved API key opens its field showing Saved where the key would be, offers no Show until one is typed, and turns the row's end into Cancel", async () => {
   held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
   const page = await mount();
   const dialog = await open(page, "Claude");
   const keyCard = row(dialog, "Anthropic API key");
   await press(keyCard, "Replace Anthropic API key");
-  const field = labeled(keyCard, "New key");
+  const field = labeled(keyCard, "Paste the key");
   assert.ok(document.activeElement === field, "Replace puts the focus in the field");
   assert.equal(field.placeholder, "Saved");
-  assert.match(keyCard.textContent ?? "", /Saving replaces the key Vespin holds\./u);
   assert.equal(field.value, "");
   assert.equal(field.type, "password");
   assert.equal(button(keyCard, "Show").disabled, true, "there is nothing in the window to show");
-  paste(field, KEY);
+  type(field, KEY);
   assert.equal(button(keyCard, "Show").disabled, false);
   await press(keyCard, "Cancel");
-  assert.equal(keyCard.querySelector("input"), null, "Cancel closes the field");
+  assert.equal(keyCard.querySelector("input") === null, true, "Cancel closes the field");
   assert.ok(!document.body.innerHTML.includes(KEY), "and drops what was pasted");
 });
 
@@ -544,14 +580,16 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   refusal = PROVIDER_KEY_REJECTION.INVALID;
   const page = await mount();
   const dialog = await open(page, "Claude");
-  const field = labeled(row(dialog, "Claude plan"), "Claude setup-token");
+  const field = labeled(row(dialog, "Claude plan"), "Paste the token it prints");
   assert.equal(field.type, "password");
-  assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
-  assert.ok(
-    !dialog.textContent?.includes("Saving replaces"),
-    "with no token stored there is nothing to replace",
+  assert.equal(field.placeholder, "sk-ant-oat01-…");
+  await press(row(dialog, "Claude plan"), "Copy command");
+  assert.deepEqual(
+    copied,
+    ["claude setup-token"],
+    "the command that prints a token is a press away",
   );
-  await pasteAndSave(field, TOKEN);
+  await paste(field, TOKEN);
   assert.match(dialog.textContent ?? "", /That isn't a Claude setup-token\./u);
   assert.equal(field.value, TOKEN, "a refused paste stands as pasted");
 
@@ -587,12 +625,15 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
 test("a harness's dialog opens on the first field it draws, the setup-token's, else the API key's", async () => {
   const page = await mount();
   const claude = await open(page, "Claude");
-  assert.ok(document.activeElement === labeled(claude, "Claude setup-token"), "the setup-token");
+  assert.ok(
+    document.activeElement === labeled(claude, "Paste the token it prints"),
+    "the setup-token",
+  );
   act(() => button(document, "Done").click());
   await settle();
 
   const codex = await open(page, "Codex");
-  assert.ok(document.activeElement === labeled(codex, "API key"), "the API key");
+  assert.ok(document.activeElement === labeled(codex, "Paste the key"), "the API key");
 });
 
 test("with both credentials kept, Disconnect's question giving way to the setup-token form leaves focus on its field", async () => {
@@ -609,14 +650,14 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   // Note that the form stands once the keys the host lays after the disconnect reach the query.
   await vi.waitFor(() =>
     assert.equal(
-      document.activeElement === labeled(dialog, "Claude setup-token"),
+      document.activeElement === labeled(dialog, "Paste the token it prints"),
       true,
       "the field has focus",
     ),
   );
 });
 
-test("a Claude token Anthropic rejected says so in its row and offers Replace token, without the setup-token hint", async () => {
+test("a Claude token Anthropic rejected says so in its row and offers Replace token", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
   assert.deepEqual(rowState(page, "Claude"), needsHand("Claude plan · Needs attention"));
@@ -624,9 +665,8 @@ test("a Claude token Anthropic rejected says so in its row and offers Replace to
   const plan = row(dialog, "Claude plan");
   assert.deepEqual(lineOf(plan), needsHand("Anthropic rejected this token. Paste a new one."));
   await press(plan, "Replace token");
-  const field = labeled(plan, "Claude setup-token");
+  const field = labeled(plan, "Paste the token it prints");
   assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
-  assert.match(plan.textContent ?? "", /Saving replaces the token Vespin holds\./u);
   assert.equal(field.value, "");
 });
 
@@ -713,27 +753,29 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
   assert.match(row(page, "Codex").textContent ?? "", /ChatGPT plan or OpenAI API key/u);
 
   await press(row(page, "Claude"), "Connect Claude");
-  assert.equal(document.querySelector('[role="dialog"]'), null, "the row opens in place");
+  assert.equal(document.querySelector('[role="dialog"]') === null, true, "the row opens in place");
   assert.equal(choice(page, "Claude plan").getAttribute("aria-checked"), "true");
-  const field = labeled(row(page, "Claude"), "Claude setup-token");
+  const field = labeled(row(page, "Claude"), "Paste the token it prints");
   assert.ok(document.activeElement === field, "the setup-token's field has focus");
-  assert.match(
-    row(page, "Claude").textContent ?? "",
-    /Run claude setup-token in a terminal, then paste what it prints\./u,
-  );
+  assert.match(row(page, "Claude").textContent ?? "", /Run this in a terminal/u);
+  await press(row(page, "Claude"), "Copy command");
+  assert.deepEqual(copied, ["claude setup-token"]);
   act(() => choice(page, "API key").click());
   await settle();
-  assert.match(row(page, "Claude").textContent ?? "", /Billed by Anthropic per token\./u);
-  assert.ok(labeled(row(page, "Claude"), "Anthropic API key"));
+  assert.ok(labeled(row(page, "Claude"), "Paste the key"));
 
   await press(row(page, "Codex"), "Connect Codex");
-  assert.equal(row(page, "Claude").querySelector("input"), null, "one row stands open");
+  assert.equal(row(page, "Claude").querySelector("input") === null, true, "one row stands open");
   await press(row(page, "Codex"), "Cancel");
-  assert.equal(row(page, "Codex").querySelector("input, [role='radio']"), null, "Cancel closes it");
+  assert.equal(
+    row(page, "Codex").querySelector("input, [role='radio']") === null,
+    true,
+    "Cancel closes it",
+  );
   assert.ok(document.activeElement === button(page, "Connect Codex"), "and hands focus back");
 
   await press(row(page, "Claude"), "Connect Claude");
-  await pasteAndSave(labeled(row(page, "Claude"), "Claude setup-token"), TOKEN);
+  await paste(labeled(row(page, "Claude"), "Paste the token it prints"), TOKEN);
   // Note that the row closes once the keys the host lays after the save reach their query.
   await vi.waitFor(() =>
     assert.equal(

@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createStore, useSelector } from "@tanstack/react-store";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
@@ -64,29 +65,19 @@ interface Saying {
 
 const SILENT: Saying = { owner: undefined, polite: undefined, alert: undefined };
 
-let saying: Saying = SILENT;
+/** What the window's regions say now. */
+const sayingStore = createStore<Saying>(SILENT);
 let said = 0;
 const owners: object[] = [];
-const listeners = new Set<() => void>();
 
 function tell(next: Saying): void {
-  saying = next;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function snapshot(): Saying {
-  return saying;
+  sayingStore.setState(() => next);
 }
 
 /** Hands the regions to the oldest `Announcer` still standing, its regions drawn empty. */
 function handOver(): void {
   const owner = owners[0];
-  if (owner !== saying.owner) tell({ ...SILENT, owner });
+  if (owner !== sayingStore.state.owner) tell({ ...SILENT, owner });
 }
 
 /** Takes back what an announcement still says, once what it said is no longer so. */
@@ -96,6 +87,7 @@ const NOTHING_TO_RETIRE: Retire = () => undefined;
 
 /** Empties `level`'s region where it still says announcement `id`, and leaves any newer words standing. */
 function retire(level: Announce, id: number): void {
+  const saying = sayingStore.state;
   if (saying[level]?.id !== id) return;
   tell({ ...saying, [level]: undefined });
 }
@@ -109,6 +101,7 @@ function retire(level: Announce, id: number): void {
  */
 export function announce(level: Announce, words: string): Retire {
   const spoken = words.trim();
+  const saying = sayingStore.state;
   if (spoken === "" || saying.owner === undefined) return NOTHING_TO_RETIRE;
   said += 1;
   const now = { id: said, words: spoken };
@@ -154,7 +147,7 @@ function Region({ level, said }: { level: Announce; said: Said | undefined }) {
 /** The window's polite and alert regions; mount one with the window, as its toasts do. */
 export function Announcer(): React.JSX.Element | null {
   const [self] = useState(() => ({}));
-  const now = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const now = useSelector(sayingStore);
   useLayoutEffect(() => {
     owners.push(self);
     handOver();

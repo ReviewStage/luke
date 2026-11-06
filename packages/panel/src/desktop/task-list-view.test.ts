@@ -217,6 +217,7 @@ function mountSidebar(
         tasksPageOpened += 1;
       },
       onClose: () => undefined,
+      onPreload: () => undefined,
     },
   });
   act(() =>

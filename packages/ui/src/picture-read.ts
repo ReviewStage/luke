@@ -44,15 +44,21 @@ export type PictureState =
       readonly failure: ReportedFailure;
     };
 
-/** A picture's read that did not land, one for each attempt, as a place reporting it takes it: its condition, as its code. */
+/**
+ * A picture's read that did not land, one for each attempt, as a place
+ * reporting it takes it: its condition, as its code, and what the attempt
+ * failed with beneath it, so a call the network dropped is reported as the
+ * network's rather than the app's.
+ */
 export interface PictureUnread {
   readonly code: typeof FAILURE_CONDITION.UNREAD;
+  readonly cause: Error;
 }
 
-/** What a read answers: the bytes in base64 under their type, or why there are none, `NOT_FOUND_FAILURE` among them. */
+/** What a read answers: the bytes in base64 under their type, or why there are none, `NOT_FOUND_FAILURE` among them, with what failed beneath it where the host caught it. */
 export type PictureAnswer =
   | { readonly contentType: string; readonly base64: string }
-  | { readonly failure: string };
+  | { readonly failure: string; readonly cause?: unknown };
 
 /** The failure that settles a picture as missing; any other leaves it to be read again. */
 const NOT_FOUND_FAILURE = "not-found";
@@ -64,14 +70,15 @@ const unreads = new WeakMap<Error, PictureUnread>();
 
 /** The failure of the attempt that rejected with `error`, the same one for as long as that attempt stands. */
 function unreadOf(error: Error): PictureUnread {
-  const unread = unreads.get(error) ?? { code: FAILURE_CONDITION.UNREAD };
+  const unread = unreads.get(error) ?? { code: FAILURE_CONDITION.UNREAD, cause: error };
   unreads.set(error, unread);
   return unread;
 }
 
 /**
  * What `answer` lands as: drawn, or settled as missing. Any other failure
- * rejects, so the query keeps nothing and the picture is read again.
+ * rejects, so the query keeps nothing and the picture is read again, with
+ * what failed beneath it as its cause.
  */
 export function readPicture(answer: Promise<PictureAnswer>): Promise<PictureRead> {
   return answer.then((answered): PictureRead => {
@@ -82,7 +89,10 @@ export function readPicture(answer: Promise<PictureAnswer>): Promise<PictureRead
       };
     }
     if (answered.failure === NOT_FOUND_FAILURE) return { kind: PICTURE_STATE.MISSING };
-    throw new Error(answered.failure);
+    throw new Error(
+      answered.failure,
+      answered.cause === undefined ? undefined : { cause: answered.cause },
+    );
   });
 }
 

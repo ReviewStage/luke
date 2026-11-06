@@ -107,11 +107,11 @@ export interface AppPlatform {
    */
   unsavedWork?(ask: ((leave: () => void) => void) | undefined): void;
   /**
-   * Hears whether a plan holds words not saved each time that changes. No
+   * Hears whether a description holds words not saved each time that changes. No
    * page's ask covers them, since the panel's own doors save them as a task
    * is left, so a shell whose ways out save nothing asks before those too.
    */
-  unsavedPlanWords?(unsaved: boolean): void;
+  unsavedDescriptionWords?(unsaved: boolean): void;
   /**
    * Hears the commands the window's controls offer now, each time that set
    * changes, so a shell with a menu bar dims an item whose command nothing

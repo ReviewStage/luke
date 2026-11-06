@@ -6,7 +6,7 @@
  * here. Where the runtime provides `AfterResponse` (the web's, over Vercel's
  * `waitUntil`, `apps/web/server/runtime.ts`), the work runs past the answer
  * with every service the request had, and the instance is kept awake until
- * it ends. A runtime that provides none, an eve root's or a test's, runs it
+ * it ends. A runtime that provides none, such as a test's, runs it
  * in place, as the request's own work, which is what it did before.
  */
 

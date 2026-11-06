@@ -91,7 +91,7 @@ import { usageOfTurns } from "./usage.js";
 /**
  * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
  *
- * The transcript is the conversation's own `messages` rows: the plan the
+ * The transcript is the conversation's own `messages` rows: the description the
  * agent was handed, each turn's journal as the relay writes it, which
  * grows in place while the turn runs and is replaced by the finished answer
  * when it ends, and the lines said on calls into the agent before calls were
@@ -315,7 +315,7 @@ interface JournalTurn {
 
 /**
  * Each turn whose journal is among the rows, by the turn: when it began,
- * its start or its queueing before eve started it, which is what the
+ * its start or its queueing before its harness started it, which is what the
  * working line counted from while it ran (`agentRunStartedAt`), and
  * what it ran on and spent as its row recorded them (`turn-record.ts`).
  */
@@ -360,7 +360,11 @@ function senderOf(sent: LineSent): AgentSender {
     case MESSAGE_SENDER.APP:
       return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
-      return { name: sent.name, kind: AGENT_SENDER.AUTOMATION };
+      return {
+        name: sent.name,
+        kind: AGENT_SENDER.AUTOMATION,
+        ...(sent.automationId === undefined ? undefined : { automationId: sent.automationId }),
+      };
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:

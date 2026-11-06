@@ -19,11 +19,7 @@ import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
-import {
-  deploymentOidcToken,
-  type SandboxUnavailable,
-  vercelSandboxApi,
-} from "../vercel-sandbox-api.js";
+import { deploymentOidcToken, vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { AgentMachine, type AgentMachineService, type MachineLifecycle } from "./agent-machine.js";
 import { type DeviceMachineService, deviceMachine } from "./device-machine.js";
 import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./vercel-machine.js";
@@ -32,22 +28,22 @@ import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./ver
 function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
   const of = (machine: AgentMachineKind): MachineLifecycle =>
     machine === AGENT_MACHINE.DEVICE ? mac : cloud;
-  const bySession = <A>(
+  const bySession = <A, E, R>(
     session: string,
-    call: (machine: MachineLifecycle) => Effect.Effect<A, SandboxUnavailable>,
+    call: (machine: MachineLifecycle) => Effect.Effect<A, E, R>,
   ) => Effect.flatMap(mac.owns(session), (owned) => call(owned ? mac : cloud));
   return {
-    findPlaces: (session) => bySession(session, (machine) => machine.findPlaces(session)),
+    findPlaces: (userId, session) =>
+      bySession(session, (machine) => machine.findPlaces(userId, session)),
     recordRunner: (place, record) => of(place.machine).recordRunner(place, record),
     firewall: {
       write: (place, userId, sources) => of(place.machine).firewall.write(place, userId, sources),
       keepLaunch: (place, userId, launch) =>
         of(place.machine).firewall.keepLaunch(place, userId, launch),
-      endLaunch: (place, userId, sources) =>
-        of(place.machine).firewall.endLaunch(place, userId, sources),
       clear: (place) => of(place.machine).firewall.clear(place),
+      // Note that a firewall's owner is always a sandbox session's, since no other machine keeps a launch there.
+      renew: (owner, ask) => cloud.firewall.renew(owner, ask),
     },
-    resume: (found) => of(found.machine).resume(found),
     stop: (place) => of(place.machine).stop(place),
     discard: (found) => of(found.machine).discard(found),
     writeFiles: (place, files) => of(place.machine).writeFiles(place, files),
@@ -67,9 +63,12 @@ function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): A
   return {
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),
+    deliverCredentials: (agent, credentials) =>
+      of(agent.machine).deliverCredentials(agent, credentials),
     open: (ask, use) => of(ask.agent.machine).open(ask, use),
-    checkOutExtras: (place, target, agent, shared) =>
-      of(place.machine).checkOutExtras(place, target, agent, shared),
+    resume: (found, agent) => of(found.machine).resume(found, agent),
+    checkOutMissing: (place, target, agent, shared) =>
+      of(place.machine).checkOutMissing(place, target, agent, shared),
     launchRunner: (place, launch) => of(place.machine).launchRunner(place, launch),
   };
 }

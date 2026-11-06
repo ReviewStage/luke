@@ -7,8 +7,6 @@
 
 // @vitest-environment jsdom
 
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -80,19 +78,15 @@ function press(target: Element, type: string): void {
 test("a note line a hint wraps hangs the hint's card when tapped, found by its caller's mark", () => {
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(hover: none)" }));
   const container = mount(
-    createElement(
-      RegistryContext.Provider,
-      { value: AtomRegistry.make() },
-      createElement(Tooltip, {
-        label: "Worked for 3m",
-        card: createElement("p", null, "Began at 9:14 AM"),
-        children: createElement(NoteLine, {
-          look: NOTE_LINE_LOOK.INSET,
-          "data-worked": "",
-          children: "Worked for 3m",
-        }),
+    createElement(Tooltip, {
+      label: "Worked for 3m",
+      card: createElement("p", null, "Began at 9:14 AM"),
+      children: createElement(NoteLine, {
+        look: NOTE_LINE_LOOK.INSET,
+        "data-worked": "",
+        children: "Worked for 3m",
       }),
-    ),
+    }),
   );
   const line = container.querySelector("[data-worked]");
   expect(line?.textContent).toBe("Worked for 3m");

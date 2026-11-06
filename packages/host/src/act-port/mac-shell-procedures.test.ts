@@ -17,10 +17,10 @@ import { type TestActPort, testActPort } from "./testing.js";
 /**
  * Shells on this Mac as main carries them, over shells and ports that answer
  * from a script: a shell belongs to the window that opened it, which alone
- * attaches to and closes it; its port carries what it printed, its exit,
- * and what the panel typed and resized; a page's end leaves it running and
- * the next attach draws what it printed meanwhile; output pauses the shell
- * past the tab's acks; and the window's end kills it. A window is an inert
+ * attaches to and closes it; it opens at the size the panel asked; its port
+ * carries what it printed, its exit, and what the panel typed and resized;
+ * output pauses the shell past the tab's acks, and never once the panel
+ * closed its port; and a close or the page's end kills it. A window is an inert
  * object of its own. Synthetic ids, folders, and bytes throughout.
  */
 
@@ -43,6 +43,7 @@ const panelOf = (): ActSender<Window> => ({ sender: { window: ++windows }, panel
 /** One shell the platform started, as the test drives it and watches it. */
 interface ScriptedShell {
   readonly folder: string;
+  readonly size: string;
   readonly heard: string[];
   print(text: string): void;
   exit(code: number): void;
@@ -55,21 +56,23 @@ interface ScriptedPort {
   readonly posted: TerminalPortOutbound[];
   closed: boolean;
   send(message: WireBoundaryInput): void;
+  /** The panel closing its end. */
+  hangUp(): void;
 }
 
 function fixture() {
   const shells: ScriptedShell[] = [];
   const opened: ScriptedPort[] = [];
   const pageGone = new Map<Window, () => void>();
-  const closed = new Map<Window, () => void>();
   let ids = 0;
-  const spawn = (folder: string): MacShell | undefined => {
+  const spawn = (folder: string, cols: number, rows: number): MacShell | undefined => {
     if (folder !== FOLDER) return undefined;
     const heard: string[] = [];
     let data: ((bytes: Uint8Array) => void) | undefined;
     let exit: ((code: number) => void) | undefined;
     shells.push({
       folder,
+      size: `${cols}x${rows}`,
       heard,
       print: (text) => data?.(new TextEncoder().encode(text)),
       exit: (code) => exit?.(code),
@@ -90,22 +93,28 @@ function fixture() {
   };
   const actPort = testActPort(
     macShellProcedures<Window>({
+      mirror: () => Effect.succeed(undefined),
       spawn,
       ports: {
         open: (sender, ticket) => {
           let listener: ((message: WireBoundaryInput) => void) | undefined;
+          let hungUp: (() => void) | undefined;
           const port: ScriptedPort = {
             sender,
             ticket,
             posted: [],
             closed: false,
             send: (message) => listener?.(message),
+            hangUp: () => hungUp?.(),
           };
           opened.push(port);
           return {
             post: (message) => void port.posted.push(message),
             onMessage: (heard) => {
               listener = heard;
+            },
+            onClose: (then) => {
+              hungUp = then;
             },
             close: () => {
               port.closed = true;
@@ -114,7 +123,6 @@ function fixture() {
         },
         whenGone: (sender, then) => void pageGone.set(sender, then),
       },
-      whenClosed: (sender, then) => void closed.set(sender, then),
       createId: () => `shell-${++ids}`,
     }),
   );
@@ -124,11 +132,13 @@ function fixture() {
     shells,
     opened,
     pageGone: (sender: Window) => pageGone.get(sender)?.(),
-    windowClosed: (sender: Window) => closed.get(sender)?.(),
   };
 }
 
-const open = { kind: ACT_KIND.MAC_SHELL_OPEN, payload: { agentId: AGENT_ID, folder: FOLDER } };
+const open = {
+  kind: ACT_KIND.MAC_SHELL_OPEN,
+  payload: { agentId: AGENT_ID, folder: FOLDER, cols: 100, rows: 30 },
+};
 const attach = (terminalId: string) => ({
   kind: ACT_KIND.MAC_SHELL_ATTACH,
   payload: { agentId: AGENT_ID, terminalId, cols: 120, rows: 32 },
@@ -167,6 +177,11 @@ it.effect(
 
       assert.ok("refused" in elsewhere && "refused" in notPanel && "refused" in stolen);
       assert.equal(shells.length, 1);
+      assert.equal(
+        shells[0]?.size,
+        "100x30",
+        "the shell opens at the size its screen was fitted to",
+      );
       assert.equal(opened.length, 1, "no port is posted to a window that did not open the shell");
       const [port] = opened;
       assert.equal(port?.sender, one.sender);
@@ -196,29 +211,6 @@ it.effect("what the panel types and resizes on the port reaches the shell", () =
 );
 
 it.effect(
-  "a page's end closes the port and leaves the shell running, and the next attach draws what it printed meanwhile",
-  () =>
-    Effect.gen(function* () {
-      const { actPort, shells, opened, pageGone } = fixture();
-      const panel = panelOf();
-
-      yield* actPort.perform(open, panel);
-      yield* actPort.perform(attach("shell-1"), panel);
-      pageGone(panel.sender);
-      shells[0]?.print("built\r\n");
-      yield* actPort.perform(attach("shell-1"), panel);
-
-      const [before, after] = opened;
-      assert.equal(before?.closed, true);
-      assert.ok(!shells[0]?.heard.includes("kill"));
-      assert.deepEqual(carried(after), [
-        { type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED },
-        "built\r\n",
-      ]);
-    }),
-);
-
-it.effect(
   "output past the tab's acks pauses the shell, and an ack that catches up resumes it",
   () =>
     Effect.gen(function* () {
@@ -234,21 +226,47 @@ it.effect(
     }),
 );
 
-it.effect("a close and the window's end each kill the window's shells", () =>
-  Effect.gen(function* () {
-    const { actPort, shells, windowClosed } = fixture();
-    const panel = panelOf();
+it.effect(
+  "a shell whose port the panel closed is never paused for the acks it no longer sends",
+  () =>
+    Effect.gen(function* () {
+      const { actPort, shells, opened } = fixture();
+      const panel = panelOf();
 
-    yield* actPort.perform(open, panel);
-    yield* actPort.perform(open, panel);
-    yield* actPort.perform({ kind: ACT_KIND.MAC_SHELL_CLOSE, payload: shellOf("shell-1") }, panel);
-    const reattached = yield* actPort.perform(attach("shell-1"), panel);
-    windowClosed(panel.sender);
+      yield* actPort.perform(open, panel);
+      yield* actPort.perform(attach("shell-1"), panel);
+      opened[0]?.hangUp();
+      shells[0]?.print("x".repeat(TERMINAL_FLOW.PAUSE_ABOVE_BYTES + 1));
 
-    assert.ok("refused" in reattached);
-    assert.deepEqual(
-      shells.map((shell) => shell.heard),
-      [["kill"], ["kill"]],
-    );
-  }),
+      assert.deepEqual(shells[0]?.heard, ["resize:120x32"]);
+      assert.equal(
+        opened[0]?.posted.length,
+        1,
+        "nothing is posted past the attach on a port that closed",
+      );
+    }),
+);
+
+it.effect(
+  "a close and the page's end, a reload or the window's close, each kill the window's shells",
+  () =>
+    Effect.gen(function* () {
+      const { actPort, shells, pageGone } = fixture();
+      const panel = panelOf();
+
+      yield* actPort.perform(open, panel);
+      yield* actPort.perform(open, panel);
+      yield* actPort.perform(
+        { kind: ACT_KIND.MAC_SHELL_CLOSE, payload: shellOf("shell-1") },
+        panel,
+      );
+      const reattached = yield* actPort.perform(attach("shell-1"), panel);
+      pageGone(panel.sender);
+
+      assert.ok("refused" in reattached);
+      assert.deepEqual(
+        shells.map((shell) => shell.heard),
+        [["kill"], ["kill"]],
+      );
+    }),
 );

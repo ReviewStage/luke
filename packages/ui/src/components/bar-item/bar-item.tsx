@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { pulseOnPress } from "../../press-pulse.js";
+import { cappedCount } from "../count-figure/count-figure.js";
 
 /**
  * bar-item.tsx -- one place in a phone's bar of places: its glyph over its name.
@@ -13,7 +14,7 @@ import { pulseOnPress } from "../../press-pulse.js";
  * before the click lands. It takes no class or style.
  *
  * A `count` of what waits on the reader there stands as a badge on the
- * glyph's top corner, the figure alone, and is said after the item's name
+ * glyph's top corner, the figure alone, drawn "99+" past 99 (`cappedCount`), and is said after the item's name
  * with its noun ("Inbox, 3 need you"); it is left out at none. It is a
  * NavItem's needs-you count (`STATUS_TONE.ATTENTION`) turned inside out, so a
  * place reads the same in the bar as in a column of places.
@@ -93,7 +94,7 @@ export function BarItem({
     >
       <span className="relative flex [&_svg]:size-ui-20" aria-hidden="true">
         {icon}
-        {counted ? <span className={BAR_ITEM_COUNT}>{count.value}</span> : null}
+        {counted ? <span className={BAR_ITEM_COUNT}>{cappedCount(count.value)}</span> : null}
       </span>
       <span>
         {children}

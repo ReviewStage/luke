@@ -1,21 +1,20 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordedRoutes } from "@repo/wire/testing";
+import { fakeCloudApi, type JsonValue, recordedRoutes } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS } from "./agent-wire.js";
+import { DESCRIPTION_ATTACHMENT_REFUSAL } from "./description-attachment-wire.js";
 import { FAILURE_FACT } from "./failure-facts.js";
 import { WRITE_UNTAKEN } from "./keyed-write.js";
-import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
-import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
 import { TASK_BOUNDS, TASK_FILE_REFUSAL } from "./task-wire.js";
 import {
+  DESCRIPTION_COMMENT_CALL_FAILURE,
   PICTURE_KEEP_FAILURE,
-  PLAN_COMMENT_CALL_FAILURE,
   TASK_CALL_FAILURE,
 } from "./tasks-view.js";
 
@@ -70,7 +69,7 @@ it.effect(
       const conflict = { conflict: { current: "- Vespin's words." } };
       let sent = 0;
       const api = fakeCloudApi({
-        [`POST /api/plans/${TASK_ID}/edit`]: {
+        [`POST /api/plans/${TASK_ID}/description`]: {
           answer: () => {
             sent += 1;
             return sent === 1 ? { plan: saved } : conflict;
@@ -257,8 +256,8 @@ it.effect(
       );
 
       assert.deepEqual(refused, { refused: "not-yours" });
-      assert.deepEqual(elsewhere, { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(blank, { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(elsewhere, { failure: DESCRIPTION_COMMENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(blank, { failure: DESCRIPTION_COMMENT_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 2);
     }),
 );
@@ -366,7 +365,7 @@ it.effect(
     Effect.gen(function* () {
       const api = fakeCloudApi({
         "GET /api/plans": { answer: () => ({ plans: [{ ...SUMMARY, archivedAt: 5 }] }) },
-        [`GET /api/plans/${TASK_ID}/revisions/3`]: {
+        [`GET /api/plans/${TASK_ID}/description/revisions/3`]: {
           status: 404,
           answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
         },
@@ -379,7 +378,7 @@ it.effect(
       assert.equal(revision, undefined);
       assert.deepEqual(recordedRoutes(api.requests()), [
         "GET /api/plans?archived=include",
-        `GET /api/plans/${TASK_ID}/revisions/3`,
+        `GET /api/plans/${TASK_ID}/description/revisions/3`,
       ]);
     }),
 );
@@ -443,7 +442,7 @@ it.effect(
 );
 
 it.effect(
-  "a picture kept answers its id, a plan at its bound of pictures or of videos answers so, and one the account may not write answers not found",
+  "a picture kept answers its id, a description at its bound of pictures or of videos answers so, and one the account may not write answers not found",
   () =>
     Effect.gen(function* () {
       const picture = "data:image/png;base64,iVBORw0KGgo=";
@@ -460,11 +459,14 @@ it.effect(
       assert.deepEqual(yield* Effect.provide(client().keepPicture(TASK_ID, picture), api.layer), {
         id: keptId,
       });
-      assert.deepEqual(yield* keep(200, () => ({ refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY })), {
-        failure: PICTURE_KEEP_FAILURE.TOO_MANY,
-      });
       assert.deepEqual(
-        yield* keep(200, () => ({ refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS })),
+        yield* keep(200, () => ({ refused: DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY })),
+        {
+          failure: PICTURE_KEEP_FAILURE.TOO_MANY,
+        },
+      );
+      assert.deepEqual(
+        yield* keep(200, () => ({ refused: DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS })),
         { failure: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS },
       );
       assert.deepEqual(yield* keep(404, () => ({ error: HOSTED_API_ERROR.NOT_FOUND })), {
@@ -477,56 +479,5 @@ it.effect(
         api.requests().map((request) => request.body),
         [JSON.stringify({ picture })],
       );
-    }),
-);
-
-it.effect(
-  "a task's pages' live read polling while Realtime fails asks for its rows inline, and reads them decoded",
-  () =>
-    Effect.gen(function* () {
-      const row = { pageId: "page-1", version: 2 };
-      const api = fakeCloudApi({
-        "GET /api/live/task-pages": {
-          answer: () => ({
-            url: LIVE_POLL_URL,
-            queries: {
-              pages: {
-                capability: LIVE_POLL_URL,
-                queryFingerprint: LIVE_POLL_URL,
-                expiresAt: 0,
-                rows: JSON.stringify([row]),
-              },
-            },
-          }),
-        },
-      });
-      const polled = yield* Effect.provide(
-        client().pagesLive({ taskId: TASK_ID }, "user-dana", true),
-        api.layer,
-      );
-      assert.ok(polled.ok);
-      assert.deepEqual(polled.answer.queries.pages.rows, [row]);
-      assert.equal(api.requests()[0]?.searchParams.get(LIVE_POLL.QUERY), LIVE_POLL.ON);
-      yield* Effect.provide(client().pagesLive({ taskId: TASK_ID }, "user-dana"), api.layer);
-      assert.equal(api.requests()[1]?.searchParams.get(LIVE_POLL.QUERY), null, "a seal asks none");
-    }),
-);
-
-it.effect(
-  "a task's pages' live read names the account it is for, and a session the service refuses for it is signed out",
-  () =>
-    Effect.gen(function* () {
-      const refusing = fakeCloudApi({
-        "GET /api/live/task-pages": {
-          answer: () => ({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
-          status: HTTP_STATUS.UNAUTHORIZED,
-        },
-      });
-      const refused = yield* Effect.provide(
-        client().pagesLive({ taskId: TASK_ID }, "user-dana", true, "digest"),
-        refusing.layer,
-      );
-      assert.deepEqual(refused, { ok: false, failure: LIVE_SIGNED_OUT.failure });
-      assert.equal(refusing.requests()[0]?.searchParams.get(LIVE_USER_QUERY), "user-dana");
     }),
 );

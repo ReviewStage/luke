@@ -41,7 +41,7 @@ const OPEN_LINK_LABEL = "Open link";
 /**
  * Whether `element` stands in words being edited: the nearest element that
  * says whether it is editable says it is. Note that a node the editor holds
- * fixed, a mention's chip in a plan being edited, says it is not, so the
+ * fixed, a mention's chip in a description being edited, says it is not, so the
  * chip's own press opens it, as a click would.
  */
 function inEditedWords(element: Element): boolean {
@@ -140,7 +140,7 @@ export function LinkMenu(): React.JSX.Element | null {
 }
 
 /**
- * The ref of an element holding words being edited, a plan's body or a
+ * The ref of an element holding words being edited, a description's body or a
  * composer's field: a link in them that the link menu opens opens through
  * the opener where the element stands, the place's own around it
  * (`OpenAddressesHere`) included, as a press on the link drawn there would.

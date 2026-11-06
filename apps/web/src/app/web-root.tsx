@@ -33,12 +33,12 @@ import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
 import { LiveReadSubscription } from "@repo/panel/live-reads";
-import { createPanelRouter } from "@repo/panel/panel-router";
+import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
-import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
-import { createBrowserHistory, RouterProvider } from "@tanstack/react-router";
+import { ErrorBoundary, RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
+import { createBrowserHistory } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -142,7 +142,7 @@ export async function mountWebApp(
     installed.push(installActPort(web.actPort, web.actPortClient));
     installed.push(installAppPlatform(web.platform));
     // Every failure the panel shows is reported through the tab's Sentry.
-    installed.push(installShownFailureReporter(sentry.reportShownFailure));
+    installed.push(installShownFailureReporter(sentry.reportShownFailure, queryClient));
     // The document is read into the window's Query client before anything is drawn over it, so
     // no reader draws a first frame without it.
     await queryClient.ensureQueryData(appStateQuery);
@@ -156,20 +156,22 @@ export async function mountWebApp(
     uninstall();
     rootElement.replaceChildren();
     await runtime.dispose();
-    createRoot(rootElement).render(<ReloadState failure={TAB_FAILED} onReload={reloadTab} />);
+    createRoot(rootElement).render(
+      <ReloadState failure={TAB_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadTab} />,
+    );
     return undefined;
   }
   liftLoadingFrame(rootElement);
   const router = createPanelRouter(tabHistory, queryClient);
   const root = createRoot(rootElement, { onCaughtError: reportCaught });
   root.render(
-    <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
+    <ErrorBoundary failure={TAB_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
           <AppStateSubscription />
           <LiveReadSubscription />
           <WebAppearance />
-          <RouterProvider router={router} />
+          <PanelRouterProvider router={router} />
         </QueryProvider>
       </RegistryContext.Provider>
     </ErrorBoundary>,

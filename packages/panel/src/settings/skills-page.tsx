@@ -50,6 +50,7 @@ import { queryOptions, type UseQueryResult, useMutation, useQuery } from "@tanst
 import { useCallback, useState } from "react";
 import { type ActResult, askAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import {
   installedSkillsQuery,
@@ -151,7 +152,7 @@ const UNANSWERED_LINE = failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNAN
 
 /** The glyph each of a row's acts leads with. */
 const ACTION_ICON = {
-  [SKILL_ACTION.VIEW]: <GLYPH.PLAN />,
+  [SKILL_ACTION.VIEW]: <GLYPH.DESCRIPTION />,
   [SKILL_ACTION.REMOVE]: <TrashIcon />,
 } as const satisfies Record<SkillAction, React.JSX.Element>;
 
@@ -270,7 +271,7 @@ function SkillRowView({
   workspace: Workspace;
   landed: boolean;
 }): React.JSX.Element {
-  const { mutateAsync: sendInstalledSkillsRemove } = useMutation(
+  const { mutateAsync: sendInstalledSkillsRemove, ...removing } = useMutation(
     actMutation(ACT_KIND.INSTALLED_SKILLS_REMOVE),
   );
   const { skill } = row;
@@ -284,16 +285,15 @@ function SkillRowView({
   // Note that the card reads the skill while it is drawn, from its opening until its fade has run, so each View reads afresh.
   const viewed = useDrawnThroughExit(viewing);
 
+  const removalAct = useConfirmAct(removing, {
+    send: () => sendInstalledSkillsRemove({ skillId: skill.id }),
+    answered: (answer): ActionResult =>
+      "failure" in answer ? rejected(failureLine(answer)) : ACCEPTED,
+    failed: () => rejected(UNANSWERED_LINE),
+  });
   const removal = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    () =>
-      sendInstalledSkillsRemove({ skillId: skill.id })
-        .catch(() => undefined)
-        .then((answer): ActionResult => {
-          if (answer === undefined) return rejected(UNANSWERED_LINE);
-          if ("failure" in answer) return rejected(failureLine(answer));
-          return ACCEPTED;
-        }),
+    removalAct,
     confirmFailure(FAILURE_SURFACE.SKILL_REMOVE),
   );
 

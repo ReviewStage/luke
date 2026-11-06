@@ -2,15 +2,24 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
+import {
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeySummary,
+} from "@repo/features/provider-key-wire";
+import { TASKS_READ } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { App } from "./app.js";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "./app-commands.js";
 // Note that Settings is loaded as the window loads it, on first use
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
@@ -19,7 +28,7 @@ import "./desktop/desktop-settings.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, signedInAs } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 
 /**
@@ -38,6 +47,52 @@ function signedIn(account: { id: string; email: string; name: string }): AppStat
 
 const ADA = signedIn({ id: "account-ada", email: "ada@example.com", name: "Ada" });
 const GRACE = signedIn({ id: "account-grace", email: "grace@example.com", name: "Grace" });
+
+/** A team's workspace Grace was invited into, which holds no task yet. */
+const TEAM: Workspace = {
+  id: "workspace-acme",
+  name: "Acme",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+};
+
+const OPUS: CatalogModel = {
+  id: "anthropic/claude-opus-5.5",
+  name: "Claude Opus 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "high"],
+};
+
+const AT = Date.UTC(2026, 10, 6, 12);
+
+const ANTHROPIC_KEY: ProviderKeySummary = {
+  provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+  hint: "…wxyz",
+  status: PROVIDER_KEY_STATUS.VERIFIED,
+  addedAt: AT,
+  statusAt: AT,
+};
+
+/** Grace signed in as a member of a team's workspace, with an agent connected or none yet. */
+function graceInvited(connected: boolean): AppStateSnapshot {
+  return {
+    ...GRACE,
+    tasks: {
+      tasks: [],
+      listStatus: TASKS_READ.READY,
+      workspaces: [TEAM],
+      workspacesStatus: TASKS_READ.READY,
+    },
+    [LIVE_READ.MODELS]: {
+      "account-grace": {
+        rows: { models: [connected ? OPUS : { ...OPUS, credentialMissing: true }] },
+      },
+    },
+    [LIVE_READ.PROVIDER_KEYS]: {
+      "account-grace": { rows: { keys: connected ? [ANTHROPIC_KEY] : [] } },
+    },
+  };
+}
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -94,6 +149,13 @@ async function deliver(snapshot: AppStateSnapshot, version: number): Promise<voi
   await settle();
 }
 
+/** Whether setup's last step offers Finish. */
+function finishStands(): boolean {
+  return [...document.querySelectorAll("button")].some(
+    (each) => each.textContent?.trim() === "Finish",
+  );
+}
+
 /** The button drawn with `name` as its words. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll("button")].find(
@@ -104,24 +166,48 @@ function button(name: string): HTMLButtonElement {
 }
 
 test("signed out from Settings, a fresh account that finishes setup lands on Home", async () => {
-  // Grace has walked setup on this machine to its last step, Connect your tools.
-  window.localStorage.setItem(
-    "app.setupPlace",
-    JSON.stringify({ "account-grace": { audience: "me", at: 3 } }),
-  );
+  // Grace has walked setup to its last step, Connect your tools, and her account carries the place.
+  const graceMidway: AppStateSnapshot = {
+    ...GRACE,
+    settings: appSettingsWire(settingsView({ setupPlace: '{"audience":"me","at":3}' })),
+  };
+  // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+  await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() =>
-    root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
-  );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   await settle();
   assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
 
   await deliver({ ...ADA, account: { status: ACCOUNT_STATUS.SIGNED_OUT } }, 2);
-  await deliver(GRACE, 3);
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector(".desktop-onboarding") !== null, true),
+  );
+  await deliver(graceMidway, 3);
+  await vi.waitFor(() => assert.equal(finishStands(), true));
   act(() => button("Finish").click());
 
-  assert.equal(document.querySelector(".desktop-settings"), null, "Settings is gone");
+  assert.equal(document.querySelector(".desktop-settings") === null, true, "Settings is gone");
+  assert.ok(document.querySelector(".home-composer"), "Home stands");
+});
+
+test("an account a team invited stays in setup once it connects an agent, until Finish lets it in", async () => {
+  await writeHandedAppState();
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
+  await settle();
+  await deliver({ ...ADA, account: { status: ACCOUNT_STATUS.SIGNED_OUT } }, 2);
+  await deliver(graceInvited(false), 3);
+  await vi.waitFor(() => assert.equal(finishStands(), true));
+  assert.equal(button("Finish").disabled, true, "Finish waits on an agent");
+
+  // Note that the agent connected is the only step an invited account walks, so nothing has moved its place.
+  await deliver(graceInvited(true), 4);
+  await vi.waitFor(() => assert.equal(button("Finish").disabled, false));
+  assert.ok(document.querySelector(".desktop-onboarding"), "setup stands");
+  assert.equal(document.querySelector(".home-composer"), null, "Home waits on Finish");
+
+  act(() => button("Finish").click());
   assert.ok(document.querySelector(".home-composer"), "Home stands");
 });

@@ -6,6 +6,7 @@ import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-g
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { useQuery } from "@tanstack/react-query";
 import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -14,8 +15,8 @@ import { rendererRegistry } from "../renderer-runtime.js";
 import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { appStateQuery, selectRun } from "../use-app-state.js";
 import {
   ListedPullRequests,
   OpenAddressesHere,
@@ -88,10 +89,12 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
   );
   act(() =>
     root?.render(
-      createElement(
-        OpenLinkProvider,
-        { value: (link: ReadLink) => links.push(link) },
-        createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
+      withQueryClient(
+        createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => links.push(link) },
+          createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
+        ),
       ),
     ),
   );
@@ -121,10 +124,12 @@ test("a new list of tasks draws no part opening links again, and a link opened a
     links.push(link);
   };
   const draw = (tasks: readonly TaskSummary[]) =>
-    createElement(
-      OpenLinkProvider,
-      { value: openPlace },
-      createElement(ListedPullRequests, { tasks, children: createElement(Opener) }),
+    withQueryClient(
+      createElement(
+        OpenLinkProvider,
+        { value: openPlace },
+        createElement(ListedPullRequests, { tasks, children: createElement(Opener) }),
+      ),
     );
   fakeAppPlatform({ openGitHub: () => undefined });
   root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -162,7 +167,7 @@ test("a link naming a listed task by its number is asked of the place it is pres
   let open: ((href: string) => void) | undefined;
   // Note that the part reads the window's document, so it is read by the press.
   function Opener(): null {
-    useAppSlice(APP_SLICE.RUN);
+    useQuery({ ...appStateQuery, select: selectRun });
     open = useOpenLink();
     return null;
   }

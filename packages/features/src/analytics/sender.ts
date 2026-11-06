@@ -1,4 +1,4 @@
-import { scheduleRepeat } from "@repo/runtime/effect";
+import { scheduleOnce } from "@repo/runtime/effect";
 import { positiveInteger } from "@repo/wire";
 import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -245,8 +245,12 @@ export class ProductEventSender {
       // whole case this event exists for, and marking it only at launch would
       // make it a second, worse copy of `app:launch`.
       if (options.sends) {
-        const interval = Duration.millis(sender.#flushIntervalMs);
-        yield* scheduleRepeat(Schedule.spaced(interval), Effect.delay(sender.#tick, interval));
+        // Note that only the first tick is delayed, because `spaced` already
+        // waits a cadence between runs: delaying each run too doubles it.
+        yield* scheduleOnce(
+          sender.#flushIntervalMs,
+          Effect.repeat(sender.#tick, Schedule.spaced(Duration.millis(sender.#flushIntervalMs))),
+        );
       }
       return sender;
     });

@@ -6,7 +6,7 @@ import { GLYPH, InboxIcon } from "@repo/ui/icons";
 import { type RefObject, useCallback } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -24,8 +24,12 @@ import { hasReminder } from "./inbox-model.js";
  * there for one moment, opening on tomorrow at 9 AM, which only its Remind
  * me confirms. The item's row offers them in a
  * Remind me submenu, and H opens them on the chosen row; an item with a
- * reminder already offers Cancel reminder besides. What a reminder does to
- * the item, and how it comes back, is `inbox-model.ts`'s `inboxAtNow`.
+ * reminder already offers Clear reminder at the submenu's foot, as Mail's
+ * Remind Me does, the row saying when it comes due rather than the menu.
+ * Several items chosen together are offered the same times, set on every
+ * one, and Clear reminders where any holds one, answered by one toast whose
+ * Undo puts each back as it stood. What a reminder does to the item, and
+ * how it comes back, is `inbox-model.ts`'s `inboxAtNow`.
  */
 
 /** The hour tomorrow, next week, and the picker's opening day come due at, in the reader's own zone. */
@@ -39,9 +43,14 @@ const WORDS = {
   TOMORROW: "Tomorrow",
   NEXT_WEEK: "Next week",
   PICK: "Pick a date and time…",
-  CANCEL: "Cancel reminder",
+  CLEAR: "Clear reminder",
+  CLEAR_ALL: "Clear reminders",
+  CLEARED: "Reminders cleared",
   PAST: "Pick a time after now to be reminded",
 } as const;
+
+/** What the act that sets a reminder is called, wherever it stands. */
+export const REMIND_ME = WORDS.REMIND_ME;
 
 /** The picker asked for one moment: titled as the menu is, confirmed by Remind me. */
 const REMIND_MOMENT: DatePickerMoment = { title: WORDS.REMIND_ME, verb: WORDS.REMIND_ME };
@@ -98,8 +107,16 @@ function pickedInstant(picked: DatePicked, now: number): Picked {
   return at <= now ? { kind: PICKED.PAST } : { kind: PICKED.AT, at };
 }
 
-/** How an item's reminder is set: for an instant, or canceled where it is null. */
-export type InboxReminder = (item: InboxItem, until: number | null) => void;
+/** How a reminder set says so: by its own toast, or quietly where its caller answers several at once. */
+export interface RemindSaying {
+  readonly quiet: boolean;
+}
+
+/** A reminder set among several, which their caller answers with one toast. */
+const QUIET: RemindSaying = { quiet: true };
+
+/** How an item's reminder is set: for an instant, or cleared where it is null. */
+export type InboxReminder = (item: InboxItem, until: number | null, saying?: RemindSaying) => void;
 
 /** What a Remind me menu acts through: the reminder, and the date picker for a time of the reader's own, where the menu's surface holds one. */
 export interface RemindDoors {
@@ -107,31 +124,32 @@ export interface RemindDoors {
   readonly onPick?: ((item: InboxItem) => void) | undefined;
 }
 
-/** The times a menu offers for `item`, each saying when it comes due. */
-function timeActions(item: InboxItem, onRemind: InboxReminder): MenuAction[] {
+/** The times a menu offers, each saying when it comes due, set through `onAt` as it is chosen. */
+function timeActions(onAt: (at: number) => void): MenuAction[] {
   const now = Date.now();
   return REMIND_TIMES.map((time) => ({
     label: time.label,
     detail: remindWords(time.at(now), now),
-    onSelect: () => onRemind(item, time.at(Date.now())),
+    onSelect: () => onAt(time.at(Date.now())),
   }));
 }
 
-/** Cancel reminder, on an item with a reminder already; nothing on one without. */
-function cancelReminderActions(item: InboxItem, onRemind: InboxReminder): MenuAction[] {
+/** Clear reminder, on an item with a reminder already; nothing on one without. */
+function clearReminderActions(item: InboxItem, onRemind: InboxReminder): MenuAction[] {
   return hasReminder(item)
-    ? [{ label: WORDS.CANCEL, icon: <InboxIcon />, onSelect: () => onRemind(item, null) }]
+    ? [{ label: WORDS.CLEAR, icon: <InboxIcon />, onSelect: () => onRemind(item, null) }]
     : [];
 }
 
 /**
- * An item's menu's reminder entries: Remind me, a submenu of the times
- * and, where the menu's surface holds a picker, a time of the reader's own,
+ * An item's menu's reminder entry: Remind me, a submenu of the times and,
+ * where the menu's surface holds a picker, a time of the reader's own,
  * printing H where `keyed`, on any item, open or settled, as H sets a
- * reminder on any; and Cancel reminder on an item with a reminder already.
+ * reminder on any; and at its foot Clear reminder, on an item with a
+ * reminder already, whose time its row says (`InboxItemMarks`).
  */
 export function remindEntries(item: InboxItem, doors: RemindDoors, keyed: boolean): MenuEntry[] {
-  const { onPick } = doors;
+  const { onPick, onRemind } = doors;
   const pick: MenuAction[] =
     onPick === undefined
       ? []
@@ -139,10 +157,59 @@ export function remindEntries(item: InboxItem, doors: RemindDoors, keyed: boolea
   const remind: MenuEntry = {
     label: WORDS.REMIND_ME,
     icon: <GLYPH.TIME />,
-    items: [...timeActions(item, doors.onRemind), ...pick],
+    items: [
+      ...timeActions((at) => onRemind(item, at)),
+      ...pick,
+      ...clearReminderActions(item, onRemind),
+    ],
     ...(keyed ? { command: APP_COMMAND.REMIND_ME } : undefined),
   };
-  return [remind, ...cancelReminderActions(item, doors.onRemind)];
+  return [remind];
+}
+
+/** Sets or clears the reminder of several items chosen together. */
+export type InboxRemindMany = (items: readonly InboxItem[], until: number | null) => void;
+
+/**
+ * The Remind me menu of several items chosen together: the times, set on
+ * every one; a time of the reader's own where the surface holds a picker;
+ * and Clear reminders where any of them holds one.
+ */
+export function remindManyGroups(
+  items: readonly InboxItem[],
+  onRemindMany: InboxRemindMany,
+  onPick: (() => void) | undefined,
+): MenuAction[][] {
+  return [
+    timeActions((at) => onRemindMany(items, at)),
+    onPick === undefined ? [] : [{ label: WORDS.PICK, icon: <GLYPH.TIME />, onSelect: onPick }],
+    items.some(hasReminder)
+      ? [{ label: WORDS.CLEAR_ALL, icon: <InboxIcon />, onSelect: () => onRemindMany(items, null) }]
+      : [],
+  ].filter((group) => group.length > 0);
+}
+
+/**
+ * Sets the reminder of several items at once, or clears it on those that
+ * hold one, each quietly, and answers with one toast whose Undo puts each
+ * back as it stood; a refusal is still each item's own to say.
+ */
+export function useRemindMany(onRemind: InboxReminder | undefined): InboxRemindMany {
+  const toast = useToast();
+  return useCallback(
+    (items, until) => {
+      const touched = until === null ? items.filter(hasReminder) : items;
+      if (onRemind === undefined || touched.length === 0) return;
+      for (const item of touched) onRemind(item, until, QUIET);
+      const undo = () => {
+        for (const item of touched) onRemind(item, item.remindAt ?? null, QUIET);
+      };
+      const words =
+        until === null ? WORDS.CLEARED : `Reminder set for ${remindWords(until, Date.now())}`;
+      toast({ ...undoToast(words, undo), replayUnmasked: true });
+    },
+    [onRemind, toast],
+  );
 }
 
 /**
@@ -164,14 +231,19 @@ export function useInboxReminding({
   chosen: InboxItem | undefined;
   active: boolean;
   onRemind: InboxReminder | undefined;
-}): { readonly popover: React.ReactNode; readonly onPick: (item: InboxItem) => void } {
+}): {
+  readonly popover: React.ReactNode;
+  readonly onPick: (item: InboxItem, onAt?: (at: number) => void) => void;
+} {
   const picker = useDatePicker(room);
   const toast = useToast();
   const menu = useMenu(active);
   const { open } = picker;
+  // Note that the picker opens on the row of `item`, setting its reminder unless `onAt` takes the time picked, as several items chosen together do.
   const onPick = useCallback(
-    (item: InboxItem) => {
-      const row = rowOf(item.id);
+    (item: InboxItem, onAt?: (at: number) => void) => {
+      // Note that a time for several items chosen hangs from the list's room where none of their rows is drawn.
+      const row = rowOf(item.id) ?? (onAt === undefined ? undefined : (room.current ?? undefined));
       if (row === undefined || onRemind === undefined) return;
       open({
         at: row,
@@ -179,7 +251,7 @@ export function useInboxReminding({
         moment: REMIND_MOMENT,
         onClose: (picked) => {
           const named = pickedInstant(picked, Date.now());
-          if (named.kind === PICKED.AT) onRemind(item, named.at);
+          if (named.kind === PICKED.AT) (onAt ?? ((at) => onRemind(item, at)))(named.at);
           if (named.kind === PICKED.PAST)
             toast({
               replayUnmasked: true,
@@ -206,9 +278,9 @@ export function useInboxReminding({
     chosen === undefined || onRemind === undefined
       ? []
       : [
-          timeActions(chosen, onRemind),
+          timeActions((at) => onRemind(chosen, at)),
           [{ label: WORDS.PICK, icon: <GLYPH.TIME />, onSelect: () => onPick(chosen) }],
-          cancelReminderActions(chosen, onRemind),
+          clearReminderActions(chosen, onRemind),
         ].filter((group) => group.length > 0);
   const popover = (
     <>

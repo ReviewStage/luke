@@ -55,7 +55,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * and no name stands before it (`LineLead`). What GitHub said on the agent's pull
  * request reaches the agent as a prompt fenced and closed with what to do
  * about it; the transcript draws it as its own folding card, the one a
- * plan, a continue, and a fork are drawn in (`ai-elements/plan.tsx`), closed
+ * description, a continue, and a fork are drawn in (`ai-elements/plan.tsx`), closed
  * as it lands, since its head already says what happened. Its head says who did what to
  * which pull request, by the verdict's own badge from the Pull request
  * tab, or a check event's status, in the icon's seat; its body holds their
@@ -80,7 +80,7 @@ function leadOf(lead: LineLead, received: boolean): string {
 export const THREAD_LINE_DID = {
   [THREAD_LINE_EVENT.MESSAGE]: { AFTER_NAME: "wrote in", OWN: "Wrote in" },
   [THREAD_LINE_EVENT.ANSWER]: { AFTER_NAME: "answered", OWN: "Answered" },
-  [THREAD_LINE_EVENT.CLOSE]: { AFTER_NAME: "closed", OWN: "Closed" },
+  [THREAD_LINE_EVENT.CLOSE]: { AFTER_NAME: "resolved", OWN: "Resolved" },
 } as const satisfies Record<ThreadLineMetadata["event"], LineLead>;
 
 /** The agent whose transcript is drawn, whose threads its thread lines are on; none where no transcript says. */
@@ -134,10 +134,10 @@ export const COMMENT_LINE_LEAD = {
   OWN: "Commented on",
 } as const satisfies LineLead;
 
-/** What a comment line's chip names where no page does: the plan of the task it is on. */
-const PLAN_WORDS = "the description";
+/** What a comment line's chip names where no page does: the description of the task it is on. */
+const DESCRIPTION_WORDS = "the description";
 
-/** The link a comment line's chip is read from: the page it is on, or its task's plan; none where no task or workspace names it. */
+/** The link a comment line's chip is read from: the page it is on, or its task's description; none where no task or workspace names it. */
 function commentLink(line: CommentLineMetadata, doors: MentionDoors): string | undefined {
   if (line.task_id === undefined || doors.place.workspace === "") return undefined;
   return line.page_id === undefined
@@ -148,15 +148,15 @@ function commentLink(line: CommentLineMetadata, doors: MentionDoors): string | u
       );
 }
 
-/** What a comment line's head names: the page by its title, or the plan. */
+/** What a comment line's head names: the page by its title, or the description. */
 export function commentLineSubject(line: CommentLineMetadata): string {
-  return line.page_title ?? PLAN_WORDS;
+  return line.page_title ?? DESCRIPTION_WORDS;
 }
 
 /**
  * The head of a comment thread that reached the agent, drawn in place of the
  * instructions it was handed in, as a thread's line is headed: that it is a
- * comment, and the chip of the plan or page it is on.
+ * comment, and the chip of the description or page it is on.
  */
 export function CommentLineHead({
   line,

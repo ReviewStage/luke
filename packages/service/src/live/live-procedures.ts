@@ -26,15 +26,15 @@
  * something of the reader's moves; or whole, with that sync id, to a reader
  * that names none, is too far behind, or whose admission to the rows moved.
  *
- * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
+ * `GET /api/live/task-record?id=` answers one task's description, pages, and calls
  * the same way, one statement a part that marks where it stands
  * (`task-record-live.ts`), after the task is read as the account, so one it
  * does not reach is not found, as its own read answers, woken by a write
  * that names the task (`taskRecordLive`), as its pages and its history are.
- * `GET /api/live/task-comments?id=` answers its plan's own comment threads,
+ * `GET /api/live/task-comments?id=` answers its description's own comment threads,
  * or with `&page=` one page's on every version, as three statements, the
  * threads, their entries, and the files their comments carry
- * (`plan-comments-live.ts`), the same way and woken the same way
+ * (`description-comments-live.ts`), the same way and woken the same way
  * (`taskCommentsLive`).
  * `GET /api/live/task-browser-tabs?id=` answers its Browser tabs as one
  * statement, the agent's pointer on each among them, woken by a write that
@@ -70,7 +70,7 @@
  * `GET /api/live/hosts` answers the account's hosts as one, with the install
  * script's address on the origin the request reached; woken by a host
  * enrolled, approved, renamed, removed, or moving through an update
- * (`hostsLive`).
+ * (`hostsRead`).
  * `GET /api/live/installed-skills?workspaceId=` answers the skills the
  * account sees there, the workspace's and its own, each with whether it may
  * manage it, on the same membership check; woken by one of them installed,
@@ -172,6 +172,13 @@ import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire"
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
 import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
+  type AnyLiveRead,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveReadInput,
+  type LiveReadParams,
+} from "@repo/features/live-read";
+import {
   ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
   LIVE_USER_QUERY,
@@ -186,7 +193,6 @@ import { SqlClient } from "effect/sql";
 import { pluginWriteOrUnavailable } from "../accounts/workspaces-procedures.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
-import { installScriptUrlOf } from "../agents/hosts-procedures.js";
 import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
@@ -203,29 +209,19 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import { SlackBot } from "../slack/slack-bot.js";
 import {
   accountPreferencesLive,
-  agentBrowserTabsLive,
   agentInboxLive,
-  agentOriginLive,
-  agentPagesLive,
   agentTranscriptLive,
   automationRunsLive,
   automationsLive,
   automationWorkspaceRunsLive,
-  hostsLive,
   inboxItemsLive,
   inboxLive,
   installedSkillsLive,
   integrationStatusesLive,
   macCommandsLive,
-  PLAN_THREADS,
   pullRequestChaptersLive,
   sidebarLive,
-  taskBrowserTabsLive,
-  taskCommentsLive,
-  taskHistoryLive,
   taskInboxLive,
-  taskPagesLive,
-  taskRecordLive,
   tasksLive,
   workspaceIntegrationsLive,
   workspaceInvitationsLive,
@@ -242,7 +238,15 @@ import {
 } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
+import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { agentOriginRead } from "./reads/agent-origin.js";
+import { agentBrowserTabsRead, taskBrowserTabsRead } from "./reads/browser-tabs.js";
+import { hostsRead } from "./reads/hosts.js";
+import { agentPagesRead, taskPagesRead } from "./reads/pages.js";
+import { taskCommentsRead } from "./reads/task-comments.js";
+import { taskHistoryRead } from "./reads/task-history.js";
+import { taskRecordRead } from "./reads/task-record.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
@@ -269,7 +273,7 @@ export interface LiveProcedureSeams {
  */
 const LIVE_POLL_HOLD = {
   LOOK: Duration.seconds(3),
-  WATCHED_LOOK: Duration.seconds(1),
+  WATCHED_LOOK,
   HOLD: Duration.seconds(25),
 } as const;
 
@@ -825,8 +829,62 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * from a page left open under another account's session reads nothing of
  * theirs.
  */
-const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string) =>
+const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string | undefined }, userId: string) =>
   input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+
+/**
+ * Every bound read's handler (`live-read-binding.ts`): each param the
+ * reader's account (`LIVE_PARAM.USER`) refused as signed out unless it is
+ * the caller's, then bound to the caller; each text the query names bound
+ * as it is; each id it names read as one (`pathUuid`), not found where it
+ * spells none, and an optional one bound empty where it names none; the
+ * caller admitted as the binding asks; the parts sealed
+ * (`liveQueryParts`); and the fields beside them read.
+ */
+function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
+  const answered = Effect.fnUntraced(function* (
+    input: LiveReadInput<Read>,
+    context: { readonly userId: string; readonly request: Request },
+  ) {
+    // SAFETY: a read's query names each of its params under its own key, as text.
+    const asked = input as Readonly<Record<string, string | undefined>>;
+    const params: Record<string, string> = {};
+    for (const [key, param] of Object.entries(read.declaration.params)) {
+      if (param === LIVE_PARAM.USER) {
+        yield* sameUser({ [LIVE_USER_QUERY]: asked[key] }, context.userId);
+        params[key] = context.userId;
+      } else if (param === LIVE_PARAM.ID) {
+        params[key] = yield* pathUuid(asked[key] ?? "");
+      } else if (param === LIVE_PARAM.OPTIONAL_ID) {
+        const named = asked[key];
+        params[key] = named === undefined ? "" : yield* pathUuid(named);
+      } else if (param !== LIVE_PARAM.SERVED) {
+        params[key] = asked[key] ?? "";
+      }
+    }
+    // SAFETY: every param the query names is bound above, and the binding serves the rest (`bindLiveRead` holds it to).
+    const served = read.serve === undefined ? undefined : yield* read.serve(params as never);
+    // SAFETY: every param the declaration names is bound above or served, and no other.
+    const bound = { ...params, ...served } as LiveReadParams<Read>;
+    if (read.admit !== undefined) yield* read.admit(bound);
+    const sealed = yield* liveQueryParts(read, bound, asked, read.look);
+    const beside =
+      read.beside === undefined
+        ? undefined
+        : yield* read.beside({ request: context.request, params: bound });
+    // SAFETY: the sealed parts are the declaration's, and the fields beside them its `beside`, as its answer names them.
+    return { ...sealed, ...beside } as LiveReadAnswer<Read>;
+  });
+  return function* ({
+    input,
+    context,
+  }: {
+    readonly input: LiveReadInput<Read>;
+    readonly context: { readonly userId: string; readonly request: Request };
+  }) {
+    return yield* answered(input, context);
+  };
+}
 
 /** The live reads, each to a signed-in caller who is the account it names. */
 /** The roles that read and manage a workspace's invitations, as its held read admits them. */
@@ -908,77 +966,14 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
     }),
-    taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskRecordLive, { userId: context.userId, taskId }, input);
-    }),
-    taskPages: signedIn.taskPages.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskPagesLive, { userId: context.userId, taskId }, input);
-    }),
-    agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
-    }),
-    agentOrigin: signedIn.agentOrigin.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(agentOriginLive, { userId: context.userId, agentId }, input);
-    }),
-    taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskHistoryLive, { userId: context.userId, taskId }, input);
-    }),
-    taskComments: signedIn.taskComments.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const pageId = input.page === undefined ? PLAN_THREADS : yield* pathUuid(input.page);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        taskCommentsLive,
-        { userId: context.userId, taskId, pageId },
-        input,
-      );
-    }),
-    taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        taskBrowserTabsLive,
-        { userId: context.userId, taskId },
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
-    }),
-    agentBrowserTabs: signedIn.agentBrowserTabs.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        agentBrowserTabsLive,
-        { userId: context.userId, agentId },
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
-    }),
+    taskRecord: signedIn.taskRecord.effect(answerBoundRead(taskRecordRead)),
+    taskPages: signedIn.taskPages.effect(answerBoundRead(taskPagesRead)),
+    agentPages: signedIn.agentPages.effect(answerBoundRead(agentPagesRead)),
+    agentOrigin: signedIn.agentOrigin.effect(answerBoundRead(agentOriginRead)),
+    taskHistory: signedIn.taskHistory.effect(answerBoundRead(taskHistoryRead)),
+    taskComments: signedIn.taskComments.effect(answerBoundRead(taskCommentsRead)),
+    taskBrowserTabs: signedIn.taskBrowserTabs.effect(answerBoundRead(taskBrowserTabsRead)),
+    agentBrowserTabs: signedIn.agentBrowserTabs.effect(answerBoundRead(agentBrowserTabsRead)),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       return yield* liveQueryParts(
@@ -1076,11 +1071,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       );
       return { ...sealed, origin: new URL(context.request.url).origin };
     }),
-    hosts: signedIn.hosts.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const sealed = yield* liveQueryParts(hostsLive, { userId: context.userId }, input);
-      return { ...sealed, installScriptUrl: installScriptUrlOf(context.request) };
-    }),
+    hosts: signedIn.hosts.effect(answerBoundRead(hostsRead)),
     workspaceMemories: signedIn.workspaceMemories.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const member = yield* hostedStoreOrUnavailable(
@@ -1131,7 +1122,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       const { agent } = yield* reachedAgentById(context.userId, input.id);
       // Note that an agent with no repository is answered as its rows stand, none, as it keeps no chapters.
-      const { generatable } = yield* agentChaptersAdmission(context.userId, agent);
+      const { generator } = yield* agentChaptersAdmission(context.userId, agent);
       const sealed = yield* liveQueryParts(
         pullRequestChaptersLive,
         {
@@ -1142,7 +1133,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         },
         input,
       );
-      return { ...sealed, generatable };
+      return { ...sealed, ...generator };
     }),
     integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

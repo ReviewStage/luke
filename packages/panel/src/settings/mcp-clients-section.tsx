@@ -48,12 +48,13 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -276,17 +277,17 @@ function ClientRow({
   arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
-  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+  const { mutateAsync: sendMcpClientsRevoke, ...revoking } = useMutation(
     actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
   );
   const name = clientName(client);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
+  const refused: ActionResult = {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: `Revoking ${name} didn't finish. Try again.`,
+  };
   const revoke = (): Promise<ActionResult> => {
-    const refused: ActionResult = {
-      status: ACTION_RESULT_STATUS.REJECTED,
-      reason: `Revoking ${name} didn't finish. Try again.`,
-    };
     setRejection(undefined);
     return sendMcpClientsRevoke({ clientId: client.clientId }).then(
       (answer): ActionResult => {
@@ -303,9 +304,15 @@ function ClientRow({
       },
     );
   };
+  const confirmAct = useConfirmAct(revoking, {
+    send: revoke,
+    answered: (answer): ActionResult =>
+      "failure" in answer ? refused : { status: ACTION_RESULT_STATUS.ACCEPTED },
+    failed: () => refused,
+  });
   const confirm = useConfirmDialog(
     { subject: !revoked, surfaceOpen: true },
-    revoke,
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.MCP_CLIENT_REVOKE),
   );
 
@@ -461,7 +468,7 @@ function ConnectSection({
 
 /** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const read = useQuery(mcpClientsQuery(accountId));
   const retry = useMutation(mcpClientsRetryMutation());
   const rows = read.data;

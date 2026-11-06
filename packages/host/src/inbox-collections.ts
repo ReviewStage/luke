@@ -49,8 +49,8 @@ export type InboxChange =
   | {
       readonly kind: typeof INBOX_CHANGE.SETTLED;
       readonly itemId: string;
-      /** What the item becomes, from the item as the read holds it. */
-      readonly item: (item: InboxItem) => InboxItem;
+      /** What the item becomes, from the item as the read holds it; none where the agent has posted over what the reader settled since. */
+      readonly item: (item: InboxItem) => InboxItem | undefined;
     }
   | {
       readonly kind: typeof INBOX_CHANGE.MARKED;
@@ -103,9 +103,10 @@ function remindedItem(
 /**
  * The item as the change leaves it, from the item as a read holds it; none
  * where it leaves it alone. Note that a settle leaves an item no longer
- * open alone, and the service's item one changed since, because a change
- * is drawn again over each answer while it stands, and the service's own
- * newer item is what it draws.
+ * open alone, and one the agent has posted over since, as an answered item
+ * the agent's next post opens again, and the service's item one changed
+ * since, because a change is drawn again over each answer while it stands,
+ * and the service's own newer item is what it draws.
  */
 function changedItem(change: InboxChange, item: InboxItem): InboxItem | undefined {
   switch (change.kind) {

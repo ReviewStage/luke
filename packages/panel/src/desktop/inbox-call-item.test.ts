@@ -17,6 +17,7 @@ import {
 } from "@repo/features/inbox-wire";
 import type { LinkPlace, ReadLink } from "@repo/features/link-grammar";
 import type { Task } from "@repo/features/task-wire";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -159,15 +160,15 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [{ agent: AGENT.id }],
-      tab: { agent: AGENT.id },
+      tabs: [agentTab(AGENT.id)],
+      tab: agentTab(AGENT.id),
       openAgents: [AGENT.id],
     },
     sidePanel: {
       ...tasksControl().sidePanel,
       open: true,
-      tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-      strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+      tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+      strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
       tab: SIDE_PANEL_TAB.INBOX,
     },
     agents: agentsControl({

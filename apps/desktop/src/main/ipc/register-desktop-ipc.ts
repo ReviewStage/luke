@@ -79,6 +79,7 @@ function portTo(channel: string) {
       post: (message: unknown) => port1.postMessage(message),
       onMessage: (listener: (message: WireBoundaryInput) => void) =>
         port1.on("message", (event) => listener(event.data)),
+      onClose: (then: () => void) => void port1.once("close", then),
       close: () => port1.close(),
     };
   };
@@ -126,12 +127,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...cliProcedures({ install: () => installCli(config.hostedServiceBaseUrl) }),
     ...macShellProcedures<WebContents>({
+      mirror: (agentId) => operator.host.mirrorEnsure({ agentId }),
       spawn: spawnMacShell,
       ports: {
         open: portTo(TERMINAL_PORT_CHANNEL),
         whenGone: whenPageGone,
       },
-      whenClosed: (contents, then) => void contents.once("destroyed", then),
       createId: randomUUID,
     }),
     ...macTerminalProcedures({
@@ -168,7 +169,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       captureStill: (sender, rect) => windowStill(sender, rect),
       tellUnsavedWork: services.unsavedWork.tell,
       tellMenuOffers: services.menuOffers.tell,
-      showBuildLabel: windows.showBuildLabel,
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };
@@ -185,6 +185,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
+    reportOnline: (_context, online) => services.tellOnline(online),
     notifyReady: async (context) => {
       windows.panelReady();
       if (!launch.captureOutput) return;
@@ -211,11 +212,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
       {
         account: {
           host: operator.host,
+          acts: operator.acts,
           haltSessionReplay: operator.haltSessionReplay,
           resumeSessionReplay: operator.resumeSessionReplay,
           askBeforeSignOut: () => services.askBeforeLeaving(LEAVE.SIGN_OUT),
         },
         accountAsks: { host: operator.host },
+        acts: operator.acts,
         agentInbox: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
@@ -226,6 +229,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         pushes: windowPushes,
         settings: {
           host: operator.host,
+          acts: operator.acts,
           // The port names its window as an unknown sender; only a window of
           // this process's own is one the reporter is minted for.
           reporterOf: (actor) => {
@@ -237,6 +241,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          acts: operator.acts,
           colorCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,

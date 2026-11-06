@@ -41,7 +41,6 @@ import {
   tasksPinRepositoryParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@repo/features/tasks-view";
-import { GATEWAY_METHOD } from "@repo/gateway";
 import {
   type Confirmation,
   type EntityKind,
@@ -54,7 +53,7 @@ import {
 } from "@repo/sync";
 import { Effect, Equal, Schema, type Scope } from "effect";
 import { confirmWrite, type TxWait } from "./live-follow.js";
-import { callKey, untaken, type WriteAnswers } from "./queued-writes.js";
+import { callKey, TASK_QUEUED_WRITE, untaken, type WriteAnswers } from "./queued-writes.js";
 
 /** The account's sections and the rows in them as the pool holds them: one row, under the account's own id. */
 export interface SectionsRow extends TaskSections {
@@ -208,7 +207,7 @@ export type SectionsInput = TasksWriteSectionParams & {
 };
 
 /** What a write to the sidebar answers its caller: whether the service kept it. */
-type SidebarWritten = { readonly changed: boolean };
+type SidebarWritten = boolean;
 
 /** The sidebar's writes, declared once for every session. */
 export interface SidebarWrites {
@@ -244,12 +243,12 @@ export interface SidebarWriteDependencies {
 }
 
 /** A write refused, which takes back what it drew. */
-const REFUSED = { refused: { changed: false } } as const;
+const REFUSED = { refused: false } as const;
 
 /** What a sidebar write answers its caller where the service kept it, and where it refused it. */
 const ANSWERS: WriteAnswers<SidebarWritten> = {
-  kept: { changed: true },
-  refused: { changed: false },
+  kept: true,
+  refused: false,
 };
 
 /**
@@ -278,14 +277,14 @@ export function sidebarWrites(dependencies: SidebarWriteDependencies): SidebarWr
               const answered = pinnedAs.answer;
               const kept = answered.pins.find((pin) => pin.repository === repository);
               return {
-                answer: { changed: true },
+                answer: true,
                 txid: answered.txid,
                 taken: kept === undefined ? () => ROW_GONE : { made: kept },
               };
             })
           : Effect.succeed(REFUSED),
       queue: {
-        name: GATEWAY_METHOD.TASKS_PIN_REPOSITORY,
+        name: TASK_QUEUED_WRITE.PIN_REPOSITORY,
         input: Schema.Struct({ ...tasksPinRepositoryParamsSchema.fields, at: Schema.Number }),
         queued: () => ANSWERS.kept,
       },
@@ -316,15 +315,15 @@ export function sidebarWrites(dependencies: SidebarWriteDependencies): SidebarWr
               }
               const last = kept;
               if (!refused && last !== undefined) {
-                return { answer: { changed: true }, txid, taken: () => last };
+                return { answer: true, txid, taken: () => last };
               }
-              if (!refused) return { answer: { changed: true }, txid: undefined, settled: true };
+              if (!refused) return { answer: true, txid: undefined, settled: true };
               if (last !== undefined) yield* dependencies.collections().keep(txid, last);
               return REFUSED;
             })
           : Effect.succeed(REFUSED),
       queue: {
-        name: GATEWAY_METHOD.TASKS_WRITE_SECTION,
+        name: TASK_QUEUED_WRITE.WRITE_SECTION,
         input: Schema.Struct({
           ...tasksWriteSectionParamsSchema.fields,
           ownerId: Schema.UndefinedOr(Schema.String),

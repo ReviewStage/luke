@@ -4,7 +4,15 @@ import { IDLE_TASKS_VIEW, type TasksPinParams, type TasksView } from "@repo/feat
 import type { ACT_KIND } from "@repo/host/acts";
 import { afterEach, test } from "vitest";
 import { rendererRegistry } from "./renderer-runtime.js";
-import { pressRows, ROW_WRITE, type RowDoors, redoLast, UNDO_RAN, undoLast } from "./undo-stack.js";
+import {
+  pressRows,
+  ROW_WRITE,
+  type RowDoors,
+  redoLast,
+  type TaskRows,
+  UNDO_RAN,
+  undoLast,
+} from "./undo-stack.js";
 
 /**
  * undo-stack.test.ts -- ⌘Z and ⇧⌘Z over one task's pin as the window draws
@@ -37,7 +45,7 @@ function tasksShowing(pinned: boolean): TasksView {
 
 /** A window drawing the task unpinned, its act keeping each pin and drawing the task as the pin leaves it. */
 interface PinWindow {
-  readonly doors: RowDoors<TasksView, typeof ACT_KIND.TASKS_PIN>;
+  readonly doors: RowDoors<TaskRows, typeof ACT_KIND.TASKS_PIN>;
   /** Every pin the act was sent, in order. */
   readonly sent: TasksPinParams[];
   /** Draws the task pinned or not, as another Mac's pin would. */
@@ -55,7 +63,7 @@ function standWindow(): PinWindow {
     show(payload.pinned);
     return Promise.resolve(true);
   };
-  return { doors: { rows: () => drawn, send }, sent, show };
+  return { doors: { rows: () => ({ tasks: drawn, held: undefined }), send }, sent, show };
 }
 
 /** Pins the task as its menu's Pin does: its row read as pressed, the pin sent, and kept for ⌘Z once the act keeps it. */

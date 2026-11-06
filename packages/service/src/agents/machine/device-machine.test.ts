@@ -61,10 +61,10 @@ import { openLocalAgent } from "../../testing/local-agent.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { wokenOnHub } from "../../testing/sync-woken.js";
 import {
-  agentDeepenPlan,
+  agentCheckoutPlan,
   agentRepositoryRead,
   cloneAgentRepository,
-  deepenCheckoutWith,
+  finishCheckoutWith,
 } from "../coder-host/checkout.js";
 import {
   agentFailureOf,
@@ -97,6 +97,8 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The repository an agent works in where a test gives it one, and the installation reaching it. */
@@ -111,10 +113,11 @@ const RELAY_INSTALLATION: InstallationFixture = {
 const launched = (opened: Effect.Success<ReturnType<typeof openLocalAgent>>) =>
   Effect.gen(function* () {
     const machine = yield* deviceMachine;
-    const [found] = yield* machine.findPlaces(opened.session);
+    const [found] = yield* machine.findPlaces(opened.userId, opened.session);
     assert.ok(found?.running !== undefined, "a local agent's place always stands");
     return yield* machine.launchRunner(found.running, {
       env: ENV,
+      userId: opened.userId,
       agentId: opened.agent.id,
       name: found.name,
       ready: Effect.void,
@@ -240,14 +243,14 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             .from(deviceAgentLine)
             .where(eq(deviceAgentLine.id, handle.command));
           const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
-          // The same agent's checkout in a cloud sandbox, deepened as its launch deepens it.
+          // The same agent's checkout in a cloud sandbox, finished as its launch finishes it.
           const { agent } = opened;
           assert.ok(hasRepository(agent));
           const target = { userId: opened.userId, conversationId: agent.conversationId };
           const sandbox = sandboxDouble(() => undefined);
           yield* Effect.gen(function* () {
             yield* cloneAgentRepository(agent, sandbox, yield* agentRepositoryRead(target, agent));
-            yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
+            yield* finishCheckoutWith(sandbox, yield* agentCheckoutPlan(target, agent));
           }).pipe(Effect.provide(github.layer));
 
           // A member with no GitHub sign-in writes as the App's bot, at the noreply address GitHub links to it.
@@ -426,7 +429,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           const turnId = randomUUID();
           yield* writer.enqueueTurn(
             { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+            { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           const statusNow = Effect.map(
             latestTurnsOfReached([agent.conversationId]),
@@ -567,7 +570,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             const turnId = randomUUID();
             yield* writer.enqueueTurn(
               { userId, conversationId: agent.conversationId },
-              { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+              { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
             );
           }
           yield* TestClock.adjust("6 minutes");

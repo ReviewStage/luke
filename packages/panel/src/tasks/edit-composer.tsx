@@ -13,7 +13,7 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "@repo/ui";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { Equal } from "effect";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -190,10 +190,7 @@ export function EditComposer({
   // Note that the send answers at once: the tab takes it in turn behind any send, and says there if it did not go.
   const confirm = useConfirmDialog(
     { subject: edit.cuts, surfaceOpen: true },
-    () => {
-      send();
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    neverBusyAct(send),
     confirmFailure(FAILURE_SURFACE.MESSAGE_EDIT),
   );
   const composer: AgentComposerControl = {

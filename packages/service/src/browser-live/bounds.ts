@@ -25,7 +25,7 @@ export const BROWSER_LIVE_BOUNDS = {
   LEASE_WRITE_EVERY: Duration.minutes(1),
   /** How often a socket asks whether the panel has gone the idle bound silent. */
   IDLE_CHECK_EVERY: Duration.seconds(30),
-  /** How often the tab is read again, for its driver and whether it still stands. */
+  /** How often the tab is read again, for its driver and whether it still stands, where Sync cannot wake the read: no listener stands, or the tab is on no task. */
   TAB_CHECK_EVERY: Duration.seconds(5),
   /** How often input moves the member's takeover on, well inside its hold. */
   RENEW_EVERY: Duration.seconds(10),

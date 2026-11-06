@@ -109,13 +109,14 @@ function said(): string[] {
 
 /** Presses `label` on the standing toast that says `words`. */
 async function press(words: string, label: string): Promise<void> {
-  const card = [...document.querySelectorAll(".ui-toast:not([data-leaving])")].find(
-    (each) => each.querySelector(".ui-toast-words")?.textContent === words,
-  );
-  const button = [...(card?.querySelectorAll("button") ?? [])].find(
-    (each) => each.textContent === label,
-  );
-  assert.ok(button, `"${words}" offers ${label}`);
+  const offered = () => {
+    const card = [...document.querySelectorAll(".ui-toast:not([data-leaving])")].find(
+      (each) => each.querySelector(".ui-toast-words")?.textContent === words,
+    );
+    return [...(card?.querySelectorAll("button") ?? [])].find((each) => each.textContent === label);
+  };
+  await vi.waitFor(() => assert.equal(offered() !== undefined, true));
+  const button = offered() ?? assert.fail(`"${words}" offers ${label}`);
   act(() => button.click());
   await settle();
 }
@@ -127,7 +128,9 @@ test("each expired server stands in a toast of its own until its Reconnect has i
     [INTEGRATION_PROVIDER.NOTION]: INTEGRATION_STATUS.CONNECTED,
   };
   await mount();
-  assert.deepEqual(said().toSorted(), ["Linear's sign-in expired", "Slack's sign-in expired"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(said().toSorted(), ["Linear's sign-in expired", "Slack's sign-in expired"]),
+  );
 
   await press("Slack's sign-in expired", "Reconnect");
   assert.deepEqual(connects, [INTEGRATION_PROVIDER.SLACK]);

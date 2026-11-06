@@ -1,8 +1,4 @@
-import {
-  CONNECTION_HEALTH,
-  type ConnectionHealth,
-  type IntegrationTool,
-} from "@repo/features/integration-health";
+import { CONNECTION_HEALTH, type ConnectionHealth } from "@repo/features/integration-health";
 import { SIGN_IN, type SignIn, signInLine } from "@repo/features/integration-sign-in";
 import {
   INTEGRATION_NAME,
@@ -13,12 +9,12 @@ import {
   type IntegrationStatus,
   integrationAccountNames,
 } from "@repo/features/integration-wire";
-import { INTEGRATION_LABEL, readFailedWords } from "@repo/features/words";
-import { matchIntegration } from "./integration-search.js";
+import { MCP_SERVER_LABEL, readFailedWords } from "@repo/features/words";
+import { integrationFound } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
 
 /**
- * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
+ * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
  *
  * Every MCP server the service hands a coding agent is one account at an
  * integration, so the popover has one row per account the signed-in account
@@ -27,9 +23,7 @@ import { searchTokens } from "./search-tokens.js";
  * than one account names each row by its label ("Notion · Acme"), and one
  * with a single account by the provider alone, as it always has. A connected server carries a
  * switch, on unless the agent switched it off, which is all the agent's row
- * keeps: a server connected later is on for every agent. Its row names how
- * many tools the server offers once they have been read, and that count
- * opens the list of them. A server not
+ * keeps: a server connected later is on for every agent. A server not
  * connected offers to connect it, there and then; one whose sign-in expired,
  * or connected but whose server refused it or answered an error of its own
  * (`@repo/features/integration-health`), offers to reconnect, the latter with the
@@ -39,20 +33,19 @@ import { searchTokens } from "./search-tokens.js";
  * failed or never finished says so and offers to try again, as Settings
  * does (`@repo/features/integration-sign-in`); one this
  * deployment does not offer the account is not drawn at all, as the agent is never
- * handed it. No other row says where it stands in words: the switch, the
- * count, and the buttons are what say it. A read of the connections that
+ * handed it. No other row says where it stands in words: the switch and the
+ * buttons are what say it. A read of the connections that
  * failed is the one error, offered as a way to read again. The rows stand
  * under Connected, a lapsed connection among them, and Not connected, a
  * sign-in under way or one that did not finish among the latter; one whose
  * standing is unread stands first under no heading. A search finds servers
- * by name or what they are for, and every connected server's tools by name
- * or description, as Settings › Integrations' filter does
- * (`integration-search.ts`).
+ * by name, account, or what they are for, as Settings › Integrations' filter
+ * does (`integration-search.ts`).
  */
 
 /** The kinds of row the popover draws. */
 export const SERVER_ROW = {
-  /** Connected: a switch for this agent, and the count of its tools. */
+  /** Connected: a switch for this agent. */
   SWITCH: "switch",
   /** Not connected, or a sign-in under way: connect it from here. */
   CONNECT: "connect",
@@ -78,7 +71,7 @@ export const SERVER_ACTION = {
 } as const;
 
 /** What the popover and its button are called. */
-export const SERVERS_LABEL = INTEGRATION_LABEL.many;
+export const SERVERS_LABEL = MCP_SERVER_LABEL.many;
 
 /** One server's row. */
 export interface ServerRow {
@@ -96,8 +89,6 @@ export interface ServerRow {
   readonly kind: ServerRowKind;
   /** Whether the agent has it on; a row with no switch has it on only by default, which is never drawn. */
   readonly on: boolean;
-  /** A connected server's tools, once it answered with them. */
-  readonly tools?: readonly IntegrationTool[];
   /** Why a connected server lists no tools, where it answered why, or why its sign-in failed. */
   readonly problem?: string;
   /** The server's or the sign-in's own words behind `problem`, quoted and naming who said them, where they said any. */
@@ -220,7 +211,6 @@ export function serverRows(input: {
       const status = input.statusOf(connection);
       const health = input.healthOf(connection);
       const signIn = input.signInOf(connection);
-      const connected = status === INTEGRATION_STATUS.CONNECTED;
       const accountName = serverAccountName(connection, accounts);
       return {
         provider,
@@ -231,9 +221,6 @@ export function serverRows(input: {
         ...(accountName !== undefined ? { accountName } : undefined),
         kind: kindOf(status, health, signIn, input.readFailed),
         on: !input.disabled.includes(connection),
-        ...(connected && health.kind === CONNECTION_HEALTH.WORKING
-          ? { tools: health.tools }
-          : undefined),
         ...wordsOf(provider, status, health, signIn),
       };
     });
@@ -287,44 +274,19 @@ export function serversOnWords(rows: readonly ServerRow[]): string {
   return `${rows.filter((row) => row.on).length} of ${rows.length} on`;
 }
 
-/** Whether a row opens onto its server's tools: connected, and its server answered with at least one. */
-export function opensTools(row: ServerRow): boolean {
-  return row.kind === SERVER_ROW.SWITCH && row.tools !== undefined && row.tools.length > 0;
-}
-
-/** One tool a search found, with the server that offers it. */
-export interface ToolHit {
-  readonly row: ServerRow;
-  readonly tool: IntegrationTool;
-}
-
-/** What a search of the popover finds: the servers it names, and the tools it finds (`integration-search.ts`). */
-export interface ServerSearch {
-  readonly rows: readonly ServerRow[];
-  readonly tools: readonly ToolHit[];
-}
-
 /**
- * The servers and tools a query finds, as Settings › Integrations' filter
- * finds them; a blank query is every server and no tool. Note that the
- * tools found stay together by server, in the provider list's order and
- * alphabetical within each, because a server's tools read best beside each
- * other and each names its server once in the same place.
+ * The servers a query finds, by name or what they are for
+ * (`integration-search.ts`), or by an account's label, so "personal" finds
+ * Notion · Personal; a blank query finds every one.
  */
-export function searchServers(rows: readonly ServerRow[], query: string): ServerSearch {
+export function searchServers(rows: readonly ServerRow[], query: string): readonly ServerRow[] {
   const tokens = searchTokens(query);
-  if (tokens.length === 0) return { rows, tools: [] };
-  const found = rows.map((row) => ({
-    row,
-    match: matchIntegration(row.provider, row.tools ?? [], tokens),
-    // An account's label finds its row too, so "personal" finds Notion · Personal.
-    labeled:
-      row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token)),
-  }));
-  return {
-    rows: found.flatMap(({ row, match, labeled }) => (match?.named || labeled ? [row] : [])),
-    tools: found.flatMap(({ row, match }) => (match?.tools ?? []).map((tool) => ({ row, tool }))),
-  };
+  return rows.filter(
+    (row) =>
+      integrationFound(row.provider, tokens) ||
+      (row.account !== undefined &&
+        tokens.every((token) => row.name.toLowerCase().includes(token))),
+  );
 }
 
 /** One server as a surface names it: its provider, its connection, and what it is called beside its provider's others. */

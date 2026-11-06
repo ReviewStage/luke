@@ -26,7 +26,7 @@ import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { type PictureReader, pictureQuery } from "../picture-query.js";
-import { useAddToPlan } from "./add-to-plan.js";
+import { useAddToDescription } from "./add-to-description.js";
 import {
   AttachedFileChips,
   type MessageFileChip,
@@ -39,7 +39,7 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  *
  * Each picture is read once through the window's pictures
  * (`../picture-query.ts`), under the agent, or under the worker whose
- * transcript names it, and drawn as a plan's picture is
+ * transcript names it, and drawn as a description's picture is
  * (`../picture-block.tsx`): its own block while one, a quiet box while its
  * bytes are read, its words where it is gone. Several, whether the agent
  * showed them or an integration's call answered them under the call's row,
@@ -49,7 +49,7 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * the rest read all the same for the viewer; a picture the call answered
  * that was not kept says so, with its size, since the model saw it all the
  * same, and a gone tile opens nothing. A press on any other opens the window's file viewer
- * walking the set, or the call's pictures, from it, with Add to plan
+ * walking the set, or the call's pictures, from it, with Add to description
  * beside Download where the transcript is drawn on a plan's page. A WebM
  * the agent recorded, shown as a picture or answered by its browser's
  * `stop_recording`, plays where it stands instead, its own block above the
@@ -192,7 +192,7 @@ function OpenViewer({
 
 /** The viewer over a set's pictures, from the one named, until it is closed. */
 function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
-  const addToPlan = useAddToPlan();
+  const addToDescription = useAddToDescription();
   const [viewing, setViewing] = useState<
     { readonly items: readonly ViewedPicture[]; readonly id: string } | undefined
   >();
@@ -208,7 +208,7 @@ function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
         id={viewing.id}
         onId={(id) => setViewing({ ...viewing, id })}
         onClose={() => setViewing(undefined)}
-        action={addToPlan}
+        action={addToDescription}
       />
     );
   return { open, viewer };

@@ -10,8 +10,10 @@
  * quit on it still says when it was last on screen. A tab no stamp names
  * yet, whether just opened or kept by a version from before the stamps,
  * counts as viewed the first time it is seen here, so nothing closes the
- * moment it is first counted. A clock on the renderer's runtime ticks each
- * minute; on each tick and on a task opening, every tab of the open task's
+ * moment it is first counted. A clock on the renderer's runtime sleeps until
+ * the next moment something falls due, a tab's day unviewed or the shown
+ * tab's hour, and wakes the tidy then, rather than ticking while nothing
+ * can; on each wake and on a task opening, every tab of the open task's
  * strips not viewed for a day closes, last in its strip first, through the
  * strip's own close, so ⇧⌘T and the "+" bring each back where it stood.
  *
@@ -31,16 +33,14 @@ import {
   type ViewedAt,
   viewedAtOf,
 } from "@repo/ui/tab-strip-model";
-import { Clock, Duration, Option, Schedule, Stream } from "effect";
+import { Clock, Context, Duration, Effect, Option, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useRef } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
 
 /** How long a tab may go unviewed before it closes itself. */
 const TAB_IDLE = Duration.hours(24);
-
-/** How often the open task's tabs are tidied while the window stands. */
-const TIDY_EVERY = Duration.minutes(1);
 
 /**
  * How often a tab that stays shown is stamped again. Note that it is not
@@ -48,13 +48,29 @@ const TIDY_EVERY = Duration.minutes(1);
  */
 const RESTAMP_EVERY = Duration.hours(1);
 
-/** The time now, and again each `TIDY_EVERY` after, on whatever clock the stream runs under. */
-const tidyTicks: Stream.Stream<number> = Stream.fromEffectSchedule(
-  Clock.currentTimeMillis,
-  Schedule.spaced(TIDY_EVERY),
-);
+/** The moment named when nothing in the open task's strips falls due. */
+const NEVER_DUE = Number.POSITIVE_INFINITY;
 
-const tidyNowAtom = rendererRuntime.atom(tidyTicks);
+/** Sleeps until `due`, then answers the time, on whatever clock it runs under. */
+const wokenAt = (due: number): Effect.Effect<number> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    yield* Effect.sleep(Duration.millis(Math.max(0, due - now)));
+    return yield* Clock.currentTimeMillis;
+  });
+
+/**
+ * The time now, and again once `due` passes, unless it names no moment.
+ * Note that each moment due is an atom of its own, so a new one replaces
+ * the sleep standing rather than waiting it out.
+ */
+const wakeAtom = Atom.family((due: number) =>
+  rendererRuntime.atom(
+    due === NEVER_DUE
+      ? Stream.fromEffect(Clock.currentTimeMillis)
+      : Stream.concat(Stream.fromEffect(Clock.currentTimeMillis), Stream.fromEffect(wokenAt(due))),
+  ),
+);
 
 /** One strip as the tidy reads and closes it. */
 interface IdleStrip<T extends StripTab> {
@@ -91,9 +107,29 @@ export interface IdleTabsInput<Column extends StripTab, Panel extends StripTab> 
   readonly onWake: (agents: readonly string[]) => void;
 }
 
-/** The time the tidy reads, moved on each tick; none until the clock's first reading lands. */
-function useTidyNow(): number | undefined {
-  return Option.getOrUndefined(AsyncResult.value(useAtomValue(tidyNowAtom)));
+/** The time the tidy woke at, moved once `due` passes; none until the clock's first reading lands. */
+function useWokenAt(due: number): number | undefined {
+  return Option.getOrUndefined(AsyncResult.value(useAtomValue(wakeAtom(due))));
+}
+
+/** Reads the time on the renderer's clock as it stands at the call, for a stamp, which is the moment it is made. */
+function useClockNow(): () => number {
+  const services = useAtomValue(rendererRuntime);
+  return () => Context.get(AsyncResult.getOrThrow(services), Clock.Clock).currentTimeMillisUnsafe();
+}
+
+/** The next moment one of the strip's tabs falls due: the shown tab's hour since its stamp, or another's day unviewed where the strip does not keep it. */
+function nextDueOf<T extends StripTab>(strip: IdleStrip<T> | undefined): number {
+  if (strip === undefined) return NEVER_DUE;
+  const { shown } = strip;
+  const restamp = shown === undefined ? undefined : viewedAtOf(strip.viewedAt, shown);
+  let due = restamp === undefined ? NEVER_DUE : restamp + Duration.toMillis(RESTAMP_EVERY);
+  for (const tab of strip.tabs) {
+    if (sameTab(tab, shown) || strip.keeps(tab)) continue;
+    const at = viewedAtOf(strip.viewedAt, tab);
+    if (at !== undefined) due = Math.min(due, at + Duration.toMillis(TAB_IDLE));
+  }
+  return due;
 }
 
 /** A tab a strip showed, with the strip's own stamp, which still writes to its task once the strip is gone or another task's. */
@@ -165,7 +201,8 @@ function tidy<T extends StripTab>(strip: IdleStrip<T> | undefined, now: number):
 export function useIdleTabs<Column extends StripTab, Panel extends StripTab>(
   input: IdleTabsInput<Column, Panel>,
 ): void {
-  const now = useTidyNow();
+  const woken = useWokenAt(Math.min(nextDueOf(input.column), nextDueOf(input.panel)));
+  const clockNow = useClockNow();
   // Note that the effects read the strips through a ref, because their
   // callbacks are new each render and only the moments below should run them.
   const latest = useRef(input);
@@ -176,8 +213,10 @@ export function useIdleTabs<Column extends StripTab, Panel extends StripTab>(
   const columnTabs = column?.tabs;
   const panelTabs = panel?.tabs;
   const shownBefore = useRef<Shown<Column, Panel> | undefined>(undefined);
+  // Note that a stamp reads the clock as it is made, because the last wake may stand an hour behind it.
   useEffect(() => {
-    if (now === undefined) return;
+    if (woken === undefined) return;
+    const now = clockNow();
     const { column: strip, panel: side } = latest.current;
     const was = shownBefore.current;
     shownBefore.current =
@@ -189,14 +228,15 @@ export function useIdleTabs<Column extends StripTab, Panel extends StripTab>(
     if (taskId === undefined) return;
     stampStanding(strip, taskId, now);
     stampStanding(side, taskId, now);
-  }, [now, taskId, columnShown, panelShown, columnTabs, panelTabs]);
+  }, [woken, taskId, columnShown, panelShown, columnTabs, panelTabs]);
   const columnRead = column !== undefined;
   const panelRead = panel !== undefined;
   useEffect(() => {
-    if (now === undefined || taskId === undefined) return;
+    if (woken === undefined || taskId === undefined) return;
+    const now = clockNow();
     tidy(columnRead ? latest.current.column : undefined, now);
     tidy(panelRead ? latest.current.panel : undefined, now);
-  }, [now, taskId, columnRead, panelRead]);
+  }, [woken, taskId, columnRead, panelRead]);
   useEffect(() => {
     if (awake.length > 0) onWake(awake);
   }, [awake, onWake]);

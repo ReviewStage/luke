@@ -30,7 +30,7 @@ import { useMentionedPlace } from "./mentioned-place.js";
  *
  * A link to an item names the task, or the agent with no task, that holds it
  * and the item. Main's document holds only what waits, in brief, so the
- * item is drawn from the account's feed of every item (`use-host-read.ts`),
+ * item is drawn from the account's feed of every item (`live-reads.ts`),
  * which the host holds for the session, as the Inbox draws it: the glyph
  * its row's second line leads with for what it asks (`inboxLineGlyph`),
  * never its agent's tile, which would draw it as a chip of the agent, and
@@ -162,7 +162,7 @@ function waitingWords(item: WaitingBrief, readerId: string | undefined): string 
   return waitsOnReader(item, readerId) ? NEEDS_YOU.LABEL : "Waiting";
 }
 
-/** An item's card from main's brief alone, wearing the thread glyph its chip wears until the item is read: its question, that it waits for an answer, and when it was asked. */
+/** An item's card from main's brief alone, wearing no glyph, as its read card wears none: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
   item,
   now,
@@ -175,7 +175,6 @@ function WaitingItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={<GLYPH.THREAD />}
         name={item.title}
         corner={<Time at={item.postedAt} now={now} hint={false} />}
       />

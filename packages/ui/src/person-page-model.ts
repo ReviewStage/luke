@@ -1,5 +1,5 @@
-import { AGENT_STATUS } from "@repo/features/agent-wire";
-import type { TaskAgentLine, TaskSummary } from "@repo/features/task-wire";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
 import { createdByOnly, TASK_ORDER, taskTime } from "./task-list-model.js";
 
 /**
@@ -11,21 +11,30 @@ import { createdByOnly, TASK_ORDER, taskTime } from "./task-list-model.js";
  * show: the tasks assigned to them, then the rest of the tasks they
  * created, a task both being listed once, as theirs to do, and the agents
  * they started, those at work apart from the rest.
- * An agent is theirs by its line's `startedBy`, and a row of the list names
- * at most a few of a task's agents (`PLAN_AGENTS_BOUNDS`), those at work
- * first, so an older agent a busy task no longer names is left out rather
- * than read for. Their agents' open Inbox items are matched to them the same
- * way (`agentStarter`). Nothing here is read of another workspace, nor of
- * anyone's personal one, since the list is the listed workspace's.
+ * Their agents are read from the agents the list follows live, every agent
+ * of every listed task, as a task's own agents are (`use-agents.ts`), so
+ * each is the whole summary a task's row draws, where it runs among it; one
+ * is theirs by its `startedBy`, an archived one left out, as a task leaves
+ * it out of its agents. Until the list follows live it carries none, and
+ * the page lists none. Their agents' open Inbox items are matched to them
+ * by the task's row (`agentStarter`), which names at most a few of a task's
+ * agents (`PLAN_AGENTS_BOUNDS`). Nothing here is read of another workspace,
+ * nor of anyone's personal one, since the list is the listed workspace's.
  */
 
 /** The most tasks the page lists before the rest are left to the sidebar's filter. */
 export const PERSON_TASKS_SHOWN = 5;
 
-/** One of a person's agents, with the task it works on. */
+/** One of a person's agents, with the task it works on and when it last moved. */
 export interface PersonAgent {
   readonly task: TaskSummary;
-  readonly agent: TaskAgentLine;
+  readonly agent: AgentSummary;
+  /**
+   * Epoch milliseconds it last moved: when its run began while it works,
+   * and when its newest turn ended once it has, where the task's row names
+   * it; else when its newest run began, else when it was started.
+   */
+  readonly at: number;
 }
 
 /** What a person's page lists: their agents at work, their tasks, and their other agents, each newest first. */
@@ -39,24 +48,39 @@ export interface PersonPage {
 }
 
 /** The statuses of an agent that may still write: starting, or running. */
-const AT_WORK: ReadonlySet<TaskAgentLine["status"]> = new Set([
+const AT_WORK: ReadonlySet<AgentSummary["status"]> = new Set([
   AGENT_STATUS.STARTING,
   AGENT_STATUS.RUNNING,
 ]);
 
-/** When an agent last moved, for ordering: its line's time, else its task's. */
-function agentTime({ task, agent }: PersonAgent): number {
-  return agent.at ?? taskTime(task, TASK_ORDER.UPDATED);
+/** The person's agents on the listed tasks, the archived left out, each with its task and when it last moved. */
+function agentsOf(
+  userId: string,
+  tasks: readonly TaskSummary[],
+  agents: readonly AgentSummary[],
+): PersonAgent[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  return agents.flatMap((agent) => {
+    const task = agent.planId === null ? undefined : byId.get(agent.planId);
+    if (task === undefined || agent.archivedAt !== undefined) return [];
+    if (agent.startedBy?.userId !== userId) return [];
+    // Note that the task's row knows when a settled agent's newest turn ended, which its summary does not.
+    const line = task.agents?.agents.find((each) => each.id === agent.id);
+    return [{ task, agent, at: line?.at ?? agent.runStartedAt ?? agent.createdAt }];
+  });
 }
 
-/** The person's page from the listed workspace's tasks, the archived left out by the list itself. */
-export function personPage(userId: string, tasks: readonly TaskSummary[]): PersonPage {
-  const theirs = tasks.flatMap((task) =>
-    (task.agents?.agents ?? [])
-      .filter((agent) => agent.startedBy?.userId === userId)
-      .map((agent) => ({ task, agent })),
-  );
-  const newest = (a: PersonAgent, b: PersonAgent) => agentTime(b) - agentTime(a);
+/**
+ * The person's page from the listed workspace's tasks, the archived left out
+ * by the list itself, and the agents it follows live, none while it does not.
+ */
+export function personPage(
+  userId: string,
+  tasks: readonly TaskSummary[],
+  agents: readonly AgentSummary[] | undefined,
+): PersonPage {
+  const theirs = agentsOf(userId, tasks, agents ?? []);
+  const newest = (a: PersonAgent, b: PersonAgent) => b.at - a.at;
   const latest = (a: TaskSummary, b: TaskSummary) =>
     taskTime(b, TASK_ORDER.UPDATED) - taskTime(a, TASK_ORDER.UPDATED);
   const assignedToThem = (task: TaskSummary) => task.assignee?.userId === userId;

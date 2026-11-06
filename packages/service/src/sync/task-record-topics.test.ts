@@ -10,10 +10,10 @@ import {
   upsertBrowserTab,
 } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, renameAgent } from "@repo/database/models/agent-store";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
 import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
 import { readGitHubTokenRow, removeGitHubToken } from "@repo/database/models/github-token-store";
-import { startPlanCommentThread } from "@repo/database/models/plan-comments";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
@@ -27,29 +27,27 @@ import {
 } from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { saveNotes } from "../tasks/plan-notes.js";
+import { taskBrowserTabsRead } from "../live/reads/browser-tabs.js";
+import { agentPagesRead, taskPagesRead } from "../live/reads/pages.js";
+import { taskCommentsRead } from "../live/reads/task-comments.js";
+import { taskHistoryRead } from "../live/reads/task-history.js";
+import { taskRecordRead } from "../live/reads/task-record.js";
+import { saveNotes } from "../tasks/description-notes.js";
 import { openTokenMember } from "../testing/github-app-fake.js";
 import { added } from "../testing/task-contents.js";
-import {
-  agentPagesLive,
-  taskBrowserTabsLive,
-  taskCommentsLive,
-  taskHistoryLive,
-  taskPagesLive,
-  taskRecordLive,
-} from "./live-queries.js";
+import type { LiveTopics } from "./live-query.js";
 
 /**
  * An open task's live reads on the migrated capture: its record, pages,
- * history, comments, and Browser tabs (`taskRecordLive` and its neighbors), and an
- * agent's own pages on no task (`agentPagesLive`). Each write that moves
+ * history, comments, and Browser tabs (`taskRecordRead` and its neighbors), and an
+ * agent's own pages on no task (`agentPagesRead`). Each write that moves
  * one, through its real writer, notifies a topic the read is woken on, so a
  * window holding it hears it within a coalesce window rather than at the
- * hold's end: the plan saved, a page shown on the task and a comment left
+ * hold's end: the description saved, a page shown on the task and a comment left
  * on it, a page an agent
  * on no task shows, an agent's tab opened, pointed at, taken over, handed
  * back, and closed, an agent renamed, and what admits the reader to the
@@ -70,11 +68,13 @@ const openAccount = Effect.gen(function* () {
 const wakes = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],
-  reads: readonly (readonly SyncTopic[])[],
+  reads: readonly LiveTopics[],
 ) =>
   Effect.gen(function* () {
     const fired = yield* expectTopicsFire(write, topics);
     for (const woken of reads) {
+      // Note that each read here names its topics by its params alone, never looking them up.
+      assert.ok(Array.isArray(woken), "the read names its topics");
       assert.ok(
         topics.some(([kind, id]) => woken.some((topic) => topic[0] === kind && topic[1] === id)),
         "the read is woken by a topic the write notifies",
@@ -85,12 +85,12 @@ const wakes = <A, E, R>(
 
 it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
   it.effect(
-    "the plan's notes saved, a page shown on the task, and a comment left on it notify the task, which wakes its record, pages, history, and comments",
+    "the description's notes saved, a page shown on the task, and a comment left on it notify the task, which wakes its record, pages, history, and comments",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const task = yield* startTask(owner, { name: "Teammate invitations" });
-        const params = { userId: owner, taskId: task.id };
+        const params = { userId: owner, id: task.id };
         const onTask: readonly SyncTopic[] = [[TOPIC.TASK, task.id]];
 
         // A save is stamped at the clock's instant, which has moved on since the task was made.
@@ -100,7 +100,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
             added("Context", "A member cannot bring a teammate in."),
           ]),
           [...onTask, [TOPIC.WORKSPACE, task.workspaceId]],
-          [taskRecordLive.topics(params), taskHistoryLive.topics(params)],
+          [taskRecordRead.topics(params), taskHistoryRead.topics(params)],
         );
         const shown = yield* wakes(
           writePage(
@@ -110,17 +110,21 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
             { kind: PAGE_SHOWER.APP },
           ),
           onTask,
-          [taskRecordLive.topics(params), taskPagesLive.topics(params)],
+          [taskRecordRead.topics(params), taskPagesRead.topics(params)],
         );
         const pageId = Option.getOrThrow(shown.value).id;
         yield* wakes(
-          startPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: owner }, task.id, {
-            clientKey: randomUUID(),
-            page: { id: pageId, version: 1 },
-            words: "Add a chart.",
-          }),
+          startDescriptionCommentThread(
+            { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: owner },
+            task.id,
+            {
+              clientKey: randomUUID(),
+              page: { id: pageId, version: 1 },
+              words: "Add a chart.",
+            },
+          ),
           onTask,
-          [taskCommentsLive.topics({ ...params, pageId })],
+          [taskCommentsRead.topics({ ...params, page: pageId })],
         );
       }),
   );
@@ -132,7 +136,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
         const owner = yield* openAccount;
         const task = yield* startTask(owner, { name: "Unrelated" });
         const agentId = yield* openTaskAgent(owner, task.workspaceId, null);
-        const woken = [agentPagesLive.topics({ userId: owner, agentId })];
+        const woken = [agentPagesRead.topics({ userId: owner, id: agentId })];
 
         yield* wakes(
           writePage(
@@ -166,14 +170,14 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Try the checkout.",
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = Option.getOrThrow(started).agent;
-        const params = { userId: owner, taskId: task.id };
-        const tabs = [taskBrowserTabsLive.topics(params)];
+        const params = { userId: owner, id: task.id };
+        const tabs = [taskBrowserTabsRead.topics(params)];
         const onTask: readonly SyncTopic[] = [[TOPIC.TASK, task.id]];
         const targetId = `target-${randomUUID()}`;
         const now = yield* Clock.currentTimeMillis;
@@ -212,7 +216,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
         yield* wakes(
           renameAgent(owner, agent.id, "Checkout"),
           [...onTask, [TOPIC.AGENT, agent.id], [TOPIC.WORKSPACE, task.workspaceId]],
-          [...tabs, taskHistoryLive.topics(params)],
+          [...tabs, taskHistoryRead.topics(params)],
         );
       }),
   );
@@ -227,12 +231,12 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
         yield* joinWorkspace(task.workspaceId, teammate);
         const sealed = (yield* readGitHubTokenRow(teammate))?.sealedToken ?? "";
         const now = new Date(yield* Clock.currentTimeMillis);
-        const params = { userId: teammate, taskId: task.id };
+        const params = { userId: teammate, id: task.id };
         const reads = [
-          taskRecordLive.topics(params),
-          taskPagesLive.topics(params),
-          taskHistoryLive.topics(params),
-          taskBrowserTabsLive.topics(params),
+          taskRecordRead.topics(params),
+          taskPagesRead.topics(params),
+          taskHistoryRead.topics(params),
+          taskBrowserTabsRead.topics(params),
         ];
         const teammateTopic: SyncTopic = [TOPIC.ACCOUNT, teammate];
 

@@ -20,6 +20,7 @@ import {
   type PullRequestRefusal,
 } from "@repo/features/pull-request-write-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   Badge,
@@ -47,6 +48,7 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@repo/ui";
+import type { ConfirmAct } from "@repo/ui/confirm-state";
 import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
@@ -54,13 +56,14 @@ import {
   GLYPH,
 } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -72,7 +75,7 @@ import { useToast, useWithdrawToast } from "../toast.js";
 import { PULL_REQUEST_STATE_LABEL, queuedLabel, REPOSITORY_UNREACHED_NOTE } from "./agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
-import { useAgentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
+import { agentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
 import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 
 /**
@@ -244,6 +247,19 @@ export interface PullRequestWrites {
    */
   readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<WriteOutcome>;
   readonly dismiss: () => void;
+  /**
+   * The change `request` asks, as a question that confirms it reads it from
+   * the change mutation: out while it is the one out, and refused as its
+   * newest answer says, or where it was not sent because another was out.
+   */
+  readonly confirmAct: (request: PullRequestActionRequest) => ConfirmAct;
+}
+
+/** A change's outcome as a question reads it: none where GitHub made it. */
+function refusalOf(outcome: WriteOutcome): ActionResult | undefined {
+  return outcome.done
+    ? undefined
+    : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words };
 }
 
 /** What an answer leaves to say: nothing where GitHub made the change. */
@@ -285,10 +301,17 @@ export function noteOf(
 export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): PullRequestWrites {
   const number = usePullRequestNumber();
   const source = usePullRequestSource();
-  const own = useAgentPullRequestWrite(agentId, number);
-  const send = source?.write ?? own;
+  const send = source?.write ?? agentPullRequestWrite(agentId, number);
+  const queryClient = useQueryClient();
+  // Note that every change to one pull request is keyed alike, so each control refuses to send while any is out (`isMutating`), and runs in order under one scope where two land in one tick.
+  const mutationKey = useMemo(
+    () => [ACT_KIND.AGENTS_PULL_REQUEST_ACTION, agentId, number] as const,
+    [agentId, number],
+  );
   // Note that the change is one mutation through GitHub's answer and the reads it asks again, so it stays pending until they land.
   const change = useMutation({
+    mutationKey,
+    scope: { id: agentId },
     mutationFn: async (request: PullRequestActionRequest) => {
       const answer = await send(request).catch(
         (): AgentPullRequestWriteAnswerView => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
@@ -303,9 +326,11 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
   const { mutateAsync, reset } = change;
   // Note that the one out is held in a ref as well, because two presses in one frame both read the mutation from before either.
   const out = useRef(false);
+  // The change a question asked that was not sent because another was out, which the mutation never hears of.
+  const [unsent, setUnsent] = useState<PullRequestAction | undefined>(undefined);
   const write = useCallback(
     async (request: PullRequestActionRequest, onDone?: () => void) => {
-      if (out.current) return NOT_SENT;
+      if (out.current || queryClient.isMutating({ mutationKey }) > 0) return NOT_SENT;
       out.current = true;
       const { answer, note } = await mutateAsync(request).finally(() => {
         out.current = false;
@@ -315,11 +340,33 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
       }
       return outcomeOf(note);
     },
-    [mutateAsync],
+    [mutateAsync, queryClient, mutationKey],
   );
   const pending = change.isPending ? change.variables.action : undefined;
   const note = change.data?.note;
-  return { pending, note, write, dismiss: reset };
+  const confirmAct = (request: PullRequestActionRequest): ConfirmAct => {
+    const asked = change.variables?.action === request.action;
+    return {
+      run: () => {
+        setUnsent(undefined);
+        return write(request).then((outcome) => {
+          if (outcome === NOT_SENT) setUnsent(request.action);
+        });
+      },
+      busy: change.isPending && asked,
+      refused:
+        unsent === request.action
+          ? refusalOf(NOT_SENT)
+          : !change.isPending && asked && change.data !== undefined
+            ? refusalOf(outcomeOf(change.data.note))
+            : undefined,
+      reset: () => {
+        setUnsent(undefined);
+        reset();
+      },
+    };
+  };
+  return { pending, note, write, dismiss: reset, confirmAct };
 }
 
 /** The changes the pill's menu offers: where the pull request stands, never a review. */
@@ -420,15 +467,7 @@ export function PullRequestStateMenu({
   const mayBeQueued = inQueue || unread;
   const confirm = useConfirmDialog(
     { subject: asked && mayBeQueued, surfaceOpen: shown },
-    () =>
-      writes
-        .write({ action: PULL_REQUEST_ACTION.CLOSE })
-        .then(
-          (outcome): ActionResult =>
-            outcome.done
-              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-        ),
+    writes.confirmAct({ action: PULL_REQUEST_ACTION.CLOSE }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DEQUEUE),
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.

@@ -33,7 +33,7 @@ import {
 import { effectServiceLayer, serviceLayer } from "@repo/host/service-layer";
 import type { ColorCode } from "@repo/host/task-code-remote";
 import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@repo/settings";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, SubscriptionRef } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { moveToApplications } from "../move-to-applications";
@@ -115,6 +115,8 @@ export interface DesktopServices {
   readonly unsavedWork: UnsavedWorkHolders<WebContents>;
   /** Which commands each panel offers the menu bar, as each tells it. */
   readonly menuOffers: MenuOffers;
+  /** Whether the machine has a network, as any window tells it. */
+  readonly tellOnline: (online: boolean) => void;
   /**
    * Asks before a way out of the app while something would be lost, answering
    * whether to go on: the one sheet the quit, Restart to update, and Sign
@@ -240,6 +242,7 @@ export function composeDesktop(
       const operator = yield* createOperatorClient({
         report: config.report,
         gateway: host.gateway,
+        acts: host.acts,
         nodes: host.nodes,
         node: native.capabilities,
         state,
@@ -317,11 +320,14 @@ export function composeDesktop(
         onPanelFocusChanged: windows.onPanelFocusChanged,
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
+      // The network as main reads it once at launch, then as its windows tell it,
+      // since Electron announces no change of it to the main process.
+      const online = yield* SubscriptionRef.make(net.isOnline());
       // A run that sends nothing, a fixture's or a capture's, is never offline.
       if (config.runMode.sendsNetwork) {
         yield* linkNetworkWatch({
           state,
-          isOnline: () => net.isOnline(),
+          online: SubscriptionRef.changes(online),
           regained: operator.host.tasksRegained(),
           report: config.report,
         });
@@ -354,6 +360,7 @@ export function composeDesktop(
         services,
         unsavedWork,
         menuOffers: offers,
+        tellOnline: (found) => void run(SubscriptionRef.set(online, found)),
         askBeforeLeaving: askFirst,
       };
     }),

@@ -88,7 +88,7 @@ const memberWithLinear = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -381,7 +381,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
   );
 
   it.effect(
-    "a connection switched off but mentioned to the agent is handed to the native turn that starts next, and to that turn alone, as an eve turn takes its mentions",
+    "a connection switched off but mentioned to the agent is handed to the native turn that starts next, and to that turn alone",
     () =>
       Effect.gen(function* () {
         const member = yield* memberWithLinear;

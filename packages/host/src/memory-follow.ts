@@ -10,7 +10,6 @@ import {
   type WorkspaceMemoriesLiveAnswer,
   workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -19,7 +18,6 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppHostReads, type AppMemories, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -183,16 +181,19 @@ export function heldMemories(
  */
 export function memoryForget(
   send: (forget: MemoryForgetParams) => Effect.Effect<MemoriesAnswerView>,
-): WriteDeclaration<MemoryLiveRow, FieldChange<MemoryLiveRow>, MemoryForgetParams, WireValue> {
+): WriteDeclaration<
+  MemoryLiveRow,
+  FieldChange<MemoryLiveRow>,
+  MemoryForgetParams,
+  MemoriesAnswerView
+> {
   return {
     kind: MEMORY,
     keys: (forget) => [forget.id],
     change: () => () => ROW_GONE,
     send: (forget) =>
       Effect.map(send(forget), (answer) =>
-        "memories" in answer
-          ? { answer: carried<MemoriesAnswerView>(answer), txid: answer.txid }
-          : { refused: carried<MemoriesAnswerView>(answer) },
+        "memories" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 }

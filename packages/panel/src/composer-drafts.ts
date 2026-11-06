@@ -1,6 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { type AgentAttachment, DIFF_SIDE } from "@repo/features/agent-wire";
+import { DESCRIPTION_COMMENT_SCOPE } from "@repo/features/description-comment-wire";
 import {
   INBOX_REPLY,
   INBOX_STATUS,
@@ -9,8 +10,7 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@repo/features/inbox-wire";
-import { PLAN_COMMENT_SCOPE } from "@repo/features/plan-comment-wire";
-import { Duration, Effect, Equal, Schema } from "effect";
+import { Duration, Effect, Equal, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
@@ -23,9 +23,9 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, a plan's comment its words per
+ * the task starts in, a description's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), a line comment in Files changed its words per
+ * (`description-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
  * (`edit-composer.tsx`), and an inbox card its answer
@@ -71,17 +71,34 @@ const MAX_KEPT = 200;
 /** How long the typing rests before what the window changed is written to storage. */
 const STORE_PAUSE = Duration.millis(300);
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a description's comment, a line comment on an agent's changed file, or an agent's line written again. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
-  PLAN_COMMENT: "planComment",
+  DESCRIPTION_COMMENT: "descriptionComment",
   LINE_COMMENT: "lineComment",
   EDIT: "edit",
 } as const;
+
+/** A description's comment's kind as storage holds it: today's, or `planComment`, which every draft kept before the description was named so holds, read as today's. */
+const descriptionCommentKind = Schema.Literals([
+  DRAFT_PLACE.DESCRIPTION_COMMENT,
+  "planComment",
+]).pipe(
+  Schema.decodeTo(
+    Schema.Literal(DRAFT_PLACE.DESCRIPTION_COMMENT),
+    SchemaTransformation.transform<
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT,
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT | "planComment"
+    >({
+      decode: () => DRAFT_PLACE.DESCRIPTION_COMMENT,
+      encode: (kind) => kind,
+    }),
+  ),
+);
 
 const draftPlaceSchema = Schema.Union([
   Schema.Struct({
@@ -125,7 +142,7 @@ const draftPlaceSchema = Schema.Union([
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.PLAN_COMMENT),
+    kind: descriptionCommentKind,
     /** The plan the comment is on, which the sidebar marks. */
     planId: Schema.String,
     /**
@@ -139,7 +156,7 @@ const draftPlaceSchema = Schema.Union([
       Schema.Struct({ threadId: Schema.String }),
       Schema.Struct({
         quote: Schema.String,
-        scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+        scope: Schema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
       }),
     ]),
   }),
@@ -248,7 +265,6 @@ const storedDrafts = Schema.fromJsonString(
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
       steps: Schema.optionalKey(Schema.Array(Schema.Number)),
       press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
-      resolving: Schema.optionalKey(Schema.Literal(true)),
       dropped: Schema.optionalKey(Schema.Array(Schema.String)),
       revision: Schema.optionalKey(Schema.Number),
     }),
@@ -268,8 +284,6 @@ export interface Draft {
   readonly values: readonly InboxFormValue[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  /** Whether an inbox card's × staged resolving its item without an answer, which its Send then does, its words going beside it. */
-  readonly resolving?: true | undefined;
   /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
   readonly dropped?: readonly string[] | undefined;
   /** The revision of the inbox item its picks were made on, so they never land on an ask changed since (`draftAt`). */
@@ -287,8 +301,11 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
 
-/** A plan comment's place: a thread being started, answered, or one of its comments edited. */
-export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+/** A description comment's place: a thread being started, answered, or one of its comments edited. */
+export type DescriptionCommentPlace = Extract<
+  DraftPlace,
+  { kind: typeof DRAFT_PLACE.DESCRIPTION_COMMENT }
+>;
 
 /** A line comment in Files changed: the agent, the file, and the side and last line it stands under. */
 export type LineCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.LINE_COMMENT }>;
@@ -307,7 +324,6 @@ function stored(draft: Draft): boolean {
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
     draft.press !== undefined ||
-    draft.resolving === true ||
     (draft.dropped ?? []).length > 0
   );
 }
@@ -329,7 +345,7 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
     .flatMap(({ place: storedPlace, text, choices = [], values = [], ...rest }) => {
       const read = placeOf(storedPlace);
       if (read === undefined) return [];
-      const { steps, press, resolving, dropped } = rest;
+      const { steps, press, dropped } = rest;
       const revision = rest.revision ?? read.revision;
       return [
         {
@@ -340,7 +356,6 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
           values,
           ...(steps === undefined ? undefined : { steps }),
           ...(press === undefined ? undefined : { press }),
-          ...(resolving === undefined ? undefined : { resolving }),
           ...(dropped === undefined ? undefined : { dropped }),
           ...(revision === undefined ? undefined : { revision }),
         },
@@ -363,7 +378,6 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.values ?? [], kept.values) &&
     Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
     entry.press === kept.press &&
-    entry.resolving === kept.resolving &&
     Equal.equals(entry.dropped ?? [], kept.dropped ?? []) &&
     entry.revision === kept.revision
   );
@@ -372,7 +386,7 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
 /** A draft as storage keeps it, a card's picks only where it holds some. */
 function entryOf(
   owner: Owner,
-  { place, text, choices, values, steps = [], press, resolving, dropped = [], revision }: KeptDraft,
+  { place, text, choices, values, steps = [], press, dropped = [], revision }: KeptDraft,
 ): StoredDraft {
   return {
     accountId: owner,
@@ -382,7 +396,6 @@ function entryOf(
     ...(values.length === 0 ? undefined : { values }),
     ...(steps.length === 0 ? undefined : { steps }),
     ...(press === undefined ? undefined : { press }),
-    ...(resolving === undefined ? undefined : { resolving }),
     ...(dropped.length === 0 ? undefined : { dropped }),
     ...(revision === undefined ? undefined : { revision }),
   };
@@ -970,15 +983,12 @@ function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
 }
 
 /** Whether a draft holds a pick: an option, a field, a step, a press, or a resolve staged, which stands on the ask it was staged on as a pick does. */
-export function holdsPicks(
-  draft: Pick<Draft, "choices" | "values" | "steps" | "press" | "resolving">,
-): boolean {
+export function holdsPicks(draft: Pick<Draft, "choices" | "values" | "steps" | "press">): boolean {
   return (
     draft.choices.length > 0 ||
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
-    draft.press !== undefined ||
-    draft.resolving === true
+    draft.press !== undefined
   );
 }
 
@@ -990,7 +1000,6 @@ export function withoutPicks<D extends Draft>(draft: D): D {
     values: [],
     steps: undefined,
     press: undefined,
-    resolving: undefined,
     revision: undefined,
   };
 }
@@ -1034,8 +1043,7 @@ export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "s
  * never the words themselves, so a list reading every row's draft draws
  * again as a draft comes or goes or a pick moves, never on each word typed.
  */
-export interface InboxRowDraft
-  extends Pick<Draft, "choices" | "values" | "steps" | "press" | "resolving"> {
+export interface InboxRowDraft extends Pick<Draft, "choices" | "values" | "steps" | "press"> {
   readonly itemId: string;
   readonly revision: number | undefined;
   /** Whether it holds words or files, which its row marks with the pencil whatever its picks. */
@@ -1055,7 +1063,6 @@ const inboxRowDraftsAtom = Atom.withEquality(
         values: kept.values,
         steps: kept.steps,
         press: kept.press,
-        resolving: kept.resolving,
       })),
   ),
   Equal.equals,
@@ -1184,7 +1191,7 @@ export function useDraftWriter(): DraftWriter {
 }
 
 /** Whether a plan holds a draft: one of its agents', its draft agent's, an inbox card's, or a comment's. */
-export function usePlanDrafted(taskId: string): boolean {
+export function useDescriptionDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
 

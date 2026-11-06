@@ -23,7 +23,7 @@ import { PhoneHead } from "./phone-head.js";
  *
  * Nothing here is held apart from the column and the side panel: the
  * screens read what they already hold. Overview is the panel shut over the
- * column on its Overview, the task's plan, which leads with the task's
+ * column on its Overview, the task's description, which leads with the task's
  * agents (`plan-agents.tsx`); an agent is the panel shut over the column on
  * its tab, a draft's among them; and a tab of the panel, opened from a link
  * or an agent's ⋯, is the panel open over either, full screen. So the tabs
@@ -36,7 +36,7 @@ import { PhoneHead } from "./phone-head.js";
  * task was opened from, and back a screen anywhere else, named for where it
  * goes ("Back to Overview"); the title, one line centered between the two
  * equal corners and fading where it is cut, names what is on screen, or
- * nothing on Overview until the plan's own heading scrolls away; and the ⋯
+ * nothing on Overview until the description's own heading scrolls away; and the ⋯
  * holds the menu of what is on screen: the task's own on Overview
  * (`task-actions.tsx`), the agent's on its screen (`agent-actions.tsx`),
  * and the tab's on one of the panel's.
@@ -113,9 +113,9 @@ export function TaskHead({
   actions,
 }: {
   back: TaskHeadBack;
-  /** What is on screen: the agent's or the tab's name; none on Overview, whose plan names the task in its own heading, which the row then picks up once it scrolls away (`pickUp`). */
+  /** What is on screen: the agent's or the tab's name; none on Overview, whose description names the task in its own heading, which the row then picks up once it scrolls away (`pickUp`). */
   title: string | undefined;
-  /** The plan's heading as the row picks it up where it draws no title. */
+  /** The description's heading as the row picks it up where it draws no title. */
   pickUp?: ToolbarPickUp | undefined;
   /** The task's name as a field in the title's place while it is renamed, `title` then being the task's name. */
   rename?: TaskHeadRename | undefined;

@@ -1,38 +1,27 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACT_KIND } from "@repo/host/acts";
-import { APP_SETTING_SCHEMA } from "@repo/settings";
 import {
-  AuthPage,
-  AuthStepFoot,
-  ChoiceList,
-  type ChoiceOption,
-  ProductMark,
-  SETTINGS_ROW_STATE,
-  SettingsRowStateLine,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@repo/ui";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useMutation } from "@tanstack/react-query";
+  APP_SETTING_SCHEMA,
+  SETUP_AUDIENCE,
+  type SetupAudience,
+  type SetupPlace,
+  setupPlaceFrom,
+  setupPlaceStored,
+} from "@repo/settings";
+import { AuthPage, AuthStepFoot, ChoiceList, type ChoiceOption, ProductMark } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Schema } from "effect";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
-import {
-  SETUP_AUDIENCE,
-  SETUP_STEP,
-  type SetupAudience,
-  type SetupGate,
-  setupGate,
-  setupSteps,
-} from "./setup-model.js";
+import { SETUP_GATE, SETUP_STEP, type SetupGate, setupGate, setupSteps } from "./setup-model.js";
 import { TeamForm, useTeamForm } from "./setup-team.js";
 import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
 
@@ -44,31 +33,15 @@ import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
  * An account invited into a team's workspace starts on Connect an agent
  * alone. An agent is required: its step goes on only once Claude or Codex
  * is connected. A team's workspace is required too, once With my team is
- * chosen, since Back leads to Just me for anyone who changed their mind.
- * GitHub may be skipped, and the tools need nothing done. Finish
- * lets the app in and keeps, on the
- * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
- * stands once on every machine.
+ * chosen, since Back leads to Just me for anyone who changed their mind;
+ * once made, its step coming back holds it to change rather than make again.
+ * GitHub may be skipped, and the tools need nothing done. Where setup
+ * stands is kept on the account (`APP_SETTING_SCHEMA.setupPlace`), so setup
+ * left partway resumes at the same step on another machine or on the web,
+ * and a team's workspace made is not offered to be made again. Finish lets
+ * the app in and keeps, on the account (`APP_SETTING_SCHEMA.setupFinished`),
+ * that it finished setup, so it stands once on every machine.
  */
-
-/** Where an account stands in setup: who it is for, the step it is on, and the team's workspace once made. */
-const setupPlace = Schema.Struct({
-  audience: Schema.Literals(Object.values(SETUP_AUDIENCE)),
-  at: Schema.Number,
-  team: Schema.optionalKey(Schema.String),
-});
-
-type SetupPlace = typeof setupPlace.Type;
-
-/**
- * Each account's place in setup on this machine, by its id, so a reload
- * comes back to the step it left rather than the first, and a team's
- * workspace made is not offered to be made again.
- */
-const SETUP_PLACE = keptKey(
-  "app.setupPlace",
-  Schema.fromJsonString(Schema.Record(Schema.String, setupPlace)),
-);
 
 /**
  * The accounts that finished setup on this device, by id: the account's own
@@ -101,9 +74,9 @@ export function useSetupGate(
   /** Whether setup was finished in this window, before the account's setting comes back from its write. */
   finishedHere: boolean,
 ): SetupGate {
-  const [places] = useKept(SETUP_PLACE, {});
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
-  const settings = useAppSlice(APP_SETTINGS_VIEW);
+  const [startedHere, setStartedHere] = useState<string>();
+  const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
   const finishedOnAccount = settings?.setupFinished === true;
   // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
   const finished =
@@ -120,15 +93,23 @@ export function useSetupGate(
       : modelsFailed
         ? true
         : undefined;
-  return setupGate({
+  const gate = setupGate({
     id: accountId,
     fresh,
     finished,
     accountRead: settings?.accountRead === true,
-    started: accountId !== undefined && places[accountId] !== undefined,
+    // Note that the place is the account's, so setup started on another machine stands here once its preferences are read.
+    started:
+      accountId !== undefined &&
+      (startedHere === accountId || setupPlaceFrom(settings?.setupPlace) !== undefined),
     invited: invitedOf(tasks),
     agent,
   });
+  // Setup once standing in this window stays until finished, whatever it connects meanwhile, though the account keeps its place only from its first move.
+  useEffect(() => {
+    if (gate === SETUP_GATE.OWED && accountId !== undefined) setStartedHere(accountId);
+  }, [gate, accountId]);
+  return gate;
 }
 
 const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
@@ -152,7 +133,7 @@ export function SetupSteps(props: SetupStepsProps): React.JSX.Element {
 /** What setup is handed. */
 interface SetupStepsProps {
   tasks: TasksControl;
-  /** The account set up, whose place in setup is kept under its id. */
+  /** The account set up, whose finish this device keeps under its id. */
   accountId: string;
   onFinish: () => void;
 }
@@ -161,26 +142,34 @@ interface SetupStepsProps {
 function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
   const { mutate: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: signOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
-  const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
+  const stored = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data?.setupPlace;
+  const kept = setupPlaceFrom(stored);
   // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
   const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
-  const place = places[accountId] ?? start;
+  const place = kept ?? start;
   const { audience, team } = place;
-  const [creating, setCreating] = useState(false);
-  const [refused, setRefused] = useState<readonly string[]>([]);
-  const move = (change: Partial<SetupPlace>) =>
-    changePlaces((kept) => ({
-      ...kept,
-      [accountId]: { ...(kept[accountId] ?? start), ...change },
-    }));
-  // Setup starting is kept at once, so it stands until finished on a reload, whatever it connects meanwhile.
+  const personal = tasks.newTask.workspaces.find((workspace) => workspace.personal === true)?.id;
+  // Note that each move is merged over the last one written, because two may land before the account's place comes back, as a team's workspace made and the step after it do.
+  const written = useRef<SetupPlace | undefined>(undefined);
   useEffect(() => {
-    changePlaces((kept) =>
-      kept[accountId] === undefined ? { ...kept, [accountId]: start } : kept,
-    );
-  }, [accountId, changePlaces, start]);
-  const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
+    written.current = setupPlaceFrom(stored);
+  }, [stored]);
+  const keep = useCallback(
+    (next: SetupPlace) => {
+      written.current = next;
+      updateSetting({ field: APP_SETTING_SCHEMA.setupPlace.field, value: setupPlaceStored(next) });
+    },
+    [updateSetting],
+  );
+  // Note that the place is first kept on the first move rather than as setup opens, because a preferences read that failed lets setup open without the account's place, and nothing written unasked may then put back another machine's.
+  const move = (change: Partial<SetupPlace>) => keep({ ...(written.current ?? place), ...change });
+  // A team's workspace made stands listed only while setup is for the team, so Just me goes back to the account's own.
+  const setAudience = (chosen: SetupAudience) => {
+    move({ audience: chosen });
+    const listed = chosen === SETUP_AUDIENCE.TEAM ? team : personal;
+    if (team !== undefined && listed !== undefined) tasks.onChooseWorkspace(listed);
+  };
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
   const [reached, setReached] = useState(false);
@@ -192,18 +181,17 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
   const finish = () => {
-    // Finished, the account's place is let go of, as setup stands no more on any machine.
+    // Note that the account's place stands once finished, since finished is read ahead of it on every machine.
     // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
     updateSetting({ field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
     keepFinished((finished) => [...finished, accountId]);
-    changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
   };
   const forward = () => (last ? finish() : setAt(at + 1));
   const back = at === 0 ? undefined : () => setAt(at - 1);
   // A team's workspace made and then left for Just me is not the one GitHub is installed on.
   const workspaceId =
-    (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
+    (audience === SETUP_AUDIENCE.TEAM ? team : personal) ?? tasks.newTask.workspaceId;
   // Note that a skippable step offers Skip until done and Continue after it; the team's draws its own foot.
   const foot = (done: boolean, label = "Continue", skippable = false) => (
     <AuthStepFoot
@@ -222,14 +210,16 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
       }),
   };
   const teamForm = useTeamForm({
+    made:
+      team === undefined
+        ? undefined
+        : { id: team, name: tasks.newTask.workspaces.find((one) => one.id === team)?.name },
     onCreated: (made) => {
-      setCreating(true);
       move({ team: made });
       tasks.onChooseWorkspace(made);
     },
+    // Note that the step stays where something was refused, so each refusal is read beside its address.
     onDone: (failed) => {
-      setCreating(false);
-      setRefused(failed);
       if (failed.length === 0) setAt(at + 1);
     },
   });
@@ -254,46 +244,33 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     );
   }
   if (step === SETUP_STEP.TEAM) {
-    const forming = team === undefined || creating;
-    // Note that Create is the step's way on until the workspace is made, and Continue after it.
+    // Note that the press makes the workspace until it stands, then saves what was changed in it, or goes on.
     return (
       <AuthPage
         mark={<ProductMark />}
         exit={exit}
-        title="Create a team workspace"
+        title={team === undefined ? "Create a team workspace" : "Your team workspace"}
+        description={
+          team === undefined
+            ? "Your team shares tasks, agents, and the repositories you connect next."
+            : "Change its name or photo, or invite more of your team."
+        }
         foot={
-          forming ? (
-            <AuthStepFoot
-              at={at + 1}
-              total={steps.length}
-              onBack={back}
-              next={{
-                label: "Create",
-                onPress: teamForm.create,
-                disabled: !teamForm.ready,
-                busy: teamForm.busy,
-                busyLabel: "Creating",
-              }}
-            />
-          ) : (
-            foot(true)
-          )
+          <AuthStepFoot
+            at={at + 1}
+            total={steps.length}
+            onBack={teamForm.busy ? undefined : back}
+            next={{
+              label: teamForm.label,
+              onPress: teamForm.create,
+              disabled: !teamForm.ready,
+              busy: teamForm.busy,
+              busyLabel: teamForm.busyLabel,
+            }}
+          />
         }
       >
-        {forming ? (
-          <TeamForm form={teamForm} disabled={teamForm.busy} />
-        ) : (
-          <>
-            <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-              Workspace created
-            </SettingsRowStateLine>
-            {refused.map((words) => (
-              <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                <ReplayMask>{words}</ReplayMask>
-              </Text>
-            ))}
-          </>
-        )}
+        <TeamForm form={teamForm} disabled={teamForm.busy} />
       </AuthPage>
     );
   }

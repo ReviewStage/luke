@@ -1,8 +1,7 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
-import { sweepHostPairings } from "@repo/database/models/host-pairing-store";
+import { purgeUnsavedAttachments } from "@repo/database/models/description-attachments";
 import { hostedStore } from "@repo/database/models/hosted-store";
-import { purgeUnsavedAttachments } from "@repo/database/models/plan-attachments";
 import { dropStaleFirewalls } from "@repo/database/models/sandbox-firewall-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { storeWriter } from "@repo/database/models/writer";
@@ -17,7 +16,6 @@ import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { sweepTokenPullRequests } from "../github/token-pull-request-sweep.js";
 import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
@@ -40,7 +38,7 @@ const SWEEP_MONITOR: CronMonitor = {
   failuresBeforeIssue: 3,
 };
 
-/** How long a picture pasted into a plan waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
+/** How long a picture pasted into a description waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
 const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 
 /** How long a sandbox firewall's record outlives its last write before the sweep drops it: an hour past the longest a session runs, so its session has surely ended. */
@@ -94,13 +92,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
-    sweepTokenPullRequests: (now) =>
-      sweepTokenPullRequests(
-        sessionsFor,
-        environment.providerKeyEncryptionKeys,
-        new Date(now),
-      ).pipe(Effect.provideContext(startContext)),
-    sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),
     renewCodexPlanSwaps: (now) =>

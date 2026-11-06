@@ -18,10 +18,10 @@ import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import type { AppLinkStanding, AppStateSnapshot } from "@repo/host/app-state";
 import { repositoryParts } from "@repo/ui/task-list-model";
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo } from "react";
 import { linkStandingQuery } from "../live-reads.js";
-import { appStateNow, appStateQuery } from "../use-app-state.js";
+import { appStateIn, appStateQuery } from "../use-app-state.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
@@ -40,7 +40,7 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
  * chip in a workspace without it asks nothing. Until it first answers, or
  * where it never does, a repository the App does not reach among them, the
  * chip says what the address says, as it always has. A chip drawn again, as a
- * plan's text is when a section opens in its editor and when it closes, says
+ * description's text is when a section opens in its editor and when it closes, says
  * the last answer at once while the host asks again, rather than its address
  * until the read lands; and an answer is drawn only while that workspace
  * still has the App, so a workspace that disconnects stops drawing it. A
@@ -303,9 +303,10 @@ function numberedTaskIdIn(
   return planning.tasks.find((task) => task.workspaceId === named.id && task.number === number)?.id;
 }
 
-/** The id of the task a link names by its number among the tasks the window lists as it stands now (`useNumberedTaskId`), for a press that cannot wait a render; nothing redraws for it. */
-export const numberedTaskIdNow: NumberedTaskIdOf = (task) =>
-  numberedTaskIdIn(appStateNow()?.tasks, task);
+/** The id of the task a link names by its number among the tasks the document `client` holds lists now (`useNumberedTaskId`), for a press that cannot wait a render; nothing redraws for it. */
+export function numberedTaskIdNow(client: QueryClient): NumberedTaskIdOf {
+  return (task) => numberedTaskIdIn(appStateIn(client)?.tasks, task);
+}
 
 /** How the id of the task a link names by its number is found among the tasks the window lists (`useNumberedTaskId`), for words pasted. */
 export function useNumberedTaskIdOf(): NumberedTaskIdOf {

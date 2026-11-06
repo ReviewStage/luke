@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import { AGENT_CALL_FAILURE, PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
@@ -18,6 +19,8 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL, chaptersModelOn } from "@repo/features/chapters-model-choice";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -26,6 +29,7 @@ import {
 } from "@repo/features/pull-request-chapters";
 import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import {
+  type ChaptersRunsOn,
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersState,
@@ -41,7 +45,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { AppChapters } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
@@ -49,14 +53,18 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
+import { rendererRegistry } from "../renderer-runtime.js";
 import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
-import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import type { AgentsControl } from "./use-agents.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -210,12 +218,25 @@ const CONVERSATION: AgentOverviewConversation = {
   earlier: 0,
 };
 
-/** The read answering these newest chapters. */
+/** What a member who saved an Anthropic key generates on. */
+const ON_HAIKU: ChaptersRunsOn = {
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  model: "claude-haiku-5-5",
+};
+
+/** The read answering these newest chapters, to a member whose Generate runs on `runsOn`, or who can generate none. */
 function answering(
   chapters: PullRequestChaptersState,
-  generatable = true,
+  runsOn: ChaptersRunsOn | null = ON_HAIKU,
 ): PullRequestChaptersAnswerView {
-  return { pullRequest: { number: 42, generatable, chapters } };
+  return {
+    pullRequest: {
+      number: 42,
+      generatable: runsOn !== null,
+      ...(runsOn === null ? {} : { runsOn }),
+      chapters,
+    },
+  };
 }
 
 /** Ready chapters made for `headSha`, "Other changes" put first, as no reader reads it. */
@@ -295,10 +316,12 @@ beforeAll(() => import("./agent-chapters-tab.js"));
 
 beforeEach(() => {
   window.localStorage.clear();
+  picks = [];
+  refusePick = false;
   lists = [];
   listReveals = [];
   marked = [];
-  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeActPort({
     [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       marked.push(request);
@@ -328,7 +351,18 @@ interface Answers {
   readonly head?: () => string;
   /** Whether the files' read names no head, as where the service could not read the pull request's commits. */
   readonly filesHeadless?: boolean;
+  /** The provider the member last picked chapters to run on, as their preferences row holds it; the row unread where none is named. */
+  readonly picked?: ModelProvider;
 }
+
+/** The providers each pick of a model for chapters asked the host to keep, in order. */
+let picks: ModelProvider[] = [];
+
+/** Answers the pick still out, which the host holds until the service keeps it. */
+let landPick: () => void = () => undefined;
+
+/** Whether the service refuses the next pick, which the host then takes back off the preferences row. */
+let refusePick = false;
 
 /** The workspace's one member as the host holds its people. */
 const DANA: WorkspaceMember = {
@@ -352,10 +386,19 @@ function chaptersHeld(answer: PullRequestChaptersAnswerView): AppChapters {
 
 /** The agent's control, its overview, files, and Generate answering as given, and its chapters laid on the window's document as the host holds them. */
 function controlAnswering(answers: Answers): AgentsControl {
-  const { deliverChapters, deliverMembers, deliverParts } = handHostReads({
+  /** The member's preferences row as the host holds it, with chapters on the provider named. */
+  const preferencesOn = (provider: ModelProvider) => ({
+    rows: {
+      agent: undefined,
+      chaptersModel: chaptersModelOn(provider, CHAPTERS_MODEL.HAIKU),
+      slackNotifications: true,
+    },
+  });
+  const { deliverChapters, deliverMembers, deliverParts, deliverPreferences } = handHostReads({
     chapters: chaptersHeld(
       answers.chapters ?? answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
     ),
+    ...(answers.picked === undefined ? {} : { preferences: preferencesOn(answers.picked) }),
   });
   moveChapters = (next) => deliverChapters(chaptersHeld(next));
   // Note that the workspace's people are laid on the document as the tab holds them, as the host lays them.
@@ -395,6 +438,15 @@ function controlAnswering(answers: Answers): AgentsControl {
   });
   fakeActPort({
     ...fakeActPortCalls(),
+    // The host draws a pick over the member's preferences row the moment it is asked, as it draws the default's.
+    [ACT_KIND.AGENTS_CHAPTERS_PROVIDER_WRITE]: ({ provider }) => {
+      picks.push(provider);
+      if (refusePick) return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+      deliverPreferences(preferencesOn(provider));
+      const kept = Promise.withResolvers<{ provider: ModelProvider }>();
+      landPick = () => kept.resolve({ provider });
+      return kept.promise;
+    },
     ...answeringChanges(() => {
       const head = answers.head?.() ?? HEAD;
       // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
@@ -446,11 +498,14 @@ function Switching({ control, first }: { control: AgentsControl; first: PullRequ
   });
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 /** Draws the agent's tab on its Chapters view, or the view given, its reads landed. */
@@ -476,7 +531,16 @@ async function draw(
             children: createElement(MemberDirectory, {
               workspace: { id: "workspace-acme", memberCount: 1 },
               readerId: "user-dana",
-              children: tab,
+              children: createElement(
+                Fragment,
+                null,
+                tab,
+                createElement(
+                  RegistryContext.Provider,
+                  { value: rendererRegistry },
+                  createElement(ToastHost),
+                ),
+              ),
             }),
           }),
         ),
@@ -566,9 +630,17 @@ function press(tab: HTMLElement, init: KeyboardEventInit): void {
   });
 }
 
-test("Chapters stands after Checks; with none yet it offers Generate chapters, which stands as generating until it answers, then the chapters, counted on the tab, Other changes last", async () => {
+test("Chapters stands after Checks; with none yet it offers Generate chapters on the model and key the read names, which stands as generating until it answers, then the chapters, counted on the tab, Other changes last", async () => {
   const generated = Promise.withResolvers<PullRequestChaptersAnswerView>();
-  const tab = await draw(controlAnswering({ generateChapters: () => generated.promise }));
+  const tab = await draw(
+    controlAnswering({
+      chapters: answering(
+        { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+        { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+      ),
+      generateChapters: () => generated.promise,
+    }),
+  );
 
   assert.deepEqual(
     tabNames(tab)
@@ -577,7 +649,8 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
     ["Conversation", "Checks", "Chapters", "Files"],
   );
   // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
-  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  const generate = await vi.waitFor(() => button(tab, "Generate with GPT-6 Luna"));
+  assert.match(tab.textContent ?? "", /Generating them runs on your OpenAI API key\./u);
   act(() => generate.click());
   await settle();
   assert.match(tab.textContent ?? "", /Generating chapters/u);
@@ -593,6 +666,57 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
     tabNames(tab).some((name) => name === "Chapters3"),
     "the tab counts the chapters",
   );
+});
+
+test("a member who saved keys of both providers generates on the model they last picked, its mark beside its name, and the chevron picks the other, kept for the next Generate, which waits until the pick is kept", async () => {
+  const luna = { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" };
+  const offered = answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE });
+  assert.ok("pullRequest" in offered && offered.pullRequest !== null);
+  const tab = await draw(
+    controlAnswering({
+      chapters: { pullRequest: { ...offered.pullRequest, runsOnChoices: [ON_HAIKU, luna] } },
+      picked: MODEL_PROVIDER.ANTHROPIC,
+    }),
+  );
+
+  await vi.waitFor(() => button(tab, "Generate with Haiku 5.5"));
+  const chevron =
+    tab.querySelector<HTMLButtonElement>('button[aria-label="Choose a model for chapters"]') ??
+    assert.fail("the chevron stands");
+  act(() => chevron.click());
+  await settle();
+  const items = () =>
+    [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].map((item) => [
+      item.textContent,
+      item.getAttribute("aria-checked"),
+    ]);
+  assert.deepEqual(items(), [
+    ["Haiku 5.5", "true"],
+    ["GPT-6 Luna", "false"],
+  ]);
+
+  chooseMenuItem("GPT-6 Luna");
+  await settle();
+  await vi.waitFor(() => assert.deepEqual(picks, [MODEL_PROVIDER.OPENAI]));
+  // Note that the press waits on the pick, since the Generate runs on what the service keeps.
+  const waiting = () => tab.querySelector('.ui-empty-state button[aria-busy="true"]') !== null;
+  assert.equal(waiting(), true);
+  await act(async () => landPick());
+  await settle();
+  await vi.waitFor(() => button(tab, "Generate with GPT-6 Luna"));
+  assert.equal(waiting(), false);
+
+  // A pick the service refuses says so, the press naming the model it still runs on.
+  refusePick = true;
+  act(() => chevron.click());
+  await settle();
+  chooseMenuItem("Haiku 5.5");
+  await settle();
+  await vi.waitFor(() =>
+    assert.match(newestToastSays() ?? "", /The model could not be switched\. Try again\./u),
+  );
+  button(tab, "Generate with GPT-6 Luna");
+  assert.match(tab.textContent ?? "", /Generating them runs on your OpenAI API key\./u);
 });
 
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
@@ -840,7 +964,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
   );
 
   // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
-  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  const generate = await vi.waitFor(() => button(tab, "Generate with Haiku 5.5"));
   act(() => generate.click());
   await settle();
   assert.equal(heading(tab), "Read the expiry");
@@ -896,7 +1020,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
 
   const unavailable = await draw(
     controlAnswering({
-      chapters: answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false),
+      chapters: answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, null),
     }),
   );
   await vi.waitFor(() =>
@@ -907,7 +1031,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some((each) =>
-      each.textContent?.startsWith("Generate chapters"),
+      each.textContent?.startsWith("Generate"),
     ),
     false,
   );

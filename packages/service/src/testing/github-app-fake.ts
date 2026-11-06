@@ -65,6 +65,8 @@ export interface FakeGitHub {
   readonly layer: Layer.Layer<GitHubApp | HttpClient.HttpClient>;
   /** Every request, in the order sent. */
   readonly sent: SentToGitHub[];
+  /** The fake as `fetch` answers, for a client that sends on `fetch` rather than the layer's `HttpClient`. */
+  readonly respond: (url: string, init: RequestInit) => Promise<Response>;
 }
 
 /** The App over the fixture settings, which is what every fake stands unless a test hands another. */
@@ -136,7 +138,7 @@ export function fakeGitHub(
   app: Layer.Layer<GitHubApp> = GITHUB_APP_LAYER,
 ): FakeGitHub {
   const sent: SentToGitHub[] = [];
-  const http = fakeHttpClientLayer(async (url, init) => {
+  const respond = async (url: string, init: RequestInit) => {
     const request: SentToGitHub = {
       url,
       method: init.method ?? "GET",
@@ -146,8 +148,8 @@ export function fakeGitHub(
     };
     sent.push(request);
     return answer(request);
-  });
-  return { layer: Layer.mergeAll(http, app), sent };
+  };
+  return { layer: Layer.mergeAll(fakeHttpClientLayer(respond), app), sent, respond };
 }
 
 /** One repository as a test names it; GitHub's record is built from it. */

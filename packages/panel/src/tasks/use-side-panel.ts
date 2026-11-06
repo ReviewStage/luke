@@ -5,24 +5,21 @@ import {
   type AgentStripTab,
   type ChangesStripTab,
   type CloudBrowserStripTab,
+  cloudBrowserTab,
   type FileStripTab,
+  fileTab,
   inTaskOrder,
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  isTranscriptTab,
+  type LocalStripTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
   replacementOf,
+  STRIP_TAB_KIND,
   type StripTab,
   type SubagentStripTab,
   sameTab,
   stampedViewed,
+  storedStripTab,
   TAB_WORDS,
   type TerminalStripTab,
   type TranscriptStripTab,
@@ -30,34 +27,40 @@ import {
   viewedLast,
   withoutViewedAt,
 } from "@repo/ui/tab-strip-model";
-import { Option, Schema } from "effect";
+import { absurd, Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fileName } from "./file-ref-model.js";
 import {
   type ByPullRequestTab,
   ofPullRequestTab,
   withPullRequestTab,
 } from "./pull-request-number.js";
+import {
+  stripTabKept,
+  stripTabPin,
+  stripTabPreviews,
+  TAB_PIN,
+  untitledStripTab,
+} from "./strip-tab-kinds.js";
 
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
  *
- * The task's column is the task's own: its Overview, holding the plan's
- * document, and its coding agents (`use-main-tabs.ts`); everything else
- * (the plan's comments, and what its agents made) stands
+ * The task's column is the task's own: its Overview, holding its
+ * description, and its coding agents (`use-main-tabs.ts`); everything else
+ * (the description's comments, and what its agents made) stands
  * in a panel at the window's right that the developer
  * opens and closes, as every devtool window's secondary sidebar does. A
  * subagent's tab opened from an agent's transcript opens it too. Not to be
  * confused with "the panel", which in this renderer is the app's whole surface.
  *
- * No fixed tab stands in the strip now. The plan's own tab once stood here
+ * No fixed tab stands in the strip now. The description's own tab once stood here
  * on every task, the task's Inbox on a task where an item waited, and the
- * plan's Comments once a comment was left on it; none is drawn or offered
- * now, since the column's Overview holds the plan, a task's threads open
- * in the window's Inbox, and the plan lists its own comments in its
- * margin's place (`plan-comments.tsx`'s `PlanCommentList`), and what an
+ * description's Comments once a comment was left on it; none is drawn or offered
+ * now, since the column's Overview holds the description, a task's threads open
+ * in the window's Inbox, and the description lists its own comments in its
+ * margin's place (`description-comments.tsx`'s `DescriptionCommentList`), and what an
  * earlier version kept of any of them reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
@@ -172,12 +175,13 @@ import {
 /** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   /**
-   * The task's plan, which the column's Overview holds now
+   * The task's description, which the column's Overview holds now
    * (`use-main-tabs.ts`). Note that it is kept here, drawn and offered
    * nowhere (`DRAWN_KINDS`), because what an earlier version kept and pinned
-   * names it, and a pin or a link naming it opens Overview instead.
+   * names it, and a pin or a link naming it opens Overview instead. Its value
+   * is the name the description had then, which is what was kept.
    */
-  PLAN: "plan",
+  DESCRIPTION: "plan",
   /**
    * The task's Inbox, whose threads open in the window's Inbox narrowed to
    * the task now. Note that it is kept here, drawn and offered nowhere
@@ -186,8 +190,8 @@ export const SIDE_PANEL_TAB = {
    */
   INBOX: "inbox",
   /**
-   * The plan's comment threads, which the plan lists in its margin's place
-   * now (`plan-comments.tsx`'s `PlanCommentList`). Note that it is kept
+   * The description's comment threads, which the description lists in its margin's place
+   * now (`description-comments.tsx`'s `DescriptionCommentList`). Note that it is kept
    * here, drawn and offered nowhere (`DRAWN_KINDS`), because what an earlier
    * version kept and pinned names it.
    */
@@ -228,6 +232,7 @@ export type SidePanelTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
+  | LocalStripTab
   | PageStripTab
   | CloudBrowserStripTab;
 
@@ -296,7 +301,7 @@ interface SidePanelTabKind {
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.PLAN]: { label: "Description", icon: DocumentIcon },
+  [SIDE_PANEL_TAB.DESCRIPTION]: { label: "Description", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
@@ -306,12 +311,12 @@ export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
 
-/** The kinds of old that are chosen and shown nowhere: the Inbox's, whose threads the window's Inbox holds, and Comments, which the plan lists itself. */
+/** The kinds of old that are chosen and shown nowhere: the Inbox's, whose threads the window's Inbox holds, and Comments, which the description lists itself. */
 const RETIRED_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS];
 
-/** The kinds the panel draws: none of the plan's, which the column's Overview holds, nor the retired ones. */
+/** The kinds the panel draws: none of the description's, which the column's Overview holds, nor the retired ones. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN && !RETIRED_KINDS.includes(kind),
+  (kind) => kind !== SIDE_PANEL_TAB.DESCRIPTION && !RETIRED_KINDS.includes(kind),
 );
 
 /** Whether a tab is of a retired kind, which nothing chooses, shows, or reopens. */
@@ -366,15 +371,13 @@ const sidePanelTabSchema = Schema.Literals([
   ...Object.values(RETIRED_SIDE_PANEL_TAB),
 ]);
 /** An agent's Changes tab as it is kept, on the task it was opened on, with the number of the pull request it names where it names one. */
-const changesTabSchema = Schema.Struct({
+const changesTabSchema = storedStripTab(STRIP_TAB_KIND.CHANGES, {
   changes: Schema.String,
   number: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
 });
-const anyTabSchema = Schema.Union([
-  sidePanelTabSchema,
-  Schema.Struct({ agent: Schema.String }),
-  changesTabSchema,
-]);
+/** An agent's tab as an earlier version kept it. */
+const agentTabSchema = storedStripTab(STRIP_TAB_KIND.AGENT, { agent: Schema.String });
+const anyTabSchema = Schema.Union([sidePanelTabSchema, agentTabSchema, changesTabSchema]);
 
 /**
  * How many tabs are kept pinned to the sidebar, the latest pinned. Note that
@@ -392,15 +395,12 @@ const PINS_KEPT = 100;
  */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
-  Schema.Struct({ file: Schema.String }),
+  storedStripTab(STRIP_TAB_KIND.FILE, { file: Schema.String }),
   changesTabSchema,
 ]);
 
 /** The tab a pin an earlier version kept on a task opens: today's kinds, or a coding agent's, which the account pins now. */
-const keptTaskPinTabSchema = Schema.Union([
-  pinnableTabSchema,
-  Schema.Struct({ agent: Schema.String }),
-]);
+const keptTaskPinTabSchema = Schema.Union([pinnableTabSchema, agentTabSchema]);
 
 /**
  * A tab pinned to the sidebar on a task: the task, the tab, the name the
@@ -471,7 +471,7 @@ export type SidebarPin = PinnedTab | AgentPin;
 
 /** Whether a row's pin is an agent's on a task, pinned on the account, rather than a tab pinned on this Mac. */
 export function isAgentPin(pin: SidebarPin): pin is AgentPin {
-  return isAgentTab(pin.tab);
+  return typeof pin.tab !== "string" && pin.tab.kind === STRIP_TAB_KIND.AGENT;
 }
 
 /** Whether two of the sidebar's pins are one: an agent's by its agent, and a tab's by its holder and the instant it was pinned, which no other pin shares. */
@@ -501,7 +501,7 @@ interface PinNames {
 /** A tab an earlier version pinned in the strip itself, of any kind it then held but a draft agent's. */
 const stripPinSchema = Schema.Union([
   keptTaskPinTabSchema,
-  Schema.Struct({
+  storedStripTab(STRIP_TAB_KIND.SUBAGENT, {
     subagent: Schema.String,
     delegation: Schema.optionalKey(Schema.Struct({ agent: Schema.String, task: Schema.String })),
   }),
@@ -599,6 +599,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pages: readonly OpenPage[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
+  /** The open Local tabs, one per terminal, in the order opened. */
+  readonly locals: readonly LocalStripTab[];
   /** The agents' cloud Browser tabs opened in this window, by the id the service keeps each under, in the order opened: the only ones the strip draws. */
   readonly openedCloudBrowsers: readonly string[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
@@ -667,6 +669,8 @@ const FIRST_LAUNCH: SidePanelState = {
 export interface SidePanelControl {
   /** Whether the panel is drawn: open, and its strip holding a tab; never with nothing in it. */
   open: boolean;
+  /** The stop the panel belongs to: a task, an agent's page, or an Inbox item, two items of one task being two stops; none while no task stands. */
+  stop: string | undefined;
   /** Whether the toggle or ⌘T asked, with nothing to show, for the "+" menu, which hangs from the toggle rather than an empty panel. */
   toggleAsked: boolean;
   /** Whether the open panel fills the work column in the document's place: asked for, or the only way a narrow room holds it. */
@@ -702,6 +706,8 @@ export interface SidePanelControl {
   pages: readonly OpenPage[];
   /** The open Terminal tabs in the order opened, after the page tabs; only those of the open task's agents are drawn. */
   terminals: readonly TerminalStripTab[];
+  /** The open Local tabs, one per terminal, in the order opened, after the Terminal tabs; only those of the open task's agents are drawn. */
+  locals: readonly LocalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
   /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
@@ -817,8 +823,8 @@ function clampWidth(width: number): number {
 }
 
 /**
- * Whether the open task holds something of each fixed kind: its plan
- * always, its plan any comment. A kind not yet read on the task is absent,
+ * Whether the open task holds something of each fixed kind: its description
+ * always, its description any comment. A kind not yet read on the task is absent,
  * which draws no tab, as nothing does.
  */
 export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
@@ -944,9 +950,9 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, a file's, or an agent's Changes. A coding agent's own tab is pinned as the agent, on the account. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of (`stripTabPin`): a fixed one, a file's, or an agent's Changes. A coding agent's own tab is pinned as the agent, on the account. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return FIXED_TABS.has(tab) || isFileTab(tab) || isChangesTab(tab);
+  return stripTabPin(tab) === TAB_PIN.SIDEBAR;
 }
 
 /** Whether the pin is of the holder's tab. */
@@ -1002,7 +1008,7 @@ function withPinsPlaced(
 
 /** The name a pin of an agent's Changes tab wears as `names` names it, by agent id; none for any other pin, or one named nowhere. */
 function agentPinLabel(tab: PinnableTab, names: PinNames): string | undefined {
-  if (!isChangesTab(tab)) return undefined;
+  if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.CHANGES) return undefined;
   return tab.number === undefined
     ? names.pullRequests.get(tab.changes)
     : ofPullRequestTab(names.numbered ?? new Map(), tab);
@@ -1084,64 +1090,73 @@ function withTab(
   taskId: string | undefined,
   bare = false,
 ): HeldState {
-  // Note that a bare panel draws no fixed tab, so the task keeps no choice of one.
-  const opened = isFixedTab(tab)
-    ? bare
-      ? held
-      : withChoice(held, taskId, tab, true)
-    : isChangesTab(tab)
-      ? withChangesOpened(held, taskId, tab)
-      : held;
-  const open = isSubagentTab(tab) ? held.subagents.find((each) => sameTab(each, tab)) : undefined;
-  const subagents =
-    isSubagentTab(tab) && open === undefined ? [...held.subagents, tab] : held.subagents;
-  // Note that a file's tab made here, as its pin opens one after a launch, is drawn on the task it is opened on.
-  const files =
-    isFileTab(tab) && !held.files.some((each) => each.path === tab.file)
-      ? [...held.files, { path: tab.file, range: undefined, opened: 0, browsedOn: taskId }]
-      : held.files;
-  const pages =
-    isPageTab(tab) && !held.pages.some((each) => sameTab(each, tab))
-      ? [...held.pages, tab]
-      : held.pages;
-  const transcripts =
-    isTranscriptTab(tab) && !held.transcripts.some((each) => sameTab(each, tab))
-      ? [...held.transcripts, tab]
-      : held.transcripts;
-  const terminals =
-    isTerminalTab(tab) && !held.terminals.some((each) => sameTab(each, tab))
-      ? [...held.terminals, tab]
-      : held.terminals;
-  const lastTerminals =
-    isTerminalTab(tab) && taskId !== undefined && held.lastTerminals[taskId] !== tab.terminal
-      ? { ...held.lastTerminals, [taskId]: tab.terminal }
-      : held.lastTerminals;
-  const openedCloudBrowsers =
-    isCloudBrowserTab(tab) && !held.openedCloudBrowsers.includes(tab.cloudBrowser)
-      ? [...held.openedCloudBrowsers, tab.cloudBrowser]
-      : held.openedCloudBrowsers;
+  const opened = withTabHeld(held, tab, taskId, bare);
+  const open =
+    typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.SUBAGENT
+      ? held.subagents.find((each) => sameTab(each, tab))
+      : undefined;
   const chosen = open ?? tab;
-  return opened === held &&
-    openedCloudBrowsers === held.openedCloudBrowsers &&
-    subagents === held.subagents &&
-    files === held.files &&
-    pages === held.pages &&
-    transcripts === held.transcripts &&
-    terminals === held.terminals &&
-    lastTerminals === held.lastTerminals &&
-    chosen === held.tab
-    ? held
-    : {
-        ...opened,
-        subagents,
-        transcripts,
-        files,
-        pages,
-        terminals,
-        lastTerminals,
-        openedCloudBrowsers,
-        tab: chosen,
-      };
+  return opened === held && chosen === held.tab ? held : { ...opened, tab: chosen };
+}
+
+/** The state holding the tab where its kind keeps what is open, unchosen; as it was where it already holds it. */
+function withTabHeld(
+  held: HeldState,
+  tab: SidePanelTab,
+  taskId: string | undefined,
+  bare: boolean,
+): HeldState {
+  // Note that a bare panel draws no fixed tab, so the task keeps no choice of one.
+  if (isFixedTab(tab)) return bare ? held : withChoice(held, taskId, tab, true);
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.CHANGES:
+      return withChangesOpened(held, taskId, tab);
+    case STRIP_TAB_KIND.SUBAGENT:
+      return held.subagents.some((each) => sameTab(each, tab))
+        ? held
+        : { ...held, subagents: [...held.subagents, tab] };
+    case STRIP_TAB_KIND.FILE:
+      // Note that a file's tab made here, as its pin opens one after a launch, is drawn on the task it is opened on.
+      return held.files.some((each) => each.path === tab.file)
+        ? held
+        : {
+            ...held,
+            files: [
+              ...held.files,
+              { path: tab.file, range: undefined, opened: 0, browsedOn: taskId },
+            ],
+          };
+    case STRIP_TAB_KIND.PAGE:
+      return held.pages.some((each) => sameTab(each, tab))
+        ? held
+        : { ...held, pages: [...held.pages, tab] };
+    case STRIP_TAB_KIND.TRANSCRIPT:
+      return held.transcripts.some((each) => sameTab(each, tab))
+        ? held
+        : { ...held, transcripts: [...held.transcripts, tab] };
+    case STRIP_TAB_KIND.TERMINAL: {
+      const terminals = held.terminals.some((each) => sameTab(each, tab))
+        ? held.terminals
+        : [...held.terminals, tab];
+      const lastTerminals =
+        taskId !== undefined && held.lastTerminals[taskId] !== tab.terminal
+          ? { ...held.lastTerminals, [taskId]: tab.terminal }
+          : held.lastTerminals;
+      return terminals === held.terminals && lastTerminals === held.lastTerminals
+        ? held
+        : { ...held, terminals, lastTerminals };
+    }
+    case STRIP_TAB_KIND.LOCAL:
+      return held.locals.some((each) => sameTab(each, tab))
+        ? held
+        : { ...held, locals: [...held.locals, tab] };
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return held.openedCloudBrowsers.includes(tab.cloudBrowser)
+        ? held
+        : { ...held, openedCloudBrowsers: [...held.openedCloudBrowsers, tab.cloudBrowser] };
+    default:
+      return absurd(tab);
+  }
 }
 
 /**
@@ -1157,7 +1172,8 @@ function withPagePlaced(
   place: PagePlace | undefined,
   beside?: { readonly place: PagePlace; readonly on: string },
 ): HeldState {
-  if (!isPageTab(tab) || (place === undefined && beside === undefined)) return held;
+  if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.PAGE) return held;
+  if (place === undefined && beside === undefined) return held;
   const standing = held.pages.find((each) => sameTab(each, tab));
   if (standing === undefined) return held;
   if (beside !== undefined) {
@@ -1180,28 +1196,56 @@ function withShownPlaced(
   reads: FileReads | undefined,
 ): HeldState {
   const { tab } = held;
-  if (tab === undefined) return held;
-  if (isPageTab(tab)) return withPagePlaced(held, tab, pagePlace);
-  if (!isFileTab(tab) || reads === undefined) return held;
-  const files = held.files.map((each) =>
-    each.path === tab.file && each.reads === undefined ? { ...each, reads } : each,
-  );
-  return { ...held, files };
+  if (tab === undefined || isFixedTab(tab)) return held;
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.PAGE:
+      return withPagePlaced(held, tab, pagePlace);
+    case STRIP_TAB_KIND.FILE: {
+      if (reads === undefined) return held;
+      const files = held.files.map((each) =>
+        each.path === tab.file && each.reads === undefined ? { ...each, reads } : each,
+      );
+      return { ...held, files };
+    }
+    case STRIP_TAB_KIND.TRANSCRIPT:
+    case STRIP_TAB_KIND.SUBAGENT:
+    case STRIP_TAB_KIND.CHANGES:
+    case STRIP_TAB_KIND.TERMINAL:
+    case STRIP_TAB_KIND.LOCAL:
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return held;
+    default:
+      return absurd(tab);
+  }
 }
 
 /** The state with the page or file the panel shows drawn on the panel `on` stands for, as the panel is carried there, read where it was. */
 function withShownCarried(held: HeldState, on: string): HeldState {
   const { tab } = held;
-  if (tab === undefined) return held;
-  if (isPageTab(tab)) {
-    const pages = held.pages.map((each) => (sameTab(each, tab) ? { ...each, shownOn: on } : each));
-    return { ...held, pages };
+  if (tab === undefined || isFixedTab(tab)) return held;
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.PAGE: {
+      const pages = held.pages.map((each) =>
+        sameTab(each, tab) ? { ...each, shownOn: on } : each,
+      );
+      return { ...held, pages };
+    }
+    case STRIP_TAB_KIND.FILE: {
+      const files = held.files.map((each) =>
+        each.path === tab.file ? { ...each, browsedOn: on } : each,
+      );
+      return { ...held, files };
+    }
+    case STRIP_TAB_KIND.TRANSCRIPT:
+    case STRIP_TAB_KIND.SUBAGENT:
+    case STRIP_TAB_KIND.CHANGES:
+    case STRIP_TAB_KIND.TERMINAL:
+    case STRIP_TAB_KIND.LOCAL:
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return held;
+    default:
+      return absurd(tab);
   }
-  if (!isFileTab(tab)) return held;
-  const files = held.files.map((each) =>
-    each.path === tab.file ? { ...each, browsedOn: on } : each,
-  );
-  return { ...held, files };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -1239,7 +1283,7 @@ function withFileOpened(
     standing === undefined
       ? [...held.files, opened]
       : held.files.map((each) => (each === standing ? opened : each));
-  return { ...held, files, tab: { file: ref.path }, open: true };
+  return { ...held, files, tab: fileTab(ref.path), open: true };
 }
 
 /**
@@ -1255,7 +1299,7 @@ function withOpenFileChosen(
   taskId: string | undefined,
   reads: FileReads | undefined,
 ): HeldState {
-  const tab: SidePanelTab = { file: open.path };
+  const tab: SidePanelTab = fileTab(open.path);
   const drawnHere = drawn.files.includes(open.path)
     ? held
     : {
@@ -1284,7 +1328,7 @@ function withFileShown(
 ): HeldState {
   const open = held.files.find((each) => each.path === path);
   if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId, reads);
-  const tab: SidePanelTab = { file: path };
+  const tab: SidePanelTab = fileTab(path);
   const placed = withTabLast(withChosenViewed(held, tab, drawn), tab, drawn);
   return withFileBrowsed(placed, taskId, undefined, path, reads);
 }
@@ -1319,7 +1363,7 @@ function withFileStepped(
   };
   const files = held.files.map((each) => (each === from ? stepped : each));
   const placed = withFileInPlace(held, taskId, from.path, to.path);
-  return { ...placed, files, tab: { file: to.path }, open: true };
+  return { ...placed, files, tab: fileTab(to.path), open: true };
 }
 
 /**
@@ -1348,7 +1392,7 @@ function withFileBrowsed(
       ? [...held.files, browsed]
       : held.files.map((each) => (each === from ? browsed : each));
   const placed = from === undefined ? held : withFileInPlace(held, taskId, from.path, to);
-  return { ...placed, files, tab: { file: to }, open: true };
+  return { ...placed, files, tab: fileTab(to), open: true };
 }
 
 /**
@@ -1404,6 +1448,10 @@ export function drawsTerminal(
   return drawn.taskAgents?.includes(tab.terminal) === true;
 }
 
+export function drawsLocal(tab: LocalStripTab, drawn: Pick<DrawnTabs, "taskAgents">): boolean {
+  return drawn.taskAgents?.includes(tab.local) === true;
+}
+
 /** The open file tabs of files opened on the task, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -1422,7 +1470,7 @@ const cloudBrowserTabs = new Map<string, CloudBrowserStripTab>();
 function cloudBrowserTabOf(id: string): CloudBrowserStripTab {
   const held = cloudBrowserTabs.get(id);
   if (held !== undefined) return held;
-  const made = { cloudBrowser: id };
+  const made = cloudBrowserTab(id);
   cloudBrowserTabs.set(id, made);
   return made;
 }
@@ -1445,6 +1493,31 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentStr
 }
 
 /**
+ * The tabs of each object kind the strip draws, in the place a tab the
+ * task's order does not hold stands in after the fixed ones; a table over
+ * every kind the panel holds, so a kind added draws nowhere until it says
+ * where it does.
+ */
+const DRAWN_OF_KIND: {
+  readonly [K in Exclude<SidePanelTab, FixedSidePanelTab>["kind"]]: (
+    held: HeldState,
+    drawn: DrawnTabs,
+  ) => readonly SidePanelTab[];
+} = {
+  [STRIP_TAB_KIND.TRANSCRIPT]: (held, drawn) =>
+    held.transcripts.filter((each) => drawsTranscript(each, drawn)),
+  [STRIP_TAB_KIND.SUBAGENT]: drawnSubagents,
+  [STRIP_TAB_KIND.FILE]: (held, drawn) => drawnFiles(held, drawn).map((file) => fileTab(file)),
+  [STRIP_TAB_KIND.CHANGES]: drawnChanges,
+  [STRIP_TAB_KIND.PAGE]: (held, drawn) =>
+    held.pages.filter((each) => drawn.pages.includes(each.page)),
+  [STRIP_TAB_KIND.TERMINAL]: (held, drawn) =>
+    held.terminals.filter((each) => drawsTerminal(each, drawn)),
+  [STRIP_TAB_KIND.LOCAL]: (held, drawn) => held.locals.filter((each) => drawsLocal(each, drawn)),
+  [STRIP_TAB_KIND.CLOUD_BROWSER]: drawnCloudBrowsers,
+};
+
+/**
  * The strip's tabs in its order: the task's fixed tabs, the subagent tabs,
  * and the file tabs the task draws, in the task's order (`inTaskOrder`). A
  * tab another task's work holds is not in it.
@@ -1452,13 +1525,7 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentStr
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
   const kinds = [
     ...drawnFixed(held, drawn.task),
-    ...held.transcripts.filter((each) => drawsTranscript(each, drawn)),
-    ...drawnSubagents(held, drawn),
-    ...drawnFiles(held, drawn).map((file) => ({ file })),
-    ...drawnChanges(held, drawn),
-    ...held.pages.filter((each) => drawn.pages.includes(each.page)),
-    ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
-    ...drawnCloudBrowsers(held, drawn),
+    ...Object.values(DRAWN_OF_KIND).flatMap((drawnOf) => drawnOf(held, drawn)),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
 }
@@ -1497,6 +1564,42 @@ function withChosenViewed(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs):
   return withViewed(held, drawn.task.id, viewed);
 }
 
+/** The state without what holds the tab open, as its kind holds it; none where a fixed tab the task does not draw, or a subagent's not open, holds nothing to let go. */
+function withTabLetGo(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState | undefined {
+  if (isFixedTab(tab)) {
+    if (!drawnFixed(held, drawn.task).includes(tab)) return undefined;
+    return drawn.task.bare === true ? held : withChoice(held, drawn.task.id, tab, false);
+  }
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.TRANSCRIPT:
+      return { ...held, transcripts: held.transcripts.filter((each) => !sameTab(each, tab)) };
+    case STRIP_TAB_KIND.SUBAGENT:
+      return held.subagents.some((each) => sameTab(each, tab))
+        ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
+        : undefined;
+    case STRIP_TAB_KIND.CHANGES:
+      return withTaskTabs(held, drawn.task.id, (was) => ({
+        ...was,
+        changes: (was.changes ?? NO_CHANGES).filter((each) => !sameTab(each, tab)),
+      }));
+    case STRIP_TAB_KIND.PAGE:
+      return { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) };
+    case STRIP_TAB_KIND.TERMINAL:
+      return { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) };
+    case STRIP_TAB_KIND.LOCAL:
+      return { ...held, locals: held.locals.filter((each) => !sameTab(each, tab)) };
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return {
+        ...held,
+        openedCloudBrowsers: held.openedCloudBrowsers.filter((each) => each !== tab.cloudBrowser),
+      };
+    case STRIP_TAB_KIND.FILE:
+      return { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+    default:
+      return absurd(tab);
+  }
+}
+
 /**
  * The state with the tab closed, gone from those viewed on the task, and
  * another chosen in its place if it was the one shown (`replacementOf`). A
@@ -1504,35 +1607,7 @@ function withChosenViewed(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs):
  * pin. Closing the last tab the plan's strip draws shuts the panel.
  */
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
-  const closed: HeldState | undefined = isFixedTab(tab)
-    ? drawnFixed(held, drawn.task).includes(tab)
-      ? drawn.task.bare === true
-        ? held
-        : withChoice(held, drawn.task.id, tab, false)
-      : undefined
-    : isTranscriptTab(tab)
-      ? { ...held, transcripts: held.transcripts.filter((each) => !sameTab(each, tab)) }
-      : isSubagentTab(tab)
-        ? held.subagents.some((each) => sameTab(each, tab))
-          ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
-          : undefined
-        : isChangesTab(tab)
-          ? withTaskTabs(held, drawn.task.id, (was) => ({
-              ...was,
-              changes: (was.changes ?? NO_CHANGES).filter((each) => !sameTab(each, tab)),
-            }))
-          : isPageTab(tab)
-            ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
-            : isTerminalTab(tab)
-              ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-              : isCloudBrowserTab(tab)
-                ? {
-                    ...held,
-                    openedCloudBrowsers: held.openedCloudBrowsers.filter(
-                      (each) => each !== tab.cloudBrowser,
-                    ),
-                  }
-                : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+  const closed = withTabLetGo(held, tab, drawn);
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1545,14 +1620,6 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
   const recent = taskTabs(kept, drawn.task.id).recent ?? [];
   const replacement = replacementOf(left, recent, stripOf(held, drawn), tab);
   return { ...kept, tab: replacement };
-}
-
-/**
- * Whether a tab may stand as a preview: one a link opens, as against the
- * fixed kinds, which stand as the task's own and are only ever chosen.
- */
-function previewable(tab: SidePanelTab): boolean {
-  return !isFixedTab(tab);
 }
 
 /** The task's preview tab, while its strip still draws it. */
@@ -1579,9 +1646,9 @@ function withPreviewMoved(
   to: string,
 ): HeldState {
   const preview = taskId === undefined ? undefined : held.previews[taskId];
-  if (taskId === undefined || preview === undefined || !sameTab(preview, { file: from }))
+  if (taskId === undefined || preview === undefined || !sameTab(preview, fileTab(from)))
     return held;
-  return { ...held, previews: { ...held.previews, [taskId]: { file: to } } };
+  return { ...held, previews: { ...held.previews, [taskId]: fileTab(to) } };
 }
 
 /**
@@ -1601,7 +1668,7 @@ function withPreview(
   const preview = previewOf(held, drawn);
   const standing = stripOf(held, drawn).some((each) => sameTab(each, tab));
   const isPreview = preview !== undefined && sameTab(preview, tab);
-  if (taskId === undefined || !previewable(tab) || (standing && !isPreview)) return open(held);
+  if (taskId === undefined || !stripTabPreviews(tab) || (standing && !isPreview)) return open(held);
   const cleared = preview === undefined || isPreview ? held : withoutTab(held, preview, drawn);
   const opened = open(cleared);
   return { ...opened, previews: { ...opened.previews, [taskId]: tab } };
@@ -1623,7 +1690,7 @@ function withFileAsked(
   if (ref.startLine === undefined && commit === undefined) {
     return withFileShown(held, ref.path, drawn, taskId, reads);
   }
-  const tab: SidePanelTab = { file: ref.path };
+  const tab: SidePanelTab = fileTab(ref.path);
   return withFileOpened(
     withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
     ref,
@@ -1659,6 +1726,26 @@ function withTabLast(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): Held
     : withTaskTabs(held, taskId, (choices) => ({ ...choices, order }));
 }
 
+/** Whether the task's strip is sure not to draw the tab: a fixed tab closed there, a Changes tab not open there, or a file with no tab open; any other kind may stand there already. */
+function absentOn(held: HeldState, choices: TaskTabs, tab: SidePanelTab): boolean {
+  if (isFixedTab(tab)) return choices.closed.includes(tab);
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.CHANGES:
+      return !(choices.changes ?? NO_CHANGES).some((each) => sameTab(each, tab));
+    case STRIP_TAB_KIND.FILE:
+      return !held.files.some((each) => each.path === tab.file);
+    case STRIP_TAB_KIND.TRANSCRIPT:
+    case STRIP_TAB_KIND.SUBAGENT:
+    case STRIP_TAB_KIND.PAGE:
+    case STRIP_TAB_KIND.TERMINAL:
+    case STRIP_TAB_KIND.LOCAL:
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return false;
+    default:
+      return absurd(tab);
+  }
+}
+
 /**
  * The state with the tab written at the end of the order of `planId`, a
  * task whose strip is not drawn here, where that strip is sure not to draw
@@ -1670,12 +1757,7 @@ function withTabLast(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): Held
  */
 function withTabLastOn(held: HeldState, taskId: string, tab: SidePanelTab): HeldState {
   const choices = taskTabs(held, taskId);
-  const absent = isFixedTab(tab)
-    ? choices.closed.includes(tab)
-    : isChangesTab(tab)
-      ? !(choices.changes ?? NO_CHANGES).some((each) => sameTab(each, tab))
-      : isFileTab(tab) && !held.files.some((each) => each.path === tab.file);
-  if (!absent) return held;
+  if (!absentOn(held, choices, tab)) return held;
   const others = held.tabs.filter((each) => !sameTab(each, tab));
   const order = openedOrder(orderOn(held, taskId), others, tab);
   return order === undefined
@@ -1696,11 +1778,13 @@ function withFileInPlace(
   to: string,
 ): HeldState {
   const order = orderOn(held, taskId);
-  if (!order.some((tab) => isFileTab(tab) && (tab.file === from || tab.file === to))) return held;
-  const others = order.filter((tab) => !isFileTab(tab) || tab.file !== to);
+  const fileOf = (tab: SidePanelTab) =>
+    typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.FILE ? tab.file : undefined;
+  if (!order.some((tab) => fileOf(tab) === from || fileOf(tab) === to)) return held;
+  const others = order.filter((tab) => fileOf(tab) !== to);
   return withTaskTabs(held, taskId, (choices) => ({
     ...choices,
-    order: others.map((tab) => (isFileTab(tab) && tab.file === from ? { file: to } : tab)),
+    order: others.map((tab) => (fileOf(tab) === from ? fileTab(to) : tab)),
   }));
 }
 
@@ -1709,9 +1793,9 @@ function current<T>(tab: T): tab is Exclude<T, RetiredSidePanelTab> {
   return !RETIRED_TABS.has(tab);
 }
 
-/** Whether a kept choice of tab is one of this panel's today: a fixed kind not retired, or an agent's Changes, never an agent's own, which the task's column holds now. */
+/** Whether a kept choice of tab is one of this panel's today: of a kind the panel keeps (`stripTabKept`) and not retired, so never an agent's own, which the task's column holds now. */
 function panelChoice(tab: typeof anyTabSchema.Type): tab is FixedSidePanelTab | ChangesStripTab {
-  return !isAgentTab(tab) && current(tab);
+  return stripTabKept(tab).sidePanel && current(tab);
 }
 
 /** Each task's kept choices without the kinds retired since they were kept, nor an agent's, nor the strip pins `stripPins` reads. */
@@ -1739,11 +1823,9 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
   );
 }
 
-/** The name a pin read from the strip's own carries until its task is next open: a fixed tab's kind, a file's name, any Changes tab's, or any agent's. */
-function stripPinLabel(tab: PinnableTab | AgentStripTab): string {
-  if (isFileTab(tab)) return fileName(tab.file);
-  if (isChangesTab(tab)) return TAB_WORDS.PULL_REQUEST;
-  return isAgentTab(tab) ? TAB_WORDS.AGENT : SIDE_PANEL_TAB_KIND[tab].label;
+/** Whether a tab an earlier version pinned in its strip is of a kind pinned today, to the sidebar or as its agent on the account, never a subagent's. */
+function pinnedKind(tab: typeof stripPinSchema.Type): tab is PinnableTab | AgentStripTab {
+  return stripTabPin(tab) !== TAB_PIN.NONE;
 }
 
 /** Whether a kept pin opens a tab this version has: any but a retired fixed kind's, the Call's among them. */
@@ -1762,9 +1844,7 @@ function stripPins(
 ): readonly (typeof taskPinSchema.Type)[] {
   const pinned = Object.entries(tasks).flatMap(([task, { pinned = [] }]) =>
     pinned.flatMap((tab) =>
-      (isPinnable(tab) || isAgentTab(tab)) && currentPin(tab)
-        ? [{ task, tab, label: stripPinLabel(tab) }]
-        : [],
+      pinnedKind(tab) && currentPin(tab) ? [{ task, tab, label: untitledStripTab(tab) }] : [],
     ),
   );
   return pinned.map((pin, place) => ({ ...pin, at: -place }));
@@ -1772,7 +1852,7 @@ function stripPins(
 
 /** Whether a kept pin is of an agent's tab, which the account pins now. */
 function carriedPin(pin: KeptPin): pin is CarriedPin {
-  return "task" in pin && isAgentTab(pin.tab);
+  return "task" in pin && stripTabPin(pin.tab) === TAB_PIN.ACCOUNT;
 }
 
 /**
@@ -1782,7 +1862,7 @@ function carriedPin(pin: KeptPin): pin is CarriedPin {
  */
 function heldPin(pin: KeptPin): PinnedTab[] {
   const { tab } = pin;
-  if (isAgentTab(tab) || !currentPin(tab) || retiredKind(tab)) return [];
+  if (!isPinnable(tab) || !currentPin(tab) || retiredKind(tab)) return [];
   const { label, at, position } = pin;
   const fields = position === undefined ? { tab, label, at } : { tab, label, at, position };
   return ["task" in pin ? { ...fields, task: pin.task } : { ...fields, agent: pin.agent }];
@@ -1802,8 +1882,10 @@ function settled(state: SidePanelState): HeldState {
   ];
   return {
     ...state,
-    // The plan's tab leads, since a kept order from before it stood here holds it nowhere.
-    tabs: [...new Set([SIDE_PANEL_TAB.PLAN, ...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    // The description's tab leads, since a kept order from before it stood here holds it nowhere.
+    tabs: [
+      ...new Set([SIDE_PANEL_TAB.DESCRIPTION, ...state.tabs.filter(current), ...SIDE_PANEL_TABS]),
+    ],
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
@@ -1811,6 +1893,7 @@ function settled(state: SidePanelState): HeldState {
     files: [],
     pages: [],
     terminals: [],
+    locals: [],
     openedCloudBrowsers: [],
     lastTerminals: {},
     pullRequestViews: new Map(),
@@ -1819,6 +1902,24 @@ function settled(state: SidePanelState): HeldState {
     pins: pins.flatMap(heldPin).toSorted((a, b) => b.at - a.at),
     carried: pins.filter(carriedPin),
   };
+}
+
+/** Whether a staged tab is one the staged state opens itself, a file's, a page's, or a Terminal tab, rather than a choice kept as a launch keeps it. */
+function stagesOpened(
+  tab: NonNullable<StagedSidePanel["tab"]>,
+): tab is FileStripTab | PageStripTab | TerminalStripTab {
+  if (typeof tab === "string") return false;
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.FILE:
+    case STRIP_TAB_KIND.PAGE:
+    case STRIP_TAB_KIND.TERMINAL:
+      return true;
+    case STRIP_TAB_KIND.AGENT:
+    case STRIP_TAB_KIND.CHANGES:
+      return false;
+    default:
+      return absurd(tab);
+  }
 }
 
 /** A staged state made whole as a kept one is, with the file, page, and Terminal tabs and the Pull request views it stages open, and its file, page, or Terminal tab shown where it names one. */
@@ -1831,14 +1932,14 @@ function stagedHeld(staged: StagedSidePanel): HeldState {
     pullRequestViews = new Map(),
     ...kept
   } = staged;
-  const opened = tab !== undefined && (isFileTab(tab) || isPageTab(tab) || isTerminalTab(tab));
+  const opened = tab !== undefined && stagesOpened(tab);
   const held = settled(opened ? kept : { ...kept, tab });
   return { ...held, ...(opened ? { tab } : undefined), files, pages, terminals, pullRequestViews };
 }
 
-/** Whether a chosen or viewed tab is kept across a launch: a fixed tab or a Changes tab, the kinds that stand again after it. */
+/** Whether a chosen or viewed tab is kept across a launch (`stripTabKept`): a fixed tab or a Changes tab, the kinds that stand again after it. */
 function keptChoice(tab: SidePanelTab): tab is FixedSidePanelTab | ChangesStripTab {
-  return isFixedTab(tab) || isChangesTab(tab);
+  return stripTabKept(tab).sidePanel;
 }
 
 /** Each task's choices as they are kept: its tabs viewed and its order as `keptChoice` keeps them, its open Changes tabs, and none of them where it has none. */
@@ -1930,19 +2031,38 @@ function shownTab(
   changes: readonly ChangesStripTab[],
 ): SidePanelTab | undefined {
   if (kept === undefined) return tabs[0];
-  if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
-  if (isFileTab(kept)) return drawn.files.includes(kept.file) ? kept : tabs[0];
-  if (isTranscriptTab(kept)) return drawsTranscript(kept, drawn) ? kept : tabs[0];
-  if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
-  if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
-  if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
-  // Note that a cloud Browser tab chosen stands while the list is on its way, so it is not swapped for another and back.
-  if (isCloudBrowserTab(kept)) {
-    return drawn.cloudBrowsers === undefined || drawn.cloudBrowsers.includes(kept.cloudBrowser)
-      ? kept
-      : tabs[0];
+  return keptDrawn(kept, tabs, drawn, changes) ? kept : tabs[0];
+}
+
+/** Whether the panel still draws the tab kept, as `shownTab` reads it. */
+function keptDrawn(
+  kept: SidePanelTab,
+  tabs: readonly SidePanelTab[],
+  drawn: Omit<DrawnTabs, "plan">,
+  changes: readonly ChangesStripTab[],
+): boolean {
+  if (isFixedTab(kept)) return tabs.includes(kept);
+  switch (kept.kind) {
+    case STRIP_TAB_KIND.FILE:
+      return drawn.files.includes(kept.file);
+    case STRIP_TAB_KIND.TRANSCRIPT:
+      return drawsTranscript(kept, drawn);
+    case STRIP_TAB_KIND.CHANGES:
+      return changes.some((each) => sameTab(each, kept));
+    case STRIP_TAB_KIND.PAGE:
+      return drawn.pages.includes(kept.page);
+    case STRIP_TAB_KIND.TERMINAL:
+      return drawsTerminal(kept, drawn);
+    case STRIP_TAB_KIND.LOCAL:
+      return drawsLocal(kept, drawn);
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      // Note that a cloud Browser tab chosen stands while the list is on its way, so it is not swapped for another and back.
+      return drawn.cloudBrowsers === undefined || drawn.cloudBrowsers.includes(kept.cloudBrowser);
+    case STRIP_TAB_KIND.SUBAGENT:
+      return drawsSubagent(kept, drawn);
+    default:
+      return absurd(kept);
   }
-  return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
 /** The kinds whose first hold keeps the tab shown as it stood (`arrived`): every kind but the retired ones. */
@@ -2194,7 +2314,7 @@ export function useSidePanel(
   );
   // Note that the retired kinds, which a step of the history or a pin an
   // earlier version kept may still name, are never chosen nor shown: a
-  // task's threads open in the window's Inbox, and the plan lists its comments. A tab shown on another task
+  // task's threads open in the window's Inbox, and the description lists its comments. A tab shown on another task
   // is not counted viewed on the open one, because the task it is viewed on is the one about to open, whose
   // strip is not drawn yet; it goes to that strip's end only where it is
   // sure to stand in none of it (`withTabLastOn`).
@@ -2249,7 +2369,10 @@ export function useSidePanel(
           : { place, on: taskId };
       // A page of another place is drawn here as it is opened, before the state naming it lands.
       const here =
-        beside === undefined || !isPageTab(tab) || drawn.pages.includes(tab.page)
+        beside === undefined ||
+        typeof tab === "string" ||
+        tab.kind !== STRIP_TAB_KIND.PAGE ||
+        drawn.pages.includes(tab.page)
           ? drawn
           : { ...drawn, pages: [...drawn.pages, tab.page] };
       update((held) => ({
@@ -2270,7 +2393,7 @@ export function useSidePanel(
     (ref: CodeRef, commit?: string, reads?: FileReads) => {
       setOpened((was) => was + 1);
       update((held) => ({
-        ...withPreview(held, { file: ref.path }, drawn, (from) =>
+        ...withPreview(held, fileTab(ref.path), drawn, (from) =>
           withFileAsked(from, ref, commit, drawn, taskId, reads ?? fileReads),
         ),
         open: true,
@@ -2295,7 +2418,7 @@ export function useSidePanel(
         if (standing === undefined || held.files.some((each) => each.path === path)) {
           return withFileShown(held, path, drawn, taskId, tree?.reads ?? fileReads);
         }
-        const viewed = withChosenViewed(held, { file: path }, drawn);
+        const viewed = withChosenViewed(held, fileTab(path), drawn);
         return withPreviewMoved(
           withFileBrowsed(viewed, taskId, standing, path, standing.reads),
           taskId,
@@ -2320,7 +2443,7 @@ export function useSidePanel(
         if (open !== undefined)
           return withOpenFileChosen(held, open, drawn, taskId, standing.reads);
         const stepped = withFileStepped(
-          withChosenViewed(held, { file: to }, drawn),
+          withChosenViewed(held, fileTab(to), drawn),
           taskId,
           standing,
           step,
@@ -2405,6 +2528,7 @@ export function useSidePanel(
   );
   return {
     open: shown,
+    stop,
     tabs,
     strip,
     order: orderOn(state, taskId),
@@ -2416,6 +2540,7 @@ export function useSidePanel(
     changes: taskTabs(state, taskId).changes ?? NO_CHANGES,
     pages: state.pages,
     terminals: state.terminals,
+    locals: state.locals,
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
     pullRequestViews: state.pullRequestViews,
     onPullRequestView,

@@ -1,7 +1,7 @@
 /**
  * agent-replay.ts -- a coding agent's transcript replayed in the first message of an agent started from it: as the service writes it, and as the desktop reads it back.
  *
- * eve opens a session with a user message and nothing before it, so an
+ * An agent's session opens on a user message and nothing before it, so an
  * agent started from another, to continue it or to fork it at one of its
  * messages, is handed that agent's transcript inside its first message:
  * the brief, then the replay under `REPLAY_HEADING`, then the developer's
@@ -160,10 +160,11 @@ export interface ReplaySummary {
   readonly steps: number;
 }
 
-/** A replay: the agent it replays, the message it was forked at where it was, the preamble the model reads, the summary of the steps left out where one was written, the steps kept, and how many steps there were. */
+/** A replay: the agent it replays, the message it was forked at where it was, whether the agent's transcript was carried whole in place of its steps, the preamble the model reads, the summary of the steps left out where one was written, the steps kept, and how many steps there were. */
 export interface Replay {
   readonly agentId: string;
   readonly messageId?: string;
+  readonly carried?: true;
   readonly preamble: string;
   readonly summary?: ReplaySummary;
   readonly steps: readonly ReplayStep[];
@@ -222,7 +223,7 @@ const NOTE_OPEN_START = `<!-- ${MARKER_SPACE}:note `;
 const NOTE_OPEN_STARTS = MARKER_SPACES.map((space) => `<!-- ${space}:note `);
 
 const REPLAY_OPEN = new RegExp(
-  `^<!-- ${SPACE}:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))? steps=(\\d+) total-steps=(\\d+) chars=(\\d+) -->\\n`,
+  `^<!-- ${SPACE}:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))?( carried=1)? steps=(\\d+) total-steps=(\\d+) chars=(\\d+) -->\\n`,
   "u",
 );
 const STEP_OPEN = new RegExp(
@@ -369,8 +370,9 @@ function summaryText(summary: ReplaySummary | undefined): string {
 /** The replay as it follows the brief: the heading, the opening marker with the preamble, the summary where there is one, every step, and the closing marker. */
 function replayText(replay: Replay): string {
   const message = replay.messageId === undefined ? "" : ` message=${replay.messageId}`;
+  const carried = replay.carried === true ? " carried=1" : "";
   const open =
-    `${REPLAY_OPEN_START}agent=${replay.agentId}${message} steps=${replay.steps.length} ` +
+    `${REPLAY_OPEN_START}agent=${replay.agentId}${message}${carried} steps=${replay.steps.length} ` +
     `total-steps=${replay.totalSteps} chars=${replay.preamble.length}${MARKER_END}`;
   const steps = replay.steps.map(stepText).join("");
   return `${REPLAY_HEADING}\n\n${open}${replay.preamble}\n${summaryText(replay.summary)}${steps}${REPLAY_CLOSE}`;
@@ -549,7 +551,7 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
   const start = at + REPLAY_HEADING_LEAD.length;
   const open = REPLAY_OPEN.exec(text.slice(start, start + 256));
   if (open === null) return undefined;
-  const [marker, agentId = "", messageId, kept = "", total = "", chars = ""] = open;
+  const [marker, agentId = "", messageId, carried, kept = "", total = "", chars = ""] = open;
   const preamble = markedRun(text, start + marker.length, Number(chars));
   if (preamble === undefined) return undefined;
   const summarized = summaryFrom(text, preamble.next);
@@ -561,6 +563,7 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
   const replay: Replay = {
     agentId,
     ...(messageId === undefined ? undefined : { messageId }),
+    ...(carried === undefined ? undefined : { carried: true }),
     preamble: preamble.run,
     ...(summarized.summary === undefined ? undefined : { summary: summarized.summary }),
     steps: read.steps,

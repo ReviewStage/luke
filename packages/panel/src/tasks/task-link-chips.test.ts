@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
@@ -14,16 +14,16 @@ import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions.js";
-import { HISTORY_READ } from "./use-plan-history.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * task-link-chips.test.ts -- a link in the plan's words is drawn as the
+ * task-link-chips.test.ts -- a link in the description's words is drawn as the
  * chip of what it names whoever wrote it, as a transcript draws one: the
  * task read on its page and a version's diff. A link that names nothing
  * stays a link, and code stays code.
@@ -101,7 +101,7 @@ const THREE_CHIPS = [
   ["link", "ACME-142/fix-the-thing"],
 ];
 
-/** The same chips where the page's plan is at hand, whose heading names the section now whatever its link was labeled. */
+/** The same chips where the page's description is at hand, whose heading names the section now whatever its link was labeled. */
 const THREE_CHIPS_ON_PAGE = [["section", "Rollout"], ...THREE_CHIPS.slice(1)];
 
 /** Words drawn as Markdown with the page's mentions, as a version and a note draw them. */
@@ -110,9 +110,9 @@ function PageWords({ words, marks }: { words: string; marks: MarkdownMark[] }): 
   return createElement(MarkdownMessage, { words, link, edit: { marks } });
 }
 
-test("the plan read on its page draws a plan's link, a file's lines, and a Linear page as chips, any other link a link, and code as code", () => {
+test("the description read on its page draws a plan's link, a file's lines, and a Linear page as chips, any other link a link, and code as code", () => {
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: TASK,
       sectionLinks: {
         workspace: "acme",
@@ -171,7 +171,7 @@ test("a link whose label a version changed in part is drawn as words with the ch
   assert.equal(container.querySelector(".ui-text-link ins.markdown-inserted")?.textContent, "new ");
 });
 
-test("the plan's version history, off the plan's page, reads a version's mentions against the plan it is of", () => {
+test("the description's version history, off the plan's page, reads a version's mentions against the description it is of", () => {
   const document = { body: `## Rollout\n\n${LINKS}\n`, assumptions: [] };
   const container = drawn(
     createElement(VersionView, {
@@ -179,7 +179,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
+          lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

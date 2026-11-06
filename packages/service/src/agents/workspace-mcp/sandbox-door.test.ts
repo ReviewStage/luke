@@ -5,16 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
-import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import {
+  commandRunStreamed,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+} from "../../testing/vercel-sandbox-fake.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 
 /**
- * The door to a native agent's sandbox, over Vercel Sandbox's REST API as
- * the deployment asks it under its own OIDC token: the sandbox tagged with
+ * The door to a native agent's sandbox, through `@vercel/sandbox` over a
+ * fake of Vercel, as the deployment asks it under its own OIDC token: the sandbox tagged with
  * the agent's session is found, the file is read from its running session
  * by a command, never by Vercel's own file read, a path that is no file is
  * no file, a file past every tool's bound is read only one byte past it, and
@@ -41,12 +47,15 @@ interface Asked {
   readonly body: unknown;
 }
 
-/** A command's run as Vercel streams it back: its start, its stdout, and its exit. */
-function commandStream(exitCode: number, stdout: string): Response {
-  return new Response(
-    `${JSON.stringify({ command: { exitCode: null } })}\n${JSON.stringify({ stream: "stdout", data: stdout })}\n${JSON.stringify({ command: { exitCode } })}\n`,
-  );
-}
+/** A command's run in the running session as Vercel streams it back: its start, its stdout, and its exit. */
+const commandStream = (exitCode: number, stdout: string) =>
+  commandRunStreamed({ id: "cmd_1", sessionId: "sbs_up" }, { exitCode, stdout, stderr: "" });
+
+/** The sandboxes tagged with the session, as Vercel lists them: one stopped, one up. */
+const SANDBOXES = [
+  { name: "sbx-stopped", status: "stopped", currentSessionId: "sbs_down", createdAt: 0 },
+  { name: "sbx-up", status: "running", currentSessionId: "sbs_up", createdAt: 1 },
+] as const;
 
 /** A temporary directory standing in for the sandbox's disk, holding the files given by their path under it. */
 function disk(files: Readonly<Record<string, Uint8Array>>): string {
@@ -61,22 +70,16 @@ function disk(files: Readonly<Record<string, Uint8Array>>): string {
 /** Vercel with one running sandbox tagged with the session, its disk the directory given; what it was asked is kept. */
 function vercel(root: string) {
   const asked: Asked[] = [];
-  const layer = fakeHttpClientLayer((url, init) => {
+  const respond = (url: string, init: RequestInit) => {
     const parsed = new URL(url);
     const sent = init.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : init.body;
     const body = typeof sent === "string" ? JSON.parse(sent) : undefined;
     asked.push({ url: parsed, body });
     if (parsed.pathname === "/api/v2/sandboxes") {
-      return (
-        sandboxListRefusal(parsed) ??
-        Response.json({
-          sandboxes: [
-            { name: "sbx-stopped", status: "stopped" },
-            { name: "sbx-up", status: "running", currentSessionId: "sbs_up" },
-          ],
-        })
-      );
+      return sandboxListRefusal(parsed) ?? Response.json(sandboxesListed(SANDBOXES));
     }
+    const named = SANDBOXES.find(({ name }) => parsed.pathname === `/api/v2/sandboxes/${name}`);
+    if (named !== undefined) return Response.json(sandboxFound(named));
     if (parsed.pathname.endsWith("/cmd")) {
       const { command, args } = body as { command: string; args: string[] };
       // The command runs as the sandbox's user, in the stand-in disk.
@@ -87,9 +90,9 @@ function vercel(root: string) {
       });
       return commandStream(ran.status ?? 1, ran.stdout);
     }
-    return Response.json({ error: { code: "not_asked" } }, { status: 500 });
-  });
-  return { layer, asked };
+    return Response.json({ error: { code: "not_asked" } }, { status: 400 });
+  };
+  return { layer: Layer.merge(fakeHttpClientLayer(respond), sandboxFetchOver(respond)), asked };
 }
 
 const ADMITTED: AdmittedConversation = {
@@ -135,7 +138,8 @@ it.effect(
       assert.deepEqual(read, [1, 0, 255, 10, 3]);
       assert.equal(missing, null);
       assert.equal(directory, null);
-      const [list, file] = api.asked;
+      const [list] = api.asked;
+      const file = api.asked.find(({ url }) => url.pathname.endsWith("/cmd"));
       assert.equal(list?.url.searchParams.get("tags"), `sessionId:${SESSION}`);
       assert.equal(list?.url.searchParams.get("teamId"), TEAM);
       assert.equal(file?.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/cmd");

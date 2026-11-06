@@ -10,20 +10,15 @@ import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@repo/host/
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { initialAppState } from "@repo/host/client";
 import { PUSH_METHOD } from "@repo/host/contract";
-import { App } from "@repo/panel/app";
 import { installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
-import { createPanelRouter } from "@repo/panel/panel-router";
+import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
-import { onRegistry } from "@repo/panel/testing/copy-feedback";
+import { onRegistry, readAppState } from "@repo/panel/testing/copy-feedback";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
 import { QueryClient } from "@tanstack/react-query";
-import {
-  createBrowserHistory,
-  RouterContextProvider,
-  type RouterHistory,
-} from "@tanstack/react-router";
+import { createBrowserHistory, type RouterHistory } from "@tanstack/react-router";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { withLoadLink } from "../../src/app/load-link";
@@ -116,7 +111,7 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
 /**
  * Installs the tab's doors as the web root does, the fixture's bridge
  * saying the tab's address as a link and the tab's own history, before the
- * test reads the panel's state (`appStateFirstRead`) and draws it.
+ * test reads the panel's state (`drawPanel`) and draws it.
  */
 export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -131,6 +126,8 @@ export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void 
 export async function drawPanel() {
   // A fixture run's window is drawn once its synthetic tasks have landed; they land before this one draws.
   await loadTasksFixture();
+  // The document is in the test's client before the window draws, as the tab's root's `ensureQueryData` leaves it.
+  await readAppState();
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);
@@ -138,12 +135,7 @@ export async function drawPanel() {
   assert.ok(tabHistory !== undefined, "the tab's doors are installed");
   const router = createPanelRouter(tabHistory, new QueryClient());
   await act(async () =>
-    root.render(
-      createElement(RouterContextProvider, {
-        router,
-        children: onRegistry(rendererRegistry, createElement(App)),
-      }),
-    ),
+    root.render(onRegistry(rendererRegistry, createElement(PanelRouterProvider, { router }))),
   );
   await settle();
   const buttonOf = (label: string) =>

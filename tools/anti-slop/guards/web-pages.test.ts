@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cardProblems,
   framedPageProblems,
   headProblems,
   textSizeProblems,
@@ -36,6 +37,41 @@ describe("the site's pages", () => {
     ].join("\n");
     expect(unfurlProblems(app, landing)).toEqual([
       "app.html: og:image is /other.png, not /card.png",
+    ]);
+  });
+
+  const CARD = [
+    '<meta property="og:title" content="Vespin: An inbox" />',
+    '<meta property="og:description" content="For agents." />',
+    '<meta property="og:image" content="/card.png" />',
+    '<meta property="og:image:alt" content="The logo." />',
+    '<meta name="twitter:card" content="summary_large_image" />',
+    '<meta name="twitter:title" content="Vespin: An inbox" />',
+    '<meta name="twitter:description" content="For agents." />',
+    '<meta name="twitter:image" content="/card.png" />',
+    '<meta name="twitter:image:alt" content="The logo." />',
+  ].join("\n");
+
+  it("name a card that draws no image, or tells X something else", () => {
+    expect(cardProblems("ok.html", CARD)).toEqual([]);
+    expect(
+      cardProblems("twin.html", CARD.replace(/<meta name="twitter:image" [^>]*>/u, "")),
+    ).toEqual(["twin.html: twitter:image is missing, not its og:image"]);
+    expect(
+      cardProblems("bare.html", CARD.replaceAll(/<meta \S+="\S+:image" [^>]*>/gu, "")),
+    ).toEqual(["bare.html: carries no og:image"]);
+    expect(
+      cardProblems("empty.html", CARD.replaceAll('content="/card.png"', 'content=""')),
+    ).toEqual(["empty.html: carries no og:image"]);
+    expect(cardProblems("cardless.html", "<title>Sign in</title>")).toEqual([]);
+    expect(
+      cardProblems("untitled.html", CARD.replaceAll(/<meta \S+="\S+:title" [^>]*>/gu, "")),
+    ).toEqual(["untitled.html: carries no og:title"]);
+  });
+
+  it("name a card whose title opens lowercase once iMessage drops the site's name", () => {
+    expect(cardProblems("lower.html", CARD.replaceAll("An inbox", "an inbox"))).toEqual([
+      'lower.html: og:title reads "an inbox" once iMessage drops the site\'s name',
     ]);
   });
 

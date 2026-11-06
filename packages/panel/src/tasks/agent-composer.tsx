@@ -46,11 +46,11 @@ import {
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { useConnected } from "../connection.js";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
@@ -99,7 +99,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
  * and one placeholder asking for a follow up, since a started agent's
- * conversation opens on its plan or task, because the tab's glyph and the transcript's "Working…"
+ * conversation opens on its description or task, because the tab's glyph and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words or files, disabled while there are neither and the agent
@@ -117,7 +117,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * a toast of its own, wherever the window is (`expired-server-toasts.ts`).
  * The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
- * opening a tab never takes the caret out of the plan, and a message sent
+ * opening a tab never takes the caret out of the description, and a message sent
  * from the box, by Enter or by Send, hands the caret back to the box as it
  * opens again, unless the developer went somewhere else meanwhile, so the
  * next message is written at once. An agent's box never holds while a
@@ -158,7 +158,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * owner hands its mentions (`task-mentions.tsx`), as New task's does for
  * its workspace, opens the list of what
  * the message can mention, the task's repository's files and folders, the
- * plan's sections, the pages agents showed on it, its other coding agents,
+ * description's sections, the pages agents showed on it, its other coding agents,
  * the repository's skills, and the account's connected MCP servers and
  * their tools
  * (`mention-picker.tsx`), and the one chosen is written into the words as
@@ -423,7 +423,7 @@ function ComposerMore({
 /**
  * How an agent's box queues a message behind the turn under way, and edits
  * one queued already (`agent-queue-dock.tsx`); none for a box that queues
- * nothing, as an eve agent's or New task's.
+ * nothing, as the box of an agent on the retired runtime, or New task's.
  */
 export interface ComposerQueueing {
   /** Whether a turn is under way or about to start, a line the box sent still on its way among them: what Queue is offered by. */
@@ -510,7 +510,7 @@ export function AgentComposer({
   onStop: () => Promise<boolean>;
   /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
   followsUp: boolean;
-  /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
+  /** The words a dictation is likely to say, read off the description (`dictation-keywords.ts`). */
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
   skills?: SkillSource | undefined;
@@ -589,10 +589,10 @@ export function AgentComposer({
   const queues = queueing?.working && !empty && !held && !files.reading && !editingQueued;
   const modifierHeld = useModifierHeld(queues || editingQueued);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
-  const { planEditor } = useSideBundles();
-  const bundle = useAtomValue(planEditor);
+  const { descriptionEditor } = useSideBundles();
+  const bundle = useAtomValue(descriptionEditor);
   // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
-  const retryBundle = useAtomRefresh(planEditor);
+  const retryBundle = useAtomRefresh(descriptionEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);
