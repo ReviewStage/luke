@@ -340,7 +340,7 @@ it.effect(
           },
         ),
       );
-      yield* turnsUntil(() => fake.exitReads.made > 0);
+      yield* turnsUntil(() => fake.exitReads.made > 0, launches);
       yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
 
       fake.finishBuild(0);
@@ -365,15 +365,18 @@ const turnsPass = Effect.promise(async () => {
 
 /**
  * Real turns of the event loop until the fake has seen what the test waits
- * for, then `turnsPass` more. Note that the wait is on what the fake saw
- * rather than a count of turns, because `@vercel/sandbox` reads the
- * deployment's token through a module it loads on its first request, which
- * takes as long as the disk does.
+ * for, or the fiber it waits on has ended, then `turnsPass` more. Note that
+ * the wait is on what the fake saw rather than a count of turns, because
+ * `@vercel/sandbox` reads the deployment's token through a module it loads
+ * on its first request, which takes as long as the disk does; and that a
+ * fiber that failed first ends it, so its join says why.
  */
-const turnsUntil = (seen: () => boolean) =>
+const turnsUntil = (seen: () => boolean, waiting: Fiber.Fiber<unknown, unknown>) =>
   Effect.andThen(
     Effect.promise(async () => {
-      while (!seen()) await new Promise<void>((settle) => setImmediate(settle));
+      while (!seen() && waiting.pollUnsafe() === undefined) {
+        await new Promise<void>((settle) => setImmediate(settle));
+      }
     }),
     turnsPass,
   );
@@ -387,7 +390,7 @@ it.effect(
       const { api, build } = yield* setUp(fake);
 
       const launch = yield* Effect.forkChild(awaitTemplate(api, build));
-      yield* turnsUntil(() => fake.exitReads.held.length > 0);
+      yield* turnsUntil(() => fake.exitReads.held.length > 0, launch);
       assert.equal(fake.exitReads.held.length, 1);
       assert.equal(fake.snapshots.length, 0);
       fake.finishBuild(0);
@@ -406,12 +409,12 @@ it.effect(
       const { api, build } = yield* setUp(fake);
 
       const launch = yield* Effect.forkChild(awaitTemplate(api, build));
-      yield* turnsUntil(() => fake.exitReads.made > 0);
+      yield* turnsUntil(() => fake.exitReads.made > 0, launch);
       const first = fake.exitReads.made;
       yield* turnsPass;
       assert.equal(fake.exitReads.made, first);
       yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
-      yield* turnsUntil(() => fake.exitReads.made > first);
+      yield* turnsUntil(() => fake.exitReads.made > first, launch);
       fake.finishBuild(0);
       yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
 
