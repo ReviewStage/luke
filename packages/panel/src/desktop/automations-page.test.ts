@@ -3647,7 +3647,7 @@ test("workspace agents the task list failed to carry say so in the Agent row, an
   act(() => button("Retry").click());
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.equal(picked(page, "Agent"), "Started by its first run");
 });
 
