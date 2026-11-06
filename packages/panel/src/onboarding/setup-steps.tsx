@@ -21,7 +21,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
-import { SETUP_STEP, type SetupGate, setupGate, setupSteps } from "./setup-model.js";
+import { SETUP_GATE, SETUP_STEP, type SetupGate, setupGate, setupSteps } from "./setup-model.js";
 import { TeamForm, useTeamForm } from "./setup-team.js";
 import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
 
@@ -75,6 +75,7 @@ export function useSetupGate(
   finishedHere: boolean,
 ): SetupGate {
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
+  const [startedHere, setStartedHere] = useState<string>();
   const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
   const finishedOnAccount = settings?.setupFinished === true;
   // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
@@ -92,16 +93,23 @@ export function useSetupGate(
       : modelsFailed
         ? true
         : undefined;
-  return setupGate({
+  const gate = setupGate({
     id: accountId,
     fresh,
     finished,
     accountRead: settings?.accountRead === true,
     // Note that the place is the account's, so setup started on another machine stands here once its preferences are read.
-    started: accountId !== undefined && setupPlaceFrom(settings?.setupPlace) !== undefined,
+    started:
+      accountId !== undefined &&
+      (startedHere === accountId || setupPlaceFrom(settings?.setupPlace) !== undefined),
     invited: invitedOf(tasks),
     agent,
   });
+  // Setup once standing in this window stays until finished, whatever it connects meanwhile, though the account keeps its place only from its first move.
+  useEffect(() => {
+    if (gate === SETUP_GATE.OWED && accountId !== undefined) setStartedHere(accountId);
+  }, [gate, accountId]);
+  return gate;
 }
 
 const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
