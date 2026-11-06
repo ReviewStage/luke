@@ -130,16 +130,13 @@ test("a note follows a new address rewriter for the same words", () => {
   assert.equal(container.querySelector("a")?.getAttribute("href"), "");
 });
 
-test("a task box is named by its item, asks with its item's place in the words, and flips back when the change is not saved", async () => {
+test("a task box is named by its item, asks with its item's place in the words, and stands as written while its tick asks nothing", async () => {
   const asked: number[] = [];
   const words = "Steps:\n\n- [ ] Write the migration\n- [ ] Wire the row";
   const { container } = drawn({
     look: MARKDOWN_LOOK.NOTE,
     words,
-    onTask: (at) => {
-      asked.push(at);
-      return Promise.resolve(false);
-    },
+    useTaskTick: (at) => ({ run: () => asked.push(at), asked: undefined }),
   });
   const boxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
   assert.deepEqual(
@@ -153,7 +150,7 @@ test("a task box is named by its item, asks with its item's place in the words, 
   assert.equal(
     second.getAttribute("aria-checked"),
     "false",
-    "a change not saved flips the box back",
+    "a box whose tick asks nothing stands as written",
   );
 });
 

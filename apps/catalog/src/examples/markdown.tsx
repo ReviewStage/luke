@@ -1,4 +1,5 @@
-import { MARKDOWN_LOOK, Markdown } from "@repo/ui/markdown";
+import { MARKDOWN_LOOK, Markdown, type TaskWrite } from "@repo/ui/markdown";
+import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -38,7 +39,10 @@ const invite = await inviteMember({ email });
 Raw <b>HTML</b> stays as the words it is.`;
 
 /** A tick that is always saved, as a description the developer can edit answers one. */
-const saved = () => Promise.resolve(true);
+function useSavedTick(): TaskWrite {
+  const [asked, setAsked] = useState<boolean | undefined>(undefined);
+  return { run: setAsked, asked };
+}
 
 function MarkdownExamples(): React.JSX.Element {
   return (
@@ -47,7 +51,7 @@ function MarkdownExamples(): React.JSX.Element {
         <Markdown look={MARKDOWN_LOOK.NOTE} words={NOTE} />
       </CatalogSection>
       <CatalogSection id="markdown-tasks" title="A note whose tasks tick">
-        <Markdown look={MARKDOWN_LOOK.NOTE} words={NOTE} onTask={saved} />
+        <Markdown look={MARKDOWN_LOOK.NOTE} words={NOTE} useTaskTick={useSavedTick} />
       </CatalogSection>
       <CatalogSection id="markdown-narrow" title="A narrow column">
         <div className="catalog-narrow">

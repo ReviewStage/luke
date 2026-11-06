@@ -4,7 +4,6 @@
 
 import { isWireString } from "@repo/wire";
 import type { Element, ElementContent, Root } from "hast";
-import { useState } from "react";
 import type { Components } from "streamdown";
 import { Checkbox } from "../components/checkbox/checkbox.js";
 import { MARKDOWN_CLASS } from "./markdown-class.js";
@@ -19,12 +18,23 @@ interface TaskItem {
 }
 
 /**
- * Ticks or clears the task item whose marker starts at an offset in the
- * words, as `ticked` says, answering whether the change was saved. Note that
- * it names the state the box was pressed to rather than a flip, so a press
- * waiting behind one that failed still asks for what the reader saw.
+ * A task item's tick as its caller's mutation stands (`useMutation`): how
+ * the box asks for a state, and the state it was pressed to while that ask is
+ * out or once it saved, none once refused or never asked. Note that it names
+ * the state the box was pressed to rather than a flip, so a press waiting
+ * behind one that failed still asks for what the reader saw.
  */
-export type MarkdownTaskToggler = (at: number, ticked: boolean) => Promise<boolean>;
+export interface TaskWrite {
+  readonly run: (ticked: boolean) => void;
+  readonly asked: boolean | undefined;
+}
+
+/**
+ * The hook that ticks or clears the task item whose marker starts at an
+ * offset in the words, called once by that item's box as it draws, so the
+ * box draws from the mutation the caller holds for it.
+ */
+export type MarkdownTaskTick = (at: number) => TaskWrite;
 
 /** Each task item's checkbox, by the tree's own node. */
 const TASK_ITEMS = new WeakMap<Element, TaskItem>();
@@ -60,39 +70,27 @@ function placeTasks(parent: Root | Element, item: Element | undefined): void {
 export const placeTaskItems = () => (tree: Root) => placeTasks(tree, undefined);
 
 /**
- * A task item's checkbox that ticks or clears its item. It flips at the
- * press, since the words come back changed only once the change is saved,
- * and flips back to where that press found it where it was not, whatever a
- * later press of it is still waiting on. Note that its caller keys it by the
- * words' own state, so a change arriving from anyone redraws it from them.
+ * A task item's checkbox that ticks or clears its item. It stands at the
+ * state pressed while its tick is out and once it saved, since the words come
+ * back changed only after, and at the words' own state where it was refused.
+ * Note that its caller keys it by the words' own state, so a change arriving
+ * from anyone redraws it from them.
  */
 function TaskBox({
   item,
   checked,
-  toggle,
+  useTick,
 }: {
   item: { readonly at: number; readonly label: string };
   checked: boolean;
-  toggle: MarkdownTaskToggler;
+  useTick: MarkdownTaskTick;
 }): React.JSX.Element {
-  const [shown, setShown] = useState(checked);
+  const tick = useTick(item.at);
   // Note that the box stands in the bullet's gutter (`prose.css`), and
   // takes a finger's press around it there, as the editor's does.
   return (
     <span className={TASK_BOX_CLASS}>
-      <Checkbox
-        label={item.label}
-        checked={shown}
-        onChange={(next) => {
-          setShown(next);
-          toggle(item.at, next).then(
-            (saved) => {
-              if (!saved) setShown(!next);
-            },
-            () => setShown(!next),
-          );
-        }}
-      />
+      <Checkbox label={item.label} checked={tick.asked ?? checked} onChange={tick.run} />
     </span>
   );
 }
@@ -118,8 +116,8 @@ export const readTaskInput: NonNullable<Components["input"]> = ({ node, ...props
   );
 };
 
-/** How a note draws a task item's checkbox where its reader can tick it, asking `toggle` at the press. */
-export function taskInput(toggle: MarkdownTaskToggler): NonNullable<Components["input"]> {
+/** How a note draws a task item's checkbox where its reader can tick it, through the tick `useTick` holds for it. */
+export function taskInput(useTick: MarkdownTaskTick): NonNullable<Components["input"]> {
   return ({ node, ...props }) => {
     const item = node === undefined ? undefined : TASK_ITEMS.get(node);
     const at = item?.at;
@@ -130,7 +128,7 @@ export function taskInput(toggle: MarkdownTaskToggler): NonNullable<Components["
         key={String(props.checked === true)}
         item={{ at, label: item.label }}
         checked={props.checked === true}
-        toggle={toggle}
+        useTick={useTick}
       />
     );
   };

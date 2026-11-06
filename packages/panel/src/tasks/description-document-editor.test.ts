@@ -16,24 +16,24 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@repo/features/tasks-vi
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import {
   type DescriptionCommentsControl,
   DescriptionCommentsProvider,
 } from "@repo/ui/description-comments";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
-  FINISH,
-  PLACEMENT_END,
-  type PlacedWords,
   type DescriptionEditorModule,
   type DescriptionEditorPlacement,
   type DescriptionEditorProps,
+  FINISH,
+  PLACEMENT_END,
+  type PlacedWords,
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";
@@ -271,7 +271,13 @@ function mount(
       ),
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    draw(createElement(DescriptionBody, { task, edit: descriptionEditMutation(task.id, door), onRename }));
+    draw(
+      createElement(DescriptionBody, {
+        task,
+        edit: descriptionEditMutation(task.id, door),
+        onRename,
+      }),
+    );
   /** The description as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
@@ -599,13 +605,14 @@ test("a press while a tick is out waits its turn, and both land, the second over
     ["One", "Upload screenshot"],
   );
 
+  const ticked = () => boxes.map((box) => box.getAttribute("aria-checked") === "true");
   act(() => {
     for (const box of boxes) box.click();
   });
-  await settle();
-  assert.equal(sent.length, 1, "the second waits for the first");
+  await vi.waitFor(() => expect(ticked()).toEqual([true, true]));
+  assert.equal(sent.length, 1, "the second waits for the first, drawn as pressed meanwhile");
   answers[0]?.resolve({ saved: true });
-  await settle();
+  await vi.waitFor(() => expect(sent.length).toBe(2));
   answers[1]?.resolve({ saved: true });
   await settle();
 
@@ -617,10 +624,7 @@ test("a press while a tick is out waits its turn, and both land, the second over
       { base: first, value: first.replace("[ ] ![Upload", "[x] ![Upload") },
     ],
   );
-  assert.deepEqual(
-    boxes.map((box) => box.getAttribute("aria-checked") === "true"),
-    [true, true],
-  );
+  await vi.waitFor(() => expect(ticked()).toEqual([true, true]));
   assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
 });
 
@@ -710,8 +714,11 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   assert.ok(box, "the box is drawn");
 
   act(() => box.click());
+  await vi.waitFor(() => expect(box.getAttribute("aria-checked")).toBe("true"));
   act(() => box.click());
+  await vi.waitFor(() => expect(box.getAttribute("aria-checked")).toBe("false"));
   first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  await vi.waitFor(() => expect(newestToastSays()).toBe("The description could not be saved."));
   await settle();
 
   assert.equal(

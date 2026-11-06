@@ -1,12 +1,12 @@
-import { LINK_PLACE, linkOf, taskLinkStep } from "@repo/features/link-grammar";
-import {
-  type MentionLines,
-  type MentionPlace,
-  type DescriptionMention,
-  sectionAnchors,
-} from "@repo/features/mention-link";
 import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import { type DescriptionSection, descriptionSections } from "@repo/features/description-document";
+import { LINK_PLACE, linkOf, taskLinkStep } from "@repo/features/link-grammar";
+import {
+  type DescriptionMention,
+  type MentionLines,
+  type MentionPlace,
+  sectionAnchors,
+} from "@repo/features/mention-link";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   DESCRIPTION_ACTOR,
@@ -31,9 +31,9 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { actorName } from "@repo/ui/actor-model";
-import { GLYPH } from "@repo/ui/icons";
-import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/description-comments";
+import { GLYPH } from "@repo/ui/icons";
+import type { MarkdownTaskTick, TaskWrite } from "@repo/ui/markdown";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
@@ -51,6 +51,11 @@ import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import {
+  DESCRIPTION_PLACEHOLDER,
+  type DescriptionEditorHandle,
+  PLACEMENT_END,
+} from "../description-editor/contract.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import { useEditedLinksHost } from "../link-menu.js";
 import {
@@ -60,14 +65,35 @@ import {
   MarkdownMessage,
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
-import {
-  PLACEMENT_END,
-  DESCRIPTION_PLACEHOLDER,
-  type DescriptionEditorHandle,
-} from "../description-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import {
+  CommentsToggle,
+  DescriptionCommentLayer,
+  useCommentFocus,
+  useEditorComment,
+} from "./description-comments.js";
+import {
+  DescriptionDocumentEditor,
+  DocumentBlock,
+  EditableTitle,
+  textBoxOf,
+  useTextRoom,
+  useWordsKeptOnClose,
+} from "./description-document-editor.js";
+import {
+  type DescriptionEditMutation,
+  type DescriptionEditSend,
+  descriptionAtRestMutation,
+  descriptionEditMutation,
+} from "./description-edit-mutation.js";
+import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
+import {
+  UNIT_ATTRIBUTED_CLASS,
+  UNIT_BYLINE_CLASS,
+  UNIT_MORE_CLASS,
+} from "./description-unit-look.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -78,35 +104,10 @@ import {
   useEditReader,
 } from "./edit-ref.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
-import {
-  CommentsToggle,
-  DescriptionCommentLayer,
-  useCommentFocus,
-  useEditorComment,
-} from "./description-comments.js";
-import {
-  DocumentBlock,
-  EditableTitle,
-  DescriptionDocumentEditor,
-  textBoxOf,
-  useTextRoom,
-  useWordsKeptOnClose,
-} from "./description-document-editor.js";
-import {
-  type DescriptionEditMutation,
-  type DescriptionEditSend,
-  descriptionEditMutation,
-} from "./description-edit-mutation.js";
-import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
-import {
-  UNIT_ATTRIBUTED_CLASS,
-  UNIT_BYLINE_CLASS,
-  UNIT_MORE_CLASS,
-} from "./description-unit-look.js";
 import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
-import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, useDescriptionEditing } from "./use-description-editing.js";
+import { useOpenLink } from "./use-open-link.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 import { useTaskMaker } from "./use-task-origin.js";
 import {
@@ -653,13 +654,11 @@ function taskSet(text: string, at: number, line: string, ticked: boolean): strin
 }
 
 /**
- * A description's writes from its words at rest, ticks and dates, in the order they
- * were made: the last one out, which the next waits on, and the text the last
- * one saved left, with the task and the drawn text it was written over, which
- * stands until the saved description is drawn.
+ * A description's writes from its words at rest, ticks and dates: the text the
+ * last one saved left, with the task and the drawn text it was written over,
+ * which stands until the saved description is drawn.
  */
 interface DescriptionWrites {
-  last: Promise<Kept>;
   saved: { readonly taskId: string; readonly over: string; readonly text: string } | undefined;
 }
 
@@ -675,13 +674,6 @@ function descriptionTextNow(writes: DescriptionWrites, drawn: DrawnDescription):
   return saved !== undefined && saved.taskId === drawn.id && saved.over === drawn.body
     ? saved.text
     : drawn.body;
-}
-
-/** `write` sent once every write before it settles, answering whether it saved, with what refused it where it did not. */
-function queuedWrite(writes: DescriptionWrites, write: () => Promise<Kept> | Kept): Promise<Kept> {
-  const sent = writes.last.then(write);
-  writes.last = sent;
-  return sent;
 }
 
 /**
@@ -703,6 +695,22 @@ function savedOver(
       kept === undefined ? undefined : { taskId: drawn.id, over: drawn.body, text: kept };
     return KEPT;
   }, notKept);
+}
+
+/** A tick from the description at rest, written in its turn through its write: whether saved, by the state the box was pressed to. */
+type DescriptionTick = ReturnType<typeof descriptionAtRestMutation<boolean, boolean>>;
+
+/**
+ * A task item's box at rest, drawn from its own mutation over `tick`: the
+ * state pressed while its write is out, or waits its turn, and once it
+ * saved, until the description drawn anew says it.
+ */
+function useDescriptionTick(tick: DescriptionTick): TaskWrite {
+  const { mutate, isPending, data, variables } = useMutation(tick);
+  return {
+    run: (ticked) => mutate(ticked),
+    asked: isPending || data === true ? variables : undefined,
+  };
 }
 
 /** What a toast says where a tick or a date written from the description at rest was not saved. */
@@ -866,8 +874,8 @@ interface DocumentUnitProps {
   anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
-  /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
-  onTask?: MarkdownTaskToggler | undefined;
+  /** The tick each task item draws from, offsets in the unit's words; every checkbox is read-only without it. */
+  useTaskTick?: MarkdownTaskTick | undefined;
   /** The description's comment threads, which mark its words; none off a page that reads them. */
   threads: readonly DescriptionCommentThread[] | undefined;
   /** The description's text as saved, which a thread being started is laid over; none while no thread is being started. */
@@ -888,7 +896,7 @@ function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
     left.linked === right.linked &&
     left.anchor === right.anchor &&
     left.entry === right.entry &&
-    left.onTask === right.onTask &&
+    left.useTaskTick === right.useTaskTick &&
     left.threads === right.threads &&
     left.descriptionText === right.descriptionText
   );
@@ -909,7 +917,7 @@ const DocumentUnit = memo(function DocumentUnit({
   linked,
   anchor,
   entry,
-  onTask,
+  useTaskTick,
   threads,
   descriptionText,
 }: DocumentUnitProps): React.JSX.Element {
@@ -926,7 +934,7 @@ const DocumentUnit = memo(function DocumentUnit({
       openLink={openLink}
       diagrams
       picture={picture}
-      onTask={onTask}
+      useTaskTick={useTaskTick}
     />
   );
   const menu =
@@ -1152,7 +1160,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   );
   const { link, doors: mentionDoors } = useMentionChips(linked, anchors, sectionLinks);
   /** The ticks and dates written from the words at rest, each sent once the one before it settles. */
-  const writes = useRef<DescriptionWrites>({ last: Promise.resolve(KEPT), saved: undefined });
+  const writes = useRef<DescriptionWrites>({ saved: undefined });
 
   // With nothing focused, the arrows select a block of a document, the first
   // in view going down and the last going up, rather than scroll the page.
@@ -1232,40 +1240,79 @@ export const DescriptionBody = memo(function DescriptionBody({
     [toast],
   );
   // The description as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
-  // Note that a tick and a date save on a mutation of this description's writes, which runs in their order behind the editor's.
-  const { mutateAsync: saveWrite } = useMutation(descriptionWrites);
-  const onEdit = edit === undefined ? undefined : saveWrite;
-  const latestDescription = useRef({ cut, id: task.id, body: task.document.body, onEdit });
-  latestDescription.current = { cut, id: task.id, body: task.document.body, onEdit };
-  // Note that ticks are sent one at a time, in the order pressed, each over
-  // the text the one before it saved, since that description may not be drawn yet.
+  // Note that a tick and a date each run as a mutation in this description's
+  // writes' scope, so each waits its turn behind the editor's saves and every
+  // write before it, and reads the text they left as it runs.
+  const latestDescription = useRef({
+    cut,
+    id: task.id,
+    body: task.document.body,
+    saves: edit !== undefined,
+  });
+  latestDescription.current = {
+    cut,
+    id: task.id,
+    body: task.document.body,
+    saves: edit !== undefined,
+  };
+  const said = (pickedOn: string) => (saved: Kept) => {
+    if (!saved.kept) sayNotSaved(pickedOn, saved.cause);
+    return saved.kept;
+  };
   // A tick is placed by its item's offset and line as drawn at the press, and
   // writes nothing where the text no longer holds that line.
-  const tick = (section: number, at: number, ticked: boolean): Promise<boolean> => {
+  const tick = (section: number, at: number): DescriptionTick => {
     const unit = tickable(section) ? cut[section] : undefined;
     const item = unit === undefined ? undefined : taskItemAt(unit.text, at);
-    const save = onEdit;
     const pressedOn = task.id;
     const queue = writes.current;
-    const sent = queuedWrite(queue, () => {
+    const written = (ticked: boolean, save: DescriptionEditSend): Promise<Kept> | Kept => {
       const now = latestDescription.current;
-      if (save === undefined || unit === undefined || item === undefined)
+      if (!now.saves || unit === undefined || item === undefined || now.id !== pressedOn)
         return notKept(FAILURE_CONDITION.NOT_KEPT);
-      if (now.id !== pressedOn) return notKept(FAILURE_CONDITION.NOT_KEPT);
       const base = descriptionTextNow(queue, now);
       const value = taskSet(base, unit.from + at, item.line, ticked);
       if (value === undefined) return notKept(FAILURE_CONDITION.NOT_KEPT);
       if (value === base) return KEPT;
       return savedOver(queue, save, now, { base, value }, value);
-    });
-    return sent.then((saved) => {
-      if (!saved.kept) sayNotSaved(pressedOn, saved.cause);
-      return saved.kept;
-    });
+    };
+    return descriptionAtRestMutation(pressedOn, descriptionWrites, (ticked: boolean, save) =>
+      Promise.resolve(written(ticked, save)).then(said(pressedOn)),
+    );
   };
   const latestTick = useRef(tick);
   latestTick.current = tick;
-  // A date changed from the description at rest is written over the text as it then stands, read as the picker closes.
+  // A date changed from the description at rest is written over the text as it
+  // then stands, read as the picker closes. Note that one saved since the
+  // picker read the description is not under its text, so nothing after it is
+  // written over that text. A save not taken leaves the date as it was, as an
+  // unticked box goes back, and says so.
+  const dated = useMutation(
+    descriptionAtRestMutation(
+      task.id,
+      descriptionWrites,
+      (
+        asked: { readonly value: string; readonly base: string; readonly pickedOn: string },
+        save,
+      ) => {
+        const now = latestDescription.current;
+        const queue = writes.current;
+        const sent =
+          now.id === asked.pickedOn
+            ? savedOver(
+                queue,
+                save,
+                now,
+                { base: asked.base, value: asked.value },
+                descriptionTextNow(queue, now) === asked.base ? asked.value : undefined,
+              )
+            : Promise.resolve(notKept(FAILURE_CONDITION.NOT_KEPT));
+        return sent.then(said(asked.pickedOn));
+      },
+    ),
+  );
+  const writeDate = useRef(dated.mutate);
+  writeDate.current = dated.mutate;
   const descriptionDates = useMemo<DescriptionDates | undefined>(
     () =>
       editable
@@ -1274,39 +1321,26 @@ export const DescriptionBody = memo(function DescriptionBody({
             text: () => descriptionTextNow(writes.current, latestDescription.current),
             from: (section) => latestDescription.current.cut[section]?.from,
             write: (value, base) => {
-              const { onEdit: save, id: pickedOn } = latestDescription.current;
-              if (save === undefined) return;
-              const queue = writes.current;
-              // Note that a date waits its turn behind the ticks out, and that
-              // one saved since the picker read the description is not under its text,
-              // so nothing after it is written over that text. A save not
-              // taken leaves the date as it was, as an unticked box flips back, and says so.
-              const sent = queuedWrite(queue, () => {
-                const now = latestDescription.current;
-                if (now.id !== pickedOn) return notKept(FAILURE_CONDITION.NOT_KEPT);
-                const kept = descriptionTextNow(queue, now) === base ? value : undefined;
-                return savedOver(queue, save, now, { base, value }, kept);
-              });
-              sent.then((saved) => {
-                if (!saved.kept) sayNotSaved(pickedOn, saved.cause);
-              });
+              const { saves, id: pickedOn } = latestDescription.current;
+              if (saves) writeDate.current({ value, base, pickedOn });
             },
           }
         : undefined,
-    [editable, sayNotSaved],
+    [editable],
   );
-  // Each section's toggler stands across draws and ticks from the description as drawn last, so a section is not drawn again for a new one.
-  const togglers = useRef(new Map<number, MarkdownTaskToggler>());
-  const taskToggler = (section: number): MarkdownTaskToggler | undefined => {
+  // Each section's tick stands across draws and ticks from the description as drawn last, so a section is not drawn again for a new one.
+  const ticks = useRef(new Map<number, MarkdownTaskTick>());
+  const taskTick = (section: number): MarkdownTaskTick | undefined => {
     // Note that a unit with no box has none, so the editor opening and closing leaves it as drawn.
     if (!tickable(section) || !TASK_ITEM_ANYWHERE.test(views[section]?.words ?? "")) {
       return undefined;
     }
-    const held = togglers.current.get(section);
+    const held = ticks.current.get(section);
     if (held !== undefined) return held;
-    const toggler: MarkdownTaskToggler = (at, ticked) => latestTick.current(section, at, ticked);
-    togglers.current.set(section, toggler);
-    return toggler;
+    const useSectionTick: MarkdownTaskTick = (at) =>
+      useDescriptionTick(latestTick.current(section, at));
+    ticks.current.set(section, useSectionTick);
+    return useSectionTick;
   };
   // The text a thread being started is laid over, handed to the units only while one is, since every unit is drawn again when it changes.
   const { pending } = useCommentFocus();
@@ -1340,7 +1374,7 @@ export const DescriptionBody = memo(function DescriptionBody({
             linked={linked}
             anchor={anchors[section] ?? ""}
             entry={entry === view.id}
-            onTask={taskToggler(section)}
+            useTaskTick={taskTick(section)}
             threads={comments?.threads}
             descriptionText={pendingText}
           />
