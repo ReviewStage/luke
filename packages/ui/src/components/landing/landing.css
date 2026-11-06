@@ -194,6 +194,7 @@
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-landing-leading);
     letter-spacing: var(--ui-display-landing-tracking);
+    text-wrap: balance;
   }
 
   .ui-landing-hero-lead,
@@ -243,6 +244,7 @@
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-feature-leading);
     letter-spacing: var(--ui-display-landing-tracking);
+    text-wrap: balance;
   }
 
   /* A stage: a box of drifting dots holding the feature's screen, which
