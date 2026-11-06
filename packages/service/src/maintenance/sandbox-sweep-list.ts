@@ -18,6 +18,7 @@ import {
   LIST_ORDER,
   type ListedSandbox,
   type ListOrder,
+  type SessionRef,
   type VercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
 
@@ -110,7 +111,7 @@ export function windowAt<Listed>(found: readonly Listed[], width: number, now: D
  */
 export const stopWithinBudget = (
   api: VercelSandboxApi,
-  running: string,
+  running: SessionRef,
   budget: StopBudget,
   named: string,
 ): Effect.Effect<BudgetedStop, never, DatabaseServices> =>
@@ -119,7 +120,10 @@ export const stopWithinBudget = (
     budget.remaining -= 1;
     // The credentials come off first, and a sandbox they would not come off is left up for the next sweep rather than stopped with them.
     const stopped = yield* Effect.result(
-      Effect.andThen(sandboxFirewall(api).clear(running), api.stopSession(running)),
+      Effect.andThen(
+        sandboxFirewall(api).clear(running.sessionId),
+        Effect.flatMap(api.session(running), (session) => session.stop()),
+      ),
     );
     if (Result.isFailure(stopped)) {
       yield* Effect.logWarning(`${named} was not stopped: ${stopped.failure.message}`);

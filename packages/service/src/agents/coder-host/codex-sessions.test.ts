@@ -54,14 +54,13 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../../environme
 import { sweepCodexPlanSwaps } from "../../maintenance/codex-plan-sweep.js";
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import {
-  fixtureToken,
   launchBearer,
   launchLines,
   linesOf,
   runnerSandboxApi,
   runnerTook,
 } from "../../testing/runner-sandbox-fake.js";
-import { sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
+import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AgentSandboxImage } from "../agent-sandbox-image.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import {

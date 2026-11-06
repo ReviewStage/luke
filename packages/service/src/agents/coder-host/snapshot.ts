@@ -214,7 +214,11 @@ const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
       if (sandbox.currentSessionId === undefined || !UP_STATUSES.has(sandbox.status ?? "")) {
         continue;
       }
-      yield* api.stopSession(sandbox.currentSessionId);
+      const session = yield* api.session({
+        name: sandbox.name,
+        sessionId: sandbox.currentSessionId,
+      });
+      yield* session.stop();
     }
   }).pipe(
     Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
@@ -283,7 +287,7 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
       yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, owner, ask));
     }
     yield* sandboxFirewall(api).set(owner, FIREWALL_SLOT.GITHUB, githubEntry(credential));
-    const ran = yield* api.run(session, {
+    const ran = yield* (yield* api.session({ name: sandbox.name, sessionId: session })).run({
       command: "sh",
       args: ["-c", SNAPSHOT_SCRIPT, "sh", ask.branch, ask.message],
       cwd: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,

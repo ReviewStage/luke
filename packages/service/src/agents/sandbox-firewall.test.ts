@@ -6,10 +6,9 @@ import { readStandingFirewall } from "@repo/database/models/sandbox-firewall-sto
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Fiber, Layer, Redacted } from "effect";
 import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
-import { fixtureToken } from "../testing/runner-sandbox-fake.js";
+import { fixtureToken, sandboxFetchOver, sessionAnswered } from "../testing/vercel-sandbox-fake.js";
 import {
   cloneEntry,
   composePolicy,
@@ -96,8 +95,9 @@ function vercel(holdFirst = false) {
     release = resolve;
   });
   let writes = 0;
-  const layer = fakeHttpClientLayer(async (url, init) => {
-    assert.ok(new URL(url).pathname.endsWith("/network-policy"), `an unexpected call: ${url}`);
+  const layer = sandboxFetchOver(async (url, init) => {
+    const session = /\/sessions\/([^/]+)\/network-policy$/u.exec(new URL(url).pathname)?.[1];
+    assert.ok(session !== undefined, `an unexpected call: ${url}`);
     const policy = JSON.parse(await new Response(init.body).text());
     writes += 1;
     if (holdFirst && writes === 1) {
@@ -105,7 +105,7 @@ function vercel(holdFirst = false) {
       await released;
     }
     landed.push(policy);
-    return Response.json({});
+    return Response.json(sessionAnswered({ id: session, status: "running" }));
   });
   return { layer, landed, arrived, release };
 }

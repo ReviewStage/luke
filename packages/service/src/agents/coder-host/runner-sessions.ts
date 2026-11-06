@@ -549,7 +549,12 @@ function pastWarmWindow(
 
 /** The place a runner's handle names, without the runner. */
 function placeOfHandle(handle: RunnerHandle): MachinePlace {
-  return { machine: handle.machine, session: handle.session, running: handle.running };
+  return {
+    machine: handle.machine,
+    session: handle.session,
+    name: handle.name,
+    running: handle.running,
+  };
 }
 
 /** Where a found place's record is kept, under the agent given. */

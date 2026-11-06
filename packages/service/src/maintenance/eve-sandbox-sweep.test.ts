@@ -9,11 +9,17 @@ import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
-import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
+import {
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+  sandboxStopRefusal,
+  sessionAnswered,
+} from "../testing/vercel-sandbox-fake.js";
 import { EVE_SANDBOX_SWEEP, sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 
 /**
@@ -57,6 +63,12 @@ interface FakeSandbox {
   readonly tags: Record<string, string>;
 }
 
+/** A sandbox of the fake's as Vercel names it, created at the epoch. */
+const listedOf = (sandbox: FakeSandbox) => ({ ...sandbox, createdAt: 0 });
+
+/** Vercel's refusal of a call, as one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer. */
+const refusal = () => Response.json({ error: { code: "bad_request" } }, { status: 400 });
+
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
 function vercel(
   options: {
@@ -79,23 +91,25 @@ function vercel(
       const tag = parsed.searchParams.get("tags");
       if (tag !== null) {
         const [key = "", value] = tag.split(":");
-        return Response.json({ sandboxes: sandboxes.filter((each) => each.tags[key] === value) });
+        return Response.json(
+          sandboxesListed(sandboxes.filter((each) => each.tags[key] === value).map(listedOf)),
+        );
       }
-      if (options.refuseList === true) return new Response(null, { status: 503 });
+      if (options.refuseList === true) return refusal();
       assert.equal(parsed.searchParams.get("project"), PROJECT);
       const status = parsed.searchParams.get("status");
       const order = parsed.searchParams.get("sortOrder");
       pagesListed.push({ order });
-      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) {
-        return new Response(null, { status: 503 });
-      }
+      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) return refusal();
       const from = Number(parsed.searchParams.get("cursor") ?? "0");
       const matching = sandboxes.filter((each) => status === null || each.status === status);
       if (order === "desc") matching.reverse();
       const page = matching.slice(from, from + PAGE);
       const next = from + PAGE < matching.length ? String(from + PAGE) : null;
-      return Response.json({ sandboxes: page, pagination: { count: page.length, next } });
+      return Response.json(sandboxesListed(page.map(listedOf), next));
     }
+    const named = sandboxes.find((each) => parsed.pathname === `/api/v2/sandboxes/${each.name}`);
+    if (named !== undefined) return Response.json(sandboxFound(listedOf(named)));
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
     const [, sessionId = "", rest = ""] = session;
@@ -106,14 +120,14 @@ function vercel(
       for (const sandbox of sandboxes.filter((each) => each.currentSessionId === sessionId)) {
         sandbox.status = "stopped";
       }
-      return Response.json({ session: { id: sessionId } });
+      return Response.json(sessionAnswered({ id: sessionId, status: "stopped" }));
     }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
-    if (options.refusePolicy === true) return new Response(null, { status: 502 });
+    if (options.refusePolicy === true) return refusal();
     policies.push(sessionId);
-    return Response.json({});
+    return Response.json(sessionAnswered({ id: sessionId, status: "running" }));
   };
-  return { layer: fakeHttpClientLayer(respond), sandboxes, stopped, policies, pagesListed };
+  return { layer: sandboxFetchOver(respond), sandboxes, stopped, policies, pagesListed };
 }
 
 /**

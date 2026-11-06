@@ -39,7 +39,6 @@ import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import { readEveRunStanding } from "@repo/database/models/agent-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
-import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
   type ListedSandbox,
@@ -118,8 +117,9 @@ const SANDBOX_ENDING = {
 
 type SandboxEnding = (typeof SANDBOX_ENDING)[keyof typeof SANDBOX_ENDING];
 
-/** A running sandbox eve opened for a session: the session its tag names, and the sandbox session it runs. */
+/** A running sandbox eve opened for a session: its name, the session its tag names, and the sandbox session it runs. */
 interface EveSandbox {
+  readonly name: string;
   readonly sessionId: string;
   readonly running: string;
 }
@@ -131,7 +131,7 @@ function eveSandboxOf(sandbox: ListedSandbox): EveSandbox | undefined {
     return undefined;
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (sessionId === undefined) return undefined;
-  return { sessionId, running: sandbox.currentSessionId };
+  return { name: sandbox.name, sessionId, running: sandbox.currentSessionId };
 }
 
 /** Whether the sandbox, read afresh, has moved on from the list: gone, down, or in another session. Vercel not answering counts as moved on. */
@@ -169,7 +169,12 @@ const endSandbox = (
     const again = yield* readEveRunStanding(sandbox.sessionId);
     if (Option.isNone(again) || !endedPastGrace(again.value, now)) return SANDBOX_ENDING.LEFT;
     if (yield* sandboxHeld(again.value.conversationId, now)) return SANDBOX_ENDING.HELD;
-    return yield* stopWithinBudget(api, sandbox.running, budget, "an orphaned eve sandbox");
+    return yield* stopWithinBudget(
+      api,
+      { name: sandbox.name, sessionId: sandbox.running },
+      budget,
+      "an orphaned eve sandbox",
+    );
   });
 
 /**
@@ -180,11 +185,7 @@ const endSandbox = (
  */
 export const sweepEveSandboxes = /* @__PURE__ */ Effect.fn("web/sweepEveSandboxes")(function* (
   now: Date,
-): Effect.fn.Return<
-  EveSandboxSweepOutcome,
-  QueryError | Schema.SchemaError,
-  DatabaseServices | HttpClient.HttpClient
-> {
+): Effect.fn.Return<EveSandboxSweepOutcome, QueryError | Schema.SchemaError, DatabaseServices> {
   const api = yield* vercelSandboxApi(deploymentOidcToken);
   const listed = yield* Effect.result(
     listRunningSandboxes(api, listOrderAt(now), EVE_SANDBOX_SWEEP.MAX_PAGES, eveSandboxOf),

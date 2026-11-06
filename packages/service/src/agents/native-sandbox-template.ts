@@ -47,8 +47,9 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
+  type OpenedSandbox,
   SANDBOX_STATUS,
-  SandboxUnavailable,
+  type SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "./vercel-sandbox-api.js";
@@ -135,8 +136,9 @@ export const TEMPLATE_STATE = {
   FAILED: "failed",
 } as const;
 
-/** The build command a template being prepared runs, which a launch waiting on it waits on to its exit. */
+/** The build command a template being prepared runs, which a launch waiting on it waits on to its exit: the template's sandbox, its session, and the command. */
 interface RunningBuild {
+  readonly name: string;
   readonly session: string;
   readonly commandId: string;
 }
@@ -233,7 +235,7 @@ const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
         vcpus: CODER.SANDBOX_VCPUS,
       })
       .pipe(
-        Effect.map((sandbox): ListedSandbox | undefined => sandbox),
+        Effect.map((sandbox): OpenedSandbox | undefined => sandbox),
         Effect.catchIf(
           (failure) => failure.status === CONFLICT_STATUS,
           () => Effect.succeed(undefined),
@@ -242,12 +244,9 @@ const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
     if (created === undefined) return PREPARING;
     const building = yield* Effect.gen(function* () {
       const running = created.currentSessionId;
-      if (running === undefined) return yield* new SandboxUnavailable({});
-      yield* api.writeFiles(
-        running,
-        build.files.map((file) => ({ ...file, mode: 0o644 })),
-      );
-      const commandId = yield* api.start(running, {
+      const session = yield* api.session({ name: build.name, sessionId: running });
+      yield* session.writeFiles(build.files.map((file) => ({ ...file, mode: 0o644 })));
+      const commandId = yield* session.start({
         command: "bash",
         args: [build.entry],
         sudo: false,
@@ -258,7 +257,7 @@ const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
         [TEMPLATE_TAG.BUILD]: commandId,
       });
       yield* Effect.logInfo(`the native agents' image ${build.key} is being prepared`);
-      return { session: running, commandId } satisfies RunningBuild;
+      return { name: build.name, session: running, commandId } satisfies RunningBuild;
     }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(build.name))));
     return { state: TEMPLATE_STATE.PREPARING, building } as const;
   });
@@ -327,23 +326,27 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
         ? PREPARING
         : yield* rebuild(api, build, found);
     }
-    const exit = yield* api.commandExit(session, commandId);
+    const held = yield* api.session({ name: build.name, sessionId: session });
+    const exit = yield* held.commandExit(commandId);
     if (exit === null) {
-      return { state: TEMPLATE_STATE.PREPARING, building: { session, commandId } } as const;
+      return {
+        state: TEMPLATE_STATE.PREPARING,
+        building: { name: build.name, session, commandId },
+      } as const;
     }
     if (exit !== 0) {
       yield* Effect.logWarning(
         `the native agents' image ${build.key} failed to prepare (exit ${exit})`,
       );
       yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.FAILED_AT]: String(now) });
-      yield* Effect.ignore(api.stopSession(session));
+      yield* Effect.ignore(held.stop());
       return FAILED;
     }
     // The mark goes up before the snapshot, so the snapshot it leaves is known for a whole image
     // and one Vercel took of a sandbox it stopped mid-build never is. Of readers racing here,
     // Vercel snapshots for the first and refuses the rest, which read on and find it ready.
     yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.BUILT]: String(now) });
-    const taken = yield* Effect.result(api.snapshot(session, NATIVE_TEMPLATE.SNAPSHOT_EXPIRY));
+    const taken = yield* Effect.result(held.snapshot(NATIVE_TEMPLATE.SNAPSHOT_EXPIRY));
     if (Result.isFailure(taken)) return PREPARING;
     yield* Effect.logInfo(`the native agents' image ${build.key} is ready`);
     return { state: TEMPLATE_STATE.READY, snapshotId: taken.success } as const;
@@ -409,9 +412,11 @@ const settled = (
       yield* pause;
       return true;
     }
-    const exit = yield* api
-      .commandExit(read.building.session, read.building.commandId, Duration.millis(left))
-      .pipe(Effect.orElseSucceed(() => null));
+    const { name, session, commandId } = read.building;
+    const exit = yield* api.session({ name, sessionId: session }).pipe(
+      Effect.flatMap((held) => held.commandExit(commandId, Duration.millis(left))),
+      Effect.orElseSucceed(() => null),
+    );
     if (exit === null && (yield* Clock.currentTimeMillis) < until) yield* pause;
     return true;
   });

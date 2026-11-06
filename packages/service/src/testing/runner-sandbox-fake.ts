@@ -23,26 +23,22 @@ import { Effect, Layer } from "effect";
 import { runnerTag } from "../agents/machine/vercel-machine.js";
 import type { NetworkPolicy } from "../agents/vercel-sandbox-api.js";
 import {
+  commandAnswered,
+  commandLogsStreamed,
+  commandRunStreamed,
   sandboxDeleted,
+  sandboxesListed,
   sandboxFetchOver,
   sandboxFound,
   sandboxListRefusal,
   sandboxStopRefusal,
   sandboxTagsRefusal,
+  sessionAnswered,
+  snapshotOf,
 } from "./vercel-sandbox-fake.js";
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
-
-/** An unsigned token naming the fixture's project and team, a year from expiring. */
-export function fixtureToken(): string {
-  const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: PROJECT, owner_id: TEAM, exp }),
-  ).toString("base64url");
-  return `${header}.${payload}.`;
-}
 
 export interface FakeSandbox {
   name: string;
@@ -110,9 +106,14 @@ export async function commandRead(
     await once(init.signal, "abort");
     throw new Error("the reader gave up");
   }
-  return Response.json({
-    command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
-  });
+  const sessionId = /\/sessions\/([^/]+)\//u.exec(url.pathname)?.[1] ?? "";
+  return Response.json(
+    commandAnswered({
+      id: command.id,
+      sessionId,
+      exitCode: command.recorded === true ? command.exitCode : null,
+    }),
+  );
 }
 
 /** The files a gzipped tar holds, by path. */
@@ -162,9 +163,12 @@ export function runnerSandboxApi() {
     readonly args: readonly string[];
     readonly env: Readonly<Record<string, string>>;
   }[] = [];
-  /** How many reads of a command the API refuses next, as a passing outage. */
+  /**
+   * How many reads of a command, and how many network policy updates, the
+   * API refuses next. Note that each refusal is a 400 rather than a passing
+   * outage's 503, for the reason `failDelete` gives.
+   */
   const failCommandReads = { remaining: 0 };
-  /** How many network policy updates the API refuses next, as a passing outage. */
   const failPolicy = { remaining: 0 };
   /** How many network policy updates the API holds next, answering none until the caller gives up. */
   const holdPolicy = { remaining: 0 };
@@ -239,7 +243,7 @@ export function runnerSandboxApi() {
         resumedWith: [],
       };
       sandboxes.push(sandbox);
-      return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
+      return Response.json(sandboxFound(listed(sandbox)));
     }
     if (method === "GET" && path === "/api/v2/sandboxes") {
       const prefix = parsed.searchParams.get("namePrefix");
@@ -247,7 +251,7 @@ export function runnerSandboxApi() {
         const named = sandboxes
           .filter((each) => !each.deleted && each.name.startsWith(prefix))
           .sort((left, right) => left.name.localeCompare(right.name));
-        return Response.json({ sandboxes: named.map(listed), pagination: { next: null } });
+        return Response.json(sandboxesListed(named.map(listed)));
       }
       const refused = sandboxListRefusal(parsed);
       if (refused !== undefined) return refused;
@@ -255,7 +259,7 @@ export function runnerSandboxApi() {
       const found = sandboxes.filter(
         (each) => !each.deleted && key !== undefined && each.tags[key] === value,
       );
-      return Response.json({ sandboxes: found.map(listed) });
+      return Response.json(sandboxesListed(found.map(listed)));
     }
     const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path);
     if (named !== null) {
@@ -272,7 +276,7 @@ export function runnerSandboxApi() {
         if (tagsRefused !== undefined) return tagsRefused;
         if (asked.tags !== undefined) sandbox.tags = asked.tags;
         if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
-        return Response.json({ sandbox: listed(sandbox) });
+        return Response.json(sandboxDeleted(listed(sandbox)));
       }
       if (method === "DELETE" && failDelete.remaining > 0) {
         failDelete.remaining -= 1;
@@ -307,7 +311,7 @@ export function runnerSandboxApi() {
       for (const command of commands.filter((each) => each.sandboxSessionId === sessionId)) {
         command.exitCode = command.exitCode ?? 143;
       }
-      return Response.json({ session: { id: sessionId } });
+      return Response.json(sessionAnswered({ id: sessionId, status: "stopped" }));
     }
     const current = sandboxes.find((each) => !each.deleted && each.currentSessionId === sessionId);
     if (current?.status === "running" && stopsAt.call?.(rest) === true) {
@@ -339,7 +343,10 @@ export function runnerSandboxApi() {
       snapshotExpirations.set(snapshot, (await body()).expiration);
       taking.status = "stopped";
       taking.currentSnapshotId = snapshot;
-      return Response.json({ snapshot: { id: snapshot }, session: { id: sessionId } });
+      return Response.json({
+        snapshot: snapshotOf({ id: snapshot, status: "created", sourceSessionId: sessionId }),
+        ...sessionAnswered({ id: sessionId, status: "stopped" }),
+      });
     }
     if (rest === "network-policy" && holdPolicy.remaining > 0) {
       holdPolicy.remaining -= 1;
@@ -349,11 +356,11 @@ export function runnerSandboxApi() {
     }
     if (rest === "network-policy" && failPolicy.remaining > 0) {
       failPolicy.remaining -= 1;
-      return new Response(null, { status: 503 });
+      return Response.json({ error: { code: "bad_request" } }, { status: 400 });
     }
     if (rest === "network-policy") {
       policies.push({ session: sessionId, policy: await body() });
-      return Response.json({});
+      return Response.json(sessionAnswered({ id: sessionId, status: "running" }));
     }
     if (rest === "fs/write") {
       assert.equal(new Headers(init.headers).get("content-type"), "application/gzip");
@@ -369,7 +376,10 @@ export function runnerSandboxApi() {
         await hooks.onRun?.(asked.env ?? {});
         runs.push({ session: sessionId, args: asked.args, env: asked.env ?? {} });
         const exitCode = hooks.runExit?.(asked.args) ?? 0;
-        return new Response(`${JSON.stringify({ command: { exitCode } })}\n`);
+        return commandRunStreamed(
+          { id: id("cmd"), sessionId },
+          { exitCode, stdout: "", stderr: "" },
+        );
       }
       assert.equal(asked.attachStdin, true);
       const command: FakeCommand = {
@@ -390,7 +400,7 @@ export function runnerSandboxApi() {
       };
       commands.push(command);
       await hooks.onStart?.(command);
-      return Response.json({ command: { id: command.id, exitCode: null } });
+      return Response.json(commandAnswered({ id: command.id, sessionId, exitCode: null }));
     }
     const commandCall = /^cmd\/([^/]+)(\/stdin|\/kill|\/logs)?$/u.exec(rest);
     assert.ok(commandCall !== null, `an unexpected call: ${method} ${path}`);
@@ -398,15 +408,11 @@ export function runnerSandboxApi() {
     if (command === undefined) return new Response(null, { status: 404 });
     if (commandCall[2] === "/kill") {
       command.exitCode = command.exitCode ?? 143;
-      return Response.json({ command: { id: command.id, exitCode: command.exitCode } });
+      return Response.json(
+        commandAnswered({ id: command.id, sessionId, exitCode: command.exitCode }),
+      );
     }
-    if (commandCall[2] === "/logs") {
-      const lines =
-        command.stderr === undefined ? [] : [{ stream: "stderr", data: command.stderr }];
-      return new Response(lines.map((each) => `${JSON.stringify(each)}\n`).join(""), {
-        headers: { "content-type": "application/x-ndjson" },
-      });
-    }
+    if (commandCall[2] === "/logs") return commandLogsStreamed(command.stderr ?? "");
     if (commandCall[2] === "/stdin") {
       // Vercel refuses stdin to a command that already exited.
       if (command.exitCode !== null) {
@@ -428,14 +434,20 @@ export function runnerSandboxApi() {
         const data = Buffer.from(asked.data, "base64");
         command.stdin = Buffer.concat([bytes.subarray(0, asked.offset), data]).toString("utf8");
       }
-      return Response.json({
-        command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
-        bytesWritten: Buffer.byteLength(command.stdin),
-      });
+      return Response.json(
+        commandAnswered(
+          {
+            id: command.id,
+            sessionId,
+            exitCode: command.recorded === true ? command.exitCode : null,
+          },
+          Buffer.byteLength(command.stdin),
+        ),
+      );
     }
     if (failCommandReads.remaining > 0) {
       failCommandReads.remaining -= 1;
-      return new Response(null, { status: 503 });
+      return Response.json({ error: { code: "bad_request" } }, { status: 400 });
     }
     return commandRead(command, parsed, init, waits.hold);
   };

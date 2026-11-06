@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
+import {
+  sandboxDeleted,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+  snapshotOf,
+} from "../testing/vercel-sandbox-fake.js";
 import { SANDBOX_RETENTION_SWEEP, sweepSandboxRetention } from "./sandbox-retention-sweep.js";
 
 /**
@@ -92,6 +98,15 @@ function vercel(
   const prefixes: string[] = [];
   const updated: { readonly name: string; readonly body: unknown }[] = [];
   const named = (name: string) => sandboxes.find((each) => each.name === name);
+  /** A sandbox as Vercel names it, a retention none was set for left out, as Vercel leaves it. */
+  const listedOf = ({ name, status, currentSnapshotId, keepLastSnapshots }: FakeSandbox) => ({
+    name,
+    status,
+    currentSessionId: `sbs_${name}`,
+    createdAt: 0,
+    ...(currentSnapshotId === undefined ? undefined : { currentSnapshotId }),
+    ...(keepLastSnapshots === null ? undefined : { keepLastSnapshots }),
+  });
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const method = init.method ?? "GET";
@@ -110,15 +125,7 @@ function vercel(
         .toSorted((first, second) => first.name.localeCompare(second.name));
       const page = matching.slice(from, from + limit);
       const next = from + limit < matching.length ? String(from + limit) : null;
-      return Response.json({
-        pagination: { count: page.length, next },
-        sandboxes: page.map(({ name, status, currentSnapshotId, keepLastSnapshots }) => ({
-          name,
-          status,
-          currentSnapshotId,
-          keepLastSnapshots,
-        })),
-      });
+      return Response.json(sandboxesListed(page.map(listedOf), next));
     }
     if (method === "GET" && path === "/api/v2/sandboxes/snapshots") {
       assert.equal(parsed.searchParams.get("project"), PROJECT);
@@ -126,19 +133,28 @@ function vercel(
       const listed = (named(parsed.searchParams.get("name") ?? "")?.snapshots ?? [])
         .toSorted((first, second) => second.createdAt - first.createdAt)
         .slice(0, Number(parsed.searchParams.get("limit")));
-      return Response.json({ snapshots: listed, pagination: { next: null } });
+      return Response.json({
+        snapshots: listed.map(snapshotOf),
+        pagination: { count: listed.length, next: null },
+      });
     }
     const lookup = /^\/api\/v2\/sandboxes\/snapshots\/([^/]+)$/u.exec(path);
     if (method === "GET" && lookup !== null) {
       const found = sandboxes.flatMap((each) => each.snapshots).find((s) => s.id === lookup[1]);
       return found === undefined
-        ? new Response("{}", { status: 404 })
-        : Response.json({ snapshot: found });
+        ? Response.json({ error: { code: "not_found" } }, { status: 404 })
+        : Response.json({ snapshot: snapshotOf(found) });
     }
+    const name = decodeURIComponent(path.split("/").at(-1) ?? "");
+    const looked = named(name);
+    if (method === "GET" && looked !== undefined)
+      return Response.json(sandboxFound(listedOf(looked)));
     assert.equal(method, "PATCH", `an unexpected call: ${method} ${path}`);
     assert.equal(parsed.searchParams.get("projectId"), PROJECT);
-    if (options.refuseUpdate === true) return new Response("{}", { status: 503 });
-    const name = decodeURIComponent(path.split("/").at(-1) ?? "");
+    // Note that the refusal is one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer.
+    if (options.refuseUpdate === true) {
+      return Response.json({ error: { code: "bad_request" } }, { status: 400 });
+    }
     const body = JSON.parse(String(init.body)) as { keepLastSnapshots: { count: number } };
     updated.push({ name, body });
     const target = named(name);
@@ -153,9 +169,9 @@ function vercel(
       .forEach((each) => {
         each.status = "deleted";
       });
-    return Response.json({ sandbox: { name } });
+    return Response.json(sandboxDeleted(listedOf(target)));
   };
-  return { layer: fakeHttpClientLayer(respond), prefixes, updated };
+  return { layer: sandboxFetchOver(respond), prefixes, updated };
 }
 
 const statusesOf = (fake: FakeSandbox) => fake.snapshots.map((each) => each.status);

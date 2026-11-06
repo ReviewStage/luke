@@ -56,10 +56,11 @@ export type MachineName = string & Brand.Brand<"MachineName">;
 /** What a machine keeps of a place it found, for its own later calls on it. Opaque to every caller but the machine. */
 export type MachineKept = Brand.Brand<"MachineKept">;
 
-/** One agent's place on a machine: which machine, our runtime session id, and where that session runs now. */
+/** One agent's place on a machine: which machine, our runtime session id, the place's lifecycle name, and where that session runs now. */
 export interface MachinePlace {
   readonly machine: AgentMachineKind;
   readonly session: string;
+  readonly name: MachineName;
   readonly running: MachineRunning;
 }
 

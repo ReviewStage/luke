@@ -14,7 +14,7 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
+import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, ErrorReporter, Layer, Option, Redacted } from "effect";
 import { afterEach, vi } from "vitest";
@@ -29,7 +29,16 @@ import {
 import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
 import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
-import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
+import {
+  commandLogsStreamed,
+  sandboxDeleted,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+  sandboxStopRefusal,
+  sessionAnswered,
+} from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 
 /**
@@ -69,6 +78,12 @@ interface FakeSandbox {
   tags: Record<string, string>;
 }
 
+/** A sandbox of the fake's as Vercel names it, created at the epoch. */
+const listedOf = (sandbox: FakeSandbox) => ({ ...sandbox, createdAt: 0 });
+
+/** Vercel's refusal of a call, as one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer. */
+const refusal = () => Response.json({ error: { code: "bad_request" } }, { status: 400 });
+
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
 function vercel(
   options: {
@@ -93,29 +108,31 @@ function vercel(
       const tag = parsed.searchParams.get("tags");
       if (tag !== null) {
         const [key = "", value] = tag.split(":");
-        return Response.json({ sandboxes: sandboxes.filter((each) => each.tags[key] === value) });
+        return Response.json(
+          sandboxesListed(sandboxes.filter((each) => each.tags[key] === value).map(listedOf)),
+        );
       }
-      if (options.refuseList === true) return new Response(null, { status: 503 });
+      if (options.refuseList === true) return refusal();
       assert.equal(parsed.searchParams.get("project"), PROJECT);
       const status = parsed.searchParams.get("status");
       const order = parsed.searchParams.get("sortOrder");
       pagesListed.push({ status, sortBy: parsed.searchParams.get("sortBy"), order });
-      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) {
-        return new Response(null, { status: 503 });
-      }
+      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) return refusal();
       const from = Number(parsed.searchParams.get("cursor") ?? "0");
       const matching = sandboxes.filter((each) => status === null || each.status === status);
       if (order === "desc") matching.reverse();
       const page = matching.slice(from, from + PAGE);
       const next = from + PAGE < matching.length ? String(from + PAGE) : null;
-      return Response.json({ sandboxes: page, pagination: { count: page.length, next } });
+      return Response.json(sandboxesListed(page.map(listedOf), next));
     }
     const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(parsed.pathname);
-    if (method === "PATCH" && named !== null) {
+    if (named !== null) {
       const sandbox = sandboxes.find((each) => each.name === decodeURIComponent(named[1] ?? ""));
-      if (sandbox === undefined) return new Response(null, { status: 404 });
+      if (sandbox === undefined)
+        return Response.json({ error: { code: "not_found" } }, { status: 404 });
+      if (method !== "PATCH") return Response.json(sandboxFound(listedOf(sandbox)));
       sandbox.tags = JSON.parse(String(init.body)).tags;
-      return Response.json({ sandbox });
+      return Response.json(sandboxDeleted(listedOf(sandbox)));
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
@@ -127,24 +144,24 @@ function vercel(
       for (const sandbox of sandboxes.filter((each) => each.currentSessionId === sessionId)) {
         sandbox.status = "stopped";
       }
-      return Response.json({ session: { id: sessionId } });
+      return Response.json(sessionAnswered({ id: sessionId, status: "stopped" }));
     }
     const command = /^cmd\/([^/]+)(\/logs)?$/u.exec(rest);
     if (command !== null) {
       const found = commands.get(command[1] ?? "");
-      if (found === undefined) return new Response(null, { status: 404 });
+      if (found === undefined)
+        return Response.json({ error: { code: "not_found" } }, { status: 404 });
       if (command[2] === undefined) return commandRead(found, parsed, init, false);
-      const line =
-        found.stderr === undefined ? "" : JSON.stringify({ stream: "stderr", data: found.stderr });
-      return new Response(`${line}\n`, { headers: { "content-type": "application/x-ndjson" } });
+      return commandLogsStreamed(found.stderr ?? "");
     }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
-    if (options.refusePolicy === true) return new Response(null, { status: 502 });
+    if (options.refusePolicy === true) return refusal();
     policies.push(sessionId);
-    return Response.json({});
+    return Response.json(sessionAnswered({ id: sessionId, status: "running" }));
   };
   return {
-    layer: fakeHttpClientLayer(respond),
+    // The sweep's settle of a lost runner reaches GitHub's client, which no test here sends on.
+    layer: Layer.merge(sandboxFetchOver(respond), noNetwork),
     sandboxes,
     commands,
     stopped,

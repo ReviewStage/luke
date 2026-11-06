@@ -41,7 +41,7 @@ import type { SandboxPtyService } from "../agents/sandbox-pty.js";
 import {
   type CommandAsk,
   type CommandRun,
-  type ListedSandbox,
+  type OpenedSandbox,
   SandboxUnavailable,
 } from "../agents/vercel-sandbox-api.js";
 import type { RelayFrame } from "../terminal/relay.js";
@@ -290,7 +290,7 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     scenario.unavailable === undefined
       ? undefined
       : Effect.fail(new SandboxUnavailable({ status: scenario.unavailable }));
-  const listed = (): ListedSandbox => ({
+  const listed = (): OpenedSandbox => ({
     name: FAKE_SANDBOX.NAME,
     status,
     currentSessionId: current,
@@ -313,43 +313,50 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
         browserUp = false;
         return listed();
       }),
-    run: (sandboxSessionId, ask) =>
+    session: ({ sessionId: sandboxSessionId }) =>
       refused() ??
-      Effect.sync(() => {
-        ran.push({ sandboxSessionId, ask });
-        if (ask.args.includes(RECORDER_SOURCE)) {
-          return (
-            scenario.recording?.start ?? {
-              exitCode: 0,
-              stdout: `${RECORDING_START_OUTPUT.STARTED}\n`,
-              stderr: "",
+      Effect.succeed({
+        run: (ask: CommandAsk) =>
+          refused() ??
+          Effect.sync((): CommandRun => {
+            ran.push({ sandboxSessionId, ask });
+            if (ask.args.includes(RECORDER_SOURCE)) {
+              return (
+                scenario.recording?.start ?? {
+                  exitCode: 0,
+                  stdout: `${RECORDING_START_OUTPUT.STARTED}\n`,
+                  stderr: "",
+                }
+              );
             }
-          );
-        }
-        if (ask.args.includes(SANDBOX_RECORDING.VIDEO)) {
-          const video = scenario.recording?.video;
-          return video === undefined
-            ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
-            : {
-                exitCode: 0,
-                stdout: `${FAKE_RECORDING_PATH}\n${Buffer.from(video).toString("base64")}`,
-                stderr: "",
-              };
-        }
-        // The stop is the recording's other script, named as the start is.
-        if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
-          const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
-          return { exitCode: 0, stdout: `${stop}\n`, stderr: "" };
-        }
-        const exitCode = scenario.startExit ?? 0;
-        if (exitCode !== 0) return { exitCode, stdout: "", stderr: "Chromium did not start\n" };
-        const stdout = browserUp ? BROWSER_START_OUTPUT.ATTACHED : BROWSER_START_OUTPUT.STARTED;
-        browserUp = true;
-        return { exitCode, stdout: `${stdout}\n`, stderr: "" };
+            if (ask.args.includes(SANDBOX_RECORDING.VIDEO)) {
+              const video = scenario.recording?.video;
+              return video === undefined
+                ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
+                : {
+                    exitCode: 0,
+                    stdout: `${FAKE_RECORDING_PATH}\n${Buffer.from(video).toString("base64")}`,
+                    stderr: "",
+                  };
+            }
+            // The stop is the recording's other script, named as the start is.
+            if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
+              const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
+              return { exitCode: 0, stdout: `${stop}\n`, stderr: "" };
+            }
+            const exitCode = scenario.startExit ?? 0;
+            if (exitCode !== 0) return { exitCode, stdout: "", stderr: "Chromium did not start\n" };
+            const stdout = browserUp ? BROWSER_START_OUTPUT.ATTACHED : BROWSER_START_OUTPUT.STARTED;
+            browserUp = true;
+            return { exitCode, stdout: `${stdout}\n`, stderr: "" };
+          }),
+        openInteractive: () =>
+          refused() ??
+          Effect.succeed({
+            url: "wss://sbx-fixture.vercel.run/ws",
+            token: Redacted.make("pty-token"),
+          }),
       }),
-    openInteractive: () =>
-      refused() ??
-      Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
     updateTimeout: () => Effect.die("a sandbox the scenario opened is already within the timeout"),
   };
   return { api, ran };

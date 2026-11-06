@@ -28,7 +28,6 @@
  */
 
 import { Effect, Result } from "effect";
-import type { HttpClient } from "effect/http";
 import { SANDBOX_NAME, SANDBOX_NAME_BEFORE_RENAME } from "../agents/machine/vercel-machine.js";
 import {
   boundSnapshotRetention,
@@ -113,9 +112,7 @@ const unboundIn = (api: VercelSandboxApi, bucket: string) =>
 
 /** Brings the stopped sandboxes of this minute's bucket onto the bound, `CONCURRENCY` at a time, `MAX_UPDATES` at most. */
 export const sweepSandboxRetention = /* @__PURE__ */ Effect.fn("web/sweepSandboxRetention")(
-  function* (
-    now: Date,
-  ): Effect.fn.Return<SandboxRetentionSweepOutcome, never, HttpClient.HttpClient> {
+  function* (now: Date): Effect.fn.Return<SandboxRetentionSweepOutcome> {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
     const unbound = yield* unboundIn(api, bucketAt(now));
     const taken = unbound.slice(0, SANDBOX_RETENTION_SWEEP.MAX_UPDATES);

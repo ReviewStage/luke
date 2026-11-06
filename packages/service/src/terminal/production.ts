@@ -1,5 +1,5 @@
 /**
- * production.ts -- the terminal relay's dependencies as the deployment stands them: the agent read by the one rule, its sandbox over Vercel's REST API, the PTY reached by WebSocket (`sandbox-pty.ts`), and the lease in the store.
+ * production.ts -- the terminal relay's dependencies as the deployment stands them: the agent read by the one rule, its sandbox through Vercel's SDK, the PTY reached by WebSocket (`sandbox-pty.ts`), and the lease in the store.
  *
  * Each dependency answers over the services the function's runtime holds,
  * captured once as the relay stands, so the relay itself requires none. A

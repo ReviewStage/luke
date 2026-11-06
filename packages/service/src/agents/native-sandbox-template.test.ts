@@ -10,10 +10,14 @@ import { Duration, Effect, Fiber, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { commandRead } from "../testing/runner-sandbox-fake.js";
 import {
+  commandAnswered,
   sandboxDeleted,
+  sandboxesListed,
   sandboxFetchOver,
   sandboxFound,
   sandboxListRefusal,
+  sessionAnswered,
+  snapshotOf,
 } from "../testing/vercel-sandbox-fake.js";
 import { PREPARE_STAGES } from "./agent-runtime/sandbox-image.js";
 import {
@@ -143,14 +147,14 @@ function vercel() {
         deleted: false,
       };
       sandboxes.push(sandbox);
-      return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
+      return Response.json(sandboxFound(listed(sandbox)));
     }
     if (method === "GET" && path === "/api/v2/sandboxes") {
       const refused = sandboxListRefusal(parsed);
       if (refused !== undefined) return refused;
       const prefix = parsed.searchParams.get("namePrefix") ?? "";
       const found = sandboxes.filter((each) => !each.deleted && each.name.startsWith(prefix));
-      return Response.json({ sandboxes: found.map(listed) });
+      return Response.json(sandboxesListed(found.map(listed)));
     }
     const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path);
     if (named !== null) {
@@ -158,7 +162,7 @@ function vercel() {
       if (sandbox === undefined) return new Response(null, { status: 404 });
       if (method === "PATCH") {
         sandbox.tags = (await body()).tags;
-        return Response.json({ sandbox: listed(sandbox) });
+        return Response.json(sandboxDeleted(listed(sandbox)));
       }
       if (method === "DELETE") {
         sandbox.deleted = true;
@@ -176,7 +180,7 @@ function vercel() {
       if (goneSnapshots.has(snapshotId) || !snapshots.includes(snapshotId)) {
         return Response.json({ error: { code: "not_found" } }, { status: 404 });
       }
-      return Response.json({ snapshot: { id: snapshotId, status: "created" } });
+      return Response.json({ snapshot: snapshotOf({ id: snapshotId, status: "created" }) });
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(path);
     assert.ok(session !== null, `an unexpected call: ${method} ${path}`);
@@ -190,7 +194,7 @@ function vercel() {
         running.status = "stopped";
         running.currentSnapshotId = id("snap_on_stop");
       }
-      return Response.json({ session: { id: sessionId } });
+      return Response.json(sessionAnswered({ id: sessionId, status: "stopped" }));
     }
     if (rest === "snapshot") {
       assert.deepEqual(await body(), { expiration: 1_209_600_000 });
@@ -203,7 +207,10 @@ function vercel() {
       const snapshot = id("snap");
       snapshots.push(snapshot);
       taking.currentSnapshotId = snapshot;
-      return Response.json({ snapshot: { id: snapshot }, session: { id: sessionId } });
+      return Response.json({
+        snapshot: snapshotOf({ id: snapshot, status: "created", sourceSessionId: sessionId }),
+        ...sessionAnswered({ id: sessionId, status: "stopped" }),
+      });
     }
     if (rest === "fs/write") {
       uploads.push(untar(new Uint8Array(await new Response(init.body).arrayBuffer())));
@@ -219,7 +226,7 @@ function vercel() {
         exitCode: null,
       };
       commands.push(command);
-      return Response.json({ command: { id: command.id, exitCode: null } });
+      return Response.json(commandAnswered({ id: command.id, sessionId, exitCode: null }));
     }
     const commandCall = /^cmd\/([^/]+)$/u.exec(rest);
     assert.ok(commandCall !== null, `an unexpected call: ${method} ${path}`);
@@ -333,6 +340,7 @@ it.effect(
           },
         ),
       );
+      yield* turnsUntil(() => fake.exitReads.made > 0);
       yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
 
       fake.finishBuild(0);
@@ -355,6 +363,21 @@ const turnsPass = Effect.promise(async () => {
   }
 });
 
+/**
+ * Real turns of the event loop until the fake has seen what the test waits
+ * for, then `turnsPass` more. Note that the wait is on what the fake saw
+ * rather than a count of turns, because `@vercel/sandbox` reads the
+ * deployment's token through a module it loads on its first request, which
+ * takes as long as the disk does.
+ */
+const turnsUntil = (seen: () => boolean) =>
+  Effect.andThen(
+    Effect.promise(async () => {
+      while (!seen()) await new Promise<void>((settle) => setImmediate(settle));
+    }),
+    turnsPass,
+  );
+
 it.effect(
   "a launch waiting on a build reads the template again the moment the build exits, with no clock between",
   () =>
@@ -364,7 +387,7 @@ it.effect(
       const { api, build } = yield* setUp(fake);
 
       const launch = yield* Effect.forkChild(awaitTemplate(api, build));
-      yield* turnsPass;
+      yield* turnsUntil(() => fake.exitReads.held.length > 0);
       assert.equal(fake.exitReads.held.length, 1);
       assert.equal(fake.snapshots.length, 0);
       fake.finishBuild(0);
@@ -383,13 +406,12 @@ it.effect(
       const { api, build } = yield* setUp(fake);
 
       const launch = yield* Effect.forkChild(awaitTemplate(api, build));
-      yield* turnsPass;
+      yield* turnsUntil(() => fake.exitReads.made > 0);
       const first = fake.exitReads.made;
       yield* turnsPass;
       assert.equal(fake.exitReads.made, first);
       yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
-      yield* turnsPass;
-      assert.ok(fake.exitReads.made > first);
+      yield* turnsUntil(() => fake.exitReads.made > first);
       fake.finishBuild(0);
       yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
 
