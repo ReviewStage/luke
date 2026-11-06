@@ -344,8 +344,8 @@ export const turns = pgTable(
      * queued or runs: set as it is queued or started and pushed on by every
      * post its runner makes (`../models/turn-lease.ts`). Past it, every
      * reader takes the runner as lost, and the next touch of the agent
-     * settles the turn so. Null for a turn from before the column, which no
-     * reader takes as lost.
+     * settles the turn so. Null for a turn from before the column, which only
+     * that settle reads as lapsed, once a lease has passed since its queueing.
      */
     leaseUntil: timestamptz("lease_until"),
     /**
