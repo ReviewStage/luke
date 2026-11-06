@@ -1,4 +1,3 @@
-import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppHostRead, AppHostReads, AppStateSnapshot } from "@repo/host/app-state";
@@ -18,10 +17,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * drawn again draws its rows in its first frame, before anything is pushed.
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
- * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, a task's or an agent's pages or cloud Browser tabs, a
- * workspace's people, or a workspace's automations or runs, or an
- * automation's runs, is held by the
+ * holds rows never says loading again. A keyed read, a workspace's people, is held by the
  * surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
@@ -140,21 +136,10 @@ function hostRead<
   };
 }
 
-/** The automations' hold on one list or history, a stream that carries nothing, and its Try again, by what it holds. */
-function automationsRead(kind: AutomationFollow["kind"]) {
-  return {
-    path: (id: string) => [id],
-    hold: (id: string) => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { kind, id }),
-    retry: (id: string) => tellAct(ACT_KIND.AUTOMATIONS_RETRY, { kind, id }),
-  };
-}
-
 /**
  * Every read a surface reads through `useHostRead`, by its name, but
  * those moved onto TanStack Query (`live-reads.ts`): one workspace's people,
- * which the window's history holds while a person's page stands on it; and
- * one workspace's automations, one workspace's runs, or one automation's
- * runs, by its id.
+ * which the window's history holds while a person's page stands on it.
  */
 const HOST_READS = {
   // Note that `navigation-history.ts`, the Router task's, is the last caller of this entry, which leaves with it (`workspaceMembersQuery`).
@@ -163,18 +148,6 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_MEMBERS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
-    slice: APP_SLICE.AUTOMATIONS,
-    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE),
-  }),
-  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: hostRead(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, {
-    slice: APP_SLICE.AUTOMATION_WORKSPACE_RUNS,
-    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE_RUNS),
-  }),
-  [LIVE_READ.AUTOMATION_RUNS]: hostRead(LIVE_READ.AUTOMATION_RUNS, {
-    slice: APP_SLICE.AUTOMATION_RUNS,
-    ...automationsRead(AUTOMATION_FOLLOW.RUNS),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 

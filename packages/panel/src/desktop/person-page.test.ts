@@ -400,12 +400,15 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  // Note that the people the host holds reach their query a tick after they land, unless the test holds them out.
-  if (!membersHeld) {
-    await vi.waitFor(() =>
-      assert.equal(document.body.textContent?.includes("Reading who they are"), false),
+  // Note that the people and the automations the host holds reach their queries a tick after they land, unless the test holds them out.
+  await vi.waitFor(() => {
+    const text = document.body.textContent ?? "";
+    assert.equal(
+      (!membersHeld && text.includes("Reading who they are")) ||
+        (!automationsHeld && /Reading (their|your) automations/u.test(text)),
+      false,
     );
-  }
+  });
 }
 
 /** Each section the page draws, by its name, with its rows' names. */
@@ -825,7 +828,7 @@ test("automations that could not be read say so and offer Retry, never passing f
   act(() => button(page, "Retry").click());
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.match(page.textContent ?? "", /Nothing of theirs here yet\./u);
 });
 

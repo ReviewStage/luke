@@ -956,10 +956,15 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       each.textContent?.includes("Invoice export"),
     );
     assert.ok(row, "the agent is listed");
-    restOn(row);
-    const words = document.querySelector(
-      ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
-    )?.textContent;
+    // Note that the card names the automation once the workspace's automations reach their query, each rest drawing it afresh.
+    const words = await vi.waitFor(() => {
+      restOn(row);
+      const named = document.querySelector(
+        ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
+      )?.textContent;
+      assert.ok(named, "the card names who started the agent");
+      return named;
+    });
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;

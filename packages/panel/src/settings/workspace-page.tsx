@@ -1,6 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_HOME } from "@repo/features/link-home";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type {
   WorkspaceSentry,
@@ -100,6 +99,7 @@ import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import {
+  automationsQuery,
   slackChannelsQuery,
   workspaceIntegrationsQuery,
   workspaceIntegrationsRetryMutation,
@@ -110,7 +110,6 @@ import {
 } from "../live-reads.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
-import { useHostRead } from "../use-host-read.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
 import { useInviteDialog } from "./invite-dialog.js";
@@ -614,7 +613,7 @@ function MemberRow({
  * service does not say whose they are, which the dialog says without names.
  */
 function useOwnAutomations(workspaceId: string, asked: boolean): readonly string[] | undefined {
-  const { rows } = useHostRead(LIVE_READ.AUTOMATIONS, asked ? workspaceId : undefined);
+  const rows = useQuery(automationsQuery(asked ? workspaceId : undefined)).data;
   if (rows === undefined || rows.some((each) => each.mine === undefined)) return undefined;
   return rows.filter((each) => each.mine === true).map((each) => each.name);
 }

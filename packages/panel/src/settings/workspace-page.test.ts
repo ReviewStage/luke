@@ -1393,27 +1393,43 @@ test("the owner with no admin is told to make one first and offered no handover,
 });
 
 test("the leave names the automations the reader made where the service says whose they are, and leaves them out where none is the reader's", async () => {
-  /** The leave dialog's lines for the automations the workspace holds. */
-  const linesFor = async (held: { name: string; mine?: boolean }[]) => {
+  const UNSAID = "Automations you created stop running.";
+  /** The leave dialog's lines for the automations the workspace holds, once `read` says the automations the host laid reached them. */
+  const linesFor = async (
+    held: { name: string; mine?: boolean }[],
+    read: (lines: readonly (string | null)[]) => boolean,
+  ) => {
     automations = held;
+    // Note that each world reads its own automations, never those the last one's page left cached.
+    startQueriesAfresh();
     const { page } = await mount(ACME);
     act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
     await settle();
-    const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
-      (li) => li.textContent,
-    );
+    const said = () =>
+      [...dialog().querySelectorAll(".leave-consequences li")].map((li) => li.textContent);
+    await vi.waitFor(() => assert.equal(read(said()), true));
+    const lines = said();
     act(() => button(dialog(), "Cancel").click());
     return lines;
   };
 
-  const named = await linesFor([
-    { name: "Nightly triage", mine: true },
-    { name: "Weekly digest", mine: true },
-    { name: "Sam's sweep", mine: false },
-  ]);
-  const one = await linesFor([{ name: "Nightly triage", mine: true }]);
-  const none = await linesFor([{ name: "Sam's sweep", mine: false }]);
-  const unsaid = await linesFor([{ name: "Nightly triage" }]);
+  const named = await linesFor(
+    [
+      { name: "Nightly triage", mine: true },
+      { name: "Weekly digest", mine: true },
+      { name: "Sam's sweep", mine: false },
+    ],
+    (lines) => lines[2] !== UNSAID,
+  );
+  const one = await linesFor(
+    [{ name: "Nightly triage", mine: true }],
+    (lines) => lines[2] !== UNSAID,
+  );
+  const none = await linesFor(
+    [{ name: "Sam's sweep", mine: false }],
+    (lines) => !lines.some((line) => line?.includes("automation")),
+  );
+  const unsaid = await linesFor([{ name: "Nightly triage" }], () => true);
 
   assert.equal(named[2], "2 automations you created stop running: Nightly triage, Weekly digest.");
   assert.equal(one[2], "An automation you created stops running: Nightly triage.");
@@ -1421,7 +1437,7 @@ test("the leave names the automations the reader made where the service says who
     none.some((line) => line?.includes("automation")),
     false,
   );
-  assert.equal(unsaid[2], "Automations you created stop running.");
+  assert.equal(unsaid[2], UNSAID);
 });
 
 test("the members the host lays on the document are drawn with nothing asked again, so an admin who joined meanwhile may be handed the workspace", async () => {

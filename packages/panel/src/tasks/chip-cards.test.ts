@@ -728,6 +728,10 @@ test("an automation's chip is called by its name now, its workspace's automation
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationHolds.length;
+  // Note that the chip says the automation's name once the workspace's automations reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Nightly sweep"), true),
+  );
   const [chip] = chipsOf(container);
   const drawnReads = reads();
   const called = chip?.textContent;
