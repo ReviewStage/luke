@@ -3,7 +3,7 @@
  *
  * What a coding agent is handed on a turn where its description changed since its
  * last turn (`../coder-host/turn-context.ts`): the developer's own time, the
- * task's name and brief, and, where its starter has Descriptions on, its saved
+ * task's name and brief, and, where its workspace has Task descriptions on, its saved
  * document, the agents' recent notes on it, and the open comment threads. It is data,
  * read again as each turn opens and remembered by none, so a turn reads
  * what was saved since the last one rather than a stale copy.
@@ -11,9 +11,9 @@
 
 import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-store";
 import { dateLabel } from "@repo/features/date-mention";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
-import { NOTE_KIND, type DescriptionAgentEdit } from "@repo/features/description-notes";
+import { type DescriptionAgentEdit, NOTE_KIND } from "@repo/features/description-notes";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -134,7 +134,7 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * (so the agent can raise what a member asked), each read again
  * every turn so what the agent saved is what the next turn reads. A task that no
  * longer stands gets the heading and the developer's time alone, and one
- * whose agent's starter has Descriptions off (`../descriptions-on.ts`) its name and brief
+ * whose agent's workspace has Task descriptions off (`../workspace-experiment-on.ts`) its name and brief
  * without the description, its notes, or threads.
  */
 export function standingContext(

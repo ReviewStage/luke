@@ -43,7 +43,6 @@ import { integrationConnectionOf } from "@repo/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@repo/features/mac-command-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { failureKind } from "@repo/runtime/effect";
-import { EXPERIMENT } from "@repo/settings";
 import {
   EXCESS_KEYS,
   HTTP_METHOD,
@@ -73,14 +72,15 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
-import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
+import { CODER_TOOL } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { experimentOnIn } from "../workspace-experiment-on.js";
+import { experimentsOnIn, NO_EXPERIMENT_ON } from "../workspace-experiment-on.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { workspaceMcpCallKey } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
 import {
+  listedWorkspaceMcpTool,
   type McpContent,
   offeredWorkspaceMcpTool,
   refusedByDoor,
@@ -291,9 +291,6 @@ const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as con
 /** What an agent whose row is gone is offered by: no repository, on our own machine. */
 const NO_AGENT_OFFERED: WorkspaceMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
-/** What beside its row an agent whose row is gone is offered by: no Memory, and no Task descriptions. */
-const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, descriptionsOn: false };
-
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
   content: [{ type: "text", text: DOOR_FAILED }],
@@ -375,7 +372,9 @@ function callWorkspaceTool(
  * The tools listed to the admitted agent: those eve offers it, by its
  * repository, where it runs, and its workspace's Memory and Task descriptions (`offeredWorkspaceMcpTool`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
- * carry out a call for an agent that no longer stands.
+ * carry out a call for an agent that no longer stands. Each is listed in
+ * the words of its workspace's experiments (`listedWorkspaceMcpTool`), every
+ * one off for an agent whose row is gone.
  */
 function listWorkspaceTools(
   admitted: AdmittedConversation,
@@ -385,25 +384,23 @@ function listWorkspaceTools(
     Effect.flatMap((found) =>
       Effect.map(
         Option.isSome(found)
-          ? Effect.all({
-              memoryOn: experimentOnIn(found.value.organizationId, EXPERIMENT.MEMORY),
-              descriptionsOn: experimentOnIn(found.value.organizationId, EXPERIMENT.DESCRIPTIONS),
-            })
-          : Effect.succeed(NO_AGENT_BESIDE),
-        (beside) =>
-          offeredWorkspaceMcpTool(
+          ? experimentsOnIn(found.value.organizationId)
+          : Effect.succeed(NO_EXPERIMENT_ON),
+        (on) => ({
+          offered: offeredWorkspaceMcpTool(
             Option.getOrElse(found, () => NO_AGENT_OFFERED),
-            beside,
+            on,
           ),
+          on,
+        }),
       ),
     ),
-    Effect.map((offered) => {
+    Effect.map(({ offered, on }) => {
       const tools = [...WORKSPACE_MCP_TOOLS]
         .filter(([name]) => offered(name))
         .map(([name, tool]) => ({
           name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
+          ...listedWorkspaceMcpTool(tool, on),
           _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
         }));
       return Result.succeed({ tools });

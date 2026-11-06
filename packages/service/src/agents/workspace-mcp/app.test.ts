@@ -57,6 +57,7 @@ import {
   fakeCdpPeer,
   noSandboxBrowserLayer,
 } from "../../testing/agent-browser-fake.js";
+import { experimentWordsIn } from "../../testing/experiment-words.js";
 import { NO_GITHUB } from "../../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -96,7 +97,12 @@ import {
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
-import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
+import {
+  listedWorkspaceMcpTool,
+  refusedByDoor,
+  WORKSPACE_MCP_TOOLS,
+  type WorkspaceMcpServices,
+} from "./tools.js";
 
 /**
  * Our MCP server, answered by its group the way a function answers it,
@@ -619,12 +625,30 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const names = listed.tools.map((tool) => tool.name);
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
+        // Pilot stays off in the agent's workspace, so its tools are listed in the words of that variant.
+        const on = { descriptionsOn: true, memoryOn: true, pilotOn: false };
         for (const tool of listed.tools) {
           const served = WORKSPACE_MCP_TOOLS.get(tool.name);
           assert.ok(served !== undefined);
-          assert.equal(tool.description, served.description);
-          assert.deepEqual(tool.inputSchema, served.inputSchema);
+          const variant = listedWorkspaceMcpTool(served, on);
+          assert.equal(tool.description, variant.description);
+          assert.deepEqual(tool.inputSchema, variant.inputSchema);
         }
+      }),
+  );
+
+  it.effect(
+    "tools/list names no task description, pilot, or memory in any tool's words or input where the agent's workspace has every experiment off",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
+
+        assert.deepEqual(experimentWordsIn(listed.tools), []);
       }),
   );
 

@@ -8,6 +8,7 @@ import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
+import type { ExperimentsOn } from "../workspace-experiment-on.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -138,15 +139,12 @@ export function macToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<MacTool> 
 /** What of an agent decides which tools eve offers it. */
 export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it has Descriptions on (`../descriptions-on.ts`). */
-export interface OfferedBeside {
-  readonly memoryOn: boolean;
-  readonly descriptionsOn: boolean;
-}
+/** What beside its own row decides which tools an agent is offered: whether its workspace has Memory on, and whether it has Task descriptions on (`../workspace-experiment-on.ts`). */
+export type OfferedBeside = Pick<ExperimentsOn, "memoryOn" | "descriptionsOn">;
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, machine, Memory, or Descriptions withholds. Note that
+ * agent's repository, machine, Memory, or Task descriptions withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
  * description's notes, pictures, and comments any task of its workspace, and a
@@ -166,8 +164,8 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
  * Every tool eve offered the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
  * repository or where it runs offers it, `run_on_mac` among them,
- * `save_memory` and `search_memory` where its starter has Memory on, and
- * `edit_description` and `look_at_picture` where it has Descriptions on, the same rules eve's tool files read as each
+ * `save_memory` and `search_memory` where its workspace has Memory on, and
+ * `edit_description` and `look_at_picture` where it has Task descriptions on, the same rules eve's tool files read as each
  * turn started; an eve agent's MCP popover reads it (`../workspace-tools.ts`).
  */
 export function offeredCoderTools(

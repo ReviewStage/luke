@@ -157,6 +157,7 @@ import {
   START_AGENT_REFUSAL,
   START_AGENT_TOOL,
   STOP_AGENT_REFUSAL,
+  startAgentToolOf,
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../agent-tools.js";
@@ -174,6 +175,7 @@ import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { NO_SECTION_DELETED, TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
+import { EXPERIMENT_OFF_REFUSAL, NO_EXPERIMENT_ON } from "../workspace-experiment-on.js";
 import { type AgentDoorSeams, type AgentToolCall, runAgentTools } from "./agent-doors.js";
 import {
   MAX_MESSAGE_WORDS_CHARS,
@@ -219,6 +221,9 @@ const AGENT_CHOICE = {
 /** The name an untitled agent on that model goes by, as its tab names it. */
 const AGENT_CHOICE_NAME = "Opus 5.5";
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
+
+/** The words a start that is not about them hands its agent. */
+const PROMPT = "Send the reminder before the invitation expires.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
 const OPUS_FAST = "anthropic/claude-opus-5.5-fast";
@@ -1210,8 +1215,13 @@ test("start_agent on the description with a note hands the agent the pictures im
 /** The JSON Schema goldens of this package, where a tool's input a model is shown is recorded. */
 const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../../fixtures/json-schema");
 
-test("start_agent shows the model the recorded input, images among it", async () => {
+test("start_agent shows the model the recorded input, images among it, and one that names no description where the workspace has Task descriptions off", async () => {
   await settleJsonSchemaGolden(GOLDEN_ROOT, "start-agent-input", START_AGENT_TOOL.inputSchema);
+  await settleJsonSchemaGolden(
+    GOLDEN_ROOT,
+    "start-agent-input-off",
+    startAgentToolOf(NO_EXPERIMENT_ON).inputSchema,
+  );
 });
 
 test("message_agent shows the model the recorded input", async () => {
@@ -1299,7 +1309,11 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
     ],
   ] as const) {
     assert.deepEqual(
-      await call(CODER_TOOL.START_AGENT, { note: NOTE, images }, `call-${randomUUID()}`),
+      await call(
+        CODER_TOOL.START_AGENT,
+        { prompt: PROMPT, note: NOTE, images },
+        `call-${randomUUID()}`,
+      ),
       { status: ACTION_RESULT_STATUS.REJECTED, reason },
     );
   }
@@ -1362,7 +1376,7 @@ test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot 
 
   assert.deepEqual(await call(CODER_TOOL.START_AGENT, start, "call-pilot-off"), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: START_AGENT_REFUSAL.PILOT_OFF,
+    reason: EXPERIMENT_OFF_REFUSAL,
   });
   assert.equal(eve.sent.length, 0, "a refused pilot starts nothing");
   await database.run(
@@ -1468,7 +1482,11 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
   for (const model of [OPUS, SOL]) {
     for (const effort of model === OPUS ? ["low", "medium", "high", "max"] : ["low", "high"]) {
       calls += 1;
-      const started = await call(CODER_TOOL.START_AGENT, { model, effort }, `call-${calls}`);
+      const started = await call(
+        CODER_TOOL.START_AGENT,
+        { prompt: PROMPT, model, effort },
+        `call-${calls}`,
+      );
       assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
       assert.ok(isRecord(started.agent));
       assert.deepEqual([started.agent.model, started.agent.effort], [model, effort]);
@@ -1476,7 +1494,7 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
   }
   const fast = await call(
     CODER_TOOL.START_AGENT,
-    { model: OPUS_FAST, effort: "high" },
+    { prompt: PROMPT, model: OPUS_FAST, effort: "high" },
     "call-fast",
   );
   assert.equal(fast.status, ACTION_RESULT_STATUS.REJECTED);
@@ -1487,7 +1505,7 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
     ),
     String(fast.reason),
   );
-  const unnamed = await call(CODER_TOOL.START_AGENT, {}, "call-default");
+  const unnamed = await call(CODER_TOOL.START_AGENT, { prompt: PROMPT }, "call-default");
   assert.ok(isRecord(unnamed.agent), JSON.stringify(unnamed));
   assert.deepEqual(
     [unnamed.agent.model, unnamed.agent.effort],
@@ -1513,7 +1531,7 @@ test("list_models says the default is no longer offered where the catalog droppe
     effort: "high",
     offered: false,
   });
-  const unnamed = await call(CODER_TOOL.START_AGENT, {}, "call-default");
+  const unnamed = await call(CODER_TOOL.START_AGENT, { prompt: PROMPT }, "call-default");
   assert.equal(unnamed.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(eve.sent.length, 0);
 
@@ -1528,7 +1546,11 @@ test("list_models says the default is no longer offered where the catalog droppe
     }),
   });
   const once = await peerCaller(hostOf(), agents.caller, eve.services, flaky);
-  const refused = await once(CODER_TOOL.START_AGENT, { model: SOL, effort: "max" }, "call-max");
+  const refused = await once(
+    CODER_TOOL.START_AGENT,
+    { prompt: PROMPT, model: SOL, effort: "max" },
+    "call-max",
+  );
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
   assert.ok(String(refused.reason).endsWith("The choices are: openai/gpt-6.1-sol (low, high)."));
 
@@ -2227,7 +2249,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
 
-  // With Task descriptions off a description given is not written, and a start with no prompt hands the brief in the description's place.
+  // With Task descriptions off a description given is not written, and a start names its prompt, since no description is handed.
   await turnDescriptions(workspaceId, bob, false);
   const planless = await call(
     CODER_TOOL.CREATE_TASK,
@@ -2236,9 +2258,11 @@ test("create_task makes a task in the caller's workspace for the member the agen
   );
   assert.ok(isRecord(planless.task) && isWireString(planless.task.id), JSON.stringify(planless));
   assert.equal(Option.getOrThrow(await database.run(readTask(bob, planless.task.id))).text, "");
-  await call(CODER_TOOL.START_AGENT, { taskId: planless.task.id }, "call-planless-start");
-  const opening = sentWords(eve.sent[1]?.body);
-  assert.ok(opening.startsWith("Audit seat counts."), opening);
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { taskId: planless.task.id }, "call-planless-start"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.PROMPT_NEEDED },
+  );
+  assert.equal(eve.sent.length, 1, "a start with no prompt starts nothing");
 });
 
 test("an agent whose starter has left the workspace makes no task in it", async () => {

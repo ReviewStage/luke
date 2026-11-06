@@ -6,7 +6,7 @@
  * `offeredCoderTools`), and for one on Claude Code or Codex the tools of
  * our MCP server, whose harness keeps its own shell and files
  * (`workspace-mcp/tools.ts`'s `offeredWorkspaceMcpTool`), each narrowed by its
- * repository, its kind, where it runs, and its starter's Memory and Descriptions. Nothing is
+ * repository, its kind, where it runs, and its workspace's Memory and Task descriptions. Nothing is
  * kept beside those rules, so the popover cannot name a tool the agent is
  * not handed. `run_on_mac` is answered off where a call would be refused
  * now (`mac-command.ts`): no Mac of its task's assignee's listening.
@@ -27,7 +27,7 @@ export interface WorkspaceToolsOfferedTo {
   readonly agent: Pick<Agent, "repository" | "machine">;
   /** Whether the agent runs on Claude Code or Codex rather than eve. */
   readonly native: boolean;
-  /** Whether the agent's starter has Memory on. */
+  /** Whether the agent's workspace has Memory on. */
   readonly memoryOn: boolean;
   /** Whether the agent's workspace has Task descriptions on (`experimentOnIn`). */
   readonly descriptionsOn: boolean;

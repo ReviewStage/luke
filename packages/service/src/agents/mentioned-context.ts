@@ -1,5 +1,7 @@
 import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { descriptionSections } from "@repo/features/description-document";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
@@ -14,6 +16,7 @@ import {
 } from "@repo/features/link-grammar";
 import { LINK_SITE, type LinkSite } from "@repo/features/link-site";
 import {
+  type DescriptionMention,
   handedMentionsIn,
   linkMention,
   MENTION_KIND,
@@ -21,14 +24,11 @@ import {
   mentionName,
   type NumberedTaskIdOf,
   type PersonMention,
-  type DescriptionMention,
   type ServerMention,
   sectionAnchors,
   type TaskMention,
 } from "@repo/features/mention-link";
 import { PAGE_OWNER, type PageLine, type PageOwner } from "@repo/features/page-wire";
-import { descriptionSections } from "@repo/features/description-document";
-import { descriptionMarkdown } from "@repo/features/description-markdown";
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
@@ -574,8 +574,8 @@ export function mentionedServers(words: string, repository: string | null): read
  * agents and people they mention, as the send read them into `reads`, and a note for
  * each MCP server or tool they mention; nothing where they mention none of
  * these. An agent with no plan is handed the notes, the agents, and the
- * pages it showed itself, which `agentId` names it by; one whose starter has
- * Descriptions off (`descriptions-on.ts`) is handed no excerpt of the description.
+ * pages it showed itself, which `agentId` names it by; one whose workspace has
+ * Task descriptions off (`workspace-experiment-on.ts`) is handed no excerpt of the description.
  */
 export function mentionedContext(
   words: string,
@@ -616,7 +616,7 @@ export function mentionedContext(
     else left += 1;
   }
   if (left > 0) {
-    part += `\n\n${left} more mention${left === 1 ? "" : "s"} of the plan left out, since this part is full; ask for what you need.`;
+    part += `\n\n${left} more mention${left === 1 ? "" : "s"} left out, since this part is full; ask for what you need.`;
   }
   return part;
 }

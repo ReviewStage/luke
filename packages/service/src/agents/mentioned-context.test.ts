@@ -157,7 +157,7 @@ test("a long section is cut on a line, saying how much was left out, and a full 
 
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
   assert.match(part, /… \(\d+ more characters\)/u);
-  assert.match(part, /\d+ more mentions? of the plan left out, since this part is full/u);
+  assert.match(part, /\d+ more mentions? left out, since this part is full/u);
 });
 
 test("a line carrying what it mentioned is matched by eve's receipt of it, and reads back as its words alone", () => {
@@ -295,7 +295,7 @@ test("a section too long for the room left is passed over, and a shorter one aft
   const part = mentionedContext(words, crowded) ?? "";
 
   assert.match(part, /The description's section "Small"/u);
-  assert.match(part, /1 more mention of the plan left out/u);
+  assert.match(part, /1 more mention left out/u);
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS);
 });
 

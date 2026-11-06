@@ -57,7 +57,11 @@ import {
 import { calledId } from "./called-id.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
-import { experimentOnIn } from "./workspace-experiment-on.js";
+import {
+  EVERY_EXPERIMENT_ON,
+  type ExperimentsOn,
+  experimentOnIn,
+} from "./workspace-experiment-on.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
 
 /**
@@ -105,19 +109,32 @@ const READ_TASK_INPUT = Schema.Struct({
 
 const readTaskAsked = Schema.decodeUnknownResult(READ_TASK_INPUT);
 
-export const READ_TASK_TOOL = {
-  name: AGENT_TOOL.READ_TASK,
-  description:
-    "Read one task of your workspace by its id, a teammate's included: its " +
-    "key (such as ACME-42), name, where it stands (its status) and how much it matters (its " +
-    "priority), repository, who started it, whether it is the task you " +
-    "work on, its mention, the brief the developer started it with (null for none), the tasks " +
-    "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), " +
+/** What `read_task` answers beyond the task's own fields, as a workspace with Task descriptions on or off words it. */
+const READ_TASK_DESCRIPTION_WORDS = {
+  on:
+    ", " +
     `and its description as last saved, cut on a line at ${DESCRIPTION_TEXT_READ_CHARS} characters with how many were ` +
-    `left out. Read one before you start an agent on it, or to learn what another task is about; ` +
-    `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
-  inputSchema: READ_TASK_INPUT,
+    "left out.",
+  off: ".",
 } as const;
+
+/** `read_task` in the words of the workspace's experiments: its name, its words, and its input schema. */
+export function readTaskToolOf(on: Pick<ExperimentsOn, "descriptionsOn">) {
+  return {
+    name: AGENT_TOOL.READ_TASK,
+    description:
+      "Read one task of your workspace by its id, a teammate's included: its " +
+      "key (such as ACME-42), name, where it stands (its status) and how much it matters (its " +
+      "priority), repository, who started it, whether it is the task you " +
+      "work on, its mention, the brief the developer started it with (null for none), the tasks " +
+      "it is blocked by and the tasks it blocks (each with its id, name, status, and mention)" +
+      `${READ_TASK_DESCRIPTION_WORDS[on.descriptionsOn ? "on" : "off"]} Read one before you start an agent on it, or to learn what another task is about; ` +
+      `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
+    inputSchema: READ_TASK_INPUT,
+  } as const;
+}
+
+export const READ_TASK_TOOL = readTaskToolOf(EVERY_EXPERIMENT_ON);
 
 /** Whether the caller reaches tasks' descriptions: whether the workspace it calls in has Task descriptions on (`experimentOnIn`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
@@ -222,7 +239,8 @@ export const CREATE_TASK_REFUSAL = {
     "task's id where it is a part of your work.",
 } as const;
 
-const CREATE_TASK_INPUT = Schema.Struct({
+/** `create_task`'s fields before its description, which every workspace offers. */
+const CREATE_TASK_FIELDS_BEFORE = {
   name: describeWire(
     Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
     "The task's name, as the developer would name it in the sidebar.",
@@ -242,14 +260,10 @@ const CREATE_TASK_INPUT = Schema.Struct({
         "it; their words where they gave them, left out otherwise.",
     ),
   ),
-  description: Schema.optionalKey(
-    describeWire(
-      Schema.String.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
-      "The description's body to start it with, as Markdown under its sections' ## headings, without " +
-        "the # title, which the task's name is; an agent started on it with no prompt is handed " +
-        "it. Left out, it starts empty.",
-    ),
-  ),
+};
+
+/** `create_task`'s fields between its description and its mode, which every workspace offers. */
+const CREATE_TASK_FIELDS_AFTER = {
   status: Schema.optionalKey(
     describeWire(
       taskStatusSchema,
@@ -286,6 +300,22 @@ const CREATE_TASK_INPUT = Schema.Struct({
         "parentTaskId; left out, it starts related to none.",
     ),
   ),
+};
+
+/** `create_task`'s starting description, offered only where the workspace has Task descriptions on. */
+const CREATE_TASK_DESCRIPTION_FIELD = {
+  description: Schema.optionalKey(
+    describeWire(
+      Schema.String.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
+      "The description's body to start it with, as Markdown under its sections' ## headings, without " +
+        "the # title, which the task's name is; an agent started on it with no prompt is handed " +
+        "it. Left out, it starts empty.",
+    ),
+  ),
+};
+
+/** `create_task`'s mode, offered only where the workspace has Pilot on. */
+const CREATE_TASK_MODE_FIELD = {
   mode: Schema.optionalKey(
     describeWire(
       taskModeSchema,
@@ -294,6 +324,23 @@ const CREATE_TASK_INPUT = Schema.Struct({
         "pilot may ask for pilot, and only as a child; left out, agent.",
     ),
   ),
+};
+
+/** `create_task`'s input in the words of the workspace's experiments: its description where it has Task descriptions on, and its mode where it has Pilot on. */
+function createTaskInputOf(on: Pick<ExperimentsOn, "descriptionsOn" | "pilotOn">) {
+  return Schema.Struct({
+    ...CREATE_TASK_FIELDS_BEFORE,
+    ...(on.descriptionsOn ? CREATE_TASK_DESCRIPTION_FIELD : {}),
+    ...CREATE_TASK_FIELDS_AFTER,
+    ...(on.pilotOn ? CREATE_TASK_MODE_FIELD : {}),
+  });
+}
+
+const CREATE_TASK_INPUT = Schema.Struct({
+  ...CREATE_TASK_FIELDS_BEFORE,
+  ...CREATE_TASK_DESCRIPTION_FIELD,
+  ...CREATE_TASK_FIELDS_AFTER,
+  ...CREATE_TASK_MODE_FIELD,
 });
 
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
@@ -301,12 +348,27 @@ const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
 /** A make that names the starting text by the field's name before the rename. */
 const namesRetiredPlan = Schema.is(Schema.Struct({ plan: Schema.Unknown }));
 
-export const CREATE_TASK_TOOL = {
-  name: AGENT_TOOL.CREATE_TASK,
-  description:
+/** What a made task starts with, as a workspace with Task descriptions on or off words it. */
+const CREATE_TASK_STARTS_WITH = {
+  on: "with their brief and a description to start from where given",
+  off: "with their brief where given",
+} as const;
+
+/** `create_task` in the words of the workspace's experiments: its name, its words, and its input schema. */
+export function createTaskToolOf(on: Pick<ExperimentsOn, "descriptionsOn" | "pilotOn">) {
+  return {
+    name: AGENT_TOOL.CREATE_TASK,
+    description: createTaskWords(on),
+    inputSchema: createTaskInputOf(on),
+  } as const;
+}
+
+function createTaskWords(on: Pick<ExperimentsOn, "descriptionsOn">): string {
+  return (
     "Make a task in your workspace for the developer you work for, as the sidebar's New task " +
-    "would: owned by them, on the repository named or the one you work in, with their brief " +
-    "and a description to start from where given, and no agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
+    "would: owned by them, on the repository named or the one you work in, " +
+    `${CREATE_TASK_STARTS_WITH[on.descriptionsOn ? "on" : "off"]}, and no agent on it. ` +
+    "Make one for a separate piece of work that should stand as a task of its own, " +
     "where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status, a priority, and an assignee where the developer said them. Give it a " +
@@ -315,7 +377,13 @@ export const CREATE_TASK_TOOL = {
     "relation instead to make it blocked by, blocking, a sub-task of, or the parent of another " +
     "task of your workspace in the same call. Answers " +
     "`accepted` with the task's id, key, name, status, priority, assignee, repository, and " +
-    "mention, or `rejected` and why.",
+    "mention, or `rejected` and why."
+  );
+}
+
+export const CREATE_TASK_TOOL = {
+  name: AGENT_TOOL.CREATE_TASK,
+  description: createTaskWords(EVERY_EXPERIMENT_ON),
   inputSchema: CREATE_TASK_INPUT,
 } as const;
 

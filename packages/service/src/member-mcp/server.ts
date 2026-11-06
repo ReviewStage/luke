@@ -29,7 +29,12 @@ import type { WorkspaceExperiment } from "@repo/settings";
 import { Cause, type Context, Effect, Exit, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
-import { MEMBER_MCP_TOOLS, type MemberMcpServices, type MemberMcpToolResult } from "./tools.js";
+import {
+  listedMemberMcpTool,
+  MEMBER_MCP_TOOLS,
+  type MemberMcpServices,
+  type MemberMcpToolResult,
+} from "./tools.js";
 
 /** The name the server gives itself to a client, and the version it names. */
 const SERVER_INFO = { name: `${PRODUCT_NAME}`, version: "1.0.0" } as const;
@@ -77,7 +82,7 @@ async function throughDoor(
   return exit.value;
 }
 
-/** The server for one request: every tool of `MEMBER_MCP_TOOLS` but those of a workspace experiment none of the member's workspaces has on, each run as the admitted member on the handed services. */
+/** The server for one request: every tool of `MEMBER_MCP_TOOLS` but those of a workspace experiment none of the member's workspaces has on, each in the words of the experiments one of them has on (`listedMemberMcpTool`), and run as the admitted member on the handed services. */
 export function memberMcpServer(
   services: Context.Context<MemberMcpRequestServices>,
   member: AdmittedMemberValues,
@@ -88,11 +93,7 @@ export function memberMcpServer(
     if (tool.experiment !== undefined && !experimentsOn.has(tool.experiment)) continue;
     server.registerTool(
       tool.name,
-      {
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: tool.annotations,
-      },
+      { ...listedMemberMcpTool(tool, experimentsOn), annotations: tool.annotations },
       (input) => throughDoor(services, member, tool.name, tool.run(input)),
     );
   }

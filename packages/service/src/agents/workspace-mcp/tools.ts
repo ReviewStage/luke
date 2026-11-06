@@ -32,8 +32,10 @@
  * kept on the running turn's row in the store (`runTurnCappedEditDescription`), so
  * the cap holds per turn as eve's does. The list is narrowed per agent as
  * eve narrows its own (`offeredWorkspaceMcpTool`), `save_memory` and `search_memory` by its
- * starter's Memory among it, and a tool left out is still refused by its
- * door where a harness calls it anyway.
+ * workspace's Memory among it, and a tool left out is still refused by its
+ * door where a harness calls it anyway. A tool whose words name an
+ * experiment is listed in the words of the agent's workspace's experiments
+ * (`listedWorkspaceMcpTool`), so an agent is told nothing of one that is off.
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
@@ -56,6 +58,7 @@ import type { IntegrationConnect } from "../../integrations/integration-connect.
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   type CommentToolName,
+  commentToolOf,
   READ_COMMENTS_TOOL,
   REPLY_TO_COMMENT_TOOL,
   UPDATE_COMMENT_TOOL,
@@ -75,8 +78,10 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
+  startAgentToolOf,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
+  updateTaskToolOf,
 } from "../agent-tools.js";
 import {
   CREATE_AUTOMATION_TOOL,
@@ -128,7 +133,13 @@ import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { SAVE_MEMORY_TOOL, SEARCH_MEMORY_TOOL } from "../memory-tools.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
-import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
+import {
+  CREATE_TASK_TOOL,
+  createTaskToolOf,
+  READ_TASK_TOOL,
+  readTaskToolOf,
+} from "../task-tools.js";
+import type { ExperimentsOn } from "../workspace-experiment-on.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
 export type WorkspaceMcpToolResult = { readonly status?: string } & object;
@@ -171,6 +182,8 @@ export interface WorkspaceMcpTool {
   ) => Effect.Effect<WorkspaceMcpToolResult, unknown, WorkspaceMcpToolServices>;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
   readonly content?: (result: WorkspaceMcpToolResult) => readonly McpContent[];
+  /** The tool's words and input in the words of the agent's workspace's experiments, where they name one; none for a tool whose words name none. */
+  readonly variant?: (on: ExperimentsOn) => ToolSpec;
 }
 
 /** A tool as its eve file declares it: its name, its words, and its input schema. */
@@ -184,38 +197,52 @@ function entry(
   spec: ToolSpec,
   run: WorkspaceMcpTool["run"],
   content?: WorkspaceMcpTool["content"],
-): readonly [string, WorkspaceMcpTool] {
-  return entryOf(spec.name, spec.description, emitJsonSchema(spec.inputSchema), run, content);
-}
-
-function entryOf(
-  name: string,
-  description: string,
-  inputSchema: object,
-  run: WorkspaceMcpTool["run"],
-  content?: WorkspaceMcpTool["content"],
+  variant?: WorkspaceMcpTool["variant"],
 ): readonly [string, WorkspaceMcpTool] {
   const tool: WorkspaceMcpTool = {
-    description,
-    inputSchema,
+    description: spec.description,
+    inputSchema: emitJsonSchema(spec.inputSchema),
     run,
     ...(content === undefined ? {} : { content }),
+    ...(variant === undefined ? {} : { variant }),
   };
-  return [name, tool];
+  return [spec.name, tool];
 }
 
-/** A tool about the workspace's agents and tasks, run through their one door under the call's key. */
-function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
-  return entry(spec, (admitted, input, { seams, callKey }) =>
-    Effect.flatMap(callKey, (callId) =>
-      runAgentTools(seams, admitted, { tool: spec.name, input, callId }),
-    ),
+/** A tool about the workspace's agents and tasks, run through their one door under the call's key, its words the variant of the agent's workspace's experiments where it has one. */
+function agentTool(
+  spec: ToolSpec & { readonly name: AgentToolCall["tool"] },
+  variant?: WorkspaceMcpTool["variant"],
+) {
+  return entry(
+    spec,
+    (admitted, input, { seams, callKey }) =>
+      Effect.flatMap(callKey, (callId) =>
+        runAgentTools(seams, admitted, { tool: spec.name, input, callId }),
+      ),
+    undefined,
+    variant,
   );
 }
 
-/** A tool of the description's comment threads, run through the comment door. */
+/** A tool of the comment threads, run through the comment door, its words the page threads' alone where the agent's workspace has Task descriptions off. */
 function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
-  return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
+  return entry(
+    spec,
+    (admitted, input) => runAgentComment(admitted, spec.name, input),
+    undefined,
+    (on) => commentToolOf(spec.name, on),
+  );
+}
+
+/** The words and input schema a tool is listed with to an agent of a workspace with the experiments given: its variant's where it has one, its own otherwise. */
+export function listedWorkspaceMcpTool(
+  tool: WorkspaceMcpTool,
+  on: ExperimentsOn,
+): Pick<WorkspaceMcpTool, "description" | "inputSchema"> {
+  if (tool.variant === undefined) return tool;
+  const spec = tool.variant(on);
+  return { description: spec.description, inputSchema: emitJsonSchema(spec.inputSchema) };
 }
 
 /** A look that answered a picture: its bytes as base64 and an image's type, never a video's, which no model is handed. */
@@ -373,7 +400,7 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   ),
   agentTool(READ_PAGE_TOOL),
   // The workspace's agents.
-  agentTool(START_AGENT_TOOL),
+  agentTool(START_AGENT_TOOL, startAgentToolOf),
   agentTool(STOP_AGENT_TOOL),
   agentTool(LIST_AGENTS_TOOL),
   agentTool(CODER_READ_AGENT_TOOL),
@@ -382,9 +409,9 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   agentTool(LIST_MODELS_TOOL),
   // Tasks and sections.
   agentTool(LIST_TASKS_TOOL),
-  agentTool(READ_TASK_TOOL),
-  agentTool(CREATE_TASK_TOOL),
-  agentTool(UPDATE_TASK_TOOL),
+  agentTool(READ_TASK_TOOL, readTaskToolOf),
+  agentTool(CREATE_TASK_TOOL, createTaskToolOf),
+  agentTool(UPDATE_TASK_TOOL, updateTaskToolOf),
   agentTool(CREATE_SECTION_TOOL),
   agentTool(DELETE_SECTION_TOOL),
   // Automations.
@@ -409,7 +436,7 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
 export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
+/** The workspace's shared memory, offered only where the agent's workspace has Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
 /** The description's notes and pictures, offered only where the agent's workspace has Task descriptions on (`experimentOnIn`). */
@@ -418,7 +445,7 @@ const DESCRIPTION_TOOLS: readonly string[] = [
   CODER_TOOL.LOOK_AT_PICTURE,
 ];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory or Task descriptions withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, machine, or workspace's Memory or Task descriptions withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...DESCRIPTION_TOOLS,
@@ -430,7 +457,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, where it runs, and, beside its row, whether its starter has
+ * repository, where it runs, and, beside its row, whether its workspace has
  * Memory and Task descriptions on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that

@@ -44,6 +44,7 @@ import {
 } from "../../tasks/picture-look.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
+import { EXPERIMENT_OFF_REFUSAL } from "../workspace-experiment-on.js";
 import {
   runAgentComment,
   runAgentEditDescription,
@@ -342,9 +343,9 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         );
         assert.deepEqual(off, {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: DESCRIPTION_EDIT_REFUSAL.OFF,
+          reason: EXPERIMENT_OFF_REFUSAL,
         });
-        assert.deepEqual(looked, pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF));
+        assert.deepEqual(looked, pictureNotLooked(EXPERIMENT_OFF_REFUSAL));
       }),
   );
 

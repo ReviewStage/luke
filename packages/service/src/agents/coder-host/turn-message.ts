@@ -82,7 +82,7 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  * so a save made while that turn ran, which none of its steps may have
  * read, is handed too; or where the rest of it is not what the session
  * last handed; never on a first turn, whose first message the description, or the
- * prompt beside it, already is. Where the agent's starter has Descriptions off, no
+ * prompt beside it, already is. Where the agent's workspace has Task descriptions off, no
  * save of the description hands it, and it is handed without the description
  * (`standingContext`). A read that fails is logged and
  * hands nothing.

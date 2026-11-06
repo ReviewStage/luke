@@ -23,6 +23,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
+import { EXPERIMENT_OFF_REFUSAL, type ExperimentsOn } from "../agents/workspace-experiment-on.js";
 import {
   ACTION_RESULT_STATUS,
   EXCESS_KEYS,
@@ -60,13 +61,11 @@ export interface CommentToolBinding {
 /** Why a call took nothing, in the words its result says. */
 export const COMMENT_TOOL_REFUSAL = {
   UNREADABLE: "The input is not one this tool takes.",
-  NO_TASK_NAMED: `Name the task whose description's comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
-  NO_THREAD: "No thread of this description has that id; read_comments lists them.",
+  NO_TASK_NAMED: `Name the task whose comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  NO_THREAD: "No thread of this task has that id; read_comments lists them.",
   NO_TASK: `No task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   RESOLVED: `The thread is resolved; reopen it with ${AGENT_TOOL.UPDATE_COMMENT} before replying.`,
   UNAVAILABLE: "The comments could not be reached; try again.",
-  DESCRIPTIONS_OFF:
-    "Task descriptions is off, so the description's comment threads are not reached; a page's threads still are, by the page's id.",
 } as const;
 
 /** The task a call names, whose description's comments it acts on. */
@@ -116,6 +115,71 @@ const UPDATE_INPUT = Schema.Struct({
   ),
 });
 
+/** The task a call names where the workspace has Task descriptions off, whose pages' comments it acts on. */
+const PAGES_TASK_ID = describeWire(
+  wireUuidSchema,
+  `The task whose pages' comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+);
+
+/** `read_comments`'s input where the workspace has Task descriptions off: a page's threads alone, so the page is named. */
+const PAGES_READ_INPUT = Schema.Struct({
+  taskId: PAGES_TASK_ID,
+  page: describeWire(
+    wireUuidSchema,
+    `One of the task's pages, by the id ${AGENT_TOOL.SHOW_PAGE} answered or a mention of it names, whose threads to read.`,
+  ),
+  status: READ_INPUT.fields.status,
+});
+
+const PAGES_REPLY_INPUT = Schema.Struct({ ...REPLY_INPUT.fields, taskId: PAGES_TASK_ID });
+
+const PAGES_UPDATE_INPUT = Schema.Struct({ ...UPDATE_INPUT.fields, taskId: PAGES_TASK_ID });
+
+/**
+ * The comment tools as a workspace with Task descriptions off is offered
+ * them: on a task's pages alone, with nothing said of a description, whose
+ * threads the door refuses while it is off.
+ */
+const PAGES_COMMENT_TOOLS = {
+  [AGENT_TOOL.READ_COMMENTS]: {
+    name: AGENT_TOOL.READ_COMMENTS,
+    description:
+      "Read the comment threads on one of the pages of the task taskId names, your own task or any other of your workspace, by the page's id: each thread's id, the version it was left on and the element it is on, by its words and its path, or none for the whole page, " +
+      "and every comment with who wrote it, when, and the names of the files it carries. Open threads unless you ask " +
+      "for resolved ones. Reading asks nothing of you: reply only to a thread someone sent you.",
+    inputSchema: PAGES_READ_INPUT,
+  },
+  [AGENT_TOOL.REPLY_TO_COMMENT]: {
+    name: AGENT_TOOL.REPLY_TO_COMMENT,
+    description:
+      "Reply in one comment thread on a page of the task taskId names, by the thread's id, as yourself; every member of the workspace sees it beside " +
+      "the element it is on. Reply where someone sent you the thread, answering what it asks; your replies send the thread to no one.",
+    inputSchema: PAGES_REPLY_INPUT,
+  },
+  [AGENT_TOOL.UPDATE_COMMENT]: {
+    name: AGENT_TOOL.UPDATE_COMMENT,
+    description:
+      "Resolve or reopen one comment thread on a page of the task taskId names, by the thread's id: a resolved thread leaves the open ones " +
+      "and stays in its history.",
+    inputSchema: PAGES_UPDATE_INPUT,
+  },
+} as const;
+
+/** A comment tool in the words of the workspace's experiments: the description's threads and its pages' where it has Task descriptions on, its pages' alone where off. */
+export function commentToolOf(
+  name: CommentToolName,
+  on: Pick<ExperimentsOn, "descriptionsOn">,
+): ToolWords {
+  return on.descriptionsOn ? DESCRIPTION_COMMENT_TOOLS[name] : PAGES_COMMENT_TOOLS[name];
+}
+
+/** A comment tool's name, words, and input schema. */
+interface ToolWords {
+  readonly name: CommentToolName;
+  readonly description: string;
+  readonly inputSchema: Schema.Top;
+}
+
 /** `read_comments`: the description's threads as they stand. */
 export const READ_COMMENTS_TOOL = {
   name: AGENT_TOOL.READ_COMMENTS,
@@ -146,6 +210,13 @@ export const UPDATE_COMMENT_TOOL = {
 
 /** The tools, in the order an agent is offered them. */
 const COMMENT_TOOLS = [READ_COMMENTS_TOOL, REPLY_TO_COMMENT_TOOL, UPDATE_COMMENT_TOOL] as const;
+
+/** The tools by name as a workspace with Task descriptions on is offered them. */
+const DESCRIPTION_COMMENT_TOOLS = {
+  [AGENT_TOOL.READ_COMMENTS]: READ_COMMENTS_TOOL,
+  [AGENT_TOOL.REPLY_TO_COMMENT]: REPLY_TO_COMMENT_TOOL,
+  [AGENT_TOOL.UPDATE_COMMENT]: UPDATE_COMMENT_TOOL,
+} as const;
 
 type CommentTool = (typeof COMMENT_TOOLS)[number];
 export type CommentToolName = CommentTool["name"];
@@ -266,7 +337,7 @@ export function runCommentTool(
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
         const { page } = read.success;
         if (page === undefined && !descriptionsOn) {
-          return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
+          return commentToolRejected(EXPERIMENT_OFF_REFUSAL);
         }
         const status = read.success.status ?? DESCRIPTION_COMMENT_STATUS.OPEN;
         const threads = yield* readDescriptionCommentThreads(writer.userId, taskId, page);
@@ -280,8 +351,7 @@ export function runCommentTool(
         const read = readEither(REPLY_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
         const thread = yield* threadOf(read.success.thread);
-        if (descriptionOff(thread))
-          return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
+        if (descriptionOff(thread)) return commentToolRejected(EXPERIMENT_OFF_REFUSAL);
         if (thread?.status === DESCRIPTION_COMMENT_STATUS.RESOLVED)
           return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
         return yield* act(read.success.thread, {
@@ -294,7 +364,7 @@ export function runCommentTool(
         const read = readEither(UPDATE_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
         if (descriptionOff(yield* threadOf(read.success.thread))) {
-          return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
+          return commentToolRejected(EXPERIMENT_OFF_REFUSAL);
         }
         const action = read.success.resolved
           ? DESCRIPTION_COMMENT_ACTION.RESOLVE

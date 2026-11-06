@@ -70,7 +70,7 @@ import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
-import { experimentOnIn } from "../workspace-experiment-on.js";
+import { EXPERIMENT_OFF_REFUSAL, experimentOnIn } from "../workspace-experiment-on.js";
 import { runMessageAgent } from "./agent-message.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import {
@@ -207,7 +207,7 @@ export function runAgentEditDescription(
     if (Result.isFailure(found)) return descriptionEditRejected(found.failure);
     // Note that no agent whose workspace has Task descriptions off is listed the tool; a harness may call it anyway, and this refuses it.
     if (!(yield* experimentOnIn(found.success.organizationId, EXPERIMENT.DESCRIPTIONS))) {
-      return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.OFF);
+      return descriptionEditRejected(EXPERIMENT_OFF_REFUSAL);
     }
     const taskId = editedTaskOf(input);
     if (taskId === undefined)
@@ -235,7 +235,7 @@ export function runAgentLookAtPicture(
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
     if (!(yield* experimentOnIn(found.success.organizationId, EXPERIMENT.DESCRIPTIONS))) {
-      return pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF);
+      return pictureNotLooked(EXPERIMENT_OFF_REFUSAL);
     }
     const taskId = lookedTaskOf(input);
     if (taskId === undefined) return pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE);

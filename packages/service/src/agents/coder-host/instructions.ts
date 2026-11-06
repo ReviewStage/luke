@@ -23,9 +23,9 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER } from "./bounds.js";
 import { COMMIT_BY, type CommitAuthorship } from "./checkout.js";
+import { EDIT_DESCRIPTION_TOOL } from "./description-edit.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
-import { EDIT_DESCRIPTION_TOOL } from "./description-edit.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 const AGENT_EDIT_DESCRIPTION_TOOL = EDIT_DESCRIPTION_TOOL.name;
@@ -210,7 +210,7 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
 function browserWords(shell: string): string {
   return `## Your browser
 
-\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the description and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch in its Browser tab and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
 
 `;
 }
@@ -391,13 +391,14 @@ Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task
 
 /**
  * What an agent on a task is told in place of its task's words where its
- * starter has Task descriptions off (`../descriptions-on.ts`), which hands it no description and lists
+ * workspace has Task descriptions off (`../workspace-experiment-on.ts`), which hands it no description and lists
  * it no description tool: a link that names a task, with nothing said of a description
- * handed beside it, and comments on the task's pages alone, which stand
- * whatever the starter's Task descriptions.
+ * handed beside it nor the older links that named one, and comments on the
+ * task's pages alone, which stand whatever the workspace's Task descriptions.
  */
 const PLANLESS_TASK_PLACE_WORDS = {
-  link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, or an older \`${LINK_ORIGIN}/<workspace>/plan/<id>\` one, names a task.`,
+  link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, names a task.`,
+  olderLinks: " and `<scheme>://folder/<path>/`",
   comments: `
 
 ## Comments
@@ -1057,7 +1058,7 @@ Your workspace keeps one memory shared by every member and every one of its agen
  * `PILOT_SECTIONS`), its task's status and its child tasks', and its
  * messages, sidebar, and `create_task` in its own words
  * (`PILOT_SECTION_WORDS`); a coder's words are the same whatever else the
- * kind. Where its starter has Task descriptions off (`descriptionsOn`, on unless said), it is
+ * kind. Where its workspace has Task descriptions off (`descriptionsOn`, on unless said), it is
  * told nothing of a description: no section on updating one, no decision taken into
  * one, a page for a write-up, comments on pages alone, and no description among what
  * a task's link or `read_task` hands it or what it names
@@ -1190,7 +1191,7 @@ export interface AgentInstructionsContext {
   /** The number its task goes by in that workspace, which the task's link names it by; none where it is not known, and the link names the task's id. */
   readonly taskNumber?: number | undefined;
   readonly memoryOn: boolean;
-  /** Whether its starter has Task descriptions on, or Pilot for a pilot (`../descriptions-on.ts`). */
+  /** Whether its workspace has Task descriptions on (`../workspace-experiment-on.ts`). */
   readonly descriptionsOn: boolean;
   readonly harness: CoderHarness;
   /** The repositories it works in beside its own, where each is checked out; none for an agent in one repository or none. */

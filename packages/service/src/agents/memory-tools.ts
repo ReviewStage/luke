@@ -21,7 +21,7 @@ import {
   callerWorkspaceId,
 } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
-import { experimentOnIn } from "./workspace-experiment-on.js";
+import { EXPERIMENT_OFF_REFUSAL, experimentOnIn } from "./workspace-experiment-on.js";
 
 /**
  * memory-tools.ts -- a coding agent's `save_memory` and `search_memory`: the workspace's shared memory of settled facts, kept and searched as the agent works.
@@ -95,7 +95,6 @@ const MEMORY_REFUSAL = {
     `Not remembered: the workspace already holds ${MEMORY_BOUNDS.MAX_MEMORIES} memories. ` +
     "Correct an existing memory with replaces instead.",
   UNAVAILABLE: "Memory is unavailable right now; carry on without it.",
-  OFF: "Memory is off for this agent's developer; carry on without it.",
 } as const;
 
 /** The tools as a coding agent is offered them: each its name, its words, and its input schema. */
@@ -221,7 +220,7 @@ function agentMemory(
   return orUnavailable(
     Effect.gen(function* () {
       if (!(yield* experimentOnIn(callerWorkspaceId(call.caller), EXPERIMENT.MEMORY))) {
-        return rejected(MEMORY_REFUSAL.OFF);
+        return rejected(EXPERIMENT_OFF_REFUSAL);
       }
       const userId = callerUserId(call.caller);
       // A refusal reads the calling agent's turn; a member's call is their own words, and has none.

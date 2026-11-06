@@ -59,6 +59,7 @@ import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { readWorkspaceMemories, WORKSPACE_MEMORY } from "../accounts/workspace-memories.js";
 import { recordMemberDescriptionNotes } from "../agents/coder-host/description-edit.js";
+import { EXPERIMENT_OFF_REFUSAL } from "../agents/workspace-experiment-on.js";
 import { DESKTOP_OAUTH_CLIENT } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
@@ -77,6 +78,7 @@ import {
   RELAY_FULL_NAME,
   startedAgent,
 } from "../testing/agents-app-support.js";
+import { experimentWordsIn } from "../testing/experiment-words.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -98,7 +100,12 @@ import {
 import { harnessFor } from "../testing/native-harness-fake.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpIssuer } from "./app.js";
 import { MEMBER_MCP_PATH, MEMBER_MCP_SCOPE } from "./resource.js";
-import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools.js";
+import {
+  LIST_WORKSPACES_TOOL,
+  MEMBER_MCP_TOOL,
+  MEMBER_MCP_TOOLS,
+  type MemberMcpTool,
+} from "./tools.js";
 
 /**
  * The member MCP server, answered by its group the way a function answers
@@ -254,6 +261,14 @@ function goldenOf(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}-input`;
 }
 
+/** The golden a tool's input is recorded under where no workspace of the member's has Task descriptions on: its off twin's, where its input there differs, its own otherwise. */
+function offGoldenOf(tool: MemberMcpTool): string {
+  const off = tool.descriptionsOff;
+  return off === undefined || off.input === tool.input
+    ? goldenOf(tool.name)
+    : `${goldenOf(tool.name)}-off`;
+}
+
 /** The head commit a changes read answers its pull request at. */
 const decodeHead = Schema.decodeUnknownSync(
   Schema.Struct({ pullRequest: Schema.Struct({ headSha: Schema.String }) }),
@@ -349,18 +364,28 @@ it.effect.each(Object.values(REVISION))(
       yield* Effect.promise(() => client.close());
 
       assert.equal(transport.protocolVersion, revision);
-      assert.deepEqual(
-        unlisted.tools.map(({ name }) => name),
-        MEMBER_MCP_TOOLS.filter(({ experiment }) => experiment === undefined).map(
-          ({ name }) => name,
-        ),
+      const goldenInput = (golden: string) =>
+        Effect.promise(async () =>
+          JSON.parse(await fs.readFile(path.join(GOLDEN_ROOT, `${golden}.json`), "utf8")),
+        );
+      // With no experiment on, a tool is listed in the words that name none, its input its off twin's golden where it has one.
+      const offGoldens = yield* Effect.forEach(
+        MEMBER_MCP_TOOLS.filter(({ experiment }) => experiment === undefined),
+        (tool) =>
+          Effect.map(goldenInput(offGoldenOf(tool)), (inputSchema) => ({
+            name: tool.name,
+            inputSchema,
+          })),
       );
+      assert.deepEqual(
+        unlisted.tools.map(({ name, inputSchema }) => ({ name, inputSchema })),
+        offGoldens,
+      );
+      assert.deepEqual(experimentWordsIn(unlisted.tools), []);
       const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name, annotations }) =>
-        Effect.promise(async () => ({
+        Effect.map(goldenInput(goldenOf(name)), (inputSchema) => ({
           name,
-          inputSchema: JSON.parse(
-            await fs.readFile(path.join(GOLDEN_ROOT, `${goldenOf(name)}.json`), "utf8"),
-          ),
+          inputSchema,
           annotations,
         })),
       );
@@ -1090,7 +1115,10 @@ it.effect(
       );
       assert.equal(resolved.state, DESCRIPTION_COMMENT_STATUS.RESOLVED);
       assert.equal(planless.isError, true);
-      assert.match(planless.content[0].text, /has Task descriptions off/u);
+      assert.ok(
+        planless.content[0].text.includes(EXPERIMENT_OFF_REFUSAL),
+        planless.content[0].text,
+      );
       // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
       assert.deepEqual(
         lines.map(({ words }) => words),
@@ -1206,5 +1234,18 @@ it.each(MEMBER_MCP_TOOLS.map((tool) => [tool.name, tool] as const))(
   "%s shows the model the recorded input",
   async (name, tool) => {
     await settleJsonSchemaGolden(GOLDEN_ROOT, goldenOf(name), tool.input);
+  },
+);
+
+it.each(
+  MEMBER_MCP_TOOLS.flatMap((tool) =>
+    tool.descriptionsOff === undefined || tool.descriptionsOff.input === tool.input
+      ? []
+      : [[tool.name, tool, tool.descriptionsOff.input] as const],
+  ),
+)(
+  "%s shows the model the recorded input that names no description where no workspace of the member's has Task descriptions on",
+  async (_name, tool, input) => {
+    await settleJsonSchemaGolden(GOLDEN_ROOT, offGoldenOf(tool), input);
   },
 );

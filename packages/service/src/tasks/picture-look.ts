@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readDescriptionAttachment } from "@repo/database/models/description-attachments";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { type Picture, type PictureType, pictureTypeSchema } from "@repo/features/picture-wire";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import { type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
@@ -55,7 +55,6 @@ export const PICTURE_LOOK_REFUSAL = {
   VIDEO:
     "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the description's text say what it shows.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
-  OFF: "Not looked: your developer has Descriptions off, so no description's picture is shown.",
 } as const;
 
 export const PICTURE_LOOK_STATUS = {
