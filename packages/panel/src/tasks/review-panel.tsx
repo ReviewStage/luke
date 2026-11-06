@@ -23,7 +23,8 @@ import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
  * summary and the note where the caller offers it; a page offers none.
  * Escape closes it, Enter in the summary sends, a press outside or the
  * focus leaving it closes it with its words kept, and a review on its way,
- * or a question asked over the window from inside it, holds it open.
+ * or a question or a menu opened over the window from inside it, holds it
+ * open.
  */
 
 /** What the press and the panel say, by the review they finish. */
@@ -55,12 +56,14 @@ export const REVIEW_PANEL_WORDS = {
 const PANEL_WIDTH = 480;
 
 /**
- * Whether a press or the focus went to a question asked over the window
- * from inside the panel, a pending comment's Delete, which stands outside
- * it in the document and leaves it open.
+ * Whether a press or the focus went to what a pending comment in the panel
+ * opened over the window, a question its Delete asks or the menu its ⋯
+ * drops, which stands outside the panel in the document and leaves it open.
  */
-function inQuestion(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest('[role="alertdialog"]') !== null;
+function overPanel(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element && target.closest('[role="alertdialog"], [role="menu"]') !== null
+  );
 }
 
 /** The summary the panel asks for, and what the review says beside it where the caller asks that too. */
@@ -254,7 +257,7 @@ export function ReviewPress({
         align={POPOVER_ALIGN.END}
         width={PANEL_WIDTH}
         onPressAway={sending ? undefined : () => setOpen(false)}
-        holds={inQuestion}
+        holds={overPanel}
       >
         <ReviewPanel
           open={open}
@@ -273,7 +276,7 @@ export function ReviewPress({
             // press it was sent from is disabled as it goes, which drops the
             // focus the way a click outside would, and the answer is drawn
             // in the panel.
-            if (sending || inQuestion(left)) return;
+            if (sending || overPanel(left)) return;
             if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
           }}
         />

@@ -3443,7 +3443,7 @@ export function PendingPageComment({
   onShow,
 }: {
   comment: HeldComment;
-  review: Pick<PageReviewControl, "edit" | "remove">;
+  review: Pick<PageReviewControl, "edit" | "remove" | "markEditing">;
   /** Whether the review is on its way, which offers no Edit or Delete. */
   busy: boolean;
   /** The page's title, the quote line of a comment on the whole page; none draws no quote line, as by its element. */
@@ -3456,6 +3456,14 @@ export function PendingPageComment({
   const menu = useMenu(true);
   const trigger = menu.trigger();
   const words = heldWords(comment);
+  const open = editing !== undefined;
+  const { markEditing } = review;
+  // Note that the review waits on an edit standing open, so it never sends words the edit is about to change.
+  useEffect(() => {
+    if (!open) return undefined;
+    markEditing(comment.clientKey, true);
+    return () => markEditing(comment.clientKey, false);
+  }, [open, markEditing, comment.clientKey]);
   const { clientKey, element } = comment;
   // Note that one a send posted already is the service's as it stood, so it offers neither.
   const groups: MenuAction[][] =

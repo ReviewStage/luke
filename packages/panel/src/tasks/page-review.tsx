@@ -20,7 +20,7 @@ import { neverBusyAct } from "@repo/ui/confirm-state";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { Schema } from "effect";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { keptLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { undoToast, useToast } from "../toast.js";
@@ -212,6 +212,10 @@ export interface PageReviewControl {
   readonly discard: () => void;
   /** Sends every held comment, then `summary` on the whole page where it holds words; answers whether all of it landed. */
   readonly send: (summary: string) => Promise<boolean>;
+  /** Whether a held comment's edit stands open, which holds the review back until it is saved or canceled. */
+  readonly editing: boolean;
+  /** Says a held comment's edit opened or closed. The same function on every render. */
+  readonly markEditing: (clientKey: string, open: boolean) => void;
 }
 
 /** The review of one page, at the version shown, of the plan the control holds, held in this window. */
@@ -226,12 +230,24 @@ export function usePageReview(
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
+  // The held comments whose edit stands open, by their keys.
+  const [edits, setEdits] = useState<ReadonlySet<string>>(new Set());
+  const markEditing = useCallback((clientKey: string, open: boolean) => {
+    setEdits((was) => {
+      if (was.has(clientKey) === open) return was;
+      const next = new Set(was);
+      if (open) next.add(clientKey);
+      else next.delete(clientKey);
+      return next;
+    });
+  }, []);
   const held = useMemo(
     () => all.filter((comment) => heldOn(comment, planId, pageId)),
     [all, planId, pageId],
   );
   const send = async (summary: string): Promise<boolean> => {
-    if (control === undefined || planId === undefined || sending) return false;
+    // Note that an edit standing open would land after the words it changes went, so it is saved or canceled first.
+    if (control === undefined || planId === undefined || sending || edits.size > 0) return false;
     const words = summary.trim();
     // Note that the summary is held before it goes, so a send that stops part way keeps it, under its key, for the next.
     const last: HeldComment[] =
@@ -306,6 +322,8 @@ export function usePageReview(
       drop((comment) => !heldOn(comment, planId, pageId));
     },
     send,
+    editing: edits.size > 0,
+    markEditing,
   };
 }
 
@@ -347,7 +365,8 @@ export function PageReviewPress({
         draft={{
           body,
           setBody,
-          over: nothing || body.length > DESCRIPTION_COMMENT_BOUNDS.MAX_WORDS_CHARS,
+          over:
+            nothing || review.editing || body.length > DESCRIPTION_COMMENT_BOUNDS.MAX_WORDS_CHARS,
         }}
         sending={review.sending}
         pendingList={

@@ -36,6 +36,7 @@ import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane } from "./page-pane.js";
@@ -695,6 +696,17 @@ test("a comment held in a review stands in the Review panel under its element's 
   act(() => {
     summary.commands.setContent("Ship it once these are in.", { contentType: "markdown" });
   });
+  // An edit standing open holds the review back until it is saved or canceled.
+  await act(async () =>
+    (
+      held.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      assert.fail("the held comment offers its ⋯")
+    ).click(),
+  );
+  chooseMenuItem("Edit");
+  assert.equal(buttonNamed(panel, "Send review").disabled, true, "Send waits on the edit");
+  await act(async () => buttonNamed(held, "Cancel").click());
+  assert.equal(buttonNamed(panel, "Send review").disabled, false, "Send stands once it is let go");
   await act(async () => buttonNamed(panel, "Send review").click());
   // Note that each start waits on the one before, so the summary goes once the held comment has landed.
   await vi.waitFor(() => assert.equal(starts.length, 2));
