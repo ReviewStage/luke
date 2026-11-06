@@ -7,7 +7,9 @@
  * reads as a letter and a reply reaches him. One POST to Resend's `/emails`
  * (https://resend.com/docs/api-reference/emails/send-email), to the new
  * account's address alone, greeting them by the first word of their name,
- * or with no name where their account has none.
+ * or with no name where their account has none. Resend holds it for an hour
+ * (`scheduled_at`) before it goes out, so it lands as a note written after
+ * they have had a look around rather than an instant receipt of the sign-up.
  *
  * The deployment holds the Resend key (`RESEND_API_KEY`, the one invitations
  * and the feedback form send with) and the sender (`WELCOME_FROM`, such as
@@ -20,7 +22,7 @@
 
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { HTTP_METHOD } from "@repo/wire";
-import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Config, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer } from "../core.js";
 import { INVITATION_MAIL_ENVIRONMENT } from "./invitation-mail.js";
@@ -36,6 +38,8 @@ const RESEND = {
   EMAILS_PATH: "/emails",
   /** Short, since the sign-up's answer waits on it. */
   REQUEST_TIMEOUT_MS: 3_000,
+  /** How long after the sign-up Resend sends the note. */
+  SEND_DELAY_MS: 60 * 60 * 1_000,
 } as const;
 
 /** What the build says once where a variable is unset, by the variables' names alone. */
@@ -126,10 +130,17 @@ export const welcomeMailFromEnvironment: Layer.Layer<WelcomeMail, never, HttpCli
       return {
         send: (letter: WelcomeLetter) =>
           Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const scheduledAt = new Date(now + RESEND.SEND_DELAY_MS).toISOString();
             const answer = yield* call.send({
               method: HTTP_METHOD.POST,
               path: RESEND.EMAILS_PATH,
-              body: JSON.stringify({ from, to: [letter.email], ...welcomeEmail(letter) }),
+              body: JSON.stringify({
+                from,
+                to: [letter.email],
+                scheduled_at: scheduledAt,
+                ...welcomeEmail(letter),
+              }),
             });
             if (callAnswered(answer) && answer.response.ok) return;
             // Note that the status alone is logged, because the letter carries the new account's address.

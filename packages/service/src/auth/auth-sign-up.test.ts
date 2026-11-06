@@ -11,7 +11,7 @@ import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import { Clock, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { WELCOME_MAIL_ENVIRONMENT, welcomeMailFromEnvironment } from "../accounts/welcome-mail.js";
@@ -75,6 +75,7 @@ it.effect(
         const services = Layer.mergeAll(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
+          Layer.succeed(Clock.Clock, yield* Clock.Clock),
           welcomeMail,
         );
         const { handler, dispose } = HttpRouter.toWebHandler(
@@ -102,12 +103,19 @@ it.effect(
 
         const emails = resend.requests.map(
           (request) =>
-            JSON.parse(request.body ?? "{}") as { from: string; to: string[]; text: string },
+            JSON.parse(request.body ?? "{}") as {
+              from: string;
+              to: string[];
+              text: string;
+              scheduled_at: string;
+            },
         );
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, WELCOME_FROM);
         assert.deepEqual(emails[0]?.to, [ADA.email]);
         assert.ok(emails[0]?.text.startsWith("Hey Ada,"));
+        // The test clock stands at the epoch, so an hour later is 1 a.m. that day.
+        assert.equal(emails[0]?.scheduled_at, "1970-01-01T01:00:00.000Z");
 
         const [personal, ...others] = yield* Database.use((db) =>
           db
