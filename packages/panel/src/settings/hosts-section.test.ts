@@ -373,6 +373,8 @@ test("This Mac's switch turns it on at once, and off only once the question is a
   await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true }, [], {
     [ACT_KIND.HOSTS_THIS_MAC_SET]: answered,
   });
+  // Note that one client holds both worlds, so the switch is pressed once this world's record has replaced the last one's.
+  await vi.waitFor(() => assert.equal(thisMacSwitch().getAttribute("aria-checked"), "true"));
   await act(async () => thisMacSwitch().click());
   await settle();
   assert.deepEqual(sent, [{ on: true }], "nothing is turned off before it is asked");

@@ -362,7 +362,11 @@ test("each harness's row names the credential in use, then what is wrong with it
     keys: [{ ...ANTHROPIC_KEY, provider: PROVIDER_KEY_PROVIDER.OPENAI, hint: "sk-proj-…7Qx2" }],
     subscriptions: [CLAUDE_PLAN],
   };
+  // Note that one client holds the test's worlds, so each later world waits for its own keys to replace the last one's.
   const connected = await mount();
+  await vi.waitFor(() =>
+    assert.deepEqual(rowState(connected, "Claude"), connectedWith("Claude plan")),
+  );
   assert.equal(rowButton(connected, "Claude").textContent, "Manage");
   assert.equal(rowButton(connected, "Codex").textContent, "Manage");
   assert.equal(rowButton(connected, "Claude").getAttribute("aria-label"), "Manage Claude");
@@ -386,7 +390,12 @@ test("each harness's row names the credential in use, then what is wrong with it
     ],
   };
   const attention = await mount();
-  assert.deepEqual(rowState(attention, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      rowState(attention, "Claude"),
+      connectedWith("Anthropic API key sk-ant-…wxyz"),
+    ),
+  );
   assert.deepEqual(rowState(attention, "Codex"), needsHand("ChatGPT plan · Signed out"));
   assert.equal(rowButton(attention, "Codex").textContent, "Sign in again");
   assert.equal(rowButton(attention, "Codex").getAttribute("aria-label"), "Sign in to Codex again");
@@ -401,7 +410,9 @@ test("each harness's row names the credential in use, then what is wrong with it
     ],
   };
   const limited = await mount();
-  assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached"));
+  await vi.waitFor(() =>
+    assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached")),
+  );
   assert.equal(rowButton(limited, "Claude").textContent, "Manage");
   assert.deepEqual(rowState(limited, "Codex"), needsHand("ChatGPT plan · Usage limit reached"));
   assert.equal(rowButton(limited, "Codex").textContent, "Manage usage");
