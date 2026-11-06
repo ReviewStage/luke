@@ -1,6 +1,10 @@
 /**
  * compose-port-forwards.ts -- a coding agent's cloud ports forwarded to this Mac's `127.0.0.1`, on the window's behalf: forwarding read and turned on or off for one agent at a time, a loopback listener kept for each port the service detects, and each connection it accepts carried over the service's tunnel.
  *
+ * How the forwarded agent's forwarding stands is told to the windows as
+ * `PORT_FORWARDS_CHANGED` each time it moves, which the client lays in app
+ * state (`portForwarding`); nothing reads it on a timer of its own.
+ *
  * Turning forwarding on asks the service to start it (`agentPorts.startForwarding`:
  * the sandbox woken, the repository's run command started where nothing
  * listens), then reads the agent's listening ports every few seconds for as
@@ -23,8 +27,8 @@
 import { type HostedAgentPortsClient, portForwardAddress, webSocketOrigin } from "@repo/features";
 import {
   PORT_FORWARD_STATE,
+  type PortForwarding,
   type PortForwardingAnswer,
-  portForwardAgentParamsSchema,
   portForwardSetParamsSchema,
 } from "@repo/features/port-forward-acts";
 import {
@@ -33,7 +37,7 @@ import {
   type TunnelFrame,
   tunnelFrameSchema,
 } from "@repo/features/sandbox-tunnel-wire";
-import { carried, GATEWAY_METHOD, RefusedRefusal, readParams } from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, RefusedRefusal, readParams } from "@repo/gateway";
 import { EXCESS_KEYS, unparsedWire } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { Deferred, Duration, Effect, Exit, Result, Schedule, Schema, Scope, Stream } from "effect";
@@ -72,7 +76,7 @@ export const PORT_FORWARD = {
 type PortForwardClient = Pick<HostedAgentPortsClient, "list" | "startForwarding">;
 
 export interface PortForwardsDependencies {
-  kernel: Pick<HostKernel, "hostedServiceBaseUrl"> & {
+  kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "emit"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
   account: Pick<AccountComposer, "capabilitiesActive" | "credential">;
@@ -134,6 +138,19 @@ export function composePortForwards(
     const socketOrigin = webSocketOrigin(kernel.hostedServiceBaseUrl);
     const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
     let forwarding: Forwarding | undefined;
+    let toldText = JSON.stringify(null);
+
+    /** How the forwarded agent's forwarding stands, told to the windows where it moved since it was last told. */
+    const tell = Effect.sync(() => {
+      const told: PortForwarding =
+        forwarding === undefined
+          ? null
+          : { agentId: forwarding.agentId, ...standing(forwarding.agentId) };
+      const text = JSON.stringify(told);
+      if (text === toldText) return;
+      toldText = text;
+      kernel.emit(GATEWAY_EVENT.PORT_FORWARDS_CHANGED, carried(told));
+    });
 
     /** A text frame the relay sent: a channel's bytes written to its connection, or its close ending it. */
     const heard = (tunnel: Tunnel, text: string) => {
@@ -160,7 +177,10 @@ export function composePortForwards(
         tunnel?.channels.clear();
         return Effect.andThen(
           Deferred.succeed(opened, undefined),
-          Effect.forEach(held, (connection) => connection.close, { discard: true }),
+          Effect.andThen(
+            Effect.forEach(held, (connection) => connection.close, { discard: true }),
+            tell,
+          ),
         );
       });
       const open = Effect.gen(function* () {
@@ -171,6 +191,7 @@ export function composePortForwards(
         const standing: Tunnel = { socket: opening.socket, channels: new Map(), nextChannel: 0 };
         tunnel = standing;
         forward.connected = true;
+        yield* tell;
         yield* Deferred.succeed(opened, standing);
         yield* Stream.runForEach(opening.socket.arrivals, (arrival) =>
           "text" in arrival ? heard(standing, arrival.text) : Effect.void,
@@ -263,12 +284,15 @@ export function composePortForwards(
           if (!current.forwards.has(port))
             current.forwards.set(port, yield* forwarded(current, port));
         }
+        yield* tell;
       });
 
     const turnOff = Effect.suspend(() => {
       const ending = forwarding;
       forwarding = undefined;
-      return ending === undefined ? Effect.void : Scope.close(ending.scope, Exit.void);
+      return ending === undefined
+        ? Effect.void
+        : Effect.andThen(Scope.close(ending.scope, Exit.void), tell);
     });
 
     /** Forwarding started for the agent, and whichever agent was forwarded before let go; refused where the service did not start it. */
@@ -291,6 +315,7 @@ export function composePortForwards(
           forwards: new Map(),
         };
         forwarding = current;
+        yield* tell;
         yield* Effect.forkIn(
           Effect.repeat(look(current), Schedule.spaced(PORT_FORWARD.LOOK_EVERY)),
           current.scope,
@@ -317,15 +342,6 @@ export function composePortForwards(
     };
 
     const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.PORT_FORWARDS> = {
-      [GATEWAY_METHOD.PORT_FORWARDS_READ]: (params) =>
-        Effect.gen(function* () {
-          const { agentId } = yield* readParams(
-            portForwardAgentParamsSchema,
-            params,
-            "reading forwarding names the agent",
-          );
-          return carried(standing(agentId));
-        }),
       [GATEWAY_METHOD.PORT_FORWARDS_SET]: (params) =>
         Effect.gen(function* () {
           const { agentId, on } = yield* readParams(

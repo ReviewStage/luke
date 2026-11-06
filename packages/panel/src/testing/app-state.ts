@@ -178,6 +178,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
+    portForwarding: null,
     network: { online: true, reachable: true },
     window: { fullScreen: false },
   };
