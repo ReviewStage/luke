@@ -7,8 +7,15 @@
    width it steps under is a literal here. */
 
 @layer components {
+  /* The frame is at least the window's height, and a page's content takes
+     the room a short page leaves, so the rails run to the window's foot and
+     the wordmark's cut edge stands on it rather than above a band of
+     ground. */
   .ui-landing-page {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
     container-type: inline-size;
     overflow-x: clip;
     background: var(--ui-color-ground);
@@ -396,6 +403,7 @@
      page's room under the bar and over the foot's rule. */
   .ui-landing-lost {
     display: flex;
+    flex-grow: 1;
     flex-direction: column;
     align-items: center;
     padding: 64px var(--ui-landing-gutter) 96px;
