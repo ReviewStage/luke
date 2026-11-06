@@ -943,34 +943,42 @@
     border-left: 1px solid var(--ui-color-border);
   }
 
-  /* The devices: the Mac window and the phone side by side, one picture
-     scaled as a whole to the stage at every width. The phone stands nine
-     tenths of the window's height, so its app draws at nearly the window's
-     density, the two reading as one set rather than two scales; they share
-     the stage's middle, a gap apart, and the stage is only as tall as they
-     are. The shares follow from that: a 16:10 window's height, nine tenths
-     of it, and the phone's 393:852 make the phone 0.26 of the window's
-     width, so with a gap of 0.05 the window takes 1 / 1.31 of the row. */
+  /* The devices: the Mac window behind and the phone in front over its
+     lower corner, as a product lineup sets them, one picture scaled as a
+     whole to the stage at every width. The phone stands nine tenths of the
+     window's height, so its app draws at nearly the window's density, the
+     two reading as one set; its foot stands a little below the window's, as
+     a nearer thing does, and a ring of the stage's ground sets its edge
+     apart from the window it covers. The shares follow from that: a 16:10
+     window's height, nine tenths of it, and the phone's 393:852 make the
+     phone 0.26 of the window's width, so a window 86% of the row puts the
+     phone's last 22% at the row's end, a third of it over the window. */
   .ui-landing-stage[data-scene="devices"] {
-    padding: 64px 6%;
+    padding: 64px 6% 72px;
   }
 
   .ui-landing-devices {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 3.8%;
+    position: relative;
   }
 
   .ui-landing-devices-window {
-    flex: 0 0 76.4%;
-    min-width: 0;
+    width: 86%;
   }
 
   .ui-landing-devices-phone {
-    flex: 0 0 19.8%;
-    min-width: 0;
+    position: absolute;
+    right: 0;
+    bottom: -4%;
+    z-index: 2;
+    width: 22.3%;
     container-type: inline-size;
+  }
+
+  .ui-landing-devices-phone .ui-landing-phone {
+    box-shadow:
+      inset 0 0 0 1px var(--ui-color-border-strong),
+      0 0 0 2.5cqw var(--ui-color-ground),
+      0 6cqw 16cqw var(--ui-color-shadow-deep);
   }
 
   /* The phone's Inbox: its bar under the status bar's room, its search, its
@@ -1121,7 +1129,7 @@
     }
 
     .ui-landing-stage[data-scene="devices"] {
-      padding: 28px 5%;
+      padding: 28px 5% 36px;
     }
 
     .ui-landing-close {
