@@ -11,7 +11,6 @@ import {
   type InstalledSkillRemovedView,
 } from "@repo/features/installed-skill-view";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -20,7 +19,6 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppHostReads, type AppInstalledSkills, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -208,16 +206,19 @@ type SkillChange = FieldChange<InstalledSkillLiveRow>;
 /** A skill removed, gone at once from every read holding it, sent as `send` asks; a refusal puts it back. */
 export function skillRemoved(
   send: (removal: InstalledSkillIdParams) => Effect.Effect<InstalledSkillRemovedView>,
-): WriteDeclaration<InstalledSkillLiveRow, SkillChange, InstalledSkillIdParams, WireValue> {
+): WriteDeclaration<
+  InstalledSkillLiveRow,
+  SkillChange,
+  InstalledSkillIdParams,
+  InstalledSkillRemovedView
+> {
   return {
     kind: INSTALLED_SKILL,
     keys: (removal) => [removal.skillId],
     change: () => () => ROW_GONE,
     send: (removal) =>
       Effect.map(send(removal), (answer) =>
-        "id" in answer
-          ? { answer: carried<InstalledSkillRemovedView>(answer), txid: answer.txid }
-          : { refused: carried<InstalledSkillRemovedView>(answer) },
+        "id" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 }

@@ -8,12 +8,12 @@ import { accountActsContract } from "./account.js";
 import { ACCOUNT_ASK_ACTS, accountAskActsContract } from "./account-asks.js";
 import { AGENT_INBOX_ACTS, agentInboxActsContract } from "./agent-inbox.js";
 import { AGENT_ACTS, agentActsContract } from "./agents.js";
-import { automationActsContract } from "./automations.js";
+import { AUTOMATION_ACTS, automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
-import { chaptersActsContract } from "./chapters.js";
+import { CHAPTERS_ACTS, chaptersActsContract } from "./chapters.js";
 import { cliActsContract } from "./cli.js";
-import { installedSkillActsContract } from "./installed-skills.js";
-import { integrationActsContract } from "./integrations.js";
+import { INSTALLED_SKILL_ACTS, installedSkillActsContract } from "./installed-skills.js";
+import { INTEGRATION_ACTS, integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
 import { macCommandActsContract } from "./mac-commands.js";
 import { macShellActsContract } from "./mac-shells.js";
@@ -45,7 +45,9 @@ export {
 export { ACCOUNT_ASK_ACTS } from "./account-asks.js";
 export { AGENT_INBOX_ACTS } from "./agent-inbox.js";
 export { AGENT_ACTS } from "./agents.js";
+export { AUTOMATION_ACTS } from "./automations.js";
 export { ACT_ERROR } from "./base.js";
+export { CHAPTERS_ACTS } from "./chapters.js";
 export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
 export {
   type ActInput,
@@ -56,6 +58,8 @@ export {
   hostAct,
   panelOnlyOf,
 } from "./declared-act.js";
+export { INSTALLED_SKILL_ACTS } from "./installed-skills.js";
+export { INTEGRATION_ACTS } from "./integrations.js";
 export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
@@ -99,6 +103,10 @@ export const HOST_ACTS = {
   ...ACCOUNT_ASK_ACTS,
   ...AGENT_INBOX_ACTS,
   ...AGENT_ACTS,
+  ...AUTOMATION_ACTS,
+  ...CHAPTERS_ACTS,
+  ...INSTALLED_SKILL_ACTS,
+  ...INTEGRATION_ACTS,
 };
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
