@@ -1,0 +1,54 @@
+---
+title: "Vespin MCP"
+description: "Use Vespin from Claude Code, Codex, Cursor, and other agents"
+---
+
+Vespin MCP is an MCP server that lets an agent outside Vespin work in your workspace as you. It can read and create tasks, start and message agents, answer your Inbox, and merge pull requests.
+
+The server is `https://vespin.dev/api/mcp`. It signs in with OAuth, so you never paste a key.
+
+## Connect an agent
+
+Open **Settings › Vespin MCP**, choose your agent under **Connect an agent**, and follow its step. The same steps:
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```sh
+    claude mcp add --transport http vespin https://vespin.dev/api/mcp
+    ```
+    Then type `/mcp` in Claude Code, choose **vespin**, and sign in.
+  </Tab>
+  <Tab title="Codex">
+    ```sh
+    codex mcp add vespin --url https://vespin.dev/api/mcp
+    ```
+    It opens your browser to sign in. If it doesn't, run `codex mcp login vespin`.
+  </Tab>
+  <Tab title="Cursor">
+    Click **Add to Cursor** in Settings › Vespin MCP, then sign in to vespin from Cursor's MCP settings.
+  </Tab>
+  <Tab title="VS Code">
+    ```sh
+    code --add-mcp '{"name":"vespin","type":"http","url":"https://vespin.dev/api/mcp"}'
+    ```
+    Then start vespin from VS Code's MCP servers and sign in.
+  </Tab>
+  <Tab title="Claude">
+    In Claude, open **Customize › Connectors**, choose **Add custom connector**, paste `https://vespin.dev/api/mcp`, and connect. On a Team or Enterprise plan, an owner adds it in **Organization settings › Connectors**.
+  </Tab>
+  <Tab title="ChatGPT">
+    In ChatGPT, open **Plugins**, choose **+ › Add custom MCP server**, paste `https://vespin.dev/api/mcp` under **Connection**, then choose **Create as a plugin**.
+  </Tab>
+</Tabs>
+
+Any other agent that supports remote MCP servers connects the same way: give it the server URL and sign in.
+
+## Sign in
+
+Signing in opens a Vespin page that names the agent and asks you to **Allow** it. The agent then acts as your account, with your permissions in every workspace you belong to. If you're in more than one workspace, it asks which one when it lists or creates something.
+
+An agent you start through Vespin MCP doesn't report back to the agent that started it. Ask that agent to check on it.
+
+## Disconnect an agent
+
+Connected agents are listed under **Connected** in Settings › Vespin MCP, with when each was allowed and last active. Open an agent's **⋯** menu and choose **Disconnect**. Access it already holds stops working within 15 minutes.

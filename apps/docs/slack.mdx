@@ -1,0 +1,43 @@
+---
+title: "Slack"
+description: "Start agents from Slack and answer your Inbox there"
+---
+
+Vespin's Slack bot does two things: it starts an agent when you mention @Vespin or DM it, and it sends your Inbox threads to you as Slack DMs.
+
+<Frame>
+  <img src="/images/slack.png" alt="Slack with Vespin's DM showing an Inbox question with a button per option and Open in Vespin, beside a channel thread where Vespin answers an @Vespin mention" />
+</Frame>
+
+## Connect the bot
+
+An owner or admin connects it once per workspace: **Settings › Workspace › Workspace connections**, then **Connect** on the **Slack** row. A Vespin workspace connects to one Slack workspace.
+
+Under **Slack settings** on the same row:
+
+- **Default repository**: where agents started from Slack work when nothing else says.
+- **Add channel**: adds the bot to a public channel. For a private channel, run `/invite @Vespin` in it.
+- Each channel can have its own repository, which overrides the default.
+
+## Start an agent
+
+Mention @Vespin in a channel the bot is in, or DM the bot. The bot reacts with 👀, replies with an **Open in Vespin** link, and starts an agent on a new task assigned to you. The agent reads the earlier messages in the thread and any images in it.
+
+The agent picks a repository in this order:
+
+1. An `owner/name` written in your message.
+2. The channel's repository.
+3. The workspace's default repository.
+4. The repository of your most recent agent.
+
+When the agent finishes a turn, it posts its answer in the Slack thread. Reply in that thread to send it another message.
+
+## Answer your Inbox in Slack
+
+When an agent posts a thread to your Inbox, the bot DMs it to you. Decisions come with a button per option, to-dos with **Mark done** and **Couldn't do it**, and every message with **Open in Vespin**. Press a button or reply in the DM's thread to answer.
+
+To stop these DMs, turn off **Slack notifications** under the Slack row in Settings › Workspace. The setting is yours alone and applies in every workspace.
+
+## How Vespin finds you
+
+The bot matches your Slack account to Vespin by a Slack account you linked in **Settings › Integrations**, or else by your email. If it can't match you, it starts nothing and asks you to link your Slack account.
