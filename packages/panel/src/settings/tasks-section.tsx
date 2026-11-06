@@ -26,7 +26,6 @@ export function TasksSection({
         page={SCHEMA_SETTINGS_PAGE.ACCOUNT}
         section={SETTING_SECTION.TASKS}
         view={view}
-        writes={writes}
       />
     </SettingsSection>
   );

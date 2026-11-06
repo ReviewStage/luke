@@ -1142,7 +1142,10 @@ test("a setting is drawn as written while its write is out, so a press reads the
   const popover = openSettings();
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
 
-  assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back");
+  // Note that the write is drawn once its mutation hands it to React, a tick after the press.
+  await vi.waitFor(() =>
+    assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back"),
+  );
   await flush();
   assert.equal(lastDrawn().look.ligatures, true);
 });
@@ -1187,19 +1190,20 @@ test("a refused write flips the switch back and is said in a toast, and the swit
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
-  assert.equal(
-    settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
-    "true",
-    "the switch flips before the write answers",
+  await vi.waitFor(() =>
+    assert.equal(
+      settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
+      "true",
+      "the switch flips before the write answers",
+    ),
   );
   // Note that the write reaches the act port a few steps after the press, as its mutation sends it.
   await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.("Could not save that setting.");
-  await flush();
+  await vi.waitFor(() => assert.equal(newestToastSays(), "Could not save that setting."));
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
   assert.equal(ligatures.getAttribute("aria-checked"), "false");
-  assert.equal(newestToastSays(), "Could not save that setting on this system.");
   assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });
