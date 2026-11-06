@@ -2,37 +2,41 @@ import { Option, Schema } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 
 /**
- * local-held.ts -- the shells this window opened on this Mac for each cloud agent's Local tab, kept across a reload, and the new shells asked for and not yet opened.
+ * local-held.ts -- the terminals this window holds on this Mac in each cloud agent's mirror, each one Local tab, kept across a reload.
  *
- * Main holds each shell and ends it with the window, but a reload keeps
- * them running (`@repo/host/act-port`'s `mac-shell-procedures.ts`), so the
- * window keeps which shells it opened, and what it named them, in its
+ * A terminal is minted here first, under an id of the window's own and its
+ * name, so its tab stands at once; the tab then opens its shell
+ * (`use-local-session.ts`) and writes the id main named the shell by
+ * beside it. Main holds each shell and ends it with the window, but a
+ * reload keeps them running (`@repo/host/act-port`'s
+ * `mac-shell-procedures.ts`), so the window keeps its terminals in its
  * session storage, which a reload keeps and a closed window forgets with
- * its shells. Note that every agent's list is kept under one key, nested by
- * the agent's id, because a key is never built from an id. It holds ids and
- * names, never a byte a shell printed. A shell main no longer holds is
- * dropped from its list once its attach is refused.
+ * its shells, and Show local opens their tabs again. Note that every
+ * agent's list is kept under one key, nested by the agent's id, because a
+ * key is never built from an id. It holds ids and names, never a byte a
+ * shell printed. A terminal leaves its list as its tab closes.
  */
 
 /** The one key the window's shells are kept under. */
 const HELD_KEY = "vespin.localShells";
 
-/** One shell the window opened: the id main named it by, and its name in the list. */
+/** One terminal the window holds: the id it minted the terminal under, the id main named its shell by once one is open, and its name. */
 const heldShellSchema = Schema.Struct({
-  terminalId: Schema.String,
+  shell: Schema.String,
+  terminalId: Schema.optionalKey(Schema.String),
   title: Schema.String,
 });
 
 export type HeldShell = typeof heldShellSchema.Type;
 
-/** Every agent's shells, oldest first, by the agent's id. */
+/** Every agent's terminals, oldest first, by the agent's id. */
 const heldShellsSchema = Schema.Record(Schema.String, Schema.Array(heldShellSchema));
 
 type HeldShells = typeof heldShellsSchema.Type;
 
 const heldShellsJson = Schema.fromJsonString(heldShellsSchema);
 
-/** No agent holds a shell. */
+/** No agent holds a terminal. */
 const NOTHING_HELD: readonly HeldShell[] = [];
 
 /** What the window kept before a reload, or nothing where it kept none, it no longer reads, or storage refuses. */
@@ -52,11 +56,11 @@ function writeHeld(held: HeldShells): void {
   try {
     window.sessionStorage.setItem(HELD_KEY, Schema.encodeSync(heldShellsJson)(held));
   } catch {
-    // A reload then opens a fresh shell, the earlier ones still ended with the window.
+    // A reload then forgets the window's terminals, whose shells still end with the window.
   }
 }
 
-/** Every agent's shells as the window holds them: what it kept before a reload, read once, then each list written through to storage. */
+/** Every agent's terminals as the window holds them: what it kept before a reload, read once, then each list written through to storage. */
 const allHeld = Atom.keepAlive(
   Atom.writable(
     (): HeldShells => readHeld(),
@@ -68,7 +72,7 @@ const allHeld = Atom.keepAlive(
 );
 
 /**
- * One agent's shells, oldest first: read as the window holds them, and
+ * One agent's terminals, oldest first: read as the window holds them, and
  * written through to its session storage, so a reload finds them.
  */
 export const localShellsHeld = Atom.family((agentId: string) =>
@@ -83,14 +87,7 @@ export const localShellsHeld = Atom.family((agentId: string) =>
   ),
 );
 
-/**
- * How many new shells were asked for in the agent's mirror and not yet
- * opened: the Local row of ⌘K or the panel's "+" asks, and the agent's
- * Local tab opens them and counts them off.
- */
-export const localShellsAsked = Atom.family((_agentId: string) => Atom.keepAlive(Atom.make(0)));
-
-/** The name a new shell takes: "Terminal" and the next number past every name of that shape the agent's shells hold. */
+/** The name a new terminal takes: "Terminal" and the next number past every name of that shape the agent's terminals hold. */
 export function nextShellTitle(shells: readonly HeldShell[]): string {
   const taken = shells.map((shell) => /^Terminal (\d+)$/u.exec(shell.title)?.[1]).map(Number);
   const highest = taken.reduce(

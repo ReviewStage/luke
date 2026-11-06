@@ -107,7 +107,7 @@ export interface AgentMenuDoors {
   section?: MenuEntry | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
   onOpenTerminal?: (() => void) | undefined;
-  /** Opens the cloud agent's own Local tab in the side panel, adding no shell. */
+  /** Shows the cloud agent's Local tab viewed last in the side panel, opening no new terminal. */
   onOpenLocal?: (() => void) | undefined;
   /** Opens a new tab of the agent's cloud browser in the side panel: a phone's, which lists the panel's tabs nowhere else (`task-pane-switcher.tsx`). */
   onOpenBrowser?: (() => void) | undefined;
@@ -271,7 +271,7 @@ export function rowDoors(doors: AgentDoors): RowDoors {
 export interface AgentTerminalDoors {
   /** Shows the agent's own Terminal tab in the side panel, adding no shell; none where the platform runs no terminals. */
   readonly onOpenTerminal: ((agentId: string) => void) | undefined;
-  /** Shows a cloud agent's own Local tab in the side panel, adding no shell; none where the platform mirrors no agent's files. */
+  /** Shows a cloud agent's Local tab viewed last in the side panel, opening no new terminal; none where the platform mirrors no agent's files. */
   readonly onOpenLocal?: ((agentId: string) => void) | undefined;
   /** Whether the platform runs terminals, which ⌘J and New terminal stand on. */
   readonly terminals: boolean;
@@ -304,7 +304,7 @@ export function agentTranscriptRead(
  * (`onShown`).
  */
 export function useAgentTerminalDoors(
-  sidePanel: Pick<SidePanelControl, "onChoose">,
+  sidePanel: Pick<SidePanelControl, "onChoose" | "locals" | "viewedAt">,
   onShown: () => void,
 ): AgentTerminalDoors {
   const terminals =

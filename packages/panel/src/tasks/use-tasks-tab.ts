@@ -208,6 +208,7 @@ import {
   openTaskThread,
 } from "./use-inbox-task.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
+import { useEndLocal } from "./use-local-session.js";
 import {
   isOverviewTab,
   MAIN_TAB,
@@ -219,7 +220,6 @@ import {
 import {
   DRAWN_KINDS,
   drawsChanges,
-  drawsLocal,
   drawsSubagent,
   drawsTerminal,
   isPinnable,
@@ -3770,18 +3770,30 @@ export function useTasksTab(input: {
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
+  const endLocal = useEndLocal();
+  // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab
+  // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
+      if (isLocalTab(tab)) endLocal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0) {
+      if (task !== undefined && at >= 0 && !isLocalTab(tab)) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closePanelTab(tab);
     },
-    [panelStrip, panelFiles, closePanelTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
+    [
+      panelStrip,
+      panelFiles,
+      closePanelTab,
+      viewed.activeTaskId,
+      setClosedTabs,
+      latestClosedTabs,
+      endLocal,
+    ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, never the Inbox, which the panel
@@ -3808,7 +3820,6 @@ export function useTasksTab(input: {
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
-    if (isLocalTab(tab)) return drawsLocal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
@@ -3816,8 +3827,8 @@ export function useTasksTab(input: {
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
   // a draft's, which lets the draft go, a Browser tab's, which takes its
-  // page with it, and a cloud Browser tab's, which only the "+" opens again. The
-  // side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  // page with it, a cloud Browser tab's, which only the "+" opens again, and a Local tab's,
+  // whose terminal ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
       (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
@@ -3869,7 +3880,11 @@ export function useTasksTab(input: {
             viewedAt: sidePanel.viewedAt,
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,
-            keeps: (tab) => typeof tab === "string" || isCloudBrowserTab(tab) || pinnedHere(tab),
+            keeps: (tab) =>
+              typeof tab === "string" ||
+              isCloudBrowserTab(tab) ||
+              isLocalTab(tab) ||
+              pinnedHere(tab),
           },
     awake: awakeAgents,
     onWake: mainTabs.onWake,
