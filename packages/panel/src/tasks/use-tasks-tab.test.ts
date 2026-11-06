@@ -39,7 +39,6 @@ import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppPlanDocuments,
-  type AppStateDelivery,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
@@ -82,7 +81,6 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
-  deliveryOf,
   handHostReads,
   handState,
   holdPages,
@@ -636,6 +634,9 @@ test("with Open a task once it starts off, New task starts the task and its agen
 /** A line of a file of the task's repository, as a place names it to open. */
 const FILE_REF = { path: "src/invite.ts", startLine: 1, endLine: 1 };
 
+/** The File tab that line opens in. */
+const FILE = { file: FILE_REF.path };
+
 /** The panel as the developer sees it: shown or not, and on which tab. */
 function panelOf(tab: ReturnType<typeof mount>) {
   const { open, tab: shown } = tab.control().sidePanel;
@@ -643,6 +644,9 @@ function panelOf(tab: ReturnType<typeof mount>) {
 }
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** The agent's Pull request tab, a tab of the side panel that stands again on its task. */
+const PULLS = { changes: AGENT_ID };
 
 const RUNNING_AGENT: AgentSummary = {
   id: AGENT_ID,
@@ -667,14 +671,14 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
   const file = { file: FILE_REF.path };
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onChoose(PULLS));
   act(() => panel().onOpenFile(FILE_REF));
-  const strip = [SIDE_PANEL_TAB.COMMENTS, file];
+  const strip = [PULLS, file];
   assert.deepEqual(panel().strip, strip);
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
 
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(PULLS));
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
   assert.deepEqual(panel().strip, []);
@@ -695,7 +699,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panel().strip, strip);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
@@ -797,7 +801,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
   );
 });
 
-test("a column kept while the plan, the Inbox, and the Call stood in it, and a side panel kept on its Plan tab, read with each let go, the agents' order, the tab last viewed, and the panel's other tabs still standing", async () => {
+test("a column kept while the plan, the Inbox, and the Call stood in it, and a side panel kept on its Plan and Comments tabs, read with each let go, the agents' order and the tab last viewed still standing", async () => {
   window.localStorage.setItem(
     "app.sidePanel",
     JSON.stringify({
@@ -836,8 +840,8 @@ test("a column kept while the plan, the Inbox, and the Call stood in it, and a s
   const column = () => tab.control().mainTabs;
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
-  assert.deepEqual(tab.control().sidePanel.strip, [SIDE_PANEL_TAB.COMMENTS], "no Plan tab stands");
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(tab.control().sidePanel.strip, [], "neither the Plan nor Comments tab stands");
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 });
 
 test("a column whose last agent is archived opens a new agent's draft in its place", async () => {
@@ -865,8 +869,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().sidePanel.onOpenFile(FILE_REF));
+  act(() => tab.control().sidePanel.onClose(FILE));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -874,8 +878,7 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.equal(tab.control().boundFor, TASK.id);
 
   tab.stand({ tasks: OPEN });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.COMMENTS]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: FILE });
 });
 
 test("in a narrow room a task opened from a list lands on its plan, its Overview with the side panel shut over it whichever tab it last showed, and on the desktop's width it stands shut once a plan with no tab was passed through", () => {
@@ -885,7 +888,7 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
       { shown: true, tasks: OPEN, room },
       { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
     );
-    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+    act(() => tab.control().sidePanel.onChoose(PULLS));
     tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
     act(() => tab.control().onSelect(TASK.id));
@@ -965,8 +968,8 @@ test("in a narrow room Back to a task opens it as it stood, its panel open on th
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS]);
+  act(() => panel().onOpenFile(FILE_REF));
+  assert.deepEqual(panel().strip, [FILE]);
 
   act(() => tab.control().onSelect(OTHER_TASK_ID));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
@@ -978,7 +981,7 @@ test("in a narrow room Back to a task opens it as it stood, its panel open on th
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
   await settle();
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(panelOf(tab), { open: true, tab: FILE });
 });
 
 test("in a narrow room a task with no page behind it leaves for Home, not the Board, and Back opens it again", async () => {
@@ -1024,24 +1027,17 @@ test("in a narrow room a Vespin link to another task's panel item opens that ite
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
-test('Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else asks for the "+" at the toggle, as a first launch does with no tab standing', () => {
-  const tab = mount({ shown: true, tasks: OPEN });
+test('Show panel on a plan whose strip holds no tab opens the tab last closed there, else asks for the "+" at the toggle, as a first launch does with no tab standing', async () => {
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
+  await settle();
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onChoose(PULLS));
+  act(() => panel().onClose(PULLS));
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 
   act(() => panel().onToggle());
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS }, "as ⇧⌘T opens it");
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.COMMENTS]);
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
-
-  // A launch keeps no tab closed to open again, but keeps the kinds closed on the plan.
-  const launched = mount({ shown: true, tasks: OPEN });
-  assert.equal(launched.control().onReopenClosedTab, undefined);
-  assert.equal(launched.control().sidePanel.open, false);
-  act(() => launched.control().sidePanel.onToggle());
-  assert.deepEqual(panelOf(launched), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(panelOf(tab), { open: true, tab: PULLS }, "as ⇧⌘T opens it");
+  assert.deepEqual(panel().strip, [PULLS]);
 
   window.localStorage.clear();
   const fresh = mount({ shown: true, tasks: OPEN });
@@ -1050,59 +1046,6 @@ test('Show panel on a plan whose strip holds no tab opens the tab last closed th
   act(() => fresh.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(fresh), { open: false, tab: undefined }, "never shown empty");
   assert.equal(fresh.control().sidePanel.toggleAsked, true, 'the "+" is asked at the toggle');
-});
-
-/**
- * Hands the account's document with Plans on, and the press that delivers it
- * again with Plans off, as the account turning the experiment off does.
- */
-function handPlansThenOff(): () => void {
-  const listeners = new Set<(delivery: AppStateDelivery) => void>();
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.PLANS), {})),
-    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  });
-  const plansOff = deliveryOf(stateWith({}, { version: 2 }));
-  return () =>
-    act(() => {
-      for (const listener of listeners) listener(plansOff);
-    });
-}
-
-test('Show panel after Plans was turned off since Comments closed passes Comments over and asks for the "+" at the toggle', async () => {
-  const turnPlansOff = handPlansThenOff();
-  const tab = mount({ shown: true, tasks: OPEN });
-  await settle();
-  const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
-
-  turnPlansOff();
-  await settle();
-  act(() => panel().onToggle());
-  assert.deepEqual(panelOf(tab), { open: false, tab: undefined }, "Comments stands nowhere");
-  assert.equal(panel().toggleAsked, true, 'the "+" is asked at the toggle');
-});
-
-test("⇧⌘T after Plans was turned off passes over Comments closed on another plan rather than opening that plan for nothing", async () => {
-  const turnPlansOff = handPlansThenOff();
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-  );
-  await settle();
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.COMMENTS));
-  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
-
-  turnPlansOff();
-  await settle();
-  assert.equal(tab.control().onReopenClosedTab, undefined, "nothing left to reopen");
-  assert.deepEqual(opensAsked(tab.payloads), [], "the other plan is not opened");
 });
 
 test("Show panel beside the Inbox, its item's plan's strip holding no tab, asks for the \"+\" at the toggle rather than showing the panel empty, though another plan stands open behind it", () => {
@@ -1287,7 +1230,7 @@ test("a Vespin link to a worker of an archived agent's task, opened before the l
     }),
   );
   // Note that the panel goes full screen while the read is out, and the worker's page keeps its panel shown, so only its answer reading the panel as it stands then has it give way.
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().sidePanel.onChoose(PULLS));
   act(() => tab.control().sidePanel.onToggleFullScreen());
   assert.equal(tab.control().sidePanel.fullScreen, true);
   answer();
@@ -1868,23 +1811,19 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
   const panel = () => tab.control().sidePanel;
   act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
   for (let close = 0; close < 20; close += 1) {
-    act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-    act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+    act(() => panel().onOpenFile(FILE_REF));
+    act(() => panel().onClose(FILE));
   }
 
   let reopened = 0;
   for (let reopen = tab.control().onReopenClosedTab; reopen !== undefined; ) {
     act(() => reopen?.());
-    assert.equal(panel().tab, SIDE_PANEL_TAB.COMMENTS);
+    assert.deepEqual(panel().tab, FILE);
     reopened += 1;
     reopen = tab.control().onReopenClosedTab;
   }
   assert.equal(reopened, 20);
-  assert.deepEqual(
-    panel().tabs,
-    [SIDE_PANEL_TAB.COMMENTS],
-    "the plan's tab, closed first, is not kept",
-  );
+  assert.deepEqual(panel().strip, [FILE], "the plan's tab, closed first, is not kept");
 });
 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {
@@ -1914,23 +1853,23 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onChoose(PULLS));
+  act(() => panel().onClose(PULLS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onChoose(PULLS));
+  act(() => panel().onClose(PULLS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: THIRD_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
   act(() => tab.control().onReopenClosedTab?.());
   assert.equal(tab.control().boundFor, OTHER_TASK_ID);
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
@@ -1960,8 +1899,8 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onChoose(PULLS));
+  act(() => panel().onClose(PULLS));
   act(() => panel().onChoose({ page: page.id }));
   act(() => panel().onClose({ page: page.id }));
   // The page is gone since: the task's pages, read again, hold none.
@@ -1971,7 +1910,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   await settle();
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
 });
 
@@ -3292,8 +3231,8 @@ test("New task's agent opens alone, no plan beside it, and the task left draws n
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
     },
   );
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  act(() => tab.control().sidePanel.onOpenFile(FILE_REF));
+  assert.deepEqual(panelOf(tab), { open: true, tab: FILE });
 
   await startAgentTask(tab);
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
@@ -3301,11 +3240,7 @@ test("New task's agent opens alone, no plan beside it, and the task left draws n
 
   tab.stand({ tasks: OPEN });
   await settle();
-  assert.deepEqual(
-    panelOf(tab),
-    { open: false, tab: SIDE_PANEL_TAB.COMMENTS },
-    "the task left keeps its tab, shut",
-  );
+  assert.deepEqual(panelOf(tab), { open: false, tab: FILE }, "the task left keeps its tab, shut");
 });
 
 test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
@@ -3816,7 +3751,7 @@ function waitingFrom(agentId: string): AppInboxTask {
 }
 
 it.effect(
-  "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown, a fixed tab, and a pinned one stay",
+  "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown and a pinned one stay",
   () =>
     Effect.gen(function* () {
       const tab = mount(
@@ -3831,10 +3766,9 @@ it.effect(
       act(() => panel().onOpenFile(FILE_REF));
       act(() => panel().onChoose(pulls));
       act(() => panel().onPin({ task: TASK.id }, pulls, "Pull request"));
-      act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;
-      assert.deepEqual(strip, [file, pulls, SIDE_PANEL_TAB.COMMENTS]);
+      assert.deepEqual(strip, [file, pulls]);
 
       yield* passing(Duration.hours(23));
       assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
@@ -3842,10 +3776,10 @@ it.effect(
       yield* passing(Duration.hours(1));
       assert.deepEqual(
         panel().strip,
-        [pulls, SIDE_PANEL_TAB.COMMENTS],
-        "the file's tab closed; the pinned Pull request and the tab shown stay",
+        [pulls],
+        "the file's tab closed; the pinned Pull request, the tab shown, stays",
       );
-      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+      assert.deepEqual(panelOf(tab), { open: true, tab: pulls });
 
       act(() => tab.control().onReopenClosedTab?.());
       assert.deepEqual(panel().strip, strip, "⇧⌘T stands it back where it stood");
@@ -3906,16 +3840,18 @@ it.effect(
       const pulls = { changes: AGENT_ID };
       const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
+      // Note that another agent's Pull request tab is shown last, so the first is not the one shown.
+      const shown = { changes: "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32" };
       act(() => first.control().sidePanel.onChoose(pulls));
-      act(() => first.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+      act(() => first.control().sidePanel.onChoose(shown));
       yield* landed;
-      assert.deepEqual(first.control().sidePanel.strip, [pulls, SIDE_PANEL_TAB.COMMENTS]);
+      assert.deepEqual(first.control().sidePanel.strip, [pulls, shown]);
       closeWindow();
 
       yield* TestClock.adjust(Duration.hours(25));
       const again = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
-      assert.deepEqual(again.control().sidePanel.strip, [SIDE_PANEL_TAB.COMMENTS]);
+      assert.deepEqual(again.control().sidePanel.strip, [shown]);
       assert.ok(again.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
     }),
 );
@@ -3970,7 +3906,7 @@ it.effect(
       yield* landed;
       const column = () => tab.control().mainTabs;
       act(() => column().onChoose({ agent: FINISHED_ID }));
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+      act(() => tab.control().sidePanel.onChoose(PULLS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
       yield* landed;
       assert.equal(tab.control().sidePanel.fullScreen, true);
@@ -3996,16 +3932,16 @@ it.effect(
       yield* landed;
       const column = () => tab.control().mainTabs;
       act(() => column().onChoose({ agent: FINISHED_ID }));
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+      act(() => tab.control().sidePanel.onChoose(PULLS));
       yield* passing(Duration.minutes(50));
       tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
       // The panel filling the window over the column keeps the tab from being viewed again on return, the task opened on its tab as a pin opens it.
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+      act(() => tab.control().sidePanel.onChoose(PULLS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
 
       yield* passing(Duration.hours(23));
-      act(() => tab.control().sidePanel.onShow(TASK.id, SIDE_PANEL_TAB.COMMENTS));
+      act(() => tab.control().sidePanel.onShow(TASK.id, PULLS));
       tab.stand({ tasks: withAgents(IDLE_AGENTS) });
       yield* passing(Duration.minutes(30));
       assert.deepEqual(

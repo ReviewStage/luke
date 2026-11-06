@@ -65,6 +65,7 @@ export function DocumentByline({
   now,
   edited,
   saved,
+  end,
 }: {
   creator: Actor | undefined;
   /** The app or the coding agent that made the task for `creator`, and the task the agent works on, which the line says it came from; none for one made by hand. */
@@ -75,6 +76,8 @@ export function DocumentByline({
   edited?: ReactNode;
   /** What confirms the reader's own edit landed, a Saved tick, after the rest. */
   saved?: ReactNode;
+  /** What the line ends with past its words, as the plan's Comments toggle. */
+  end?: ReactNode;
 }): React.JSX.Element {
   return (
     <p className="plan-byline mx-0 mt-0 mb-block-gap flex flex-wrap gap-x-field-gap gap-y-tight-gap text-caption text-muted-foreground pointer-coarse:gap-y-block-gap">
@@ -115,6 +118,7 @@ export function DocumentByline({
         )}
         {saved}
       </ReplayUnmask>
+      {end}
     </p>
   );
 }

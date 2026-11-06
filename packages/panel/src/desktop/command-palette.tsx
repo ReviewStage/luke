@@ -962,7 +962,6 @@ function agentRows(
   tasks: TasksControl,
   doors: PanelOfferDoors,
   show: (pick: () => void) => void,
-  experiments: ExperimentChoices,
 ): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
@@ -987,7 +986,6 @@ function agentRows(
         panel: tasks.sidePanel,
         agents: tasks.agents,
         pages,
-        experiments,
         onNewTerminal: doors.onNewTerminal,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
@@ -1370,11 +1368,10 @@ function copyLinkRows(
 function panelTabRows(
   tasks: TasksControl,
   show: (pick: () => void) => void,
-  experiments: ExperimentChoices,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   const plan = openPlanStanding(tasks);
-  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK, experiments);
+  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK);
   return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
     const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });
@@ -2239,7 +2236,7 @@ export function CommandPalette({
   // Every other kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
   const tiersOf = {
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks, experiments)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
@@ -2268,7 +2265,7 @@ export function CommandPalette({
         ...agentPinRows(tasks, choose),
         ...taskCommandRows(tasks, reads, renameOffer, choose, experiments),
         ...agentArchiveRows(openAgent, askArchive, choose),
-        ...panelTabRows(tasks, onTasks, experiments),
+        ...panelTabRows(tasks, onTasks),
         ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand, experiments),
         ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand, experiments),
         ...actionRows(GO_TO_COMMANDS, runCommand, experiments),

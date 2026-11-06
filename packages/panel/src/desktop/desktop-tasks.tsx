@@ -30,7 +30,7 @@ import {
   useMinute,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { openThread, PlanCommentsProvider } from "@repo/ui/plan-comments";
+import { PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import {
   agentOfTab,
@@ -77,7 +77,7 @@ import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js
 import { OpenAddressesHere, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
 import { usePlanComments } from "../tasks/use-plan-comments.js";
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
-import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -414,7 +414,7 @@ function PlanDocument({
     readerId: tasks.me,
     agents: tasks.agents,
   });
-  // The task's comments are held from its open while it is shown, for its plan's margin, its Comments tab, and its summary, so its first ready frame marks them; none are read while Plans is off.
+  // The task's comments are held from its open while it is shown, for its plan's margin and list, so its first ready frame marks them; none are read while Plans is off.
   const plansOn = useExperiment(EXPERIMENT.PLANS);
   const commentsTaskId = tasks.shown && plansOn ? tasks.activeTaskId : undefined;
   const comments = usePlanComments(
@@ -423,22 +423,17 @@ function PlanDocument({
       [commentsTaskId],
     ),
   );
-  const openComments = comments?.threads.filter(openThread).length;
-  // A link to a comment thread is taken once the task's comments are read:
-  // a resolved one opens the Comments tab, where it is listed, and the ask
-  // is then let go, so nothing opens it again. Note that the plan's margin
-  // has taken an open one by then, since a child's effects run before ours.
+  // A link to a comment thread is let go once the task's comments are read,
+  // so nothing opens it again. Note that the plan has taken it by then,
+  // beside its words or, resolved, in its list, since a child's effects run
+  // before ours.
   const commentAsk = tasks.commentReveal?.planId === inboxTaskId ? tasks.commentReveal : undefined;
-  const commentsRead = comments?.read === true ? comments.threads : undefined;
-  const { onShow: showSideTab } = tasks.sidePanel;
+  const commentsRead = comments?.read === true;
   const { onCommentRevealed } = tasks;
   useEffect(() => {
-    if (commentAsk === undefined || inboxTaskId === undefined || commentsRead === undefined) return;
-    if (commentsRead.some((thread) => thread.id === commentAsk.thread && !openThread(thread))) {
-      showSideTab(inboxTaskId, SIDE_PANEL_TAB.COMMENTS);
-    }
+    if (commentAsk === undefined || inboxTaskId === undefined || !commentsRead) return;
     onCommentRevealed(commentAsk.ask);
-  }, [commentAsk, inboxTaskId, commentsRead, showSideTab, onCommentRevealed]);
+  }, [commentAsk, inboxTaskId, commentsRead, onCommentRevealed]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLElement | null>(null);
   // The plan's document in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
@@ -463,7 +458,7 @@ function PlanDocument({
     summary,
     column,
     tasks.sidePanel.fullScreen,
-    agentsComing || summaryHolds(tasks, inbox.board, openComments),
+    agentsComing || summaryHolds(tasks, inbox.board),
   );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.

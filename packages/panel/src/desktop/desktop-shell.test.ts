@@ -1056,7 +1056,17 @@ function placed(place: Place) {
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
       ...onTask,
       mainTabs: { ...control.mainTabs, tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB], tab: DRAFT_TAB },
-      sidePanel: { ...control.sidePanel, open: true, fullScreen: true },
+      // The panel fills the window on a File tab of the plan.
+      sidePanel: {
+        ...control.sidePanel,
+        open: true,
+        fullScreen: true,
+        strip: [{ file: "docs/notes.md" }],
+        files: [
+          { path: "docs/notes.md", range: undefined, opened: 0, browsedOn: DOCUMENT_TASK.id },
+        ],
+        tab: { file: "docs/notes.md" },
+      },
     },
     [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },
     [PLACE.VERSION_HISTORY]: { ...onTask, history: { ...control.history, open: true } },
