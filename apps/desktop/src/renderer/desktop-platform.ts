@@ -10,7 +10,7 @@ import type { AppPlatform } from "@repo/panel/app-platform";
 import { openBrowserLiveOverPort } from "@repo/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
-/** What of this window's work is unsaved: a page's, which stands an ask, and a plan's words. */
+/** What of this window's work is unsaved: a page's, which stands an ask, and a description's words. */
 const unsaved = { page: false, descriptionWords: false };
 
 /** Tells main whether this window holds unsaved work, which a quit, a restart to update, and a sign-out ask about with its own sheet. */

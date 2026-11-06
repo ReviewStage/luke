@@ -142,7 +142,7 @@ import {
  * window); or, with none open, Home (`desktop-home.tsx`).
  * The task list itself is the sidebar's, and so is moving between tasks: the
  * toolbar offers no way out of the open task, only its actions: Start, which
- * hands the task to a coding agent, and the ⋯ menu, where Copy plan and the
+ * hands the task to a coding agent, and the ⋯ menu, where Copy description and the
  * rest stand. The toolbar is one row, the side panel's bar's height exactly;
  * the task's repository is the sidebar's row's to name, so the toolbar draws
  * the repository chip only while the task has none, and otherwise only the
@@ -156,7 +156,7 @@ import {
  * its Overview, across the page in place of the column's bar and the side
  * panel, the way back to the agents pinned at its card's top left: its path over its title (its
  * repository, the task it is a child of, and its key), its chips, its
- * relations, its agents, and its plan. A phone heads the task with its own row instead (`TaskHead`).
+ * relations, its agents, and its description. A phone heads the task with its own row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the column's bar, listing what
  * both "+" menus open, with its button last in that bar (`task-summary.tsx`).
@@ -167,7 +167,7 @@ import {
  * the draft agent's. A task with no agent's tab to show shows a new
  * agent's draft (`use-main-tabs.ts`), whose composer starts an agent on
  * what is typed. Start and the ⋯ menu are the task's, not an agent's,
- * so only the plan's own tab draws them, while their chords (Copy plan,
+ * so only the plan's own tab draws them, while their chords (Copy description,
  * Archive, Permanently delete) answer on every tab. The document stays laid out while an agent's tab is shown,
  * so coming back to it finds it where it was left.
  *
@@ -337,13 +337,13 @@ function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Ele
 }
 
 /**
- * ⌥⌘C on the plan, the toolbar's while a task is drawn: the press itself
+ * ⌥⌘C on the description, the toolbar's while a task is drawn: the press itself
  * stands in the ⋯ menu, and what came of it is said in the window's toast.
  * A focused agent's pane or tab offers its transcript's copy over it
  * (`main-tabs.tsx`, `side-panel.tsx`).
  */
 function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
-  // While Plans is off there is no plan to copy, so the chord is an agent's alone.
+  // While Descriptions is off there is no description to copy, so the chord is an agent's alone.
   useAppCommand(
     APP_COMMAND.COPY_CONTENT,
     useExperiment(EXPERIMENT.DESCRIPTIONS) ? copy.onPress : undefined,
@@ -413,7 +413,7 @@ function DescriptionDocument({
     readerId: tasks.me,
     agents: tasks.agents,
   });
-  // The task's comments are held from its open while it is shown, for its plan's margin and list, so its first ready frame marks them; none are read while Plans is off.
+  // The task's comments are held from its open while it is shown, for its description's margin and list, so its first ready frame marks them; none are read while Descriptions is off.
   const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const commentsTaskId = tasks.shown && descriptionsOn ? tasks.activeTaskId : undefined;
   const comments = useDescriptionComments(
@@ -423,7 +423,7 @@ function DescriptionDocument({
     ),
   );
   // A link to a comment thread is let go once the task's comments are read,
-  // so nothing opens it again. Note that the plan has taken it by then,
+  // so nothing opens it again. Note that the description has taken it by then,
   // beside its words or, resolved, in its list, since a child's effects run
   // before ours.
   const commentAsk = tasks.commentReveal?.planId === inboxTaskId ? tasks.commentReveal : undefined;
@@ -435,7 +435,7 @@ function DescriptionDocument({
   }, [commentAsk, inboxTaskId, commentsRead, onCommentRevealed]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  // The plan's document in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
+  // The description in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
   // Note that each box is handed afresh as it mounts, and the document's for each task, because the document stands only once the task is read, and the heading watched is that task's.
   const [documentBox, setDocumentBox] = useState<HTMLElement | null>(null);
   const headingTask = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
@@ -471,12 +471,12 @@ function DescriptionDocument({
   const rename = useInlineRename(taskId, tasks.onRenameTask);
   // The open task's one rename door, which its toolbar's ⋯, its title's ⋯,
   // and ⌘K all ask. On a phone it opens the head's field; wider, it puts the
-  // caret in the plan's own title, showing the plan first where the panel
-  // hides it. Note that the title is asked once the plan stands, because a
+  // caret in the description's own title, showing the description first where the panel
+  // hides it. Note that the title is asked once the description stands, because a
   // title drawn afresh takes only the asks that come after it.
   const [titleAsked, setTitleAsked] = useState(false);
   const [titleAsks, setTitleAsks] = useState(0);
-  // The plan is shown while the column is on Overview, with no panel filling the window over it.
+  // The description is shown while the column is on Overview, with no panel filling the window over it.
   const descriptionShown = isOverviewTab(tasks.mainTabs.tab) && !tasks.sidePanel.fullScreen;
   const { onChoose: chooseColumnTab } = tasks.mainTabs;
   useEffect(() => {
@@ -563,7 +563,7 @@ function DescriptionDocument({
     tasks.agentView.onOpen(agent);
     setFocus(COLUMN.MAIN);
   };
-  // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
+  // The description stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
   // The task's details go back to the agent's tab they were opened over, or the agents' last, or
   // a new agent's draft where no agent's tab stands, as a task with none opens on.
@@ -677,7 +677,7 @@ function DescriptionDocument({
     });
     return card ?? undefined;
   };
-  // Note that what the transcripts and the plan are handed, and what they
+  // Note that what the transcripts and the description are handed, and what they
   // read from around them, is held across this page's draws over the same
   // task, because each holds while that does (`AgentPane`, `DescriptionBody`), and
   // the page is drawn again as its column's focus, its side
@@ -762,8 +762,8 @@ function DescriptionDocument({
   // Change repository asks the crumb to open its menu, each ask counted so
   // the same press opens it again: the ask stands until the crumb answers it
   // (`onAsked`), so a crumb drawn again later does not open on an ask already
-  // answered, and the plan is shown first where the panel hides it, since
-  // the crumb stands in the plan.
+  // answered, and the description is shown first where the panel hides it, since
+  // the crumb stands in the description.
   const chooseRepository = useSteadyDoor((repository: string) => {
     if (opened === undefined) return;
     const { id: taskId } = opened;
@@ -787,7 +787,7 @@ function DescriptionDocument({
     if (menuRequest === undefined || descriptionShown) return;
     showOverview();
   }, [menuRequest, descriptionShown, showOverview]);
-  // Note that the crumb is handed the ask only once the plan is in sight, so its menu never opens behind a list.
+  // Note that the crumb is handed the ask only once the description is in sight, so its menu never opens behind a list.
   const openRequest = descriptionShown ? menuRequest : undefined;
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
     () =>
@@ -830,7 +830,7 @@ function DescriptionDocument({
       ? undefined
       : (kind: TaskCreateRelationKind) => onNewRelatedTask(openedId, kind),
   );
-  // The task's menus and ⌘K ask the head to open the add menu, each ask counted and answered as the repository chip's is, once the plan is in sight.
+  // The task's menus and ⌘K ask the head to open the add menu, each ask counted and answered as the repository chip's is, once the description is in sight.
   const [answeredRelation, setAnsweredRelation] = useState(0);
   const relationPending =
     relationMenu !== undefined &&
@@ -855,7 +855,7 @@ function DescriptionDocument({
     }),
     [workspaceName, blockTasks, changeBlock, setParent, newRelatedTask, relationAsk],
   );
-  // Note that S opens the status chip only while the plan is in sight, never behind an agent's tab or Activity's list.
+  // Note that S opens the status chip only while the description is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(
     () => ({
       workspaceName,
@@ -893,14 +893,14 @@ function DescriptionDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does.
+  // The task's agents head its description, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
     () => (
       <PlanAgents
         agents={agents}
         held={views.held}
         tab={tab}
-        // Overview's agents stand open, its list the task's own rather than a fold under the plan's head.
+        // Overview's agents stand open, its list the task's own rather than a fold under the description's head.
         folded={false}
         waiting={waitingOf}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
@@ -979,7 +979,7 @@ function DescriptionDocument({
           }),
     [agents, views.held, tab, sideTab, listedCard, tasks, now],
   );
-  // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
+  // A link anywhere on the task to a pull request one of its agents opened, a chip in the description,
   // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
   // pull request of the task's repository opens in a Pull request tab by its number, and one to
   // another task's page opens beside the task.
@@ -1095,7 +1095,7 @@ function DescriptionDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  // The plan's document stands in the column's Overview and the task's Inbox
+  // The description stands in the column's Overview and the task's Inbox
   // in the side panel, each drawn here, where what they read is held.
   // A summary row that opens a tab of the side panel hands the panel the
   // keys, as a transcript's row does (`openPanelTab`), so ⌘W closes what it opened.
@@ -1198,8 +1198,8 @@ function DescriptionDocument({
   const head = phone ? (
     <TaskHead
       back={back}
-      // Note that the task's Rename opens the task's name in the title's place on any screen, since the screen hides the plan's own title.
-      // Note that Overview's plan names the task in its own heading, so the row names it only once that heading scrolls away.
+      // Note that the task's Rename opens the task's name in the title's place on any screen, since the screen hides the description's own title.
+      // Note that Overview's description names the task in its own heading, so the row names it only once that heading scrolls away.
       title={
         rename.editing
           ? (rename.asked ?? task.name)
@@ -1284,7 +1284,7 @@ function DescriptionDocument({
                               onShown={showSide}
                             />
                           ) : null}
-                          {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+                          {/* A version drawn in the description's place is the version's page, which opens no tab. */}
                           {tasks.history.viewing === undefined ? (
                             <NewTabChord
                               onNewTab={
@@ -1488,7 +1488,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   accountName?: string | undefined;
   /** Whether a fixture stages the window, whose tasks' looks Home's rows read as staged. */
   staged?: boolean;
-  /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
+  /** The open description's sections changed since the developer last looked, held by the shell across the description's version history. */
   looks: TaskLooks;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;

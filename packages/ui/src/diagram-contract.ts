@@ -4,7 +4,7 @@
  * Mermaid is too large for the bundle every window parses, so it ships as a
  * bundle of its own (`diagram.js`, built from
  * `packages/panel/src/diagram/index.ts`) that the panel imports the
- * first time a plan shows a ```` ```mermaid ```` fence
+ * first time a description shows a ```` ```mermaid ```` fence
  * (`packages/panel/src/description-diagram.tsx`). Mermaid reaches each
  * diagram type through a dynamic import of its own, so a flowchart loads the
  * flowchart's chunk and no other. That bundle exports one module, `diagram`,

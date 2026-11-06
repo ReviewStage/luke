@@ -8,10 +8,10 @@ import type { DescriptionEditorBlocks, DescriptionEditorHandle } from "./contrac
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * description-placeholder.test.ts -- what the plan editor's empty blocks say under
- * the caret: the empty plan its own words, an empty line how to open the `/`
+ * description-placeholder.test.ts -- what the description editor's empty blocks say under
+ * the caret: the empty description its own words, an empty line how to open the `/`
  * menu where one stands over the text, and an empty heading its level's
- * name. Synthetic plan.
+ * name. Synthetic description.
  */
 
 /** A `/` menu that takes no key, for an editor that offers one. */
@@ -34,7 +34,7 @@ function mounted(markdown: string, offersBlocks = true): Editor {
       markdown,
       placement: undefined,
       focus: true,
-      label: "Plan",
+      label: "Description",
       className: "markdown description-unit",
       onDraft: () => undefined,
       onFinish: () => undefined,
@@ -61,7 +61,7 @@ function newLine(editor: Editor): void {
     .run();
 }
 
-test("an empty plan reads Write the plan", () => {
+test("an empty description reads Write the description", () => {
   const editor = mounted("");
 
   assert.equal(said(editor), "Write the description");

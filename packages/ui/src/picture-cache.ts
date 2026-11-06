@@ -5,7 +5,7 @@ import type { ReportedFailure } from "./reported-failure.js";
 /**
  * picture-cache.ts -- the pictures this window read, each read once through the host and shared by every place that draws it, up to a byte budget.
  *
- * A picture is named by what it belongs to, a plan say, and its own id
+ * A picture is named by what it belongs to, a description say, and its own id
  * there, and its bytes never change under that id: a new picture is a new
  * id. So a picture read once stands for as long as the window does, and a
  * second place drawing it reads nothing, until the pictures kept pass

@@ -388,7 +388,7 @@ const NO_TERMINALS: readonly TerminalStripTab[] = [];
  * The fixed kinds each holder's panel offers: a task's every one it draws,
  * never the plan's, which the column's Overview holds, nor the Inbox's,
  * whose threads open in the window's Inbox; an agent's page none, the
- * plan's comments being a task's alone.
+ * description's comments being a task's alone.
  */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: DRAWN_KINDS,
@@ -1780,7 +1780,7 @@ export interface TaskCards {
  * worker's, read as its tab reads its own, `chosen` telling whether that
  * tab is the one shown, whose transcript follows the run; a tab that hangs
  * none leaves the row its hint. A call's own rows name no worker, and hang
- * none for one. An agent's transcript also names the task whose plan it was
+ * none for one. An agent's transcript also names the task whose description it was
  * handed, by `task`, and every transcript names an agent a call is about by
  * its tab's tile and name, by `agent`. Every kind of target names the tab
  * it opens, so a kind added to `TOOL_TARGET` is a choice made here.
@@ -1791,7 +1791,7 @@ export function taskCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
   pages: PagePlace | undefined;
-  /** The plan's task, which an agent's plan card names as its sender. */
+  /** The description's task, which an agent's description card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
   const { agents, held, chosen, pages, task } = input;
@@ -1871,7 +1871,7 @@ function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefi
 /** What the chosen tab shows. */
 /**
  * A page's tab, with the page's comment threads where it stands on a task,
- * held on the task and the page and written through the plan's comment
+ * held on the task and the page and written through the description's comment
  * doors naming the page, beside the open task or an Inbox item's alike; a
  * page an agent on no task showed has none.
  */

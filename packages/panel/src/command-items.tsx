@@ -10,7 +10,7 @@
  * label is its verb and noun, so the menu bar, the Keyboard shortcuts page,
  * ⌘K, and the menus never word it apart; a command no chord reaches is
  * worded here alone. A chord that acts on whichever thing is focused, as
- * ⌥⌘C copies the plan or an agent's transcript and ⌘⌫ deletes a task or an
+ * ⌥⌘C copies the description or an agent's transcript and ⌘⌫ deletes a task or an
  * agent, keeps its own words in the table, which ⌘K and the menu bar say,
  * and each thing's item says its own verb (`keyedAs`).
  *

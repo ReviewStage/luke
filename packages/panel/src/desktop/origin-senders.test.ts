@@ -29,7 +29,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
  * origin-senders.test.ts -- in a task's column, an agent's tab opens on its
- * plan as a message the task sent: the task's name under the card, which
+ * description as a message the task sent: the task's name under the card, which
  * opens the plan, with the teammate who started the agent beside it and
  * never the reader; and a worker's tab in the side panel opens on its task
  * as a message the agent that delegated it sent, whose name opens that
@@ -61,7 +61,7 @@ const AGENT: AgentSummary = {
   startedBy: CHARLES,
 };
 
-/** When the plan was handed to the agent. */
+/** When the description was handed to the agent. */
 const BRIEF_SENT_AT = Date.UTC(2026, 9, 14, 16, 5);
 
 const BRIEF: AgentTranscriptMessage = {
@@ -160,7 +160,7 @@ function senderLine(place: Element): HTMLElement {
   );
 }
 
-test("a task's agent opens on its plan sent by the task, which opens the plan in the task's Overview, with the teammate who started the agent", async () => {
+test("a task's agent opens on its description sent by the task, which opens the description in the task's Overview, with the teammate who started the agent", async () => {
   const { container, chosen } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
 
   const line = senderLine(container);
@@ -172,13 +172,13 @@ test("a task's agent opens on its plan sent by the task, which opens the plan in
   assert.deepEqual(chosen, [MAIN_TAB.OVERVIEW]);
 });
 
-test("the reader's own agent opens on its plan sent by the task alone, never by them", async () => {
+test("the reader's own agent opens on its description sent by the task alone, never by them", async () => {
   const { container } = await mount({ reader: CHARLES.userId, main: { agent: AGENT.id } });
 
   assert.equal(words(senderLine(container)), "Teammate invitations");
 });
 
-test("the line naming who sent the plan stands under its card, then when it was sent, as a sent message's stands under its bubble", async () => {
+test("the line naming who sent the description stands under its card, then when it was sent, as a sent message's stands under its bubble", async () => {
   const { container } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
 
   const card =
@@ -191,7 +191,8 @@ test("the line naming who sent the plan stands under its card, then when it was 
   );
   const meta =
     line.closest(".ui-message-line") ?? assert.fail("the sender's line is the card's meta");
-  const time = meta.querySelector("time") ?? assert.fail("the meta says when the plan was sent");
+  const time =
+    meta.querySelector("time") ?? assert.fail("the meta says when the description was sent");
   assert.equal(time.getAttribute("datetime"), new Date(BRIEF_SENT_AT).toISOString());
   assert.ok(
     line.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING,

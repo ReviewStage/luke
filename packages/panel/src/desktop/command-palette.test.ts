@@ -2749,12 +2749,12 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   return host;
 }
 
-test("on a wide window ⌘K's Rename task puts the caret in the plan's own title", () => {
+test("on a wide window ⌘K's Rename task puts the caret in the description's own title", () => {
   const host = paletteBesideTask(SHELL_ROOM.WIDE);
 
   const title = host.querySelector('[role="textbox"][aria-label="Task name"]');
-  assert.ok(title, "the plan's title is drawn");
-  assert.ok(document.activeElement === title, "the caret is in the plan's title");
+  assert.ok(title, "the description's title is drawn");
+  assert.ok(document.activeElement === title, "the caret is in the description's title");
 });
 
 test("on a phone ⌘K's Rename task opens the task's name in the head's field", () => {

@@ -105,7 +105,7 @@ import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-c
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
- * desktop-version-history.tsx -- a plan's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
+ * desktop-version-history.tsx -- a description's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
  *
  * The left column is as wide as the tasks' sidebar and resizes it from its
  * own edge, never folding, as Settings' page list does. At its head stand
@@ -115,7 +115,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * it, the reader's account picture as You, a teammate's sign-in picture
  * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
- * the moment itself on hover. The newest is the plan as it stands and the
+ * the moment itself on hover. The newest is the description as it stands and the
  * one drawn when the view opens, wearing no tag of its own: its Restore says
  * it is already current. Opened from a section's "Edited by", the view draws
  * the version that made the section's last change instead, its row brought
@@ -139,7 +139,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * chosen in it, so Back returns to wherever it was opened from, the task as
  * it was left, side panel and all; a restore that lands leaves for the task
  * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
- * the plan held, so both are left out of the screen recording
+ * the description held, so both are left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
  * What the history is of is handed in as its subject: the open task's
@@ -263,7 +263,7 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Restores the version, asking nothing; none for the plan as it stands. */
+  /** Restores the version, asking nothing; none for the description as it stands. */
   onRestore: (() => void) | undefined;
   /** Copy link, the version's; none for a history with no link of its own. */
   copyLink: MenuAction | undefined;
@@ -457,7 +457,7 @@ function SectionsSkeleton(): React.JSX.Element {
  * The foot of the list while an older page stands: how many older versions
  * wait, read a page of them on its press, and a failed read said above it
  * with Retry. Note that the count is the versions numbered below `before`,
- * the oldest one the list holds, since a plan's versions are numbered from
+ * the oldest one the list holds, since a description's versions are numbered from
  * one without gaps.
  */
 function EarlierRow({
@@ -797,7 +797,7 @@ export function DesktopVersionHistory({
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
   const people = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, subject.workspace?.id).rows;
-  // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
+  // A version of a description has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();
   const numbered = useNumberedPlace();
@@ -1080,7 +1080,7 @@ export function DesktopVersionHistory({
   );
 }
 
-/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+/** The open description's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
 export function TaskVersionHistory({
   tasks,
   ...view

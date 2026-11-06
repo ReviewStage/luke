@@ -14,7 +14,7 @@ import type { TerminalModule } from "./terminal/contract.js";
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
  *
  * The panel's editors (`description-editor/`), a File tab's tree (`file-tree/`), a
- * Terminal tab's screen (`terminal/`), a plan's diagrams (`diagram/`), and a
+ * Terminal tab's screen (`terminal/`), a description's diagrams (`diagram/`), and a
  * Files changed diff (`diff-view/`) are each
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
@@ -131,7 +131,7 @@ export function useSideBundles(): SideBundles {
 
 /**
  * Starts the editor bundle loading, where it has not started already: the
- * panel calls it as it first paints, and a plan's text as the pointer comes
+ * panel calls it as it first paints, and a description's text as the pointer comes
  * over it, so the editor is there by the time it is opened.
  */
 export function usePrefetchEditorBundle(): () => void {

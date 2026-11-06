@@ -86,7 +86,7 @@ import { TabStrip } from "./tab-strip.js";
  * keeping, with what its transcript hands up while it is shown; no ⋯
  * stands on the bar.
  *
- * The task's details, its Overview (its head and its plan document, which
+ * The task's details, its Overview (its head and its description, which
  * the task's page draws, `desktop-tasks.tsx`), are no tab among the agents:
  * the task's name in the topbar opens them across the page, in place of the column's
  * bar and the side panel, with the way back to the agents in their own card,
@@ -232,7 +232,7 @@ export function AgentMenuTab({
     onOpenBrowser,
     onDeleted: doors.onClose,
   });
-  // The chosen agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫ while the column has the keys, over the open task's plan and its delete.
+  // The chosen agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫ while the column has the keys, over the open task's description and its delete.
   const { onCopy, deletion } = actions.doors;
   const focused = keys && doors.chosen;
   useAppCommand(

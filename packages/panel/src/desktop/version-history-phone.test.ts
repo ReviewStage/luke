@@ -22,17 +22,17 @@ import { TaskVersionHistory } from "./desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * version-history-phone.test.ts -- a plan's version history on a phone is
+ * version-history-phone.test.ts -- a description's version history on a phone is
  * headed as every phone's page is: its list by one way out, named for the
  * step Back goes to, or from a revision's sections back to every version,
  * and its title, with no Back and Forward; a version by the way back to the
  * list, when it was saved, and a ⋯ holding its restore. A wide room keeps
- * its rows and bar. Synthetic plan and revisions.
+ * its rows and bar. Synthetic description and revisions.
  */
 
 const ignore = (): void => undefined;
 
-/** A revision of the plan by the developer. */
+/** A revision of the description by the developer. */
 function line(seq: number) {
   return {
     seq,
@@ -71,7 +71,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history in `room` over its versions 3 and 2, as `history` stands, every way out written down. */
+/** The description's version history in `room` over its versions 3 and 2, as `history` stands, every way out written down. */
 function drawn(
   room: ShellRoom,
   history: Partial<VersionHistoryControl>,

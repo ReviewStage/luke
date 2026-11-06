@@ -39,7 +39,7 @@ function ShapesSkeleton(): React.JSX.Element {
   );
 }
 
-/** A plan's heading over its lines, each block in the type its words will stand in. */
+/** A description's heading over its lines, each block in the type its words will stand in. */
 function DescriptionSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the description">

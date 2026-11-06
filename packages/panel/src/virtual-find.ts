@@ -15,7 +15,7 @@ import {
  * virtual-find.ts -- ⌘F over a tab whose rows draw only near its view (`VirtualRows`): every match counted from the rows' words, a step scrolling the run to its row, and the match painted once the row is drawn.
  *
  * A long run draws only the rows near its view, so the words of most of a
- * long transcript, a pull request's conversation, a plan's comments, or its
+ * long transcript, a pull request's conversation, a description's comments, or its
  * version history are in no DOM a find could read. The tab hands its scope
  * a find of its own instead, as a File tab does for the lines Pierre has not
  * drawn (`whole-file.tsx`): a match is placed by the row it is in and by how

@@ -68,16 +68,16 @@ export type DocumentRegion =
   | { readonly kind: typeof DOCUMENT_REGION.FAILED }
   | { readonly kind: typeof DOCUMENT_REGION.MISSING };
 
-/** The open task's plan as the host holds it for the window: what its read answered, absent until it first does, and whether it failed before it ever had. */
+/** The open task's description as the host holds it for the window: what its read answered, absent until it first does, and whether it failed before it ever had. */
 export interface HeldDocumentRead {
   readonly rows?: HeldDescriptionDocument | undefined;
   readonly failed?: boolean;
 }
 
 /**
- * The document region's state, from the open task's held plan. The tab
+ * The document region's state, from the open task's held description. The tab
  * never draws a document it did not read: a task is drawn only when the
- * held plan is the active task's, and the region reads only while that plan
+ * held description is the active task's, and the region reads only while that description
  * holds nothing and has not failed, so a task held lately draws at once.
  */
 export function documentRegion(

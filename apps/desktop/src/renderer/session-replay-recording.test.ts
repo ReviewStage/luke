@@ -178,7 +178,7 @@ async function useControls(): Promise<void> {
 
 /**
  * The sheets the window adopts: one of the panel's own, which a recording
- * keeps, a plan diagram's measuring sheet, which names the diagram's
+ * keeps, a description diagram's measuring sheet, which names the diagram's
  * classes, and the open thread's, written again once adopted, which names
  * the thread.
  */

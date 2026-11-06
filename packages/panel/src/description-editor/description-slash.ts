@@ -14,7 +14,7 @@ import { turnInto } from "./writing-format.js";
 import { inTableCell } from "./writing-keys.js";
 
 /**
- * description-slash.ts -- the plan editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
+ * description-slash.ts -- the description editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
  *
  * A `/` at the start of a line or after a space, outside code and outside
  * a table's cell, opens the panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
@@ -156,7 +156,7 @@ function reported(view: EditorView, state: SlashState, blocks: DescriptionEditor
 }
 
 /**
- * The plan editor's `/`: the word reported as the editor's state moves and
+ * The description editor's `/`: the word reported as the editor's state moves and
  * as it takes or loses the caret, and a block chosen laid in in its place,
  * a document's own Markdown read into blocks by `parse`.
  */

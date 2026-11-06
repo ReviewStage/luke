@@ -5,7 +5,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorDiagram } from "./contract.js";
 
 /**
- * diagram-preview.ts -- a Mermaid code block's diagram previewed under it while a plan's text is edited, drawn by the panel.
+ * diagram-preview.ts -- a Mermaid code block's diagram previewed under it while a description's text is edited, drawn by the panel.
  *
  * The block stays code, as the text holds it, and its diagram stands under
  * it as a widget, which is never part of the text, so nothing about it is

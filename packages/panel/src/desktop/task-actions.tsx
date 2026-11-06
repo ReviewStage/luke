@@ -146,7 +146,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * draws it the same way and Permanently delete can be drawn red.
  * Each item is worded, marked, and keyed as the window's one list has it
  * (`command-items.tsx`), as ⌘K offers the same command; the open task's menu
- * prints the chords of Copy plan, Version history, and Permanently delete, which act on the open task, and another task's prints
+ * prints the chords of Copy description, Version history, and Permanently delete, which act on the open task, and another task's prints
  * none, as a tab's menu prints its chords for the chosen tab alone. U and P,
  * which act on the focused sidebar row and otherwise on the open task, print
  * on the open task's menu and on a sidebar row's, and S, which opens Status
@@ -155,12 +155,12 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * the chord copies the same link (`copy-link-item.tsx`).
  *
  * Copy link copies the plan's address on vespin.dev, as the ⋯
- * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
+ * beside the description's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
- * the Plan tab's ⋯ puts the caret in the plan's own title. Version history
- * opens the plan's versions over the whole window, opening the task first
+ * the Plan tab's ⋯ puts the caret in the description's own title. Version history
+ * opens the description's versions over the whole window, opening the task first
  * where it is not the open one, the one item that moves it. New sub-task
  * opens New task's card for a child of the task, in its workspace and
  * repository (`new-task-composer.tsx`). Task relation hangs the add menu
@@ -238,7 +238,7 @@ export interface TaskRowTab
   > {
   /** The tab's tasks as they stand when read. */
   readonly tasksNow: () => readonly TaskSummary[];
-  /** Copies the open plan, as Copy plan does. */
+  /** Copies the open description, as Copy description does. */
   readonly onCopyDescription: () => void;
   readonly onOpenHistory: TasksControl["history"]["onOpen"];
   /** Opens a repository's page on GitHub. */
@@ -292,7 +292,7 @@ export function useTaskRowTab(tasks: TasksControl): TaskRowTab {
 /**
  * The task the window has open, as a row of it reads it: its document, and
  * its agents, which name who last edited it. A page hands it only to the
- * open task's row, so a save of the open plan draws that row alone.
+ * open task's row, so a save of the open description draws that row alone.
  */
 export interface OpenedTask {
   readonly task: Task;
@@ -596,7 +596,7 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * menu's panel, and Remove parent where the task has one, New sub-task being the
  * add menu's and ⌘K's; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
- * any row. The Plan tab's document menu leads with Copy plan, since Copy
+ * any row. The Plan tab's document menu leads with Copy description, since Copy
  * formats the document drawn, and holds the same but for Status, Priority,
  * and Assignee, which the plan's chips stand for. Change repository says
  * Choose a repository on a task with none, on either.
@@ -625,15 +625,15 @@ function taskActionGroups(
     relationId: string;
     /** The open task, where it is this one. */
     opened: OpenedTask | undefined;
-    /** Whether the account has Plans on, without which there is no plan to copy and no version history. */
-    plans: boolean;
+    /** Whether the account has Descriptions on, without which there is no description to copy and no version history. */
+    descriptions: boolean;
   },
   surface: TaskMenuSurface,
 ): MenuEntry[][] {
-  const { opened, plans } = doors;
+  const { opened, descriptions } = doors;
   const drawn = opened !== undefined;
   const copy: MenuAction[] =
-    drawn && plans
+    drawn && descriptions
       ? [commandAction(PANEL_COMMAND.COPY_DESCRIPTION, tasks.onCopyDescription, drawn)]
       : [];
   const link: MenuAction[] =
@@ -654,7 +654,7 @@ function taskActionGroups(
     task?.parentTaskId === undefined
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
-  const versions: MenuAction[] = plans
+  const versions: MenuAction[] = descriptions
     ? [versionHistoryItem(() => tasks.onOpenHistory(taskId), drawn)]
     : [];
   const change = commandAction(
@@ -716,9 +716,9 @@ function TaskMenuFooter({
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
-  // Note that the open task's last editor is its plan's, so while Plans is off it is said only by when the task last changed, as another task is.
-  const plans = useExperiment(EXPERIMENT.DESCRIPTIONS);
-  const edit = opened === undefined || !plans ? undefined : lastEditOf(opened.task);
+  // Note that the open task's last editor is its description's, so while Descriptions is off it is said only by when the task last changed, as another task is.
+  const descriptions = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const edit = opened === undefined || !descriptions ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
     sections: opened?.task.sectionEdits ?? [],
@@ -850,7 +850,7 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
-  const plans = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptions = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -873,7 +873,7 @@ export function useTaskMenuItems(
           standing,
           relationId,
           opened,
-          plans,
+          descriptions,
           read: {
             unread: doors.unread,
             onMark: (unread) => {
@@ -936,7 +936,7 @@ export function TaskActions({
 }: {
   tasks: TasksControl;
   task: TaskSummary;
-  /** Puts the caret in the plan's own title, or opens a phone's head as the task's name field. */
+  /** Puts the caret in the description's own title, or opens a phone's head as the task's name field. */
   onRename: () => void;
   /** Where the items are handed up, for the menus that draw them. */
   hand: React.RefObject<TaskMenuItems | undefined>;

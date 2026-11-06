@@ -147,8 +147,8 @@ function Disclosures(): React.JSX.Element {
             </DisclosureSummary>
             <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
               <Text>
-                {PRODUCT_NAME} read the plan, split it into three tasks, and started an agent on
-                each.
+                {PRODUCT_NAME} read the description, split it into three tasks, and started an agent
+                on each.
               </Text>
             </DisclosureBody>
           </Disclosure>

@@ -20,9 +20,9 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * A plan's version has a link of its own: a version's row's menu copies its
- * plan's address under the version's number, which opens the plan's version
- * history on it, and says Link copied. Synthetic plan.
+ * A description's version has a link of its own: a version's row's menu copies its
+ * plan's address under the version's number, which opens the description's version
+ * history on it, and says Link copied. Synthetic description.
  */
 
 const ignore = (): void => undefined;
@@ -35,7 +35,7 @@ const ACME = {
   github: null,
 };
 
-/** A revision of the plan by the notetaker. */
+/** A revision of the description by the notetaker. */
 function line(seq: number) {
   return {
     seq,
@@ -61,7 +61,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history over the window, its versions read. */
+/** The description's version history over the window, its versions read. */
 function drawn(): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({

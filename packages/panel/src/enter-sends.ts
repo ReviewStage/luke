@@ -8,7 +8,7 @@
  * sends asks here, the composer's editor (`description-editor/composer-editor.ts`),
  * a pull request's Markdown boxes (`tasks/comment-editor.tsx`), and the plain
  * text areas that stand in for them, so one key does one thing in each. A
- * document's text, a plan's or a pull request's description, is the one
+ * document's text, a task's description or a pull request's, is the one
  * place Enter writes and ⌘ or Ctrl with Enter finishes (`modEnterSends`).
  */
 

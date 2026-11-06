@@ -2,7 +2,7 @@
  * contract.ts -- what the panel and the editor bundle say to each other: a Markdown document's text and the composer's words, the two mount calls, and nothing that pulls TipTap into the panel.
  *
  * TipTap is too large for the bundle every window parses, so the panel's two
- * editors, a Markdown document's text (a plan's, and any other document the
+ * editors, a Markdown document's text (a description's, and any other document the
  * panel edits, `../tasks/markdown-editor.tsx`) and an agent's message box, ship as one bundle of
  * their own (`description-editor.js`, built from `./index.ts`) that the panel starts
  * loading after its first paint (`../bundle-loader.ts`), as a File tab's tree
@@ -111,7 +111,7 @@ export type DescriptionEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
-/** How the text was finished: its send, Enter in a message box and ⌘↩ in a document, which a box sends or saves on, or Esc, which it lets go on; a plan finishes either way. */
+/** How the text was finished: its send, Enter in a message box and ⌘↩ in a document, which a box sends or saves on, or Esc, which it lets go on; a description finishes either way. */
 export const FINISH = {
   SUBMIT: "submit",
   ESCAPE: "escape",
@@ -119,7 +119,7 @@ export const FINISH = {
 
 export type Finish = (typeof FINISH)[keyof typeof FINISH];
 
-/** What an empty plan says until a word is typed, the editor's own where a document names none. */
+/** What an empty description says until a word is typed, the editor's own where a document names none. */
 export const DESCRIPTION_PLACEHOLDER = "Write the description";
 
 /** What the `/` menu lays in beyond the writing vocabulary's blocks, each the menu's own. */
@@ -144,7 +144,7 @@ interface SlashMarkdown {
 export type SlashChoice = SlashBlock | SlashMarkdown;
 
 /**
- * The plan editor's `/`, as the panel draws its menu: the `/` word the caret
+ * The description editor's `/`, as the panel draws its menu: the `/` word the caret
  * ends reported (`onTrigger`), and the keys the menu over it takes first
  * (`onKey`), answering whether it took one.
  */
@@ -154,9 +154,9 @@ export interface DescriptionEditorBlocks {
 }
 
 /**
- * What a document hands the editor as it mounts it: a plan in place of its
+ * What a document hands the editor as it mounts it: a description in place of its
  * text's drawn sections, or another Markdown document in place of its drawn
- * words. What a plan alone takes, its sections' placement, mentions,
+ * words. What a description alone takes, its sections' placement, mentions,
  * pictures, comment threads, and diagrams, is each left out where the
  * document takes none.
  */
@@ -179,7 +179,7 @@ export interface DescriptionEditorProps {
   /**
    * Whether the text is a message box's, which sends on Enter as every box
    * does (`enterSends`), Shift+Enter laying in what Enter lays in in a
-   * document; a document's text, a plan's or a description's, where Enter
+   * document; a document's text, a task's description or a pull request's, where Enter
    * writes, finishes on ⌘↩.
    */
   readonly sendsOnEnter?: boolean | undefined;
@@ -211,7 +211,7 @@ export interface DescriptionEditorProps {
   readonly blocks?: DescriptionEditorBlocks | undefined;
 }
 
-/** The words one comment thread is on, as offsets into a plan's Markdown. */
+/** The words one comment thread is on, as offsets into a description's Markdown. */
 export interface EditorAnchor {
   readonly thread: string;
   readonly from: number;
@@ -229,7 +229,7 @@ export interface EditorAnchors {
 }
 
 /**
- * A picture the plan's text holds, as the editor's node keeps it: its
+ * A picture the description's text holds, as the editor's node keeps it: its
  * address, its alt text, and its caption, the Markdown title; and, while
  * the picture is still being kept, the upload it waits on, which the panel
  * names and the address stays empty for. A picture with an upload writes
@@ -254,17 +254,17 @@ interface PictureDrawing {
   readonly undraw: () => void;
 }
 
-/** A picture laid into the text that is still to be kept: a file pasted, dropped, or chosen, or a picture of another plan pasted from its address. */
+/** A picture laid into the text that is still to be kept: a file pasted, dropped, or chosen, or a picture of another description pasted from its address. */
 export type PictureTaken =
   | { readonly upload: string; readonly file: File }
   | { readonly upload: string; readonly from: string };
 
 /**
- * The plan editor's pictures, as the panel draws and keeps them: each
+ * The description editor's pictures, as the panel draws and keeps them: each
  * picture the text holds drawn into its node's own element (`draw`), the
  * pictures laid in that are still to be kept handed over under the upload
  * each node waits on (`take`), and whether a pasted picture's address is
- * another plan's, which is kept again on this one (`copies`).
+ * another description's, which is kept again on this one (`copies`).
  */
 export interface DescriptionEditorPictures {
   readonly draw: (
@@ -323,7 +323,7 @@ interface ComposerMentions {
   readonly pasted: (words: string) => MentionNode | undefined;
 }
 
-/** A mention the plan's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
+/** A mention the description's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
 export interface MentionNode {
   readonly name: string;
   readonly target: string;
@@ -343,7 +343,7 @@ export interface HeadingsChange {
 }
 
 /**
- * The plan editor's mentions, as the panel draws and picks them: an `@` word
+ * The description editor's mentions, as the panel draws and picks them: an `@` word
  * the caret ends reported (`onTrigger`), the keys a list over it takes first
  * (`onKey`), each mention the text holds drawn into its node's own element
  * (`drawMention`), and a target named again where the edit changed the
@@ -388,7 +388,7 @@ export interface DescriptionEditorHandle extends EditorFormatting {
    * The open comment threads as they stand now, so the marks follow threads
    * opened and closed while the editor stands: `open` names every open
    * thread, its words found or not, and `anchors` the words of those that
-   * have them, in offsets of `text`, the plan as saved. A thread newly among
+   * have them, in offsets of `text`, the description as saved. A thread newly among
    * the anchors is marked on its words as they stand in the editor, and a
    * thread no longer open, or every one where none is, loses its mark. A
    * thread it carries that is still open keeps the mark that has followed

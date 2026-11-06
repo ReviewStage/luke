@@ -5,16 +5,16 @@ import type { EditorView } from "@tiptap/pm/view";
 import type { DescriptionEditorPictures, PictureNode, PictureTaken } from "./contract.js";
 
 /**
- * picture-node.ts -- a picture in the plan's text: TipTap's image held inline in its own paragraph, written back escaped, drawn by the panel, and laid in from a paste, a drop, or a file chosen.
+ * picture-node.ts -- a picture in the description's text: TipTap's image held inline in its own paragraph, written back escaped, drawn by the panel, and laid in from a paste, a drop, or a file chosen.
  *
- * A picture stands in the plan's Markdown as `![alt](address "caption")`
+ * A picture stands in the description's Markdown as `![alt](address "caption")`
  * (`@repo/features/description-attachment-link`). The editor keeps it as TipTap's
  * image node, inline, in a paragraph of its own, and writes it back with
  * its alt text's brackets, its address's parentheses, and its caption's
  * quotes escaped, which TipTap's own writer does not. A picture laid in from
  * a paste, a drop, or a file chosen has no address yet: it waits on an
  * upload the panel names, writes nothing to the text meanwhile, and takes
- * its address once the panel kept it (`settled`). A picture of another plan
+ * its address once the panel kept it (`settled`). A picture of another description
  * pasted in is kept again on this one, so its new readers can see it. The
  * node's element is the panel's to draw into, as a mention's is: its
  * picture, its upload, and its tools while selected.
@@ -224,8 +224,8 @@ function withPictures(fragment: Fragment, change: (picture: PmNode) => PmNode): 
 }
 
 /**
- * A pasted slice's pictures of another plan, each made to wait on a new
- * upload that keeps it again on this plan, and handed to the panel to keep;
+ * A pasted slice's pictures of another description, each made to wait on a new
+ * upload that keeps it again on this description, and handed to the panel to keep;
  * every other picture as it was.
  */
 export function copiedPictures(slice: Slice, pictures: DescriptionEditorPictures): Slice {

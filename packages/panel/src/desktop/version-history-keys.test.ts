@@ -27,7 +27,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  * the list's foot says how many and reads the next page on its press, or says
  * the read failed and offers Retry; and the Back row at the list's head goes
  * back, its hint, raised by the keyboard's focus, saying where it leads.
- * Synthetic plan and people.
+ * Synthetic description and people.
  */
 
 declare global {
@@ -46,7 +46,7 @@ const ACME = {
   github: null,
 };
 
-/** A revision of the plan by Lee. */
+/** A revision of the description by Lee. */
 function line(seq: number) {
   return {
     seq,
@@ -77,7 +77,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
+/** The description's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
 function drawn(
   chosen: number[],
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},

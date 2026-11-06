@@ -1030,7 +1030,7 @@ const PLACE = {
   AUTOMATIONS: "the Automations page",
   SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
   SETTINGS: "Settings",
-  VERSION_HISTORY: "a plan's version history",
+  VERSION_HISTORY: "a description's version history",
 } as const;
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
@@ -1257,7 +1257,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
   });
 });
 
-test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
+test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, {

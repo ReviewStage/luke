@@ -358,7 +358,7 @@ const glueDrawnLinks =
  * words become an action only where a reader expects a link to open. Only
  * HTTP, HTTPS, and mail destinations survive `urlTransform` below, so anything else
  * arrives here as words alone. A place that draws its own links
- * (`LinkDrawer`), one showing a plan's words or the app's notes, draws a link
+ * (`LinkDrawer`), one showing a description's words or the app's notes, draws a link
  * naming a mention as the chip that opens what it names before it is ever
  * drawn as a plain one.
  *
@@ -416,7 +416,7 @@ function writtenAt(node: HastParent | undefined): MarkdownSpan | undefined {
 }
 
 /**
- * Draws a picture the place showing the words knows how to, a plan's say,
+ * Draws a picture the place showing the words knows how to, a description's say,
  * from its address, its alt text, and its title; nothing for one it leaves
  * drawn as its alt text, as every picture is where no drawer is handed.
  */
@@ -575,9 +575,9 @@ function keptUrl(url: string): string {
  * inside the paragraph, and the blocks a paragraph cannot hold — headings,
  * lists, quotes, fenced code, tables, rules — composed around it. Raw HTML
  * in the words is text. Every size in the stylesheet is in `em`, so the same
- * component reads at the caption's ten pixels and the plan's own size. Note
+ * component reads at the caption's ten pixels and the description's own size. Note
  * that it is drawn again only when what it is handed changes, because the
- * engine parses the words afresh on every draw, and a plan redrawn on a save
+ * engine parses the words afresh on every draw, and a description redrawn on a save
  * would parse every section.
  */
 export const MarkdownMessage = memo(function MarkdownMessage({
@@ -600,13 +600,13 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   link?: LinkDrawer | undefined;
   /** Opens a plain link pressed; every plain link is words going nowhere without one. */
   openLink?: ((href: string) => void) | undefined;
-  /** Draws the pictures the place knows how to, a plan's say; every picture is its alt text without one. */
+  /** Draws the pictures the place knows how to, a description's say; every picture is its alt text without one. */
   picture?: PictureDrawer | undefined;
   /** The words a search asks for, marked where they landed. */
   found?: readonly string[] | undefined;
   /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
   diagrams?: boolean | undefined;
-  /** Ticks or clears a task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
+  /** Ticks or clears a task item pressed, as a description the developer can edit does; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
   /** Whether the words are one line's, a to-do's step say: drawn in the place's own element as one run of inline words, with no root, its blocks' words run together. */
   inline?: boolean | undefined;

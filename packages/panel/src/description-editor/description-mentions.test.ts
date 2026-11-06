@@ -18,12 +18,12 @@ import type { ComposerTrigger, DescriptionEditorHandle, MentionNode } from "./co
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * The plan editor's mentions over the real editor: a mention in the text
+ * The description editor's mentions over the real editor: a mention in the text
  * opened as its node, drawn by the panel, and written back as the link it was
  * read from; an `@` word reported and a pick written in its place; no `@` in
  * code or inside a word; and a heading renamed in the edit, or one laid in
  * that a later heading's anchor steps aside for, renaming the text's own
- * mentions of it. Synthetic plan.
+ * mentions of it. Synthetic description.
  */
 
 const TASK_ID = "pl_1";
@@ -64,7 +64,7 @@ function mounted(markdown: string) {
     markdown,
     placement: undefined,
     focus: true,
-    label: "Plan",
+    label: "Description",
     className: "markdown description-unit",
     onDraft: (draft) => drafts.push(draft),
     onFinish: () => {
@@ -84,7 +84,7 @@ function mounted(markdown: string) {
       },
       retarget: (target, change) => retargetedMention(TASK_ID, PLACE, target, change),
       namesMention: () => false,
-      // The panel reads the one page of an integration's this plan is pasted.
+      // The panel reads the one page of an integration's this description is pasted.
       pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
   });

@@ -10,7 +10,7 @@
    literal here. */
 
 @layer components {
-  /* The measure is the page's, a plan's reading width in the window and the
+  /* The measure is the page's, a description's reading width in the window and the
      admin's wider column on the web; the theme's `max-w-collection-page`
      and `px-collection-page-inset` read them. */
   .ui-collection-page {

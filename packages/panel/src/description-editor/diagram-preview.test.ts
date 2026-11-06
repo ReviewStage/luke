@@ -9,12 +9,12 @@ import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * diagram-preview.test.ts -- a Mermaid code block in the plan editor stays
+ * diagram-preview.test.ts -- a Mermaid code block in the description editor stays
  * code, and the panel draws its diagram under it, out of the text: a block
  * in another language has none, the text saves as written, and a change to
  * the block's code asks for its diagram again, handing the code it held
  * before. The panel's drawing stands in as the code's own words. Synthetic
- * plan.
+ * description.
  */
 
 const FLOW = "flowchart LR\n  Invite --> Join";
@@ -38,7 +38,7 @@ function mounted(markdown: string) {
     markdown,
     placement: undefined,
     focus: true,
-    label: "Plan",
+    label: "Description",
     className: "markdown description-unit",
     onDraft: () => undefined,
     onFinish: () => undefined,

@@ -134,7 +134,7 @@ import { taskCardOf } from "./task-card.js";
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`). The chosen item's box
  * mentions what its repository and workspace hold (`answerPlace`), and,
- * for an item of a task, what the task's page offers besides: its plan
+ * for an item of a task, what the task's page offers besides: its description
  * and sections as saved, its pages, its agents, and their pull requests
  * (`heldTaskMentions`); and
  * its skills are read through its holder and drawn as chips that open
@@ -443,7 +443,7 @@ export const DesktopInbox = memo(function DesktopInbox({
   // A task or a section a mention names opens as a link to it would.
   const openMention = (mention: DescriptionMention) =>
     openPlaceHere(placeOfMention(mention), () => tasks.onShowMention(mention));
-  // An item of a task offers what the task's page does: its plan and sections as saved, its pages, its agents, and their pull requests.
+  // An item of a task offers what the task's page does: its description and sections as saved, its pages, its agents, and their pull requests.
   const heldTask = chosen?.holder.kind === INBOX_HOLDER.TASK ? chosen.holder.task : undefined;
   const descriptionText = useSavedDescriptionText(heldTask);
   const mentions =

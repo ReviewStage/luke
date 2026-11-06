@@ -18,7 +18,7 @@ import {
 } from "./document-source.js";
 
 /**
- * A whole plan in the editor keeps every block's exact source but the ones
+ * A whole description in the editor keeps every block's exact source but the ones
  * the developer changes, so an edit is a change on its own lines only.
  */
 
@@ -155,7 +155,7 @@ test("a block the developer changed after the save went out stays theirs when th
   ]);
 });
 
-/** A plan whose picture stands on its own line, as a coding agent may write one. */
+/** A description whose picture stands on its own line, as a coding agent may write one. */
 const PICTURED = [
   "## Approach",
   "",
@@ -213,7 +213,7 @@ test("a picture whose alt text, address, and title need escaping reads back as t
   assert.deepEqual([read?.alt, read?.src, read?.title], [alt, src, title]);
 });
 
-/** How many checkboxes the read view draws for a plan's text. */
+/** How many checkboxes the read view draws for a description's text. */
 function drawnCheckboxes(words: string): number {
   return (
     renderToStaticMarkup(createElement(MarkdownMessage, { words })).split('type="checkbox"')

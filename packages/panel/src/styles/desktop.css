@@ -197,7 +197,7 @@ body,
   --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.3);
 }
 
-/* A thread opened over a narrow room's plan spans the column rather than
+/* A thread opened over a narrow room's description spans the column rather than
    standing a margin card's width at its right over the words, so its reply
    box has the column's room. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .comment-float {
@@ -688,7 +688,7 @@ body,
   padding: 0;
 }
 
-/* What a transcript opens on, the plan, an automation's prompt, or a
+/* What a transcript opens on, the description, an automation's prompt, or a
    worker's task, stands as a sent message does, at the right over the line
    naming who sent it and when, its card across the message's whole measure,
    so it lines up with a long sent message's left edge rather than a width of
@@ -747,7 +747,7 @@ body,
 }
 
 /* Its column is a `ScrollArea` with nothing scrolling sideways, since
-   nothing in a plan is wider than the column (its code and tables scroll on
+   nothing in a description is wider than the column (its code and tables scroll on
    their own), and a stable gutter, so where macOS draws a bar that takes
    room the column does not shift sideways on the line the app writes that
    first makes it scroll. This is the block inside it. */
@@ -757,12 +757,12 @@ body,
   padding-bottom: 140px; /* off-scale */
 }
 
-/* A plan's comment counts and a block's comment button stand in the gutter
+/* A description's comment counts and a block's comment button stand in the gutter
    past the column's end (tasks.css), which the desktop's 48px inset holds.
    The web's 24px holds neither, so its documents end a finger's target and a
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
-   comment lands, and a plan and its versions keep one width. */
+   comment lands, and a description and its versions keep one width. */
 .desktop-document {
   --comment-gutter: var(--ui-page-inset);
 }
@@ -798,7 +798,7 @@ body,
   line-height: var(--ui-type-reading-leading);
 }
 
-/* A plan is a document rather than a message, so its sections breathe: its
+/* A description is a document rather than a message, so its sections breathe: its
    blocks, and the sections of a text drawn inside one block, stand a
    section's gap apart, wherever it is drawn, the side panel's plan tab
    included. Note that the gap is the body's children's rather than
@@ -823,9 +823,9 @@ body,
 }
 
 /* Each section is named by a heading with room above it rather than a rule
-   under it; a plan's title is its page's header (`PageHeader`), not a
+   under it; a description's title is its page's header (`PageHeader`), not a
    heading of the text. Note that the headings keep prose's own scale and
-   weight (`@repo/ui`'s prose.css), so a plan's h1, h2 and h3 read as three
+   weight (`@repo/ui`'s prose.css), so a description's h1, h2 and h3 read as three
    steps, as they do in every other note. An h3 that follows a block inside
    a section stands the same room above it, so it never sits on the list or
    paragraph before it; one straight under a heading stays close to it. */
@@ -1179,7 +1179,7 @@ body,
 
 /* The side panel ----------------------------------------------------------- */
 
-/* What the open plan's document keeps beside the side panel: the panel is
+/* What the open description keeps beside the side panel: the panel is
    dragged no wider than the plan's area less this (side-panel.tsx reads it,
    which is why it is registered as a length), and drawn no wider either.
    Beside the open sidebar it is the panel's own least width, so neither pane
@@ -1192,7 +1192,7 @@ body,
 
 /* With the sidebar folded the document's toolbar starts clear of the title
    bar's buttons, so the document keeps that much more, and the plan's tab the
-   same room beside Copy plan and the plan's menu. */
+   same room beside Copy description and the plan's menu. */
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-task {
   --document-reserve: calc(280px + var(--sidebar-toggle-clearance) - var(--column-inset));
 }

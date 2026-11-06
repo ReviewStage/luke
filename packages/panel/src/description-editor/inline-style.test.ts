@@ -31,13 +31,13 @@ function host(): HTMLElement {
   return element;
 }
 
-test("the plan editor writes no inline style element into the page", () => {
+test("the description editor writes no inline style element into the page", () => {
   mounted.push(
     mountDescriptionEditor(host(), {
       markdown: "## Goal\n\nShip the invite flow.\n",
       placement: undefined,
       focus: true,
-      label: "Plan",
+      label: "Description",
       className: "markdown description-unit",
       onDraft: () => undefined,
       onFinish: () => undefined,

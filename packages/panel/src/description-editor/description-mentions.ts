@@ -19,7 +19,7 @@ import {
 import { MENTION_NODE } from "./mention-node.js";
 
 /**
- * description-mentions.ts -- the plan editor's `@`: the word the caret ends reported to the panel, the mention it picks written in its place, and a mention of a heading the developer renames named again with the new words.
+ * description-mentions.ts -- the description editor's `@`: the word the caret ends reported to the panel, the mention it picks written in its place, and a mention of a heading the developer renames named again with the new words.
  *
  * An `@` at the start of a word, outside code, opens the panel's list
  * (`onTrigger`): the word runs from the `@` to the caret, up to six words
@@ -125,7 +125,7 @@ function opensSection(node: PmNode): boolean {
 }
 
 /**
- * A heading's words as the plan's text spells them, its formatting kept, as
+ * A heading's words as the description's text spells them, its formatting kept, as
  * `descriptionSections` knows a section by: the block's own source while it is the
  * block it opened as, so `_today_` stays `_today_`, else as the editor will
  * write it.
@@ -213,7 +213,7 @@ function retargeted(
   return tr.docChanged ? tr : undefined;
 }
 
-/** The plan editor's mentions: the `@` word reported as the editor's state moves and as it takes or loses the caret, and renamed headings' mentions named again. */
+/** The description editor's mentions: the `@` word reported as the editor's state moves and as it takes or loses the caret, and renamed headings' mentions named again. */
 export function descriptionMentions(
   manager: MarkdownManager,
   sourceOf: (node: PmNode) => string | undefined,

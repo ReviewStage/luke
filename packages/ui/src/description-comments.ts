@@ -10,12 +10,12 @@ import {
 import { createContext, useContext } from "react";
 
 /**
- * description-comments.ts -- the open plan's comment threads as one control the margin, the Comments tab, and the summary draw and press, and where each thread stands in the plan's text and its margin.
+ * description-comments.ts -- the open description's comment threads as one control the margin, the Comments tab, and the summary draw and press, and where each thread stands in the description's text and its margin.
  *
  * The panel holds the threads, read as the host holds them and written
  * through its doors (its `use-description-comments.ts`), and hands the control
  * down; the same control holds one of the task's pages' threads in the
- * plan's place where it is handed the page.
+ * description's place where it is handed the page.
  */
 
 /** What starting a thread came to: the thread as the service holds it, or why there is none. */
@@ -24,9 +24,9 @@ type CommentStarted = { readonly thread: DescriptionCommentThread } | { readonly
 /** What the margin, the Comments tab, and the summary draw and press. */
 export interface DescriptionCommentsControl {
   readonly planId: string;
-  /** Every thread of the plan, oldest first, resolved ones among them. */
+  /** Every thread of the description, oldest first, resolved ones among them. */
   readonly threads: readonly DescriptionCommentThread[];
-  /** Whether a read has answered, so the threads are what the plan holds rather than nothing yet. */
+  /** Whether a read has answered, so the threads are what the description holds rather than nothing yet. */
   readonly read: boolean;
   readonly failed: boolean;
   readonly onRetry: () => void;
@@ -45,10 +45,10 @@ export function openThread(thread: DescriptionCommentThread): boolean {
 
 const DescriptionCommentsContext = createContext<DescriptionCommentsControl | undefined>(undefined);
 
-/** The open plan's comments, for the margin, the Comments tab, and the summary under it. */
+/** The open description's comments, for the margin, the Comments tab, and the summary under it. */
 export const DescriptionCommentsProvider = DescriptionCommentsContext.Provider;
 
-/** The open plan's comments; none outside a plan's page. */
+/** The open description's comments; none outside a plan's page. */
 export function useDescriptionCommentsControl(): DescriptionCommentsControl | undefined {
   return useContext(DescriptionCommentsContext);
 }
@@ -63,26 +63,26 @@ export interface CommentSpan {
   readonly block: boolean;
 }
 
-/** A thread not yet posted: where its words stand in the plan's text, and whether it is on a whole block. */
+/** A thread not yet posted: where its words stand in the description's text, and whether it is on a whole block. */
 export interface PendingThread {
   readonly from: number;
   readonly to: number;
   readonly scope: DescriptionCommentStartRequest["scope"];
   readonly quote: string;
-  /** The text `from` and `to` are offsets in, where it is not the plan's as saved: the open editor's, for words started on there. */
+  /** The text `from` and `to` are offsets in, where it is not the description's as saved: the open editor's, for words started on there. */
   readonly text?: string;
 }
 
 /** The id the thread being started is drawn under until the service names it. */
 export const PENDING_THREAD = "pending";
 
-/** The last laying of a thread being started's text over the plan's, kept since every section asks it of the same two texts. */
+/** The last laying of a thread being started's text over the description's, kept since every section asks it of the same two texts. */
 let laid:
   | { readonly from: string; readonly to: string; readonly change: ReturnType<typeof textChange> }
   | undefined;
 
 /**
- * A thread being started, where it stands in the plan's text as saved: one
+ * A thread being started, where it stands in the description's text as saved: one
  * begun on the editor's words is measured in the editor's text, laid over
  * the saved text so its mark stands on the same words; nothing where none of
  * them is saved yet.
@@ -110,7 +110,7 @@ function pendingIn(
 }
 
 /**
- * The open threads' words inside one section of the plan's text, `from` to
+ * The open threads' words inside one section of the description's text, `from` to
  * `to`, in the section's own offsets, and the thread being started's among
  * them: what the read view marks.
  */

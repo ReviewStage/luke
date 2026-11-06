@@ -296,7 +296,7 @@ test("a pull request's corner says the age of the moment its state names, and no
   assert.equal(card(PULL_REQUEST_STATE.MERGED), undefined);
 });
 
-test("a plan's card says under its name when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
+test("a plan's card says under its name when the task last saw activity, its agent's later turn over its description's save, as its row does", () => {
   const worked: TaskSummary = {
     ...SUMMARY,
     agents: {
