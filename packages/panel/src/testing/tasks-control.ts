@@ -46,6 +46,7 @@ import {
   tasksDeleteMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
+import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
 
 const ignore = () => undefined;
@@ -390,6 +391,26 @@ export const ADMIN_AWAY: AdminViewControl = {
   onPreload: ignore,
 };
 
+/** The Board's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const BOARD_AWAY: BoardRoute = {
+  open: false,
+  standingIn: undefined,
+  onOpen: ignore,
+  onClose: ignore,
+  onTurn: ignore,
+  onPreload: ignore,
+};
+
+/** A person's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const PERSON_AWAY: PersonRoute = {
+  userId: undefined,
+  name: undefined,
+  workspace: undefined,
+  onOpen: ignore,
+  onClose: ignore,
+  onPreload: ignore,
+};
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
@@ -558,11 +579,12 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       workspaceId: undefined,
       onOpen: ignore,
       onClose: ignore,
+      onPreload: ignore,
     },
     inboxTaskless: [],
     failedRuns: [],
     adminView: ADMIN_AWAY,
-    boardView: { open: false, onOpen: ignore, onClose: ignore },
+    boardView: { open: false, onOpen: ignore, onClose: ignore, onPreload: ignore },
     unknownWorkspace: { open: false, onClose: ignore },
     automationsView: {
       open: false,

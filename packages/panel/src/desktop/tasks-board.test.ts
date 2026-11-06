@@ -180,7 +180,12 @@ async function mountBoard(
     me: DEAN,
     listRead: true,
     onSelect: (taskId) => opened.push(taskId),
-    boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
+    boardView: {
+      open: true,
+      onOpen: () => undefined,
+      onClose: () => (closed += 1),
+      onPreload: () => undefined,
+    },
     onSetTaskStanding: (taskId, standing) => {
       sent.push([taskId, standing]);
       return askKept(Promise.resolve(keeps));
@@ -212,7 +217,6 @@ async function mountBoard(
                 filter: NO_TASKS_FILTER,
                 display: shown,
                 onDisplay: (next) => displayed.push(next),
-                scroll: () => undefined,
               },
             }),
           }),

@@ -17,7 +17,8 @@ import {
  * drawn says how many rows the run holds and where it stands among them,
  * though the rows far from the view are not drawn at all; and a run read
  * from its top draws the rows its scroller shows, wherever in the scroller
- * the boxes around it place it. A list of several runs answers every row's
+ * the boxes around it place it, by the sizes it measured when it was last
+ * drawn where it is handed them. A list of several runs answers every row's
  * key, in the order its runs stand.
  */
 
@@ -130,6 +131,72 @@ test("a run read from its top, placed by a box inside its scroller, draws the ro
   const drawn = [...container.querySelectorAll("li")].map((row) => row.textContent);
   assert.equal(drawn[0], "row-6");
   assert.equal(drawn.at(-1), "row-21");
+});
+
+test("a run drawn again with what it measured lays its rows out by those sizes from its first draw", () => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  // Note that the run stands at the top of a body 1,000px down its scroller, scrolled 2,000px down, as above: by the
+  // 100px estimate rows 10 to 17 would show, but its first 20 rows measured 50px, so 1,000px into the run is row 20.
+  const box = (id: string) => document.getElementById(id);
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.classList.contains("ui-virtual-rows")) return box("body");
+    return this.id === "body" || this.id === "scroller" ? box("list") : null;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.id === "body" ? 1000 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollTop", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.id === "scroller" ? 2000 : 0;
+  });
+  const keys = Array.from({ length: 100 }, (_, index) => `row-${index}`);
+  const measurements = keys.slice(0, 20).map((key, index) => ({
+    key,
+    index,
+    start: index * 50,
+    end: (index + 1) * 50,
+    size: 50,
+    lane: 0,
+  }));
+  const scroller = createRef<HTMLDivElement>();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  // Note that the scroller stands before the run is drawn in it, as a page's does when its rows are drawn again.
+  const frame = (run: boolean) =>
+    createElement(
+      "nav",
+      { id: "list" },
+      createElement(
+        "div",
+        { id: "scroller", ref: scroller },
+        createElement(
+          "div",
+          { id: "body" },
+          run
+            ? createElement(VirtualRows, {
+                scroller,
+                keys,
+                estimate: 100,
+                anchor: VIRTUAL_ROWS_ANCHOR.START,
+                listItems: true,
+                measurements,
+                children: (index, place) => createElement("li", place, keys[index]),
+              })
+            : null,
+        ),
+      ),
+    );
+  act(() => root.render(frame(false)));
+  act(() => root.render(frame(true)));
+  const drawn = [...container.querySelectorAll("li")].map((row) => row.textContent);
+  assert.equal(drawn[0], "row-16");
+  assert.equal(drawn.at(-1), "row-31");
 });
 
 test("a row moved to another place, the run's length unchanged, is drawn under its own key", () => {

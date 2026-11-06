@@ -30,6 +30,7 @@ catalog:
   "@modelcontextprotocol/client": 2.4.0
   "@vercel/sandbox": 3.9.1
   "@tanstack/react-router": 1.170.46
+  "@tanstack/react-store": 0.11.2
 
 # The workspaces that resolve a dependency away from the catalog above, and
 # it is the compiler alone, held to TypeScript 6 because each needs the compiler

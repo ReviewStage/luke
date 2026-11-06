@@ -151,7 +151,6 @@ async function mountView(
       filter: drawing.filter ?? NO_TASKS_FILTER,
       display: drawing.display ?? display,
       onDisplay: () => undefined,
-      scroll: () => undefined,
     };
     act(() =>
       root.render(

@@ -49,6 +49,9 @@ catalogs:
     '@tanstack/react-router':
       specifier: 1.170.46
       version: 1.170.46
+    '@tanstack/react-store':
+      specifier: 0.11.2
+      version: 0.11.2
     '@types/node':
       specifier: 26.2.0
       version: 26.2.0
@@ -858,6 +861,9 @@ importers:
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.46(react-dom@19.2.8)(react@19.2.8)
+      '@tanstack/react-store':
+        specifier: 'catalog:'
+        version: 0.11.2(react-dom@19.2.8)(react@19.2.8)
       '@tiptap/core':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/pm@3.31.4)

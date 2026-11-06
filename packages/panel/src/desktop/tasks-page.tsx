@@ -34,10 +34,10 @@ import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { PhoneHead, PlaceMore, phoneFindGroups, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
+import type { TasksPageHeld } from "./tasks-page-held.js";
 import {
   FILTER,
   FILTERED,
@@ -58,8 +58,8 @@ import {
  * The filter is the page's, one for both views and one for each workspace,
  * since a creator and a repository are a workspace's own; each view keeps a
  * display of its own (`tasks-page-model.ts`). Which view it shows, the
- * filter, both displays, and where each view stood scrolled when the reader
- * left it are kept on this Mac.
+ * filter, and both displays are kept on this Mac; where it stood scrolled is
+ * the router's to put back with the step it stood in (`panel-router.tsx`).
  *
  * The List is `tasks-list.tsx`, and the Board `tasks-board.tsx`. A display
  * is kept with the properties its view offered then, so a property a view
@@ -71,7 +71,7 @@ import {
 const TASKS = "Tasks";
 
 /** The page's two views. */
-export const TASKS_VIEW = {
+const TASKS_VIEW = {
   LIST: "list",
   BOARD: "board",
 } as const;
@@ -144,7 +144,7 @@ function storedDisplayOf(view: TasksView) {
   );
 }
 
-/** Where the view shown last, the filters (each workspace's by its id), each view's display, and where each view stood scrolled when the reader left it, by the view's name, are kept on this Mac. */
+/** Where the view shown last, the filters (each workspace's by its id), and each view's display are kept on this Mac. */
 const KEPT = {
   VIEW: keptKey("app.tasksPageView", storedView),
   FILTERS: keptKey("app.tasksFilter", storedFilters),
@@ -152,7 +152,6 @@ const KEPT = {
     [TASKS_VIEW.LIST]: keptKey("app.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
     [TASKS_VIEW.BOARD]: keptKey("app.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
   },
-  SCROLLS: keptKey("app.tasksScroll", storedScrolls),
 } as const;
 
 /** The List | Columns switch beside the page's title. */
@@ -182,9 +181,12 @@ function ViewSwitch({
 export function TasksPage({
   tasks,
   room,
+  held,
 }: {
   tasks: TasksControl;
   room: ShellRoom;
+  /** What the page holds across its visits, where something outlives it to hold it (`tasks-page-held.ts`). */
+  held?: TasksPageHeld | undefined;
 }): React.JSX.Element {
   const [view, keepView] = useKept(KEPT.VIEW, TASKS_VIEW.LIST);
   const [listDisplay, onListDisplay] = useKept(
@@ -209,12 +211,7 @@ export function TasksPage({
   };
   const display = view === TASKS_VIEW.LIST ? listDisplay : boardDisplay;
   const onDisplay = view === TASKS_VIEW.LIST ? onListDisplay : onBoardDisplay;
-  // Note that each view stands where its reader left it, put back once as the page has its tasks and never as they refresh.
-  const scroll = useKeptScroll(KEPT.SCROLLS, view, tasks.listRead);
-  const choose = (next: TasksView) => {
-    scroll.keep();
-    keepView(next);
-  };
+  const choose = (next: TasksView) => keepView(next);
   const shared = (tasks.workspace?.memberCount ?? 1) > 1;
   const listed = tasks.listed.tasks;
   const filterAsk = useMenuAsk();
@@ -325,10 +322,19 @@ export function TasksPage({
   );
   // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
   const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;
-  const frame = { toolbar, chips, filter, display, onDisplay, scroll: scroll.ref };
+  const frame = {
+    toolbar,
+    chips,
+    filter,
+    display,
+    onDisplay,
+    chosen: held?.chosenIn(view),
+    measured: held?.measuredIn(view),
+    column: held?.column,
+  };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
-    <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
+    <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown} held={held?.find}>
       {/* A face names its assignee or its creator, and the Filter offers them, against the listed workspace's members. */}
       <ReplayUnmask>
         <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>

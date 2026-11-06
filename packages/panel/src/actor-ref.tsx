@@ -51,12 +51,11 @@ import {
 } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import { BotIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
-import { type ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useAutomation } from "./automation-directory.js";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
-import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { useCreator } from "./member-directory.js";
-import { useActorDoor } from "./person-door.js";
+import { useActorDoor, usePreloadedPerson } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
 import { AgentHoverCard } from "./tasks/agent-ref.js";
 import { AgentMark } from "./tasks/tab-look.js";
@@ -669,7 +668,7 @@ export function PersonCard({
   latest?: ReactNode;
 }): React.JSX.Element {
   // The card hanging is the pointer on their name, a press from their page, so its chunk is read now.
-  useEffect(PERSON_PAGE.prefetch, []);
+  usePreloadedPerson(actor.userId);
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
