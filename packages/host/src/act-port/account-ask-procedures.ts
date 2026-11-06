@@ -3,7 +3,6 @@ import type {
   ChatGptDevicePollAnswerView,
   ChatGptDeviceStartAnswerView,
   ChatGptDeviceWaitParams,
-  ChatGptSignInAnswerView,
   DictationTranscribeAnswerView,
   DictationTranscribeParams,
   GitHubTokenAnswerView,
@@ -44,8 +43,6 @@ export interface AccountAskProceduresDependencies {
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-    chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
-    chatGptSignInCancel(): Effect.Effect<void>;
     chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
     chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
     chatGptDeviceCancel(
@@ -125,18 +122,6 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.providerKeyForAgents(input);
-    }),
-    [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actPort[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN].effect(
-      function* ({ context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.chatGptSignIn();
-      },
-    ),
-    [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actPort[
-      ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.chatGptSignInCancel();
     }),
     [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START]: actPort[
       ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START

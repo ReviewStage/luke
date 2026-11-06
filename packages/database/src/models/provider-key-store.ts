@@ -12,7 +12,7 @@ import { and, asc, eq, lte, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
-import { accountChatGptHost, accountProviderKey } from "../schemas/account-provider-key.js";
+import { accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
@@ -33,12 +33,11 @@ import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
  * side, and a save replaces only the row of its own kind. A status is written against the sealed key a step
  * ran on, so a step on a key since replaced marks nothing of its successor.
  *
- * A ChatGPT sign-in is a row of its own kind whose seal holds its tokens and
+ * A ChatGPT plan is a row of its own kind whose seal holds its tokens and
  * whose `access_expires_at` says when its access token lapses. Its renewal
  * runs under the row's lock (`withProviderKeyLocked`) and reseals the row in
- * place, so two renewals of one sign-in run one after the other and the
- * second reads what the first wrote. The account's ChatGPT host id stands in
- * a table of its own, minted once, so it outlives every sign-in.
+ * place, so two renewals of one plan run one after the other and the
+ * second reads what the first wrote.
  */
 
 const ProviderSchema = Schema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
@@ -230,37 +229,6 @@ const resealRow = SqlSchema.findAll({
           ),
         )
         .returning({ provider: accountProviderKey.provider }),
-    ),
-});
-
-const insertHost = SqlSchema.void({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    extAgentHostId: Schema.String,
-    now: Schema.Date,
-  }),
-  execute: (write) =>
-    Database.use((db) =>
-      db
-        .insert(accountChatGptHost)
-        .values({
-          userId: write.userId,
-          extAgentHostId: write.extAgentHostId,
-          createdAt: write.now,
-        })
-        .onConflictDoNothing({ target: accountChatGptHost.userId }),
-    ),
-});
-
-const findHost = SqlSchema.findOne({
-  Request: Schema.String,
-  Result: Schema.Struct({ extAgentHostId: Schema.String }),
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ extAgentHostId: accountChatGptHost.extAgentHostId })
-        .from(accountChatGptHost)
-        .where(eq(accountChatGptHost.userId, userId)),
     ),
 });
 
@@ -485,26 +453,6 @@ export function resealProviderKey(
   return Effect.map(
     resealRow({ userId, provider, kind, fromSealedKey, ...sealed, accessExpiresAt }),
     (moved) => moved.length > 0,
-  );
-}
-
-/**
- * The account's ChatGPT host id: the one it holds, or `minted` kept as its
- * own where it holds none. Two first reads at once keep one, and both
- * answer it.
- */
-export function ensureChatGptHostId(
-  userId: string,
-  minted: string,
-  now: Date,
-): TaskStoreEffect<string> {
-  return Effect.gen(function* () {
-    yield* insertHost({ userId, extAgentHostId: minted, now });
-    const host = yield* findHost(userId);
-    return host.extAgentHostId;
-  }).pipe(
-    // The insert above leaves a row for this account, so none here is the database breaking its own contract.
-    Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
   );
 }
 

@@ -19,6 +19,7 @@ import {
   markWindowStart,
   PANEL_SPAN,
 } from "@repo/panel/panel-spans";
+import { QueryProvider } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { ReloadState } from "@repo/ui/error-boundary";
@@ -119,6 +120,10 @@ export function mountWindow(
       return;
     }
     endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
-    draw(<RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>);
+    draw(
+      <RegistryContext.Provider value={rendererRegistry}>
+        <QueryProvider>{surface}</QueryProvider>
+      </RegistryContext.Provider>,
+    );
   })();
 }

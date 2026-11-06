@@ -623,18 +623,19 @@ the hint, and the status; it is replaced whole by a save, deleted by a
 removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
-A ChatGPT sign-in (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
-is a row of the same table, saved by the desktop on
-`PUT /api/account/chatgpt/credentials` after it signs in under the account's
-host id (`GET /api/account/chatgpt/host`, minted once into
-`account_chatgpt_host` and kept across sign-outs). Its seal holds the access,
-refresh and ID tokens, the issued client and the account's subject, bound to
-the kind; `access_expires_at` beside it says when a renewal is due. A
-renewal runs under the row's lock across OpenAI's token endpoint, so
-renewals of one sign-in are serialized as OpenAI asks, and replaces the
-tokens, the expiry and the scopes together. Removing it revokes its refresh
-token at OpenAI first and answers `revocationUnconfirmed` where OpenAI did
-not confirm.
+A ChatGPT plan (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
+is a row of the same table, kept by the service as Codex's device-code
+login connects (`POST /api/account/chatgpt/device`, then its `poll`,
+`src/accounts/chatgpt-device-login.ts`). Its seal holds the access, refresh
+and ID tokens, Codex's client and the account's subject, bound to the kind;
+`access_expires_at` beside it says when a renewal is due. A renewal runs
+under the row's lock across OpenAI's token endpoint, so renewals of one plan
+are serialized, and replaces the tokens and the expiry together. Removing
+it revokes its refresh token at OpenAI first and answers
+`revocationUnconfirmed` where OpenAI did not confirm. A row the retired
+third-party Sign in with ChatGPT sealed can no longer renew: it is removed
+as it is opened, without asking OpenAI anything, and the plan reads as not
+connected.
 
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
 `HostedEnvironment`: comma-separated `<version>:<base64 of 32 random

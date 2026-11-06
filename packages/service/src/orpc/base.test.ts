@@ -23,14 +23,14 @@ import "@orpc/experimental-effect/extensions/effect";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { oc } from "@orpc/contract";
+import { openapi } from "@orpc/openapi";
+import { implement } from "@orpc/server";
 import { Database } from "@repo/database/core/query";
 import { user } from "@repo/database/schemas/auth";
 import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { HOSTED_ERRORS } from "@repo/features/contract";
 import { HTTP_METHOD } from "@repo/wire";
-import { oc } from "@orpc/contract";
-import { openapi } from "@orpc/openapi";
-import { implement } from "@orpc/server";
 import { Cause, Context, Effect, Layer, Logger, Option, References, Schema } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { SessionUserIdResolver, UserIdResolver } from "../http/http-effect.js";
@@ -245,9 +245,9 @@ it.effect("a procedure's log lines carry the trace id of the caller's unsampled 
     });
     const router = {
       account: {
-        chatGptHost: hosted.account.chatGptHost.effect(function* () {
-          yield* Effect.logInfo("asked for the ChatGPT host");
-          return { extAgentHostId: "host-1" };
+        providerKeys: hosted.account.providerKeys.effect(function* () {
+          yield* Effect.logInfo("asked for the provider keys");
+          return { keys: [] };
         }),
       },
     };
@@ -257,7 +257,7 @@ it.effect("a procedure's log lines carry the trace id of the caller's unsampled 
     )) as Context.Context<WebServices>;
     const response = yield* Effect.promise(() =>
       hostedFetch(router)(
-        new Request(`${ORIGIN}${HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_HOST}`, {
+        new Request(`${ORIGIN}${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}`, {
           headers: { traceparent: `00-${traceId}-00f067aa0ba902b7-00` },
         }),
         services,

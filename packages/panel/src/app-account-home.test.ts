@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
@@ -22,6 +21,7 @@ import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, signedInAs } from "./testing/app-state.js";
+import { onRegistry } from "./testing/copy-feedback.js";
 
 /**
  * app-account-home.test.ts -- an account leaving the window takes its place
@@ -112,11 +112,7 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
     JSON.stringify({ "account-grace": { audience: "me", at: 3 } }),
   );
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() =>
-    root?.render(
-      createElement(RegistryContext.Provider, { value: AtomRegistry.make() }, createElement(App)),
-    ),
-  );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(App))));
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   await settle();

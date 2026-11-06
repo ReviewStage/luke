@@ -12,7 +12,6 @@ import { accountProviderKey } from "@repo/database/schemas/account-provider-key"
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import {
-  type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -24,30 +23,29 @@ import {
   recordingHttpClient,
 } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, DateTime, Duration, Effect, Fiber, Redacted, Result } from "effect";
+import { Clock, DateTime, Duration, Effect, Fiber, Redacted, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import {
   CHATGPT_ACCESS,
-  CHATGPT_FLOW,
   CHATGPT_OAUTH,
   type ChatGptAccess,
   CODEX_DEVICE_OAUTH,
   chatGptPlanOf,
   refreshChatGptAccess,
   removeChatGptCredentials,
-  sealChatGptCredentials,
   sealCodexDeviceCredentials,
 } from "./chatgpt-credentials.js";
 
 /**
- * An account's ChatGPT sign-in renewed and revoked against a fake of
- * OpenAI's authorization server, over a real dialect: a renewal rotates the
- * refresh token and replaces the access token, its expiry and the scopes
- * together; two renewals at once run one after the other, so the rotating
- * refresh token is never presented twice; a refresh token OpenAI refuses for
- * good marks the sign-in invalid; and removing the sign-in revokes its
- * session first, whether or not OpenAI confirms it.
+ * An account's ChatGPT plan renewed and revoked against a fake of OpenAI's
+ * authorization server, over a real dialect: a renewal rotates the refresh
+ * token and replaces the access token and its expiry together; two renewals
+ * at once run one after the other, so the rotating refresh token is never
+ * presented twice; a refresh token OpenAI refuses for good marks the plan
+ * invalid; removing the plan revokes its session first, whether or not
+ * OpenAI confirms it; and a plan the retired third-party sign-in sealed
+ * reads as not connected.
  *
  * Synthetic accounts and tokens throughout; the key-encryption key is fixed
  * bytes written for this file.
@@ -61,9 +59,14 @@ function ring(): KeyRing {
   return parsed.success;
 }
 
-const ISSUED_CLIENT = "oaiapp_test_client";
 const REVOCATION_URL = "https://auth.openai.com/oauth/revoke";
-const GRANTED = [CHATGPT_OAUTH.USAGE_SCOPE, "offline_access", "openid"];
+
+/** A renewal's JSON body, as Codex sends it. */
+const RenewalBodySchema = Schema.Struct({
+  grant_type: Schema.String,
+  client_id: Schema.String,
+  refresh_token: Schema.String,
+});
 
 /** The form a recorded request carried, however the client encoded it. */
 async function formOf(request: RecordedRequest): Promise<URLSearchParams> {
@@ -74,8 +77,6 @@ async function formOf(request: RecordedRequest): Promise<URLSearchParams> {
 interface FakeServerState {
   revocationStatus: number;
   tokenStatus: number | undefined;
-  /** The scopes a renewal is answered as granting. */
-  granted: readonly string[];
   /** Where the discovery document says to revoke. */
   revocationEndpoint: string;
 }
@@ -87,10 +88,10 @@ interface RenewalGate {
 }
 
 /**
- * OpenAI's authorization server as far as the service reaches it: a token
- * endpoint that rotates the refresh token on every renewal and refuses one
- * already used, a discovery document naming the revocation endpoint, and
- * that endpoint, which answers what the test sets.
+ * OpenAI's authorization server as far as the service reaches it: Codex's
+ * token endpoint, which rotates the refresh token on every renewal and
+ * refuses one already used, a discovery document naming the revocation
+ * endpoint, and that endpoint, which answers what the test sets.
  */
 function fakeAuthorizationServer(initialRefresh: string) {
   let current = initialRefresh;
@@ -100,7 +101,6 @@ function fakeAuthorizationServer(initialRefresh: string) {
   const state: FakeServerState = {
     revocationStatus: HTTP_STATUS.OK,
     tokenStatus: undefined,
-    granted: GRANTED,
     revocationEndpoint: REVOCATION_URL,
   };
   /** Holds every renewal at a gate from here on, until the test opens it or a second renewal arrives. */
@@ -117,7 +117,7 @@ function fakeAuthorizationServer(initialRefresh: string) {
         revocation_endpoint: state.revocationEndpoint,
       });
     }
-    if (request.url !== CHATGPT_OAUTH.TOKEN_URL) {
+    if (request.url !== CODEX_DEVICE_OAUTH.TOKEN_URL) {
       return new Response(null, { status: state.revocationStatus });
     }
     renewals += 1;
@@ -128,12 +128,11 @@ function fakeAuthorizationServer(initialRefresh: string) {
       await gate.opened;
     }
     if (state.tokenStatus !== undefined) return jsonResponse({}, state.tokenStatus);
-    const form = await formOf(request);
-    assert.equal(form.get("grant_type"), "refresh_token");
-    assert.equal(form.get("client_id"), ISSUED_CLIENT);
-    assert.equal(form.get("resource"), CHATGPT_OAUTH.RESOURCE);
-    assert.equal(form.get("scope"), null, "a renewal names no scope, so the grant is kept");
-    if (form.get("refresh_token") !== current) {
+    const body: unknown = JSON.parse(await new Response(request.init.body).text());
+    const asked = Schema.decodeUnknownSync(RenewalBodySchema)(body);
+    assert.equal(asked.grant_type, "refresh_token");
+    assert.equal(asked.client_id, CODEX_DEVICE_OAUTH.CLIENT_ID);
+    if (asked.refresh_token !== current) {
       return jsonResponse({ error: "refresh_token_reused" }, HTTP_STATUS.BAD_REQUEST);
     }
     issued += 1;
@@ -142,7 +141,6 @@ function fakeAuthorizationServer(initialRefresh: string) {
       access_token: `access-${issued}`,
       refresh_token: current,
       expires_in: 3600,
-      scope: state.granted.join(" "),
       token_type: "Bearer",
     });
   });
@@ -158,20 +156,19 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-const signIn = (userId: string, overrides: Partial<ChatGptCredentialsSaveRequest> = {}) =>
+/** The account's plan connected through a device-code login, its access token lapsing an hour on. */
+const signIn = (userId: string, overrides: { refreshToken?: string } = {}) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const request: ChatGptCredentialsSaveRequest = {
-      clientId: ISSUED_CLIENT,
-      accountId: "chatgpt-subject",
+    const accessExpiresAt = new Date(now.getTime() + 3_600_000);
+    const { sealed, hint } = sealCodexDeviceCredentials(ring(), userId, {
       accessToken: "access-0",
-      refreshToken: "refresh-0",
+      refreshToken: overrides.refreshToken ?? "refresh-0",
       idToken: "id-token-0",
-      expiresInSeconds: 3600,
-      scopes: GRANTED,
-      ...overrides,
-    };
-    const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(ring(), userId, request, now);
+      accountId: "chatgpt-subject",
+      chatgptAccountId: undefined,
+      accessExpiresAt,
+    });
     yield* saveProviderKey(
       userId,
       PROVIDER_KEY_PROVIDER.OPENAI,
@@ -184,17 +181,13 @@ const signIn = (userId: string, overrides: Partial<ChatGptCredentialsSaveRequest
     );
   });
 
-/** An access token as OpenAI shapes one, a JWT whose only claim read is `exp`, in Unix seconds; unsigned, as nothing verifies it. */
-const accessTokenExpiringAt = (exp: number) =>
-  ["header", Buffer.from(JSON.stringify({ exp })).toString("base64url"), "signature"].join(".");
-
 const tokenOf = (access: ChatGptAccess) =>
   access.outcome === CHATGPT_ACCESS.READY ? Redacted.value(access.accessToken) : access.outcome;
 
 const rowOf = (userId: string) =>
   Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) => rows[0]);
 
-it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
+it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
   it.effect(
     "an access token still good past the margin is handed out as it stands; one near its expiry is renewed, its refresh token rotated, and the renewal stored",
     () => {
@@ -258,7 +251,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
   );
 
   it.effect(
-    "a refresh token OpenAI refuses for good marks the sign-in invalid and keeps it; a server error changes nothing",
+    "a refresh token OpenAI refuses for good marks the plan invalid and keeps it; a server error changes nothing",
     () => {
       const server = fakeAuthorizationServer("refresh-0");
       return Effect.gen(function* () {
@@ -282,7 +275,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         );
         assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
 
-        // An invalid sign-in stays signed out, even where OpenAI would now take its refresh token.
+        // An invalid plan stays signed out, even where OpenAI would now take its refresh token.
         yield* signIn(owner, { refreshToken: "refresh-stale" });
         yield* Database.use((db) =>
           db
@@ -299,7 +292,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
     },
   );
 
-  it.effect("a renewal reads and writes the caller's own sign-in alone", () => {
+  it.effect("a renewal reads and writes the caller's own plan alone", () => {
     const server = fakeAuthorizationServer("refresh-0");
     return Effect.gen(function* () {
       const { owner, other } = yield* openAccounts;
@@ -314,7 +307,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
   });
 
   it.effect(
-    "removing the sign-in revokes its current refresh token under its issued client first, then removes it",
+    "removing the plan revokes its current refresh token under Codex's client first, then removes it",
     () => {
       const server = fakeAuthorizationServer("refresh-0");
       return Effect.gen(function* () {
@@ -328,7 +321,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         const form = yield* Effect.promise(() => formOf(revocation));
         assert.deepEqual(
           [form.get("token"), form.get("token_type_hint"), form.get("client_id")],
-          ["refresh-0", "refresh_token", ISSUED_CLIENT],
+          ["refresh-0", "refresh_token", CODEX_DEVICE_OAUTH.CLIENT_ID],
         );
         assert.equal(yield* rowOf(owner), undefined);
         assert.equal(
@@ -341,7 +334,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
   );
 
   it.effect(
-    "a revocation OpenAI keeps failing is tried again, then the sign-in is removed anyway and answered unconfirmed",
+    "a revocation OpenAI keeps failing is tried again, then the plan is removed anyway and answered unconfirmed",
     () => {
       const server = fakeAuthorizationServer("refresh-0");
       return Effect.gen(function* () {
@@ -353,51 +346,6 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         assert.equal(yield* driven(removing, Duration.seconds(1)), false);
 
         assert.equal(yield* rowOf(owner), undefined);
-      }).pipe(Effect.provide(server.http.layer));
-    },
-  );
-
-  it.effect(
-    "a sign-in handed over late is renewed by its access token's own expiry, not by when it was saved",
-    () => {
-      const server = fakeAuthorizationServer("refresh-0");
-      return Effect.gen(function* () {
-        const { owner } = yield* openAccounts;
-        // OpenAI issued the token to expire an hour on; the desktop saves it 50 minutes later.
-        const issuedAt = yield* Clock.currentTimeMillis;
-        yield* TestClock.adjust("50 minutes");
-        yield* signIn(owner, { accessToken: accessTokenExpiringAt((issuedAt + 3_600_000) / 1000) });
-
-        assert.equal(tokenOf(yield* refreshChatGptAccess(owner, ring())), "access-1");
-        assert.equal(
-          (yield* rowOf(owner))?.accessExpiresAt?.getTime(),
-          issuedAt + (50 + 60) * 60 * 1000,
-        );
-      }).pipe(Effect.provide(server.http.layer));
-    },
-  );
-
-  it.effect(
-    "a renewal whose grant lost the plan's scope is kept, since it rotated the refresh token, and marks the sign-in invalid",
-    () => {
-      const server = fakeAuthorizationServer("refresh-0");
-      return Effect.gen(function* () {
-        const { owner } = yield* openAccounts;
-        yield* signIn(owner);
-        yield* TestClock.adjust("2 hours");
-        server.state.granted = ["openid", "offline_access"];
-
-        assert.equal(
-          tokenOf(yield* refreshChatGptAccess(owner, ring())),
-          CHATGPT_ACCESS.SIGNED_OUT,
-        );
-        assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
-
-        // The rotated refresh token is the one kept, so its revocation names it.
-        assert.equal(yield* removeChatGptCredentials(owner, ring()), true);
-        const revocation = server.http.requests.find((request) => request.url === REVOCATION_URL);
-        assert.ok(revocation);
-        assert.equal((yield* Effect.promise(() => formOf(revocation))).get("token"), "refresh-1");
       }).pipe(Effect.provide(server.http.layer));
     },
   );
@@ -459,10 +407,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
 
         const renewed = yield* refreshChatGptAccess(owner, ring());
         assert.equal(tokenOf(renewed), "codex-access-1");
-        assert.deepEqual(chatGptPlanOf(renewed), {
-          flow: CHATGPT_FLOW.CODEX_DEVICE,
-          chatgptAccountId: "chatgpt-workspace",
-        });
+        assert.deepEqual(chatGptPlanOf(renewed), { chatgptAccountId: "chatgpt-workspace" });
         assert.deepEqual(renewals, [
           {
             grant_type: "refresh_token",
@@ -491,47 +436,49 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
   );
 
   it.effect(
-    "a sign-in sealed before the flows were told apart reads as the third party's and renews as it always has",
+    "a plan the retired third-party sign-in sealed, with or without its flow named, reads as not connected and is removed, and OpenAI is asked nothing",
     () => {
       const server = fakeAuthorizationServer("refresh-0");
       return Effect.gen(function* () {
         const { owner } = yield* openAccounts;
         const now = yield* DateTime.nowAsDate;
-        // The seal as it was written before it named a flow.
-        const json = JSON.stringify({
-          clientId: ISSUED_CLIENT,
+        // The seal as the third-party sign-in wrote it, before and after it named its flow.
+        const thirdParty = {
+          clientId: "oaiapp_test_client",
           accountId: "chatgpt-subject",
           accessToken: "access-0",
           refreshToken: "refresh-0",
           idToken: "id-token-0",
-          scopes: GRANTED,
-        });
-        const sealed = sealProviderKey(
-          ring(),
-          {
-            userId: owner,
-            provider: PROVIDER_KEY_PROVIDER.OPENAI,
-            kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-          },
-          Redacted.make(json),
-        );
-        yield* saveProviderKey(
-          owner,
-          PROVIDER_KEY_PROVIDER.OPENAI,
-          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-          sealed,
-          "ChatGPT",
-          null,
-          now,
-          now,
-        );
+          scopes: ["chatgpt.tokens.use.direct", "offline_access", "openid"],
+        };
+        const sealRetired = (seal: object) =>
+          saveProviderKey(
+            owner,
+            PROVIDER_KEY_PROVIDER.OPENAI,
+            PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+            sealProviderKey(
+              ring(),
+              {
+                userId: owner,
+                provider: PROVIDER_KEY_PROVIDER.OPENAI,
+                kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+              },
+              Redacted.make(JSON.stringify(seal)),
+            ),
+            "ChatGPT",
+            null,
+            now,
+            new Date(now.getTime() + 3_600_000),
+          );
 
-        const renewed = yield* refreshChatGptAccess(owner, ring());
-        assert.equal(tokenOf(renewed), "access-1");
-        assert.deepEqual(chatGptPlanOf(renewed), {
-          flow: CHATGPT_FLOW.THIRD_PARTY,
-          chatgptAccountId: undefined,
-        });
+        yield* sealRetired(thirdParty);
+        assert.equal(tokenOf(yield* refreshChatGptAccess(owner, ring())), CHATGPT_ACCESS.NONE);
+        assert.equal(yield* rowOf(owner), undefined);
+
+        yield* sealRetired({ flow: "third_party", ...thirdParty });
+        assert.equal(yield* removeChatGptCredentials(owner, ring()), true);
+        assert.equal(yield* rowOf(owner), undefined);
+        assert.deepEqual(server.http.requests, []);
       }).pipe(Effect.provide(server.http.layer));
     },
   );

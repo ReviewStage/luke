@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import "@repo/panel/testing/match-media";
 import "@repo/panel/testing/resize-observer";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { initialAppState } from "@repo/host/client";
@@ -17,6 +16,7 @@ import { installAppPlatform } from "@repo/panel/app-platform";
 import { installWindowHistory } from "@repo/panel/navigation-history";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
+import { onRegistry } from "@repo/panel/testing/copy-feedback";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -124,11 +124,7 @@ export async function drawPanel() {
   document.body.append(element);
   const root = createRoot(element);
   roots.push(root);
-  await act(async () =>
-    root.render(
-      createElement(RegistryContext.Provider, { value: rendererRegistry }, createElement(App)),
-    ),
-  );
+  await act(async () => root.render(onRegistry(rendererRegistry, createElement(App))));
   await settle();
   const buttonOf = (label: string) =>
     [...element.querySelectorAll("button")].findLast(

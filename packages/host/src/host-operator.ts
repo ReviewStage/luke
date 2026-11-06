@@ -86,10 +86,8 @@ import {
   type ChatGptDevicePollAnswerView,
   type ChatGptDeviceStartAnswerView,
   type ChatGptDeviceWaitParams,
-  type ChatGptSignInAnswerView,
   chatGptDevicePollAnswerViewSchema,
   chatGptDeviceStartAnswerViewSchema,
-  chatGptSignInAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -873,10 +871,6 @@ export interface HostOperator {
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
   providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  chatGptSignInCancel(): Effect.Effect<void>;
   /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
   chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
   /** A device-code login waited on until it settles or an ask after it goes unanswered; the keys as they then stand once it connected. */
@@ -2342,12 +2336,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chatGptSignIn: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
-        answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
     chatGptDeviceStart: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHATGPT_DEVICE_START),

@@ -22,9 +22,8 @@
  *   swap that puts the token in its place at the sandbox's firewall
  *   (`HarnessLaunch`'s `held`, `LAUNCH_SWAP.OPENAI_PLAN`), which the
  *   scheduled sweep renews while it stands (`renewPlanSwap`), so a turn
- *   outlives the hour a token lives. The swap stands on OpenAI's API for a
- *   third-party sign-in's token, and on Codex's ChatGPT backend for a
- *   device-code login's, which the runner is told to send its requests to
+ *   outlives the hour a token lives. The swap stands on Codex's ChatGPT
+ *   backend, which the runner is told to send its requests to
  *   (`planBackendEnv`).
  * - The token is the account's `chatgpt_oauth` row's, renewed first where
  *   less than the token margin is left of it (`refreshChatGptAccess`, under
@@ -74,8 +73,6 @@ import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provide
 import { Duration, Effect, Option, Redacted, Result } from "effect";
 import {
   CHATGPT_ACCESS,
-  CHATGPT_FLOW,
-  type ChatGptFlow,
   type ChatGptPlanIdentity,
   refreshChatGptAccess,
 } from "../../accounts/chatgpt-credentials.js";
@@ -134,36 +131,30 @@ const BEARER_HEADER = "authorization";
 /** Where a credential is swapped in at a sandbox's firewall: a host, and the paths under it where only some carry it. */
 type SwapTarget = Pick<PlaceholderSwap, "domain" | "path">;
 
-/** OpenAI's API as Codex reaches it from a sandbox: the one host it sends an API key, or a third-party sign-in's token, to. */
+/** OpenAI's API as Codex reaches it from a sandbox: the one host it sends an API key to. */
 const OPENAI_API: SwapTarget = { domain: "api.openai.com" };
 
 /**
- * Where Codex sends the plan's bearer from a sandbox, by the flow the plan
- * was connected through: the provider's `base_url` the runner writes for
- * its backend (`@repo/agent-runner`'s `codex.ts`), OpenAI's API for a
- * third-party sign-in's token, and Codex's ChatGPT backend for a
- * device-code login's, which OpenAI's API refuses. Note that the latter is
- * held to the backend's paths, because that token is the account's
- * ChatGPT sign-in, which the rest of chatgpt.com would take too.
+ * Where Codex sends the plan's bearer from a sandbox: the provider's
+ * `base_url` the runner writes for its backend (`@repo/agent-runner`'s
+ * `codex.ts`), Codex's ChatGPT backend, which OpenAI's API refuses the
+ * plan's token on. Note that it is held to the backend's paths, because
+ * that token is the account's ChatGPT sign-in, which the rest of
+ * chatgpt.com would take too.
  */
-const PLAN_TARGET = {
-  [CHATGPT_FLOW.THIRD_PARTY]: OPENAI_API,
-  [CHATGPT_FLOW.CODEX_DEVICE]: {
-    domain: "chatgpt.com",
-    path: { startsWith: "/backend-api/codex/" },
-  },
-} as const satisfies Record<ChatGptFlow, SwapTarget>;
+const PLAN_TARGET: SwapTarget = {
+  domain: "chatgpt.com",
+  path: { startsWith: "/backend-api/codex/" },
+};
 
 /**
  * What tells the runner which backend the plan's launch sends its requests
- * to: nothing for a third-party sign-in, whose launch runs as it always
- * has; for a device-code login, Codex's ChatGPT backend and the workspace
- * it pays from, where its ID token named one. Note that these sit in the
- * launch's environment, which its fingerprint digests, so a warm runner
- * whose plan was connected again through the other flow is relaunched.
+ * to: Codex's ChatGPT backend, and the workspace it pays from, where its ID
+ * token named one. Note that these sit in the launch's environment, which
+ * its fingerprint digests, so a warm runner whose plan was connected again
+ * under another workspace is relaunched.
  */
 function planBackendEnv(plan: ChatGptPlanIdentity): Readonly<Record<string, string>> {
-  if (plan.flow !== CHATGPT_FLOW.CODEX_DEVICE) return {};
   return {
     [RUNNER_ENV.CODEX_PLAN_BACKEND]: CODEX_PLAN_BACKEND.CHATGPT,
     ...(plan.chatgptAccountId === undefined
@@ -375,7 +366,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
             env,
             held: heldAtFirewall(
               LAUNCH_SWAP.OPENAI_PLAN,
-              PLAN_TARGET[plan.flow],
+              PLAN_TARGET,
               RUNNER_ENV.CODEX_TOKEN,
               token,
             ),
@@ -484,9 +475,8 @@ export const PLAN_RENEWAL = {
  * (`firewallSourcesOfAgent`). A sign-in that no longer answers a token, or a
  * credential that could not be minted, leaves the swap as it stands, which
  * OpenAI refuses once its token lapses, as the route refused a Mac's command.
- * So does a plan connected again through the other flow since the launch,
- * whose token the swap's host would refuse: the runner is relaunched on the
- * new one at its next message, its fingerprint changed.
+ * So does a swap a launch on the retired third-party sign-in set on another
+ * host, which the plan's token is never sent to.
  */
 export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSession, ring: KeyRing) =>
   Effect.gen(function* () {
@@ -501,10 +491,9 @@ export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSessio
         );
         return PLAN_RENEWAL.UNANSWERED;
       }
-      const host = PLAN_TARGET[access.plan.flow].domain;
-      if (!Redacted.value(standing.rules).every(([swapped]) => swapped === host)) {
+      if (!Redacted.value(standing.rules).every(([swapped]) => swapped === PLAN_TARGET.domain)) {
         yield* Effect.logWarning(
-          "a Codex plan's swap was not renewed: the plan was connected through another flow",
+          "a Codex plan's swap was not renewed: it stands on another host than the plan's",
         );
         return PLAN_RENEWAL.LEFT;
       }

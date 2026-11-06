@@ -86,6 +86,14 @@ const TYPED = 'textarea, [contenteditable]:not([contenteditable="false"])';
 /** The recorder's fixed class for an input whose changes it never reads. */
 const IGNORED_INPUT = "ph-ignore-input";
 
+/**
+ * The recorder's fixed class for what it leaves out whole: drawn as an empty
+ * box of its size, and none of its changes read. Note that a decoration that
+ * moves by rewriting its own attributes wears it too, because the recorder
+ * would otherwise serialize, mask, and send every step.
+ */
+export const REPLAY_LEFT_OUT = "ph-no-capture";
+
 /** The selector a withheld sheet's first rule is written with, which no element wears. */
 const WITHHELD = ".session-replay-withheld";
 

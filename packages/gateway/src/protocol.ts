@@ -484,10 +484,6 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** A ChatGPT sign-in for our hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
   /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
   CHATGPT_DEVICE_START: "chatGpt.device.start",
   /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */

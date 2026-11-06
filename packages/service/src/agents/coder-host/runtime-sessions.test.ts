@@ -49,7 +49,7 @@ import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import { sealCodexDeviceCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import {
@@ -1013,20 +1013,15 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
         ),
       );
       assert.ok(Result.isSuccess(ring));
-      const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(
-        ring.success,
-        owner,
-        {
-          clientId: "dynamic-client-fixture",
-          accountId: "chatgpt-subject",
-          accessToken: "access-0",
-          refreshToken: "refresh-0",
-          idToken: "id-token-0",
-          expiresInSeconds: 3600,
-          scopes: [CHATGPT_OAUTH.USAGE_SCOPE, "offline_access", "openid"],
-        },
-        new Date(0),
-      );
+      const accessExpiresAt = new Date(3_600_000);
+      const { sealed, hint } = sealCodexDeviceCredentials(ring.success, owner, {
+        accessToken: "access-0",
+        refreshToken: "refresh-0",
+        idToken: "id-token-0",
+        accountId: "chatgpt-subject",
+        chatgptAccountId: undefined,
+        accessExpiresAt,
+      });
       yield* saveProviderKey(
         owner,
         PROVIDER_KEY_PROVIDER.OPENAI,
