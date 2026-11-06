@@ -41,7 +41,6 @@ import {
   SPINNER_SIZE,
   SpinnerRing,
   Stack,
-  TextButton,
   useConfirmDialog,
 } from "@repo/ui";
 import type { ServerRow } from "@repo/ui/agent-servers-model";
