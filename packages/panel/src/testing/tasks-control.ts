@@ -47,6 +47,7 @@ import {
   tasksDeleteMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
+import type { VersionHistoryRoute } from "../version-history-route.js";
 import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
 
@@ -242,7 +243,7 @@ function versionHistoryControl(
   return {
     open: false,
     onOpen: ignore,
-    onReturn: ignore,
+    onPreload: ignore,
     onClose: ignore,
     list: { kind: HISTORY_READ.READING },
     selected: undefined,
@@ -254,7 +255,6 @@ function versionHistoryControl(
     onCloseSections: ignore,
     listed: true,
     onList: ignore,
-    onStand: ignore,
     onRetry: ignore,
     onRetryVersion: ignore,
     onLoadEarlier: () => Promise.resolve(false),
@@ -414,6 +414,20 @@ export const AUTOMATIONS_AWAY: AutomationsRoute = {
   onRuns: ignore,
   onClose: ignore,
   onTurn: ignore,
+};
+
+/** A version history's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const VERSION_HISTORY_AWAY: VersionHistoryRoute = {
+  open: false,
+  workspace: undefined,
+  task: undefined,
+  spot: undefined,
+  listAddress: undefined,
+  onOpen: ignore,
+  onMove: ignore,
+  onClose: ignore,
+  onGiveWay: ignore,
+  onPreload: ignore,
 };
 
 /** A person's route standing nowhere, for a tasks tab drawn with no router to stand it. */

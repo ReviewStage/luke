@@ -26,7 +26,13 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
-import { ADMIN_AWAY, AUTOMATIONS_AWAY, BOARD_AWAY, PERSON_AWAY } from "../testing/tasks-control.js";
+import {
+  ADMIN_AWAY,
+  AUTOMATIONS_AWAY,
+  BOARD_AWAY,
+  PERSON_AWAY,
+  VERSION_HISTORY_AWAY,
+} from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
@@ -219,6 +225,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       boardView: BOARD_AWAY,
       personView: PERSON_AWAY,
       automationsView: AUTOMATIONS_AWAY,
+      versionHistoryView: VERSION_HISTORY_AWAY,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }

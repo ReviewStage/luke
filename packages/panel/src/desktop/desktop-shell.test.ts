@@ -215,7 +215,9 @@ function mount(
         ? SHELL_AT.ADMIN
         : overrides.automationsView?.open === true
           ? SHELL_AT.AUTOMATIONS
-          : undefined;
+          : overrides.history?.open === true
+            ? SHELL_AT.VERSION_HISTORY
+            : undefined;
   act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
   return container;
 }
@@ -1054,6 +1056,10 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
   handState({});
   const page = mount(false, { history });
+  // The router goes to the history, whose frame stands while its chunk is read.
+  await act(async () => {
+    await Promise.resolve();
+  });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
   assert.equal(
@@ -1259,6 +1265,12 @@ async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
 
 const PLACES = Object.values(PLACE);
 
+/** Where the router stands for a place it draws, Settings and a version history; none for a place the shell's props say. */
+function routedAt(place: Place): string | undefined {
+  if (place === PLACE.SETTINGS) return SHELL_AT.SETTINGS;
+  return place === PLACE.VERSION_HISTORY ? SHELL_AT.VERSION_HISTORY : undefined;
+}
+
 test("the side panel's toggle stands on a plan and on an agent's page, which keeps a panel of its own, and nowhere else the plan's place is taken", async () => {
   await handBridge();
   const container = document.createElement("div");
@@ -1269,13 +1281,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   for (const place of PLACES) {
     act(() =>
       root?.render(
-        onRegistry(
-          registry,
-          underRouter(
-            createElement(PlacedShell, { place }),
-            place === PLACE.SETTINGS ? SHELL_AT.SETTINGS : undefined,
-          ),
-        ),
+        onRegistry(registry, underRouter(createElement(PlacedShell, { place }), routedAt(place))),
       ),
     );
     await settle();
@@ -1337,10 +1343,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
       root?.render(
         onRegistry(
           AtomRegistry.make(),
-          underRouter(
-            createElement(PlacedShell, { place }),
-            place === PLACE.SETTINGS ? SHELL_AT.SETTINGS : undefined,
-          ),
+          underRouter(createElement(PlacedShell, { place }), routedAt(place)),
         ),
       ),
     );
@@ -1367,7 +1370,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
   });
 });
 
-test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", () => {
+test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", async () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, {
@@ -1389,6 +1392,8 @@ test("a plan's chip in a description's version history hangs the plan's card, as
       },
     },
   });
+  await act(() => routed().settled());
+  await settle();
   const chip = page.querySelector("[data-mention-ref]");
   assert.ok(chip, "the version draws the plan's chip");
 

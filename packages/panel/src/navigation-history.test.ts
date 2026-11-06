@@ -46,6 +46,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
+import { useVersionHistoryRoute } from "./version-history-route.js";
 import {
   type BoardRoute,
   type PersonRoute,
@@ -112,6 +113,10 @@ function mount(
     board = useBoardRoute({ onClose: () => history?.onLeaveRouted() });
     person = usePersonRoute({ onClose: () => history?.onLeaveRouted() });
     automations = useAutomationsRoute({ onClose: () => history?.onLeaveRouted() });
+    const versions = useVersionHistoryRoute({
+      narrow: false,
+      onClose: () => history?.onLeaveRouted(),
+    });
     const listedStep = standing.workspaces.find((each) => each.id === standing.workspace?.id)?.slug;
     const tasks: TasksControl = {
       ...standing,
@@ -157,6 +162,7 @@ function mount(
       settingsList: undefined,
       onSettingsList: () => undefined,
       automations,
+      versionHistory: versions,
       room: SHELL_ROOM.WIDE,
       title: titled?.(tasks),
       tasks,

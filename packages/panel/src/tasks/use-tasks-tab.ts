@@ -11,6 +11,7 @@ import {
   LINK_PLACE,
   type LinkPlace,
   type ReadLink,
+  taskLinkStep,
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
@@ -151,6 +152,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
+import type { VersionHistoryRoute } from "../version-history-route.js";
 import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -1026,17 +1028,16 @@ export interface VersionHistoryControl extends DescriptionHistoryControl {
    * where it is not the open one.
    */
   onOpen: (taskId: string, save?: number) => void;
-  /** Opens a description's version history where it stood when it was left, as Back and Forward go to it. */
-  onReturn: (taskId: string, spot: HistorySpot | undefined) => void;
+  /** Reads a description's version history ahead, as the pointer comes to a way into it. */
+  onPreload: (taskId: string) => void;
   /** Leaves the version history for the task, its side panel as it was. */
   onClose: () => void;
 }
 
-/** The task whose version history stands, and the save whose revision it opened on or where it stood before. */
-interface HistoryOpening {
+/** The save a version history opened on, on its task, whose revision it seeks. */
+interface HistorySeek {
   readonly taskId: string;
-  readonly save: number | undefined;
-  readonly spot: HistorySpot | undefined;
+  readonly save: number;
 }
 
 /**
@@ -1417,6 +1418,8 @@ export function useTasksTab(input: {
   personView: PersonRoute;
   /** The listed workspace's Automations pages as the router stands them (`automations-route.ts`). */
   automationsView: AutomationsRoute;
+  /** A task's version history as the router stands it (`version-history-route.ts`). */
+  versionHistoryView: VersionHistoryRoute;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1464,12 +1467,9 @@ export function useTasksTab(input: {
   const [relationMenu, setRelationMenu] = useState<TasksControl["relationMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
   const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
-  /**
-   * The task whose version history stands in the window, which it does only
-   * while that task is the one bound for, and the save whose revision it
-   * opened on, none for the description as it stands.
-   */
-  const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
+  /** The save whose revision a version history opened from a section's "Edited by" seeks, on its task, until it is found, given up on, or the history is left. */
+  const [historySeek, setHistorySeek] = useState<HistorySeek | undefined>(undefined);
+  const historyRoute = input.versionHistoryView;
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
   const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
@@ -1953,7 +1953,7 @@ export function useTasksTab(input: {
     input.automationsView.open;
   const stateShown = shown && !routedOver;
   const columnInView =
-    stateShown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
+    stateShown && !historyRoute.open && standIn === undefined && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
   // Note that the column is filled only while in view, because a blank draft out of view is let
   // go at once (below), which would leave it empty to fill again.
@@ -2018,16 +2018,67 @@ export function useTasksTab(input: {
   // back. A fixture's tasks are opened nowhere, so nothing is asked of them.
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
-  // The version history is the task's, so another task, or none, leaves it, and so does Descriptions turned off, whose it is.
   const descriptionsOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
-  if (historyFor !== undefined && (historyFor.taskId !== boundFor || !descriptionsOn)) {
-    setHistoryFor(undefined);
-  }
-  // A plan the service would not hand the reader has no history to show, so its Not found stands in the history's place, as a version's link may ask for one.
+  // The version history is the router's (`version-history-route.ts`), of the task its address names by its number in the
+  // workspace it names, or by its id, found among the tasks the window holds, else asked of the service as a link's is.
+  const routedStep = historyRoute.task;
+  const routedNumber =
+    routedStep === undefined
+      ? undefined
+      : taskNumberOf({ kind: LINK_PLACE.TASK, planId: routedStep });
+  const routedHome =
+    historyRoute.workspace === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, historyRoute.workspace)?.id;
+  const namesTask = (task: {
+    readonly id: string;
+    readonly number?: number | undefined;
+    readonly workspaceId: string;
+  }) =>
+    task.id === routedStep ||
+    (taskLinkStep(task) === routedStep &&
+      (routedHome === undefined || task.workspaceId === routedHome));
+  const heldTask =
+    routedStep === undefined
+      ? undefined
+      : (tasks.tasks.find(namesTask) ??
+        (region.kind === DOCUMENT_REGION.READY && namesTask(region.task)
+          ? region.task
+          : undefined));
+  const foundTask = useQuery({
+    ...taskByNumberQueryOptions(historyRoute.workspace ?? "", routedNumber ?? 0),
+    enabled:
+      heldTask === undefined && routedNumber !== undefined && historyRoute.workspace !== undefined,
+    select: (found) => ("taskId" in found ? found.taskId : undefined),
+  }).data;
+  const routedHistoryTask =
+    routedStep === undefined
+      ? undefined
+      : (heldTask?.id ?? (routedNumber === undefined ? routedStep : foundTask));
+  // The task a version history's address names opens under it as the history lands, whatever stood in the plan's place giving way, as opening it always had them.
+  const landHistory = useRef<(taskId: string) => void>(() => undefined);
+  useEffect(() => {
+    if (routedHistoryTask === undefined) return;
+    landHistory.current(routedHistoryTask);
+    // A save sought is the opening's alone, so the history left lets it go.
+    return () => setHistorySeek(undefined);
+  }, [routedHistoryTask]);
+  // The history is the description's, which stands only while Descriptions is on (`versionHistoryRouteStands`).
   const historyOpen =
-    historyFor !== undefined &&
-    historyFor.taskId === boundFor &&
+    routedHistoryTask !== undefined &&
+    routedHistoryTask === boundFor &&
+    descriptionsOn &&
     region.kind !== DOCUMENT_REGION.MISSING;
+  // A plan the service would not hand the reader has no history to show, so its step gives way to the task, whose Not found stands, as a version's link may ask for one.
+  const historyMissing =
+    routedHistoryTask !== undefined &&
+    routedHistoryTask === tasks.activeTaskId &&
+    region.kind === DOCUMENT_REGION.MISSING;
+  const giveHistoryWay = useRef(historyRoute.onGiveWay);
+  giveHistoryWay.current = historyRoute.onGiveWay;
+  useEffect(() => {
+    if (historyMissing) giveHistoryWay.current();
+  }, [historyMissing]);
   // A pin stays chosen while its task stays open, whichever of its tabs is
   // shown: once its task opens it is held there, and any other task opening
   // lets it go. Note that this reads the task open rather than the one asked
@@ -2182,6 +2233,10 @@ export function useTasksTab(input: {
     },
     [tasksNow, workspacesNow, listedId, openTaskId, openTask, chooseListed, toast, leaveTask],
   );
+  landHistory.current = (taskId) => {
+    if (taskId !== boundFor) select(taskId);
+    setStandIn(undefined);
+  };
 
   // A fixture's tasks are deleted nowhere, as they are read from nowhere. A
   // delete that landed says nothing, since the task leaving the list says it;
@@ -2807,9 +2862,11 @@ export function useTasksTab(input: {
     history: heldHistory,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
-    shown: shown && historyOpen,
-    seek: historyFor?.save,
-    returnTo: historyFor?.spot,
+    at: shown && historyOpen ? historyRoute.spot : undefined,
+    seek: historySeek?.taskId === historyTaskId ? historySeek?.save : undefined,
+    narrow: input.room === SHELL_ROOM.NARROW,
+    onMove: historyRoute.onMove,
+    onSought: () => setHistorySeek(undefined),
     // The Undo puts back the version that stood before the restore, itself a restore.
     onRestored: (undo) => sayRestored(toast, undo),
   });
@@ -2876,7 +2933,11 @@ export function useTasksTab(input: {
     // service answers; a refusal opens the card again where it was left.
     const { handed, card } = from;
     const standingBefore = standIn;
-    const historyBefore = historyFor;
+    // Note that a version history standing at the press is where its address stood, which a refusal opens again.
+    const historyBefore =
+      historyRoute.workspace === undefined || historyRoute.task === undefined
+        ? undefined
+        : { workspace: historyRoute.workspace, task: historyRoute.task, spot: historyRoute.spot };
     const stays = !opensNewTask;
     const pressedAt = navigations.current;
     // Note that the agent's first line is stamped at the press, which its line after the answer keeps.
@@ -2898,7 +2959,7 @@ export function useTasksTab(input: {
       setStartingTask({ line, choice: handed?.choice, navigation: pressedAt });
       setNewTaskAsk(undefined);
       setStandIn(undefined);
-      setHistoryFor(undefined);
+      closeHistory();
     }
     // Note that the host opens a start's task at once, so a bare one pressed on Home's own
     // composer, whose page the task's took the place of, says its refusal in a toast, as no
@@ -2919,7 +2980,9 @@ export function useTasksTab(input: {
         // Note that what stood before the press comes back only where the developer went nowhere since.
         if (navigations.current === pressedAt) {
           setStandIn((now) => now ?? standingBefore);
-          setHistoryFor((now) => now ?? historyBefore);
+          if (historyBefore !== undefined) {
+            historyRoute.onOpen(historyBefore.workspace, historyBefore.task, historyBefore.spot);
+          }
         }
         setNewTaskAsk({
           preset:
@@ -2982,7 +3045,7 @@ export function useTasksTab(input: {
           setNewTaskAsk(undefined);
           setStartingTask(undefined);
           setStandIn(undefined);
-          setHistoryFor(undefined);
+          closeHistory();
           return undefined;
         }
         letGoOfPage();
@@ -3080,7 +3143,7 @@ export function useTasksTab(input: {
   const newTask = () => {
     // Note that Home under a routed place is no Home on screen, so its composer is no New task there (`admin-route.ts`).
     const atHome =
-      page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined && !routedOver;
+      page === TASKS_PAGE.HOME && standIn === undefined && !historyRoute.open && !routedOver;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -3090,14 +3153,45 @@ export function useTasksTab(input: {
 
   // A description's version history opens over the task, so another task opens first.
   // Note that a task's versions are its description's, so while Descriptions is off whatever would open them, a link to a version among them, opens the task's Overview.
-  const openHistory = (opening: HistoryOpening) => {
+  // A task's history's address names it as its links do, under its workspace, the one a link named where the window holds no such task, else the listed one;
+  // a workspace not yet read is named by its id, as a link names one.
+  const historyAddressOf = (taskId: string, workspace: string | undefined) => {
+    const task =
+      tasksNow.find((each) => each.id === taskId) ??
+      (region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
+        ? region.task
+        : undefined);
+    const home = viewed.workspaces.find((each) => each.id === task?.workspaceId);
+    const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+    const under =
+      home === undefined ? (workspace ?? task?.workspaceId ?? listedStep) : stepOf(home);
+    return under === undefined
+      ? undefined
+      : { workspace: under, task: task === undefined ? taskId : taskLinkStep(task) };
+  };
+  // It is opened at its address (`version-history-route.ts`).
+  const openHistory = (
+    taskId: string,
+    opening: {
+      readonly save?: number | undefined;
+      readonly spot?: HistorySpot;
+      readonly workspace?: string;
+    },
+  ) => {
     if (!descriptionsOn) {
-      showOverview({ kind: LINK_PLACE.TASK, planId: opening.taskId });
+      showOverview({ kind: LINK_PLACE.TASK, planId: taskId });
       return;
     }
-    if (opening.taskId !== boundFor) select(opening.taskId);
+    const address = historyAddressOf(taskId, opening.workspace);
+    if (address === undefined) return;
+    if (taskId !== boundFor) select(taskId);
     setStandIn(undefined);
-    setHistoryFor(opening);
+    setHistorySeek(opening.save === undefined ? undefined : { taskId, save: opening.save });
+    historyRoute.onOpen(address.workspace, address.task, opening.spot);
+  };
+  // A door into a place of the window's state leaves the version history over it.
+  const closeHistory = () => {
+    if (historyRoute.open) historyRoute.onClose();
   };
 
   // A task's own tab, its Inbox, and an agent's are in its column, so a
@@ -3106,7 +3200,7 @@ export function useTasksTab(input: {
   const showColumnTab = (taskId: string, tab: MainTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
     setStandIn(undefined);
-    setHistoryFor(undefined);
+    closeHistory();
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onShow(taskId, tab);
   };
@@ -3115,7 +3209,7 @@ export function useTasksTab(input: {
   const showPanelTab = (taskId: string, tab: SidePanelTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
     setStandIn(undefined);
-    setHistoryFor(undefined);
+    closeHistory();
     sidePanel.onShow(taskId, tab);
   };
   // The task's description shown at the place given: its column's Overview, which
@@ -3123,7 +3217,7 @@ export function useTasksTab(input: {
   // the window goes there (`route.ts`), a panel filling the window over the
   // column giving way.
   const showOverview = (place: OverviewPlace) => {
-    const standing = standIn === undefined && historyFor === undefined;
+    const standing = standIn === undefined && !historyRoute.open;
     const routed = route(
       { kind: ADDRESS.PLACE, link: { workspace: "", place } },
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
@@ -3135,14 +3229,14 @@ export function useTasksTab(input: {
     }
     if (place.planId !== tasks.activeTaskId) select(place.planId);
     setStandIn(undefined);
-    setHistoryFor(undefined);
+    closeHistory();
     mainTabs.onShow(place.planId, MAIN_TAB.OVERVIEW);
   };
   // A link to a tab of the task standing opens it as the panel's preview, as
   // any link pressed there does; one to another task's goes there and opens
   // it as a tab of its own (`route.ts`).
   const linkPanelTab = (place: TaskTabPlace, tab: SidePanelTab) => {
-    const standing = standIn === undefined && historyFor === undefined;
+    const standing = standIn === undefined && !historyRoute.open;
     const routed = route(
       { kind: ADDRESS.PLACE, link: { workspace: "", place } },
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
@@ -3182,7 +3276,7 @@ export function useTasksTab(input: {
   const showTaskAgents = (taskId: string) => {
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     setStandIn(undefined);
-    setHistoryFor(undefined);
+    closeHistory();
     const returnTab = taskId === tasks.activeTaskId ? mainTabs.returnTab : undefined;
     if (returnTab !== undefined && isOverviewTab(mainTabs.tab)) {
       mainTabs.onChoose(returnTab);
@@ -3212,7 +3306,7 @@ export function useTasksTab(input: {
 
   // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
   const standInFor = (standing: StandIn) => {
-    setHistoryFor(undefined);
+    closeHistory();
     setStandIn(standing);
   };
 
@@ -3455,7 +3549,6 @@ export function useTasksTab(input: {
   const openBoard = (home: Pick<Workspace, "id" | "slug"> | undefined) => {
     const shown = home ?? listedWorkspace;
     if (shown === undefined) return;
-    setHistoryFor(undefined);
     setStandIn(undefined);
     input.boardView.onOpen(stepOf(shown));
   };
@@ -3473,7 +3566,6 @@ export function useTasksTab(input: {
   ) => {
     const shown = home ?? listedWorkspace;
     if (shown === undefined) return;
-    setHistoryFor(undefined);
     setStandIn(undefined);
     // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
     // asked before it, answering late, lists nothing and leaves nothing over it.
@@ -3492,14 +3584,13 @@ export function useTasksTab(input: {
     const listedId = workspace === undefined ? listedWorkspace?.id : listLinked(workspace);
     const shown = viewed.workspaces.find((each) => each.id === listedId) ?? listedWorkspace;
     if (shown === undefined) return;
-    setHistoryFor(undefined);
     setStandIn(undefined);
     input.automationsView.onOpen(to, stepOf(shown));
   };
 
   // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
   const goHome = () => {
-    setHistoryFor(undefined);
+    closeHistory();
     if (boundFor === undefined) setStandIn(undefined);
     else leaveTask();
   };
@@ -3552,10 +3643,9 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.VERSION:
-        openHistory({
-          taskId: place.planId,
-          save: undefined,
-          spot: { revision: place.revision, opened: undefined },
+        openHistory(place.planId, {
+          spot: { revision: place.revision, opened: undefined, listed: false },
+          workspace,
         });
         return;
       case LINK_PLACE.PAGE:
@@ -3623,7 +3713,7 @@ export function useTasksTab(input: {
   // open, once the host has it open, since the panel draws the open task's.
   const showFile = (taskId: string, ref: CodeRef, commit: string | undefined) => {
     setStandIn(undefined);
-    setHistoryFor(undefined);
+    closeHistory();
     if (taskId === tasks.activeTaskId) {
       sidePanel.onOpenFile(ref, commit);
       return;
@@ -3739,7 +3829,7 @@ export function useTasksTab(input: {
   );
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
-    stateShown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
+    stateShown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && !historyRoute.open;
   const pinnedHere = (tab: StripTab) =>
     isAgentTab(tab)
       ? taskAgentPins.some((pin) => pin.agentId === tab.agent)
@@ -3787,7 +3877,7 @@ export function useTasksTab(input: {
   const reopenHere = (closed: ClosedTab) => {
     if (!drawsAgain(closed)) return;
     setStandIn(undefined);
-    setHistoryFor(undefined);
+    closeHistory();
     if (closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL) {
       sidePanel.onReopen(closed.tab, closed.at, closed.file);
       return;
@@ -3881,7 +3971,7 @@ export function useTasksTab(input: {
     startingTask !== undefined &&
     startingTask.navigation === navigations.current &&
     standIn === undefined &&
-    historyFor === undefined
+    !historyRoute.open
       ? startingTask
       : undefined;
 
@@ -3948,9 +4038,13 @@ export function useTasksTab(input: {
     history: {
       ...history,
       open: historyOpen,
-      onOpen: (taskId, save) => openHistory({ taskId, save, spot: undefined }),
-      onReturn: (taskId, spot) => openHistory({ taskId, save: undefined, spot }),
-      onClose: () => setHistoryFor(undefined),
+      // The history takes the window from whatever stood, so a page holding unsaved work asks first.
+      onOpen: guard((taskId: string, save?: number) => openHistory(taskId, { save })),
+      onPreload: (taskId) => {
+        const address = historyAddressOf(taskId, undefined);
+        if (address !== undefined) historyRoute.onPreload(address.workspace, address.task);
+      },
+      onClose: historyRoute.onClose,
     },
     // Note that the pin's own task opened by its row is the task the
     // sidebar marks again rather than the pin; another task's lets the pin
@@ -3984,7 +4078,7 @@ export function useTasksTab(input: {
       // It leaves any task it was narrowed to, so the Inbox lists every item.
       onOpen: guard(() => {
         timeInboxOpen();
-        setHistoryFor(undefined);
+        closeHistory();
         leaveInboxTask();
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
@@ -3992,7 +4086,7 @@ export function useTasksTab(input: {
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
       onOpenItem: guard((chosen: InboxChoice) => {
-        setHistoryFor(undefined);
+        closeHistory();
         openTaskThread("taskId" in chosen ? chosen.taskId : undefined);
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { ...held, chosen } : { kind: STAND_IN.INBOX, chosen },
@@ -4012,7 +4106,7 @@ export function useTasksTab(input: {
       agentId: agentView?.agentId,
       pages: agentPages,
       onOpen: guard((agentId: string) => {
-        setHistoryFor(undefined);
+        closeHistory();
         setStandIn({ kind: STAND_IN.AGENT, agentId });
       }),
       onClose: guard(() => setStandIn(undefined)),
@@ -4089,7 +4183,7 @@ export function useTasksTab(input: {
     onShowInbox: guard(
       ({ taskId, itemId }: { readonly taskId: string; readonly itemId?: string }) => {
         timeInboxOpen();
-        setHistoryFor(undefined);
+        closeHistory();
         chooseInboxTask(taskId);
         const chosen = itemId === undefined ? undefined : { taskId, itemId, opened: true as const };
         setStandIn({ kind: STAND_IN.INBOX, chosen });
@@ -4099,7 +4193,7 @@ export function useTasksTab(input: {
     onOpenPinnedTab: guard((pin: SidebarPin) => {
       const { tab } = pin;
       setChosen({ pin, over: openTaskId });
-      setHistoryFor(undefined);
+      closeHistory();
       // A tab pinned on an agent's own page opens that page, its panel on the tab.
       if ("agent" in pin) {
         setStandIn({ kind: STAND_IN.AGENT, agentId: pin.agent });

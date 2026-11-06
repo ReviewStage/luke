@@ -96,6 +96,7 @@ import { ADMIN_AWAY, listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
+import { useVersionHistoryRoute, type VersionHistoryRoute } from "../version-history-route.js";
 import { useBoardRoute, usePersonRoute } from "../workspace-routes.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
@@ -282,10 +283,12 @@ function mount(
     tasks,
     room,
     automations,
+    versionHistory,
   }: {
     tasks: TasksControl;
     room: ShellRoom;
     automations: AutomationsRoute;
+    versionHistory: VersionHistoryRoute;
   }) {
     windowHistory = useWindowHistory({
       known: true,
@@ -294,6 +297,7 @@ function mount(
       settingsList: undefined,
       onSettingsList: () => undefined,
       automations,
+      versionHistory,
       room,
       tasks,
     });
@@ -327,8 +331,13 @@ function mount(
   function Probe() {
     const [held, setHeld] = useState(standing);
     const router = useRouter();
-    const leaveRouted = () => void router.navigate({ to: "/app" });
+    // Note that the router here is drawn by no provider, which is what reads its history's moves, so its own last location stays where it was made, `/app`, and the leave is written to the history itself.
+    const leaveRouted = () => router.history.push("/app");
     const automationsView = useAutomationsRoute({ onClose: leaveRouted });
+    const versionHistoryView = useVersionHistoryRoute({
+      narrow: held.room === SHELL_ROOM.NARROW,
+      onClose: leaveRouted,
+    });
     restand = setHeld;
     control = useTasksTab({
       tasks: held.tasks,
@@ -356,12 +365,14 @@ function mount(
       boardView: useBoardRoute({ onClose: leaveRouted }),
       personView: usePersonRoute({ onClose: leaveRouted }),
       automationsView,
+      versionHistoryView,
     });
     return held.history
       ? createElement(WindowHistoryProbe, {
           tasks: control,
           room: held.room,
           automations: automationsView,
+          versionHistory: versionHistoryView,
         })
       : null;
   }
@@ -1762,6 +1773,7 @@ test("a Vespin link to a task's version opens its version history on that versio
       place: { kind: LINK_PLACE.VERSION, planId: TASK.id, revision: 3 },
     }),
   );
+  await settle();
   const history = { open: tab.control().history.open, spot: tab.control().history.spot };
   act(() =>
     tab.control().onOpenLink({
@@ -1769,6 +1781,7 @@ test("a Vespin link to a task's version opens its version history on that versio
       place: { kind: LINK_PLACE.TASK, planId: TASK.id },
     }),
   );
+  await settle();
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
@@ -1827,6 +1840,7 @@ test("a version history opened on a held task lists its versions in its first fr
   await settle();
 
   act(() => tab.control().history.onOpen(TASK.id));
+  await settle();
 
   assert.deepEqual(tab.control().history.list, {
     kind: HISTORY_READ.READY,

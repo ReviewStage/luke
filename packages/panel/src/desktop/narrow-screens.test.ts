@@ -13,7 +13,7 @@ import { PROFILE } from "@repo/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement, useEffect, useRef } from "react";
+import { act, createElement, type ReactElement, useEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
@@ -39,7 +39,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { shellRouterEachTest } from "../testing/shell-router.js";
+import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
@@ -241,20 +241,28 @@ function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX
   });
 }
 
-/** The version history the last window drew, which the window's history moves as it goes back and forth. */
+/** The version history the last window drew, and the way to stand it elsewhere, as its address moving does. */
 let standingVersions: ReturnType<typeof useDescriptionHistory> | undefined;
+let standVersions: ((spot: HistorySpot) => void) | undefined;
 
-/** The description's version history over the window, opened on the description as it stands or where `returnTo` says. */
-function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
+/** Where a version history opened on the description as it stands stands: its list, following the newest. */
+const VERSIONS_LISTED: HistorySpot = { revision: undefined, opened: undefined, listed: true };
+
+/** The description's version history over the window, standing where `at` says until it moves, as its address says where it stands. */
+function HistoryWindow({ at }: { at: HistorySpot }): React.JSX.Element {
+  const [spot, setSpot] = useState(at);
+  standVersions = setSpot;
   const versions = useDescriptionHistory({
     source: HISTORY,
     taskId: DOCUMENT_TASK.id,
     history: HELD_HISTORY,
     editedAt: undefined,
     name: DOCUMENT_TASK.name,
-    shown: true,
+    at: spot,
     seek: undefined,
-    returnTo,
+    narrow: true,
+    onMove: setSpot,
+    onSought: ignore,
     onRestored: ignore,
   });
   standingVersions = versions;
@@ -268,8 +276,12 @@ function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): Rea
   return createElement(Shell, { tab: PANEL_TAB.TASKS, tasks });
 }
 
-/** Draws the window on a stage of a width, and lets what it reads land. */
-async function mount(width: number, window: React.JSX.Element): Promise<HTMLElement> {
+/** Draws the window on a stage of a width, standing where `standing` says, else where its props say, and lets what it reads land. */
+async function mount(
+  width: number,
+  window: React.JSX.Element,
+  standing?: string,
+): Promise<HTMLElement> {
   stageWidth = width;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -280,7 +292,8 @@ async function mount(width: number, window: React.JSX.Element): Promise<HTMLElem
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(window))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(window, standing))));
+  await act(() => routed().settled());
   await settle();
   return container;
 }
@@ -483,7 +496,11 @@ function versionRow(page: HTMLElement, at: number): HTMLButtonElement {
 }
 
 test("a version history on a narrow stage opens on its versions, a version chosen stands alone under a way back, and Back returns to the list", async () => {
-  const page = await mount(PHONE, createElement(HistoryWindow, { returnTo: undefined }));
+  const page = await mount(
+    PHONE,
+    createElement(HistoryWindow, { at: VERSIONS_LISTED }),
+    SHELL_AT.VERSION_HISTORY,
+  );
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 
   act(() => versionRow(page, 1).click());
@@ -499,7 +516,11 @@ test("a version history on a narrow stage opens on its versions, a version chose
 });
 
 test("a version history under the split's line by its own width, on a stage wide enough for panes, opens on its versions and stands a version chosen alone under a way back", async () => {
-  const page = await mount(UNDER_SPLIT, createElement(HistoryWindow, { returnTo: undefined }));
+  const page = await mount(
+    UNDER_SPLIT,
+    createElement(HistoryWindow, { at: VERSIONS_LISTED }),
+    SHELL_AT.VERSION_HISTORY,
+  );
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 
   act(() => versionRow(page, 1).click());
@@ -516,7 +537,8 @@ test("a version history under the split's line by its own width, on a stage wide
 test("a link to a version on a narrow stage opens on that version, with the way back to the list", async () => {
   const page = await mount(
     PHONE,
-    createElement(HistoryWindow, { returnTo: { revision: 2, opened: undefined } }),
+    createElement(HistoryWindow, { at: { revision: 2, opened: undefined, listed: false } }),
+    SHELL_AT.VERSION_HISTORY,
   );
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
 
@@ -524,21 +546,21 @@ test("a link to a version on a narrow stage opens on that version, with the way 
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 });
 
-test("a version history gone back to on its list in a narrow room opens on its list, and the window's history moves it between the list and the version", async () => {
+test("a version history standing on its list in a narrow room shows its list, and its address moving moves it between the list and the version", async () => {
   const page = await mount(
     PHONE,
-    createElement(HistoryWindow, { returnTo: { revision: 2, opened: undefined, listed: true } }),
+    createElement(HistoryWindow, { at: VERSIONS_LISTED }),
+    SHELL_AT.VERSION_HISTORY,
   );
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 
-  act(() => standingVersions?.onStand({ revision: 2, opened: undefined, listed: false }));
+  act(() => standVersions?.({ revision: 2, opened: undefined, listed: false }));
   await settle();
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
   assert.equal(standingVersions?.selected, 2);
 
-  act(() => standingVersions?.onStand({ revision: 3, opened: undefined, listed: true }));
+  act(() => standVersions?.(VERSIONS_LISTED));
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
-  assert.equal(standingVersions?.selected, 2, "the list stands over the version chosen");
 });
 
 /** Focuses the button in `within` that says `words`, as a press of a key or a tap does, and presses it. */
@@ -577,7 +599,11 @@ test("a page chosen on a wide Settings leaves the focus on its row", async () =>
 });
 
 test("a version chosen on a narrow stage takes the focus to its way back, and Back hands it to the version's row", async () => {
-  const page = await mount(PHONE, createElement(HistoryWindow, { returnTo: undefined }));
+  const page = await mount(
+    PHONE,
+    createElement(HistoryWindow, { at: VERSIONS_LISTED }),
+    SHELL_AT.VERSION_HISTORY,
+  );
   const row = versionRow(page, 1);
   act(() => {
     row.focus();
@@ -602,7 +628,8 @@ test("a wide Settings turned narrow hands the focus from the hidden page list to
 test("a link to a version on a narrow stage opens with the focus on its way back", async () => {
   const page = await mount(
     PHONE,
-    createElement(HistoryWindow, { returnTo: { revision: 2, opened: undefined } }),
+    createElement(HistoryWindow, { at: { revision: 2, opened: undefined, listed: false } }),
+    SHELL_AT.VERSION_HISTORY,
   );
   assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
   assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");

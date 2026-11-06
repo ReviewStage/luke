@@ -116,6 +116,7 @@ import {
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
+import { useVersionHistoryRoute } from "./version-history-route.js";
 import { ViewingAs } from "./viewing-as.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
@@ -410,6 +411,10 @@ function AppWindow(): React.JSX.Element {
   const boardView = useBoardRoute({ onClose: () => leaveRouted.current() });
   const personView = usePersonRoute({ onClose: () => leaveRouted.current() });
   const automationsView = useAutomationsRoute({ onClose: () => leaveRouted.current() });
+  const versionHistoryView = useVersionHistoryRoute({
+    narrow: room === SHELL_ROOM.NARROW,
+    onClose: () => leaveRouted.current(),
+  });
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -432,6 +437,7 @@ function AppWindow(): React.JSX.Element {
     boardView,
     personView,
     automationsView,
+    versionHistoryView,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -555,6 +561,7 @@ function AppWindow(): React.JSX.Element {
     settingsList: settingsPlace.listAddress,
     onSettingsList: settingsPlace.list,
     automations: automationsView,
+    versionHistory: versionHistoryView,
     room,
     tasks,
   });
