@@ -24,6 +24,7 @@ import {
 import { failureKind } from "@repo/runtime/effect";
 import { Cache, Clock, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { reconsiderRunArchive } from "../../automations/run-archive.js";
 import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import {
   GITHUB_HTTP_STATUS,
@@ -278,7 +279,7 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   return answer;
 });
 
-/** What a pull request's write leaves to do: a merge counted by the one write that first kept it, and the task asked to settle where the read first saw it merged. */
+/** What a pull request's write leaves to do: a merge counted by the one write that first kept it, the task asked to settle where the read first saw it merged, and the agent's automation run asked to archive where the read first saw it merged or closed. */
 const afterRecorded = (
   userId: string,
   agent: Agent,
@@ -296,6 +297,9 @@ const afterRecorded = (
     // A merge first seen may have finished the task's work; the task is asked once the row says merged.
     const merged = ended === PULL_REQUEST_STATE.MERGED;
     if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
+    // Note that a pull request ending wakes no agent, so no settle of its turn would archive its run.
+    if (ended !== undefined && agent.automationRunId !== null)
+      yield* reconsiderRunArchive(agent.id);
   });
 
 /**

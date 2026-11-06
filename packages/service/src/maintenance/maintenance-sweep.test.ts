@@ -111,7 +111,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sweepAutomations: (now) =>
       Effect.sync(() => {
         recorded.automated.push(now);
-        return { fired: 1, started: 1, skipped: 0, failed: 0, archived: 0 };
+        return { fired: 1, started: 1, skipped: 0, failed: 0 };
       }),
     purgeUnsavedPictures: (now) =>
       Effect.sync(() => {
