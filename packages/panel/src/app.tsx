@@ -77,6 +77,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
+import { forgetAccountReads } from "./query-keys.js";
 import { ROUTED_PLACE } from "./route-gates.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
@@ -248,12 +249,13 @@ function AppWindow(): React.JSX.Element {
   const unseenAgents =
     useQuery({ ...appStateQuery, select: selectUnseenAgents }).data ?? NO_UNSEEN_AGENTS;
   const settingsHeld = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
-  // A picture is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
+  // A picture, and each read keyed by no account, is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   const queryClient = useQueryClient();
   useEffect(() => {
     void forgetPictures(queryClient);
+    void forgetAccountReads(queryClient);
     forgetUndo();
   }, [queryClient, accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
