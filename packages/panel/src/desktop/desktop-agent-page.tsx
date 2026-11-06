@@ -529,7 +529,7 @@ export function DesktopAgentPage({
   // that opens another task, as a link to it opens (`route.ts`), a worker's opening through its delegation.
   const openPlace = useOpenPlace();
   const openTarget = useSteadyDoor((target: ToolTarget) => {
-    // An inbox call's row opens the window's Inbox on the thread its answer names, as a link to it does, so it never narrows the Inbox (`openInboxItemOn`).
+    // An inbox call's row opens the window's Inbox on the thread its answer names, as a link to it does, without narrowing it (`openInboxItemOn`); one naming no thread opens the Inbox narrowed to the agent's task where it has one.
     if (target.kind === TOOL_TARGET.INBOX) {
       const { item } = target;
       openPlace?.(
