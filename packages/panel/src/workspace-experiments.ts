@@ -71,6 +71,27 @@ export function useWorkspaceExperiment(
 }
 
 /**
+ * When a workspace last turned one experiment on, in epoch milliseconds,
+ * while it stands on; none while it is off, never chosen, or the workspace
+ * is not read.
+ */
+export function useWorkspaceExperimentOnSince(
+  workspaceId: string | undefined,
+  experiment: WorkspaceExperiment,
+): number | undefined {
+  const select = useCallback(
+    (state: AppStateSnapshot) => {
+      const choice = state.tasks.workspaces
+        .find((each) => each.id === workspaceId)
+        ?.experiments?.find((each) => each.experiment === experiment);
+      return choice?.on === true ? choice.changedAt : undefined;
+    },
+    [workspaceId, experiment],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
+}
+
+/**
  * Every experiment on where the window works in one workspace: the account's
  * own choices of its own, and that workspace's of the workspace's. For a list
  * that gates its entries by a tag (`AppShortcut.experiment`), or a page by

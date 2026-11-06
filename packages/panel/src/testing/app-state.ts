@@ -123,8 +123,8 @@ const CASE_WORKSPACES: readonly { readonly id: string; readonly slug?: string }[
 
 /**
  * A tasks' view with the workspace experiments among `experiments` on in
- * every workspace it lists, and in each of `CASE_WORKSPACES` it does not
- * list: as it stands where none of them is on.
+ * every workspace it lists that chose none of its own, and in each of
+ * `CASE_WORKSPACES` it does not list: as it stands where none of them is on.
  */
 function withWorkspaceExperiments(view: TasksView, experiments: ExperimentChoices): TasksView {
   const chosen = WORKSPACE_EXPERIMENT_LIST.filter((experiment) => experiments[experiment] === true);
@@ -141,7 +141,7 @@ function withWorkspaceExperiments(view: TasksView, experiments: ExperimentChoice
   return {
     ...view,
     workspaces: [
-      ...view.workspaces.map((listed) => ({ ...listed, experiments: on })),
+      ...view.workspaces.map((listed) => ({ ...listed, experiments: listed.experiments ?? on })),
       ...unlisted.map(({ id, slug }) => ({
         id,
         ...(slug === undefined ? undefined : { slug }),
@@ -325,13 +325,15 @@ export function readExperiments(experiments: ExperimentChoices): void {
  * hold these experiments from its first draw. Note that the document is read
  * again once main's lands, so the bridge must hand the same experiments
  * (`handState`, `readExperiments`) for them to stand. `initialValues` are
- * laid in the registry, as a case's own clock is.
+ * laid in the registry, as a case's own clock is, and `patch` over the
+ * document's slices, as `stateWith` lays it.
  */
 export function registryWith(
   experiments: ExperimentChoices,
   initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
+  patch: Partial<AppStateSnapshot> = {},
 ): AtomRegistry.AtomRegistry {
-  writeAppState(snapshotWith(experiments));
+  writeAppState(stateWith(experiments, patch));
   return AtomRegistry.make({ initialValues });
 }
 
