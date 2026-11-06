@@ -3,7 +3,6 @@ import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_BOUNDS,
-  DESCRIPTION_COMMENT_ENTRY,
   type DescriptionCommentStart,
 } from "@repo/features/description-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -42,7 +41,9 @@ import { REVIEW_PANEL_WORDS, ReviewPress, type ReviewWords } from "./review-pane
  * column, as a pull request's pending comments stand on their lines and in
  * its Review panel; a held reply stands as the last comment of its thread,
  * wherever the thread is drawn. Each is edited in place, and deleted at
- * once with Undo, since it reaches no one but the reader.
+ * once with Undo, since it reaches no one but the reader. A send that stops
+ * part way keeps what it posted held on the service; Retry sends the rest,
+ * and Discard is no longer offered, since what is posted is not taken back.
  *
  * Sending the review starts each comment's thread, or replies on it, held
  * (`held`), which posts it for every member to read and hands it to no
@@ -115,8 +116,6 @@ export interface HeldComment {
   readonly attachments: readonly AgentAttachment[];
   /** Whether a send that stopped part way posted it held already, so it is sent no more, and neither edited nor deleted, since the service holds it as it stood. */
   readonly landed?: true;
-  /** Whether a Discard asked to delete it, posted already, and the service would not: it is sent no more, and only another Discard tries again. */
-  readonly discarded?: true;
 }
 
 /** A held comment as the renderer's storage keeps it: all of it but its files. */
@@ -142,7 +141,6 @@ const keptHeldSchema = Schema.Struct({
   ),
   words: Schema.String,
   landed: Schema.optionalKey(Schema.Literal(true)),
-  discarded: Schema.optionalKey(Schema.Literal(true)),
 });
 
 /** Every comment held in a review, the account signed in's alone, in the order they were held, kept across a relaunch but for their files. */
@@ -224,39 +222,12 @@ async function sendReview(
   return sendHeld(control, last, along.length === 0 ? {} : { along });
 }
 
-/**
- * Deletes a held comment a stopped send posted already: the thread it
- * started, under its key, which is the thread's id; or, where it is a
- * reply, its own entry in its thread, the reader's latest of its words.
- * Answers whether it is gone; a reply no thread holds any more is.
- */
-async function deletePosted(
-  control: DescriptionCommentsControl | undefined,
-  comment: HeldComment,
-): Promise<boolean> {
-  if (control === undefined) return false;
-  const { reply } = comment;
-  if (reply === undefined) {
-    return control.act(comment.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD });
-  }
-  const entry = control.threads
-    .find((thread) => thread.id === reply.threadId)
-    ?.entries.findLast(
-      (each) => each.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT && each.words === comment.words,
-    );
-  if (entry === undefined) return true;
-  return control.act(reply.threadId, {
-    action: DESCRIPTION_COMMENT_ACTION.DELETE,
-    entry: entry.id,
-  });
-}
-
 /** A page's review as its pane draws and presses it. */
 export interface PageReviewControl {
-  /** The comments held on the page, in the order they were held, but those a Discard is still deleting. */
+  /** The comments held on the page, in the order they were held. */
   readonly held: readonly HeldComment[];
-  /** Whether a Discard left anything to delete, a thread the service would not delete yet, which another Discard tries again. */
-  readonly leftover: boolean;
+  /** Whether a send that stopped part way posted any of them already, which Retry finishes and nothing takes back. */
+  readonly landed: boolean;
   readonly sending: boolean;
   /** Whether the last send stopped part way, until the next. */
   readonly failed: boolean;
@@ -266,12 +237,13 @@ export interface PageReviewControl {
   readonly edit: (clientKey: string, words: string) => void;
   /** Takes a held comment out of the review at once, saying so with Undo, which puts it back where it stood. */
   readonly remove: (clientKey: string) => void;
+  /** Lets every held comment go; offered only while none is posted. */
   readonly discard: () => void;
   /** Sends every held comment, then `summary` on the whole page where it holds words; answers whether all of it landed. */
   readonly send: (summary: string) => Promise<boolean>;
   /** Whether a held comment's edit stands open, which holds the review back until it is saved or canceled. */
   readonly editing: boolean;
-  /** Says a held comment's edit opened or closed. The same function on every render. */
+  /** Says an edit of a held comment opened or closed, each opening matched by its closing. The same function on every render. */
   readonly markEditing: (clientKey: string, open: boolean) => void;
 }
 
@@ -287,23 +259,21 @@ export function usePageReview(
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
-  // The held comments whose edit stands open, by their keys.
-  const [edits, setEdits] = useState<ReadonlySet<string>>(new Set());
+  // How many edits stand open on each held comment, by its key: a held reply is drawn in its thread and in the panel, and each may edit it.
+  const [edits, setEdits] = useState<ReadonlyMap<string, number>>(new Map());
   const markEditing = useCallback((clientKey: string, open: boolean) => {
     setEdits((was) => {
-      if (was.has(clientKey) === open) return was;
-      const next = new Set(was);
-      if (open) next.add(clientKey);
+      const count = (was.get(clientKey) ?? 0) + (open ? 1 : -1);
+      const next = new Map(was);
+      if (count > 0) next.set(clientKey, count);
       else next.delete(clientKey);
       return next;
     });
   }, []);
-  const page = useMemo(
+  const held = useMemo(
     () => all.filter((comment) => heldOn(comment, planId, pageId)),
     [all, planId, pageId],
   );
-  // Note that a thread a Discard could not delete is never sent, drawn, or counted, so no Send hands on what the reader discarded.
-  const held = useMemo(() => page.filter((comment) => comment.discarded !== true), [page]);
   const send = async (summary: string): Promise<boolean> => {
     // Note that an edit standing open would land after the words it changes went, so it is saved or canceled first.
     if (control === undefined || planId === undefined || sending || edits.size > 0) return false;
@@ -362,7 +332,7 @@ export function usePageReview(
   };
   return {
     held,
-    leftover: page.length > held.length,
+    landed: held.some((comment) => comment.landed === true),
     sending,
     failed,
     hold: (comment) => {
@@ -379,20 +349,7 @@ export function usePageReview(
     remove,
     discard: () => {
       setFailed(false);
-      // Note that what a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says; what the service would not delete stays held, never to be sent, for the next Discard to try again.
-      const posted = page.filter((comment) => comment.landed === true);
-      const keys = new Set(posted.map((comment) => comment.clientKey));
-      setAll((now) =>
-        now.flatMap((comment) => {
-          if (!heldOn(comment, planId, pageId)) return [comment];
-          return keys.has(comment.clientKey) ? [{ ...comment, discarded: true as const }] : [];
-        }),
-      );
-      for (const comment of posted) {
-        void deletePosted(control, comment).then((deleted) => {
-          if (deleted) drop((each) => each.clientKey !== comment.clientKey);
-        });
-      }
+      drop((comment) => !heldOn(comment, planId, pageId));
     },
     send,
     editing: edits.size > 0,
@@ -419,7 +376,7 @@ export function PageReviewPress({
   const [body, setBody] = useState("");
   const count = review.held.length;
   const discarding = useConfirmDialog(
-    { subject: count > 0 || review.leftover, surfaceOpen: open },
+    { subject: count > 0, surfaceOpen: open },
     neverBusyAct(() => {
       review.discard();
     }),
@@ -463,7 +420,8 @@ export function PageReviewPress({
             </FailureNote>
           ) : null
         }
-        onDiscard={count === 0 && !review.leftover ? undefined : discarding.ask}
+        // Note that a review a stopped send posted part of is finished by Retry, never taken back, as a review submitted on GitHub is not.
+        onDiscard={count === 0 || review.landed ? undefined : discarding.ask}
         onSent={(done) => {
           // Note that a summary goes into the review as it is sent, so it is let go of here whether or not the rest lands.
           const summary = body;

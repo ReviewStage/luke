@@ -447,15 +447,22 @@ function reviewOf(comment: {
 }
 
 /**
- * The member's own latest comment in a thread a review sends: the one they
- * held in it, a new thread's first comment or a reply, whose words say whom
- * the thread is handed to.
+ * The member's own comments in a thread a review sends since it was last
+ * handed over: those they held in it, a new thread's first comment and the
+ * replies under it, whose words say whom the thread is handed to.
  */
 function heldWordsOf(thread: DescriptionCommentThread, userId: string): string | undefined {
-  return thread.entries.findLast(
-    (entry) =>
-      entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT && entry.writer.by?.userId === userId,
-  )?.words;
+  const since = thread.entries.findLastIndex(
+    (entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.ASKED,
+  );
+  const words = thread.entries
+    .slice(since + 1)
+    .filter(
+      (entry) =>
+        entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT && entry.writer.by?.userId === userId,
+    )
+    .map((entry) => entry.words ?? "");
+  return words.length === 0 ? undefined : words.join("\n\n");
 }
 
 /** The threads a review sends, in the order they were named: each named along that the task holds, once, then the one sending it. */
@@ -688,6 +695,19 @@ export function descriptionCommentsProcedures(seams: DescriptionCommentsProcedur
       const taskId = yield* pathUuid(input.params.id);
       const threadId = yield* pathUuid(input.params.thread);
       const writer = { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: context.userId } as const;
+      // Note that only a page's thread is held in a review, so a reply on any other asking to be held or to send one is refused before it is written.
+      if (
+        action.action === DESCRIPTION_COMMENT_ACTION.REPLY &&
+        (action.held === true || action.along !== undefined)
+      ) {
+        const read = yield* hostedStoreOrUnavailable(
+          readDescriptionCommentThread(context.userId, taskId, threadId),
+        );
+        if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+        if (read.value.page === undefined) {
+          return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+        }
+      }
       const outcome = yield* hostedStoreOrUnavailable(
         actOnDescriptionCommentThread(writer, taskId, threadId, action),
       );

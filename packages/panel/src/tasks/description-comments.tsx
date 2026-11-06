@@ -3772,7 +3772,10 @@ export function PageCommentLayer({
           inWindow(room.current, at === undefined ? PAGE_TOP : (marks.get(at) ?? undefined))
         }
         side={POPOVER_SIDE.BELOW}
-        onPressAway={() => onOpen(undefined)}
+        // Note that a held reply's edit standing open in a thread holds the card, so a stray press never drops its words.
+        onPressAway={() => {
+          if (review?.editing !== true) onOpen(undefined);
+        }}
         holds={keepsPageCardOpen}
       >
         {/* Note that the threads stand no taller than the room their side leaves, so each card scrolls its entries above its reply field, and several scroll together, rather than run off the room's edge. */}
