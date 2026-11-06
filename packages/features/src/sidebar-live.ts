@@ -1,12 +1,5 @@
 import { Schema } from "effect";
-import {
-  LIVE_MODE,
-  LIVE_PARAM,
-  type LiveReadAnswer,
-  liveRead,
-  liveRows,
-  ORDER,
-} from "./live-read.js";
+import { LIVE_MODE, LIVE_PARAM, liveRead, liveRows, ORDER } from "./live-read.js";
 import { LIVE_USER_QUERY } from "./live-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
@@ -86,8 +79,6 @@ export const SIDEBAR_READ = liveRead({
     }),
   },
 });
-
-export type SidebarLiveAnswer = LiveReadAnswer<typeof SIDEBAR_READ>;
 
 /** The sidebar as the held reads answer it: the account's sections and the tasks and agents in them, and its pins. */
 export interface SidebarRead {
