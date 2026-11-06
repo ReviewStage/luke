@@ -14,7 +14,7 @@
  * once the request has answered, where the runtime runs work past the
  * answer, since none is the settle's to wait on; and the report and the
  * Slack message run on the pool rather than on a transaction the settle may
- * have run inside, so their sends hold no transaction open over eve or
+ * have run inside, so their sends hold no transaction open over a harness or
  * Slack. Note that the work may start before such a transaction commits, so
  * a caller that runs the writer inside its own tells this listener only once
  * it has (`../native-events/runner-events-app.ts`), and the reads here see
@@ -47,7 +47,7 @@ const outsideTransaction = <A, E>(
 
 /**
  * The deployment's listener over the services the report sends through,
- * read once as the layer is built: eve as the deployment acting for the
+ * read once as the layer is built: the agents' sessions as the deployment acting for the
  * agent's account, GitHub, which a send to an agent on a repository asks
  * whether its starter still reaches it, and the workspace's Slack bot.
  */

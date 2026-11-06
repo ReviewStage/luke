@@ -69,13 +69,13 @@ it.effect(
             yield* sql`update conversations set runtime = ${runtime} where id = (select conversation_id from agent where id = ${agentId})`;
             return agentId;
           });
-        const onEve = yield* agentOn("eve");
+        const onRetired = yield* agentOn("eve");
         const unnamed = yield* agentOn(null);
         const onClaudeCode = yield* agentOn("claude_code");
         const putAway = yield* agentOn("eve");
         yield* archiveAgent("dean", putAway, true);
-        const question = yield* openInboxItem("dean", workspaceId, taskId, onEve, true);
-        const notice = yield* openInboxItem("dean", workspaceId, taskId, onEve, false);
+        const question = yield* openInboxItem("dean", workspaceId, taskId, onRetired, true);
+        const notice = yield* openInboxItem("dean", workspaceId, taskId, onRetired, false);
         const nativeQuestion = yield* openInboxItem(
           "dean",
           workspaceId,
@@ -87,7 +87,7 @@ it.effect(
         yield* runWebMigrations();
         const archivedAt = (agentId: string) =>
           Effect.map(readAgent("dean", agentId), (agent) => Option.getOrThrow(agent).archivedAt);
-        const stamped = yield* archivedAt(onEve);
+        const stamped = yield* archivedAt(onRetired);
         yield* sql`delete from __drizzle_migrations where name = ${MIGRATION}`;
         yield* runWebMigrations();
 
@@ -99,11 +99,15 @@ it.effect(
           userId: "dean",
           reason: "Its runtime was retired. Continue it in a new agent to go on from its work.",
         };
-        assert.deepEqual(yield* archivedBy(onEve), retired);
+        assert.deepEqual(yield* archivedBy(onRetired), retired);
         assert.deepEqual(yield* archivedBy(unnamed), retired);
         assert.equal(yield* archivedBy(onClaudeCode), null);
         assert.deepEqual(yield* archivedBy(putAway), { by: "member", userId: "dean" });
-        assert.deepEqual(yield* archivedAt(onEve), stamped, "a second run stamps nothing again");
+        assert.deepEqual(
+          yield* archivedAt(onRetired),
+          stamped,
+          "a second run stamps nothing again",
+        );
 
         const standing = (itemId: string) =>
           Effect.gen(function* () {
@@ -132,7 +136,7 @@ it.effect(
           asks: [["open", undefined]],
         });
 
-        yield* archiveAgent("dean", onEve, false);
+        yield* archiveAgent("dean", onRetired, false);
         assert.deepEqual(yield* standing(question), {
           status: "open",
           closedReason: null,

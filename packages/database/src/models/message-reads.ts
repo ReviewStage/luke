@@ -855,13 +855,13 @@ export interface LatestTurn {
   readonly conversationId: string;
   readonly id: string;
   readonly status: string;
-  /** eve's own id for the turn, which a Stop names to eve; null for a row eve has not started. */
-  readonly eveTurnId: string | null;
+  /** The runtime's own id for the turn, which a Stop names to the harness; null where the row names none. */
+  readonly runtimeTurnId: string | null;
   /** The word for how a failed turn failed, and the detail behind it; null on a turn that did not. */
   readonly failure: string | null;
   readonly failureDetail: string | null;
   readonly cancelRequestedAt: Date | null;
-  /** When the turn was queued, and when eve started it; null until it has. */
+  /** When the turn was queued, and when its runtime started it; null until it has. */
   readonly queuedAt: Date;
   readonly startedAt: Date | null;
   /** When the turn answered or ended; null while it runs. */
@@ -877,7 +877,7 @@ const LatestTurnRowSchema = Schema.Struct({
   conversationId: Schema.String,
   id: Schema.String,
   status: Schema.String,
-  eveTurnId: Schema.NullOr(Schema.String),
+  runtimeTurnId: Schema.NullOr(Schema.String),
   failure: Schema.NullOr(Schema.String),
   failureDetail: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
@@ -906,7 +906,7 @@ const findLatestTurns = SqlSchema.findAll({
           conversationId: turns.conversationId,
           id: turns.id,
           status: turns.status,
-          eveTurnId: turns.eveTurnId,
+          runtimeTurnId: turns.runtimeTurnId,
           failure: turns.failure,
           failureDetail: turns.failureDetail,
           cancelRequestedAt: turns.cancelRequestedAt,
@@ -1088,25 +1088,25 @@ const AwaitingLinesRowSchema = Schema.Struct({
 });
 
 /**
- * What eve puts between two messages it hands a turn as one: steers that
- * arrive while a step is under way are coalesced into the next step's input,
- * their words joined by a blank line (eve's `appendUserContent`), and the
- * turn receives the joined words as a single message.
+ * What the retired runtime put between two messages it handed a turn as one:
+ * steers that arrived while a step was under way were coalesced into the next
+ * step's input, their words joined by a blank line, and the turn received the
+ * joined words as a single message.
  */
 export const COALESCED_LINE_SEPARATOR = "\n\n";
 
 /** A developer's line and the turn-owned row later in its conversation that may carry its words: one table under the two names the read takes it by. */
 const receipt = alias(messages, "receipt");
 
-/** The words of a row's one text part, as both the line and the receipt hold them, fenced by eve's separator so a whole coalesced segment is matched and never a fragment of one. */
+/** The words of a row's one text part, as both the line and the receipt hold them, fenced by the coalescing separator so a whole coalesced segment is matched and never a fragment of one. */
 const fencedWords = (parts: AnyPgColumn) =>
   sql`${COALESCED_LINE_SEPARATOR} || (${parts} -> 0 ->> 'text') || ${COALESCED_LINE_SEPARATOR}`;
 
 /**
  * Whether a turnless user row of `messages` still awaits its turn: no later
  * user row of a turn in its conversation carries its words, whole or as one
- * of the segments eve coalesced. Such a row is eve's own receipt of the
- * line, written by the relay where the line was not taken into the turn, so
+ * of the segments the retired runtime coalesced. Such a row is that runtime's
+ * own receipt of the line, written by its relay where the line was not taken into the turn, so
  * the line awaits nothing: it must not read the agent as running forever,
  * and no later turn may take it in the place of the line it did receive.
  */
@@ -1172,7 +1172,7 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
  * as the status allows it to wait (`coder-host/status.ts`). The kind is held
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
- * turn of eve's. A line a turn already received under another row
+ * turn of an agent's. A line a turn already received under another row
  * (`noReceiptOfLine`) is not counted, and neither is a line a past call
  * left (`lineOfTheAgents`), whose turn the call opened through an ask of its
  * own rather than through the line. Nor is a line its hand-over withdrew,
@@ -1304,7 +1304,7 @@ const TURN_FIELDS = {
   conversationId: turns.conversationId,
   origin: turns.origin,
   status: turns.status,
-  eveTurnId: turns.eveTurnId,
+  runtimeTurnId: turns.runtimeTurnId,
   model: turns.model,
   reasoningEffort: turns.reasoningEffort,
   promptHash: turns.promptHash,
@@ -1325,8 +1325,8 @@ const TurnRowSchema = Schema.Struct({
   conversationId: Schema.String,
   origin: TurnOriginSchema,
   status: TurnStatusSchema,
-  /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; the opener's inbox row and a row from before the column names none. */
-  eveTurnId: Schema.NullOr(Schema.String),
+  /** The runtime's own id for the turn: a native turn's own id, or the retired runtime's `turn_<n>` within its session; the opener's inbox row and a row from before the column names none. */
+  runtimeTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   reasoningEffort: Schema.NullOr(Schema.String),
   promptHash: Schema.NullOr(Schema.String),

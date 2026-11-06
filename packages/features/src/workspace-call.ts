@@ -19,11 +19,18 @@ import type { TaskCallResult } from "./task-client.js";
  * `workspace-` prefix.
  */
 
-/** The failures a workspace call shipped under a spelling other than its refusal's slug. */
+/**
+ * The failures a workspace call shipped under a spelling other than its
+ * refusal's slug: the slug refusals without their `workspace-` prefix, and
+ * a repository GitHub does not reach or GitHub not answering as no answer,
+ * as the workspace has always read them.
+ */
 export const WORKSPACE_RENAMES = {
   [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: "slug-malformed",
   [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: "slug-reserved",
   [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: "slug-taken",
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: "unanswered",
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: "unanswered",
 } as const;
 
 /** The procedures a workspace call asks: every workspace group's, and the GitHub group's two over a workspace's token repositories. */

@@ -1,13 +1,9 @@
 /**
- * recorded-session.ts -- the conversation row's session, read, claimed, and locked without eve's code.
+ * recorded-session.ts -- the conversation row's session, read, claimed, and locked over the store alone.
  *
- * The statements over a conversation's record that a handover to eve needs:
- * the eve session it runs in, where one has been recorded, and the
- * forward-only claim of a session for it. They stand apart from the
- * admission in `conversation.ts` on purpose. The admission reads the caller
- * through the door's authenticators, which import the eve package, and a
- * caller that talks to eve over HTTP must load nothing of eve's own code; a
- * leaf with no path to the door is what keeps such a bundle free of it.
+ * The statements over a conversation's record that a handover to its runtime
+ * needs: the session it runs in, where one has been recorded, and the
+ * forward-only claim of a session for it.
  *
  * Who reaches a conversation is decided here too, for the same bundle: the
  * account that opened it, and every member of the workspace of the coding
@@ -231,16 +227,16 @@ const findStandingSessions = SqlSchema.findAll({
 
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 
-/** An eve session a standing conversation of the account runs in, and the kind of conversation, which says which eve service runs it. */
+/** A runtime session a standing conversation of the account runs in, and the kind of conversation. */
 export interface StandingSession {
   readonly sessionId: string;
   readonly kind: ConversationKind;
 }
 
 /**
- * The eve sessions the account's standing conversations run in: every one
+ * The runtime sessions the account's standing conversations run in: every one
  * of them, or those of the conversations named. A cleared conversation is
- * left out, since eve's door no longer admits anyone to its session.
+ * left out.
  */
 export function standingSessionsOf(
   userId: string,
@@ -254,7 +250,7 @@ export function standingSessionsOf(
 }
 
 /**
- * The eve sessions the standing conversations named run in, whichever
+ * The runtime sessions the standing conversations named run in, whichever
  * member opened each: only for ids a gate already read, such as a shared
  * task's agents' conversations as its delete gathers them.
  */
@@ -265,7 +261,7 @@ export function standingSessionsNamed(
   return findStandingSessions({ userId: null, conversationIds });
 }
 
-/** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
+/** The runtime session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
 export function recordedRuntimeSession(
   target: ConversationTarget,
 ): Effect.Effect<string | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
@@ -291,7 +287,7 @@ export function runtimeSessionReachableBy(
 }
 
 /**
- * Claims the conversation for the eve session now starting, only forward:
+ * Claims the conversation for the runtime session now starting, only forward:
  * the row takes the id when it records none or an older one, and a start
  * replayed for a session the conversation has since rotated away from
  * changes nothing. Answers whether the row now records this session.

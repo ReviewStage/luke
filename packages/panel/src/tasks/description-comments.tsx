@@ -602,6 +602,8 @@ interface ThreadDoors {
   readonly control: DescriptionCommentsControl;
   readonly agents: EditAgents | undefined;
   readonly me: string | undefined;
+  /** The reader's review of the page the threads are on, which a reply may be held in; none on the description, or where comments are not held. */
+  readonly review?: PageReviewControl | undefined;
 }
 
 /** What deleting asks first, a comment's or a whole thread's, since neither comes back. */
@@ -1562,6 +1564,8 @@ function ThreadCard({
   // Note that a page's thread stands on no words of the description, so it never reads as having lost them.
   const gone = thread.anchor === undefined && thread.page === undefined;
   const note = doors.control.notes.get(thread.id);
+  const { review } = doors;
+  const heldReplies = review?.held.filter((comment) => comment.reply?.threadId === thread.id) ?? [];
   // Whether a press on the card at rest opened it, which is what hands its reply the caret; a thread open from the first, as every one in the description's comments list, takes none.
   const [pressed, setPressed] = useState(false);
   useEffect(() => {
@@ -1656,6 +1660,17 @@ function ThreadCard({
               <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
             ),
           )}
+          {/* Note that the reader's replies held in their review stand last, Pending, as a pull request's pending replies do. */}
+          {review === undefined
+            ? null
+            : heldReplies.map((comment) => (
+                <PendingPageComment
+                  key={comment.clientKey}
+                  comment={comment}
+                  review={review}
+                  busy={review.sending}
+                />
+              ))}
         </div>
       </ScrollArea>
       {thread.status === DESCRIPTION_COMMENT_STATUS.OPEN ? (
@@ -1668,6 +1683,28 @@ function ThreadCard({
           }}
           autoFocus={pressed}
           failure={note}
+          review={
+            review === undefined || thread.page === undefined
+              ? undefined
+              : {
+                  open: review.held.length > 0,
+                  onHold: (words, attachments) =>
+                    review.hold({
+                      clientKey: crypto.randomUUID(),
+                      version: thread.page?.version ?? 0,
+                      element: undefined,
+                      reply: {
+                        threadId: thread.id,
+                        quote: thread.quote,
+                        ...(thread.page?.element === undefined
+                          ? undefined
+                          : { path: thread.page.element }),
+                      },
+                      words,
+                      attachments,
+                    }),
+                }
+          }
           onCancel={() => onClose?.()}
           onSend={(words, clientKey, attachments) =>
             doors.control.act(thread.id, {
@@ -3242,10 +3279,13 @@ export function PageComments({
   filter,
   onFilter,
   onOpen,
+  review,
 }: {
   /** The page's threads, as `useDescriptionComments` holds them for the page. */
   control: DescriptionCommentsControl;
-  doors: Omit<ThreadDoors, "control">;
+  doors: Omit<ThreadDoors, "control" | "review">;
+  /** The reader's review of the page, which a reply may be held in; none where comments are not held. */
+  review?: PageReviewControl | undefined;
   /** The threads whose element is outlined, by their ids. */
   open: readonly string[] | undefined;
   /** Which threads the pane lists, kept by its tab so the pane shut and opened again lists the same. */
@@ -3282,7 +3322,7 @@ export function PageComments({
   return (
     <ThreadsPane
       control={control}
-      doors={{ ...doors, control }}
+      doors={{ ...doors, control, review }}
       filter={filter}
       onFilter={onFilter}
       empty={NO_PAGE_COMMENTS}
@@ -3371,7 +3411,7 @@ function PagePin({
   stands,
 }: {
   threads: readonly DescriptionCommentThread[];
-  doors: Omit<ThreadDoors, "control">;
+  doors: Omit<ThreadDoors, "control" | "review">;
   open: boolean;
   onOpen: () => void;
   onHint: (over: boolean) => void;
@@ -3422,8 +3462,8 @@ function heldWords(comment: HeldComment): string {
  * end with Edit, which opens its words in place in a posted comment's edit
  * field, and Delete, which takes it out of the review at once with Undo.
  * Where it stands apart from its element, in the Review panel, its quote line
- * says what it is on, its element's words or the page's title, and pressed,
- * shows its element on the page.
+ * says what it is on, its element's words, its thread's quote where it is a
+ * reply, or the page's title, and pressed, shows its element on the page.
  */
 export function PendingPageComment({
   comment,
@@ -3453,6 +3493,8 @@ export function PendingPageComment({
     return () => markEditing(comment.clientKey, false);
   }, [open, markEditing, comment.clientKey]);
   const { clientKey, element } = comment;
+  // The element its quote line shows: its own, or the one its thread is on, where it is a reply.
+  const shownPath = comment.reply === undefined ? element?.path : comment.reply.path;
   // Note that one a send posted already is the service's as it stood, so it offers neither.
   const groups: MenuAction[][] =
     busy || comment.landed === true
@@ -3499,10 +3541,10 @@ export function PendingPageComment({
       >
         {title === undefined ? null : (
           <QuoteLine
-            words={element?.quote ?? title}
+            words={comment.reply?.quote ?? element?.quote ?? title}
             label={COMMENT_WORDS.SHOW_ELEMENT}
             onShow={
-              element === undefined || onShow === undefined ? undefined : () => onShow(element.path)
+              shownPath === undefined || onShow === undefined ? undefined : () => onShow(shownPath)
             }
           />
         )}
@@ -3623,7 +3665,7 @@ export function PageCommentLayer({
   review,
 }: {
   control: DescriptionCommentsControl;
-  doors: Omit<ThreadDoors, "control">;
+  doors: Omit<ThreadDoors, "control" | "review">;
   /** The reader's review of the page; none where comments are not held, which posts each at once. */
   review?: PageReviewControl | undefined;
   /** The page and the version shown, which a thread is started on. */
@@ -3649,7 +3691,7 @@ export function PageCommentLayer({
   onStarted: (threadId: string) => void;
   onCancel: () => void;
 }): React.JSX.Element {
-  const full = { ...doors, control };
+  const full = { ...doors, control, review };
   const byElement = threadsByElement(control.threads);
   const opened = control.threads.filter((thread) => open?.includes(thread.id) === true);
   const at = opened[0]?.page?.element;
@@ -3730,7 +3772,10 @@ export function PageCommentLayer({
           inWindow(room.current, at === undefined ? PAGE_TOP : (marks.get(at) ?? undefined))
         }
         side={POPOVER_SIDE.BELOW}
-        onPressAway={() => onOpen(undefined)}
+        // Note that a held reply's edit standing open in a thread holds the card, so a stray press never drops its words.
+        onPressAway={() => {
+          if (review?.editing !== true) onOpen(undefined);
+        }}
         holds={keepsPageCardOpen}
       >
         {/* Note that the threads stand no taller than the room their side leaves, so each card scrolls its entries above its reply field, and several scroll together, rather than run off the room's edge. */}

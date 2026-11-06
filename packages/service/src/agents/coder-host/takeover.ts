@@ -49,8 +49,8 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { ModelCatalog } from "../../providers/model-catalog.js";
 import { standingAgentDrive } from "../agent-drive.js";
 import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
-import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS } from "../mentioned-context.js";
+import type { AgentSessions, TypedTurn } from "../sessions/agent-sessions.js";
 import { deploymentOidcToken, vercelSandboxApi } from "../vercel-sandbox-api.js";
 import type { AccountKeyRows, AgentRuntimeChoice } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
@@ -95,7 +95,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * of that automation. Its mentions and servers are read from the source's
  * brief and the note, as a fresh start's would be, and never from the
  * replay. A continue is named after its source, `<title> (continued)`,
- * where the ask names no title and the source has one, and once eve has
+ * where the ask names no title and the source has one, and once its harness has
  * taken it the source is stopped as a Stop stops it, since the work goes on
  * in the new agent; a fork leaves its source running, and a source that
  * could not be stopped is logged, never the Start's failure. A continue
@@ -106,7 +106,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * transaction that makes it (`createAgent`), those of any pilot that took
  * over from it before among them, and once stopped the source is archived,
  * by the coding agent that continued it or else the member, which is logged
- * where it fails; a source eve would not stop stands unarchived. A fork of a
+ * where it fails; a source its harness would not stop stands unarchived. A fork of a
  * pilot takes over nothing. A member's continue of an agent a pilot started,
  * such as a sub-pilot, reports to that pilot as its source did; every other
  * Start records only the coding agent whose `start_agent` asks as its
@@ -260,7 +260,7 @@ function wordsOf(prompt: string | undefined, note: string | undefined): string |
   return words.length === 0 ? undefined : words.join("\n\n");
 }
 
-/** How many of the note's files are text files, which eve is handed inlined, and how many images and PDFs. */
+/** How many of the note's files are text files, which the harness is handed inlined, and how many images and PDFs. */
 function noteFilesOf(files: readonly AgentAttachment[]): NoteFiles {
   const text = files.filter((file) => file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT).length;
   return { text, other: files.length - text };
@@ -612,7 +612,7 @@ const measuredStepOf = Effect.fnUntraced(function* (userId: string, lineage: rea
  * the window of the model the new agent runs on, as the catalog lists it,
  * less the instructions the source's work last measured, or a fallback
  * where it measured none, and within the context it last measured where
- * eve compacted it (`measuredBoundBytes`), with the steps that do not fit
+ * it was compacted (`measuredBoundBytes`), with the steps that do not fit
  * summarized on the model `summaryModel` finds at the model's lowest
  * effort, where it finds one (`replay-summary.ts`); then the whole first
  * prompt, the files and what a mention may add included, held to the
@@ -813,7 +813,7 @@ export const landedInheriting = <
       ask.summaryModel,
       rules.attachments,
     );
-    // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
+    // The note's files go after the source's in each group the harness is handed, so the marker counts them by group.
     const landing = yield* land(fitter, noteFilesOf(ask.attachments ?? []));
     const carried = rules.carriesExtras
       ? yield* carriedExtrasOf(userId, from.source, landing.repository)
@@ -823,7 +823,7 @@ export const landedInheriting = <
 };
 
 /**
- * The source of a continue stopped as a Stop stops it, over the eve the
+ * The source of a continue stopped as a Stop stops it, over the sessions the
  * Start reached: a turn it still runs canceled and stamped, and nothing
  * where it runs none or a Stop already stands on it. Its sandbox is
  * stopped by its own turn's end, as a Stop leaves it. Answers whether the
@@ -831,8 +831,8 @@ export const landedInheriting = <
  * since the new agent stands either way.
  */
 const stoppedSource = (
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
+  agentSessions: Effect.Effect<
+    AgentSessions<TypedTurn>,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
@@ -841,7 +841,7 @@ const stoppedSource = (
   by: string | undefined,
 ) =>
   canceledTurn(
-    eve,
+    agentSessions,
     storeWriter({ tools: CODER_TOOL_SET }),
     source,
     by === undefined ? {} : { by },
@@ -877,13 +877,13 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
  * transcript made the new agent's own before its first open forks it, then
  * the opening, and once that succeeded the source of a continue stopped,
  * since the work goes on in the new agent, and a pilot it took over archived
- * where the stop held, since one eve would not stop still runs and stands
+ * where the stop held, since one its harness would not stop still runs and stands
  * where its messages still reach it. Answers the transaction the pilot was
  * archived in; none where none was, as for every fresh Start, which only opens.
  */
 export const openedTakingOver = <E, R>(
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
+  agentSessions: Effect.Effect<
+    AgentSessions<TypedTurn>,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
@@ -909,7 +909,7 @@ export const openedTakingOver = <E, R>(
     }
     yield* opening;
     if (from === undefined || !rules.stopsSource) return Option.none<string>();
-    const stopped = yield* stoppedSource(eve, from.source, startedBy?.id);
+    const stopped = yield* stoppedSource(agentSessions, from.source, startedBy?.id);
     if (rules.takesOver === undefined || !stopped) return Option.none<string>();
     return yield* archivedPilot(userId, rules.takesOver, startedBy);
   });

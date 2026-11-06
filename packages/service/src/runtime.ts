@@ -3,7 +3,7 @@
  *
  * This module builds nothing and runs nothing: each edge that runs an effect
  * against the deployment's services (`apps/web/server/runtime.ts` for the web
- * functions, each eve root's own `runtime.ts` for its agent) builds its one
+ * functions) builds its one
  * `ManagedRuntime` over this layer.
  */
 
@@ -48,8 +48,7 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * tracer's logger is named beside the JSON one: it is what puts a line on the
  * span it was written under. The third sends every line to Sentry's logs
  * with its annotations (`observability/sentry.ts`), which the runtime's edge
- * starts. An eve root's runtime is built over these services too, so its lines
- * reach Sentry through the same logger.
+ * starts.
  */
 const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 

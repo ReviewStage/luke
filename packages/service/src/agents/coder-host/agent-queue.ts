@@ -46,7 +46,7 @@ import { Clock, DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../../http/http-effect.js";
-import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
+import type { AgentSessions, TypedTurn } from "../sessions/agent-sessions.js";
 import { routedSessions } from "./runtime-sessions.js";
 import { agentStatusOf, startedBlank } from "./status.js";
 import { steerAgentWritten } from "./steer.js";
@@ -56,7 +56,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 export type QueueSessions = (
   account: string,
 ) => Effect.Effect<
-  AgentSessions<EveTypedTurn>,
+  AgentSessions<TypedTurn>,
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 >;
@@ -133,9 +133,9 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
   agent: Agent,
   message: QueuedMessageRow,
 ) {
-  const eve = yield* sessionsFor(message.userId);
+  const agentSessions = yield* sessionsFor(message.userId);
   const { sent } = yield* steerAgentWritten(
-    eve,
+    agentSessions,
     storeWriter({ tools: CODER_TOOL_SET }),
     message.userId,
     agent,
@@ -262,8 +262,8 @@ const PAUSE_OF_TURN: ReadonlyMap<string, QueuePause> = new Map([
 
 /**
  * The queue at a native agent's turn's end, as the runner's events route
- * tells it (`../native-events/runner-events-app.ts`'s `turnEnded`): eve
- * reached as the deployment acting for each queued message's member, since
+ * tells it (`../native-events/runner-events-app.ts`'s `turnEnded`): the agent's
+ * sessions reached as the deployment acting for each queued message's member, since
  * no request of theirs stands behind it.
  */
 export const queueAtNativeTurnEnd = (agent: Agent) =>

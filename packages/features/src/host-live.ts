@@ -1,10 +1,21 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema } from "effect";
 import { DEVICE_PLATFORM, HOST_UPDATE } from "./device-agent-wire.js";
 import type { Host } from "./host-wire.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveRowOf,
+  liveRead,
+  liveRows,
+  ORDER,
+  orderedLiveRows,
+} from "./live-read.js";
+import { LIVE_READ, LIVE_USER_QUERY } from "./live-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 /**
- * host-live.ts -- the account's hosts as Settings › Hosts follows them over the service's held poll: the statement the service answers, the rows it delivers, and the hosts as the section draws them.
+ * host-live.ts -- the account's hosts as Settings › Hosts follows them over the service's held poll: the read declared, and the hosts as the section draws them.
  *
  * The service answers one statement, every machine of the account's enrolled
  * with a secret of its own or made by a pairing's approve and not removed,
@@ -17,51 +28,46 @@ import { sealedLiveQuerySchema } from "./live-wire.js";
  * of the others.
  */
 
-/** The account's hosts sealed for following: the address, the one statement of its hosts, and the install script's address the section's commands name. */
-export const hostsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ hosts: sealedLiveQuerySchema }),
-  installScriptUrl: EffectSchema.String,
+/** The account's hosts as Settings › Hosts follows them: one part, every host of the account's by name and then id, and the install script's address its commands name. */
+export const HOSTS_READ = liveRead({
+  name: LIVE_READ.HOSTS,
+  path: HOSTED_SERVICE_PATH.LIVE_HOSTS,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    hosts: liveRows({
+      row: Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+        platform: Schema.String,
+        machineId: Schema.NullOr(Schema.String),
+        model: Schema.NullOr(Schema.String),
+        update: Schema.NullOr(Schema.String),
+      }),
+      key: "id",
+      order: [
+        ["name", ORDER.ASC],
+        ["id", ORDER.ASC],
+      ],
+    }),
+  },
+  beside: { installScriptUrl: Schema.String },
 });
 
-export type HostsLiveAnswer = typeof hostsLiveAnswerSchema.Type;
+export type HostsLiveAnswer = LiveReadAnswer<typeof HOSTS_READ>;
 
 /** One host as the statement delivers it. */
-const hostLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  name: EffectSchema.String,
-  platform: EffectSchema.String,
-  machineId: EffectSchema.NullOr(EffectSchema.String),
-  model: EffectSchema.NullOr(EffectSchema.String),
-  update: EffectSchema.NullOr(EffectSchema.String),
-});
-
-export type HostLiveRow = typeof hostLiveRowSchema.Type;
-
-/** The account's hosts as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const hostsLiveRowsSchema = EffectSchema.Struct({
-  hosts: EffectSchema.Array(hostLiveRowSchema),
-});
+export type HostLiveRow = LiveRowOf<typeof HOSTS_READ.parts.hosts>;
 
 /** One host as Settings › Hosts draws it: what the section reads of a listed host, and nothing else. */
 export type HostLine = Pick<Host, "id" | "name" | "platform" | "machineId" | "model" | "update">;
 
-const readPlatform = EffectSchema.decodeUnknownOption(
-  EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
-);
-const readUpdate = EffectSchema.decodeUnknownOption(
-  EffectSchema.Literals(Object.values(HOST_UPDATE)),
-);
-
-/** By name, then by id, as the statement orders them. */
-function byName(a: HostLiveRow, b: HostLiveRow): number {
-  if (a.name !== b.name) return a.name < b.name ? -1 : 1;
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
+const readPlatform = Schema.decodeUnknownOption(Schema.Literals(Object.values(DEVICE_PLATFORM)));
+const readUpdate = Schema.decodeUnknownOption(Schema.Literals(Object.values(HOST_UPDATE)));
 
 /** The account's hosts as the held read answers them, by name and then id, each field this build does not know left out. */
 export function hostsOfLiveRows(rows: readonly HostLiveRow[]): readonly HostLine[] {
-  return rows.toSorted(byName).map((row) => {
+  return orderedLiveRows(HOSTS_READ.parts.hosts, rows).map((row) => {
     const platform = readPlatform(row.platform);
     const update = readUpdate(row.update);
     return {

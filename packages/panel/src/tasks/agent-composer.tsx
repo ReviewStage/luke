@@ -46,11 +46,11 @@ import {
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { useConnected } from "../connection.js";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
@@ -423,7 +423,7 @@ function ComposerMore({
 /**
  * How an agent's box queues a message behind the turn under way, and edits
  * one queued already (`agent-queue-dock.tsx`); none for a box that queues
- * nothing, as an eve agent's or New task's.
+ * nothing, as the box of an agent on the retired runtime, or New task's.
  */
 export interface ComposerQueueing {
   /** Whether a turn is under way or about to start, a line the box sent still on its way among them: what Queue is offered by. */

@@ -49,7 +49,7 @@ export const TURN_FAILURE = {
    */
   ABANDONED: "abandoned",
   /**
-   * The run's session ended for good: eve refused a message to it as a
+   * The run's session ended for good: its runtime refused a message to it as a
    * session it no longer runs, while its turn still stood running, so the
    * turn's end is never coming and its record says the session was lost.
    */

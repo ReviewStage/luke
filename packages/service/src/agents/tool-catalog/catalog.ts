@@ -11,8 +11,8 @@
  * agent tools' own runs for the workspace's agents, tasks, automations, and
  * memory, `../coder-host/agent-doors.ts` for the rest); and, for the tools whose
  * answer is a picture, how it is shown. A door is reached directly rather
- * than through the coder host, because the host composes eve's sandbox and
- * tools, which the web function serving the server does not bundle.
+ * than through the coder host, whose composition the web function serving
+ * the server does not bundle.
  *
  * What an agent is offered is read from here alone (`offeredTools`): the
  * server's `tools/list` and the agent's MCP popover both ask it, so neither
@@ -21,23 +21,23 @@
  * may make anyway, is refused in its gate's words before its door is run.
  *
  * `browser` drives the Chromium in the agent's own sandbox, found by the
- * session the sandbox is tagged with (`admitted.runtimeSessionId`), as eve's
- * tool finds it, its tabs kept under the agent's own conversation; its
+ * session the sandbox is tagged with (`admitted.runtimeSessionId`), its
+ * tabs kept under the agent's own conversation; its
  * screenshots reach the agent as images, which the transcript leaves out.
  *
  * Left out, beside the harness's own shell, files, todos, waiting,
- * subagents, skills, and web reads: eve's `connection_search` and
+ * subagents, skills, and web reads: the retired runtime's `connection_search` and
  * `connection_execute`, since each integration the agent is handed is an
  * MCP server of its own beside ours (`../workspace-mcp/app.ts`).
  *
- * Two things eve's tool files keep in the session's own state are kept
+ * Two things the retired runtime's tool files kept in the session's own state are kept
  * otherwise here, since the server keeps no session: a call's id, which the
  * agent tools key a start or a message on, is the key the store holds for the
  * agent's conversation, the tool, and the input within a window
  * (`../workspace-mcp/call-key.ts`), so the call a harness retries after a
- * timeout starts or sends once, as eve's run again does; and the turn's
+ * timeout starts or sends once; and the turn's
  * count of description notes is kept on the running turn's row in the store
- * (`runTurnCappedEditDescription`), so the cap holds per turn as eve's does.
+ * (`runTurnCappedEditDescription`), so the cap holds per turn.
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
@@ -138,7 +138,6 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { sessionsRouter } from "../coder-host/runtime-sessions.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { macCommandNotRun, RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import {
   runAgentRecall,
@@ -146,6 +145,7 @@ import {
   SAVE_MEMORY_TOOL,
   SEARCH_MEMORY_TOOL,
 } from "../memory-tools.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
@@ -155,7 +155,7 @@ import {
 import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
 import { type AgentStanding, GATES, standingOf, TOOL_GATE, type ToolGate } from "./gates.js";
 
-/** What a door answers: the tool's own result, the value its eve tool hands the model. */
+/** What a door answers: the tool's own result, the value the model is handed. */
 export type WorkspaceMcpToolResult = { readonly status?: string } & object;
 
 /** What the doors run against, every one of which a web function's runtime provides. */
@@ -171,7 +171,7 @@ export type WorkspaceMcpServices =
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`../workspace-mcp/app.ts`). */
 type WorkspaceMcpToolServices = WorkspaceMcpServices | AgentBrowser;
 
-/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`../workspace-mcp/call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
+/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`../workspace-mcp/call-key.ts`); and the seams the doors that reach an agent's sessions or the store's writer read. */
 export interface WorkspaceMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
   readonly callKey: Effect.Effect<string, StoreFailure, DatabaseServices>;
@@ -269,11 +269,11 @@ function agentTool<const Name extends string>(
     return Effect.gen(function* () {
       const clientKey = yield* callKey;
       // Each agent the tools reach is answered by the runtime its conversation runs on (`../coder-host/runtime-sessions.ts`).
-      const eveAs = yield* sessionsRouter;
+      const agentSessionsAs = yield* sessionsRouter;
       const call: AgentCall = {
         caller: { kind: AGENT_CALLER.AGENT, agent, descriptionsOn },
-        eve: eveAs(agent.userId),
-        eveAs,
+        agentSessions: agentSessionsAs(agent.userId),
+        agentSessionsAs,
         writer: seams.writer(),
         clientKey,
         summaryModel: seams.summaryModel,
@@ -304,7 +304,7 @@ const isLooked = Schema.is(
  * A look's text block where it looked: its status alone, as JSON. Note that
  * the transcript keeps the text blocks of a tool of ours alone
  * (`../native-events/claude-code-moments.ts`), so this is what a look is
- * stored as, the same as eve's relay stores one (`storedPictureLookOutput`).
+ * stored as, the same as the retired runtime's relay stored one (`storedPictureLookOutput`).
  */
 const LOOKED_TEXT: McpContent = {
   type: "text",
@@ -364,7 +364,7 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
 /**
  * One `edit_description` call under the turn's cap: its notes reserved against the
  * conversation's running turn in the store, the count before them handed to
- * the door as eve hands its session's, and the reservation settled to what
+ * the door, and the reservation settled to what
  * was taken once the door answers. A call that asks for notes before the
  * runner's events have recorded its turn is refused, to be tried again,
  * since there is no count yet to hold it to; one that asks for none has

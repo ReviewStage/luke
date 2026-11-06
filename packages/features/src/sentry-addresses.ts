@@ -2,7 +2,7 @@
  * sentry-addresses.ts -- the addresses a Sentry report carries, as it may keep them: query values, fragments, user info, and credential-shaped path segments redacted.
  *
  * Every process that reports to Sentry hands its spans, events, and log
- * lines through here: the service's functions and eve roots
+ * lines through here: the service's functions
  * (`@repo/service/observability/sentry`), and the clients' span filter
  * (`sentry-breadcrumbs.ts`) beneath the desktop's main process, its
  * renderers, and the web app's tab. Sentry's own URL filter redacts only a

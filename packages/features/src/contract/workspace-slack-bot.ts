@@ -2,10 +2,11 @@
  * workspace-slack-bot.ts -- a workspace's own Slack bot read, connected, and disconnected, and the reader's own notifications from it (`slack-bot-wire.ts`).
  *
  * Each declares a workspace or installation not found, and the writes a
- * role that does not allow them; a default repository named, for the
- * workspace or a channel, also refuses one the workspace's GitHub does not
- * reach or GitHub not answering
- * (`packages/service/src/slack/slack-bot-procedures.ts`).
+ * role that does not allow them
+ * (`packages/service/src/slack/slack-bot-procedures.ts`); a default
+ * repository named, for the workspace or a channel, also refuses one the
+ * workspace's GitHub does not reach or GitHub not answering, which the
+ * workspace client reads as no answer (`WORKSPACE_RENAMES`).
  */
 
 import { openapi } from "@orpc/openapi";

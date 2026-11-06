@@ -1,10 +1,8 @@
 /**
  * sandbox-door.ts -- the door to a native agent's sandbox a tool of our MCP server reads a file through.
  *
- * eve hands each of its tools the session's sandbox (`ctx.getSandbox()`),
- * through which `post_thread`, `edit_description`, `show_image`, and
- * `show_page` read a file the agent names by its path. A native harness runs
- * in a sandbox eve never opened, so the same door is made here, over the
+ * `post_thread`, `edit_description`, `show_image`, and `show_page` read a
+ * file the agent names by its path through a door made here, over the
  * agent's machine (`../machine/agent-machine.ts`, the one its row names, a
  * sandbox or its starter's Mac): the place its session runs in, and the
  * one file asked for, read as the agent's own user, never
@@ -21,8 +19,8 @@
 import { Effect, type Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { AgentMachine, type AgentMachineService } from "../machine/agent-machine.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** The most of one file a door reads: past every bound a tool holds a file to, a page's HTML and a kept picture among them. */

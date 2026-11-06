@@ -58,7 +58,7 @@ import { task } from "./task.js";
  * that cleared it. The last step is what the provider counted of the
  * newest model step of the agent's own conversation, with the estimates of
  * what it read that no provider counts apart (`StoredAgentStep`), and
- * `compacted_at` when eve last compacted that conversation; both are null
+ * `compacted_at` when its harness last compacted that conversation; both are null
  * until it happens, and both are what the tab's context ring reads.
  * `published` is the pull request from the agent's branch as GitHub last
  * answered a read of it (`coder-host/published.ts`), null before a read
@@ -140,7 +140,7 @@ import { task } from "./task.js";
  * prefix cache read or wrote, and the estimates of what the step read that
  * the provider does not count apart, the instructions, the tool
  * definitions, and the plan or task the agent was handed, each estimated
- * as eve's own compaction estimates (`coder-host/token-estimate.ts`); a
+ * as its JSON's bytes over four (`coder-host/token-estimate.ts`); a
  * native step estimates the plan or task alone and tells the rest as 0.
  * `at` is the epoch milliseconds the step's end was relayed.
  */
@@ -296,7 +296,7 @@ export const agentTable = pgTable(
     title: text("title"),
     /** The newest model step of the agent's own conversation; null before its first. */
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
-    /** When eve last compacted the agent's own conversation; null where it never has. */
+    /** When the harness last compacted the agent's own conversation; null where it never has. */
     compactedAt: timestamptz("compacted_at"),
     /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
     published: jsonb("published").$type<StoredPullRequest>(),
@@ -320,7 +320,7 @@ export const agentTable = pgTable(
      * The digest of the bearer the agent's runner presents at our MCP server and its events
      * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
      * than its conversation's, because a launch writes it while a message's hand-over holds the
-     * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
+     * conversation's lock (`steer.ts`), from another function's connection.
      */
     runnerTokenHash: text("runner_token_hash"),
     /** What the agent is (`AGENT_KIND`): a coder, or a task's pilot; a coder for every row from before the column. */
@@ -384,7 +384,7 @@ export const agentTable = pgTable(
  * for the worker, keyed by the child conversation the worker's session is
  * recorded in, which is a function of the agent's conversation and the call
  * that started the worker (`@repo/database/models/ids`). The worker's own steps
- * read the pair here, since eve hands a child's resolvers no lineage and the
+ * read the pair here, since the retired runtime handed a child's resolvers no lineage and the
  * pair is per call rather than per agent. The call's own id is kept beside
  * it, since the child's id is a digest no reader can turn back into the
  * call its tool part names, and the agent's page names each worker's title
@@ -395,7 +395,7 @@ export const agentDelegationTable = pgTable("agent_delegation", {
   childConversationId: uuid("child_conversation_id")
     .primaryKey()
     .references(() => conversations.id, { onDelete: "cascade" }),
-  /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
+  /** The retired runtime's id for the delegation call; null on a row recorded before migration 0079 kept it. */
   callId: text("call_id"),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: text("model").notNull(),

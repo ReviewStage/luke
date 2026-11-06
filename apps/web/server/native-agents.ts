@@ -11,7 +11,7 @@
  * build ships the agents' image reference in each of those functions' `.func`
  * (`scripts/bundle-functions.ts`), where it is read beside the
  * function's own entry. Every other function provides none, and a native
- * conversation reached from one is refused by name rather than run on eve.
+ * conversation reached from one is refused by name.
  */
 
 import { dirname } from "node:path";

@@ -1,5 +1,5 @@
 /**
- * session-sandbox-cleanup.ts -- the queue of eve sessions whose Vercel Sandbox the sweep still has to delete.
+ * session-sandbox-cleanup.ts -- the queue of agents' sessions whose Vercel Sandbox the sweep still has to delete.
  *
  * Whatever lets go of a session for good queues it here: the purge of a
  * deleted task's conversations and the deletion of an account, each in the

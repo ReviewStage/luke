@@ -160,7 +160,7 @@ const listedTabs = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The coding agent an open names, where the member sees it whole, its task
  * included where it is on one (`agentVisibleTo`), and controls it, and
- * where a task is named, it is on that task, with the eve session
+ * where a task is named, it is on that task, with the session
  * its sandbox is tagged with; not found for an agent of another task, and
  * not ready for one that has run no sandbox yet.
  */

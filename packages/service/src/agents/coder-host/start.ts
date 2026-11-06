@@ -95,18 +95,18 @@ import {
   offeredToAccount,
   validateModelChoice,
 } from "../../providers/model-catalog.js";
-import { eveContent, keptHandedImages } from "../attached-files.js";
+import { keptHandedImages, turnContent } from "../attached-files.js";
 import { descriptionsOnFor } from "../descriptions-on.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import {
   type AgentSessions,
   describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveTypedTurn,
   RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
-import { mentionedContext, mentionedServers } from "../mentioned-context.js";
-import { readMentioned } from "../mentioned-reads.js";
+  SESSION_SEND_OUTCOME,
+  SESSION_TURN,
+  type TypedTurn,
+} from "../sessions/agent-sessions.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -153,12 +153,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * on a task that names none the agent works in none and asks nothing of GitHub. The
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
- * agent's eve session opens with the task's document as the Markdown Copy
+ * agent's session opens with the task's document as the Markdown Copy
  * would put on the clipboard, or with the ask's prompt in the description's place
  * and the files attached to it, which only a prompt carries; a note the
  * ask carries rides after either under a heading of its own, so what the
  * developer said beyond the description reaches the agent in the same first
- * message rather than as a second one on its heels. Once eve has taken an
+ * message rather than as a second one on its heels. Once its harness has taken an
  * agent on a task, the task moves into progress from the backlog or to do
  * and never back (`beginTaskWork`), a move that fails logged rather than
  * the Start's failure; a Start by hand on a task no one is assigned to assigns it to
@@ -171,7 +171,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * inherits from that agent what `takeover.ts` decides and reads: its brief,
  * its transcript replayed, its work, its choice, servers, place, branch, and
  * extra repositories where the ask names none, and for a continue its stop
- * once eve has taken the new agent, a pilot taking over from a pilot.
+ * once its harness has taken the new agent, a pilot taking over from a pilot.
  * An ask that names a branch has its agent's checkout cloned at that branch
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
@@ -204,10 +204,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * for them all, and only in the cloud, through the one installation of the
  * App that reaches its own (`extraRepositoriesOf`); a Start that names none reads and
  * writes exactly what it did before.
- * An eve that did not take the opening leaves no agent behind, so the retry
+ * A harness that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh, and so does one that could not be
  * reached, a first line that could not be written, and a Start cut short
- * before eve took it, each said as an error naming the agent (`agent-log.ts`).
+ * before the harness took it, each said as an error naming the agent (`agent-log.ts`).
  * A choice an ask names runs that one agent and is never kept as the
  * account's default, which only
  * Settings writes. Where the agent runs is the place the ask names, else
@@ -294,7 +294,7 @@ export interface AgentStarted {
   readonly txid?: string;
 }
 
-/** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
+/** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to the agent's harness. */
 export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 /** What an account may start an agent on: the models the catalog offers it, and the choice a Start naming none runs on. */
@@ -706,8 +706,7 @@ function openingOf(
 /**
  * The first message of a Start, written as the line awaiting its turn under
  * a fresh key, as a steer's is (`steer.ts`), and its line id, which a native
- * runner is handed and names back as it takes the line, and eve's receipt
- * takes by its words. Its
+ * runner is handed and names back as it takes the line. Its
  * dispatch has already happened by the time it matters: the line is written
  * standing, and the Start's own open is what hands it over.
  */
@@ -926,10 +925,10 @@ const extraRepositoriesOf = Effect.fnUntraced(function* (
   );
 });
 
-/** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
+/** Starts the account's agent on the task or in the workspace, as above; its sessions are composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
+  agentSessions: Effect.Effect<
+    AgentSessions<TypedTurn>,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
@@ -1042,19 +1041,19 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const opening = Effect.gen(function* () {
     if (handed === null) return;
     // Every line the opening says names the agent, the runtime's own past the answer included. Note
-    // that the agent stands from here, so an opening cut short before eve was asked, as a caller's
+    // that the agent stands from here, so an opening cut short before the harness was asked, as a caller's
     // deadline cuts a `start_agent`, discards it as a refused one does, in a finalizer the
     // interruption cannot cut short, and says so, rather than leaving an agent no session was opened
-    // for. One cut short while eve was asked is said alone, since its session may have opened, a
+    // for. One cut short while the harness was asked is said alone, since its session may have opened, a
     // native launch handed on past the answer, and the agent is that session's.
     let asked = false;
     const opened = yield* Effect.gen(function* () {
-      const sessions = yield* eve.pipe(
+      const sessions = yield* agentSessions.pipe(
         Effect.tapError((refusal) =>
           discardedAt(
             userId,
             agent,
-            `eve could not be reached to start a coding agent: ${refusal.error}`,
+            `the agent's runtime could not be reached to start a coding agent: ${refusal.error}`,
             refusal.error,
             { failure: SERVER_AGENT_START_FAILURE.UNREACHABLE, startedBy: starterOf(ask) },
           ),
@@ -1095,20 +1094,20 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
           ),
         ),
       );
-      // The runtime says why an open it refused was refused; eve that could not be asked is said here.
+      // The runtime says why an open it refused was refused; one that could not be asked is said here.
       asked = true;
       return yield* sessions
         .open({
           conversationId: agent.conversationId,
-          turn: EVE_HOST_TURN.TYPED,
-          message: eveContent(handed, files, mentioned),
+          turn: SESSION_TURN.TYPED,
+          message: turnContent(handed, files, mentioned),
           lineId: line,
         })
         .pipe(
-          Effect.catchTag("EveUnreachable", (failure) =>
+          Effect.catchTag("SessionUnreachable", (failure) =>
             Effect.as(
               agentFailureSaid(
-                `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
+                `the agent's runtime could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
                 failure._tag,
                 true,
               ),
@@ -1136,7 +1135,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       ),
       Effect.annotateLogs(agentLogIds(agent)),
     );
-    if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+    if (opened === undefined || opened.outcome !== SESSION_SEND_OUTCOME.ACCEPTED) {
       // An image still being prepared is answered by name, so the Start is made again under its key.
       const refusal = opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened);
       // A native harness says why it refused where its harness decided it (`runner-sessions.ts`), so
@@ -1169,7 +1168,14 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   );
   // The source's transcript is the new agent's own before its first open forks it, and a continue's
   // source stops once it opened, since the work goes on in the new agent; a fork's goes on beside it.
-  const archived = yield* openedTakingOver(eve, userId, ask.startedBy, inherited, agent, opening);
+  const archived = yield* openedTakingOver(
+    agentSessions,
+    userId,
+    ask.startedBy,
+    inherited,
+    agent,
+    opening,
+  );
   // The Start answers the last transaction it committed in, which Realtime delivers after every
   // one before it, so a client waiting on it sees the agent and its task's standing alike.
   let committed = Option.getOrElse(archived, () => txid);
@@ -1246,8 +1252,8 @@ export const requestedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
+  agentSessions: Effect.Effect<
+    AgentSessions<TypedTurn>,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
@@ -1260,7 +1266,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
-  const { agent, created, txid } = yield* startAgent(eve, userId, {
+  const { agent, created, txid } = yield* startAgent(agentSessions, userId, {
     ...whereOf(where),
     idempotencyKey: request.idempotencyKey,
     choice,

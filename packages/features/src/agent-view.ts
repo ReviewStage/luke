@@ -35,6 +35,7 @@ import {
 import { accountContract } from "./contract/account.js";
 import { dictationContract } from "./contract/dictation.js";
 import { githubTokenContract } from "./contract/github-token.js";
+import { hostsContract } from "./contract/hosts.js";
 import { modelsContract } from "./contract/models.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
@@ -42,12 +43,7 @@ import { failureFactsSchema } from "./failure-facts.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
-import {
-  devicePresenceAnswerSchema,
-  hostDoneAnswerSchema,
-  hostIdRequestSchema,
-  hostsAnswerSchema,
-} from "./host-wire.js";
+import { hostIdRequestSchema } from "./host-wire.js";
 import { answerView, failureSetOf } from "./hosted-failure.js";
 import {
   inboxAcknowledgeRequestSchema,
@@ -133,10 +129,20 @@ const AGENT_ACCOUNT_CALLS = {
   },
 };
 
+/** The account's hosts the agent client lists, reads the presence of, and removes through `hostedCall`, as their contracts declare their refusals. */
+const AGENT_HOST_CALLS = {
+  hosts: {
+    list: hostsContract.list,
+    presence: hostsContract.presence,
+    remove: hostsContract.remove,
+  },
+};
+
 /**
  * Why a coding-agent call answered nothing a window can draw: the failures
- * the account's own procedures declare (`AGENT_ACCOUNT_CALLS`), among them
- * no answer at all (`unanswered`), the task, agent, or workspace not one
+ * the account's own procedures and its hosts' declare (`AGENT_ACCOUNT_CALLS`,
+ * `AGENT_HOST_CALLS`), among them
+ * no answer at all (`unanswered`), the task, agent, workspace, or host not one
  * the account holds (`not-found`), one only another member may act on
  * (`not-permitted`), a model or effort the service does not offer now
  * (`invalid-choice`), a clip dictated with no OpenAI key saved
@@ -146,6 +152,7 @@ const AGENT_ACCOUNT_CALLS = {
  */
 export const AGENT_CALL_FAILURE = {
   ...failureSetOf(AGENT_ACCOUNT_CALLS, { as: AGENT_RENAMES }),
+  ...failureSetOf(AGENT_HOST_CALLS),
   /** The task names no repository, so there is nothing for an agent to check out. */
   NO_REPOSITORY: "no-repository",
   /** The task's workspace's GitHub installation does not reach the task's repository; why travels beside it where the service said. */
@@ -219,20 +226,17 @@ export const agentDefaultAnswerViewSchema = EffectSchema.Union([
 export type AgentDefaultAnswer = typeof agentDefaultAnswerViewSchema.Type;
 
 /** The account's hosts, as the window hears them read (`host-wire.ts`): the list and the install script's address, or why there is none. */
-export const hostsAnswerViewSchema = EffectSchema.Union([hostsAnswerSchema, failed]);
+export const hostsAnswerViewSchema = answerView(hostsContract.list);
 
 export type HostsAnswerView = typeof hostsAnswerViewSchema.Type;
 
 /** How long ago the reader's devices last beat, as the window hears it read, or why not. */
-export const devicePresenceAnswerViewSchema = EffectSchema.Union([
-  devicePresenceAnswerSchema,
-  failed,
-]);
+export const devicePresenceAnswerViewSchema = answerView(hostsContract.presence);
 
 export type DevicePresenceAnswerView = typeof devicePresenceAnswerViewSchema.Type;
 
 /** A host removed, as the window hears it: done, or why not. */
-export const hostDoneAnswerViewSchema = EffectSchema.Union([hostDoneAnswerSchema, failed]);
+export const hostDoneAnswerViewSchema = answerView(hostsContract.remove);
 
 export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
 

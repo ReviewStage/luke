@@ -42,7 +42,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * its tab is shown or the window comes forward on it, and not at all while
  * the window is focused on that agent's tab, where the developer sees the
  * end for themselves. A message to an agent that had ended reads it running
- * under the ended turn's id until eve opens the next turn, which is the old
+ * under the ended turn's id until its harness opens the next turn, which is the old
  * run read again and not a new one: the ledger keeps the end it marked until
  * the new turn's id arrives, whose own end is the next dot. A list that
  * landed late, describing a turn the agent has left behind, says nothing

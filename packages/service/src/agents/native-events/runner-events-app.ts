@@ -106,7 +106,7 @@ import { redactKeepingPlanCodes } from "./runner-moments.js";
  * one transaction with the number of the last event applied, so an event
  * already applied is passed over: a batch posted again, or two posts
  * racing, write nothing twice. A write the writer refuses is said in the
- * log and passed over, as eve's relay passes one over, since the runner
+ * log and passed over, since the runner
  * posting the batch again would be refused again. The answer names the last
  * event applied, which a relaunch numbers its events after. A runner posting
  * is a run under way, so a post keeps its sandbox alive past its short
@@ -478,7 +478,7 @@ function landWrite(
         writer.enqueueTurn(target, {
           turnId: write.turnId,
           // A native turn's id is the one a Stop names it by (`coder-host/stop.ts`), since no runtime mints another.
-          eveTurnId: write.turnId,
+          runtimeTurnId: write.turnId,
           origin: TURN_ORIGIN.TYPED,
           model: applying.model,
           reasoningEffort: applying.reasoningEffort,
@@ -524,7 +524,7 @@ function landWrite(
       );
     case NATIVE_WRITE.PLAN_STATUS: {
       // Note that the row is the starter's credential that pays: its plan's, or, for an agent its API key
-      // pays for, that key's, which a refusal marks invalid as eve's step does; a plan's limit is no key's.
+      // pays for, that key's, which a refusal marks invalid; a plan's limit is no key's.
       const row =
         applying.payer === AGENT_PAYER.API_KEY
           ? write.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
@@ -597,8 +597,8 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       });
       state = projected.state;
       writes.push(...projected.writes);
-      // A turn starting takes the servers mentioned to the agent since its last turn started, as
-      // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at our own
+      // A turn starting takes the servers mentioned to the agent since its last turn started
+      // (`agent-runtime/servers.ts`), and keeps them for its calls at our own
       // MCP server, which hands them whatever the switches say (`integrations/connection-door.ts`).
       // They are taken event by event, so a turn that starts and ends within one batch takes its
       // own, never the next turn's.

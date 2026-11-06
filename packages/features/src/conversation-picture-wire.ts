@@ -7,8 +7,8 @@ import { WEBM_TYPE } from "./video-signature.js";
  * conversation-picture-wire.ts -- a picture a transcript names: how a tool's stored output or a line's image names one the service kept beside the conversation, and why one was not kept.
  *
  * A tool may answer a model with a picture, as an integration's MCP tool
- * answers an image block. The model sees the picture where eve hands it
- * over; the record keeps it once, as a row beside the conversation
+ * answers an image block. The model sees the picture where the agent's
+ * harness hands it over; the record keeps it once, as a row beside the conversation
  * (`attachment`), and the stored output names that row in the
  * picture's place, never the bytes, which would otherwise ride every read,
  * journal amend, and long poll of the transcript. A picture the service did
