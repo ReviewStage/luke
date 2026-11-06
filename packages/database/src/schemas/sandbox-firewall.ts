@@ -29,8 +29,10 @@ export const sandboxFirewall = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** Minted as the launch is kept. Nothing reads it now; the code this replaced compared it, so it stays until no deployment runs that code. */
     version: uuid("version").notNull(),
-    /** The agent the launch runs, whose repository credential a write made apart from the launch mints, and with which the row goes; none in a row kept before agents were named here. */
-    agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "cascade" }),
+    /** The agent the launch runs, whose repository credential a write made apart from the launch mints, and with which the row goes. */
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** The launch's swaps as the service sealed them. */
     sealedEntries: text("sealed_entries").notNull(),
     /** When the row was last written, from the writer's own clock. */

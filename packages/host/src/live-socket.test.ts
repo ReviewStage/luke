@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fixedBearer, HOSTED_SERVICE_PATH } from "@repo/features";
 import { type LiveSocketAsk, liveSocketAskSchema } from "@repo/features/live-wire";
-import { type Cause, Deferred, Duration, Effect, Fiber, Queue, Schema, Stream } from "effect";
+import { type Cause, Deferred, Duration, Effect, Exit, Fiber, Queue, Schema, Stream } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import type {
@@ -20,18 +20,23 @@ import { liveSocketClient } from "./live-socket.js";
  * while a write goes over HTTP; a 401 closes the socket and is asked again
  * over HTTP; a socket past its time takes no new asks while the ones it
  * holds are still answered; and an ask left unanswered closes its socket and
- * is asked again over HTTP, so a socket's end never fails a read.
+ * fails before the deadline it travels under, so the read is asked again on
+ * a fresh connection rather than over HTTP with too little time left.
  */
 
 const SERVICE = "https://app.test";
 const TASKS_POLL = `${SERVICE}/api/live/tasks?userId=user-1&poll=true&after=d1`;
 const HTTP_BODY = JSON.stringify({ over: "http" });
 const INBOX_READ = `${SERVICE}${HOSTED_SERVICE_PATH.INBOX_READ}`;
+/** A live read the service answers at once, past no digest, so it travels under the usual deadline. */
+const TASKS_READ = `${SERVICE}/api/live/tasks?userId=user-1&poll=true`;
 
 /** How long a socket takes new asks, how long it then drains, and how long an ask waits, as the plan sets them. */
 const ROTATE_AFTER = Duration.minutes(12);
 const DRAIN = Duration.seconds(40);
-const ANSWER_WITHIN = Duration.seconds(30);
+
+/** The account call's usual deadline, which an ordinary live read travels under. */
+const USUAL_DEADLINE = Duration.seconds(10);
 
 /** One relay socket as a test drives it: once the host reads it, the asks it sent read in order, answers pushed in, and whether its scope closed. */
 const scriptedSocket = Effect.gen(function* () {
@@ -173,11 +178,11 @@ it.effect(
 );
 
 it.effect(
-  "a socket past its time takes no new asks while one it holds is still answered, and an ask left unanswered closes its socket and is asked again over HTTP",
+  "a socket past its time takes no new asks while one it holds is still answered, and an ask left unanswered closes its socket and fails before its deadline",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { relay, poll } = yield* subject;
+        const { relay, http, client, poll } = yield* subject;
         yield* Fiber.join(yield* poll);
         const older = yield* relay.opened;
         yield* older.reading;
@@ -205,14 +210,18 @@ it.effect(
         yield* TestClock.adjust(DRAIN);
         assert.equal(older.state.closed, true);
 
-        const stalled = yield* poll;
-        yield* newer.asked;
-        yield* TestClock.adjust(ANSWER_WITHIN);
-        assert.deepEqual(
-          yield* Fiber.join(stalled),
-          { status: 200, text: HTTP_BODY },
-          "an ask its socket never answered is answered over HTTP",
+        const askedOverHttp = http.asked.length;
+        const stalled = yield* Effect.forkChild(
+          Effect.exit(client.execute(HttpClientRequest.get(TASKS_READ))),
         );
+        yield* newer.asked;
+        yield* TestClock.adjust(Duration.subtract(USUAL_DEADLINE, Duration.millis(1)));
+        const ended = stalled.pollUnsafe();
+        assert.ok(
+          ended !== undefined && Exit.isSuccess(ended) && Exit.isFailure(ended.value),
+          "an ask its socket never answered fails before the deadline it travels under",
+        );
+        assert.equal(http.asked.length, askedOverHttp, "a stalled ask is not asked over HTTP");
         assert.equal(newer.state.closed, true, "a socket that stalled is closed");
       }),
     ),

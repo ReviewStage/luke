@@ -120,7 +120,7 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
-import { useForwardEntry } from "./agent-forward.js";
+import { ForwardChip, useAutoForward } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -2723,7 +2723,6 @@ function AgentTabView({
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
   const queue = useAgentQueue(agent.id, transcript.queue);
   const pictures = useAgentPictureDoor(agent.id);
-  const forward = useForwardEntry(agent);
   const queueEditing = useQueueEditing(composer, queue, pictures);
   const enterQueues = useQuery({ ...appStateQuery, select: selectEnterQueues }).data === true;
   // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
@@ -3048,8 +3047,12 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
-            plus={forward === undefined ? undefined : [forward]}
+            tools={(narrow) => (
+              <>
+                <AgentPlace agent={agent} narrow={narrow} />
+                <ForwardChip agent={agent} />
+              </>
+            )}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its description or
             // task, so the box takes a follow up even before the transcript is read.
@@ -3253,6 +3256,7 @@ function AgentTabBody({
     known: control.pullRequests.get(agent.id),
   });
   const moveToCloud = useMoveToCloud(agent, control);
+  useAutoForward(agent, shown);
   // Note that the log never waits on the pull request's dock over the box, because its read asks GitHub and would hold every tab's first draw for a second or more.
   // Note that nothing counts as landed before the first page.
   const surroundsLanded = messages.length > 0;

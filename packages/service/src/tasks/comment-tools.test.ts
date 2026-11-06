@@ -7,16 +7,16 @@ import { writePage } from "@repo/database/models/task-pages";
 import { createTask, saveDescriptionText } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_SCOPE,
   DESCRIPTION_COMMENT_STATUS,
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { unparsedWire } from "@repo/wire";
 import { Effect, Option } from "effect";
-import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import {
   COMMENT_TOOL_REFUSAL,

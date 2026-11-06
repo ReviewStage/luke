@@ -197,6 +197,25 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   /*
+   * Whether a cloud agent's ports reach this Mac on their own: the agent whose
+   * tab is open is forwarded once nothing else is, a toast saying so. Off,
+   * an agent's ports are forwarded only from the plug at its box's foot.
+   */
+  forwardPorts: toggleSetting({
+    field: "forwardPorts",
+    id: APP_SETTING_ID.FORWARD_PORTS,
+    label: "Forward cloud agents' ports automatically",
+    detail:
+      "A dev server an agent starts in its sandbox opens at localhost on this Mac. A forward already on stands until it is stopped from its ports chip.",
+    default: true,
+    page: SETTINGS_PAGE.THIS_MAC,
+    order: 3,
+    // Only the Mac app listens on this Mac's localhost.
+    visible: desktopAppDrawn,
+    // Nothing to run per write: an agent's tab reads the setting as it opens.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  /*
    * Where an app link opened in a browser goes: it stays on the web, or the
    * web hands it to the Mac app (`@repo/features/link-open`). The account's,
    * so the web reads it on a signed-in load; it rides the preferences

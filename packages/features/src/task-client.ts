@@ -340,14 +340,12 @@ function fileWindowQuery(window: TaskFileRequest):
 /** A write the wire refuses by shape, which never travels. */
 const UNTRAVELED = { ok: false, failure: WRITE_UNTAKEN.REFUSED } as const;
 
-/** A keyed write's answer, or how it ended untaken: refused, unanswered, or taken already under its key (`keyed-write.ts`). */
-function keyedWrite<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<TaskCallResult<Answer, WriteUntaken>, never, HttpClient.HttpClient> {
-  return Effect.match(asked, {
-    onSuccess: succeeded,
-    onFailure: (failed) => ({ ok: false, failure: writeUntakenOf(hostedFailureFacts(failed)) }),
-  });
+/** How a sidebar's keyed write is asked: under the usual deadline, and its idempotency key where it has one (`keyed-write.ts`). */
+function keyedReading(key: string | undefined) {
+  return {
+    deadline: HOSTED_DEADLINE.USUAL,
+    ...(key === undefined ? undefined : { idempotencyKey: key }),
+  };
 }
 
 /** A procedure's answer, or nothing where it reached none. */
@@ -779,7 +777,9 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
     const query = fileWindowQuery(window);
     if (query === undefined) return Effect.succeed(undefined);
-    return orNothing(askHosted(this.#hosted.taskFiles.file, { id: taskId, ...query }));
+    return Effect.map(hostedCall(this.#hosted.taskFiles.file, { id: taskId, ...query }), (read) =>
+      "failure" in read ? undefined : read,
+    );
   }
 
   /** One window of a file of a repository the workspace's installation reaches, as `readFile` reads a task's; nothing where the service did not answer, or where the window is not one the wire admits. */
@@ -803,12 +803,13 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(
-      askHosted(this.#hosted.taskFiles.tree, {
+    return Effect.map(
+      hostedCall(this.#hosted.taskFiles.tree, {
         id: taskId,
         ...(admitted.path === "" ? undefined : { path: admitted.path }),
         ...(admitted.recursive === true ? { recursive: TASK_FILE_QUERY_FLAG } : undefined),
       }),
+      (listed) => ("failure" in listed ? undefined : listed),
     );
   }
 
@@ -816,8 +817,9 @@ export class HostedTaskClient {
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.taskFiles.skills, { id: taskId, installed: TASK_SKILLS_INSTALLED }),
+    return Effect.map(
+      hostedCall(this.#hosted.taskFiles.skills, { id: taskId, installed: TASK_SKILLS_INSTALLED }),
+      (read) => ("failure" in read ? undefined : read),
     );
   }
 
@@ -973,22 +975,14 @@ export class HostedTaskClient {
     taskId: string,
     picture: string,
   ): Effect.Effect<TasksPictureKeepAnswer, never, HttpClient.HttpClient> {
-    return Effect.match(
-      askHosted(this.#hosted.taskFiles.keepPicture, {
-        params: { id: taskId },
-        body: { picture },
-      }),
-      {
-        onFailure: (failed): TasksPictureKeepAnswer =>
-          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.NOT_FOUND
-            ? { failure: TASK_CALL_FAILURE.NOT_FOUND }
-            : { failure: PICTURE_KEEP_FAILURE.UNANSWERED },
-        onSuccess: ({ body: kept }): TasksPictureKeepAnswer =>
-          "id" in kept
-            ? { id: kept.id }
-            : {
-                failure: KEEP_REFUSED[kept.refused],
-              },
+    return Effect.map(
+      hostedCall(this.#hosted.taskFiles.keepPicture, { params: { id: taskId }, body: { picture } }),
+      (kept): TasksPictureKeepAnswer => {
+        // Note that a failure is handed on bare, as it always was, its cause left out.
+        if ("failure" in kept) return { failure: kept.failure };
+        return "id" in kept.body
+          ? { id: kept.body.id }
+          : { failure: KEEP_REFUSED[kept.body.refused] };
       },
     );
   }
@@ -1000,11 +994,16 @@ export class HostedTaskClient {
     version: number,
   ): Effect.Effect<PageVersion | undefined, never, HttpClient.HttpClient> {
     const named = { page: pageId, version: String(version) };
-    const asked =
-      "taskId" in place
-        ? askHosted(this.#hosted.taskFiles.page, { id: place.taskId, ...named })
-        : askHosted(this.#hosted.agentPages.version, { id: place.agentId, ...named });
-    return Effect.map(orNothing(asked), (answer) => answer?.page);
+    if ("taskId" in place) {
+      return Effect.map(
+        hostedCall(this.#hosted.taskFiles.page, { id: place.taskId, ...named }),
+        (read) => ("failure" in read ? undefined : read.page),
+      );
+    }
+    return Effect.map(
+      orNothing(askHosted(this.#hosted.agentPages.version, { id: place.agentId, ...named })),
+      (answer) => answer?.page,
+    );
   }
 
   /** Puts one revision of a description back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
@@ -1123,8 +1122,9 @@ export class HostedTaskClient {
       readEither(repositoryPinRequestSchema)({ repository, pinned }),
     );
     if (asked === undefined) return Effect.succeed(UNTRAVELED);
-    return keyedWrite(
-      askHosted(this.#hosted.repositoryPins.set, asked, HOSTED_DEADLINE.USUAL, key),
+    return Effect.map(
+      hostedCall(this.#hosted.repositoryPins.set, asked, keyedReading(key)),
+      (pinned) => ("failure" in pinned ? untakenAs(pinned) : succeeded(pinned)),
     );
   }
 
@@ -1165,8 +1165,9 @@ export class HostedTaskClient {
   > {
     const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
     if (asked === undefined) return Effect.succeed(UNTRAVELED);
-    return keyedWrite(
-      askHosted(this.#hosted.taskSections.write, asked, HOSTED_DEADLINE.USUAL, key),
+    return Effect.map(
+      hostedCall(this.#hosted.taskSections.write, asked, keyedReading(key)),
+      (written) => ("failure" in written ? untakenAs(written) : succeeded(written)),
     );
   }
 

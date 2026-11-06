@@ -11,6 +11,7 @@ import {
   type WithRepository,
 } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_AUTHOR, type AgentAuthor } from "@repo/features/agent-wire";
 import {
   GITHUB_ACCESS,
@@ -34,7 +35,6 @@ import {
   readBody,
   send,
 } from "../../github/github-app.js";
-import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { agentRepositoryToken, type CheckoutServices } from "./checkout.js";
 import { agentPublished } from "./published.js";
 

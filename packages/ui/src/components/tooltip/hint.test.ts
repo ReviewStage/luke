@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DELAY_MS } from "@repo/brand";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment, type ReactElement, useRef } from "react";
+import { act, createElement, Fragment, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { Button } from "../button/button.js";
@@ -52,11 +50,6 @@ class StillResizeObserver {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StillResizeObserver);
 });
-
-/** `element` under `registry`, as an app's root provides its own. */
-function onRegistry(registry: AtomRegistry.AtomRegistry, element: ReactElement): ReactElement {
-  return createElement(RegistryContext.Provider, { value: registry }, element);
-}
 
 /** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */
 function restOn(target: Element): void {
@@ -107,7 +100,7 @@ test("a list row's card, handed no place to hang, hangs past the row's end, not 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Row))));
+  act(() => root.render(createElement(Row)));
   const row = container.querySelector("li");
   const press = row?.querySelector(":scope > button");
   assert.ok(row && press);
@@ -142,7 +135,7 @@ function mount(element: React.ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(element));
   return container;
 }
 
@@ -407,20 +400,17 @@ function CardedRow({ row }: { row: string }): React.JSX.Element {
   );
 }
 
-/** Rows that each hang a card, drawn under a registry of their own. */
+/** Rows that each hang a card, drawn on a root of their own. */
 function drawRows(rows: readonly string[]): (row: string) => HTMLElement {
   const container = document.body.appendChild(document.createElement("ul"));
   const root = createRoot(container);
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          Fragment,
-          null,
-          rows.map((row) => createElement(CardedRow, { key: row, row })),
-        ),
+      createElement(
+        Fragment,
+        null,
+        rows.map((row) => createElement(CardedRow, { key: row, row })),
       ),
     ),
   );
@@ -554,28 +544,25 @@ test("a pill seen warms the window, so the next control's shows at once", () => 
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          Fragment,
-          null,
-          createElement(Tooltip, {
-            label: "Back",
-            children: createElement("button", {
-              type: "button",
-              "aria-label": "Go back",
-              "aria-describedby": undefined,
-            }),
+      createElement(
+        Fragment,
+        null,
+        createElement(Tooltip, {
+          label: "Back",
+          children: createElement("button", {
+            type: "button",
+            "aria-label": "Go back",
+            "aria-describedby": undefined,
           }),
-          createElement(Tooltip, {
-            label: "Forward",
-            children: createElement("button", {
-              type: "button",
-              "aria-label": "Go forward",
-              "aria-describedby": undefined,
-            }),
+        }),
+        createElement(Tooltip, {
+          label: "Forward",
+          children: createElement("button", {
+            type: "button",
+            "aria-label": "Go forward",
+            "aria-describedby": undefined,
           }),
-        ),
+        }),
       ),
     ),
   );

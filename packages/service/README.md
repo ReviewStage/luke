@@ -2642,8 +2642,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
 - `purgedPictures`: description pictures uploaded a day ago that no save named.
 - `agentQueues`: unpaused queues of idle agents handed on.
-- `hostPairings`: lapsed host pairings, and approved hosts that never
-  collected their secret, deleted.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
