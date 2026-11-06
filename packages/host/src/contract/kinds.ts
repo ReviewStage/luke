@@ -542,6 +542,18 @@ export const MAC_TERMINAL_ACT_KIND = {
 } as const;
 
 /**
+ * A shell on this Mac (`mac-shells.ts`): the developer's login shell opened
+ * in a folder for the asking panel, attached, and closed, answered by the
+ * desktop's main, which holds it. What it prints travels on the port an
+ * attach posts to that panel, as a cloud shell's does, never on an act.
+ */
+export const MAC_SHELL_ACT_KIND = {
+  MAC_SHELL_OPEN: "macShell.open",
+  MAC_SHELL_ATTACH: "macShell.attach",
+  MAC_SHELL_CLOSE: "macShell.close",
+} as const;
+
+/**
  * A command an agent asked to run on this Mac (`../mac-command-ask.ts`),
  * answered by the developer from the prompt the panel draws over the window:
  * allowed once, allowed always, which also writes Settings › This Mac to
@@ -731,6 +743,7 @@ export const PORT_ACT_KIND = {
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_COMMAND_ACT_KIND,
+  ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
@@ -897,6 +910,10 @@ export const PORT_ACT_USE = {
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
+  MAC_SHELL_OPEN: ACT_USE.WRITE,
+  MAC_SHELL_ATTACH: ACT_USE.WRITE,
+  MAC_SHELL_CLOSE: ACT_USE.WRITE,
+
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
 
   SETTING_UPDATE: ACT_USE.WRITE,
@@ -1023,6 +1040,7 @@ export const PORT_ACT_USE = {
 export const PLATFORM_PORT_ACT_KIND = {
   ...BROWSER_LIVE_ACT_KIND,
   ...CLI_ACT_KIND,
+  ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
