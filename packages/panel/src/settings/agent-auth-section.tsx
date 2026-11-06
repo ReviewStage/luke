@@ -1059,18 +1059,11 @@ function ConnectButton({
   );
 }
 
-/** Connect Codex over the surface while the ChatGPT plan's Connect holds it open, back leading to `backTo`. */
-function ChatGptConnect({
-  chatGpt,
-  backTo,
-}: {
-  chatGpt: ChatGptPlan;
-  backTo: string;
-}): React.JSX.Element {
+/** Connect Codex over the surface while the ChatGPT plan's Connect holds it open. */
+function ChatGptConnect({ chatGpt }: { chatGpt: ChatGptPlan }): React.JSX.Element {
   return (
     <ConnectCodexDialog
       open={chatGpt.connecting}
-      backTo={backTo}
       onClose={chatGpt.closeConnect}
       onConnected={chatGpt.connectedNow}
     />
@@ -1122,7 +1115,7 @@ function ChatGptPlanRow({
         }
       </SettingsRow>
       <CredentialQuestion inDialog confirm={chatGpt.removal} question={CHATGPT_DISCONNECT} />
-      <ChatGptConnect chatGpt={chatGpt} backTo={HARNESS[PROVIDER_KEY_PROVIDER.OPENAI].name} />
+      <ChatGptConnect chatGpt={chatGpt} />
     </>
   );
 }
@@ -1904,7 +1897,7 @@ export function AgentConnectSection({
           ))
         }
       </HarnessList>
-      <ChatGptConnect chatGpt={chatGpt} backTo={WORDS.SETUP} />
+      <ChatGptConnect chatGpt={chatGpt} />
     </div>
   );
 }
