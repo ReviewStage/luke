@@ -327,7 +327,13 @@ export function composeMacCommands(
     /** The gate as last worked out: the account the Mac takes commands for, none while it is shut. */
     const gate = yield* SubscriptionRef.make<string | undefined>(undefined);
     const gateFor = Effect.map(gateOpen, (open) => (open ? dependencies.accountId() : undefined));
-    const gateMoved = Effect.flatMap(gateFor, (userId) => SubscriptionRef.set(gate, userId));
+    /** How many times the gate has moved: shut, opened, or opened for another account. */
+    let moves = 0;
+    const gateMoved = Effect.flatMap(gateFor, (userId) =>
+      Effect.map(SubscriptionRef.getAndSet(gate, userId), (was) => {
+        if (was !== userId) moves += 1;
+      }),
+    );
     /** Waits until the gate stands open, for whichever account. */
     const opened = SubscriptionRef.changes(gate).pipe(
       Stream.filter((userId) => userId !== undefined),
@@ -418,31 +424,31 @@ export function composeMacCommands(
         return Effect.raceFirst(follow, Effect.asVoid(left(userId)));
       });
 
-    /** The account the commands in the running set were claimed for, none before the first follow. */
-    let runningFor: string | undefined;
+    /** How many times the gate had moved when the running set was last cleared. */
+    let clearedAt = 0;
 
     /**
      * One turn of the loop: the commands followed until the gate leaves the
      * account, the read asked again after a pause, or as soon as the service
      * answers again, where it did not answer it or signed the session out;
-     * with the gate shut, or open for another account than the commands
-     * running were claimed for, every command still running stopped (its
-     * process group killed as its scope closes); with it shut, a wait for it
-     * to open.
+     * with the gate moved since the commands running were claimed, every
+     * one of them stopped (its process group killed as its scope closes),
+     * though it opened again for the same account; with it shut, a wait for
+     * it to open.
      * Every turn begins by letting go of the asks of any account but the one
      * signed in, since a follow ends as the account changes.
      */
     const turn = (running: FiberSet.FiberSet) =>
       Effect.gen(function* () {
         yield* withdrawOtherAccounts;
+        if (moves !== clearedAt) {
+          clearedAt = moves;
+          yield* FiberSet.clear(running);
+          // Note that the clear waits out any claim under way, during which the gate may have moved again, so the next turn starts from where it stands now.
+          if (moves !== clearedAt) return;
+        }
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out.
         const userId = yield* SubscriptionRef.get(gate);
-        if (userId !== runningFor) {
-          yield* FiberSet.clear(running);
-          runningFor = userId;
-          // Note that the clear waits out any claim under way, during which the gate may have moved again, so the next turn starts from where it stands now.
-          if ((yield* SubscriptionRef.get(gate)) !== userId) return;
-        }
         if (userId === undefined) return yield* Effect.asVoid(opened);
         const sealed = yield* seal(userId, false);
         if ("failure" in sealed) {
