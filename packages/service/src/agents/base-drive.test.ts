@@ -1,5 +1,5 @@
 /**
- * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill's sandbox is still being created or still runs, and gone after a fill that failed.
+ * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill's sandbox is still being created or still runs, filled once a sandbox a fill could not delete is, and gone after a fill that failed.
  */
 
 import assert from "node:assert/strict";
@@ -182,6 +182,24 @@ it.effect(
 
       assert.equal(whileInstalling, false);
       assert.equal(yield* baseDriveFilled(api, RELAY), true);
+    }),
+);
+
+it.effect(
+  "a base drive whose fill's sandbox could not be deleted reads filled once the next fill deletes it",
+  () =>
+    Effect.gen(function* () {
+      const { fake, api } = yield* fixture;
+      // The fill's delete after its fork, and the delete its cleanup tries again, are both refused.
+      fake.failDelete.remaining = 2;
+      yield* Effect.result(filled(api));
+      const stuck = yield* baseDriveFilled(api, RELAY);
+
+      yield* filled(api);
+
+      assert.equal(stuck, false);
+      assert.equal(yield* baseDriveFilled(api, RELAY), true);
+      assert.equal(fake.sandboxes.length, 1, "the next fill opened no sandbox of its own");
     }),
 );
 

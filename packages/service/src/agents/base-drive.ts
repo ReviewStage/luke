@@ -154,7 +154,8 @@ export const installDependencies = Effect.fn("web/installCheckoutDependencies")(
  * that failed or outlasted `FILL_TIMEOUT` stops its sandbox, deletes the
  * staging drive, and deletes the sandbox; one whose sandbox was never
  * created deletes the staging drive. A staging drive left once the base
- * drive stands is said in the log and let be, since the base drive is whole.
+ * drive stands is said in the log and let be, since the base drive is whole;
+ * a fill's sandbox left beside it is deleted by the next fill.
  * `open` is the sandbox as the clone reaches it, over the caller's runner.
  */
 export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
@@ -165,7 +166,11 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   open: (sandbox: { readonly name: string; readonly running: string }) => RepositorySandbox,
 ) {
   const name = baseDriveName(of);
-  if ((yield* api.getDrive(name)) !== undefined) return;
+  if ((yield* api.getDrive(name)) !== undefined) {
+    // Note that a fill's sandbox beside a base drive that stands is one whose delete failed after the fork, which keeps the drive from reading as filled, so it goes here.
+    if ((yield* api.getNamed(name)) !== undefined) yield* Effect.ignore(api.deleteSandbox(name));
+    return;
+  }
   const staging = stagingDriveName(name);
   yield* api.getOrCreateDrive(staging);
   // Note that a name another launch took first is that launch's fill, whose drive this one leaves be.
