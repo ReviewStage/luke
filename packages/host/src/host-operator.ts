@@ -1,5 +1,4 @@
 import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
-import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
 import {
   ADMIN_UNANSWERED,
@@ -709,8 +708,6 @@ function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Ef
  * rest on to the act, whose own answer guard is checked in the router and
  * again in the window that asked.
  */
-const _WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
-
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
 }
