@@ -8,7 +8,7 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, type ReactElement } from "react";
 import { afterEach, beforeEach } from "vitest";
@@ -32,14 +32,6 @@ function freshQueryClient(): QueryClient {
   client.setQueryDefaults(appStateQuery.queryKey, { enabled: false });
   return client;
 }
-
-/**
- * Note that a test's readers are told of what moved as the write lands rather
- * than on the next macrotask, Query's default (`notifyManager`), because a
- * test waits out a delivery by its promises alone, as the atoms it was
- * written against told their readers.
- */
-notifyManager.setScheduler((callback) => callback());
 
 let testQueryClient = freshQueryClient();
 

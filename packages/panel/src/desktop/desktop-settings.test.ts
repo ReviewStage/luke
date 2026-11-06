@@ -16,7 +16,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
@@ -370,11 +370,7 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
 
   handState(experimentsOn(EXPERIMENT.MEMORY));
   const on = mount(createElement(SettingsHarness));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(pageGroups(on)[0]?.rows, ["Workspace", "Memory"]);
+  await vi.waitFor(() => expect(pageGroups(on)[0]?.rows).toEqual(["Workspace", "Memory"]));
   assert.equal(shownTitle(on), "Account");
   openPage(on, "Memory");
   assert.equal(shownTitle(on), "Memory");
@@ -388,9 +384,7 @@ test("the sidebar lists Hosts under Account after Agents, and its search finds i
   const experiments = experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST);
   handState(experiments);
   const on = mount(createElement(SettingsHarness, { stored: settingsView({ experiments }) }));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  await vi.waitFor(() => expect(pageGroups(on)[1]?.rows).toContain("Hosts"));
 
   assert.deepEqual(pageGroups(on)[1]?.rows, [
     "Account",

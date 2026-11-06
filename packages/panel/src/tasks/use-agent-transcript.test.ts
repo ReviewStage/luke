@@ -16,7 +16,6 @@ import {
 } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { OWN_TRANSCRIPT } from "@repo/host/app-state";
-import { useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -36,7 +35,7 @@ import {
   tellingTranscripts,
   transcriptTold,
 } from "../testing/tasks-control.js";
-import { appStateQuery } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   type AgentTranscriptControl,
   type TranscriptOlderReader,
@@ -119,7 +118,7 @@ function drawn(older?: TranscriptOlderReader) {
     return null;
   }
   function Window(props: { shown: boolean }) {
-    return useQuery(appStateQuery).data === undefined ? null : createElement(Probe, props);
+    return useAppSlice(APP_SLICE.RUN) === undefined ? null : createElement(Probe, props);
   }
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));

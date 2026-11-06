@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
@@ -70,7 +70,7 @@ async function window(first: AppStateSnapshot): Promise<{
   }
   root = createRoot(document.createElement("div"));
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Reader))));
-  await settle();
+  await vi.waitFor(() => expect(drawn.length > 0).toBe(true));
   return {
     drawn,
     deliver: async (snapshot) => {
@@ -95,6 +95,7 @@ test("a delivery that moves only the settings leaves every other slice the objec
 
   const moved = stateWith(experimentsOn(EXPERIMENT.MEMORY), { version: 2 });
   await deliver(moved);
+  await vi.waitFor(() => expect(drawn.at(-1) === held).toBe(false));
   const now = drawn.at(-1);
 
   assert.ok(held && now);
@@ -117,6 +118,7 @@ test("a delivery naming one slice replaces that slice alone, and every slice it 
   const held = drawn.at(-1);
 
   await push({ version: 2, entries: { network: { online: false, reachable: true } } });
+  await vi.waitFor(() => expect(drawn.at(-1) === held).toBe(false));
   const now = drawn.at(-1);
 
   assert.ok(held && now);
