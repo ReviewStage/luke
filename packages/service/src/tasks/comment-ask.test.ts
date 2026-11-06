@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentThread,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import { test } from "vitest";
 import { commentAskMessage } from "./comment-ask.js";
 
@@ -13,24 +13,24 @@ import { commentAskMessage } from "./comment-ask.js";
  * A plan's comment thread as it is handed to an agent: the words it is
  * handed over in. The hand-over itself, through the one steer path every
  * message to an agent takes, is the comments route's suite
- * (`apps/web/tests/plan-comments.test.ts`). Synthetic throughout.
+ * (`apps/web/tests/description-comments.test.ts`). Synthetic throughout.
  */
 
-const THREAD: PlanCommentThread = {
+const THREAD: DescriptionCommentThread = {
   id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
-  scope: PLAN_COMMENT_SCOPE.WORDS,
+  scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
   quote: "a retry",
   anchor: { from: 20, to: 27 },
   section: "Testing",
-  status: PLAN_COMMENT_STATUS.OPEN,
+  status: DESCRIPTION_COMMENT_STATUS.OPEN,
   createdAt: 1_792_108_800_000,
   updatedAt: 1_792_108_800_000,
   revision: 1,
   entries: [
     {
       id: "5f2b0c1e-8d3a-4c7b-9e6f-1a2b3c4d5e6f",
-      kind: PLAN_COMMENT_ENTRY.COMMENT,
-      writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
+      kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+      writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
       words: "Is this covered already?",
       at: 1_792_108_800_000,
     },

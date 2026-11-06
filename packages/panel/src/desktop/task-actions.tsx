@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
   type Task,
@@ -76,7 +76,7 @@ import {
   PANEL_COMMAND,
   type PanelCommand,
 } from "../command-items.js";
-import { usePlanDrafted } from "../composer-drafts.js";
+import { useDescriptionDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChordLinks } from "../copy-link-item.js";
 import { leftMark } from "../draft-mark.js";
@@ -85,7 +85,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { useTaskSendFailed } from "../tasks/failed-lines.js";
-import { lastEditOf } from "../tasks/plan-body.js";
+import { lastEditOf } from "../tasks/description-body.js";
 import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import {
@@ -241,7 +241,7 @@ export interface TaskRowTab
   /** The tab's tasks as they stand when read. */
   readonly tasksNow: () => readonly TaskSummary[];
   /** Copies the open plan, as Copy plan does. */
-  readonly onCopyPlan: () => void;
+  readonly onCopyDescription: () => void;
   readonly onOpenHistory: TasksControl["history"]["onOpen"];
   /** Opens a repository's page on GitHub. */
   readonly onOpenGitHub: TasksControl["repositories"]["openGitHub"];
@@ -273,7 +273,7 @@ export function taskRowTab(
     onMoveTask: tasks.onMoveTask,
     onWriteSections: tasks.onWriteSections,
     tasksNow,
-    onCopyPlan: tasks.copy.onPress,
+    onCopyDescription: tasks.copy.onPress,
     onOpenHistory: tasks.history.onOpen,
     onOpenGitHub: tasks.repositories.openGitHub,
     pictures: tasks.repositories.pictures,
@@ -635,7 +635,9 @@ function taskActionGroups(
   const { opened, plans } = doors;
   const drawn = opened !== undefined;
   const copy: MenuAction[] =
-    drawn && plans ? [commandAction(PANEL_COMMAND.COPY_PLAN, tasks.onCopyPlan, drawn)] : [];
+    drawn && plans
+      ? [commandAction(PANEL_COMMAND.COPY_DESCRIPTION, tasks.onCopyDescription, drawn)]
+      : [];
   const link: MenuAction[] =
     task === undefined
       ? []
@@ -725,7 +727,7 @@ function TaskMenuFooter({
     sections: opened?.task.sectionEdits ?? [],
     agents: opened === undefined ? undefined : { control: opened.agents, onOpen: undefined },
   };
-  const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
+  const named = edit !== undefined && edit.actor !== DESCRIPTION_ACTOR.EARLIER;
   return (
     <>
       <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]">
@@ -1099,7 +1101,7 @@ export function SidebarTask({
   const coarse = useCoarsePointer();
   const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const chosen = useContext(ChosenTasksContext)(task.id);
-  const drafted = usePlanDrafted(task.id) && !open;
+  const drafted = useDescriptionDrafted(task.id) && !open;
   const sendFailed = useTaskSendFailed(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);

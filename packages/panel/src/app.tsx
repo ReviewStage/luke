@@ -82,7 +82,7 @@ import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/re
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
+import { useDescriptionWordsUnsaved } from "./tasks/use-description-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { ToastHost } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
@@ -280,10 +280,10 @@ function AppWindow(): React.JSX.Element {
   // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
   // covers, so its own ways out of the page and the app ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
-  const planWordsUnsaved = usePlanWordsUnsaved();
+  const descriptionWordsUnsaved = useDescriptionWordsUnsaved();
   useEffect(() => {
-    appPlatform().unsavedPlanWords?.(planWordsUnsaved);
-  }, [planWordsUnsaved]);
+    appPlatform().unsavedDescriptionWords?.(descriptionWordsUnsaved);
+  }, [descriptionWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>

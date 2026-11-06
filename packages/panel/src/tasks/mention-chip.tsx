@@ -28,13 +28,13 @@ import {
   type MentionPlace,
   mentionName,
   type NumberedTaskIdOf,
-  type PlanMention,
+  type DescriptionMention,
   pageRepositoryOf,
   pastedLinkMention,
   sectionAnchors,
 } from "@repo/features/mention-link";
 import { type KnownNames, placeChipLook } from "@repo/features/place-chip-model";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import {
   THING_KIND,
@@ -61,7 +61,11 @@ import { CalendarIcon } from "@repo/ui/icons";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
-import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
+import type {
+  HeadingsChange,
+  MentionNode,
+  MentionNodeDoors,
+} from "../description-editor/contract.js";
 import { LinkAutomations, useSectionHeading } from "./chip-cards.js";
 import {
   DATE_PICKER_CLOSE,
@@ -193,7 +197,7 @@ export interface MentionDoors {
   readonly holder: MentionHolder | undefined;
   readonly place: MentionPlace;
   readonly anchors: ReadonlySet<string>;
-  readonly onOpenTask: (mention: PlanMention) => void;
+  readonly onOpenTask: (mention: DescriptionMention) => void;
   /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
   readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
   /** One of the plan's agents as its chip wears it, none for an agent not of the plan; the door is none where the place knows the plan's agents not. */
@@ -210,7 +214,7 @@ interface MentionedAgentLook {
 
 /**
  * A mention named again where an edit of the plan it names renamed the
- * section it names or moved its anchor (`../plan-editor/plan-mentions.ts`):
+ * section it names or moved its anchor (`../description-editor/description-mentions.ts`):
  * the target at its anchor now, under the section's heading now, so the
  * words the plan is saved with call it what its chip does; or nothing where
  * the target names no section of the plan, or one whose heading and anchor
@@ -1070,7 +1074,7 @@ function pastedName(
   if (mention.kind !== MENTION_KIND.SECTION)
     return chipName(mention, said, true, names.known, undefined, undefined, repository);
   if (mention.taskId !== names.taskId) return said;
-  const headings = planSections(names.text()).map((section) => section.heading);
+  const headings = descriptionSections(names.text()).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;
 }
 

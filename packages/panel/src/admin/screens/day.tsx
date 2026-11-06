@@ -45,7 +45,7 @@ const ACCOUNT_COLUMN = "account";
 /** Each per-account count's column heading, in the order the columns stand. */
 const DAY_ACCOUNT_COUNT_LABEL = {
   [DAY_ACCOUNT_COUNT.TASKS_CREATED]: "Tasks",
-  [DAY_ACCOUNT_COUNT.PLAN_REVISIONS]: "Description revisions",
+  [DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS]: "Description revisions",
   [DAY_ACCOUNT_COUNT.AGENTS_STARTED]: "Agents",
   [DAY_ACCOUNT_COUNT.INBOX_ANSWERED]: "Inbox answered",
   [DAY_ACCOUNT_COUNT.AUTOMATION_RUNS]: "Automation runs",

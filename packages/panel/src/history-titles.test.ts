@@ -33,7 +33,11 @@ function onTask(
     tasks: [TASK],
     activeTaskId: TASK.id,
     boundFor: TASK.id,
-    sidePanel: { ...base.sidePanel, open: side !== undefined, tab: side ?? SIDE_PANEL_TAB.PLAN },
+    sidePanel: {
+      ...base.sidePanel,
+      open: side !== undefined,
+      tab: side ?? SIDE_PANEL_TAB.DESCRIPTION,
+    },
   });
 }
 

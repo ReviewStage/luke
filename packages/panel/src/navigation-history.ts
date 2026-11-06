@@ -125,7 +125,7 @@ import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
 import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
-import type { HistorySpot } from "./tasks/use-plan-history.js";
+import type { HistorySpot } from "./tasks/use-description-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,

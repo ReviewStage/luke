@@ -112,7 +112,7 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AGENT_ORIGIN: "/api/live/agent-origin",
   /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
-  /** One task's comments under `?id=`, its plan's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `plan-comment-live.ts` declares the answer. */
+  /** One task's comments under `?id=`, its plan's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `description-comment-live.ts` declares the answer. */
   LIVE_TASK_COMMENTS: "/api/live/task-comments",
   /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
@@ -270,7 +270,7 @@ export const HOSTED_SERVICE_PATH = {
    * GitHub holds it now (GET), named by the workspace and the repository
    * (`GITHUB_REPOSITORIES_QUERY`), for a place with no plan to name it by,
    * such as an agent an automation started; the answer is a plan's tree's
-   * (`plan-wire.ts`).
+   * (`description-wire.ts`).
    */
   GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
   /**
@@ -283,7 +283,7 @@ export const HOSTED_SERVICE_PATH = {
   /**
    * The skills a developer may choose of a repository a workspace's
    * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
-   * the answer is a plan's skills' (`plan-wire.ts`).
+   * the answer is a plan's skills' (`description-wire.ts`).
    */
   GITHUB_REPOSITORY_SKILLS: "/api/github/repositories/skills",
   /**
@@ -465,14 +465,14 @@ export interface SkillsPlace {
   readonly repository?: string;
 }
 
-/** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */
-function planAttachmentsPath(taskId: string): string {
+/** One plan's pictures, under which each is served as its bytes (`descriptionAttachmentPath`). */
+function descriptionAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
 }
 
 /** One picture of one plan, as its bytes (GET). */
-export function planAttachmentPath(taskId: string, attachmentId: string): string {
-  return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
+export function descriptionAttachmentPath(taskId: string, attachmentId: string): string {
+  return `${descriptionAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
 /** One item of a task's inbox, which its attachments are under. */

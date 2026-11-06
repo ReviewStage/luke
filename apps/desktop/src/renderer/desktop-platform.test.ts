@@ -19,10 +19,10 @@ test("main hears unsaved work while a page's ask or a plan's words stand, and no
     },
   });
 
-  DESKTOP_PLATFORM.unsavedPlanWords?.(true);
+  DESKTOP_PLATFORM.unsavedDescriptionWords?.(true);
   DESKTOP_PLATFORM.unsavedWork?.(() => undefined);
   DESKTOP_PLATFORM.unsavedWork?.(undefined);
-  DESKTOP_PLATFORM.unsavedPlanWords?.(false);
+  DESKTOP_PLATFORM.unsavedDescriptionWords?.(false);
   await Promise.resolve();
 
   assert.deepEqual(told, [true, true, true, false]);

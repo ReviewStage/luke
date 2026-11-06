@@ -30,13 +30,13 @@ import {
   SLASH_INSERT,
   type SlashBlock,
   type SlashChoice,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
 
 /**
  * block-picker.tsx -- a Markdown document's `/` menu: which blocks the words after the `/` match, the menu drawn under the `/`, and the keys it takes from the editor.
  *
  * The editor reports the `/` word the caret ends (`onTrigger`,
- * `../plan-editor/plan-slash.ts`), and hands the menu its keys first
+ * `../description-editor/description-slash.ts`), and hands the menu its keys first
  * (`onKey`), as it hands the `@` list its own. The menu offers the
  * vocabulary's blocks, its names and Markdown, and the menu's own inserts
  * beside them, a picture and a mention only where the text takes them,

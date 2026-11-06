@@ -17,7 +17,7 @@ export const ACTIVITY_FEATURE = {
   /** A coding agent started (`agent.created_at`), by hand, by the app, or by an automation. */
   AGENTS_STARTED: "agentsStarted",
   /** A plan revision written by the developer, or by the retired notetaker on their behalf before agents wrote plans. */
-  PLAN_REVISIONS: "planRevisions",
+  DESCRIPTION_REVISIONS: "descriptionRevisions",
   /** An inbox item the developer answered (`inbox_item.settled_at`, answered). */
   INBOX_ANSWERED: "inboxAnswered",
   /** An automation that fired and was not held back by a guard (`automation_run.fired_at`). */
@@ -74,7 +74,7 @@ export type AgentOrigin = (typeof AGENT_ORIGIN)[keyof typeof AGENT_ORIGIN];
  */
 export const DAY_ACCOUNT_COUNT = {
   TASKS_CREATED: DAILY_COUNT.TASKS_CREATED,
-  PLAN_REVISIONS: DAILY_COUNT.PLAN_REVISIONS,
+  DESCRIPTION_REVISIONS: DAILY_COUNT.DESCRIPTION_REVISIONS,
   AGENTS_STARTED: DAILY_COUNT.AGENTS_STARTED,
   INBOX_ANSWERED: DAILY_COUNT.INBOX_ANSWERED,
   AUTOMATION_RUNS: DAILY_COUNT.AUTOMATION_RUNS,
@@ -133,7 +133,7 @@ export const MEANINGFUL_ACTION = {
   /** A task created (`task.created_at`). */
   TASKS_CREATED: "tasksCreated",
   /** A plan revision written as the developer, under their user id. */
-  PLAN_REVISIONS: "planRevisions",
+  DESCRIPTION_REVISIONS: "descriptionRevisions",
   /** A coding agent started (`agent.created_at`), however it was started. */
   AGENTS_STARTED: "agentsStarted",
 } as const;

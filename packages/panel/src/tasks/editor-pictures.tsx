@@ -1,5 +1,8 @@
 import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
-import { planAttachmentAddress, planAttachmentOf } from "@repo/features/plan-attachment-link";
+import {
+  descriptionAttachmentAddress,
+  descriptionAttachmentOf,
+} from "@repo/features/description-attachment-link";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { PICTURE_KEEP_FAILURE } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -41,11 +44,14 @@ import type {
   PictureNode,
   PictureNodeDoors,
   PictureTaken,
-  PlanEditorHandle,
-  PlanEditorPictures,
-} from "../plan-editor/contract.js";
+  DescriptionEditorHandle,
+  DescriptionEditorPictures,
+} from "../description-editor/contract.js";
 import { documentScrollerOf } from "./document-frame.js";
-import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
+import {
+  type DescriptionPicturesDoor,
+  useDescriptionPicturesDoor,
+} from "./description-pictures.js";
 
 /**
  * editor-pictures.tsx -- a plan's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
@@ -325,10 +331,10 @@ function KeptPicture({
   door,
 }: {
   drawn: DrawnPicture;
-  door: PlanPicturesDoor;
+  door: DescriptionPicturesDoor;
 }): React.JSX.Element {
   const { picture, selected, doors } = drawn;
-  const named = planAttachmentOf(picture.src);
+  const named = descriptionAttachmentOf(picture.src);
   const state = usePicture(
     named?.taskId ?? "",
     named?.attachmentId ?? "",
@@ -391,7 +397,7 @@ function KeptPicture({
 
 /** What the editor's pictures hand the document: the editor's doors, the pictures drawn into their nodes, the chooser Insert image opens, and whether one is still being sent. */
 export interface EditorPictures {
-  readonly pictures: PlanEditorPictures | undefined;
+  readonly pictures: DescriptionEditorPictures | undefined;
   readonly drawn: ReactNode;
   /** Whether a picture laid in is still on its way to being kept, which the editor stays open for, since only it can lay in the address that comes back. */
   readonly sending: boolean;
@@ -407,10 +413,10 @@ export interface EditorPictures {
 export function useEditorPictures(
   taskId: string,
   workspace: string | undefined,
-  handle: React.RefObject<PlanEditorHandle | undefined>,
+  handle: React.RefObject<DescriptionEditorHandle | undefined>,
 ): EditorPictures {
   const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
-  const door = usePlanPicturesDoor();
+  const door = useDescriptionPicturesDoor();
   const [drawn, setDrawn] = useState<readonly DrawnPicture[]>([]);
   const [uploads, setUploads] = useState<ReadonlyMap<string, Upload>>(new Map());
   const counted = useRef(0);
@@ -435,7 +441,7 @@ export function useEditorPictures(
       keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
+        descriptionAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },
@@ -456,7 +462,7 @@ export function useEditorPictures(
         }
         return keep(taken, url);
       }
-      const named = planAttachmentOf(taken.from);
+      const named = descriptionAttachmentOf(taken.from);
       const read =
         named === undefined || door === undefined
           ? undefined
@@ -475,7 +481,7 @@ export function useEditorPictures(
   // Note that the doors handed the editor once read the newest of these as they run.
   const beginning = useRef(begin);
   beginning.current = begin;
-  const pictures = useRef<PlanEditorPictures | undefined>(undefined);
+  const pictures = useRef<DescriptionEditorPictures | undefined>(undefined);
   if (pictures.current === undefined && workspace !== undefined) {
     pictures.current = {
       draw: (element, picture, doors) => {
@@ -494,7 +500,7 @@ export function useEditorPictures(
         for (const each of taken) beginning.current(each);
       },
       copies: (src) => {
-        const named = planAttachmentOf(src);
+        const named = descriptionAttachmentOf(src);
         return named !== undefined && named.taskId !== taskId;
       },
     };

@@ -3,8 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
-import { listPages, writePage } from "@repo/database/models/plan-pages";
-import { readTaskPlan, savePlanText, updateTask } from "@repo/database/models/task-store";
+import { listPages, writePage } from "@repo/database/models/task-pages";
+import {
+  readTaskDescription,
+  saveDescriptionText,
+  updateTask,
+} from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
 import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@repo/features/live-wire";
@@ -58,7 +62,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
 const heldRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     return {
-      plan: yield* readTaskPlan(reader, taskId),
+      plan: yield* readTaskDescription(reader, taskId),
       pages: yield* listPages(reader, taskPageOwner(taskId)),
     };
   });
@@ -181,8 +185,8 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             live = nextLive;
           });
 
-        yield* step(["plan"], savePlanText(owner, task.id, "## Invites\n\nThey expire."));
-        yield* step(["plan"], savePlanText(teammate, task.id, "## Invites\n\nA week."));
+        yield* step(["plan"], saveDescriptionText(owner, task.id, "## Invites\n\nThey expire."));
+        yield* step(["plan"], saveDescriptionText(teammate, task.id, "## Invites\n\nA week."));
         yield* step([], updateTask(owner, task.id, { name: "Invitations" }));
         assert.deepEqual((yield* liveRecordOf(stranger, task.id)).plan, []);
       }),

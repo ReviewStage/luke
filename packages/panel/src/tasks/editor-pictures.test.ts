@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
-import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import type { Task } from "@repo/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -21,7 +21,7 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -121,7 +121,7 @@ function drawn(node: ReactNode): HTMLElement {
 /** The plan's page, editable, with its editor opened on the Approach section. */
 async function editing(): Promise<HTMLElement> {
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: TASK,
       onEdit: (request) => {
         saved.push(request.document.value);
@@ -234,7 +234,7 @@ test("a video of another plan pasted in is kept on this plan as it is, waiting a
   });
   const container = await editing();
   const editable = container.querySelector(".ProseMirror") ?? assert.fail("the editor stands");
-  const address = planAttachmentAddress(
+  const address = descriptionAttachmentAddress(
     { taskId: OTHER_TASK, attachmentId: "9a1b3c5d-7e9f-4a2b-8c4d-6e8f0a2b4c6d" },
     "acme",
   );
@@ -260,7 +260,9 @@ test("a video of another plan pasted in is kept on this plan as it is, waiting a
 });
 
 test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
-  const reading = drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS }));
+  const reading = drawn(
+    createElement(DescriptionBody, { task: TASK, sectionLinks: SECTION_LINKS }),
+  );
   assert.equal(appCommandOffered(APP_COMMAND.INSERT_PICTURE), false);
   act(() => roots.pop()?.unmount());
   reading.remove();

@@ -2,7 +2,7 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
 import { sweepHostPairings } from "@repo/database/models/host-pairing-store";
 import { hostedStore } from "@repo/database/models/hosted-store";
-import { purgeUnsavedAttachments } from "@repo/database/models/plan-attachments";
+import { purgeUnsavedAttachments } from "@repo/database/models/description-attachments";
 import { dropStaleFirewalls } from "@repo/database/models/sandbox-firewall-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { storeWriter } from "@repo/database/models/writer";

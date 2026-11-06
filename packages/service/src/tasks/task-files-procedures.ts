@@ -12,7 +12,7 @@
  * wrote for the task, each by its newest version, and
  * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
  * answered inside JSON so no page is ever a document of this origin
- * (`@repo/database/models/plan-pages`), and `…/versions/{version}/frame`
+ * (`@repo/database/models/task-pages`), and `…/versions/{version}/frame`
  * a browser's frame of it, sent on to the sandbox's own site
  * (`../pages/page-frame.ts`). `POST /api/plans/{id}/attachments`
  * keeps one picture on the plan, pasted, dropped, or chosen into its text by
@@ -30,15 +30,18 @@
  * answers as not found.
  */
 
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
-import { listPages, readPageVersion } from "@repo/database/models/plan-pages";
+import {
+  keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
+} from "@repo/database/models/description-attachments";
+import { listPages, readPageVersion } from "@repo/database/models/task-pages";
 import { readTaskWorkspace } from "@repo/database/models/task-store";
 import { pageVersionNumberSchema, taskPageOwner } from "@repo/features/page-wire";
 import { pictureOfDataUrl } from "@repo/features/picture-wire";
 import {
-  PLAN_ATTACHMENT_REFUSAL,
-  PLAN_ATTACHMENT_STATUS,
-} from "@repo/features/plan-attachment-wire";
+  DESCRIPTION_ATTACHMENT_REFUSAL,
+  DESCRIPTION_ATTACHMENT_STATUS,
+} from "@repo/features/description-attachment-wire";
 import {
   type TaskFileRequest,
   type TaskTreeRequest,
@@ -150,28 +153,28 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       const picture = pictureOfDataUrl(input.body.picture);
       if (picture === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       const kept = yield* hostedStoreOrUnavailable(
-        keepPlanAttachment(context.userId, taskId, picture),
+        keepDescriptionAttachment(context.userId, taskId, picture),
       );
       switch (kept.status) {
-        case PLAN_ATTACHMENT_KEEP.KEPT:
+        case DESCRIPTION_ATTACHMENT_KEEP.KEPT:
           yield* recordServerEventIn(
             SERVER_EVENT.AGENT_TOOL_OPEN,
             context.userId,
             readTaskWorkspace(context.userId, taskId),
-            { tool: SERVER_AGENT_TOOL.ADD_TO_PLAN },
+            { tool: SERVER_AGENT_TOOL.ADD_TO_DESCRIPTION },
           );
-          return { status: PLAN_ATTACHMENT_STATUS.KEPT, body: { id: kept.id } };
-        case PLAN_ATTACHMENT_KEEP.TOO_MANY:
+          return { status: DESCRIPTION_ATTACHMENT_STATUS.KEPT, body: { id: kept.id } };
+        case DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY:
           return {
-            status: PLAN_ATTACHMENT_STATUS.REFUSED,
-            body: { refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY },
+            status: DESCRIPTION_ATTACHMENT_STATUS.REFUSED,
+            body: { refused: DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY },
           };
-        case PLAN_ATTACHMENT_KEEP.TOO_MANY_VIDEOS:
+        case DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY_VIDEOS:
           return {
-            status: PLAN_ATTACHMENT_STATUS.REFUSED,
-            body: { refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS },
+            status: DESCRIPTION_ATTACHMENT_STATUS.REFUSED,
+            body: { refused: DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS },
           };
-        case PLAN_ATTACHMENT_KEEP.NO_TASK:
+        case DESCRIPTION_ATTACHMENT_KEEP.NO_TASK:
           return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       }
     }),

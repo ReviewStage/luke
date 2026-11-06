@@ -21,7 +21,7 @@ import {
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
-import { readPageById } from "@repo/database/models/plan-pages";
+import { readPageById } from "@repo/database/models/task-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
@@ -74,7 +74,7 @@ import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -1955,7 +1955,7 @@ const startTaskOf = (
         assigneeId: userId,
         ...(calling === undefined
           ? undefined
-          : { origin: { actor: PLAN_ACTOR.AGENT, agentId: calling.id } }),
+          : { origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: calling.id } }),
         madeByStart: true,
         relations: [],
       },

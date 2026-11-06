@@ -504,11 +504,11 @@ const HOST_READS = {
     slice: APP_SLICE.AUTOMATION_RUNS,
     ...automationsRead(AUTOMATION_FOLLOW.RUNS),
   }),
-  [LIVE_READ.PLAN_COMMENTS]: hostRead(LIVE_READ.PLAN_COMMENTS, {
-    slice: APP_SLICE.PLAN_COMMENTS,
+  [LIVE_READ.DESCRIPTION_COMMENTS]: hostRead(LIVE_READ.DESCRIPTION_COMMENTS, {
+    slice: APP_SLICE.DESCRIPTION_COMMENTS,
     path: (subject: CommentSubject) =>
       subject.pageId === undefined
-        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        ? [COMMENT_SUBJECT.DESCRIPTION, subject.taskId]
         : [COMMENT_SUBJECT.PAGE, subject.pageId],
     hold: (subject) => askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, commentsFollowOf(subject)),
     retry: (subject) => tellAct(ACT_KIND.TASKS_COMMENTS_RETRY, commentsFollowOf(subject)),
@@ -519,8 +519,8 @@ const HOST_READS = {
     hold: (taskId) => askAct(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }),
     retry: (taskId) => tellAct(ACT_KIND.TASKS_HISTORY_RETRY, { taskId }),
   }),
-  [LIVE_READ.PLAN_DOCUMENT]: hostRead(LIVE_READ.PLAN_DOCUMENT, {
-    slice: APP_SLICE.PLAN_DOCUMENT,
+  [LIVE_READ.DESCRIPTION_DOCUMENT]: hostRead(LIVE_READ.DESCRIPTION_DOCUMENT, {
+    slice: APP_SLICE.DESCRIPTION_DOCUMENT,
     path: (taskId: string) => [taskId],
     hold: (taskId) => askAct(ACT_KIND.TASKS_DOCUMENT_FOLLOW, { taskId }),
     retry: (taskId) => tellAct(ACT_KIND.TASKS_DOCUMENT_RETRY, { taskId }),

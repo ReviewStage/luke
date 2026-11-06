@@ -99,17 +99,17 @@ test("plan words held with no ask standing hold the browser's close and reload b
   const page = new EventTarget();
   const tab = pageLeave(page);
 
-  tab.unsavedPlanWords(true);
+  tab.unsavedDescriptionWords(true);
   expect(holdsBack(page)).toBe(true);
 
-  tab.unsavedPlanWords(false);
+  tab.unsavedDescriptionWords(false);
   expect(holdsBack(page)).toBe(false);
 });
 
 test("a send while only plan words are held goes at once, to the browser's own question", () => {
   const page = new EventTarget();
   const tab = pageLeave(page);
-  tab.unsavedPlanWords(true);
+  tab.unsavedDescriptionWords(true);
   const asked: boolean[] = [];
 
   tab.leave(() => asked.push(holdsBack(page)));
@@ -121,7 +121,7 @@ test("a page's ask taken down while plan words are held still holds the browser'
   const page = new EventTarget();
   const tab = pageLeave(page);
   tab.unsavedWork(() => undefined);
-  tab.unsavedPlanWords(true);
+  tab.unsavedDescriptionWords(true);
 
   tab.unsavedWork(undefined);
 
@@ -133,7 +133,7 @@ test("a Leave answered for a page's work still lets the browser ask about a plan
   const tab = pageLeave(page);
   const asked: (() => void)[] = [];
   tab.unsavedWork((leave) => asked.push(leave));
-  tab.unsavedPlanWords(true);
+  tab.unsavedDescriptionWords(true);
   const gone: boolean[] = [];
 
   tab.leave(() => gone.push(holdsBack(page)));

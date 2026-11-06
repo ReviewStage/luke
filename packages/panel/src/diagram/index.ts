@@ -125,7 +125,7 @@ async function drawnNow(code: string, appearance: DiagramAppearance): Promise<Di
   scratch.className = "ph-no-capture";
   document.body.append(scratch);
   try {
-    return await laidOutIn(scratch, `plan-diagram-${laidOut}`, code);
+    return await laidOutIn(scratch, `description-diagram-${laidOut}`, code);
   } finally {
     scratch.remove();
   }

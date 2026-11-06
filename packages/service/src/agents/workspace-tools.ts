@@ -29,8 +29,8 @@ export interface WorkspaceToolsOfferedTo {
   readonly native: boolean;
   /** Whether the agent's starter has Memory on. */
   readonly memoryOn: boolean;
-  /** Whether the agent's starter has Plans on, or Pilot for a pilot (`plansOnFor`). */
-  readonly plansOn: boolean;
+  /** Whether the agent's starter has Plans on, or Pilot for a pilot (`descriptionsOnFor`). */
+  readonly descriptionsOn: boolean;
 }
 
 /** Our tools the agent is offered, by name, in the order its runtime offers them. */

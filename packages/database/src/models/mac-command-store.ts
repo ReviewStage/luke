@@ -387,7 +387,7 @@ const findForeignLine = SqlSchema.findOneOption({
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
                 or(
-                  and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
+                  and(isNull(startedAgent.prompt), isNull(startedAgent.descriptionSnapshot)),
                   STARTED_ON_OUTSIDE_WORDS,
                   exists(
                     db

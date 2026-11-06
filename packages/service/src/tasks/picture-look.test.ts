@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import {
+  keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
+} from "@repo/database/models/description-attachments";
 import { createTask } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@repo/features/picture-wire";
-import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { unparsedWire } from "@repo/wire";
 import { webmBytes } from "@repo/wire/testing";
 import { Effect } from "effect";
@@ -19,7 +22,7 @@ import {
   pictureNotLooked,
   runLookAtPicture,
 } from "./picture-look.js";
-import type { PlanDocumentBinding } from "./plan-notes.js";
+import type { DescriptionDocumentBinding } from "./description-notes.js";
 
 /**
  * `look_at_picture`, the planning model's and a coding agent's look at one
@@ -56,18 +59,19 @@ const openPicturedTasks = Effect.gen(function* () {
   yield* joinWorkspace(workspace, teammate);
   const task = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
   const other = yield* createTask(owner, { organizationId: workspace, name: "Billing" });
-  const kept = yield* keepPlanAttachment(teammate, task.id, PICTURE);
-  if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the picture was not kept");
-  const address = planAttachmentAddress({ taskId: task.id, attachmentId: kept.id }, "acme");
+  const kept = yield* keepDescriptionAttachment(teammate, task.id, PICTURE);
+  if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT)
+    return assert.fail("the picture was not kept");
+  const address = descriptionAttachmentAddress({ taskId: task.id, attachmentId: kept.id }, "acme");
   return { owner, outsider, planId: task.id, otherId: other.id, attachmentId: kept.id, address };
 });
 
 /** A look as a turn makes one: bound to the plan as the account. */
-function lookCall(userId: string, taskId: string): PlanDocumentBinding {
+function lookCall(userId: string, taskId: string): DescriptionDocumentBinding {
   return { userId, taskId: taskId };
 }
 
-const look = (call: PlanDocumentBinding, address: string) =>
+const look = (call: DescriptionDocumentBinding, address: string) =>
   runLookAtPicture(call, unparsedWire({ address }));
 
 it.layer(getTestDB())("look_at_picture", (it) => {
@@ -98,7 +102,7 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           attachmentId,
           address,
         } = yield* openPicturedTasks;
-        const missing = planAttachmentAddress(
+        const missing = descriptionAttachmentAddress(
           { taskId: taskId, attachmentId: randomUUID() },
           "acme",
         );
@@ -149,9 +153,10 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           contentType: PICTURE_MEDIA_TYPE.WEBM,
           bytes: webmBytes(1280, 800),
         };
-        const kept = yield* keepPlanAttachment(owner, taskId, video);
-        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the video was not kept");
-        const address = planAttachmentAddress({ taskId, attachmentId: kept.id }, "acme");
+        const kept = yield* keepDescriptionAttachment(owner, taskId, video);
+        if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT)
+          return assert.fail("the video was not kept");
+        const address = descriptionAttachmentAddress({ taskId, attachmentId: kept.id }, "acme");
 
         const answered = yield* look(lookCall(owner, taskId), address);
 

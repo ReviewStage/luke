@@ -254,7 +254,7 @@ export const SCENES: readonly Scene[] = [
   },
   // The plan's comment threads: their marks in the words, one opened from its line's count, and the resolved one in the Comments tab.
   {
-    id: "plan-comments",
+    id: "description-comments",
     place: PLACE.PLAN,
     title: "Comment marks",
     profile: "tasks-comments",
@@ -262,7 +262,7 @@ export const SCENES: readonly Scene[] = [
     phoneSteps: [],
   },
   {
-    id: "plan-comment-thread",
+    id: "description-comment-thread",
     place: PLACE.PLAN,
     title: "An open thread",
     profile: "tasks-comments",
@@ -270,7 +270,7 @@ export const SCENES: readonly Scene[] = [
     phoneSteps: [ANSWERED_THREAD],
   },
   {
-    id: "plan-comments-resolved",
+    id: "description-comments-resolved",
     place: PLACE.PLAN,
     title: "A resolved thread",
     profile: "tasks-comments",

@@ -14,11 +14,11 @@ import {
   withTaskId,
 } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
-import type { PlanEditRequest } from "@repo/features/plan-edit";
-import { planMarkdown } from "@repo/features/plan-markdown";
+import type { DescriptionEditRequest } from "@repo/features/description-edit";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
@@ -161,8 +161,8 @@ import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
-import type { SectionReveal } from "./plan-body.js";
-import type { RevisionSource } from "./plan-history-model.js";
+import type { SectionReveal } from "./description-body.js";
+import type { RevisionSource } from "./description-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
@@ -193,10 +193,10 @@ import {
 } from "./use-main-tabs.js";
 import {
   type HistorySpot,
-  type PlanHistoryControl,
-  type PlanHistorySource,
-  usePlanHistory,
-} from "./use-plan-history.js";
+  type DescriptionHistoryControl,
+  type DescriptionHistorySource,
+  useDescriptionHistory,
+} from "./use-description-history.js";
 import {
   DRAWN_KINDS,
   drawsChanges,
@@ -235,7 +235,7 @@ import { sayRestored } from "./version-view.js";
  * Main is told which agent's tab is shown, so an agent that ends while the
  * developer is looking at it is not marked unseen, and the agents main says
  * ended unseen read in semibold until their tab is shown (`@repo/host/agent-notices`). The open plan's history is the
- * tab's as well (`use-plan-history.ts`): its version history, opened from
+ * tab's as well (`use-description-history.ts`): its version history, opened from
  * the task's menu or its "Edited by" line, or from a section's on the
  * revision that last changed the section, takes the whole window in the
  * task's place (`desktop-version-history.tsx`) until it is left or another
@@ -676,7 +676,7 @@ export interface TasksControl {
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
   /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
-  edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+  edit: (taskId: string, request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
   /** The task's column's tabs: its agents' and its draft's, and which is shown. */
   mainTabs: MainTabsControl;
   /** The side panel beside the open task's column: shown or not, its tab, and its width. */
@@ -706,7 +706,7 @@ export interface TasksControl {
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
   /** Opens a task the same way, scrolled to the section a mention or an app link names, or at its top for the task's own. */
-  onShowMention: (mention: PlanMention) => void;
+  onShowMention: (mention: DescriptionMention) => void;
   /**
    * Opens the place an app link names, of the Plans tab's: a task, its
    * section, version, page, call, or turn; an agent, on its task's tab or
@@ -877,7 +877,7 @@ export interface TasksControl {
     /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers and New task's Task relation offers its workspace's of. */
     tasks: readonly TaskSummary[];
     /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
-    onShowMention: (mention: PlanMention) => void;
+    onShowMention: (mention: DescriptionMention) => void;
   };
   /** Leaves the open task for Home (`desktop-home.tsx`); a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -1025,7 +1025,7 @@ export function useLeaveGuard(onStanding?: (ask: LeaveAsk | undefined) => void):
 }
 
 /** The open plan's history as the window opens and draws it, over what is read of it. */
-export interface VersionHistoryControl extends PlanHistoryControl {
+export interface VersionHistoryControl extends DescriptionHistoryControl {
   /** Whether the plan's version history takes the window in its place. */
   open: boolean;
   /**
@@ -1531,21 +1531,21 @@ export function useTasksTab(input: {
   const page = tasksPage(tasks);
   // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
-  const heldPlan = useHostRead(LIVE_READ.PLAN_DOCUMENT, viewed.activeTaskId);
-  const heldPlanRows = heldPlan.rows;
-  const heldPlanFailed = heldPlan.status === HOST_READ_STATUS.FAILED;
-  const retryPlan = heldPlan.retry;
+  const heldDescription = useHostRead(LIVE_READ.DESCRIPTION_DOCUMENT, viewed.activeTaskId);
+  const heldDescriptionRows = heldDescription.rows;
+  const heldDescriptionFailed = heldDescription.status === HOST_READ_STATUS.FAILED;
+  const retryDescription = heldDescription.retry;
   const openedTaskId = viewed.activeTaskId;
   const region = useMemo(
     () =>
       renamedRegion(
         documentRegion(
           { activeTaskId: openedTaskId },
-          { rows: heldPlanRows, failed: heldPlanFailed },
+          { rows: heldDescriptionRows, failed: heldDescriptionFailed },
         ),
         drafts,
       ),
-    [openedTaskId, heldPlanRows, heldPlanFailed, drafts],
+    [openedTaskId, heldDescriptionRows, heldDescriptionFailed, drafts],
   );
   // A started agent's tab opens selected; the column's tabs are built after
   // the agents they draw, so the opening reaches them through this late binding.
@@ -1811,7 +1811,7 @@ export function useTasksTab(input: {
     for (const pin of sidePanel.pins) {
       if (!("task" in pin)) continue;
       const { task: taskId, tab } = pin;
-      if (tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(taskId)) continue;
+      if (tab !== SIDE_PANEL_TAB.DESCRIPTION || migratedPins.current.has(taskId)) continue;
       const pinned = tasks.tasks.find((each) => each.id === taskId);
       if (pinned === undefined) continue;
       migratedPins.current.add(taskId);
@@ -1897,8 +1897,8 @@ export function useTasksTab(input: {
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
   // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
-  const plansOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
-  if (historyFor !== undefined && (historyFor.taskId !== boundFor || !plansOn)) {
+  const descriptionsOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
+  if (historyFor !== undefined && (historyFor.taskId !== boundFor || !descriptionsOn)) {
     setHistoryFor(undefined);
   }
   // A plan the service would not hand the reader has no history to show, so its Not found stands in the history's place, as a version's link may ask for one.
@@ -1935,12 +1935,12 @@ export function useTasksTab(input: {
     const timed = opening.current;
     if (timed === undefined || readyTask?.id !== timed.taskId) return;
     opening.current = undefined;
-    const planChars = readyTask.document.body.length;
+    const descriptionChars = readyTask.document.body.length;
     recordPanelSpan({
       name: PANEL_SPAN.TASK_OPEN,
       startedAt: timed.startedAt,
       endedAt: Date.now(),
-      attributes: () => ({ [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: planChars }),
+      attributes: () => ({ [PANEL_SPAN_ATTRIBUTE.DESCRIPTION_CHARS]: descriptionChars }),
     });
   }, [readyTask]);
   // Opening a task, or leaving one, is leaving the window's Inbox for it.
@@ -2389,7 +2389,7 @@ export function useTasksTab(input: {
   // it asks the model nothing and reads no flag.
   const pressCopy = () => {
     if (region.kind !== DOCUMENT_REGION.READY) return;
-    copyWithToast(planMarkdown(region.task), TASK_COPIED_NOTE);
+    copyWithToast(descriptionMarkdown(region.task), TASK_COPIED_NOTE);
   };
 
   // An agent that ended unseen marks its tab unread; main clears it once the
@@ -2637,7 +2637,7 @@ export function useTasksTab(input: {
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
   const edit = useCallback(
-    (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    (taskId: string, request: DescriptionEditRequest): Promise<TasksEditAnswer> => {
       if (fixture !== undefined) {
         return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
       }
@@ -2663,7 +2663,7 @@ export function useTasksTab(input: {
 
   // A fixture's task reads its staged history through the same acts, and holds it on its staged document (`tasks-fixture.ts`).
   const historySource = useMemo(
-    (): PlanHistorySource => ({
+    (): DescriptionHistorySource => ({
       readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
       restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
@@ -2675,7 +2675,7 @@ export function useTasksTab(input: {
     LIVE_READ.HISTORY,
     shown && historyOpen ? historyTaskId : undefined,
   );
-  const history = usePlanHistory({
+  const history = useDescriptionHistory({
     source: historySource,
     taskId: historyTaskId,
     history: heldHistory,
@@ -2963,7 +2963,7 @@ export function useTasksTab(input: {
   // A plan's version history opens over the task, so another task opens first.
   // Note that a task's versions are its plan's, so while Plans is off whatever would open them, a link to a version among them, opens the task's Overview.
   const openHistory = (opening: HistoryOpening) => {
-    if (!plansOn) {
+    if (!descriptionsOn) {
       showOverview({ kind: LINK_PLACE.TASK, planId: opening.taskId });
       return;
     }
@@ -3065,8 +3065,9 @@ export function useTasksTab(input: {
 
   // Each ask is its own, so the same section asked twice scrolls twice.
   // Note that a section is the description's, so while descriptions are off a mention of one opens its task's agents.
-  const showMention = (mention: PlanMention) => {
-    const anchor = mention.kind === MENTION_KIND.SECTION && plansOn ? mention.anchor : undefined;
+  const showMention = (mention: DescriptionMention) => {
+    const anchor =
+      mention.kind === MENTION_KIND.SECTION && descriptionsOn ? mention.anchor : undefined;
     if (anchor === undefined) {
       showTaskAgents(mention.taskId);
       return;
@@ -3364,7 +3365,7 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.COMMENT:
         // A comment is the description's, so while descriptions are off its link opens the task's agents.
-        if (!plansOn) {
+        if (!descriptionsOn) {
           showTaskAgents(place.planId);
           return;
         }
@@ -3998,7 +3999,7 @@ export function useTasksTab(input: {
       });
     },
     onRetryList: () => refreshTasks(),
-    onRetryDocument: retryPlan,
+    onRetryDocument: retryDescription,
     onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewRelatedTask: (taskId, kind) => {

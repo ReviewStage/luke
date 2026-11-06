@@ -37,7 +37,7 @@ import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
 import { parsedUrl } from "./parsed-url.js";
 import { PRODUCT_NAME } from "./product-name.js";
-import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
+import { DESCRIPTION_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
  * mention-link.ts -- a mention as what it names, and the link it is written into words as: the one module that knows the link's form.
@@ -153,7 +153,7 @@ const MENTION_BOUNDS = {
   /** The most characters a mention's target may spell: an anchor or a path at its bound, every character encoded as UTF-8's widest, and the task's id. */
   MAX_TARGET_CHARS: 24_000,
   /** The most characters an anchor may spell: a heading at its bound, each character lowered into as many as two, and a suffix telling it from an earlier one. */
-  MAX_ANCHOR_CHARS: PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
+  MAX_ANCHOR_CHARS: DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
   /** The most characters a task's id may spell; the service mints them far shorter. */
   MAX_TASK_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
@@ -366,7 +366,7 @@ const mentionSchema = EffectSchema.Union([
 export type Mention = typeof mentionSchema.Type;
 
 /** A mention of the task or one of its sections. */
-export type PlanMention = Extract<
+export type DescriptionMention = Extract<
   Mention,
   { readonly kind: typeof MENTION_KIND.TASK | typeof MENTION_KIND.SECTION }
 >;

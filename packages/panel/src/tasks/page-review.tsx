@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
-import type { PlanCommentStart } from "@repo/features/plan-comment-wire";
+import type { DescriptionCommentStart } from "@repo/features/description-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
@@ -13,7 +13,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import type { PlanCommentsControl } from "@repo/ui/plan-comments";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Schema } from "effect";
@@ -125,7 +125,7 @@ function heldOn(comment: HeldComment, planId: string | undefined, pageId: string
 }
 
 /** The start of a held comment's thread, under its key, which names the thread. */
-function startOf(comment: HeldComment): PlanCommentStart {
+function startOf(comment: HeldComment): DescriptionCommentStart {
   return {
     id: comment.clientKey,
     clientKey: comment.clientKey,
@@ -142,7 +142,7 @@ function startOf(comment: HeldComment): PlanCommentStart {
  * landed, stopping at the first that did not.
  */
 async function sendReview(
-  control: PlanCommentsControl,
+  control: DescriptionCommentsControl,
   comments: readonly HeldComment[],
 ): Promise<boolean> {
   const last = comments.at(-1);
@@ -177,7 +177,7 @@ export interface PageReviewControl {
 
 /** The review of one page of the plan the control holds, held in this window. */
 export function usePageReview(
-  control: PlanCommentsControl | undefined,
+  control: DescriptionCommentsControl | undefined,
   pageId: string,
 ): PageReviewControl {
   const planId = control?.planId;
@@ -240,7 +240,7 @@ export function PageReviewSection({
       review.discard();
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
-    confirmFailure(FAILURE_SURFACE.PLAN_COMMENT_DISCARD),
+    confirmFailure(FAILURE_SURFACE.DESCRIPTION_COMMENT_DISCARD),
   );
   if (count === 0) return null;
   return (
@@ -257,7 +257,7 @@ export function PageReviewSection({
         <FailureNote
           onRetry={review.send}
           failure={failureShown({
-            surface: FAILURE_SURFACE.PLAN_COMMENT_SEND,
+            surface: FAILURE_SURFACE.DESCRIPTION_COMMENT_SEND,
             cause: FAILURE_CONDITION.REFUSED,
           })}
         >

@@ -57,7 +57,7 @@ import {
  * plan's Comments once a comment was left on it; none is drawn or offered
  * now, since the column's Overview holds the plan, a task's threads open
  * in the window's Inbox, and the plan lists its own comments in its
- * margin's place (`plan-comments.tsx`'s `PlanCommentList`), and what an
+ * margin's place (`description-comments.tsx`'s `DescriptionCommentList`), and what an
  * earlier version kept of any of them reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
@@ -187,7 +187,7 @@ export const SIDE_PANEL_TAB = {
   INBOX: "inbox",
   /**
    * The plan's comment threads, which the plan lists in its margin's place
-   * now (`plan-comments.tsx`'s `PlanCommentList`). Note that it is kept
+   * now (`description-comments.tsx`'s `DescriptionCommentList`). Note that it is kept
    * here, drawn and offered nowhere (`DRAWN_KINDS`), because what an earlier
    * version kept and pinned names it.
    */
@@ -296,7 +296,7 @@ interface SidePanelTabKind {
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.PLAN]: { label: "Description", icon: DocumentIcon },
+  [SIDE_PANEL_TAB.DESCRIPTION]: { label: "Description", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
@@ -311,7 +311,7 @@ const RETIRED_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX, SIDE_
 
 /** The kinds the panel draws: none of the plan's, which the column's Overview holds, nor the retired ones. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN && !RETIRED_KINDS.includes(kind),
+  (kind) => kind !== SIDE_PANEL_TAB.DESCRIPTION && !RETIRED_KINDS.includes(kind),
 );
 
 /** Whether a tab is of a retired kind, which nothing chooses, shows, or reopens. */
@@ -1803,7 +1803,9 @@ function settled(state: SidePanelState): HeldState {
   return {
     ...state,
     // The plan's tab leads, since a kept order from before it stood here holds it nowhere.
-    tabs: [...new Set([SIDE_PANEL_TAB.PLAN, ...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    tabs: [
+      ...new Set([SIDE_PANEL_TAB.DESCRIPTION, ...state.tabs.filter(current), ...SIDE_PANEL_TABS]),
+    ],
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],

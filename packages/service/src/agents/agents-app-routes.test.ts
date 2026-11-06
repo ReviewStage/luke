@@ -21,12 +21,12 @@ import { rewindConversation } from "@repo/database/models/conversation-rewind";
 import { registerDevice } from "@repo/database/models/device-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { sentLineStands } from "@repo/database/models/message-reads";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { conversations, messages } from "@repo/database/schemas/storage";
 import { task as taskTable } from "@repo/database/schemas/task";
 import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -158,11 +158,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
         const answered = yield* Effect.ensuring(
           Effect.andThen(
-            sql.unsafe("ALTER TABLE plan_page_version RENAME TO plan_page_version_aside"),
+            sql.unsafe("ALTER TABLE task_page_version RENAME TO task_page_version_aside"),
             ask(startAs(owner, task.id, { idempotencyKey, task: prompt })),
           ),
           Effect.orDie(
-            sql.unsafe("ALTER TABLE plan_page_version_aside RENAME TO plan_page_version"),
+            sql.unsafe("ALTER TABLE task_page_version_aside RENAME TO task_page_version"),
           ),
         );
 
@@ -271,7 +271,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             ...AGENT_DEFAULT_CHOICE,
             idempotencyKey: randomUUID(),
             taskId: task.id,
-            planSnapshot: "# Invitations",
+            descriptionSnapshot: "# Invitations",
             prompt: null,
             repository: task.repository,
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -357,10 +357,10 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agent.effort, AGENT_DEFAULT_CHOICE.effort);
         assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.equal(agent.turnId, null);
-        assert.equal(agent.brief, AGENT_BRIEF.PLAN);
+        assert.equal(agent.brief, AGENT_BRIEF.DESCRIPTION);
         const stored = yield* readAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
-        assert.equal(stored.value.planSnapshot, SNAPSHOT);
+        assert.equal(stored.value.descriptionSnapshot, SNAPSHOT);
         assert.equal(stored.value.prompt, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
         const lineId = eve.opened[0]?.message.lineId ?? "";
@@ -883,7 +883,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const now = yield* DateTime.nowAsDate;
         // A revision a later build wrote, by a kind of writer this build has no name for.
         yield* Database.use((db) =>
-          db.insert(planRevision).values({
+          db.insert(descriptionRevision).values({
             taskId: task.id,
             seq: 1_000,
             actor: sql`'a-later-writer'`,

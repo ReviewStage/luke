@@ -13,12 +13,12 @@ import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { MAXIMUM_START_BODY_BYTES } from "../agent-wire.js";
-import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
+import { descriptionEditAnswerSchema, descriptionEditRequestSchema } from "../description-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
-  planRevisionAnswerSchema,
-  planRevisionSeqSchema,
-  planRevisionsAnswerSchema,
+  descriptionRevisionAnswerSchema,
+  descriptionRevisionSeqSchema,
+  descriptionRevisionsAnswerSchema,
   TASK_BOUNDS,
   TASK_LIST_QUERY,
   taskAnswerSchema,
@@ -57,7 +57,7 @@ const taskParams = { id: EffectSchema.String };
 
 /** A revision's number as a path or a query carries it, read as the whole number from one it must be. */
 const revisionSeqText = EffectSchema.NumberFromString.pipe(
-  EffectSchema.decodeTo(planRevisionSeqSchema),
+  EffectSchema.decodeTo(descriptionRevisionSeqSchema),
 );
 
 /** The most a task's number may be, Postgres's integer, so a number past it names no task rather than failing its read. */
@@ -155,19 +155,19 @@ export const tasksContract = {
   edit: hostedProcedure
     .meta(bodyCap(EDIT_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/edit`, inputStructure: "detailed" }))
-    .input(exactBodyInput(EffectSchema.Struct(taskParams), planEditRequestSchema))
-    .output(EffectSchema.flip(planEditAnswerSchema)),
+    .input(exactBodyInput(EffectSchema.Struct(taskParams), descriptionEditRequestSchema))
+    .output(EffectSchema.flip(descriptionEditAnswerSchema)),
   /** A page of the plan's history, before the revision `before` names where it names one. */
   revisions: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISIONS }))
     .input(
       EffectSchema.Struct({ ...taskParams, before: EffectSchema.optionalKey(revisionSeqText) }),
     )
-    .output(EffectSchema.flip(planRevisionsAnswerSchema)),
+    .output(EffectSchema.flip(descriptionRevisionsAnswerSchema)),
   revision: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISION }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
-    .output(EffectSchema.flip(planRevisionAnswerSchema)),
+    .output(EffectSchema.flip(descriptionRevisionAnswerSchema)),
   /** One revision put back as the plan's content. */
   restore: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))

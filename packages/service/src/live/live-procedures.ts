@@ -34,7 +34,7 @@
  * `GET /api/live/task-comments?id=` answers its plan's own comment threads,
  * or with `&page=` one page's on every version, as three statements, the
  * threads, their entries, and the files their comments carry
- * (`plan-comments-live.ts`), the same way and woken the same way
+ * (`description-comments-live.ts`), the same way and woken the same way
  * (`taskCommentsLive`).
  * `GET /api/live/task-browser-tabs?id=` answers its Browser tabs as one
  * statement, the agent's pointer on each among them, woken by a write that
@@ -217,7 +217,7 @@ import {
   installedSkillsLive,
   integrationStatusesLive,
   macCommandsLive,
-  PLAN_THREADS,
+  DESCRIPTION_THREADS,
   pullRequestChaptersLive,
   sidebarLive,
   taskBrowserTabsLive,
@@ -946,7 +946,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskComments: signedIn.taskComments.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const pageId = input.page === undefined ? PLAN_THREADS : yield* pathUuid(input.page);
+      const pageId = input.page === undefined ? DESCRIPTION_THREADS : yield* pathUuid(input.page);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(

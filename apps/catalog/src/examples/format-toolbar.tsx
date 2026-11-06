@@ -36,7 +36,7 @@ function useMarks(initial: readonly WritingMark[]) {
 }
 
 /** The plan's toolbar over words in a heading, bold and linked. */
-function PlanToolbar(): React.JSX.Element {
+function DescriptionToolbar(): React.JSX.Element {
   const [marks, toggle] = useMarks([WRITING_MARK.BOLD, WRITING_MARK.LINK]);
   const [block, setBlock] = useState<WritingBlock>(WRITING_BLOCK.HEADING_2);
   return (
@@ -87,9 +87,9 @@ function TurnInto(): React.JSX.Element {
 function FormatToolbarExample(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="format-toolbar-plan" title="Over the description's words">
+      <CatalogSection id="format-toolbar-description" title="Over the description's words">
         <Stack gap={GAP.FIELD}>
-          <PlanToolbar />
+          <DescriptionToolbar />
           <SpanningToolbar />
         </Stack>
       </CatalogSection>

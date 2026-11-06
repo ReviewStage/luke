@@ -66,7 +66,7 @@ import {
   taskListOfLiveRows,
   taskPullRequestsOfLiveRows,
 } from "@repo/features/task-list-live";
-import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -119,12 +119,12 @@ const openAgent = (
     const made = yield* createAgent(userId, {
       ...("taskId" in place
         ? place.blank === true
-          ? { taskId: place.taskId, planSnapshot: null, prompt: null }
-          : { taskId: place.taskId, planSnapshot: "# Invitations\n", prompt: null }
+          ? { taskId: place.taskId, descriptionSnapshot: null, prompt: null }
+          : { taskId: place.taskId, descriptionSnapshot: "# Invitations\n", prompt: null }
         : {
             taskId: null,
             organizationId: place.workspaceId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: "Sweep the flaky tests.",
           }),
       idempotencyKey: randomUUID(),
@@ -492,11 +492,11 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         // Tasks made for the owner by a coding agent, and by the notetaker on their call.
         const followUp = yield* startTask(owner, {
           name: "Invite emails",
-          origin: { actor: PLAN_ACTOR.AGENT, agentId: done.id },
+          origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: done.id },
         });
         const fromCall = yield* startTask(owner, {
           name: "Audit log export",
-          origin: { actor: PLAN_ACTOR.NOTETAKER },
+          origin: { actor: DESCRIPTION_ACTOR.NOTETAKER },
         });
         // The follow-up made a child of the first plan.
         const db = yield* Database;
@@ -545,8 +545,8 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           [originOf(plan.id), originOf(followUp.id), originOf(fromCall.id)],
           [
             undefined,
-            { actor: PLAN_ACTOR.AGENT, agentId: done.id },
-            { actor: PLAN_ACTOR.NOTETAKER },
+            { actor: DESCRIPTION_ACTOR.AGENT, agentId: done.id },
+            { actor: DESCRIPTION_ACTOR.NOTETAKER },
           ],
         );
         const parentOf = (taskId: string) =>
@@ -675,7 +675,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const { agent: pilot } = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: plan.id,
-            planSnapshot: "# Invitations\n",
+            descriptionSnapshot: "# Invitations\n",
             prompt: null,
             kind: AGENT_KIND.PILOT,
             idempotencyKey: randomUUID(),
@@ -841,7 +841,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           Effect.map(
             createAgent(owner, {
               taskId,
-              planSnapshot: "# Invitations\n",
+              descriptionSnapshot: "# Invitations\n",
               prompt: null,
               kind,
               ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
