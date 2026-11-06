@@ -1,6 +1,7 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
@@ -13,10 +14,9 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
+import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
-import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
@@ -130,11 +130,11 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import {
+  descriptionDocumentQuery,
+  descriptionDocumentRetryMutation,
   historyQuery,
   historyRetryMutation,
   pagesQuery,
-  descriptionDocumentQuery,
-  descriptionDocumentRetryMutation,
 } from "../live-reads.js";
 import {
   beginPanelSpan,
@@ -167,14 +167,17 @@ import {
   withUndrawnPassed,
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import type { SectionReveal } from "./description-body.js";
+import {
+  type DescriptionEditMutation,
+  descriptionEditMutation,
+} from "./description-edit-mutation.js";
+import type { RevisionSource } from "./description-history-model.js";
 import { holdsAsk } from "./inbox-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
-import type { SectionReveal } from "./description-body.js";
-import { type DescriptionEditMutation, descriptionEditMutation } from "./description-edit-mutation.js";
-import type { RevisionSource } from "./description-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
@@ -187,6 +190,12 @@ import {
   readAgentById,
   useAgents,
 } from "./use-agents.js";
+import {
+  type DescriptionHistoryControl,
+  type DescriptionHistorySource,
+  type HistorySpot,
+  useDescriptionHistory,
+} from "./use-description-history.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import {
   chooseInboxTask,
@@ -203,12 +212,6 @@ import {
   type NamedAgents,
   useMainTabs,
 } from "./use-main-tabs.js";
-import {
-  type HistorySpot,
-  type DescriptionHistoryControl,
-  type DescriptionHistorySource,
-  useDescriptionHistory,
-} from "./use-description-history.js";
 import {
   DRAWN_KINDS,
   drawsChanges,
@@ -953,6 +956,8 @@ export interface TasksControl {
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
   /** The same delete, as a question asking it first holds its own mutation over it. */
   deleteTask: TaskDeleteMutation;
+  /** Several deletes at once, as a selection's question holds its own mutation over them. */
+  deleteTasks: TasksDeleteMutation;
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
@@ -1242,6 +1247,17 @@ export function taskDeleteMutation(run: (taskId: string) => Promise<ActedResult>
 
 /** A task's delete, as a place asking it holds it. */
 type TaskDeleteMutation = ReturnType<typeof taskDeleteMutation>;
+
+/** Several tasks deleted at once, as a selection's question holds its own mutation over them, each through `run`, answering each in the order asked. */
+export function tasksDeleteMutation(run: (taskId: string) => Promise<ActedResult>) {
+  return mutationOptions({
+    mutationKey: [ACT_KIND.TASKS_DELETE],
+    mutationFn: (taskIds: readonly string[]) => Promise.all(taskIds.map(run)),
+  });
+}
+
+/** Several tasks deleted at once, as a selection's question holds it. */
+type TasksDeleteMutation = ReturnType<typeof tasksDeleteMutation>;
 
 /** A task moved to another workspace, and whether a refusal goes unsaid, as the Move dialog says it under its list. */
 interface TaskMoveAsk {
@@ -2144,12 +2160,13 @@ export function useTasksTab(input: {
   // delete that landed says nothing, since the task leaving the list says it;
   // a refusal is said where the question that asked it stands, or in a toast
   // where the task leaving took it away (`use-refusal-heard.ts`).
-  const deleteTaskOptions = taskDeleteMutation(async (taskId) => {
+  const sendDeleteTask = async (taskId: string): Promise<ActedResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await askKept(sendAct(ACT_KIND.TASKS_DELETE, { taskId }));
     if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     return { ...DELETE_REFUSED, cause: deleted.cause };
-  });
+  };
+  const deleteTaskOptions = taskDeleteMutation(sendDeleteTask);
   const { mutateAsync: deleteTask } = useMutation(deleteTaskOptions);
 
   // The tasks the tab draws as they stand at each call, and each row write's
@@ -4131,6 +4148,7 @@ export function useTasksTab(input: {
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     deleteTask: deleteTaskOptions,
+    deleteTasks: tasksDeleteMutation(sendDeleteTask),
     back,
     leaveGuard,
   });

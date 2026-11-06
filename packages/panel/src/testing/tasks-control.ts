@@ -33,8 +33,8 @@ import {
   agentRenameMutation,
   MODELS_READ,
 } from "../tasks/use-agents.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-description-history.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { DRAWN_KINDS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -42,6 +42,7 @@ import {
   taskDeleteMutation,
   taskMoveMutation,
   taskRenameMutation,
+  tasksDeleteMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
@@ -427,7 +428,9 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     descriptionEdit: (taskId) =>
-      descriptionEditMutation(taskId, () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })),
+      descriptionEditMutation(taskId, () =>
+        Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+      ),
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,
@@ -620,6 +623,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onMovePins: ignore,
     onDeleteTask,
     deleteTask: taskDeleteMutation((taskId) => onDeleteTask(taskId)),
+    deleteTasks: tasksDeleteMutation((taskId) => onDeleteTask(taskId)),
     back: () => false,
     // No page asks before it is left, so every way out goes at once.
     leaveGuard: {
