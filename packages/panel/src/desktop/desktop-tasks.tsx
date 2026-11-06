@@ -155,7 +155,7 @@ import {
  * frame, the column's bar holds the agents' tabs, the "+", and the chosen
  * agent's ⋯, and the side panel's its own. Details opens the task's details,
  * its Overview, across the page in place of the column's bar and the side
- * panel: the way back to the agents, then its path over its title (its
+ * panel, the way back to the agents pinned at its card's top left: its path over its title (its
  * repository, the task it is a child of, and its key), its chips, its
  * relations, its agents, and its plan. A phone heads the task with its own row instead (`TaskHead`).
  *
@@ -585,7 +585,7 @@ function PlanDocument({
   // Details opens the task's details in the column's place, and pressed again goes back to the agents.
   const toggleDetails = () =>
     tab !== undefined && isOverviewTab(tab) ? leaveDetails() : openOverview();
-  // The way back to the agents stands in the details' own card, over its path; a phone's head is its way back.
+  // The way back to the agents stands pinned in the details' own card; a phone's head is its way back.
   const leaveDetailsDoor = useSteadyDoor(leaveDetails);
   const detailsLead = useMemo(
     () =>
@@ -1130,6 +1130,8 @@ function PlanDocument({
       aria-label={task.name}
       hidden={!overviewShown}
     >
+      {/* The way back to the agents stays pinned at the card's top left, over the details as they scroll. */}
+      {detailsWide ? <div className="task-details-back">{detailsLead}</div> : null}
       <PlanBody
         task={task}
         reader={reader}
@@ -1145,7 +1147,6 @@ function PlanDocument({
         standing={standing}
         head={planHead}
         titleActions={!phone}
-        lead={detailsLead}
       />
     </Fill>
   );

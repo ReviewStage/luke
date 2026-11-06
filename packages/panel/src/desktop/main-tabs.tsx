@@ -9,8 +9,6 @@ import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import { TASK_BOUNDS, type TaskSummary } from "@repo/features/task-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
-  BUTTON_VARIANT,
-  Button,
   FILL_ELEMENT,
   Fill,
   INLINE_EDIT_LOOK,
@@ -23,7 +21,6 @@ import {
   Toolbar,
   VisuallyHidden,
 } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
@@ -73,7 +70,7 @@ import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
- * main-tabs.tsx -- the task's topbar and its column's tabs: the topbar naming the task with Details and the task's ⋯, each agent's tab and the draft agent's under it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the task's topbar and its column's tabs: the topbar naming the task, its name opening its details, and the task's ⋯, each agent's tab and the draft agent's under it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * A task opens on its agents, as Conductor opens a workspace on its chats:
  * the topbar names the task across its page (`TaskTopbar`), and the column's
@@ -89,7 +86,7 @@ import { TabStrip } from "./tab-strip.js";
  *
  * The task's details, its Overview (its head and its plan document, which
  * the task's page draws, `desktop-tasks.tsx`), are no tab among the agents:
- * the topbar's Details opens them across the page, in place of the column's
+ * the task's name in the topbar opens them across the page, in place of the column's
  * bar and the side panel, with the way back to the agents in their own card,
  * so no tab ever stands with none chosen. The task's ⋯ stands in the topbar whatever the
  * column shows.
@@ -514,15 +511,15 @@ function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Ele
   return <div className="main-tabs flex items-center gap-list-gap">{children}</div>;
 }
 
-/** What the task's topbar calls the way into the task's details, and the place their way back leads to. */
-export const DETAILS_WORDS = { BUTTON: "Details", PLACE: "agents" } as const;
+/** What the task's name in its topbar opens, and the place the details' way back leads to. */
+export const DETAILS_WORDS = { HINT: "Task details", PLACE: "agents" } as const;
 
 /**
  * The task's topbar, across the task's page over its column and its side
- * panel: the task's status mark and name, then Details, which opens the
- * task's details in the column's place and, pressed again, goes back to the
- * agents (`details`), and the task's ⋯, its own menu (`planMenu`), standing
- * whichever the column shows; then `actions`. The window's side panel toggle
+ * panel: the task's status mark and name, the name a press that opens the
+ * task's details across the page and, pressed again, goes back to the agents
+ * (`details`), as a channel's name opens its details; then the task's ⋯, its
+ * own menu (`planMenu`), standing whichever the page shows, and `actions`. The window's side panel toggle
  * stands at its end (`desktop-shell.tsx`).
  */
 export function TaskTopbar({
@@ -550,19 +547,14 @@ export function TaskTopbar({
     <Toolbar
       lead={look?.icon}
       title={task?.name}
+      titlePress={
+        details === undefined
+          ? undefined
+          : { open: details.shown, label: DETAILS_WORDS.HINT, onPress: details.onToggle }
+      }
       measure
       actions={
         <>
-          {details === undefined ? null : (
-            <Button
-              variant={BUTTON_VARIANT.QUIET}
-              icon={<GLYPH.PLAN />}
-              pressed={details.shown}
-              onClick={details.onToggle}
-            >
-              {DETAILS_WORDS.BUTTON}
-            </Button>
-          )}
           {task === undefined || planMenu === undefined ? null : (
             <PlaceMore
               thing={task.name}

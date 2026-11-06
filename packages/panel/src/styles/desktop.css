@@ -548,6 +548,21 @@ body,
   top: 0;
 }
 
+/* The way back to the agents stays at the details' card's top left, on the
+   card's ground, as the details scroll beneath it. */
+.desktop-task[data-barless="true"] .desktop-document {
+  position: relative;
+}
+
+.task-details-back {
+  position: absolute;
+  z-index: 1;
+  top: var(--ui-space-8);
+  left: var(--ui-space-8);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-color-ground);
+}
+
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
    controls give way before its tabs do: where the column is narrowest the
    agents' Retry draws its glyph alone (`FoldingButton`). */

@@ -538,7 +538,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document opens on the way back to the agents, then its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
+test("a plan's document, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -578,14 +578,17 @@ test("a plan's document opens on the way back to the agents, then its path, its 
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   // A task from before statuses draws no standing chip.
-  const back = body?.firstElementChild;
-  const path = back?.nextElementSibling;
+  const path = body?.firstElementChild;
   const first = path?.nextElementSibling;
   const byline = first?.nextElementSibling;
 
   assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
-  assert.equal(back?.textContent, "Agents", "the way back to the agents leads the document");
-  assert.equal(path?.classList.contains("plan-task-path"), true, "the path stands under it");
+  assert.equal(
+    container.querySelector(".desktop-document .task-details-back")?.textContent,
+    "Agents",
+    "the way back to the agents is pinned in the card",
+  );
+  assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
   assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
   assert.equal(
     [...(path?.querySelectorAll("button") ?? [])].some((each) =>
