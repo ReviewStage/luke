@@ -305,7 +305,7 @@ export interface CardFoot {
 
 /** The foot naming the task an agent works on, by the plan's glyph: "On Teammate invitations", "On no task". */
 export function taskFoot(words: string): CardFoot {
-  return { glyph: <GLYPH.PLAN />, words };
+  return { glyph: <GLYPH.DESCRIPTION />, words };
 }
 
 /**

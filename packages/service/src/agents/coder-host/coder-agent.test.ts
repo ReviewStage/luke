@@ -298,8 +298,8 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
-  const UPDATING = "## Updating the plan";
+test("every agent on a task is told how to update its description, one handed a prompt told to read it first, and one on no task told of no description", () => {
+  const UPDATING = "## Updating the description";
   const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task);
@@ -356,9 +356,9 @@ test("every agent on a task is told to keep its task's status with update_task, 
   }
 });
 
-test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, or a page, on its task or on itself", () => {
+test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the description, or a page, on its task or on itself", () => {
   const NO_DOCUMENT = "never commit the write-up as a document";
-  const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_DESCRIPTION}\``;
+  const PLAN = `write it into the description with \`${CODER_TOOL.EDIT_DESCRIPTION}\``;
   const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task);
@@ -590,17 +590,17 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
   }
 });
 
-test("with Plans off the instructions say nothing of a plan: no edit_description, no plan handed with a task's link or read_task, no plan to name or write a write-up into, and comments on pages alone", () => {
+test("with Task descriptions off the instructions say nothing of a description: no edit_description, no description handed with a task's link or read_task, no description to name or write a write-up into, and comments on pages alone", () => {
   const DESCRIPTION_WORDS = [
     `\`${CODER_TOOL.EDIT_DESCRIPTION}\``,
-    "## Updating the plan",
-    "take that decision into the plan",
-    "write it into the plan",
-    "what its plan said when the message was sent",
-    "its plan included",
-    "Your task's plan, whose link is",
-    "Keep a mention in the plan",
-    "comment threads on a plan's text",
+    "## Updating the description",
+    "take that decision into the description",
+    "write it into the description",
+    "what its description said when the message was sent",
+    "its description included",
+    "Your task's description, whose link is",
+    "Keep a mention in the description",
+    "comment threads on a description's text",
   ];
   for (const brief of Object.values(AGENT_BRIEF)) {
     const told = (descriptionsOn: boolean) =>

@@ -730,10 +730,32 @@ it.effect(
       const made = decodeMade(
         yield* call(MEMBER_MCP_TOOL.CREATE_TASK, {
           name: "Seat billing",
-          plan: "## Problem\n\nSeats drift.",
+          description: "## Problem\n\nSeats drift.",
         }),
       );
       const taskId = made.task.id;
+      const refused = (name: string, args: Record<string, unknown>) =>
+        Effect.promise(async () => {
+          const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
+          assert.equal(answer.isError, true, name);
+          return answer.content[0].text;
+        });
+      // A client that listed the tools before the rename is told what each is called now, and nothing is written.
+      assert.match(
+        yield* refused("edit_plan", {
+          taskId,
+          notes: [{ kind: NOTE_KIND.ADD, section: "Problem", text: "Written by the old name." }],
+        }),
+        /`edit_description`/u,
+      );
+      assert.match(
+        yield* refused("comment_on_plan", { taskId, quote: "Seats drift.", words: "Why?" }),
+        /`comment_on_description`/u,
+      );
+      assert.match(
+        yield* refused(MEMBER_MCP_TOOL.CREATE_TASK, { name: "Seat billing", plan: "## Problem" }),
+        /named description, not plan/u,
+      );
       yield* call(MEMBER_MCP_TOOL.EDIT_DESCRIPTION, {
         taskId,
         notes: [{ kind: NOTE_KIND.ADD, section: "Problem", text: "Invoices lag too." }],
@@ -1053,7 +1075,7 @@ it.effect(
       );
       assert.equal(resolved.state, DESCRIPTION_COMMENT_STATUS.RESOLVED);
       assert.equal(planless.isError, true);
-      assert.match(planless.content[0].text, /has Plans off/u);
+      assert.match(planless.content[0].text, /has Task descriptions off/u);
       // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
       assert.deepEqual(
         lines.map(({ words }) => words),

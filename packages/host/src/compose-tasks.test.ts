@@ -348,7 +348,7 @@ const RELAY: Workspace = {
 };
 
 /** The parts of a task's record's live read. */
-type RecordPart = "plan" | "pages" | "calls" | "code";
+type RecordPart = "description" | "pages" | "calls" | "code";
 
 /** The parts a subject's comments' live read delivers. */
 type CommentPart = "threads" | "entries" | "files";
@@ -2325,7 +2325,7 @@ it.effect(
       };
       service.tasks = [theirs];
       yield* answered(() =>
-        record.set({ plan: [{ taskId: INVITES, savedAt: theirs.updatedAt }] }, ["tx-other"]),
+        record.set({ description: [{ taskId: INVITES, savedAt: theirs.updatedAt }] }, ["tx-other"]),
       );
       service.live.list.set({ plans: [rowOfTask(invites)] }, ["tx-other"]);
       yield* nextPoll(settled);
@@ -2335,7 +2335,7 @@ it.effect(
 
       // Once the record carries the edit's transaction, the save it delivered meanwhile is read.
       yield* answered(() =>
-        record.set({ plan: [{ taskId: INVITES, savedAt: theirs.updatedAt }] }, ["tx-edit"]),
+        record.set({ description: [{ taskId: INVITES, savedAt: theirs.updatedAt }] }, ["tx-edit"]),
       );
       service.live.list.set({ plans: [rowOfTask(theirs)] }, ["tx-edit"]);
       yield* nextPoll(settled);
@@ -4693,18 +4693,21 @@ const followSettled = Effect.repeat(
 
 /** A task's record's live read as the service answers it polled, its rows none until a test sets them. */
 const recordLive = () =>
-  polledLive<RecordPart, typeof NOT_FOUND_LIVE>(["plan", "pages", "calls", "code"]);
+  polledLive<RecordPart, typeof NOT_FOUND_LIVE>(["description", "pages", "calls", "code"]);
 
 /** A task's record's live read as the service reads it from `tasks`: the description marked by its last save, and no pages, calls, or code. */
 function polledRecord(service: FakeService, taskId: string) {
-  return polledLive<RecordPart, typeof NOT_FOUND_LIVE>(["plan", "pages", "calls", "code"], () => ({
-    plan: service.tasks
-      .filter((each) => each.id === taskId)
-      .map((each) => ({ taskId, savedAt: each.updatedAt })),
-    pages: [],
-    calls: [],
-    code: [],
-  }));
+  return polledLive<RecordPart, typeof NOT_FOUND_LIVE>(
+    ["description", "pages", "calls", "code"],
+    () => ({
+      description: service.tasks
+        .filter((each) => each.id === taskId)
+        .map((each) => ({ taskId, savedAt: each.updatedAt })),
+      pages: [],
+      calls: [],
+      code: [],
+    }),
+  );
 }
 
 /** Rows set on a live read, then its next poll asked, half a second after the last answered. */
@@ -4797,7 +4800,7 @@ it.effect(
       const { openTask, description } = yield* subject(service);
       yield* openTask(INVITES);
       yield* followSettled;
-      yield* answered(() => record.set({ plan: [], pages: [], calls: [], code: [] }));
+      yield* answered(() => record.set({ description: [], pages: [], calls: [], code: [] }));
       assert.equal(record.held(), 1);
 
       // Another member deletes the task, so the poll standing answers it not found.

@@ -854,7 +854,7 @@ function InboxSidePanel({
               tasks.onShowAgent(taskId, agent),
             );
       }
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         if (taskId === undefined) return;
         return openPlace({ kind: LINK_PLACE.TASK, planId: taskId }, () => tasks.onShowTask(taskId));
       case TOOL_TARGET.INBOX:

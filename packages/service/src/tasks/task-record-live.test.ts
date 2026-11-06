@@ -28,12 +28,12 @@ import { taskRecordLiveStatements } from "./task-record-live.js";
  * Synthetic accounts, pages, and words throughout.
  */
 
-const PARTS = ["plan", "pages", "code"] as const;
+const PARTS = ["description", "pages", "code"] as const;
 
 type Part = (typeof PARTS)[number];
 
 /** The parts a held read answers: the description and the pages; no desktop reads the code again. */
-const HELD_PARTS = ["plan", "pages"] as const;
+const HELD_PARTS = ["description", "pages"] as const;
 
 /** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
@@ -52,7 +52,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskRecordLiveStatements(reader, taskId));
     return yield* Schema.decodeUnknownEffect(taskRecordLiveRowsSchema)({
-      plan: yield* runLive(statements.plan),
+      description: yield* runLive(statements.description),
       pages: yield* runLive(statements.pages),
       code: yield* runLive(statements.code),
     });
@@ -62,7 +62,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
 const heldRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     return {
-      plan: yield* readTaskDescription(reader, taskId),
+      description: yield* readTaskDescription(reader, taskId),
       pages: yield* listPages(reader, taskPageOwner(taskId)),
     };
   });
@@ -112,7 +112,9 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           });
 
         assert.deepEqual(live, {
-          plan: [{ taskId: task.id, savedAt: Option.getOrThrow(held.plan).updatedAt }],
+          description: [
+            { taskId: task.id, savedAt: Option.getOrThrow(held.description).updatedAt },
+          ],
           pages: [],
           code: [],
         });
@@ -149,7 +151,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           ),
         );
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {
-          plan: [],
+          description: [],
           pages: [],
           code: [],
         });
@@ -178,17 +180,23 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             const nextHeld = yield* heldRecordOf(teammate, task.id);
             assert.deepEqual(movedParts(live, nextLive), expected, "the live marks moved");
             assert.deepEqual(
-              nextLive.plan.map((plan) => plan.savedAt),
-              [Option.getOrThrow(nextHeld.plan).updatedAt],
+              nextLive.description.map((description) => description.savedAt),
+              [Option.getOrThrow(nextHeld.description).updatedAt],
               "the mark is the open document's last save",
             );
             live = nextLive;
           });
 
-        yield* step(["plan"], saveDescriptionText(owner, task.id, "## Invites\n\nThey expire."));
-        yield* step(["plan"], saveDescriptionText(teammate, task.id, "## Invites\n\nA week."));
+        yield* step(
+          ["description"],
+          saveDescriptionText(owner, task.id, "## Invites\n\nThey expire."),
+        );
+        yield* step(
+          ["description"],
+          saveDescriptionText(teammate, task.id, "## Invites\n\nA week."),
+        );
         yield* step([], updateTask(owner, task.id, { name: "Invitations" }));
-        assert.deepEqual((yield* liveRecordOf(stranger, task.id)).plan, []);
+        assert.deepEqual((yield* liveRecordOf(stranger, task.id)).description, []);
       }),
   );
 });

@@ -39,7 +39,7 @@ export interface TaskRecordFollowDependencies {
 /** The description's rows as one comparable value. */
 function descriptionMarkOf(rows: TaskRecordLiveRows): string {
   return JSON.stringify(
-    rows.plan.toSorted((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0)),
+    rows.description.toSorted((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0)),
   );
 }
 
@@ -62,7 +62,7 @@ export function taskRecordMoves(
       (): string | undefined => undefined,
       (before: string | undefined, rows: TaskRecordLiveRows) => {
         const mark = descriptionMarkOf(rows);
-        const moved = mark === before ? [] : [{ descriptionSavedAt: rows.plan[0]?.savedAt }];
+        const moved = mark === before ? [] : [{ descriptionSavedAt: rows.description[0]?.savedAt }];
         return [mark, moved] as const;
       },
     ),

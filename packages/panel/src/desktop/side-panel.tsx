@@ -1807,7 +1807,7 @@ export function taskCards(input: {
         return pages === undefined
           ? undefined
           : { kind: TAB_KIND.PAGE, place: pages, pageId: opened.page, name };
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         return taskId === undefined
           ? undefined
           : { kind: TAB_KIND.PLAN, taskId, name: task?.name, status: task?.status };

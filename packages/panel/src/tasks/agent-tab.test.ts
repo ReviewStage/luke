@@ -146,7 +146,7 @@ const OPENING_CALLS: readonly {
     tool: "edit_description",
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
-    target: { kind: TOOL_TARGET.PLAN },
+    target: { kind: TOOL_TARGET.DESCRIPTION },
     verb: "Updated",
     made: "Description",
     opens: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",

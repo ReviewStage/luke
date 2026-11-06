@@ -1224,8 +1224,8 @@ export const TOOL_TARGET = {
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
-  /** The task's own tab, its document. */
-  PLAN: "plan",
+  /** The task's own tab, its description. */
+  DESCRIPTION: "description",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
   /** Another task of the workspace, opened on its description as the sidebar opens it, or on one of its agents' tabs where the target names one. */
@@ -1237,7 +1237,7 @@ export const TOOL_TARGET = {
 export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
-  | { readonly kind: typeof TOOL_TARGET.PLAN }
+  | { readonly kind: typeof TOOL_TARGET.DESCRIPTION }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
@@ -1266,7 +1266,7 @@ export function placeOfTaskTarget(
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.PLAN]: "Open the description",
+  [TOOL_TARGET.DESCRIPTION]: "Open the description",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",
@@ -1280,7 +1280,7 @@ interface TargetedCall {
   readonly output: WireValue | undefined;
 }
 
-const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.DESCRIPTION };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
 /** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens, by the id its answer lists the thread under; the whole Inbox where it names none. */
@@ -1481,7 +1481,7 @@ export function targetLink(target: ToolTarget, place: TargetPlace): string | und
   switch (target.kind) {
     case TOOL_TARGET.TASK:
       return linked({ kind: LINK_PLACE.TASK, planId: target.task });
-    case TOOL_TARGET.PLAN: {
+    case TOOL_TARGET.DESCRIPTION: {
       const taskId = holderTaskId(place.holder);
       return taskId === undefined ? undefined : linked({ kind: LINK_PLACE.TASK, planId: taskId });
     }

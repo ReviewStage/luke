@@ -29,13 +29,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 64000,
-      "description": "What the agent should do, typed to it as its first message; the developer's words where they named the job. Leave it out to start the agent on the task's plan itself."
+      "description": "What the agent should do, typed to it as its first message; the developer's words where they named the job. Leave it out to start the agent on the task's description itself."
     },
     "note": {
       "type": "string",
       "minLength": 1,
       "maxLength": 64000,
-      "description": "Everything else the agent should hear as it starts (what to start with, what to watch out for, what to leave alone), handed to it after the plan or the prompt in the same first message; leave it out where there is nothing beyond the plan."
+      "description": "Everything else the agent should hear as it starts (what to start with, what to watch out for, what to leave alone), handed to it after the description or the prompt in the same first message; leave it out where there is nothing beyond the description."
     },
     "title": {
       "type": "string",

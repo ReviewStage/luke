@@ -551,7 +551,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a tool the server does not hold and a method it does not know are protocol errors; a notification is taken with no body",
+    "a tool the server does not hold and a method it does not know are protocol errors, a tool since renamed is a tool error naming the tool in its place, and a notification is taken with no body",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -562,6 +562,12 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           id: 4,
           method: "tools/call",
           params: { name: "bash", arguments: {} },
+        });
+        const renamedTool = yield* post(fetch, agent.bearer, {
+          jsonrpc: "2.0",
+          id: 7,
+          method: "tools/call",
+          params: { name: "edit_plan", arguments: { taskId: agent.taskId, notes: [] } },
         });
         const unknownMethod = yield* post(fetch, agent.bearer, {
           jsonrpc: "2.0",
@@ -580,6 +586,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         );
 
         assert.equal(unknownTool.body.error.code, -32602);
+        assert.equal(renamedTool.body.result.isError, true);
+        assert.match(renamedTool.body.result.content[0].text, /`edit_description`/u);
         assert.equal(unknownMethod.body.error.code, -32601);
         assert.deepEqual(
           [notification.status, notification.body],

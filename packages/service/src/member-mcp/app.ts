@@ -124,7 +124,9 @@ function renamedWords(params: (typeof toolCallSchema.Type)["params"]): string | 
  * `create_task`'s `plan`: the tool's own error naming what is called so now,
  * where the SDK would answer an unknown tool or drop the field and make the
  * task empty; nothing for any other request, which the SDK answers. Note
- * that a client keeps the tools it was listed before the rename.
+ * that a client keeps the tools it was listed before the rename, and that
+ * the result names its kind, as 2026-07-28 asks of every result, which an
+ * earlier revision's client strips.
  */
 const renamedToolAnswer = /* @__PURE__ */ Effect.fn("web/memberMcpRenamedTool")(function* (
   request: Request,
@@ -144,7 +146,7 @@ const renamedToolAnswer = /* @__PURE__ */ Effect.fn("web/memberMcpRenamedTool")(
     Response.json({
       jsonrpc: "2.0",
       id,
-      result: { content: [{ type: "text", text }], isError: true },
+      result: { resultType: "complete", content: [{ type: "text", text }], isError: true },
     }),
   );
 });

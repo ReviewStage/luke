@@ -80,7 +80,7 @@ import { SqlClient } from "effect/sql";
  */
 
 const ORIGIN = "https://app.test";
-const EDIT = (taskId: string) => `/api/plans/${taskId}/edit`;
+const EDIT = (taskId: string) => `/api/plans/${taskId}/description`;
 
 const commentsPath = (taskId: string) => `/api/plans/${taskId}/comments`;
 const threadPath = (taskId: string, threadId: string) => `${commentsPath(taskId)}/${threadId}`;

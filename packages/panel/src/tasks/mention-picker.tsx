@@ -246,7 +246,7 @@ const MENTION_GROUP = {
   AGENTS: "Agents",
   TASKS: "Tasks",
   PEOPLE: "People",
-  PLAN: "Description",
+  DESCRIPTION: "Description",
   PAGES: "Pages",
   FILES: "Files and folders",
   THREADS: "Threads",
@@ -260,7 +260,7 @@ const MENTION_GROUP = {
 /** The kinds a list may be narrowed to, each but a server by its own word typed before a colon after the `@`. */
 const MENTION_FROM = {
   FILES: "files",
-  PLAN: "description",
+  DESCRIPTION: "description",
   TASKS: "tasks",
   PAGES: "pages",
   AGENTS: "agents",
@@ -276,7 +276,9 @@ const MENTION_FROM = {
 type MentionFrom = (typeof MENTION_FROM)[keyof typeof MENTION_FROM];
 
 /** Words that narrow the list as a kind's own word does: `plan`, the description's word before it was renamed. */
-const MENTION_FROM_ALIAS: ReadonlyMap<string, MentionFrom> = new Map([["plan", MENTION_FROM.PLAN]]);
+const MENTION_FROM_ALIAS: ReadonlyMap<string, MentionFrom> = new Map([
+  ["plan", MENTION_FROM.DESCRIPTION],
+]);
 
 /** The kind a list is narrowed to: one of the place's own, or one connected server by its connection, wearing its provider's mark. */
 type Narrow =
@@ -1054,7 +1056,7 @@ function narrowedRows(
   switch (kind.narrow.from) {
     case MENTION_FROM.FILES:
       return paths === undefined ? [] : fileRows(paths, folder, term);
-    case MENTION_FROM.PLAN:
+    case MENTION_FROM.DESCRIPTION:
       return best(rows.description, term, PER_KIND);
     case MENTION_FROM.TASKS:
       return best(rows.tasks, term, PER_KIND);
@@ -1106,7 +1108,10 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
-  const description = { label: MENTION_GROUP.PLAN, rows: best(rows.description, term, PER_GROUP) };
+  const description = {
+    label: MENTION_GROUP.DESCRIPTION,
+    rows: best(rows.description, term, PER_GROUP),
+  };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
     label: MENTION_GROUP.TASKS,
@@ -1150,7 +1155,7 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
   switch (kind.narrow.from) {
     case MENTION_FROM.FILES:
       return <FolderIcon aria-hidden="true" />;
-    case MENTION_FROM.PLAN:
+    case MENTION_FROM.DESCRIPTION:
       return <DocumentIcon />;
     case MENTION_FROM.TASKS:
       return <PlanGlyph status={undefined} />;
@@ -1596,8 +1601,8 @@ function kindsOf(
       ? []
       : [
           {
-            from: MENTION_FROM.PLAN,
-            name: MENTION_GROUP.PLAN,
+            from: MENTION_FROM.DESCRIPTION,
+            name: MENTION_GROUP.DESCRIPTION,
             detail: sectionCount(descriptionSections(source.text()).length),
           },
         ]),

@@ -132,7 +132,7 @@ export const GLYPH = {
   PAGE: lucideGlyph(AppWindow),
   // A page of the web, outside the app, as a website chip names it.
   WEBSITE: lucideGlyph(Globe),
-  PLAN: DocumentIcon,
+  DESCRIPTION: DocumentIcon,
   // What one version of a description changed: its changed sections.
   VERSION_CHANGES: lucideGlyph(FilePenLine),
   INBOX: InboxIcon,

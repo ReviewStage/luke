@@ -47,7 +47,7 @@
   "src/agents/coder-host/coder-agent-tools.test.ts": 25424,
   "src/agents/coder-host/coder-agent.test.ts": 70,
   "src/agents/coder-host/coder-inbox.test.ts": 6657,
-  "src/agents/coder-host/coder-plan-pictures.test.ts": 4564,
+  "src/agents/coder-host/coder-description-pictures.test.ts": 4564,
   "src/agents/coder-host/coder-start.test.ts": 5169,
   "src/agents/coder-host/codex-sessions.test.ts": 3821,
   "src/agents/coder-host/inbox-store.test.ts": 15254,

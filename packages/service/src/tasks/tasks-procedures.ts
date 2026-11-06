@@ -645,7 +645,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * text as it now stands and who last wrote it where the edit conflicts
      * with it, or as refused where the description would be longer than a description may be.
      */
-    edit: plans.edit.effect(function* ({ input, context }) {
+    editDescription: plans.editDescription.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
@@ -674,13 +674,13 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * yet answers an empty page, and so does a plan id the account does not
      * own, which it answers no differently.
      */
-    revisions: plans.revisions.effect(function* ({ input, context }) {
+    descriptionRevisions: plans.descriptionRevisions.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       return yield* hostedStoreOrUnavailable(listRevisions(context.userId, taskId, input.before));
     }),
 
     /** One revision's content and the content before it. */
-    revision: plans.revision.effect(function* ({ input, context }) {
+    descriptionRevision: plans.descriptionRevision.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const revision = yield* hostedStoreOrUnavailable(
         readRevision(context.userId, taskId, input.seq),
@@ -696,7 +696,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * nothing. It names nothing in a body: the plan and the revision are the
      * path's.
      */
-    restore: plans.restore.effect(function* ({ input, context }) {
+    restoreDescription: plans.restoreDescription.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const restored = yield* restoreRevision({ userId: context.userId, taskId }, input.seq);
       if (restored.status !== DESCRIPTION_SAVE_STATUS.SAVED) {

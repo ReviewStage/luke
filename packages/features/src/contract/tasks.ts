@@ -49,8 +49,21 @@ const START_BODY_BYTES = NAME_BODY_BYTES + BRIEF_BYTES + MAXIMUM_START_BODY_BYTE
 const EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 
 const PLAN = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
-const REVISIONS = `${PLAN}/revisions` as const;
+const DESCRIPTION = `${PLAN}/description` as const;
+const REVISIONS = `${DESCRIPTION}/revisions` as const;
 const REVISION = `${REVISIONS}/{seq}` as const;
+
+/**
+ * The paths the task's description was edited and read back at before it
+ * was named the description, under the task's own path rather than its
+ * description's, which a released desktop or the published CLI still asks:
+ * each is answered as needing an update (`HOSTED_API_ERROR.HOST_UPGRADE_NEEDED`)
+ * rather than as a path the service never served.
+ */
+export const RETIRED_TASK_PATHS: readonly RegExp[] = [
+  /^\/api\/plans\/[^/]+\/edit\/?$/u,
+  /^\/api\/plans\/[^/]+\/revisions(?:\/[^/]+(?:\/restore)?)?\/?$/u,
+];
 
 /** The plan a path names, as text: the handler reads it as a UUID, so one that is none answers as no plan rather than as a request that does not read. */
 const taskParams = { id: EffectSchema.String };
@@ -151,25 +164,25 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: PLAN }))
     .input(EffectSchema.Struct(taskParams))
     .output(EffectSchema.flip(taskDeleteAnswerSchema)),
-  /** The developer's edit of the document. */
-  edit: hostedProcedure
+  /** The developer's edit of the description. */
+  editDescription: hostedProcedure
     .meta(bodyCap(EDIT_BODY_BYTES))
-    .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/edit`, inputStructure: "detailed" }))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: DESCRIPTION, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), descriptionEditRequestSchema))
     .output(EffectSchema.flip(descriptionEditAnswerSchema)),
-  /** A page of the plan's history, before the revision `before` names where it names one. */
-  revisions: hostedProcedure
+  /** A page of the description's history, before the revision `before` names where it names one. */
+  descriptionRevisions: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISIONS }))
     .input(
       EffectSchema.Struct({ ...taskParams, before: EffectSchema.optionalKey(revisionSeqText) }),
     )
     .output(EffectSchema.flip(descriptionRevisionsAnswerSchema)),
-  revision: hostedProcedure
+  descriptionRevision: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISION }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(descriptionRevisionAnswerSchema)),
-  /** One revision put back as the plan's content. */
-  restore: hostedProcedure
+  /** One revision put back as the description's content. */
+  restoreDescription: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(taskRestoreAnswerSchema)),

@@ -5,13 +5,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 36,
-      "description": "The task whose plan's comments to act on, by the id list_tasks answered."
+      "description": "The task whose description's comments to act on, by the id list_tasks answered."
     },
     "quote": {
       "type": "string",
       "minLength": 1,
       "maxLength": 2000,
-      "description": "The words of the plan the thread stands on, copied exactly from the plan as read_task reads it, as much as stands there exactly once."
+      "description": "The words of the description the thread stands on, copied exactly from the description as read_task reads it, as much as stands there exactly once."
     },
     "words": {
       "type": "string",

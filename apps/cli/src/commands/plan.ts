@@ -3,7 +3,7 @@
  *
  * A description is one Markdown text (`description-edit.ts`). `edit` writes it
  * through the procedure the app's description editor saves with,
- * `plans.edit`, naming the text it read just before as the base, so a write
+ * `plans.editDescription`, naming the text it read just before as the base, so a write
  * an agent made in between is kept where the two do not touch the same
  * lines, and is refused as a conflict where they do, with nothing changed.
  *
@@ -36,7 +36,7 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(["--url", "--workspace", "-w"])
 export function writeDescription(taskId: string, base: string, value: string) {
   return Effect.gen(function* () {
     const { hosted } = yield* session;
-    const saved = yield* askService(hosted.plans.edit, {
+    const saved = yield* askService(hosted.plans.editDescription, {
       params: { id: taskId },
       body: { document: { base, value } },
     });

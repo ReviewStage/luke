@@ -439,7 +439,7 @@ export function nextFailedRunExpiry(
 export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
-    plan: sealedLiveQuerySchema,
+    description: sealedLiveQuerySchema,
     pages: sealedLiveQuerySchema,
     calls: sealedLiveQuerySchema,
     code: sealedLiveQuerySchema,
@@ -468,7 +468,7 @@ const taskCodeLiveRowSchema = EffectSchema.Struct({
 
 /** The task's description, pages, and agents' code as Realtime delivers them, a part's rows each, of which this build compares the description's alone: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
-  plan: EffectSchema.Array(taskDescriptionLiveRowSchema),
+  description: EffectSchema.Array(taskDescriptionLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),
   code: EffectSchema.Array(taskCodeLiveRowSchema),
 });

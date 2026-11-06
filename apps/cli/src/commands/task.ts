@@ -6,7 +6,7 @@
  * repository from the working folder's `origin` unless `-R` names one, and
  * with `--start` or `--prompt` starts an agent on the new task, the one-shot
  * every peer leads with: in the create's own request where there is no plan
- * to write first, else created, then planned through `plans.edit`, then
+ * to write first, else created, then planned through `plans.editDescription`, then
  * started, so the agent reads the plan it was given.
  */
 

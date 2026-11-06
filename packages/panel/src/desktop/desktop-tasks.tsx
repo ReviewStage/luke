@@ -614,7 +614,7 @@ function DescriptionDocument({
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
         return openAgentColumn(target.agent);
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         return openOverview();
       case TOOL_TARGET.INBOX: {
         if (taskId === undefined) return;

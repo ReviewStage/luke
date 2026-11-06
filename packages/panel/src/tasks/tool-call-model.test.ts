@@ -552,7 +552,7 @@ test("a description edit or a comment call opens the task it named, and one made
   assert.deepEqual(toolTarget(edited), { kind: TOOL_TARGET.TASK, task: "task-2" });
   assert.deepEqual(toolTarget(replied), { kind: TOOL_TARGET.TASK, task: "task-2" });
   assert.deepEqual(toolTarget({ ...edited, input: { notes: edited.input.notes } }), {
-    kind: TOOL_TARGET.PLAN,
+    kind: TOOL_TARGET.DESCRIPTION,
   });
 });
 

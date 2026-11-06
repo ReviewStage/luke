@@ -49,10 +49,10 @@ const CONTEXT = {
   descriptionsOn: true,
 } as const;
 
-const DESCRIPTION_JOB = "implement the plan given as the first message";
+const DESCRIPTION_JOB = "implement the task's description given as the first message";
 const BLANK_JOB = "do what the developer asks of you in this conversation";
 
-test("an agent started with neither a plan nor a prompt is told to do what the developer asks, on every harness", () => {
+test("an agent started with neither a description nor a prompt is told to do what the developer asks, on every harness", () => {
   const blank = agentHanded({ descriptionSnapshot: null, prompt: null });
   for (const harness of Object.values(CODER_HARNESS)) {
     const instructions = agentCoderInstructions(blank, { ...CONTEXT, harness });
@@ -61,8 +61,8 @@ test("an agent started with neither a plan nor a prompt is told to do what the d
   }
 });
 
-test("an agent handed a plan is told to implement it, on every harness", () => {
-  const planned = agentHanded({ descriptionSnapshot: "# Plan", prompt: null });
+test("an agent handed a description is told to implement it, on every harness", () => {
+  const planned = agentHanded({ descriptionSnapshot: "# Invitations", prompt: null });
   for (const harness of Object.values(CODER_HARNESS)) {
     const instructions = agentCoderInstructions(planned, { ...CONTEXT, harness });
     assert.ok(instructions.includes(DESCRIPTION_JOB), harness);
@@ -70,7 +70,7 @@ test("an agent handed a plan is told to implement it, on every harness", () => {
 });
 
 test("an agent in several repositories is told where each of the others is checked out, and on which branch", () => {
-  const planned = agentHanded({ descriptionSnapshot: "# Plan", prompt: null });
+  const planned = agentHanded({ descriptionSnapshot: "# Invitations", prompt: null });
   const instructions = agentCoderInstructions(planned, {
     ...CONTEXT,
     harness: CODER_HARNESS.CLAUDE_CODE,

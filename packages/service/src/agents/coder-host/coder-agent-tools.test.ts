@@ -2094,12 +2094,12 @@ test("create_task makes a task in the caller's workspace for the member the agen
   const name = "Invite expiry migration";
   // A description handed with its # title keeps its body alone, the task's name standing for the title.
   const body = "## Goal\n\nAdd the invitation's expiry.";
-  const plan = `# ${name}\n\n${body}`;
+  const description = `# ${name}\n\n${body}`;
   const countedBefore = tasksCounted(bob);
 
   const made = await call(
     CODER_TOOL.CREATE_TASK,
-    { name: ` ${name} `, brief: "Invites should lapse after a week.", plan },
+    { name: ` ${name} `, brief: "Invites should lapse after a week.", description },
     "call-new",
   );
   assert.equal(made.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(made));
@@ -2134,10 +2134,19 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
   assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
 
+  // A call naming the field as it was named before the rename makes nothing, and says what it is named now.
+  const retired = await call(
+    CODER_TOOL.CREATE_TASK,
+    { name: "Seats", plan: "## Goal" },
+    "call-plan",
+  );
+  assert.equal(retired.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(retired.reason, CREATE_TASK_REFUSAL.RENAMED_DESCRIPTION);
+
   // A title in a description written with CRLF line ends is dropped as well.
   const crlf = await call(
     CODER_TOOL.CREATE_TASK,
-    { name: "Seats", plan: "\r\n# Seats\r\n\r\n## Goal\r\n\r\nBill by seat." },
+    { name: "Seats", description: "\r\n# Seats\r\n\r\n## Goal\r\n\r\nBill by seat." },
     "call-crlf",
   );
   assert.ok(isRecord(crlf.task) && isWireString(crlf.task.id), JSON.stringify(crlf));
@@ -2149,7 +2158,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   // A line opening on # that is no Markdown title is the description's own, and stays.
   const kept = await call(
     CODER_TOOL.CREATE_TASK,
-    { name: "Limits", plan: "#define MAX 10\n\n## Goal\n\nUpdate limits." },
+    { name: "Limits", description: "#define MAX 10\n\n## Goal\n\nUpdate limits." },
     "call-define",
   );
   assert.ok(isRecord(kept.task) && isWireString(kept.task.id), JSON.stringify(kept));
@@ -2216,7 +2225,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   await turnDescriptions(bob, false);
   const planless = await call(
     CODER_TOOL.CREATE_TASK,
-    { name: "Seat audit", brief: "Audit seat counts.", plan: "## Goal\n\nCount seats." },
+    { name: "Seat audit", brief: "Audit seat counts.", description: "## Goal\n\nCount seats." },
     "call-planless",
   );
   assert.ok(isRecord(planless.task) && isWireString(planless.task.id), JSON.stringify(planless));
@@ -3865,12 +3874,12 @@ test("read_task reads a teammate's task of the caller's workspace with its descr
   const home = `https://vespin.dev/workspace-${workspaceId}/task`;
   const read = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
-  assert.ok(isRecord(read.task) && isRecord(read.plan));
+  assert.ok(isRecord(read.task) && isRecord(read.description));
   assert.deepEqual(
     [read.task.name, read.task.isYourTask, read.task.mention],
     ["Billing", false, `[@Billing](${home}/${numbers.billing})`],
   );
-  assert.deepEqual(read.plan, { text: description, saved: true, leftOutChars: 0 });
+  assert.deepEqual(read.description, { text: description, saved: true, leftOutChars: 0 });
   const own = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.invitations });
   assert.equal(isRecord(own.task) && own.task.isYourTask, true, JSON.stringify(own));
 
@@ -3879,15 +3888,18 @@ test("read_task reads a teammate's task of the caller's workspace with its descr
   const long = line.repeat(41);
   await database.run(saveDescriptionText(teammates.userId, taskIds.billing, long));
   const cut = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
-  assert.ok(isRecord(cut.plan) && isWireString(cut.plan.text), JSON.stringify(cut).slice(0, 200));
-  assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
-  assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
+  assert.ok(
+    isRecord(cut.description) && isWireString(cut.description.text),
+    JSON.stringify(cut).slice(0, 200),
+  );
+  assert.equal(cut.description.text, line.repeat(40).slice(0, -1));
+  assert.equal(cut.description.leftOutChars, long.length - (line.length * 40 - 1));
 
   // With Descriptions off the task is read all the same, without its description.
   await turnDescriptions(caller.userId, false);
   const planless = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
-  assert.deepEqual([isRecord(planless.task), "plan" in planless], [true, false]);
+  assert.deepEqual([isRecord(planless.task), "description" in planless], [true, false]);
 
   // A task started from a brief, its description still untouched, is read with the developer's words.
   const briefed = await database.run(

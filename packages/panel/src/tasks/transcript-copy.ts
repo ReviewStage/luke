@@ -117,7 +117,7 @@ type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 
 /** What the brief's heading calls it: the description an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
-  PLAN: "Description",
+  DESCRIPTION: "Description",
   PROMPT: "Prompt",
   SUBAGENT_TASK: "Subagent task",
 } as const;
@@ -362,7 +362,7 @@ export function agentTranscript(input: {
       ? BRIEF_LABEL.SUBAGENT_TASK
       : brief === AGENT_BRIEF.PROMPT
         ? BRIEF_LABEL.PROMPT
-        : BRIEF_LABEL.PLAN;
+        : BRIEF_LABEL.DESCRIPTION;
   const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
   // An agent started from another opens on its brief, the replay, and the note, each copied apart.
   const opening = first === undefined || task !== undefined ? undefined : replayOpening(first);

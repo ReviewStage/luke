@@ -28,7 +28,7 @@ import { Option } from "effect";
 
 /** The statements an open task's record is followed by, one a part. */
 export interface TaskRecordLiveStatements {
-  readonly plan: LiveStatement;
+  readonly description: LiveStatement;
   readonly pages: LiveStatement;
   readonly calls: LiveStatement;
   readonly code: LiveStatement;
@@ -95,7 +95,7 @@ export function taskRecordLiveStatements(
   taskId: string,
 ): Option.Option<TaskRecordLiveStatements> {
   return Option.all({
-    plan: liveStatementOf(descriptionStatement(userId, taskId)),
+    description: liveStatementOf(descriptionStatement(userId, taskId)),
     pages: liveStatementOf(pagesStatement(userId, taskId)),
     calls: liveStatementOf(callsStatement()),
     code: liveStatementOf(codeStatement()),

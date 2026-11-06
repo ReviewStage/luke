@@ -374,7 +374,7 @@ export const AGENT_LEAD: TranscriptLead = {
 };
 
 /** The description's own tab, which a task's name over its description's card opens. */
-const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.DESCRIPTION };
 
 /** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--ui-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
 const ROW_ESTIMATE_PX = 172;
@@ -922,7 +922,7 @@ const UNTITLED_PAGE = "Page";
  * calls by the plan's name and the pull request's number.
  */
 function madeLabel(target: ToolTarget, subject: string | undefined, href: string): string {
-  const bare = target.kind === TOOL_TARGET.PLAN || target.kind === TOOL_TARGET.PULL_REQUEST;
+  const bare = target.kind === TOOL_TARGET.DESCRIPTION || target.kind === TOOL_TARGET.PULL_REQUEST;
   return bare || subject === undefined || subject === "" ? href : subject;
 }
 

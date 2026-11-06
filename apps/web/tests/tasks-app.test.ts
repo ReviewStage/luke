@@ -120,10 +120,10 @@ const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
 /** A window of a file the File tab asks for. */
 const README_WINDOW = { path: "README.md", first: "1", last: "10" } as const;
 const PAGES = (taskId: string) => `${ONE_TASK(taskId)}/pages`;
-const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
+const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/description/revisions`;
 const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
 const RESTORE = (taskId: string, seq: number) => `${REVISION(taskId, seq)}/restore`;
-const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/edit`;
+const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/description`;
 const PAGE = (taskId: string, pageId: string, version: string) =>
   `${PAGES(taskId)}/${pageId}/versions/${version}`;
 

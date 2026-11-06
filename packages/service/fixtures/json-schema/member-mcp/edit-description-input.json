@@ -5,7 +5,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 36,
-      "description": "The task whose plan to edit, by the id list_tasks answered."
+      "description": "The task whose description to edit, by the id list_tasks answered."
     },
     "notes": {
       "type": "array",

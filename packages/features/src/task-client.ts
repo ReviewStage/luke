@@ -498,7 +498,7 @@ export class HostedTaskClient {
     const admitted = Result.getOrUndefined(readEither(descriptionEditRequestSchema)(edit));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
-      askHosted(this.#hosted.plans.edit, { params: { id: taskId }, body: admitted }),
+      askHosted(this.#hosted.plans.editDescription, { params: { id: taskId }, body: admitted }),
       {
         [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
       },
@@ -879,7 +879,7 @@ export class HostedTaskClient {
     before?: number,
   ): Effect.Effect<DescriptionRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
     return orNothing(
-      askHosted(this.#hosted.plans.revisions, {
+      askHosted(this.#hosted.plans.descriptionRevisions, {
         id: taskId,
         ...(before === undefined ? undefined : { before: String(before) }),
       }),
@@ -897,7 +897,7 @@ export class HostedTaskClient {
   > {
     return orNothing(
       Effect.map(
-        askHosted(this.#hosted.plans.revision, { id: taskId, seq: String(seq) }),
+        askHosted(this.#hosted.plans.descriptionRevision, { id: taskId, seq: String(seq) }),
         (answer) => answer.revision,
       ),
     );
@@ -987,7 +987,7 @@ export class HostedTaskClient {
   > {
     return orNothing(
       Effect.map(
-        askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
+        askHosted(this.#hosted.plans.restoreDescription, { id: taskId, seq: String(seq) }),
         (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
     );

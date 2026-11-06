@@ -70,7 +70,7 @@ it.effect(
       const conflict = { conflict: { current: "- Vespin's words." } };
       let sent = 0;
       const api = fakeCloudApi({
-        [`POST /api/plans/${TASK_ID}/edit`]: {
+        [`POST /api/plans/${TASK_ID}/description`]: {
           answer: () => {
             sent += 1;
             return sent === 1 ? { plan: saved } : conflict;
@@ -366,7 +366,7 @@ it.effect(
     Effect.gen(function* () {
       const api = fakeCloudApi({
         "GET /api/plans": { answer: () => ({ plans: [{ ...SUMMARY, archivedAt: 5 }] }) },
-        [`GET /api/plans/${TASK_ID}/revisions/3`]: {
+        [`GET /api/plans/${TASK_ID}/description/revisions/3`]: {
           status: 404,
           answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
         },
@@ -379,7 +379,7 @@ it.effect(
       assert.equal(revision, undefined);
       assert.deepEqual(recordedRoutes(api.requests()), [
         "GET /api/plans?archived=include",
-        `GET /api/plans/${TASK_ID}/revisions/3`,
+        `GET /api/plans/${TASK_ID}/description/revisions/3`,
       ]);
     }),
 );
