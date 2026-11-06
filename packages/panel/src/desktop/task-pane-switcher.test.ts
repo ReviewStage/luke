@@ -493,6 +493,9 @@ test("on a wide window a refused rename keeps the name typed in the description'
   });
   await act(async () => title.blur());
 
-  assert.equal(descriptionTitle(container)?.textContent, "Invite teammates");
+  // Note that the refusal reaches the title through the rename's mutation, a moment after it is answered.
+  await vi.waitFor(() =>
+    assert.equal(descriptionTitle(container)?.textContent, "Invite teammates"),
+  );
   assert.match(container.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });
