@@ -152,7 +152,10 @@ The Mac app keeps its window layout and the drafts of messages you have not
 sent. While you are signed in, it also keeps a copy of your workspaces' lists
 and changes you made offline in a local database, `entities.db`, encrypted
 whole under a random key that is itself kept only encrypted under a key in the
-macOS Keychain; the database and its key are deleted when you sign out. Your sign-in
+macOS Keychain. Until that database is rolled out to your account, and for a
+few launches after, the same copy is kept in one file, `entities.sealed`,
+encrypted under the Keychain's key. Both, and the key, are deleted when you
+sign out. Your sign-in
 tokens are kept encrypted the same way. Transcripts and pictures you
 open are held in memory only.
 
