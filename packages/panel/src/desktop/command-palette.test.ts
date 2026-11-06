@@ -2602,7 +2602,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
   const listed = rows();
   assert.ok(listed.includes(`Invite funnel · ${DOCUMENT_TASK.name}`), "the page is listed");
   assert.ok(
-    listed.includes(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`),
+    listed.includes(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`),
     "the agent's terminal is listed",
   );
 
@@ -2611,8 +2611,11 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens again");
   });
   chooseFilter("This task");
-  press(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`);
-  assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
+  press(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`);
+  const [page, terminal] = chosen;
+  assert.deepEqual(page, { page: "page-1" });
+  assert.ok(terminal instanceof Object && "terminal" in terminal && "title" in terminal);
+  assert.deepEqual([terminal.terminal, terminal.title], [agent.id, "Cloud 1"]);
 });
 
 test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them', async () => {
