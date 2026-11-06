@@ -1588,7 +1588,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Add repository…, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   openPageMenu(page);
@@ -1601,6 +1601,7 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order
     "Copy transcript",
     "Rename",
     "Show terminal⌘J",
+    "Add repository…",
     "Archive",
     "Permanently delete⌘⌫",
   ]);
@@ -1638,6 +1639,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "PinP",
     "Move to section",
     "Show terminal⌘J",
+    "Add repository…",
     "Archive",
     "Permanently delete⌘⌫",
   ]);

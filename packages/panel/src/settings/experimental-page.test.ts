@@ -84,8 +84,8 @@ test("each experiment is a switch, on as the account chose, that writes the choi
     [...page.querySelectorAll('[role="switch"]')]
       .slice(0, 2)
       .map((each) => each.getAttribute("aria-label")),
-    ["Task descriptions", "Several repositories"],
-    "Several repositories stands second, after the newest",
+    ["Task descriptions", "Bring your own host"],
+    "Bring your own host stands second, after the newest",
   );
 
   await act(async () => memory.click());
@@ -103,7 +103,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
   });
   assert.deepEqual(feedbackAbout, [
     EXPERIMENT.DESCRIPTIONS,
-    EXPERIMENT.SEVERAL_REPOSITORIES,
     EXPERIMENT.BRING_YOUR_OWN_HOST,
     EXPERIMENT.SKILLS,
     EXPERIMENT.PILOT,

@@ -9,7 +9,6 @@
  *
  * - to anyone but the agent's starter or one of their agents, since the
  *   token the set is minted on is minted for the starter;
- * - while the starter has the Several repositories experiment off;
  * - to an agent caller that has heard words from another account
  *   (`heardFromAnotherAccount`), so words from a
  *   review comment on a public repository never widen what an agent's
@@ -37,7 +36,6 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { accountExperimentOn } from "@repo/database/models/account-store";
 import {
   APPEND_REFUSAL,
   type AppendRefusal,
@@ -55,7 +53,6 @@ import {
   type AgentAlsoRepository,
   EXTRA_REPOSITORY_REFUSAL,
 } from "@repo/features/agent-wire";
-import { EXPERIMENT } from "@repo/settings";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp, REPOSITORY_SET_UNREACHED } from "../../github/github-app.js";
@@ -114,12 +111,6 @@ const checkedRepository = Effect.fnUntraced(function* (
   asked: AgentAlsoRepository,
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   if (adder.userId !== agent.userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const on = yield* hostedStoreOrUnavailable(
-    accountExperimentOn(agent.userId, EXPERIMENT.SEVERAL_REPOSITORIES),
-  );
-  if (!on) {
-    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
-  }
   if (adder.agent !== undefined) {
     const caller = { userId: adder.agent.userId, conversationId: adder.agent.conversationId };
     if (yield* hostedStoreOrUnavailable(heardFromAnotherAccount(caller))) {

@@ -5,7 +5,6 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { EXPERIMENT } from "@repo/settings";
 import {
   DIALOG_SIZE,
   DIALOG_TONE,
@@ -24,13 +23,12 @@ import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { addRepositoryFailureWords } from "./agent-model.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { type AgentsControl, agentAddRepositoryMutation } from "./use-agents.js";
@@ -46,7 +44,7 @@ import { type AgentsControl, agentAddRepositoryMutation } from "./use-agents.js"
  * (`agent-repository-add.ts`). A toast then says whether it was checked out
  * beside the agent now or will be at its next turn, where no place of the
  * agent's ran, which tells the agent nothing so an idle one is not woken. A
- * refusal keeps the dialog up saying why under the chooser. It stands only while Several repositories is on, on
+ * refusal keeps the dialog up saying why under the chooser. It stands only on
  * an agent the reader started that runs in the cloud and is not archived,
  * under nothing archived, where the control can add one; the service still
  * refuses an agent in no repository and a repository already among its
@@ -85,8 +83,6 @@ function addedWords(repository: string, checkout: AddedRepositoryCheckout | unde
 function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
   const own = agent.startedBy === undefined || agent.startedBy.userId === agents.me;
   return (
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) })
-      .data === true &&
     agents.addRepository !== undefined &&
     agents.onUnarchive === undefined &&
     agent.archivedAt === undefined &&

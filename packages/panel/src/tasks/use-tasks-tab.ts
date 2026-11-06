@@ -515,7 +515,7 @@ export interface NewTaskAgent {
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
-  /** The repositories the agent works in beside the task's, `owner/name`, which the card offers while Several repositories is on; none where left out. */
+  /** The repositories the agent works in beside the task's, `owner/name`, which the card's repository chip picks after the task's own; none where left out. */
   readonly alsoRepositories?: readonly string[] | undefined;
 }
 

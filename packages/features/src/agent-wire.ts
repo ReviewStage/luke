@@ -292,8 +292,6 @@ export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL
 
 /** Why a Start naming repositories beside its agent's own, or a repository added to a running agent, was refused, which the refusal names (`extra-repository-refused`). */
 export const EXTRA_REPOSITORY_REFUSAL = {
-  /** The starter has the Several repositories experiment off. */
-  EXPERIMENT_OFF: "experiment-off",
   /** The agent works in no repository of its own, which extras stand beside. */
   NO_REPOSITORY: "no-repository",
   /** The agent would run on a device, and only an agent in the cloud works in several repositories. */
@@ -983,8 +981,7 @@ export const addedRepositoryCheckoutSchema = EffectSchema.Literals(
  * branch its checkout is cloned at, none for its default branch, appended
  * after the repositories it works in beside its own, checked out, and told
  * to it, as `update_agent`'s `addRepository` adds one. Only for the agent's
- * starter with the Several repositories experiment on, an agent in the
- * cloud in a repository of its own, its repositories all reached through
+ * starter, an agent in the cloud in a repository of its own, its repositories all reached through
  * one installation of the GitHub App; refused by why
  * (`extra-repository-refused`) otherwise. Nothing removes one.
  */
