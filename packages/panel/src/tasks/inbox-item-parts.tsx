@@ -24,7 +24,6 @@ import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
-  HoverCardNote,
   HoverCardRow,
   HoverCardRule,
   HoverCardSkeleton,
@@ -61,7 +60,6 @@ import {
   type InboxHolder,
   type InboxLineKind,
   type InboxListed,
-  inboxCardWords,
   inboxLineKind,
   inboxSettledStanding,
   inboxSettledWords,
@@ -208,7 +206,7 @@ export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
 }
 
 /**
- * An item's own glyph, as its chip wears it and its card leads with it:
+ * An item's own glyph, as its chip wears it:
  * what it asks, as its row's second line leads with it (`inboxLineGlyph`),
  * or the thread's glyph where it asks nothing.
  */
@@ -228,13 +226,14 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
 /**
  * An Inbox row's card, hung beside the row as a sidebar task's row hangs
  * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with the item's glyph, what it asks as its chip wears
- * it, its title, where it stands, waiting on the reader, on a teammate, or
- * settled, and when it last moved; then what holds it, a task as its key
+ * thread. It leads with its title, wearing no glyph, where it stands,
+ * waiting on the reader, on a teammate, or settled, and when it last
+ * moved; then what holds it, a task as its key
  * and its chip, which wears its status, or an automation by its name;
- * how it ended, once it has; and the agent's latest words, three lines at
- * most. Note that it draws no open ask's options or steps, because a card
- * takes no press and they would read as controls; the item's box answers. The agent that asked
+ * and how it ended, once it has. Note that it draws no message of the
+ * thread, which the row's own second line already previews, and no open
+ * ask's options or steps, because a card takes no press and they would
+ * read as controls; the item's box answers. The agent that asked
  * stands at its foot, the loading spinner beside it while it works.
  */
 export function InboxItemCard({
@@ -254,7 +253,6 @@ export function InboxItemCard({
   const { needsYou, starter, nameOf } = useInboxStanding(listed, readerId);
   const settled = inboxSettledWords(item, nameOf);
   const subject = itemSubject(holder, item.agentId, models, readerId);
-  const words = inboxCardWords(item);
   // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
   const line =
     holder.kind === INBOX_HOLDER.TASK
@@ -264,7 +262,6 @@ export function InboxItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}
         sub={<span>{standingWords(item, needsYou, starter)}</span>}
         corner={<Time at={item.updatedAt} now={now} hint={false} />}
@@ -277,7 +274,6 @@ export function InboxItemCard({
           label={settled}
         />
       )}
-      {words === "" ? null : <HoverCardNote>{words}</HoverCardNote>}
       <HoverCardRule />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
@@ -299,7 +295,7 @@ export function InboxItemCard({
 
 /**
  * What holds an item, as its card says it under the head, a quieter row
- * on the name's column: a task by its key, as the task's own card says it
+ * flush with the name, which wears no glyph: a task by its key, as the task's own card says it
  * (`TaskKey`), and by its chip as a mention of it is drawn (`HolderRef`),
  * which wears the task's status as its mark, so the card says no status in
  * words; an automation, or the agents no automation names, by their chip
@@ -321,7 +317,6 @@ function HolderDetail({
   return (
     <HoverCardRow
       look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={null}
       label={
         <span className={cn(TASK_CARD_STANDING, "flex-nowrap")} data-holder-detail="">
           {holder.kind === INBOX_HOLDER.TASK ? (

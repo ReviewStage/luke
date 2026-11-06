@@ -162,7 +162,7 @@ function waitingWords(item: WaitingBrief, readerId: string | undefined): string 
   return waitsOnReader(item, readerId) ? NEEDS_YOU.LABEL : "Waiting";
 }
 
-/** An item's card from main's brief alone, wearing the thread glyph its chip wears until the item is read: its question, that it waits for an answer, and when it was asked. */
+/** An item's card from main's brief alone, wearing no glyph, as its read card wears none: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
   item,
   now,
@@ -175,7 +175,6 @@ function WaitingItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={<GLYPH.THREAD />}
         name={item.title}
         corner={<Time at={item.postedAt} now={now} hint={false} />}
       />
