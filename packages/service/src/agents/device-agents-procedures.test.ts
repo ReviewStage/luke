@@ -75,6 +75,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** What the routes counted, across the file; a case reads its own account's. */

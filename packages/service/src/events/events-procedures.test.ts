@@ -40,6 +40,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 const RECORDING: HostedEnvironmentValues = {

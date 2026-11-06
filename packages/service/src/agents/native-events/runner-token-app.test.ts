@@ -83,6 +83,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** OpenAI's token endpoint, in Codex's JSON: each renewal rotates the refresh token and answers the next access token, good for an hour. */

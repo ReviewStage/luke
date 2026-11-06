@@ -109,14 +109,21 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
   return userId;
 }
 
-/** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null. */
+/** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null, and the Preview stand-ins given. */
 async function ownKey(
   userId: string,
   preferred: ProviderKeyProvider,
   ring: string | null = RING.HELD,
+  standIns: Partial<Record<ProviderKeyProvider, string>> = {},
 ) {
+  const previewApiKeys = Object.fromEntries(
+    Object.entries(standIns).map(([provider, key]) => [provider, Redacted.make(key)]),
+  );
   const own = await database.run(
-    ownKeyOf(userId, preferred, ring === null ? undefined : Redacted.make(ring)),
+    ownKeyOf(userId, preferred, {
+      providerKeyEncryptionKeys: ring === null ? undefined : Redacted.make(ring),
+      previewApiKeys,
+    }),
   );
   return own === undefined ? undefined : { provider: own.provider, key: Redacted.value(own.key) };
 }
@@ -175,6 +182,38 @@ test("a call beside an account's agents, such as chapters or a replay's summary,
   assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
 });
 
+test("on a Preview, a call beside an account's agents spends the Preview's stand-in key where no key of the account's opens, and the account's own wherever one does", async () => {
+  const both = await accountWithKeys({
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
+  });
+  const openAiOnly = await accountWithKeys({ [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI });
+  const none = await accountWithKeys({});
+  const standIns = {
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "sk-ant-preview-stand-in-1111",
+    [PROVIDER_KEY_PROVIDER.OPENAI]: "sk-proj-preview-stand-in-1111",
+  };
+
+  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, standIns), {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    key: ACCOUNT_KEY.ANTHROPIC,
+  });
+  assert.deepEqual(await ownKey(openAiOnly, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, standIns), {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    key: ACCOUNT_KEY.OPENAI,
+  });
+  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.OTHER, standIns), {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    key: standIns[PROVIDER_KEY_PROVIDER.ANTHROPIC],
+  });
+  assert.deepEqual(
+    await ownKey(none, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, {
+      [PROVIDER_KEY_PROVIDER.OPENAI]: standIns[PROVIDER_KEY_PROVIDER.OPENAI],
+    }),
+    { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: standIns[PROVIDER_KEY_PROVIDER.OPENAI] },
+  );
+});
+
 /** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and our own key for titles, which no such call spends. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
@@ -186,6 +225,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING.HELD),
   titleAnthropicApiKey: Redacted.make("sk-ant-vespin-title-key-1111"),
+  previewApiKeys: {},
 };
 
 /** Asks the model once, answering its text or nothing where the provider refused. */

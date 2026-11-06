@@ -132,6 +132,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The native harnesses an answer is handed to, writing down each with the account it acted for. */

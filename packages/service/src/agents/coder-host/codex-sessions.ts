@@ -63,7 +63,7 @@ import { type Agent, readAgent, readAgentRouting } from "@repo/database/models/a
 import {
   type FirewallOwner,
   type KeyRing,
-  openProviderKey,
+  PROVIDER_KEY_UNREADABLE,
   parseKeyRing,
 } from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
@@ -78,6 +78,7 @@ import {
   type ChatGptPlanIdentity,
   refreshChatGptAccess,
 } from "../../accounts/chatgpt-credentials.js";
+import { ownApiKeyOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
@@ -310,34 +311,23 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
    * The account's OpenAI API key opened, as `OPENAI_API_KEY`, which the
    * runner names as app-server's provider `env_key` in place of the plan's
    * token command: the key itself on a Mac, and in a sandbox a placeholder,
-   * the key held at its firewall; refused where the key is gone or
-   * unreadable, and never turned to the plan.
+   * the key held at its firewall; a Preview's stand-in where the key is gone
+   * or unreadable (`accounts/own-api-key.ts`); refused where neither is, and
+   * never turned to the plan.
    */
   const apiKeyEnv = (agent: Agent) =>
     Effect.gen(function* () {
       const environment = yield* HostedEnvironment;
-      const ring = environment.providerKeyEncryptionKeys;
-      const parsed = ring === undefined ? undefined : parseKeyRing(ring);
-      if (parsed === undefined || Result.isFailure(parsed)) {
-        return yield* new LaunchRefused({ reason: "no key ring" });
-      }
-      const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
-      const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.OPENAI);
-      if (row === undefined) {
+      const key = yield* ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.OPENAI, environment);
+      if (key === undefined) {
         return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
       }
-      const opened = openProviderKey(
-        parsed.success,
-        { userId, provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.API_KEY },
-        row,
-      );
-      if (Result.isFailure(opened)) {
+      if (key === PROVIDER_KEY_UNREADABLE) {
         return yield* new LaunchRefused({
           reason: "API key unreadable",
           keyRefusal: KEY_REFUSAL.UNREADABLE,
         });
       }
-      const key = opened.success;
       const launch: HarnessLaunch =
         agent.machine === AGENT_MACHINE.DEVICE
           ? { env: { ...homeOf(agent), [RUNNER_ENV.OPENAI_API_KEY]: Redacted.value(key) } }

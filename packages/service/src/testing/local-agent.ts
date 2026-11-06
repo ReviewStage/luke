@@ -130,6 +130,7 @@ export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 });
 
 /** The developer's message as the store hands it to the agent's sessions. */

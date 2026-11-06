@@ -62,6 +62,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** What the fake GitHub answers `GET /user` with, per token; a token it does not know is refused. */

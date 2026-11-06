@@ -24,8 +24,9 @@ import {
   PROVIDER_KEY_PROVIDER,
 } from "@repo/features/provider-key-wire";
 import type { WireBoundaryInput } from "@repo/wire";
-import { type Context, Effect, Layer, Option } from "effect";
+import { type Context, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
+import { HostedEnvironment } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
@@ -167,7 +168,7 @@ const wire = (models: readonly CatalogModel[]) =>
 
 it.layer(getTestDB())("the models route", (it) => {
   it.effect(
-    "the signed-in desktop reads the offered models, each with its efforts, every one marked unconnected while the account connects nothing, and a provider whose API key it saved unmarked",
+    "the signed-in desktop reads the offered models, each with its efforts, every one marked unconnected while the account connects nothing, and a provider whose API key it saved, or a Preview's stand-in key, unmarked",
     () =>
       Effect.gen(function* () {
         assert.deepEqual(yield* answer(modelCatalogOf(CATALOG), request(MODELS)), {
@@ -182,6 +183,26 @@ it.layer(getTestDB())("the models route", (it) => {
             body: { models: [...wire([OPUS]), { ...wire([SOL])[0], credentialMissing: true }] },
           },
         );
+        // A Preview holding an OpenAI stand-in key pays for GPT agents of an account that saved no OpenAI key.
+        const onPreview = Layer.merge(
+          modelCatalogOf(CATALOG),
+          Layer.succeed(HostedEnvironment, {
+            posthogPersonalApiKey: undefined,
+            posthogProjectId: undefined,
+            posthogApiHost: undefined,
+            posthogProjectApiKey: undefined,
+            posthogIngestHost: undefined,
+            cronSecret: undefined,
+            githubWebhookSecret: undefined,
+            providerKeyEncryptionKeys: undefined,
+            titleAnthropicApiKey: undefined,
+            previewApiKeys: { [MODEL_PROVIDER.OPENAI]: Redacted.make("sk-proj-preview-stand-in") },
+          }),
+        );
+        assert.deepEqual(yield* answer(onPreview, request(MODELS, { userId: "user-keyed" })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { models: wire(CATALOG) },
+        });
       }),
   );
 
