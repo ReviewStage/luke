@@ -15,18 +15,21 @@
  * The port bridge opens a TCP connection to the port on the sandbox's
  * loopback for each channel opened, closes the connection when its channel
  * closes and the channel when its connection does, and closes a channel
- * whose port nothing listens on as refused.
+ * whose port nothing listens on as refused. The mirror bridge
+ * (`mirror-bridge.ts`) runs at the agent's checkout and sends its files to
+ * the Mac on the one channel the Mac opens.
  */
 
 import { TUNNEL_KIND, type TunnelKind } from "@repo/features/sandbox-tunnel-wire";
+import { CODER } from "../agents/coder-host/bounds.js";
 import { WITHOUT_CAPABILITIES } from "../agents/sandbox-capabilities.js";
 import type { CommandAsk } from "../agents/vercel-sandbox-api.js";
+import { MIRROR_BRIDGE_SOURCE } from "./mirror-bridge.js";
 
 /** A bridge a tunnel asks for: its kind, and the argument that kind takes. */
-export type TunnelBridge = {
-  readonly kind: typeof TUNNEL_KIND.PORT_FORWARD;
-  readonly port: number;
-};
+export type TunnelBridge =
+  | { readonly kind: typeof TUNNEL_KIND.PORT_FORWARD; readonly port: number }
+  | { readonly kind: typeof TUNNEL_KIND.MIRROR };
 
 /** The bridge's own word, a line with a `bridge` key: ready, from then on speaking frames. */
 export const TUNNEL_BRIDGE_WORD = { KEY: "bridge", READY: "ready" } as const;
@@ -34,10 +37,12 @@ export const TUNNEL_BRIDGE_WORD = { KEY: "bridge", READY: "ready" } as const;
 /**
  * Whether a kind's traffic holds the agent's sandbox, keeping it alive and
  * moving its lease on: a forwarded port's does, since someone is using the
- * app it serves.
+ * app it serves; the mirror's does not, since it only follows the agent's
+ * work, and pauses when the sandbox stops after a turn.
  */
 export const TUNNEL_HOLDS_SANDBOX = {
   [TUNNEL_KIND.PORT_FORWARD]: true,
+  [TUNNEL_KIND.MIRROR]: false,
 } as const satisfies Record<TunnelKind, boolean>;
 
 /** The port bridge, as Node runs it with the port as its one argument. */
@@ -92,17 +97,20 @@ process.stdin.on("end", () => {
 say({ bridge: "ready" });
 `;
 
+/** A bridge's source and its one argument: the port it forwards, or the checkout it mirrors. */
+function scriptOf(bridge: TunnelBridge): readonly [string, string] {
+  switch (bridge.kind) {
+    case TUNNEL_KIND.PORT_FORWARD:
+      return [PORT_BRIDGE_SOURCE, String(bridge.port)];
+    case TUNNEL_KIND.MIRROR:
+      return [MIRROR_BRIDGE_SOURCE, CODER.CHECKOUT_PATH];
+  }
+}
+
 /** The bridge a tunnel asks for, as the PTY's start frame runs it: Node with no capabilities, its source inline. */
 export function tunnelBridge(bridge: TunnelBridge): CommandAsk {
   return {
     command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "node",
-      "--no-warnings",
-      "-e",
-      PORT_BRIDGE_SOURCE,
-      String(bridge.port),
-    ],
+    args: [...WITHOUT_CAPABILITIES.ARGS, "node", "--no-warnings", "-e", ...scriptOf(bridge)],
   };
 }
