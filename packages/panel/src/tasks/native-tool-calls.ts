@@ -9,14 +9,14 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@repo/wire
  * the harness's own tool name (`CLAUDE_CODE_TOOL`), with the harness's own
  * input and, for its own tools, the text the model read as the answer
  * (`claude-code-moments.ts`). The transcript has a renderer for every kind of
- * call those tools make, written for the tools eve gives an agent, so each
- * harness's call is read here once as the eve call that does the same thing:
+ * call those tools make, written for the tools the retired runtime gave an agent, so each
+ * harness's call is read here once as the call of the same kind:
  * its name, its input under the keys that tool takes, and its answer under the
  * key that tool answers its words in. Everything after the read (rows, the
  * to-do list, a loaded skill, a copy of the transcript) then draws it as it
- * draws eve's. A call to our own MCP server is stored under our tool's
+ * draws the retired runtime's. A call to our own MCP server is stored under our tool's
  * name and needs no reading, and a subagent's call (`Agent`) keeps its name,
- * which the tab draws as a delegation's row, as eve's `delegate` is drawn.
+ * which the tab draws as a delegation's row, as the retired runtime's `delegate` is drawn.
  *
  * Each harness has one table, keyed by the names its calls are stored under,
  * which no two harnesses share: Claude Code's and Codex's (`CODEX_TOOL`,
@@ -30,7 +30,7 @@ export interface DrawnCall {
   readonly output: WireValue | undefined;
 }
 
-/** How one harness tool's call is read as the eve call that draws it. */
+/** How one harness tool's call is read as the call of the same kind, which draws it. */
 type NativeCallReading = (call: DrawnCall) => DrawnCall;
 
 /** The words a harness tool answered, which its own tools answer as the text the model read; nothing for any other answer. */
@@ -38,13 +38,13 @@ function answerWords(output: WireValue | undefined): string | undefined {
   return isWireString(output) ? output : undefined;
 }
 
-/** The answer under the key the eve tool answers its words in; an answer that is not words, or none yet, as it is. */
+/** The answer under the key the drawn tool answers its words in; an answer that is not words, or none yet, as it is. */
 function wordsUnder(output: WireValue | undefined, key: string): WireValue | undefined {
   const words = answerWords(output);
   return words === undefined ? output : { [key]: words };
 }
 
-/** A command's answer as eve's shell answers one: the terminal's words as its output. Note that the CLI folds the command's errors into the same words, so none are told apart. */
+/** A command's answer as the retired runtime's shell answered one: the terminal's words as its output. Note that the CLI folds the command's errors into the same words, so none are told apart. */
 function terminalAnswer(output: WireValue | undefined): WireValue | undefined {
   const words = answerWords(output);
   return words === undefined ? output : { stdout: words, stderr: "", exitCode: 0 };
@@ -108,7 +108,7 @@ function watched(input: WireValue | undefined): string {
 }
 
 /**
- * Claude Code's tools, each read as the eve call that does what it does:
+ * Claude Code's tools, each read as the call that does what it does:
  * a command as `bash`, a read as `read_file`, a whole file written as
  * `write_file`, an edit or a notebook cell as an `apply_patch` of the lines
  * it changed, a search as `glob` or `grep`, a page and a web search as
@@ -209,7 +209,7 @@ const CLAUDE_CODE_CALLS: Record<
   [CLAUDE_CODE_TOOL.TASK_UPDATE]: (call) => call,
   [CLAUDE_CODE_TOOL.TASK_LIST]: (call) => call,
   [CLAUDE_CODE_TOOL.TASK_GET]: (call) => call,
-  // Note that a stop keeps its name, because it stops a background command, a monitor, or a subagent alike, so no one eve call does what it does.
+  // Note that a stop keeps its name, because it stops a background command, a monitor, or a subagent alike, so no one call of the retired runtime's does what it does.
   [CLAUDE_CODE_TOOL.TASK_STOP]: (call) => call,
   // Note that a message to a subagent keeps its name, because it continues the subagent's delegation rather than starting one, so it draws as a row of its own.
   [CLAUDE_CODE_TOOL.SEND_MESSAGE]: (call) => call,
@@ -217,7 +217,7 @@ const CLAUDE_CODE_CALLS: Record<
   [CLAUDE_CODE_TOOL.AGENT]: (call) => ({ ...call, input: withMaker(call.input, ANTHROPIC) }),
 };
 
-/** A Codex command's answer, `{output, exitCode}`, as eve's shell answers one; the exit code is none while it runs or once it was stopped. */
+/** A Codex command's answer, `{output, exitCode}`, as the retired runtime's shell answered one; the exit code is none while it runs or once it was stopped. */
 function codexTerminalAnswer(output: WireValue | undefined): WireValue | undefined {
   if (!isRecord(output) || !isWireString(output.output)) return output;
   const exitCode = isWireNumber(output.exitCode) ? output.exitCode : 0;
@@ -326,7 +326,7 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
 }
 
 /**
- * Codex's items, each read as the eve call that does what it does: a
+ * Codex's items, each read as the call that does what it does: a
  * command as `bash`, a file change as an `apply_patch` of its files, a web
  * search as `web_search`, a picture looked at as `read_file` of it, as
  * Claude Code's Read of one is, and the turn's plan as `write_todos`. A call to
@@ -363,7 +363,7 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
     input: codexTodosInput(input),
     output,
   }),
-  // Note that the server's name is joined to the tool's with a dot, which no tool of ours or eve's is named with, so no renderer of theirs takes it.
+  // Note that the server's name is joined to the tool's with a dot, which no tool of ours or of the retired runtime's is named with, so no renderer of theirs takes it.
   [CODEX_TOOL.MCP_TOOL_CALL]: ({ input, output }) => ({
     tool: `${inputString(input, "server") ?? ""}.${inputString(input, "tool") ?? ""}`,
     input: isRecord(input) ? input.arguments : input,
@@ -389,7 +389,7 @@ const NATIVE_TOOL_CALLS: ReadonlyMap<string, NativeCallReading> = new Map([
   ...Object.entries(CODEX_CALLS),
 ]);
 
-/** A stored call as the transcript draws it: a native harness's as the eve call that does the same, and any other as it is. */
+/** A stored call as the transcript draws it: a native harness's as the call of the same kind, and any other as it is. */
 export function drawnCall(call: DrawnCall): DrawnCall {
   return NATIVE_TOOL_CALLS.get(call.tool)?.(call) ?? call;
 }

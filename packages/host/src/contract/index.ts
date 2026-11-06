@@ -21,7 +21,7 @@ import { macTerminalActsContract } from "./mac-terminals.js";
 import { portForwardActsContract } from "./port-forwards.js";
 import { pushesContract } from "./pushes.js";
 import { SETTINGS_ACTS, settingsActsContract } from "./settings.js";
-import { tasksActsContract } from "./tasks.js";
+import { TASKS_ACTS, tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
@@ -97,6 +97,7 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export { SETTINGS_ACTS, type SettingUpdatePayload } from "./settings.js";
+export { TASKS_ACTS } from "./tasks.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 export { WORKSPACE_ACTS } from "./workspaces.js";
 
@@ -111,6 +112,7 @@ export const HOST_ACTS = {
   ...INSTALLED_SKILL_ACTS,
   ...INTEGRATION_ACTS,
   ...SETTINGS_ACTS,
+  ...TASKS_ACTS,
   ...WORKSPACE_ACTS,
 };
 

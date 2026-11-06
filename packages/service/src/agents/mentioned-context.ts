@@ -49,7 +49,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
  * one of its sections, is not: a coding agent has no tool to read the description
  * again, and one started on a prompt never saw it. So the message carries one
  * more part after its words, the description or each section it named as it stood
- * at the send, under a heading eve's receipt is read back by
+ * at the send, under a heading a receipt is read back by
  * (`attached-file-parts.ts`). Only the agent's own description is read, the description the
  * send already read as its sender; a mention of another task adds nothing,
  * but where its link names it by its number, `…/task/42`, which spells

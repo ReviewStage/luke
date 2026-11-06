@@ -272,7 +272,7 @@ function gitBasic(token: Redacted.Redacted, access: GitHubTokenAccess): string {
 
 /**
  * The repository's credential at the firewall. An installation token is set
- * on GitHub's two hosts, as eve's own `authenticateGitHub` sets it. A
+ * on GitHub's two hosts. A
  * member's own classic token is set on the one repository's paths alone,
  * and nothing on any other path of GitHub's, GraphQL and every other
  * repository among them: git over HTTPS takes the member's login and the

@@ -185,6 +185,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
+    reportOnline: (_context, online) => services.tellOnline(online),
     notifyReady: async (context) => {
       windows.panelReady();
       if (!launch.captureOutput) return;
@@ -240,6 +241,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          acts: operator.acts,
           colorCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,

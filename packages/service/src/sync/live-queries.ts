@@ -3,13 +3,15 @@
  *
  * A read is moved onto Sync by defining it (`defineLiveQuery`), adding
  * it here, and answering its procedure from the definition
- * (`liveQueryParts`). Each view's own change defines its read, and a read
- * with no definition is looked at on its clock.
+ * (`liveQueryParts`). A read declared once (`@repo/features/live-read`) is
+ * bound instead (`../live/live-read-binding.ts`, one file under
+ * `../live/reads/` each), and its binding stands here beside the
+ * definitions. Each view's own change defines its read, and a read with no
+ * definition is looked at on its clock.
  */
 import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { hostsLiveStatement } from "@repo/database/models/host-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
@@ -81,6 +83,7 @@ import {
   workspaceFormerSlugSync,
 } from "@repo/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
+import { LIVE_MODE } from "@repo/features/live-read";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { macCommandKindsRead } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
@@ -102,12 +105,14 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
+import type { AnyBoundRead } from "../live/live-read-binding.js";
+import { hostsRead } from "../live/reads/hosts.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
-import { defineLiveQuery, LIVE_MODE, liveQueryRegistry } from "./live-query.js";
+import { defineLiveQuery, liveQueryRegistry } from "./live-query.js";
 
 /**
  * The reader's topic for each workspace it is a member of, looked up as a
@@ -455,22 +460,6 @@ export const workspaceMembersLive = defineLiveQuery({
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
   statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * The account's hosts, by name, woken on the account's topic by a host
- * enrolled, approved, renamed, removed, or moving through an update, or
- * reporting another platform, machine, or model. Note that a beat wakes
- * nothing, since `deviceSync` ignores when a device was last seen: a
- * window judges a host by its own presence read.
- */
-export const hostsLive = defineLiveQuery({
-  name: LIVE_READ.HOSTS,
-  params: ["userId"],
-  reads: [deviceSync],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) => Option.map(hostsLiveStatement(userId), (hosts) => ({ hosts })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -949,6 +938,9 @@ export const agentTranscriptLive = defineLiveQuery({
   },
 });
 
+/** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
+export const BOUND_READS: readonly AnyBoundRead[] = [hostsRead];
+
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
   tasksLive,
@@ -965,7 +957,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   workspaceMemoriesLive,
   installedSkillsLive,
   workspaceIntegrationsLive,
-  hostsLive,
   automationsLive,
   automationWorkspaceRunsLive,
   automationRunsLive,
@@ -979,4 +970,5 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentBrowserTabsLive,
   pullRequestChaptersLive,
   agentTranscriptLive,
+  ...BOUND_READS,
 ]);

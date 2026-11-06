@@ -287,18 +287,9 @@ function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
 
 /** The tools a connected server lists, a few of each, as its server describes them. */
 const TOOLS = [
-  {
-    name: "search",
-    title: "Search",
-    description: "Find pages, issues, and messages by their words.",
-  },
-  { name: "read", title: "Read", description: "Read one item whole, by its id or address." },
-  {
-    name: "create",
-    title: "Create",
-    description: "Create an item where the account may write.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
-  },
+  { name: "search", description: "Find pages, issues, and messages by their words." },
+  { name: "read", description: "Read one item whole, by its id or address." },
+  { name: "create", description: "Create an item where the account may write." },
 ] as const;
 
 /* ----- Settings › Agents ----- */

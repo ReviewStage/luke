@@ -77,8 +77,9 @@ import { CURSOR_START } from "./transcript.js";
 /**
  * replay.ts -- what an agent started from another agent of its plan is handed: that agent's brief, its transcript replayed, and where it left its work.
  *
- * eve opens a session with a user message and keeps no history seeded
- * beside it, so the transcript goes inside the first message, in the format
+ * A new agent's session opens with a user message and, unless a continue
+ * hands it its source's own harness transcript (`takeover.ts`), keeps no
+ * history seeded beside it, so the transcript goes inside the first message, in the format
  * `@repo/features/agent-replay` writes and the desktop reads back. The
  * source is read as the account asking, on the plan the Start names and no
  * other, and its transcript under the member who started it, whose
@@ -143,7 +144,7 @@ interface CallWords {
 }
 
 /**
- * Each coding tool's words, eve's and those a native harness calls under its
+ * Each coding tool's words, the retired runtime's and those a native harness calls under its
  * own names (`../native-events/`); a patch, and a Codex file change, name
  * their files in their own input and stand apart.
  */
@@ -175,7 +176,7 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   ],
 ]);
 
-/** The tools that edit the one file their input names: eve's own, and Claude Code's. */
+/** The tools that edit the one file their input names: the retired runtime's own, and Claude Code's. */
 const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
   CODER_TOOL.WRITE_FILE,
   CLAUDE_CODE_TOOL.WRITE,
@@ -426,7 +427,7 @@ function noteStep(heading: StartNoteHeading, text: string, sentAt: Date | undefi
   return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, sender, text, sentAt);
 }
 
-/** A file the source's prompt carried, as a Start attaches one again; nothing where eve kept no bytes of it. */
+/** A file the source's prompt carried, as a Start attaches one again; nothing where its transcript kept no bytes of it. */
 function attachmentOf(url: string, mediaType: string, name: string): AgentAttachment | undefined {
   const prefix = `data:${mediaType};base64,`;
   if (!url.startsWith(prefix) || !ATTACHMENT_TYPES.has(mediaType)) return undefined;

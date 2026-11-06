@@ -23,7 +23,7 @@ import {
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect, Option } from "effect";
 import { CODER_REFUSAL } from "../coder-host/bounds.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   EXPERIMENT_OFF_REFUSAL,
   type ExperimentsOn,

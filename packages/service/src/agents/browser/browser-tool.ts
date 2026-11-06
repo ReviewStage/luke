@@ -200,13 +200,13 @@ export const BROWSER_TOOL_REFUSAL = {
 
 /** What a call runs under: the session whose sandbox its browser is in, the conversation its tabs belong to, and the transcript its screenshots are kept beside. */
 export interface BrowserCall {
-  /** The eve session whose sandbox the browser runs in: the root's own (`browserSessionOf`). */
+  /** The session whose sandbox the browser runs in: the root's own (`browserSessionOf`). */
   readonly browserSession: string;
   /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for the app. */
   readonly conversationId: string;
   /** The transcript the call is written to, which keeps its screenshots: the agent's own, since no worker is offered the tool. */
   readonly transcript: ConversationTarget;
-  /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it; one already open is answered as it stands. */
+  /** Opens the sandbox the browser runs in; one already open is answered as it stands. */
   readonly openSandbox: () => PromiseLike<unknown>;
 }
 
@@ -646,7 +646,7 @@ export function runBrowserTool(
   }
   const { actions } = read.success;
   return Effect.gen(function* () {
-    // Note that the sandbox is opened first, as eve opens it for a shell call, because the browser
+    // Note that the sandbox is opened first, because the browser
     // is found by the sandbox its session is tagged with, and an agent's first call may be this one.
     const opened = yield* Effect.result(
       Effect.tryPromise({ try: async () => call.openSandbox(), catch: () => "not opened" }),

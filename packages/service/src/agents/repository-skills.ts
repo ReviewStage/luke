@@ -17,7 +17,7 @@
  * huge `SKILL.md` costs a fixed number of requests and bytes: past the
  * bound the rest are left out. The bound on reads is wider than the bound
  * on skills, so folders that hold no skill do not crowd out ones that do.
- * A skill is named by its folder, as eve names one by its path; a folder
+ * A skill is named by its folder; a folder
  * whose name breaks the convention's rule (lowercase letters, digits, and
  * single hyphens), whose `SKILL.md` names another, or which carries no
  * description is left out, since the convention refuses all three.

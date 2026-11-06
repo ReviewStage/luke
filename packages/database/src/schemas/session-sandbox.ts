@@ -2,15 +2,15 @@ import { index, pgTable, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 
 /**
- * session-sandbox.ts -- an eve session whose Vercel Sandbox is still to be deleted.
+ * session-sandbox.ts -- an agent's session whose Vercel Sandbox is still to be deleted.
  *
  * A row is queued where we let go of a session for good: the purge of a
  * deleted task's conversations seven days on, and an account's deletion.
- * The scheduled sweep deletes the sandbox eve tagged with the session's id,
+ * The scheduled sweep deletes the sandbox tagged with the session's id,
  * with the snapshots only it kept, and then the row; a delete Vercel did not
  * confirm stamps `tried_at` and waits for a later sweep. The row names the
  * session alone and no account, because it must outlive the account whose
- * deletion queued it, and an eve run id says nothing of what was said in it.
+ * deletion queued it, and a session id says nothing of what was said in it.
  */
 export const sessionSandboxCleanup = pgTable(
   "session_sandbox_cleanup",

@@ -2,14 +2,15 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 
 /**
- * landing-devices.tsx -- the landing's devices: a Mac window at 16:10 and a modern iPhone, each drawing a screen laid out at the device's own size and scaled to the room it is given.
+ * landing-devices.tsx -- the landing's devices: a Mac window at 16:10, a modern iPhone, and one of the app's columns on its own, each drawing a screen laid out at the device's own size and scaled to the room it is given.
  *
  * A screen inside is laid out at the size the app draws at (a 1280 by 800
- * window, a 393 by 852 phone), so its rows, bars, and type keep the app's
+ * window, a 393 by 852 phone, a 500 by 700 panel), so its rows, bars, and type keep the app's
  * own proportions, and the device scales it to fit, measuring its own box
  * rather than the viewport. The window wears the app's frame (the sidebar's
  * ground around the sheet) and three quiet lights; the phone a thin even
- * bezel, deep corners, and the Dynamic Island. Neither is ever pressed: what
+ * bezel, deep corners, and the Dynamic Island; the panel, one column of the
+ * app lifted out of its window, the window's edge and corners alone. None is ever pressed: what
  * they hold is inert, and a reader is told only the device's name.
  */
 
@@ -17,6 +18,7 @@ import { cssCustomProperties } from "../../css.js";
 const SCREEN = {
   WINDOW: { WIDTH: 1280, HEIGHT: 800 },
   PHONE: { WIDTH: 393, HEIGHT: 852 },
+  PANEL: { WIDTH: 500, HEIGHT: 700 },
 } as const;
 
 /** How far the screen is scaled to fill `box`'s width, `width` wide as laid out; 1 until it is measured. */
@@ -79,6 +81,26 @@ export function LandingPhone({
         </div>
       </div>
       <span className="ui-landing-phone-island" aria-hidden="true" />
+    </div>
+  );
+}
+
+/** One column of the Mac app lifted out of its window, drawing `children` laid out at 500 by 700. */
+export function LandingPanel({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): React.JSX.Element {
+  const fit = useFit(SCREEN.PANEL.WIDTH);
+  return (
+    <div className="ui-landing-panel" role="img" aria-label={label}>
+      <div ref={fit.ref} className="ui-landing-panel-fit" style={fit.style}>
+        <div className="ui-landing-panel-screen" inert>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }

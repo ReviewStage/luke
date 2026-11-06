@@ -131,8 +131,6 @@ export interface SettingsSearchEntry {
  * schema's — each entry says whether its row is drawn right now, judged from
  * this same record — so nothing here restates a condition a page branches on.
  * Beside it, the workspace the Workspace page shows, absent while it draws none.
- * An integration's tools are not here: the Integrations page's own filter
- * finds them (`settings/integrations-page.tsx`).
  */
 export type SettingsSearchInput = SettingsRowsInput & {
   workspace?: Workspace | undefined;

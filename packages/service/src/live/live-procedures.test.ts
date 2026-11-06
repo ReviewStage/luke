@@ -52,11 +52,7 @@ import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { taskCommentsLiveAnswerSchema } from "@repo/features/description-comment-live";
 import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
-import {
-  hostsLiveAnswerSchema,
-  hostsLiveRowsSchema,
-  hostsOfLiveRows,
-} from "@repo/features/host-live";
+import { HOSTS_READ, hostsOfLiveRows } from "@repo/features/host-live";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
   installedSkillsLiveAnswerSchema,
@@ -1618,8 +1614,8 @@ it.layer(getTestDB())("the account's hosts' live read", (it) => {
 
         const polled = yield* ask({ bearer: owner, path: "/api/live/hosts" });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(hostsLiveAnswerSchema)(polled.body);
-        const { hosts } = Schema.decodeUnknownSync(hostsLiveRowsSchema)({
+        const answer = Schema.decodeUnknownSync(HOSTS_READ.answer)(polled.body);
+        const { hosts } = Schema.decodeUnknownSync(HOSTS_READ.rows)({
           hosts: answer.queries.hosts.rows,
         });
 

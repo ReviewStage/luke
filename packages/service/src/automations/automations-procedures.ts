@@ -6,7 +6,7 @@ import {
 } from "@repo/database/models/automation-store";
 import { Effect, Option } from "effect";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { SERVER_AUTOMATION_SOURCE } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -44,7 +44,7 @@ import {
  *
  * "Run now" records a manual firing under the client's key and acts on it
  * at once, through the same guards and the same start a scheduled run
- * takes (`automations/automation-runs.ts`), reaching eve as the developer under
+ * takes (`automations/automation-runs.ts`), reaching the agent's sessions as the developer under
  * the request's own bearer; the same key again answers the run it made. A
  * run's agent is summarized with its status as the agent's tab reads it.
  */
@@ -143,9 +143,9 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
           Option.isSome(readable) ? HOSTED_REFUSAL.NOT_PERMITTED : HOSTED_REFUSAL.NOT_FOUND,
         );
       }
-      // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
+      // Note that the run reaches the agent's sessions as this request's caller, whoever made the automation, as a Start does.
       const ran = yield* runAutomationNowAs(userId, automation.value, key, () =>
-        routedSessions<EveTypedTurn>(userId),
+        routedSessions<TypedTurn>(userId),
       );
       return {
         status: ran.made ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,

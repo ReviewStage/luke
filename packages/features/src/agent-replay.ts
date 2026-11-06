@@ -1,7 +1,7 @@
 /**
  * agent-replay.ts -- a coding agent's transcript replayed in the first message of an agent started from it: as the service writes it, and as the desktop reads it back.
  *
- * eve opens a session with a user message and nothing before it, so an
+ * An agent's session opens on a user message and nothing before it, so an
  * agent started from another, to continue it or to fork it at one of its
  * messages, is handed that agent's transcript inside its first message:
  * the brief, then the replay under `REPLAY_HEADING`, then the developer's

@@ -123,13 +123,13 @@ import {
 } from "./coder-host/stop.js";
 import { startedFromBefore } from "./coder-host/takeover.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import type { SandboxStopReach } from "./session-sandboxes.js";
+import type { TypedTurn } from "./sessions/agent-sessions.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
 import { listedPage } from "./workspace-agents.js";
-import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
+import { runOnMacStanding } from "./workspace-tools.js";
 
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
@@ -203,7 +203,7 @@ const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return txid === undefined ? { agent } : { agent, txid };
 });
 
-/** The eve session alone of the agent the path names, as `reachedAgentSession` reads it. */
+/** The session alone of the agent the path names, as `reachedAgentSession` reads it. */
 const reachedSession = (userId: string, id: string) =>
   Effect.map(reachedAgentSession(userId, id), ({ sessionId }) => sessionId);
 
@@ -298,17 +298,14 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
     },
   });
-  // Which of our own tools the agent is offered, as the catalog offers them, and whether its `run_on_mac` would run now.
+  // Whether the agent's `run_on_mac` would run now.
   const workspaceToolsOf = (userId: string, agentId: string) =>
     Effect.gen(function* () {
       const { agent, target } = yield* reachedAgentById(userId, agentId);
       // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
       const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
       if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return {
-        tools: yield* offeredWorkspaceTools(agent),
-        runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
-      };
+      return { runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)) };
     });
   return {
     /**
@@ -367,12 +364,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * An agent started on the task, or the one a retry under the same key
      * already started, on the one start path (`coder-host/start.ts`),
-     * reaching eve as the developer.
+     * reaching the agent's sessions as the developer.
      */
     start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const started = yield* startRequestedAgent(
-        routedSessions<EveTypedTurn>(context.userId),
+        routedSessions<TypedTurn>(context.userId),
         context.userId,
         { taskId },
         input.body,
@@ -411,7 +408,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       }
       const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
       const started = yield* startRequestedAgent(
-        routedSessions<EveTypedTurn>(context.userId),
+        routedSessions<TypedTurn>(context.userId),
         context.userId,
         placeOfAgent(source),
         input.body,
@@ -502,7 +499,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       if ("addRepository" in body) {
         // The member adds it as `update_agent` does, and the agent hears it in its conversation.
         const added = yield* addAgentRepository({ userId }, agent, body.addRepository, {
-          eve: yield* routedSessions<EveTypedTurn>(userId),
+          agentSessions: yield* routedSessions<TypedTurn>(userId),
           writer,
           clientKey: randomUUID(),
         });
@@ -521,11 +518,11 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * The agent deleted for good, by the steps a task's delete takes for
      * each of its agents (`tasks-procedures.ts`): stopped for good first,
-     * then, under its conversation's lock, its eve session retired
+     * then, under its conversation's lock, its session retired
      * (`retire-sessions.ts`), the words said on its calls deleted, its row
      * deleted, and its conversation stamped deleted for the purge. Any
      * member who reaches the agent may delete it, as any member may delete
-     * a task. An eve that refuses the Stop, an agent with a turn still
+     * a task. A harness that refuses the Stop, an agent with a turn still
      * coming that no Stop can name yet, or one a message woke after the
      * Stop, stands and is refused as not ready.
      */
@@ -543,7 +540,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { deleted: true as const, txid: deleted.value.txid };
     }),
-    /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
+    /** The agent stopped: the harness's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
       yield* stoppedAgent(writer, userId, agent);

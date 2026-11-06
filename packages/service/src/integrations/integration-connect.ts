@@ -86,7 +86,7 @@ export class IntegrationConnectFailure extends Data.TaggedError("IntegrationConn
   }
 }
 
-/** One account's token as Connect issued it; the token itself travels sealed until the one place that hands it to eve. */
+/** One account's token as Connect issued it; the token itself travels sealed until it is handed to the call that sends it to the provider. */
 export interface IntegrationToken {
   readonly token: Redacted.Redacted;
   /** When it stops being good, in milliseconds since the epoch. */

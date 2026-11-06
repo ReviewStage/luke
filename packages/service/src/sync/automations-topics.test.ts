@@ -210,7 +210,11 @@ it.layer(getTestDB())("what moves a workspace's automations notifies", (it) => {
           world,
         );
         yield* wakesTheTeammate(
-          writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" }),
+          writer.enqueueTurn(target, {
+            turnId,
+            origin: TURN_ORIGIN.TYPED,
+            runtimeTurnId: "turn_0",
+          }),
           turn,
           world,
         );

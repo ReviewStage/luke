@@ -2610,7 +2610,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs seventeen sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs fifteen sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2638,10 +2638,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   queued from the last hour acted on, at most twelve a sweep and four at
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
 - `purgedPictures`: description pictures uploaded a day ago that no save named.
-- `tokenPullRequests`: the open pull requests of agents on a member's own
-  GitHub token, which no webhook reaches, read on that token, their reviews,
-  comments, and checks among them, and the agent woken with what changed
-  (`src/github/token-pull-request-sweep.ts`).
 - `agentQueues`: unpaused queues of idle agents handed on.
 - `hostPairings`: lapsed host pairings, and approved hosts that never
   collected their secret, deleted.

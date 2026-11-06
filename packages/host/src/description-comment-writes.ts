@@ -15,7 +15,6 @@ import type {
   TasksCommentAnswer,
   TasksCommentStartParams,
 } from "@repo/features/tasks-view";
-import { carried } from "@repo/gateway";
 import {
   type FieldChange,
   type Refused,
@@ -23,7 +22,6 @@ import {
   type WriteDeclaration,
   type Written,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect } from "effect";
 import { COMMENT_THREAD, type CommentThreadRow } from "./description-comment-reads.js";
 
@@ -200,14 +198,14 @@ function writtenOf(
   planId: string,
   answer: TasksCommentAnswer,
   made: boolean,
-): Written<FieldChange<CommentThreadRow>, WireValue> | Refused<WireValue> {
+): Written<FieldChange<CommentThreadRow>, TasksCommentAnswer> | Refused<TasksCommentAnswer> {
   if ("deleted" in answer) {
-    return { answer: carried(answer), txid: answer.txid, taken: () => ROW_GONE };
+    return { answer, txid: answer.txid, taken: () => ROW_GONE };
   }
-  if (!("thread" in answer)) return { refused: carried(answer) };
+  if (!("thread" in answer)) return { refused: answer };
   const { thread } = answer;
   return {
-    answer: carried(answer),
+    answer,
     txid: answer.txid,
     taken: made ? { made: { ...thread, taskId: planId } } : () => thread,
   };
@@ -220,7 +218,7 @@ export function descriptionCommentWrites(dependencies: DescriptionCommentWritesD
     CommentThreadRow,
     FieldChange<CommentThreadRow>,
     TasksCommentStartParams,
-    WireValue
+    TasksCommentAnswer
   > = {
     kind: COMMENT_THREAD,
     // Note that a start naming no id draws nothing, so it answers as the service does.
@@ -233,7 +231,7 @@ export function descriptionCommentWrites(dependencies: DescriptionCommentWritesD
     CommentThreadRow,
     FieldChange<CommentThreadRow>,
     TasksCommentActParams,
-    WireValue
+    TasksCommentAnswer
   > = {
     kind: COMMENT_THREAD,
     keys: ({ threadId }) => [threadId],

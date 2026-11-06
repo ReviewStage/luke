@@ -10,13 +10,9 @@ import {
   jsonOf,
 } from "./account-call.js";
 import type { WorkspaceTokenRepository } from "./github-repositories-wire.js";
-import {
-  askHosted,
-  askLive,
-  type HostedClient,
-  type HostedFailure,
-  hostedClient,
-} from "./hosted-link.js";
+import { hostedCall } from "./hosted-call.js";
+import { spelledFailure } from "./hosted-failure.js";
+import { askLive, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import {
@@ -39,8 +35,10 @@ import {
   workspaceSlackBotRepositoryRequestSchema,
   workspaceSlackBotRequestSchema,
 } from "./slack-bot-wire.js";
+import type { TaskCallResult } from "./task-client.js";
 import {
   WORKSPACE_CALL_FAILURE,
+  WORKSPACE_RENAMES,
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "./workspace-call.js";
@@ -89,7 +87,9 @@ import {
  * nothing, because the one thing a caller does without it is keep the
  * workspaces it last read; every other call answers a result, because its
  * caller draws why it did not happen: the account's role does not allow
- * it, the workspace is not one it is in, or no answer came.
+ * it, the workspace is not one it is in, or no answer came. Each procedure
+ * is asked through `hostedCall`, so a refusal is read as its contract
+ * declares it, in the words `workspace-call.ts` derives from them.
  */
 
 export interface HostedWorkspaceClientOptions {
@@ -104,37 +104,46 @@ export interface HostedWorkspaceClientOptions {
 
 const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
-/** The refusals a workspace call names, by the service's own word for each. */
-const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
-  [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
-  [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
-  [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
-  [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED, WORKSPACE_CALL_FAILURE.SLUG_MALFORMED],
-  [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED, WORKSPACE_CALL_FAILURE.SLUG_RESERVED],
-  [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN, WORKSPACE_CALL_FAILURE.SLUG_TAKEN],
-]);
+/** The workspace failure a refusal is read as, where it is one a workspace call names. */
+function workspaceFailureOf(refusal: HostedApiError): WorkspaceCallFailure | undefined {
+  const failure = spelledFailure(refusal, { as: WORKSPACE_RENAMES });
+  return Object.values(WORKSPACE_CALL_FAILURE).find((each) => each === failure);
+}
 
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-  const failure = refusal === undefined ? undefined : REFUSALS.get(refusal);
+  const failure = refusal === undefined ? undefined : workspaceFailureOf(refusal);
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
+/** How a call failed, as `hostedCall` answers it beside the procedure's output, which never carries a failure. */
+type Failed<Answered> = Extract<Answered, { readonly failure: string }>;
+
+/** Whether a call's answer is how it failed rather than its output. */
+function failedCall<Answered extends object>(answered: Answered): answered is Failed<Answered> {
+  return "failure" in answered;
+}
+
 /**
- * A procedure's answer picked, or the refusal it failed with where it is one
- * named here; unanswered for everything else.
+ * A procedure's answer (`hostedCall`) as a result: its output picked, or
+ * why it failed, as the result shipped: its failure alone, the facts beneath
+ * an unanswered call and a refusal's fields left out. The result's failure
+ * is the call's own, so
+ * a method answering a workspace result holds each to the workspace's words.
  */
-function hostedResult<Answer, Picked>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-  pick: (answer: Answer) => Picked,
-): Effect.Effect<WorkspaceCallResult<Picked>, never, HttpClient.HttpClient> {
-  return Effect.match(asked, {
-    onSuccess: (answer): WorkspaceCallResult<Picked> => ({ ok: true, answer: pick(answer) }),
-    onFailure: (failed): WorkspaceCallResult<Picked> => {
-      const failure = failed._tag === "HostedRefused" ? REFUSALS.get(failed.refusal) : undefined;
-      return failure === undefined ? UNANSWERED : { ok: false, failure };
-    },
+function resultOf<Answered extends object, Picked>(
+  called: Effect.Effect<Answered, never, HttpClient.HttpClient>,
+  pick: (answer: Exclude<Answered, Failed<Answered>>) => Picked,
+): Effect.Effect<
+  TaskCallResult<Picked, Failed<Answered>["failure"]>,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.map(called, (answered) => {
+    // SAFETY: an answer that carries a failure is how the call failed, and every other one is the procedure's output.
+    if (failedCall(answered)) return { ok: false, failure: answered.failure } as const;
+    return { ok: true, answer: pick(answered as Exclude<Answered, Failed<Answered>>) } as const;
   });
 }
 
@@ -158,7 +167,7 @@ function liveResult<Answer>(
     onFailure: (failed): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => {
       if (failed._tag !== "HostedRefused") return UNANSWERED;
       if (failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN) return LIVE_SIGNED_OUT;
-      const failure = REFUSALS.get(failed.refusal);
+      const failure = workspaceFailureOf(failed.refusal);
       return failure === undefined ? UNANSWERED : { ok: false, failure };
     },
   });
@@ -295,8 +304,8 @@ export class HostedWorkspaceClient {
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(workspaceCreateRequestSchema)({ name }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaces.create, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaces.create, admitted),
       (answer) => answer.workspace,
     );
   }
@@ -310,8 +319,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceRenameRequestSchema)({ workspaceId, name }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaces.rename, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaces.rename, admitted),
       (answer) => answer.workspace,
     );
   }
@@ -326,8 +335,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceExperimentSetRequestSchema)({ workspaceId, experiment, on }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaces.setExperiment, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaces.setExperiment, admitted),
       (answer) => answer.workspace,
     );
   }
@@ -341,8 +350,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlugSetRequestSchema)({ workspaceId, slug }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaces.setSlug, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaces.setSlug, admitted, { as: WORKSPACE_RENAMES }),
       (answer) => answer.workspace,
     );
   }
@@ -356,8 +365,8 @@ export class HostedWorkspaceClient {
       readEither(workspacePhotoSetRequestSchema)({ workspaceId, photo }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaces.setPhoto, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaces.setPhoto, admitted),
       (answer) => answer.workspace,
     );
   }
@@ -370,8 +379,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceGithubRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceGithub.connect, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceGithub.connect, admitted),
       (answer) => answer.url,
     );
   }
@@ -384,8 +393,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceGithubRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceGithub.disconnect, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceGithub.disconnect, admitted),
       (answer) => answer.workspace,
     );
   }
@@ -398,8 +407,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSentryRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSentry.install, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSentry.install, admitted),
       (answer) => answer.url,
     );
   }
@@ -413,8 +422,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSentryDisconnectRequestSchema)({ workspaceId, installationId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSentry.disconnect, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSentry.disconnect, admitted),
       (answer) => answer,
     );
   }
@@ -426,8 +435,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSlackBot.read, {
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSlackBot.read, {
         [WORKSPACE_SLACK_BOT_QUERY.WORKSPACE_ID]: admitted.workspaceId,
       }),
       (answer) => answer,
@@ -442,8 +451,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSlackBot.connect, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSlackBot.connect, admitted),
       (answer) => answer,
     );
   }
@@ -456,8 +465,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSlackBot.disconnect, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSlackBot.disconnect, admitted),
       (answer) => answer,
     );
   }
@@ -471,8 +480,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlackBotNotificationsRequestSchema)({ workspaceId, notifications }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSlackBot.notifications, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSlackBot.notifications, admitted),
       (answer) => answer,
     );
   }
@@ -485,8 +494,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlackBotRepositoryRequestSchema)(params),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSlackBot.repository, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSlackBot.repository, admitted, { as: WORKSPACE_RENAMES }),
       (answer) => answer,
     );
   }
@@ -499,8 +508,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceSlackBotChannelRequestSchema)(params),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSlackBot.channel, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.workspaceSlackBot.channel, admitted, { as: WORKSPACE_RENAMES }),
       (answer) => answer,
     );
   }
@@ -544,8 +553,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceLeaveRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.github.tokenRepositories, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.github.tokenRepositories, admitted),
       (answer) => answer.repositories,
     );
   }
@@ -568,8 +577,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceTokenRepositoryRequestSchema)({ workspaceId, repository, added }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.github.setTokenRepository, admitted),
+    return resultOf(
+      hostedCall(this.#hosted.github.setTokenRepository, admitted, { as: WORKSPACE_RENAMES }),
       (answer) => answer.repositories,
     );
   }
@@ -583,8 +592,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceMemberRemovalSchema)({ workspaceId, userId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaces.removeMember, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaces.removeMember, admitted),
       (answer) => answer.members,
     );
   }
@@ -599,8 +608,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceMemberRoleSchema)({ workspaceId, userId, role }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaces.changeRole, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaces.changeRole, admitted),
       (answer) => answer.members,
     );
   }
@@ -614,8 +623,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceTransferSchema)({ workspaceId, userId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaces.transfer, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaces.transfer, admitted),
       (answer) => answer.members,
     );
   }
@@ -629,8 +638,8 @@ export class HostedWorkspaceClient {
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.map(
-      hostedResult(
-        askHosted(this.#hostedInSession.workspaces.leave, admitted),
+      resultOf(
+        hostedCall(this.#hostedInSession.workspaces.leave, admitted),
         (answer) => answer.workspaceId,
       ),
       (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
@@ -647,8 +656,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceInviteRequestSchema)({ workspaceId, email, role }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaceInvitations.invite, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaceInvitations.invite, admitted),
       (answer) => answer.invitation,
     );
   }
@@ -666,8 +675,8 @@ export class HostedWorkspaceClient {
       readEither(workspaceInvitationCancelSchema)({ workspaceId, invitationId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaceInvitations.cancel, admitted),
+    return resultOf(
+      hostedCall(this.#hostedInSession.workspaceInvitations.cancel, admitted),
       (answer) => answer.invitations,
     );
   }

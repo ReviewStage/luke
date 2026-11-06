@@ -25,8 +25,8 @@ import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
+import type { SessionTurn } from "../sessions/agent-sessions.js";
 import { experimentOnSinceIn } from "../workspace-experiment-on.js";
 import {
   handedAfterCompaction,
@@ -41,7 +41,7 @@ import {
 
 /** The turn opening: its kind, as its request named it, and its store id. */
 export interface CoderTurn {
-  readonly kind: EveHostTurn | undefined;
+  readonly kind: SessionTurn | undefined;
   readonly turnId: string | undefined;
 }
 

@@ -262,7 +262,7 @@ export interface FakeSandboxScenario {
   readonly startExit?: number;
   /** Whether every call is unavailable, as Vercel answering the status given. */
   readonly unavailable?: number;
-  /** Whether every resume is unavailable, as Vercel answering the status given. */
+  /** Whether every resume is unavailable, as Vercel answering the status given, a reopen through `getOrCreate` among them. */
   readonly resumeUnavailable?: number;
   /** The error code Vercel's body names on that refusal, where it names one. */
   readonly resumeCode?: string;
@@ -308,6 +308,15 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     scenario.unavailable === undefined
       ? undefined
       : Effect.fail(new SandboxUnavailable({ status: scenario.unavailable }));
+  const resumeRefused = () =>
+    scenario.resumeUnavailable === undefined
+      ? undefined
+      : Effect.fail(
+          new SandboxUnavailable({
+            status: scenario.resumeUnavailable,
+            ...(scenario.resumeCode === undefined ? undefined : { code: scenario.resumeCode }),
+          }),
+        );
   const listed = (): OpenedSandbox => ({
     name,
     status,
@@ -330,20 +339,11 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     listTagged: (sessionId) =>
       refused() ??
       Effect.succeed(sessionId === scenario.sessionId && status !== undefined ? [listed()] : []),
-    resume: () =>
-      refused() ??
-      (scenario.resumeUnavailable === undefined
-        ? undefined
-        : Effect.fail(
-            new SandboxUnavailable({
-              status: scenario.resumeUnavailable,
-              ...(scenario.resumeCode === undefined ? undefined : { code: scenario.resumeCode }),
-            }),
-          )) ??
-      resumed(),
+    resume: () => refused() ?? resumeRefused() ?? resumed(),
     // A sandbox whose snapshot is gone is made again under its name, a fresh disk where no browser runs.
     getOrCreate: (ask, onCreate) =>
       refused() ??
+      resumeRefused() ??
       (scenario.snapshotGone === true && status !== "running"
         ? Effect.promise(async () => {
             creates.push(ask);

@@ -7,7 +7,7 @@
  *
  * Each agent runs in a sandbox of its own, so what the source never
  * committed and pushed would be lost to the agent started from it. As that
- * Start is made, the service reaches the source's sandbox by its eve
+ * Start is made, the service reaches the source's sandbox by its
  * session's tag (`../vercel-sandbox-api.ts`), wakes it where it stopped, as
  * the Terminal tab's resume does, and records its checkout whole: what it
  * committed, what it changed, and every file it made that git does not
@@ -96,7 +96,7 @@ export type SnapshotOutcome =
 export interface SnapshotAsk<R> {
   /** The account whose agent the source is, under which its sandbox's firewall launch is kept. */
   readonly userId: string;
-  /** The eve session the source's sandbox is tagged with. */
+  /** The session the source's sandbox is tagged with. */
   readonly sessionId: string;
   readonly branch: string;
   readonly message: string;

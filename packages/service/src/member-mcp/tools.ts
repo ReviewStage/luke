@@ -685,12 +685,12 @@ const MEMBER_WRITER = storeWriter({ tools: CODER_TOOL_SET });
  */
 const memberWriteCall = (read: AgentReadCall) =>
   Effect.gen(function* () {
-    const eveAs = yield* sessionsRouter;
+    const agentSessionsAs = yield* sessionsRouter;
     const environment = yield* HostedEnvironment;
     const call: AgentCall = {
       ...read,
-      eve: eveAs(callerUserId(read.caller)),
-      eveAs,
+      agentSessions: agentSessionsAs(callerUserId(read.caller)),
+      agentSessionsAs,
       writer: MEMBER_WRITER,
       clientKey: randomUUID(),
       summaryModel: (owner, chosen, effort) =>

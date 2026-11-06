@@ -2,7 +2,7 @@
  * claude-code-sessions.ts -- a coding agent's sessions on Claude Code: the runner in its Claude Code mode, launched on the account's setup-token.
  *
  * The `claude_code` implementation of `AgentSessions`
- * (`eve-host/eve-sessions.ts`), on the launch machinery every native
+ * (`sessions/agent-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
  * runner's config names the image's `claude` and appends our coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
@@ -52,11 +52,10 @@ import { ownApiKeyOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
 import { CREDENTIAL_RENEWAL, LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { LAUNCH_SWAP } from "../sandbox-firewall.js";
+import { KEY_REFUSAL, PLAN_REFUSAL, type SessionTurn } from "../sessions/agent-sessions.js";
 import { BEARER_PREFIX } from "../workspace-mcp/bearer.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -316,7 +315,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
 }
 
 /** The sessions for one account, over the calling fiber's services. */
-export const claudeCodeSessions = <Turn extends EveHostTurn = EveHostTurn>(
+export const claudeCodeSessions = <Turn extends SessionTurn = SessionTurn>(
   options: RunnerSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);

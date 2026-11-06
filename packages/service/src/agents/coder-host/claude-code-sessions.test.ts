@@ -108,17 +108,17 @@ import { AGENT_DRIVE, agentDriveName } from "../agent-drive.js";
 import { AGENT_TAG, SANDBOX_NAME } from "../agent-sandbox-open.js";
 import { BASE_DRIVE } from "../base-drive.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  KEY_REFUSAL,
-  PLAN_REFUSAL,
-} from "../eve-host/eve-sessions.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
+import {
+  KEY_REFUSAL,
+  PLAN_REFUSAL,
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+} from "../sessions/agent-sessions.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { AgentImage } from "./agent-image.js";
@@ -318,7 +318,7 @@ const turnUnderWay = (userId: string, agent: Agent) =>
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     yield* writer.enqueueTurn(
       { userId, conversationId: agent.conversationId },
-      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+      { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
     );
     return turnId;
   });
@@ -582,8 +582,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const opened = yield* sessions.open(message(agent, "Fix the invitations.", lineId));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const [sandbox] = api.sandboxes;
         assert.ok(sandbox !== undefined);
         assert.equal(sandbox.image, IMAGE);
@@ -752,7 +752,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const opened = yield* sessions.open(message(agent, "Triage it."));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         const skills = api.uploads.find((upload) =>
           [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
         );
@@ -836,7 +836,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* markPlan(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt);
         const limited = runnerSandboxApi();
         assert.deepEqual(yield* openOn(limited), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
           planResetsAt: resetsAt.getTime(),
@@ -847,7 +847,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const reset = runnerSandboxApi();
         const live = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(reset)));
         const reopened = yield* live.open(message(agent, "Go."));
-        assert.ok(reopened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(reopened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.deepEqual(
           anthropicSwaps(reset, reset.sandboxes[0]?.currentSessionId).map((swap) => swap.sets),
           [`Bearer ${PLAN_TOKEN}`],
@@ -857,7 +857,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
         const written = (yield* launchLines(reset.commands[0])).length;
         assert.deepEqual(yield* live.send(reopened.sessionId, message(agent, "Also the emails.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
@@ -865,7 +865,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const refused = runnerSandboxApi();
         assert.deepEqual(yield* openOn(refused), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
@@ -906,7 +906,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(signedOut)),
         );
         const refused = yield* without.open(message(agent, "Go."));
-        assert.equal(refused.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(refused.outcome, SESSION_SEND_OUTCOME.FAILED);
         assert.equal("planRefusal" in refused && refused.planRefusal, PLAN_REFUSAL.SIGNED_OUT);
         assert.deepEqual(signedOut.commands, []);
 
@@ -944,7 +944,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(machines),
           Effect.provide(services(onKey)),
         );
-        assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(
+          (yield* keyed.open(message(agent, "Go."))).outcome,
+          SESSION_SEND_OUTCOME.ACCEPTED,
+        );
         const [launch] = yield* deviceAgentLinesWaiting(userId, deviceId);
         assert.ok(launch?.kind === DEVICE_AGENT_LINE_KIND.LAUNCH);
         const claimed = Option.getOrThrow(
@@ -1021,7 +1024,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const [command] = api.commands;
         assert.ok(command !== undefined);
         // The CLI reads a placeholder where the key would stand, which the firewall swaps for the key in Anthropic's own header.
@@ -1040,7 +1043,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(visible.includes(API_KEY), false);
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
 
         yield* removeProviderKey(
           userId,
@@ -1052,7 +1055,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(gone)),
         );
         assert.deepEqual(yield* without.open(message(agent, "Go.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           keyRefusal: KEY_REFUSAL.MISSING,
         });
@@ -1112,7 +1115,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         assert.deepEqual(yield* sessions.open(message(started.value.agent, "Go.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           keyRefusal: KEY_REFUSAL.UNREADABLE,
         });
@@ -1129,7 +1132,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ),
         );
         const opened = yield* onPreview.open(message(started.value.agent, "Go."));
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         const placeholder = preview.commands[0]?.env[RUNNER_ENV.API_KEY];
         assert.deepEqual(anthropicSwaps(preview, preview.sandboxes[0]?.currentSessionId), [
           { header: "x-api-key", at: placeholder, sets: standIn },
@@ -1166,12 +1169,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const laterId = randomUUID();
 
         const opened = yield* sessions.open(withFiles("Read the spec.", firstId, "Spec v2.pdf"));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const sent = yield* sessions.send(
           opened.sessionId,
           withFiles("And this one.", laterId, "../../etc/notes.pdf"),
         );
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
 
         const firstPath = `/tmp/agent-attachments/${firstId}/2-Spec-v2.pdf`;
         const laterPath = `/tmp/agent-attachments/${laterId}/2-etc-notes.pdf`;
@@ -1212,7 +1215,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const { userId, agent } = yield* openAgent;
       const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
       const lineId = randomUUID();
       yield* updateAgentChoice(userId, agent.id, {
         model: "anthropic/claude-sonnet-5.5",
@@ -1227,11 +1230,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const canceled = yield* sessions.cancel(opened.sessionId, turnId);
 
       assert.deepEqual(sent, {
-        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        outcome: SESSION_SEND_OUTCOME.ACCEPTED,
         sessionId: opened.sessionId,
         deliveryId: lineId,
       });
-      assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+      assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
       const [model, line, stop] = ((yield* launchLines(api.commands[0])) as InputLine[]).slice(2);
       // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
@@ -1260,7 +1263,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         yield* updateAgentChoice(userId, agent.id, {
           model: "anthropic/claude-opus-5.5-fast",
           effort: "low",
@@ -1291,7 +1294,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const turnId = yield* turnUnderWay(userId, agent);
         const kept = keptAfterResponse();
 
@@ -1312,7 +1315,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* TestClock.adjust("1 second");
         yield* across(Fiber.join(forcing), CODER.RUNNER_LEASE.POLL, 5);
 
-        assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+        assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.ACCEPTED);
         assert.equal(before.status, TURN_STATUS.QUEUED);
         assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.CANCELED);
         assert.equal(api.commands.length, 1);
@@ -1327,7 +1330,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const { userId, agent } = yield* openAgent;
       const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
       // The turn a Stop was pressed on, then a newer one the Stop arrives during.
       const stopped = yield* turnUnderWay(userId, agent);
       yield* TestClock.adjust("1 second");
@@ -1335,7 +1338,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
       const canceled = yield* sessions.cancel(opened.sessionId, stopped);
 
-      assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.ok(
         ((yield* launchLines(api.commands[0])) as InputLine[]).every(
           (line) => line.type !== INPUT_LINE.STOP,
@@ -1354,7 +1357,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
         // The events route records the CLI's session from the runner's init, and the run ends.
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
@@ -1371,12 +1374,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes[0]?.status, "stopped");
         assert.equal(
           (yield* sessions.cancel(opened.sessionId, "turn_0")).outcome,
-          EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN,
+          SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN,
         );
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.sandboxes[0]?.status, "running");
         assert.equal(api.commands.length, 2);
@@ -1419,7 +1422,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         sequence.next = 42;
         yield* runnerTook(agent.id);
@@ -1436,7 +1439,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .send(opened.sessionId, message(agent, "Now the emails."))
           .pipe(Effect.provide(kept.layer));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes[0]?.status, "stopped");
         assert.equal(api.commands.length, 1);
         yield* across(kept.run, CODER.RESUME_WHILE_ENDING.SPACING, 4);
@@ -1462,7 +1465,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const sequence = { next: 0 };
       const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
       assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
       sequence.next = 42;
       yield* runnerTook(agent.id);
@@ -1508,7 +1511,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .pipe(Effect.provide(kept.layer));
         yield* across(kept.run, CODER.RESUME_WHILE_ENDING.SPACING, 4);
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 2);
         assert.equal(api.sandboxes.length, 1);
         const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
@@ -1583,8 +1586,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
-        assert.notEqual(failed.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.notEqual(failed.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         const relaunch = api.commands.at(-1);
         const [config] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig];
         assert.equal(config.resume, undefined);
@@ -1612,7 +1615,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         yield* runnerTook(agent.id);
         sequence.next = 42;
         const first = api.commands[0];
@@ -1628,7 +1631,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ],
         });
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes[0]?.status, "running");
         assert.equal(api.commands.length, 2);
         const relaunch = api.commands[1];
@@ -1650,12 +1653,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         // The runner took its first message, and a message queued as it ended was never read.
         yield* runnerTook(agent.id);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         sequence.next = 9;
 
         const ended = yield* runnerEnded({
@@ -1708,7 +1711,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
 
         const ended = yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
@@ -1732,7 +1735,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         // The runner took its message, and its events were applied.
         yield* runnerTook(agent.id);
         sequence.next = 1;
@@ -1759,7 +1762,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(halted, true);
         assert.ok(Option.isNone(recordAfterHalt));
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.sandboxes[0]?.deleted, false);
         assert.deepEqual(haltedWith, { type: INPUT_LINE.STOP, launch: 0 });
@@ -1786,7 +1789,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
 
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
       assert.equal(api.sandboxes[0]?.timeout, CODER.SANDBOX_TIMEOUT_MS);
     }),
   );
@@ -1816,7 +1819,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           const sequence = { next: 0 };
           const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
           const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-          assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+          assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
           assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
           if (stored) {
             yield* appendSessionEntries(
@@ -1839,7 +1842,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
           const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
-          assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
           assert.equal(expired.deleted, true);
           const fresh = api.sandboxes[1];
           assert.ok(fresh !== undefined);
@@ -1859,7 +1862,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           assert.equal(skillUploads(), 2);
           // The session is found again by its tag, in the new sandbox alone.
           const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
-          assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(found.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
           assert.equal(api.sandboxes.length, 2);
         }),
     );
@@ -1875,7 +1878,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         sequence.next = 42;
         yield* runnerTook(agent.id);
         yield* runnerEnded({
@@ -1891,14 +1894,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const refused = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
-        assert.deepEqual(refused, { outcome: EVE_SEND_OUTCOME.FAILED, status: 503 });
+        assert.deepEqual(refused, { outcome: SESSION_SEND_OUTCOME.FAILED, status: 503 });
         // The replacement took the expired sandbox's place under the session's name, and stands.
         const replacement = api.sandboxes[1];
         assert.ok(replacement !== undefined);
         assert.deepEqual([expired.deleted, replacement.deleted], [true, false]);
         api.hooks.runExit = undefined;
         const retried = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
-        assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(retried.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 2);
         assert.equal(replacement.status, "running");
       }),
@@ -1914,7 +1917,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
         sequence.next = 42;
         yield* runnerTook(agent.id);
@@ -1933,7 +1936,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.deepEqual(
           [replaced.outcome, later.outcome],
-          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+          [SESSION_SEND_OUTCOME.ACCEPTED, SESSION_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(expired.deleted, false);
         assert.equal(api.sandboxes.length, 2);
@@ -1964,7 +1967,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 0 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
         const first = api.commands[0];
         assert.ok(first !== undefined);
@@ -1987,7 +1990,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         yield* Effect.promise(async () => {
           for (let turn = 0; turn < 50; turn += 1) {
             await new Promise<void>((settle) => setImmediate(settle));
@@ -2015,11 +2018,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .open(message(agent, "Fix the invitations."))
           .pipe(Effect.provide(kept.layer));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.deepEqual([api.sandboxes.length, api.commands.length], [0, 0]);
         yield* kept.run;
         assert.deepEqual([api.sandboxes.length, api.commands.length], [1, 1]);
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes[0]?.tags.sessionId, opened.sessionId);
 
         const unplanned = yield* openAgentWithoutPlan;
@@ -2032,7 +2035,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .open(message(unplanned.agent, "Go."))
           .pipe(Effect.provide(refusedKept.layer));
         assert.deepEqual(refused, {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
@@ -2051,7 +2054,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 3 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
         // The runner took its message, its events were applied, and it exited.
@@ -2061,7 +2064,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 2);
         assert.equal(api.commands[1]?.sandboxSessionId, first.sandboxSessionId);
         assert.equal((yield* launchLines(first)).length, 2);
@@ -2078,7 +2081,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sequence = { next: 3 };
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
         // The runner took its message, its events were applied, and it exited.
@@ -2103,7 +2106,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.deepEqual(
           sent.map((each) => each.outcome),
-          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+          [SESSION_SEND_OUTCOME.ACCEPTED, SESSION_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(api.commands.length, 2);
         assert.deepEqual(
@@ -2141,7 +2144,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api, http)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         holding = true;
 
         const one = yield* Effect.forkChild(
@@ -2155,7 +2158,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.deepEqual(
           sent.map((each) => each.outcome),
-          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+          [SESSION_SEND_OUTCOME.ACCEPTED, SESSION_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(api.commands.length, 1);
         assert.deepEqual(
@@ -2180,7 +2183,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const turnId = yield* turnUnderWay(userId, agent);
         api.failCommandReads.remaining = 3;
 
@@ -2189,7 +2192,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const canceled = yield* sessions.cancel(opened.sessionId, turnId);
         const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Again."));
         // The fake refuses the read with a 400, a status `@vercel/sandbox` never tries again.
         assert.deepEqual(canceled, { outcome: "failed", status: 400 });
@@ -2210,7 +2213,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         // A read that waits for the running command's exit is held until its reader gives up.
         api.waits.hold = true;
 
@@ -2229,7 +2232,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = sending.pollUnsafe();
         assert.ok(sent !== undefined && Exit.isSuccess(sent));
-        assert.equal(sent.value.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.value.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Now the emails."));
         assert.equal(api.commands.length, 1);
       }),
@@ -2246,7 +2249,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
@@ -2286,7 +2289,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         // Another instance's call holds the lease, as a launch elsewhere does.
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
@@ -2304,7 +2307,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.deepEqual(
           answers.map((answer) => answer.outcome),
-          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+          [SESSION_SEND_OUTCOME.ACCEPTED, SESSION_SEND_OUTCOME.ACCEPTED],
         );
         const read = yield* runnerLinesPast(userId, agent.id, {
           launch: 3,
@@ -2347,7 +2350,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         yield* runnerTook(agent.id);
         // The session's place is gone, as a reset leaves it.
         yield* sessions.reset(opened.sessionId);
@@ -2363,7 +2366,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* releaseAgentRunnerLease(agent.id, elsewhere);
         yield* kept.run;
 
-        assert.equal(answer.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(answer.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         const read = yield* runnerLinesPast(userId, agent.id, {
           launch: 4,
           after: 0,
@@ -2382,7 +2385,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // A repository agent, whose write token stands at the firewall beside its runner's swaps.
         const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
         const opened = yield* sessions.open(message(agent, "Push a branch."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
         const [command] = api.commands;
         const bearer = launchBearer(api, command, SERVICE_HOST);
@@ -2418,7 +2421,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const [sandbox] = api.sandboxes;
         assert.ok(sandbox !== undefined);
         // A send elsewhere holds the lease, as it does while it relaunches the runner.
@@ -2473,7 +2476,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           nextSequence: () => Effect.sync(() => sequence.next),
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         // The runner took its message, and its events were applied.
         yield* runnerTook(agent.id);
         sequence.next = 1;
@@ -2481,7 +2484,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Use Notion now."));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         const [first, second] = api.commands;
         assert.ok(first !== undefined && second !== undefined);
         assert.notEqual(first.exitCode, null);
@@ -2511,21 +2514,21 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
 
         const reset = yield* sessions.reset(opened.sessionId);
 
-        assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
+        assert.equal(reset.outcome, SESSION_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
         assert.ok((yield* nextSessionSandboxes(QUEUE_READ)).includes(opened.sessionId));
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
           (yield* sessions.reset(opened.sessionId)).outcome,
-          EVE_RESET_OUTCOME.NO_ACTIVE_SESSION,
+          SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION,
         );
         assert.deepEqual(yield* sessions.send(opened.sessionId, message(agent, "Hello?")), {
-          outcome: EVE_SEND_OUTCOME.RETIRED,
+          outcome: SESSION_SEND_OUTCOME.RETIRED,
         });
       }),
   );
@@ -2540,7 +2543,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         Effect.provide(services(api)),
       );
       const opened = yield* theirSessions.open(message(theirs.agent, "Their work."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
       const mySessions = yield* sessionsFor(mine.userId, { next: 0 }).pipe(
         Effect.provide(services(api)),
       );
@@ -2556,10 +2559,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const canceled = yield* mySessions.cancel(opened.sessionId, "turn_0");
       const reset = yield* mySessions.reset(opened.sessionId);
 
-      assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
-      assert.deepEqual(queuedBehind, { outcome: EVE_SEND_OUTCOME.RETIRED });
-      assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
-      assert.equal(reset.outcome, EVE_RESET_OUTCOME.NO_ACTIVE_SESSION);
+      assert.deepEqual(sent, { outcome: SESSION_SEND_OUTCOME.RETIRED });
+      assert.deepEqual(queuedBehind, { outcome: SESSION_SEND_OUTCOME.RETIRED });
+      assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.equal(reset.outcome, SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION);
       assert.equal(api.sandboxes[0]?.deleted, false);
       assert.equal((yield* launchLines(api.commands[0])).length, 2);
     }),
@@ -2576,7 +2579,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
@@ -2586,8 +2589,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const failed = yield* sessions.send(opened.sessionId, message(agent, "Again."));
         const retried = yield* sessions.send(opened.sessionId, message(agent, "Again."));
 
-        assert.equal(failed.outcome, EVE_SEND_OUTCOME.FAILED);
-        assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(failed.outcome, SESSION_SEND_OUTCOME.FAILED);
+        assert.equal(retried.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 3);
         assert.notEqual(api.commands[1]?.exitCode, null);
         const [config, line] = (yield* launchLines(api.commands[2])) as [
@@ -2606,7 +2609,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const { userId, agent } = yield* openAgent;
       const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
       api.failStdin.remaining = 1;
       api.failStdin.status = 503;
 
@@ -2616,7 +2619,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       yield* TestClock.adjust(Duration.seconds(5));
       const sent = yield* Fiber.join(sending);
 
-      assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+      assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
       const last = ((yield* launchLines(api.commands[0])) as InputLine[]).at(-1);
       assert.ok(last?.type === INPUT_LINE.MESSAGE);
@@ -2635,11 +2638,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
 
         const after = yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
 
-        assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(after.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 1);
         const [typed, typedAfter] = yield* textsOf(api.commands[0]);
         // A typed first turn opens with the time alone: the plan is its first message already.
@@ -2676,7 +2679,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .open(message(agent, "Fix the invitations."))
           .pipe(Effect.provide(logger));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.ok(
           logged.includes(
             "A Claude Code launch failed after its Start: Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused",
@@ -2788,7 +2791,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a repository agent's sandbox opens with the write token at its firewall, as eve's first write sets it, and never in a command",
+    "a repository agent's sandbox opens with the write token at its firewall, and never in a command",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2801,7 +2804,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const opened = yield* sessions.open(message(agent, "Push a branch."));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         // The repository is cloned whole, in one fetch, before the runner starts, so no fetch runs
         // beside the agent's own git.
         const clone = api.runs.findIndex(isClone);
@@ -2853,7 +2856,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The launch, then the base drive's fill, whose clone is refused too.
         yield* kept.run;
         yield* kept.run;
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.FAILED);
         const own = sandboxOfAgent(api, agent)?.currentSessionId;
         const failedRuns = api.runs.length;
@@ -2871,7 +2874,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .pipe(Effect.provide(kept.layer));
         yield* kept.run;
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         const ownAfter = (from: number) =>
           api.runs.slice(from).filter((run) => run.session === own);
         assert.equal(ownAfter(failedRuns).filter(isClone).length, 1, "cloned once");
@@ -2899,7 +2902,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const filledWithLaunch = baseDrives(api).length;
         yield* kept.run;
 
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(launched, 1);
         assert.equal(filledWithLaunch, 0);
         const own = sandboxOfAgent(api, agent);
@@ -2936,7 +2939,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .pipe(Effect.provide(kept.layer));
         yield* kept.run;
 
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const own = sandboxOfAgent(api, next);
         const drive = agentDriveName(opened.sessionId);
         assert.equal(own?.mounts?.[AGENT_DRIVE.MOUNT_PATH]?.drive, drive);
@@ -2973,7 +2976,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .pipe(Effect.provide(kept.layer));
         yield* kept.run;
         yield* kept.run;
-        assert.ok(first.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(first.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const source = agentDriveName(first.sessionId);
         const continued = yield* anotherAgent(userId, agent, undefined, {
           agentId: agent.id,
@@ -2987,7 +2990,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .pipe(Effect.provide(kept.layer));
         yield* kept.run;
 
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const own = sandboxOfAgent(api, continued);
         const drive = agentDriveName(opened.sessionId);
         assert.equal(own?.mounts?.[AGENT_DRIVE.MOUNT_PATH]?.drive, drive);
@@ -3030,7 +3033,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const opened = yield* sessions.open(message(continued, "Go on."));
 
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const [config] = (yield* launchLines(api.commands[0])) as [ClaudeCodeConfig, InputLine];
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.fork, true);
@@ -3060,7 +3063,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(own?.image, IMAGE);
         const clone = api.runs.find((run) => run.session === own?.currentSessionId && isClone(run));
         assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         assert.equal(baseDrives(api).length, 1);
       }),
@@ -3091,7 +3094,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         clone.open();
         const opened = yield* Fiber.join(opening);
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(startedDuringClone, 0);
         assert.equal(api.commands.length, 1);
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
@@ -3106,7 +3109,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const api = runnerSandboxApi();
         const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const policiesBefore = api.policies.length;
         api.failPolicy.remaining = 1;
 
@@ -3115,7 +3118,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.deepEqual(
           [sent.outcome, later.outcome],
-          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+          [SESSION_SEND_OUTCOME.ACCEPTED, SESSION_SEND_OUTCOME.ACCEPTED],
         );
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Now the emails."));
         assert.equal(api.commands.length, 1);
@@ -3131,7 +3134,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const api = runnerSandboxApi();
         const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         api.holdPolicy.remaining = 1;
 
         const sending = yield* Effect.forkChild(
@@ -3147,7 +3150,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* TestClock.adjust(CODER.CREDENTIAL_RENEWAL);
 
         const sent = yield* Fiber.join(sending);
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
       }),
   );
   it.effect(
@@ -3163,7 +3166,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(Layer.merge(services(api), analytics.layer)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
 
         yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
         // The runner exited, its sandbox still up.

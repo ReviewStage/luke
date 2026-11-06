@@ -41,8 +41,8 @@ const makeTable = Effect.gen(function* () {
 
 /**
  * The async context a statement leaves its caller in, which is what the
- * test at the end of this file reads. eve keeps its session container in one
- * of these, so where a Drizzle statement leaves its caller is read against
+ * test at the end of this file reads. A caller may keep per-request state in
+ * one of these, so where a Drizzle statement leaves its caller is read against
  * where a raw statement on the same client leaves it.
  */
 const standing = new AsyncLocalStorage<string>();
@@ -69,7 +69,7 @@ type Statement = () => Effect.Effect<unknown, QueryError, DatabaseServices>;
 /**
  * What one caller finds standing after its own statement: it enters a context
  * of its own, yields the statement, and reads the context back one step
- * later, which is where a hook reads eve's container.
+ * later, which is where a hook reads such state.
  */
 const leftStandingAfter = (tag: string, statement: Statement) =>
   Effect.gen(function* () {

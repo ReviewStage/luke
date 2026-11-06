@@ -25,7 +25,7 @@ import {
 } from "@repo/settings";
 import type { SettingsUpdateResult } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@repo/wire";
-import { Cause, Effect, Option, Queue, type Scope, Stream } from "effect";
+import { Cause, Effect, Option, PubSub, Queue, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -73,6 +73,13 @@ export interface SettingsComposer extends Composer {
   readonly recordProductEvent: RecordProductEvent;
   emitSettingsSnapshot: (settings: SettingsUpdateResult["settings"], reporter?: string) => void;
   emitSettings: () => Effect.Effect<void>;
+  /**
+   * A pulse each time the settings are told the windows again, subscribed
+   * as it is yielded: every write, every experiment the service answers,
+   * and every sign-in, sign-out, and change of the account signed in, each
+   * of which tells them.
+   */
+  readonly told: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
   refusedSettings: (reason: string) => Effect.Effect<SettingsUpdateResult>;
   /**
    * One settings write and, when it landed, its host side effects and the
@@ -118,6 +125,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const path = yield* Path.Path;
     const { runMode, report } = kernel;
     const late = yield* lateService<SettingsLinks>();
+    // Note that a reader wants only that the settings moved since it last read them, so one pulse held is as good as many.
+    const toldPulses = yield* PubSub.sliding<void>(1);
     /**
      * One link, awaited: every reader of these is an effect of its own, so a
      * read before the merge has linked suspends until it stands rather than
@@ -379,6 +388,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         settings: carried(settings),
         ...(reporter !== undefined ? { reporter } : undefined),
       });
+      PubSub.publishUnsafe(toldPulses, undefined);
     }
 
     const emitSettings = (): Effect.Effect<void> =>
@@ -577,6 +587,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       recordProductEvent,
       emitSettingsSnapshot,
       emitSettings,
+      told: PubSub.subscribe(toldPulses).pipe(Effect.map(Stream.fromSubscription)),
       refusedSettings,
       settingsWrite,
       reconcileAccountPreferences,

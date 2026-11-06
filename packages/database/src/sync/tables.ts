@@ -158,7 +158,7 @@ export const userSync = defineSyncTable(user, {
  * A member's device, on its account's topic and, through its memberships,
  * every workspace it is in, so a Mac's new name reaches the task lists that
  * name the local agents on it, and a host's platform, machine, model, and
- * update reach Settings › Hosts (`hostsLive`), as do its enrolling, which
+ * update reach Settings › Hosts (`hostsRead`), as do its enrolling, which
  * writes its version, and its removal. Note that every other column is
  * ignored, because the device beats and registers again often, rewriting
  * when it was last seen and what it runs, and no view the capture wakes

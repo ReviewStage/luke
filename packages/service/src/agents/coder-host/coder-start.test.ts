@@ -41,14 +41,14 @@ import {
 } from "../../testing/github-app-fake.js";
 import {
   type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveFailed,
-  type EveMessage,
   PLAN_REFUSAL,
   RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  type SessionFailed,
+  type SessionMessage,
+} from "../sessions/agent-sessions.js";
 import { type StartAsk, startAgent } from "./start.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -60,9 +60,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * agent and opens nothing again; a member who did not make the workspace
  * starts one as well, an account outside it starts nothing, and a
  * repository the workspace's installation does not reach is refused before
- * eve is asked, and a Start whose session never opened leaves no agent. An agent started on a task moves it into progress from the
+ * the harness is asked, and a Start whose session never opened leaves no agent. An agent started on a task moves it into progress from the
  * backlog or to do, and on a task worked in pilot mode the first is its pilot,
- * refused to an account with Pilot off. eve is a fake at the client's boundary, GitHub a script,
+ * refused to an account with Pilot off. The agent's sessions are a fake, GitHub a script,
  * the catalog fixed, and the store PGlite. Synthetic accounts and words
  * throughout.
  */
@@ -80,20 +80,20 @@ let installationsConnected = 0;
 
 const TASK = "Find the flakiest test in CI this week and fix it.";
 
-/** eve's coding-agent service, writing down the first message of every session opened. */
-function fakeEve() {
-  const opened: EveMessage[] = [];
+/** The agent's sessions, writing down the first message of every session opened. */
+function fakeAgentSessions() {
+  const opened: SessionMessage[] = [];
   const sessions: AgentSessions = {
     open: (message) =>
       Effect.sync(() => {
         opened.push(message);
-        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
+        return { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
       }),
-    send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
-    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
-    reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+    send: () => Effect.succeed({ outcome: SESSION_SEND_OUTCOME.FAILED, status: 500 }),
+    cancel: () => Effect.succeed({ outcome: SESSION_CANCEL_OUTCOME.ACCEPTED }),
+    reset: () => Effect.succeed({ outcome: SESSION_RESET_OUTCOME.RESET }),
   };
-  return { opened, sessions, eve: Effect.succeed(sessions) };
+  return { opened, sessions, agentSessions: Effect.succeed(sessions) };
 }
 
 /** The catalog every Start is checked against. */
@@ -138,14 +138,18 @@ function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: 
  * runner names it back, and whether it has heard from another account by
  * then.
  */
-const openedLineTaken = (owner: string, conversationId: string, opened: readonly EveMessage[]) =>
+const openedLineTaken = (
+  owner: string,
+  conversationId: string,
+  opened: readonly SessionMessage[],
+) =>
   Effect.gen(function* () {
     const target = { userId: owner, conversationId };
     const lineId = opened[0]?.lineId;
     assert.ok(lineId !== undefined);
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const turnId = randomUUID();
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
+    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, runtimeTurnId: turnId });
     yield* writer.consume(target, {
       conversationId: sessionKey(conversationId),
       turnId,
@@ -179,11 +183,11 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
-        const { opened, eve } = fakeEve();
+        const { opened, agentSessions } = fakeAgentSessions();
         const ask = workspaceAsk(workspaceId);
 
-        const first = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
-        const again = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
+        const first = yield* startAgent(agentSessions, owner, ask).pipe(Effect.provide(services));
+        const again = yield* startAgent(agentSessions, owner, ask).pipe(Effect.provide(services));
 
         assert.equal(first.created, true);
         assert.deepEqual([again.created, again.agent.id], [false, first.agent.id]);
@@ -216,13 +220,15 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         const outsider = yield* openGithubUser();
         yield* connectAgentApiKeys(outsider);
         yield* openWorkspace(outsider);
-        const { opened, eve } = fakeEve();
+        const { opened, agentSessions } = fakeAgentSessions();
 
-        const theirs = yield* startAgent(eve, teammate, workspaceAsk(workspaceId)).pipe(
+        const theirs = yield* startAgent(agentSessions, teammate, workspaceAsk(workspaceId)).pipe(
           Effect.provide(services),
         );
         const refused = yield* Effect.result(
-          startAgent(eve, outsider, workspaceAsk(workspaceId)).pipe(Effect.provide(services)),
+          startAgent(agentSessions, outsider, workspaceAsk(workspaceId)).pipe(
+            Effect.provide(services),
+          ),
         );
 
         assert.equal(theirs.agent.organizationId, workspaceId);
@@ -233,14 +239,14 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a repository the workspace's installation does not reach is refused before eve is asked",
+    "a repository the workspace's installation does not reach is refused before the harness is asked",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
-        const { opened, eve } = fakeEve();
+        const { opened, agentSessions } = fakeAgentSessions();
 
         const refused = yield* Effect.result(
-          startAgent(eve, owner, workspaceAsk(workspaceId, "Acme/Elsewhere")).pipe(
+          startAgent(agentSessions, owner, workspaceAsk(workspaceId, "Acme/Elsewhere")).pipe(
             Effect.provide(services),
           ),
         );
@@ -251,7 +257,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a Start whose session never opened, eve not reached or the Start cut short before eve was asked, leaves no agent behind, and one cut short while eve was asked keeps it",
+    "a Start whose session never opened, the harness not reached or the Start cut short before it was asked, leaves no agent behind, and one cut short while it was asked keeps it",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
@@ -262,11 +268,13 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
           ),
         );
         // Each Start is held where it never gets past, and interrupted there.
-        const cutAt = (eve: (reached: Deferred.Deferred<void>) => Effect.Effect<AgentSessions>) =>
+        const cutAt = (
+          agentSessions: (reached: Deferred.Deferred<void>) => Effect.Effect<AgentSessions>,
+        ) =>
           Effect.gen(function* () {
             const reached = yield* Deferred.make<void>();
             const ask = workspaceAsk(workspaceId);
-            const starting = yield* startAgent(eve(reached), owner, ask).pipe(
+            const starting = yield* startAgent(agentSessions(reached), owner, ask).pipe(
               Effect.provide(services),
               Effect.forkChild,
             );
@@ -279,7 +287,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         );
         const whileAsking = yield* cutAt((reached) =>
           Effect.succeed({
-            ...fakeEve().sessions,
+            ...fakeAgentSessions().sessions,
             open: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
           }),
         );
@@ -303,12 +311,12 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
             reported.push(attributes);
           }),
         ]);
-        const refusing = (failed: EveFailed) =>
+        const refusing = (failed: SessionFailed) =>
           Effect.succeed<AgentSessions>({
-            ...fakeEve().sessions,
+            ...fakeAgentSessions().sessions,
             open: () => Effect.succeed(failed),
           });
-        const started = (failed: EveFailed) =>
+        const started = (failed: SessionFailed) =>
           Effect.result(
             startAgent(refusing(failed), owner, workspaceAsk(workspaceId)).pipe(
               Effect.provide(Layer.merge(services, reporting)),
@@ -316,12 +324,12 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
           );
 
         yield* started({
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 503,
           runtimeRefusal: RUNTIME_REFUSAL.NOT_HERE,
         });
         yield* started({
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 429,
           planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
         });
@@ -340,8 +348,10 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
         const openedTaken = (ask: StartAsk) =>
           Effect.gen(function* () {
-            const { opened, eve } = fakeEve();
-            const { agent } = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
+            const { opened, agentSessions } = fakeAgentSessions();
+            const { agent } = yield* startAgent(agentSessions, owner, ask).pipe(
+              Effect.provide(services),
+            );
             return yield* openedLineTaken(owner, agent.conversationId, opened);
           });
         const ranFor = (firing: AutomationFiring): StartAsk => ({
@@ -397,10 +407,10 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
         const filed = yield* made(TASK_STATUS.BACKLOG);
         const todo = yield* made(TASK_STATUS.TODO);
         const done = yield* made(TASK_STATUS.DONE);
-        const { eve } = fakeEve();
+        const { agentSessions } = fakeAgentSessions();
 
         for (const task of [filed, todo, done]) {
-          yield* startAgent(eve, owner, taskAsk(task.id)).pipe(Effect.provide(services));
+          yield* startAgent(agentSessions, owner, taskAsk(task.id)).pipe(Effect.provide(services));
         }
 
         const statusOf = (taskId: string) =>
@@ -424,10 +434,10 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
           });
         const byHand = yield* made();
         const byAutomation = yield* made();
-        const { eve } = fakeEve();
+        const { agentSessions } = fakeAgentSessions();
 
-        yield* startAgent(eve, owner, taskAsk(byHand.id)).pipe(Effect.provide(services));
-        yield* startAgent(eve, owner, {
+        yield* startAgent(agentSessions, owner, taskAsk(byHand.id)).pipe(Effect.provide(services));
+        yield* startAgent(agentSessions, owner, {
           ...taskAsk(byAutomation.id),
           automationOrigin: {
             name: "Nightly",
@@ -471,12 +481,12 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
           by: owner,
         });
         const piloted = yield* pilotTask(owner, workspaceId);
-        const { eve } = fakeEve();
+        const { agentSessions } = fakeAgentSessions();
 
-        const first = yield* startAgent(eve, owner, taskAsk(piloted.id)).pipe(
+        const first = yield* startAgent(agentSessions, owner, taskAsk(piloted.id)).pipe(
           Effect.provide(services),
         );
-        const next = yield* startAgent(eve, owner, taskAsk(piloted.id)).pipe(
+        const next = yield* startAgent(agentSessions, owner, taskAsk(piloted.id)).pipe(
           Effect.provide(services),
         );
 
@@ -488,10 +498,10 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
     Effect.gen(function* () {
       const { owner, workspaceId } = yield* openConnectedWorkspace;
       const piloted = yield* pilotTask(owner, workspaceId);
-      const { eve } = fakeEve();
+      const { agentSessions } = fakeAgentSessions();
 
       const refused = yield* Effect.result(
-        startAgent(eve, owner, taskAsk(piloted.id)).pipe(Effect.provide(services)),
+        startAgent(agentSessions, owner, taskAsk(piloted.id)).pipe(Effect.provide(services)),
       );
 
       assert.ok(Result.isFailure(refused));
@@ -551,8 +561,8 @@ const openSeveralWorkspace = () =>
 /** A Start that was refused as given, having made no agent under its key. */
 const refusedStart = (owner: string, ask: StartAsk) =>
   Effect.gen(function* () {
-    const { eve, opened } = fakeEve();
-    const refused = yield* startAgent(eve, owner, ask).pipe(
+    const { agentSessions, opened } = fakeAgentSessions();
+    const refused = yield* startAgent(agentSessions, owner, ask).pipe(
       Effect.provide(severalServices),
       Effect.flip,
     );
@@ -567,9 +577,9 @@ it.layer(getTestDB())("an agent started in several repositories", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openSeveralWorkspace();
-        const { eve } = fakeEve();
+        const { agentSessions } = fakeAgentSessions();
 
-        const started = yield* startAgent(eve, owner, {
+        const started = yield* startAgent(agentSessions, owner, {
           ...workspaceAsk(workspaceId),
           alsoRepositories: [{ repository: "acme/web" }],
         }).pipe(Effect.provide(severalServices));
@@ -586,15 +596,15 @@ it.layer(getTestDB())("an agent started in several repositories", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openSeveralWorkspace();
-        const { eve } = fakeEve();
+        const { agentSessions } = fakeAgentSessions();
         const web = `${WEB.owner}/${WEB.name}`;
-        const source = yield* startAgent(eve, owner, {
+        const source = yield* startAgent(agentSessions, owner, {
           ...workspaceAsk(workspaceId),
           alsoRepositories: [{ repository: web }],
         }).pipe(Effect.provide(severalServices));
         yield* recordAgentRepositoryHead(owner, source.agent.id, web, "agent/invite");
 
-        const continued = yield* startAgent(eve, owner, {
+        const continued = yield* startAgent(agentSessions, owner, {
           ...workspaceAsk(workspaceId),
           prompt: undefined,
           from: { agentId: source.agent.id },

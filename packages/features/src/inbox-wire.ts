@@ -72,7 +72,7 @@ import { WEBM_TYPE } from "./video-signature.js";
  * in its tab does.
  *
  * The agent posts, withdraws, and reads its items through the tools named
- * below, whose inputs are declared here so the model is shown, eve holds,
+ * below, whose inputs are declared here so the model is shown, our MCP server holds,
  * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
@@ -525,7 +525,7 @@ export type InboxForm = Extract<InboxResponse, { type: typeof INBOX_RESPONSE.FOR
  * the blocks of context under it, an image among them by its path in the
  * sandbox, the response it asks for, and whether the agent needs to hear
  * back, which it does unless it says not. The model is shown this schema
- * and eve holds the call to it.
+ * and our MCP server holds the call to it.
  */
 export const inboxPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
@@ -673,7 +673,7 @@ export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
  * always hears, and the member its ask is addressed to by their mention
  * link, read by the service rather than held to a grammar here, so a link
  * that names nothing is refused in words the model can act on. The model
- * is shown this schema and eve holds the call to it. Note that a post from
+ * is shown this schema and our MCP server holds the call to it. Note that a post from
  * an agent still holding an earlier schema may name `waits` or `channel`,
  * which the service's read drops with any other key it does not name.
  */

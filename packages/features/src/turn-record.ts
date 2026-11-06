@@ -1,7 +1,7 @@
 /**
  * turn-record.ts -- what a turn ran on and spent, read off its row as a turn's footer card says it.
  *
- * Every turn row names the model eve resolved it to and the effort it ran
+ * Every turn row names the model it was resolved to and the effort it ran
  * at where its session named one, and once it settles, the tokens its steps
  * summed and how it ended; and whether Anthropic refused a fast step of it,
  * which then ran at standard speed. A tab draws those on the card its "Worked for"

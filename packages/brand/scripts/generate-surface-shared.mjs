@@ -53,6 +53,9 @@ const MOTION_DURATION_MS = {
   QUICK: 140,
   HOVER: 70,
   PANE: 240,
+  // Motion a reader watches rather than waits on, as the landing's hero
+  // plays the Inbox: long enough to follow, eased in as well as out.
+  SHOWCASE: 1000,
 };
 const MOTION_DELAY_MS = {
   ROW_STAGGER: 32,
@@ -158,6 +161,7 @@ function uiMotionTokensCss() {
   --ui-duration-pane: ${ms(MOTION_DURATION_MS.PANE)};
   --ui-duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
   --ui-duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
+  --ui-duration-showcase: ${ms(MOTION_DURATION_MS.SHOWCASE)};
   --ui-motion-exit: ${MOTION_EXIT};
   --ui-motion-pane: ${MOTION_PANE};
   --ui-row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};

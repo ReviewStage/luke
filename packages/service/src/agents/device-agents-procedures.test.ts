@@ -206,7 +206,11 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const target = { userId, conversationId };
     const turnId = randomUUID();
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.enqueueTurn(target, {
+      turnId,
+      origin: TURN_ORIGIN.TYPED,
+      runtimeTurnId: "turn_0",
+    });
     yield* writer.consume(target, {
       conversationId: sessionKey(conversationId),
       turnId,

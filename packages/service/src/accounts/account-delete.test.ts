@@ -23,7 +23,7 @@ import { SqlClient } from "effect/sql";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import type { NativeAgentSessions } from "../agents/coder-host/runtime-sessions.js";
-import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/eve-host/eve-sessions.js";
+import { type AgentSessions, SESSION_RESET_OUTCOME } from "../agents/sessions/agent-sessions.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -75,7 +75,7 @@ function sessionCookieOf(userId: string): string {
 }
 
 /** A harness as a deletion reaches it: every retire written down with whom it acted for, and nothing else a deletion asks. */
-function retiringEve() {
+function retiringSessions() {
   const retired: (readonly [string, string])[] = [];
   const asked = (caller: string): AgentSessions => ({
     open: () => Effect.die(new Error("a deletion opens no session")),
@@ -84,7 +84,7 @@ function retiringEve() {
     reset: (sessionId) =>
       Effect.sync(() => {
         retired.push([caller, sessionId]);
-        return { outcome: EVE_RESET_OUTCOME.RESET };
+        return { outcome: SESSION_RESET_OUTCOME.RESET };
       }),
   });
   return {
@@ -117,7 +117,7 @@ const sessionOf = (
  * the procedures answering on the test's database and clock over the harness
  * given.
  */
-const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
+const openAccounts = (agentSessions: ReturnType<typeof retiringSessions>) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openUser;
@@ -151,7 +151,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
       owner,
       other,
       stands,
-      ask: (request: Request) => answer(procedures, request, eve.harness),
+      ask: (request: Request) => answer(procedures, request, agentSessions.harness),
     };
   });
 
@@ -189,8 +189,8 @@ it.layer(getTestDB())("an account's deletion", (it) => {
     "over a browser's session cookie erases the account the cookie names alone, retiring every session of that account's standing agents' conversations through the harness acting for it, none of another account's, and none of a conversation of another kind",
     () =>
       Effect.gen(function* () {
-        const eve = retiringEve();
-        const { owner, other, stands, ask } = yield* openAccounts(eve);
+        const agentSessions = retiringSessions();
+        const { owner, other, stands, ask } = yield* openAccounts(agentSessions);
         const mainSession = yield* sessionOf(owner, CONVERSATION_KIND.MAIN);
         const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.AGENT);
         yield* sessionOf(other, CONVERSATION_KIND.MAIN);
@@ -206,7 +206,7 @@ it.layer(getTestDB())("an account's deletion", (it) => {
         );
 
         assert.notEqual(mainSession, agentSession);
-        assert.deepEqual(eve.retired, [[harnessFor(owner), agentSession]]);
+        assert.deepEqual(agentSessions.retired, [[harnessFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false, "the cookie erased its account");
         assert.equal(yield* stands(other), true, "and no other");
       }),
@@ -216,8 +216,8 @@ it.layer(getTestDB())("an account's deletion", (it) => {
     "over the bearer retires the account's sessions through the harness acting for the bearer's account, whatever cookie rides beside it, and erases that account",
     () =>
       Effect.gen(function* () {
-        const eve = retiringEve();
-        const { owner, other, stands, ask } = yield* openAccounts(eve);
+        const agentSessions = retiringSessions();
+        const { owner, other, stands, ask } = yield* openAccounts(agentSessions);
         const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.AGENT);
         yield* sessionOf(other, CONVERSATION_KIND.AGENT);
 
@@ -231,7 +231,7 @@ it.layer(getTestDB())("an account's deletion", (it) => {
           { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } },
         );
 
-        assert.deepEqual(eve.retired, [[harnessFor(owner), agentSession]]);
+        assert.deepEqual(agentSessions.retired, [[harnessFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false);
         assert.equal(yield* stands(other), true);
       }),

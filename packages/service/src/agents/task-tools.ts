@@ -86,7 +86,7 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  * with a description to start from where one is given. Only a pilot may make a task
  * in pilot mode, and only as a child, which is how it gives a part too big
  * for one pull request a pilot of its own. It is made under an id drawn from
- * eve's key for the call (`called-id.ts`), so a call run again answers the
+ * the call's key (`called-id.ts`), so a call run again answers the
  * task it made and makes no second.
  * Every answer is data the model reads, never a credential.
  */

@@ -72,8 +72,8 @@ import {
  * The deadlines a procedure is asked under, by how long its answer may
  * take: the usual one, a held read the service keeps open for as long as it
  * waits on the next change (or a dictated clip the model hears through), a
- * message to an agent, which waits on the agent's conversation and on eve
- * taking the words before it answers, and a Start, which may copy another
+ * message to an agent, which waits on the agent's conversation and on its
+ * session taking the words before it answers, and a Start, which may copy another
  * agent's work before it answers.
  */
 export const HOSTED_DEADLINE = {
@@ -91,8 +91,8 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * The deadlines longer than the usual one, which is the account call's own
  * default or the one a client keeps: a held read's is the service's hold and
  * room for the answer to travel after it, a message's outlasts the service's
- * wait for the conversation's lock (five seconds) and its hand-over to eve
- * under it (thirty, `@repo/database/models/writer`'s bounds) with room for
+ * wait for the conversation's lock (five seconds) and its hand-over to the
+ * agent's session under it (thirty, `@repo/database/models/writer`'s bounds) with room for
  * the reads before them, so a send that lands slowly is never read as one
  * that did not answer, a Start's outlasts the copy, and a
  * Generate of a pull request's chapters outlasts the function it runs in
@@ -520,7 +520,7 @@ export function askLive<Input extends LivePollInput, Output>(
 }
 
 /** What a live read's input may name of a poll. */
-interface LivePollInput {
+export interface LivePollInput {
   readonly [LIVE_POLL.QUERY]?: typeof LIVE_POLL.ON;
   readonly [LIVE_POLL.AFTER]?: string;
 }

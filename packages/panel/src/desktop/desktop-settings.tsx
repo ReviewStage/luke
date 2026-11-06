@@ -297,7 +297,7 @@ function PageGroup({
  * lit, unless the page stands alone, where a step lights the result and
  * Return opens it. The query lives here, so it lasts as long as Settings
  * stays open. The Integrations page has a search of its own, for its
- * integrations and their tools, whose query is held here too: a result of
+ * integrations, whose query is held here too: a result of
  * the sidebar's that opens one of its rows hands the query down to it where
  * it finds that integration there, so the page opens on what was asked
  * for, and turning to another page clears it. Command-F lands in the page's
