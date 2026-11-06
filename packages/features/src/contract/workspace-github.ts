@@ -7,7 +7,10 @@
  *
  * Connect refuses a workspace the caller is not in and a role that does not
  * allow it; disconnect refuses every caller as not permitted
- * (`packages/service/src/accounts/workspace-github-procedures.ts`).
+ * (`packages/service/src/accounts/workspace-github-procedures.ts`), and also
+ * declares not found, which an older service without its path answers
+ * before any procedure matches and the workspace client has always read as
+ * its own failure.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -33,7 +36,7 @@ export const workspaceGithubContract = {
     .input(exactInput(workspaceGithubRequestSchema))
     .output(EffectSchema.flip(workspaceGithubConnectAnswerSchema)),
   disconnect: declaredProcedure
-    .errors(refuses(HOSTED_API_ERROR.NOT_PERMITTED))
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT }),
