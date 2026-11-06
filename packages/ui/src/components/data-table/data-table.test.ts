@@ -1,24 +1,25 @@
 // @vitest-environment jsdom
 
-import { act, createElement, useState } from "react";
+import { act, createElement, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { SORT_DIRECTION } from "../../sort-direction.js";
 import {
+  createDataTableColumnHelper,
   DATA_TABLE_COLUMN_KIND,
   DataTable,
-  type DataTableColumn,
-  type DataTableSort,
+  type DataTableColumns,
 } from "./data-table.js";
 
 /**
  * data-table.test.ts -- a table reads as its headings over its rows, named
- * for what it holds; a sortable heading is a button whose press the caller
- * hears, its cell announcing the order chosen; a table that sorts nothing
- * offers no button, though it still announces an order it was given; a
+ * for what it holds; a sortable heading is a button that sorts the rows by
+ * its column, its first press the way the column says and the next flipping
+ * it, its cell announcing the order chosen and its caller hearing it; an
+ * order the caller puts before that choice stands through every press; a
  * press on a row opens it, unless its caller says it has nothing to open,
- * while a press on a control in its cells answers for that control alone; a mark column's heading is read, not drawn; and
- * no rows show the empty line in place of the table. Synthetic runs.
+ * while a press on a control in its cells answers for that control alone; a
+ * mark column's heading is read, not drawn; and no rows show the empty line
+ * in place of the table. Synthetic runs.
  */
 
 declare global {
@@ -31,15 +32,19 @@ interface Run {
   id: string;
   name: string;
   minutes: number;
+  pinned: boolean;
 }
 
-type RunKey = "name" | "minutes" | "pin";
-
 const RUNS: readonly Run[] = [
-  { id: "nightly", name: "Nightly review", minutes: 42 },
-  { id: "release", name: "Release notes", minutes: 7 },
-  { id: "triage", name: "Issue triage", minutes: 19 },
+  { id: "nightly", name: "Nightly review", minutes: 42, pinned: false },
+  { id: "release", name: "Release notes", minutes: 7, pinned: true },
+  { id: "triage", name: "Issue triage", minutes: 19, pinned: false },
 ];
+
+/** The pinned runs first, before any order a heading chooses. */
+const PINNED_FIRST = [{ id: "pin", desc: true }];
+
+const column = createDataTableColumnHelper<Run>();
 
 const roots: Root[] = [];
 
@@ -59,53 +64,56 @@ function draw(element: React.ReactElement): HTMLElement {
 }
 
 /** The columns over a run, the pin a button of its own whose press `heard` records. */
-function columns(heard: string[]): DataTableColumn<Run, RunKey>[] {
-  return [
-    {
-      key: "pin",
-      label: "Pinned",
-      kind: DATA_TABLE_COLUMN_KIND.MARK,
-      cell: (run) =>
+function columns(heard: string[]): DataTableColumns<Run> {
+  return column.columns([
+    column.accessor((run) => run.pinned, {
+      id: "pin",
+      header: "Pinned",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.MARK },
+      cell: ({ row }) =>
         createElement(
           "button",
-          { type: "button", onClick: () => heard.push(`pin ${run.id}`) },
-          `Pin ${run.name}`,
+          { type: "button", onClick: () => heard.push(`pin ${row.original.id}`) },
+          `Pin ${row.original.name}`,
         ),
-    },
-    { key: "name", label: "Run", sortable: true, cell: (run) => run.name },
-    {
-      key: "minutes",
-      label: "Minutes",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable: true,
-      cell: (run) => String(run.minutes),
-    },
-  ];
+    }),
+    column.accessor((run) => run.name, {
+      id: "name",
+      header: "Run",
+      sortFn: "text",
+      sortDescFirst: false,
+    }),
+    column.accessor((run) => run.minutes, {
+      id: "minutes",
+      header: "Minutes",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      sortFn: "basic",
+      sortDescFirst: true,
+      cell: ({ getValue }) => String(getValue()),
+    }),
+  ]);
 }
 
-/** Runs sorted as the table's headings ask, each press heard and every row press recorded. */
-function SortedRuns({ heard }: { heard: string[] }): React.JSX.Element {
-  const [sort, setSort] = useState<DataTableSort<RunKey> | undefined>(undefined);
-  const flip = sort?.direction === SORT_DIRECTION.ASCENDING;
-  const rows =
-    sort === undefined ? RUNS : [...RUNS].sort((a, b) => (a.minutes - b.minutes) * (flip ? 1 : -1));
-  return createElement(DataTable<Run, RunKey>, {
+/** Runs the table sorts by its headings, each order chosen heard and every row press recorded. */
+function SortedRuns({
+  heard,
+  leading,
+}: {
+  heard: string[];
+  leading?: typeof PINNED_FIRST;
+}): React.JSX.Element {
+  const runColumns = useMemo(() => columns(heard), [heard]);
+  return createElement(DataTable<Run>, {
     label: "Runs",
-    columns: columns(heard),
-    rows,
-    rowKey: (run) => run.id,
+    columns: runColumns,
+    rows: RUNS,
+    getRowId: (run) => run.id,
     empty: "No runs yet.",
-    sort,
-    onSort: (key) => {
-      heard.push(`sort ${key}`);
-      setSort({
-        key,
-        direction:
-          sort?.key === key && sort.direction === SORT_DIRECTION.DESCENDING
-            ? SORT_DIRECTION.ASCENDING
-            : SORT_DIRECTION.DESCENDING,
-      });
-    },
+    leadingSorting: leading,
+    onSortingChange: (sorting) =>
+      heard.push(
+        `sort ${sorting.map((sort) => `${sort.id} ${sort.desc ? "desc" : "asc"}`).join()}`,
+      ),
     onRowPress: (run) => heard.push(`open ${run.id}`),
   });
 }
@@ -145,7 +153,7 @@ test("a table reads as its headings over its rows, named for what it holds", () 
   expect(container.querySelector("tbody tr")?.textContent).toContain("42");
 });
 
-test("a sortable heading's press is heard, and its cell announces the order chosen", () => {
+test("a sortable heading's press sorts by it, then flips it, and its cell announces the order chosen", () => {
   const heard: string[] = [];
   const container = draw(createElement(SortedRuns, { heard }));
 
@@ -158,24 +166,22 @@ test("a sortable heading's press is heard, and its cell announces the order chos
   expect(heading(container, "Minutes").getAttribute("aria-sort")).toBe("ascending");
   expect(order(container)).toEqual(["Release notes", "Issue triage", "Nightly review"]);
   expect(heading(container, "Run").hasAttribute("aria-sort")).toBe(false);
-  expect(heard).toEqual(["sort minutes", "sort minutes"]);
+
+  press(heading(container, "Run").querySelector("button"));
+  expect(order(container)).toEqual(["Issue triage", "Nightly review", "Release notes"]);
+  expect(heard).toEqual(["sort minutes desc", "sort minutes asc", "sort name asc"]);
 });
 
-test("a table sorted by its caller, offering no sort, still announces the order its rows are in", () => {
-  const container = draw(
-    createElement(DataTable<Run, RunKey>, {
-      label: "Runs",
-      columns: columns([]),
-      rows: RUNS,
-      rowKey: (run) => run.id,
-      empty: "No runs yet.",
-      sort: { key: "minutes", direction: SORT_DIRECTION.DESCENDING },
-    }),
-  );
+test("an order the caller leads with stands before every order a heading chooses", () => {
+  const heard: string[] = [];
+  const container = draw(createElement(SortedRuns, { heard, leading: PINNED_FIRST }));
 
-  expect(container.querySelector("th button")).toBeNull();
-  expect(heading(container, "Minutes").getAttribute("aria-sort")).toBe("descending");
-  expect(heading(container, "Run").hasAttribute("aria-sort")).toBe(false);
+  expect(order(container)).toEqual(["Release notes", "Nightly review", "Issue triage"]);
+  press(heading(container, "Minutes").querySelector("button"));
+  press(heading(container, "Minutes").querySelector("button"));
+
+  expect(order(container)).toEqual(["Release notes", "Issue triage", "Nightly review"]);
+  expect(heard).toEqual(["sort minutes desc", "sort minutes asc"]);
 });
 
 test("a press on a row opens it, and a press on a control in its cells is that control's alone", () => {
@@ -192,11 +198,11 @@ test("a press on a row opens it, and a press on a control in its cells is that c
 test("a row its caller says has nothing to open does not open", () => {
   const heard: string[] = [];
   const container = draw(
-    createElement(DataTable<Run, RunKey>, {
+    createElement(DataTable<Run>, {
       label: "Runs",
       columns: columns(heard),
       rows: RUNS,
-      rowKey: (run) => run.id,
+      getRowId: (run) => run.id,
       empty: "No runs yet.",
       onRowPress: (run) => heard.push(`open ${run.id}`),
       rowPressable: (run) => run.id !== "release",
@@ -212,11 +218,11 @@ test("a row its caller says has nothing to open does not open", () => {
 
 test("no rows show the empty line in place of the table", () => {
   const container = draw(
-    createElement(DataTable<Run, RunKey>, {
+    createElement(DataTable<Run>, {
       label: "Runs",
       columns: columns([]),
       rows: [],
-      rowKey: (run) => run.id,
+      getRowId: (run) => run.id,
       empty: "No runs yet.",
     }),
   );

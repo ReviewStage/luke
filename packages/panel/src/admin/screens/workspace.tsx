@@ -14,9 +14,6 @@ import { formatDate } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
 import {
   Badge,
-  DATA_TABLE_MIN_WIDTH,
-  DataTable,
-  type DataTableColumn,
   GAP,
   Inline,
   MARK_PROVIDER,
@@ -30,8 +27,16 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
+import {
+  createDataTableColumnHelper,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumns,
+  DataTableSkeleton,
+} from "@repo/ui/data-table";
 import { githubAccountPageUrl } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -41,7 +46,6 @@ import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/s
 import { ExternalLink } from "../chrome/external-links.js";
 import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, workspaceReadQuery } from "../routing.js";
 import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
 
@@ -62,8 +66,6 @@ const MEMBER_COLUMN = {
   ROLE: "role",
   JOINED: "joined",
 } as const;
-
-type MemberColumnKey = (typeof MEMBER_COLUMN)[keyof typeof MEMBER_COLUMN];
 
 /** The week's work, as the Workspaces table counts it, and how many are in it. */
 const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceDetail>[] = [
@@ -90,18 +92,30 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceDetail>[] = [
   },
 ];
 
+const memberColumn = createDataTableColumnHelper<AdminWorkspaceMember>();
+
 function memberColumns(
   onOpenAccount: (id: string) => void,
-): DataTableColumn<AdminWorkspaceMember, MemberColumnKey>[] {
-  return [
-    {
-      key: MEMBER_COLUMN.ACCOUNT,
-      label: "Member",
-      cell: (member) => <AccountCell account={member.account} onOpen={onOpenAccount} />,
-    },
-    { key: MEMBER_COLUMN.ROLE, label: "Role", cell: (member) => member.role },
-    { key: MEMBER_COLUMN.JOINED, label: "Joined", cell: (member) => formatDate(member.joinedAt) },
-  ];
+): DataTableColumns<AdminWorkspaceMember> {
+  return memberColumn.columns([
+    memberColumn.display({
+      id: MEMBER_COLUMN.ACCOUNT,
+      header: "Member",
+      cell: ({ row: { original: member } }) => (
+        <AccountCell account={member.account} onOpen={onOpenAccount} />
+      ),
+    }),
+    memberColumn.display({
+      id: MEMBER_COLUMN.ROLE,
+      header: "Role",
+      cell: ({ row: { original: member } }) => member.role,
+    }),
+    memberColumn.display({
+      id: MEMBER_COLUMN.JOINED,
+      header: "Joined",
+      cell: ({ row: { original: member } }) => formatDate(member.joinedAt),
+    }),
+  ]);
 }
 
 /** The masthead's frame: the badges line over the created line and the workspace's GitHub accounts. */
@@ -180,6 +194,7 @@ function WorkspaceSections({
   detail: AdminWorkspaceDetail | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
+  const memberTableColumns = useMemo(() => memberColumns(onOpenAccount), [onOpenAccount]);
   return (
     <>
       {detail === undefined ? <MastheadSkeleton /> : <Masthead detail={detail} />}
@@ -188,7 +203,7 @@ function WorkspaceSections({
         {detail === undefined ? (
           <DataTableSkeleton
             label="Members"
-            columns={memberColumns(onOpenAccount)}
+            columns={memberTableColumns}
             rows={MEMBERS_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             cells={{ [MEMBER_COLUMN.ACCOUNT]: <AccountCellSkeleton /> }}
@@ -196,9 +211,9 @@ function WorkspaceSections({
         ) : (
           <DataTable
             label="Members"
-            columns={memberColumns(onOpenAccount)}
+            columns={memberTableColumns}
             rows={detail.members}
-            rowKey={(member) => member.account.id}
+            getRowId={(member) => member.account.id}
             empty="No members"
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             onRowPress={(member) => onOpenAccount(member.account.id)}

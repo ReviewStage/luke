@@ -28,11 +28,6 @@ import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wi
 import { formatInstant } from "@repo/features/time-format";
 import {
   Badge,
-  DATA_TABLE_COLUMN_KIND,
-  DATA_TABLE_MIN_WIDTH,
-  DataTable,
-  type DataTableColumn,
-  type DataTableMinWidth,
   GAP,
   Inline,
   MARK_PROVIDER,
@@ -44,10 +39,20 @@ import {
   TEXT_TONE,
   Text,
 } from "@repo/ui";
+import {
+  createDataTableColumnHelper,
+  DATA_TABLE_COLUMN_KIND,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumns,
+  type DataTableMinWidth,
+  DataTableSkeleton,
+  type RowData,
+} from "@repo/ui/data-table";
 import { repositoryPageUrl } from "@repo/ui/tasks-model";
+import { useMemo } from "react";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { ExternalLink } from "../chrome/external-links.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import {
   connectionWord,
   INSTALLATION_LABEL,
@@ -127,12 +132,18 @@ function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[]
   ];
 }
 
-const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
-  { key: "started", label: "Started", cell: (agent) => formatInstant(agent.createdAt) },
-  {
-    key: "repository",
-    label: "Repository",
-    cell: (agent) =>
+const agentColumn = createDataTableColumnHelper<AdminAccountAgent>();
+
+const AGENT_COLUMNS = agentColumn.columns([
+  agentColumn.display({
+    id: "started",
+    header: "Started",
+    cell: ({ row: { original: agent } }) => formatInstant(agent.createdAt),
+  }),
+  agentColumn.display({
+    id: "repository",
+    header: "Repository",
+    cell: ({ row: { original: agent } }) =>
       agent.repository === null ? (
         NONE
       ) : (
@@ -144,16 +155,17 @@ const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
           }}
         />
       ),
-  },
-  {
-    key: "model",
-    label: "Model",
-    cell: (agent) => `${agent.model} · ${agent.effort}${windowWords(agent.contextWindow)}`,
-  },
-  {
-    key: "status",
-    label: "Status",
-    cell: (agent) => (
+  }),
+  agentColumn.display({
+    id: "model",
+    header: "Model",
+    cell: ({ row: { original: agent } }) =>
+      `${agent.model} · ${agent.effort}${windowWords(agent.contextWindow)}`,
+  }),
+  agentColumn.display({
+    id: "status",
+    header: "Status",
+    cell: ({ row: { original: agent } }) => (
       <Inline gap={GAP.TIGHT}>
         <QuietWords mark={agent.status === AGENT_STATUS.FAILED ? QUIET_MARK.FAILED : undefined}>
           {AGENT_STATUS_WORDS[agent.status]}
@@ -161,27 +173,29 @@ const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
         {agent.failure === null ? null : <Text tone={TEXT_TONE.MUTED}>{agent.failure}</Text>}
       </Inline>
     ),
-  },
-  {
-    key: "pull-request",
-    label: "Pull request",
-    cell: (agent) =>
+  }),
+  agentColumn.display({
+    id: "pull-request",
+    header: "Pull request",
+    cell: ({ row: { original: agent } }) =>
       agent.pullRequest === ADMIN_PULL_REQUEST.NONE ? (
         NONE
       ) : (
         <QuietWords>{pullRequestWord(agent.pullRequest)}</QuietWords>
       ),
-  },
-];
+  }),
+]);
+
+const workspaceColumn = createDataTableColumnHelper<AdminAccountWorkspace>();
 
 function workspaceColumns(
   onOpenWorkspace: (id: string) => void,
-): readonly DataTableColumn<AdminAccountWorkspace>[] {
-  return [
-    {
-      key: "workspace",
-      label: "Workspace",
-      cell: (workspace) => (
+): DataTableColumns<AdminAccountWorkspace> {
+  return workspaceColumn.columns([
+    workspaceColumn.display({
+      id: "workspace",
+      header: "Workspace",
+      cell: ({ row: { original: workspace } }) => (
         <Inline gap={GAP.TIGHT}>
           <WorkspaceCell workspace={workspace} onOpen={onOpenWorkspace} />
           <Badge>
@@ -189,18 +203,22 @@ function workspaceColumns(
           </Badge>
         </Inline>
       ),
-    },
-    { key: "role", label: "Role", cell: (workspace) => workspace.role },
-    {
-      key: "members",
-      label: "Members",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (workspace) => formatCount(workspace.memberCount),
-    },
-    {
-      key: "github",
-      label: "GitHub",
-      cell: (workspace) =>
+    }),
+    workspaceColumn.display({
+      id: "role",
+      header: "Role",
+      cell: ({ row: { original: workspace } }) => workspace.role,
+    }),
+    workspaceColumn.display({
+      id: "members",
+      header: "Members",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: workspace } }) => formatCount(workspace.memberCount),
+    }),
+    workspaceColumn.display({
+      id: "github",
+      header: "GitHub",
+      cell: ({ row: { original: workspace } }) =>
         workspace.github.length === 0 ? (
           <Text tone={TEXT_TONE.MUTED}>not installed</Text>
         ) : (
@@ -212,8 +230,8 @@ function workspaceColumns(
             ))}
           </Inline>
         ),
-    },
-  ];
+    }),
+  ]);
 }
 
 /** One key or connection as the credentials table draws it. */
@@ -254,21 +272,35 @@ function credentialRows(support: AdminAccountSupport): CredentialRow[] {
   return [...keys, ...connections].map((row, order) => ({ ...row, order }));
 }
 
-const CREDENTIAL_COLUMNS: readonly DataTableColumn<CredentialRow>[] = [
-  { key: "kind", label: "Kind", cell: (row) => row.kind },
-  { key: "provider", label: "Provider", cell: (row) => row.provider },
-  {
-    key: "status",
-    label: "Status",
-    cell: (row) => (
+const credentialColumn = createDataTableColumnHelper<CredentialRow>();
+
+const CREDENTIAL_COLUMNS = credentialColumn.columns([
+  credentialColumn.display({
+    id: "kind",
+    header: "Kind",
+    cell: ({ row: { original: row } }) => row.kind,
+  }),
+  credentialColumn.display({
+    id: "provider",
+    header: "Provider",
+    cell: ({ row: { original: row } }) => row.provider,
+  }),
+  credentialColumn.display({
+    id: "status",
+    header: "Status",
+    cell: ({ row: { original: row } }) => (
       <Inline gap={GAP.TIGHT}>
         <QuietWords mark={row.failed ? QUIET_MARK.FAILED : undefined}>{row.status}</QuietWords>
         {row.detail === undefined ? null : <Text tone={TEXT_TONE.MUTED}>{row.detail}</Text>}
       </Inline>
     ),
-  },
-  { key: "changed", label: "Last changed", cell: (row) => formatInstant(row.at) },
-];
+  }),
+  credentialColumn.display({
+    id: "changed",
+    header: "Last changed",
+    cell: ({ row: { original: row } }) => formatInstant(row.at),
+  }),
+]);
 
 /** What failed, with the provider where a key or a connection did. */
 function failureSubject(failure: AdminAccountFailure): string {
@@ -282,20 +314,42 @@ interface FailureRow {
   failure: AdminAccountFailure;
 }
 
-const FAILURE_COLUMNS: readonly DataTableColumn<FailureRow>[] = [
-  { key: "when", label: "When", cell: ({ failure }) => formatInstant(failure.at) },
-  { key: "what", label: "What", cell: ({ failure }) => failureSubject(failure) },
-  {
-    key: "why",
-    label: "Why",
-    cell: ({ failure }) =>
+const failureColumn = createDataTableColumnHelper<FailureRow>();
+
+const FAILURE_COLUMNS = failureColumn.columns([
+  failureColumn.display({
+    id: "when",
+    header: "When",
+    cell: ({
+      row: {
+        original: { failure },
+      },
+    }) => formatInstant(failure.at),
+  }),
+  failureColumn.display({
+    id: "what",
+    header: "What",
+    cell: ({
+      row: {
+        original: { failure },
+      },
+    }) => failureSubject(failure),
+  }),
+  failureColumn.display({
+    id: "why",
+    header: "Why",
+    cell: ({
+      row: {
+        original: { failure },
+      },
+    }) =>
       failure.reason === null ? (
         <Text tone={TEXT_TONE.MUTED}>no reason recorded</Text>
       ) : (
         <QuietWords mark={QUIET_MARK.FAILED}>{failure.reason}</QuietWords>
       ),
-  },
-];
+  }),
+]);
 
 /** The account's agent defaults and the experiments it turned on. */
 function DefaultsLines({ support }: { support: AdminAccountSupport }): React.JSX.Element {
@@ -336,20 +390,20 @@ function DefaultsLinesSkeleton(): React.JSX.Element {
 }
 
 /** One support table: its label, its columns, its rows from the answer, and what it says with none. */
-function SupportTable<Row>({
+function SupportTable<Row extends RowData>({
   label,
   columns,
   rows,
-  rowKey,
+  getRowId,
   empty,
   minWidth,
   skeletonRows,
   onRowPress,
 }: {
   label: string;
-  columns: readonly DataTableColumn<Row>[];
+  columns: DataTableColumns<Row>;
   rows: readonly Row[] | undefined;
-  rowKey: (row: Row) => string;
+  getRowId: (row: Row) => string;
   empty: string;
   minWidth: DataTableMinWidth;
   skeletonRows: number;
@@ -362,7 +416,7 @@ function SupportTable<Row>({
       label={label}
       columns={columns}
       rows={rows}
-      rowKey={rowKey}
+      getRowId={getRowId}
       empty={empty}
       minWidth={minWidth}
       onRowPress={onRowPress}
@@ -383,6 +437,7 @@ export function AccountSupportSections({
   windowDays: number;
   onOpenWorkspace: (id: string) => void;
 }): React.JSX.Element {
+  const workspaceTableColumns = useMemo(() => workspaceColumns(onOpenWorkspace), [onOpenWorkspace]);
   return (
     <>
       <AdminSection title="Work">
@@ -394,7 +449,7 @@ export function AccountSupportSections({
           label="The account's newest agents"
           columns={AGENT_COLUMNS}
           rows={support?.recentAgents}
-          rowKey={(agent) => agent.id}
+          getRowId={(agent) => agent.id}
           empty="No agent started yet."
           minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
           skeletonRows={SKELETON_ROWS.AGENTS}
@@ -404,9 +459,9 @@ export function AccountSupportSections({
       <AdminSection title="Workspaces">
         <SupportTable
           label="The account's workspaces"
-          columns={workspaceColumns(onOpenWorkspace)}
+          columns={workspaceTableColumns}
           rows={support?.workspaces}
-          rowKey={(workspace) => workspace.id}
+          getRowId={(workspace) => workspace.id}
           empty="In no workspace."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
           skeletonRows={SKELETON_ROWS.WORKSPACES}
@@ -419,7 +474,7 @@ export function AccountSupportSections({
           label="The account's provider keys and integration connections"
           columns={CREDENTIAL_COLUMNS}
           rows={support === undefined ? undefined : credentialRows(support)}
-          rowKey={(row) => String(row.order)}
+          getRowId={(row) => String(row.order)}
           empty="No provider key or connection."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
           skeletonRows={SKELETON_ROWS.CREDENTIALS}
@@ -435,7 +490,7 @@ export function AccountSupportSections({
           label="The account's recent failures"
           columns={FAILURE_COLUMNS}
           rows={support?.failures.map((failure, order) => ({ order, failure }))}
-          rowKey={(row) => String(row.order)}
+          getRowId={(row) => String(row.order)}
           empty="Nothing failed in this window."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
           skeletonRows={SKELETON_ROWS.FAILURES}
