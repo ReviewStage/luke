@@ -33,7 +33,7 @@ import {
 import { actorName } from "@repo/ui/actor-model";
 import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { GLYPH } from "@repo/ui/icons";
-import type { MarkdownTaskTick, TaskWrite } from "@repo/ui/markdown";
+import { type MarkdownTaskBox, TaskBox, type TaskBoxItem } from "@repo/ui/markdown";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
@@ -701,16 +701,26 @@ function savedOver(
 type DescriptionTick = ReturnType<typeof descriptionAtRestMutation<boolean, boolean>>;
 
 /**
- * A task item's box at rest, drawn from its own mutation over `tick`: the
- * state pressed while its write is out, or waits its turn, and once it
- * saved, until the description drawn anew says it.
+ * A task item's box at rest, drawn from its own mutation over the tick
+ * `tick` writes at its offset: the state pressed while its write is out, or
+ * waits its turn, and once it saved, until the description drawn anew says it.
  */
-function useDescriptionTick(tick: DescriptionTick): TaskWrite {
-  const { mutate, isPending, data, variables } = useMutation(tick);
-  return {
-    run: (ticked) => mutate(ticked),
-    asked: isPending || data === true ? variables : undefined,
-  };
+function DescriptionTaskBox({
+  item,
+  tick,
+}: {
+  item: TaskBoxItem;
+  tick: (at: number) => DescriptionTick;
+}): React.JSX.Element {
+  const { mutate, isPending, data, variables } = useMutation(tick(item.at));
+  const asked = isPending || data === true ? variables : undefined;
+  return (
+    <TaskBox
+      label={item.label}
+      checked={item.checked}
+      write={{ run: (ticked) => mutate(ticked), asked }}
+    />
+  );
 }
 
 /** What a toast says where a tick or a date written from the description at rest was not saved. */
@@ -874,8 +884,8 @@ interface DocumentUnitProps {
   anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
-  /** The tick each task item draws from, offsets in the unit's words; every checkbox is read-only without it. */
-  useTaskTick?: MarkdownTaskTick | undefined;
+  /** Draws each task item's box a reader can tick, offsets in the unit's words; every checkbox is read-only without it. */
+  taskBox?: MarkdownTaskBox | undefined;
   /** The description's comment threads, which mark its words; none off a page that reads them. */
   threads: readonly DescriptionCommentThread[] | undefined;
   /** The description's text as saved, which a thread being started is laid over; none while no thread is being started. */
@@ -896,7 +906,7 @@ function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
     left.linked === right.linked &&
     left.anchor === right.anchor &&
     left.entry === right.entry &&
-    left.useTaskTick === right.useTaskTick &&
+    left.taskBox === right.taskBox &&
     left.threads === right.threads &&
     left.descriptionText === right.descriptionText
   );
@@ -917,7 +927,7 @@ const DocumentUnit = memo(function DocumentUnit({
   linked,
   anchor,
   entry,
-  useTaskTick,
+  taskBox,
   threads,
   descriptionText,
 }: DocumentUnitProps): React.JSX.Element {
@@ -934,7 +944,7 @@ const DocumentUnit = memo(function DocumentUnit({
       openLink={openLink}
       diagrams
       picture={picture}
-      useTaskTick={useTaskTick}
+      taskBox={taskBox}
     />
   );
   const menu =
@@ -1328,19 +1338,19 @@ export const DescriptionBody = memo(function DescriptionBody({
         : undefined,
     [editable],
   );
-  // Each section's tick stands across draws and ticks from the description as drawn last, so a section is not drawn again for a new one.
-  const ticks = useRef(new Map<number, MarkdownTaskTick>());
-  const taskTick = (section: number): MarkdownTaskTick | undefined => {
+  // Each section's box drawer stands across draws and ticks from the description as drawn last, so a section is not drawn again for a new one.
+  const boxes = useRef(new Map<number, MarkdownTaskBox>());
+  const taskBox = (section: number): MarkdownTaskBox | undefined => {
     // Note that a unit with no box has none, so the editor opening and closing leaves it as drawn.
     if (!tickable(section) || !TASK_ITEM_ANYWHERE.test(views[section]?.words ?? "")) {
       return undefined;
     }
-    const held = ticks.current.get(section);
+    const held = boxes.current.get(section);
     if (held !== undefined) return held;
-    const useSectionTick: MarkdownTaskTick = (at) =>
-      useDescriptionTick(latestTick.current(section, at));
-    ticks.current.set(section, useSectionTick);
-    return useSectionTick;
+    const tickAt = (at: number) => latestTick.current(section, at);
+    const drawBox: MarkdownTaskBox = (item) => <DescriptionTaskBox item={item} tick={tickAt} />;
+    boxes.current.set(section, drawBox);
+    return drawBox;
   };
   // The text a thread being started is laid over, handed to the units only while one is, since every unit is drawn again when it changes.
   const { pending } = useCommentFocus();
@@ -1374,7 +1384,7 @@ export const DescriptionBody = memo(function DescriptionBody({
             linked={linked}
             anchor={anchors[section] ?? ""}
             entry={entry === view.id}
-            useTaskTick={taskTick(section)}
+            taskBox={taskBox(section)}
             threads={comments?.threads}
             descriptionText={pendingText}
           />

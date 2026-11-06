@@ -6,7 +6,7 @@ import {
   Markdown,
   type MarkdownComponents,
   type MarkdownSteps,
-  type MarkdownTaskTick,
+  type MarkdownTaskBox,
   markdownStep,
 } from "@repo/ui/markdown";
 import { matchRanges } from "@repo/ui/search-tokens";
@@ -589,7 +589,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   picture,
   found,
   diagrams,
-  useTaskTick,
+  taskBox,
   inline,
 }: {
   words: string;
@@ -606,8 +606,8 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   found?: readonly string[] | undefined;
   /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
   diagrams?: boolean | undefined;
-  /** The tick each task item draws from, as a description the developer can edit holds one; every checkbox is read-only without it. */
-  useTaskTick?: MarkdownTaskTick | undefined;
+  /** Draws each task item's box a reader can tick, as a description the developer can edit does; every checkbox is read-only without it. */
+  taskBox?: MarkdownTaskBox | undefined;
   /** Whether the words are one line's, a to-do's step say: drawn in the place's own element as one run of inline words, with no root, its blocks' words run together. */
   inline?: boolean | undefined;
 }): React.JSX.Element {
@@ -665,7 +665,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
         rehypePlugins={rehypePlugins}
         components={components}
         urlTransform={link === undefined ? safeUrl : keptUrl}
-        useTaskTick={useTaskTick}
+        taskBox={taskBox}
       />
     </FenceEdit.Provider>
   );

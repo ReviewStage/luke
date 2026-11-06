@@ -5,7 +5,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
-import { MARKDOWN_LOOK, Markdown, type MarkdownProps, markdownStep } from "./markdown.js";
+import { MARKDOWN_LOOK, Markdown, type MarkdownProps, markdownStep, TaskBox } from "./markdown.js";
 
 /**
  * markdown.test.ts -- the one renderer as a place meets it: a note draws its
@@ -136,7 +136,12 @@ test("a task box is named by its item, asks with its item's place in the words, 
   const { container } = drawn({
     look: MARKDOWN_LOOK.NOTE,
     words,
-    useTaskTick: (at) => ({ run: () => asked.push(at), asked: undefined }),
+    taskBox: ({ at, label, checked }) =>
+      createElement(TaskBox, {
+        label,
+        checked,
+        write: { run: () => asked.push(at), asked: undefined },
+      }),
   });
   const boxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
   assert.deepEqual(

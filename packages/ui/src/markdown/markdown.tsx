@@ -51,13 +51,16 @@ import { cn } from "../cn.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
 import {
-  type MarkdownTaskTick,
+  type MarkdownTaskBox,
   placeTaskItems,
   readTaskInput,
+  TaskBox,
+  type TaskWrite,
   taskInput,
 } from "./markdown-tasks.js";
 
-export type { MarkdownTaskTick, TaskWrite } from "./markdown-tasks.js";
+export type { MarkdownTaskBox, TaskBoxItem, TaskWrite } from "./markdown-tasks.js";
+export { TaskBox } from "./markdown-tasks.js";
 
 /** How a place's words are drawn: as a note, a transcript, or a site's document. */
 export const MARKDOWN_LOOK = {
@@ -137,8 +140,13 @@ const NOTE_COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
-/** The tick of a box whose words lost their tick between draws: asking nothing, and drawing the words' own state. */
-const NO_TICK: MarkdownTaskTick = () => ({ run: () => undefined, asked: undefined });
+/** A tick that asks nothing. */
+const NO_WRITE: TaskWrite = { run: () => undefined, asked: undefined };
+
+/** The box of an item whose words lost their drawer between draws: asking nothing, and drawing the words' own state. */
+const untickable: MarkdownTaskBox = ({ label, checked }) => (
+  <TaskBox label={label} checked={checked} write={NO_WRITE} />
+);
 
 /**
  * The elements a line keeps as they are: the inline ones Markdown writes, and
@@ -315,8 +323,8 @@ export interface MarkdownProps {
   urlTransform?: UrlTransform | undefined;
   /** Whether a transcript's HTML blocks lose their indent before they are read. */
   normalizeHtmlIndentation?: boolean | undefined;
-  /** The tick each of a note's task items draws from, as a description the developer can edit holds one; every checkbox is read-only without it. */
-  useTaskTick?: MarkdownTaskTick | undefined;
+  /** Draws each of a note's task items' boxes a reader can tick, as a description the developer can edit does; every checkbox is read-only without it. */
+  taskBox?: MarkdownTaskBox | undefined;
 }
 
 /**
@@ -331,12 +339,12 @@ function WholeWords({
   remarkPlugins,
   rehypePlugins,
   urlTransform,
-  useTaskTick,
+  taskBox,
 }: Omit<MarkdownProps, "className">): React.JSX.Element {
-  // Note that the tick is read as a box draws, so a new one each render redraws nothing.
-  const tick = useRef(useTaskTick);
-  tick.current = useTaskTick;
-  const toggles = useTaskTick !== undefined;
+  // Note that the drawer is read as a box draws, so a new one each render redraws nothing.
+  const drawer = useRef(taskBox);
+  drawer.current = taskBox;
+  const toggles = taskBox !== undefined;
   // Note that every box is named by its item, so one the reader cannot tick is placed too.
   const steps = useMemo(
     () => [
@@ -348,7 +356,9 @@ function WholeWords({
   );
   const drawn = useMemo<Components>(() => {
     const own = look === MARKDOWN_LOOK.DOCUMENT ? {} : NOTE_COMPONENTS;
-    const input = toggles ? taskInput((at) => (tick.current ?? NO_TICK)(at)) : readTaskInput;
+    const input = toggles
+      ? taskInput((item) => (drawer.current ?? untickable)(item))
+      : readTaskInput;
     return { ...own, input, ...components };
   }, [look, toggles, components]);
   // Note that the block is keyed by its rewriter, because its memo compares the words, the components, and the steps, never the rewriter.
