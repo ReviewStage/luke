@@ -9,6 +9,7 @@ import {
   LostPage,
   ScrollArea,
   SiteBarPages,
+  SiteFootLinks,
 } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -16,7 +17,7 @@ import { CatalogSection } from "../section";
 /**
  * landing.tsx -- the product's landing: its bar, the one line beside the
  * copper ball, a feature over its scene, a feature with facts beside its
- * stage, and the close over the wordmark in dots, and the page an unknown
+ * stage, and the close over the site's foot and the wordmark in dots, and the page an unknown
  * address is answered with, each in a frame that scrolls as a document would.
  * Every name and line is made up.
  */
@@ -36,6 +37,24 @@ function Bar(): React.JSX.Element {
   );
 }
 
+/** The site's foot: its facts and links in one dotted row, two columns of a control's rows on a phone. */
+function Foot(): React.JSX.Element {
+  return (
+    <SiteFootLinks
+      facts={["Apache-2.0", "macOS 14+"]}
+      links={[
+        { label: "About", href: "#landing-foot-about" },
+        { label: "Docs", href: "#landing-foot-docs" },
+        { label: "Changelog", href: "#landing-foot-changelog" },
+        { label: "RSS", href: "#landing-foot-rss" },
+        { label: "Privacy", href: "#landing-foot-privacy" },
+        { label: "Contact", href: "#landing-foot-contact" },
+      ]}
+      notice="© 2026 Acme Inc."
+    />
+  );
+}
+
 function Landing(): React.JSX.Element {
   return (
     <LandingPage
@@ -48,7 +67,7 @@ function Landing(): React.JSX.Element {
         lead: "The app and the service behind it are one repository.",
         actions: <Button variant={BUTTON_VARIANT.OUTLINE}>View on GitHub</Button>,
       }}
-      footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
+      footer={<Foot />}
     >
       <LandingSection
         title="Monitor all your agents with one inbox."
@@ -82,7 +101,7 @@ function Lost(): React.JSX.Element {
   return (
     <LostPage
       bar={<Bar />}
-      footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
+      footer={<Foot />}
       address="/docs/getting-startd"
       title="No agent could find this page."
       lead="The link may be mistyped, or the page may have moved."
