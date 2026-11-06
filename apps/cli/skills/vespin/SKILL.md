@@ -42,7 +42,7 @@ Other commands:
 | `inbox list [--unread]` · `inbox view <thread>` | Threads agents posted, and one thread with its open ask |
 | `inbox answer <thread> <option>` · `inbox answer <thread> -F <json\|->` · `inbox reply <thread> -F <msg\|->` · `inbox close <thread>` | Answer a decide's option, `done` for a to-do, or a form as JSON by field; write on the thread; close it |
 
-`description edit` replaces the whole description, so run `description show` first and edit that. Run `vespin <group> --help` for any flag not listed here.
+`description edit` replaces the whole description, so run `description show` first and edit that; piped, `show` prints JSON, so take its `body` (`jq -r .body`). Run `vespin <group> --help` for any flag not listed here.
 
 ## Conventions
 
@@ -79,7 +79,7 @@ vespin agent wait "$a" && vespin agent wait "$b" && vespin agent checkout "$a"
 Edit a description in a pipe:
 
 ```sh
-vespin description show ACME-42 | sed 's/- \[ \] Tests/- [x] Tests/' | vespin description edit ACME-42 -F -
+vespin description show ACME-42 | jq -r .body | sed 's/- \[ \] Tests/- [x] Tests/' | vespin description edit ACME-42 -F -
 ```
 
 Answer the first unread thread:

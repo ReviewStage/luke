@@ -74,7 +74,7 @@ const showCommand = Command.make("show", { task: taskArgument }, ({ task }) =>
   Command.withExamples([
     { command: "vespin description show ACME-42", description: "Print the description" },
     {
-      command: "vespin description show ACME-42 > description.md",
+      command: "vespin description show ACME-42 | jq -r .body > description.md",
       description: "Save it to edit",
     },
   ]),
@@ -111,7 +111,7 @@ const editCommand = Command.make(
     },
     {
       command:
-        "vespin description show ACME-42 | sed 's/TODO/Done/' | vespin description edit ACME-42 -F -",
+        "vespin description show ACME-42 | jq -r .body | sed 's/TODO/Done/' | vespin description edit ACME-42 -F -",
       description: "Edit it in a pipe",
     },
   ]),
