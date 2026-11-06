@@ -227,8 +227,10 @@ export function FileTab({
       ),
     [pinned, headStatus, headFetching, headData, wholeStatus, wholeFetching, wholeData],
   );
-  // Retry reads again the read that stopped the tab: the head's where it named no file, else the whole text.
-  const readAgain = () => void (pinned === undefined && !headRead ? head : whole).refetch();
+  // Retry reads again the read that stopped the tab: the head's where it failed or named no file, else the whole text.
+  // Note that a head read again that failed keeps the file it named before, so its status is weighed beside its answer.
+  const headStopped = head.status === QUERY_STATUS.ERROR || !headRead;
+  const readAgain = () => void (pinned === undefined && headStopped ? head : whole).refetch();
   const told = useRef(onRead);
   told.current = onRead;
   useEffect(() => {

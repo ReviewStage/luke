@@ -189,6 +189,31 @@ test("a File tab whose first read the service refused reads no whole text, and R
   ]);
 });
 
+test("a File tab opened again whose head read then fails asks for the head again on Retry", async () => {
+  const asked: TaskFileRequest[] = [];
+  const read = service(asked);
+  const file = { path: PATH, range: undefined, opened: 1 };
+  await tab(file, read);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.replaceChildren();
+
+  let failing = true;
+  const container = drawTab(file, (request) => {
+    if (!failing || request.raw === true) return read(request);
+    asked.push(request);
+    return Promise.reject(new Error("the host went away"));
+  });
+  const retry = () =>
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry");
+  await vi.waitFor(() => assert.equal(retry() === undefined, false));
+  failing = false;
+  act(() => retry()?.click());
+  await wholeFileDrawn(container);
+
+  const heads = asked.filter((request) => request.raw !== true);
+  assert.equal(heads.length, 3, "the head is read on opening, on opening again, and on Retry");
+});
+
 test("the lines a File tab was opened on are lit", async () => {
   const container = await tab(
     { path: PATH, range: { startLine: 1, endLine: 1 }, opened: 1 },
