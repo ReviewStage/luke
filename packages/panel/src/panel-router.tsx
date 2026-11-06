@@ -8,15 +8,17 @@
  * before the router stood reads the same through it; Settings stands at
  * `/app/settings` too, while the window lists no workspace, and the
  * Automations pages hold the places no link names, their Runs tab, a new
- * automation's page, and an automation's runs alone. A place's leaf
+ * automation's page, and an automation's runs alone, as a version history
+ * holds its own: its list, a version's sections, and one of them. A place's leaf
  * is an index route under the path it shares with the places beneath it,
- * so `/task/<id>` and `/task/<id>/version/<n>` are both a route of their own.
+ * so `/task/<id>` and `/task/<id>/agent/<id>` are both a route of their own.
  *
  * The root draws `App`, whose shell draws the route standing through its
- * `Outlet` (`desktop-shell.tsx`). Every place but Settings stands beside the
+ * `Outlet` (`desktop-shell.tsx`). Every place but Settings and a version history stands beside the
  * sidebar, under the pathless `places` layout, which stays drawn as the
- * window moves between them. Settings, Admin, a workspace's Board, a
- * person's page, and the Automations pages are routed places: the router alone says the window stands
+ * window moves between them, and a task's version history takes the whole
+ * window as Settings does. Settings, Admin, a workspace's Board, a
+ * person's page, the Automations pages, and a task's version history are routed places: the router alone says the window stands
  * on them, their routes draw them as lazy routes, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`). Every other place
@@ -50,6 +52,7 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
+  VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
 import {
   adminRouteStands,
@@ -57,6 +60,7 @@ import {
   settingsPageRouteStands,
   UNREAD_ROUTE_ACCESS,
   useRouteAccess,
+  versionHistoryRouteStands,
   workspaceRouteStands,
 } from "./route-gates.js";
 import { pathUnder } from "./routed-location.js";
@@ -186,11 +190,6 @@ const taskIndexRoute = createRoute({
   getParentRoute: () => taskRoute,
   path: "/",
   validateSearch: taskSearchSchema,
-});
-
-const taskVersionRoute = createRoute({
-  getParentRoute: () => taskRoute,
-  path: "version/$revision",
 });
 
 const taskPageRoute = createRoute({ getParentRoute: () => taskRoute, path: "page/$pageId" });
@@ -404,6 +403,65 @@ const settingsPageRoute = createRoute({
   },
 });
 
+/**
+ * A task's version history, over the whole window as Settings is, its
+ * versions listed where the sidebar stood: following the newest at
+ * `/<workspace>/task/<id>/versions`, which a narrow room stands as the list
+ * alone, a version chosen at `/version/<revision>`, its sections listed at
+ * `/version/<revision>/sections`, and one of them at
+ * `/version/<revision>/section/<heading>`. It is the description's, so it
+ * stands only while the account has Descriptions on
+ * (`versionHistoryRouteStands`), and gives way to the task otherwise. One
+ * layout draws every page of it, so moving between them draws no new
+ * history; its chunk is its own, opened seldom, whose frame stands while it
+ * loads.
+ */
+const versionHistoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "version-history",
+  pendingComponent: VersionHistoryRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() =>
+  import("./desktop/version-history-route.lazy.js").then(
+    (loaded) => loaded.versionHistoryLazyRoute,
+  ),
+);
+
+const taskVersionsRoute = createRoute({
+  getParentRoute: () => versionHistoryRoute,
+  path: "/$workspace/task/$taskId/versions",
+  // A version history gives way to the task it is of while the account has Descriptions off.
+  beforeLoad: ({ context, params }) => {
+    if (versionHistoryRouteStands(context.access)) return;
+    throw redirect({ to: "/$workspace/task/$taskId", params, replace: true });
+  },
+});
+
+const taskVersionRoute = createRoute({
+  getParentRoute: () => versionHistoryRoute,
+  path: "/$workspace/task/$taskId/version/$revision",
+  beforeLoad: ({ context, params }) => {
+    if (versionHistoryRouteStands(context.access)) return;
+    throw redirect({
+      to: "/$workspace/task/$taskId",
+      params: { workspace: params.workspace, taskId: params.taskId },
+      replace: true,
+    });
+  },
+});
+
+const taskVersionIndexRoute = createRoute({ getParentRoute: () => taskVersionRoute, path: "/" });
+
+const taskVersionSectionsRoute = createRoute({
+  getParentRoute: () => taskVersionRoute,
+  path: "sections",
+});
+
+const taskVersionSectionRoute = createRoute({
+  getParentRoute: () => taskVersionRoute,
+  path: "section/$heading",
+});
+
 /** Settings while the window lists no workspace, as the desktop's does with no account. */
 const appSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -438,7 +496,6 @@ const routeTree = rootRoute.addChildren([
       boardRoute,
       taskRoute.addChildren([
         taskIndexRoute,
-        taskVersionRoute,
         taskPageRoute,
         taskInboxItemRoute,
         taskAgentRoute.addChildren([
@@ -477,6 +534,14 @@ const routeTree = rootRoute.addChildren([
         adminWorkspaceRoute,
         adminDayRoute,
       ]),
+    ]),
+  ]),
+  versionHistoryRoute.addChildren([
+    taskVersionsRoute,
+    taskVersionRoute.addChildren([
+      taskVersionIndexRoute,
+      taskVersionSectionsRoute,
+      taskVersionSectionRoute,
     ]),
   ]),
   settingsRoute.addChildren([settingsIndexRoute, settingsPageRoute]),

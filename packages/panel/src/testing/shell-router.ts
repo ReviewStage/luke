@@ -6,7 +6,7 @@
  * root drawing the shell under test, the places beside the sidebar
  * (`ShellPlaces`) with what the window's state says in their slot
  * (`StatePlace`), and the routed places, Settings, Admin, the Board, a
- * person's page, and the Automations pages, as their own
+ * person's page, the Automations pages, and a version history, as their own
  * lazy modules and frames draw them. It is built from TanStack Router's own
  * routes over the same components `panel-router.tsx` mounts, rather than
  * the window's router, whose root is `App`, so the test's props are what
@@ -34,18 +34,20 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
+  VersionHistoryRouteLoading,
 } from "../desktop/desktop-shell.js";
 import { LAZY_ROUTE } from "../panel-router.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { routeAccessNow } from "../route-gates.js";
 
-/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, or a person's page. */
+/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, a version history's list, or a person's page. */
 export const SHELL_AT = {
   PLACES: "/app",
   SETTINGS: "/app/settings",
   ADMIN: "/acme/admin",
   BOARD: "/acme/tasks",
   AUTOMATIONS: "/acme/automations",
+  VERSION_HISTORY: "/acme/task/1/versions",
 } as const;
 
 /** A person's page in the shell under test, under the same workspace as its Board. */
@@ -79,10 +81,11 @@ interface StandingProps {
     readonly boardView?: { readonly open?: boolean };
     readonly personView?: { readonly userId?: string | undefined };
     readonly automationsView?: { readonly open?: boolean };
+    readonly history?: { readonly open?: boolean };
   };
 }
 
-/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, or a person's page where one stands, else the places. */
+/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, a version history, or a person's page where one stands, else the places. */
 function standingOf(shell: ReactElement): string {
   const props: StandingProps =
     typeof shell.props === "object" && shell.props !== null ? shell.props : {};
@@ -90,6 +93,7 @@ function standingOf(shell: ReactElement): string {
   if (props.tasks?.adminView?.open === true) return SHELL_AT.ADMIN;
   if (props.tasks?.boardView?.open === true) return SHELL_AT.BOARD;
   if (props.tasks?.automationsView?.open === true) return SHELL_AT.AUTOMATIONS;
+  if (props.tasks?.history?.open === true) return SHELL_AT.VERSION_HISTORY;
   const person = props.tasks?.personView?.userId;
   return person === undefined ? SHELL_AT.PLACES : personAt(person);
 }
@@ -148,6 +152,25 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     import("../desktop/settings-route.lazy.js").then((loaded) => loaded.appSettingsLazyRoute),
   );
   const settingsPage = createRoute({ getParentRoute: () => settings, path: "$page" });
+  // Note that the history's layout is pathless under the root, as in the window's tree, so its lazy module's id is its own here too.
+  const versionHistory = createRoute({
+    getParentRoute: () => root,
+    id: "version-history",
+    pendingComponent: VersionHistoryRouteLoading,
+    ...LAZY_ROUTE,
+  }).lazy(() =>
+    import("../desktop/version-history-route.lazy.js").then(
+      (loaded) => loaded.versionHistoryLazyRoute,
+    ),
+  );
+  const versions = createRoute({
+    getParentRoute: () => versionHistory,
+    path: "/$workspace/task/$taskId/versions",
+  });
+  const version = createRoute({
+    getParentRoute: () => versionHistory,
+    path: "/$workspace/task/$taskId/version/$revision",
+  });
   const router = createRouter({
     routeTree: root.addChildren([
       places.addChildren([
@@ -158,6 +181,7 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
         workspace.addChildren([automationPages.addChildren([automations, automation])]),
       ]),
       settings.addChildren([settingsPage]),
+      versionHistory.addChildren([versions, version]),
     ]),
     history: createMemoryHistory({ initialEntries: [at] }),
     context: { queryClient: new QueryClient(), access: routeAccessNow() },

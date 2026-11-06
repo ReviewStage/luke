@@ -748,6 +748,10 @@ function DescriptionDocument({
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
+  // The pointer on a way into the history reads its chunk ahead rather than at the press.
+  const preloadHistory = useSteadyDoor(() => {
+    if (opened !== undefined) tasks.history.onPreload(opened.id);
+  });
   const descriptionEdit = opened === undefined ? undefined : tasks.descriptionEdit(opened.id);
   // Note that the plan's title reads its rename's answer, on the same mutation the header's field draws its refusal from.
   const renameDoor = useSteadyDoor(
@@ -1186,6 +1190,7 @@ function DescriptionDocument({
         reader={reader}
         agents={editAgents}
         onShowHistory={showHistory}
+        onPreloadHistory={preloadHistory}
         edit={descriptionEdit}
         // The title renames as the chip's field does, so a refusal is said beside it.
         onRename={renameDoor}

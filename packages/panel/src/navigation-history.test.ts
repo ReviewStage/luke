@@ -46,6 +46,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
+import { useVersionHistoryRoute } from "./version-history-route.js";
 import {
   type BoardRoute,
   type PersonRoute,
@@ -109,9 +110,24 @@ function mount(
     const [standing, setTasks] = useState(initial);
     restand = setTasks;
     // The Board and a person's page stand where the router does, as the window's root reads them, and are left for the state's place.
-    board = useBoardRoute({ onClose: () => history?.onLeaveRouted() });
-    person = usePersonRoute({ onClose: () => history?.onLeaveRouted() });
-    automations = useAutomationsRoute({ onClose: () => history?.onLeaveRouted() });
+    board = useBoardRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    person = usePersonRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    automations = useAutomationsRoute({
+      narrow: false,
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    const versions = useVersionHistoryRoute({
+      narrow: false,
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
     const listedStep = standing.workspaces.find((each) => each.id === standing.workspace?.id)?.slug;
     const tasks: TasksControl = {
       ...standing,
@@ -157,6 +173,7 @@ function mount(
       settingsList: undefined,
       onSettingsList: () => undefined,
       automations,
+      versionHistory: versions,
       room: SHELL_ROOM.WIDE,
       title: titled?.(tasks),
       tasks,
@@ -185,6 +202,8 @@ function mount(
       act(() => person?.onOpen(userId, name, workspace)),
     /** Opens an Automations page by the router, as its own doors do. */
     openAutomations: (to?: AutomationsPlace) => act(() => shown?.automationsView.onOpen(to)),
+    /** Stands the automation's runs alone, or its setup again, as its Runs and its way back do. */
+    automationRuns: (runs: boolean) => act(() => shown?.automationsView.onRuns(runs)),
     /** The name the person's page standing was opened with. */
     personName: () => person?.name,
     /** Leaves the routed place standing for `tasks`, the place a door into the window's state opens, in one move as the door makes it. */
@@ -557,6 +576,19 @@ test("the automation a new automation's page made takes that page's step, so Bac
   act(() => window.history().onForward());
   await settle();
   assert.equal(window.at(), `/acme/automation/${AUTOMATION_ID}`);
+});
+
+test("on the desktop's width an automation's runs, stood alone by an editor narrower than its split, take its setup's step rather than a step of their own", async () => {
+  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
+  await settle();
+  const behind = window.history().steps.back.length;
+
+  window.automationRuns(true);
+  await settle();
+
+  assert.equal(window.at(), `/acme/automation/${AUTOMATION_ID}/runs`);
+  assert.equal(window.history().steps.back.length, behind, "the runs took the setup's step");
 });
 
 test("another automation opened over a new automation's page, as a notification opens one, is a visit after it, which Back leaves for the new page", async () => {

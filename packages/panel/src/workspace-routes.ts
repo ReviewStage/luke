@@ -44,15 +44,19 @@ export interface PersonRoute {
   readonly onPreload: (userId: string, workspace: string) => void;
 }
 
-/** The Board as the router stands it, left by `onClose`. */
-export function useBoardRoute(input: { onClose: () => void }): BoardRoute {
+/** The Board as the router stands it, left by `onClose`, and kept standing by `onStay` where a leave was asked of it before a door asked for the Board standing. */
+export function useBoardRoute(input: { onClose: () => void; onStay: () => void }): BoardRoute {
   const router = useRouter();
   const navigate = useNavigate();
   const here = useRoutedLocation();
   const open = here.place === ROUTED_PLACE.BOARD;
   const standingIn = open ? here.params.workspace : undefined;
   const onOpen = (workspace: string) => {
-    if (standingIn === workspace) return;
+    // Opening the Board standing moves nothing, and keeps it standing where the door that asked for it left the routed place first, as a link's and ⌘K's do.
+    if (standingIn === workspace) {
+      input.onStay();
+      return;
+    }
     void navigate({ to: "/$workspace/tasks", params: { workspace } });
   };
   const onTurn = (workspace: string) => {
@@ -65,8 +69,8 @@ export function useBoardRoute(input: { onClose: () => void }): BoardRoute {
   return { open, standingIn, onOpen, onClose: input.onClose, onTurn, onPreload };
 }
 
-/** A person's page as the router stands it, left by `onClose`. */
-export function usePersonRoute(input: { onClose: () => void }): PersonRoute {
+/** A person's page as the router stands it, left by `onClose`, and kept standing by `onStay` as the Board is. */
+export function usePersonRoute(input: { onClose: () => void; onStay: () => void }): PersonRoute {
   const router = useRouter();
   const navigate = useNavigate();
   const here = useRoutedLocation();
@@ -77,7 +81,10 @@ export function usePersonRoute(input: { onClose: () => void }): PersonRoute {
   const workspace = open ? here.params.workspace : undefined;
   const onOpen = (to: string, name: string | undefined, toWorkspace: string) => {
     if (name !== undefined) names.set(to, name);
-    if (to === userId && toWorkspace === workspace) return;
+    if (to === userId && toWorkspace === workspace) {
+      input.onStay();
+      return;
+    }
     void navigate({
       to: "/$workspace/person/$userId",
       params: { workspace: toWorkspace, userId: to },

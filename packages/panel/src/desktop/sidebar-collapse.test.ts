@@ -148,6 +148,7 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
         onGoTo: ignore,
         onLeaveVersionHistory: ignore,
         onLeaveRouted: ignore,
+        onStayRouted: ignore,
         away: undefined,
         onLeave: ignore,
       },

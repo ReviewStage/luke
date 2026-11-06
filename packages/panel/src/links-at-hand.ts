@@ -201,7 +201,8 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
     thing: LINK_THING.TASK,
     name: drawn.name,
   };
-  if (tasks.history.open) {
+  // A version history is a routed place over the task (`version-history-route.ts`), so the task's own links are the place under it.
+  if (tasks.history.open && at.underRouted !== true) {
     const revision = tasks.history.selected;
     // A narrow room's version list stands alone, and has no link of its own, so it is the task's step.
     const listedAlone = at.narrow === true && tasks.history.listed;

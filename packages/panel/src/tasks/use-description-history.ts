@@ -7,7 +7,7 @@ import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@repo/features/t
 import { ACT_KIND } from "@repo/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { queryOptions, skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { type ActedResult, askAct, askKept, type Kept } from "../act.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { useRegained } from "../use-regained.js";
@@ -22,15 +22,15 @@ import { revisionOfSave } from "./description-history-model.js";
  * which main lays after it, so a save lands at the head of the list as it
  * lands in the document, a version history opened again lists its versions
  * in its first frame, and nothing is read again here. The newest revision,
- * the description as it stands, is chosen until the developer chooses another, and
- * a save landing meanwhile moves the view on
- * to the new newest; choosing one reads its content and the content before
- * it, and the version history draws what that revision changed until it is
- * left or another task opens, and opens again on the newest. Opened from a
- * section's "Edited by", it opens instead on the revision that made the
- * section's last save, reading older pages until one shows it, and on the
- * newest where none can be read. Gone back to, it opens where it stood when
- * it was left: on the version chosen then, with the sections then open.
+ * the description as it stands, is chosen where the history's address names
+ * no revision, and a save landing meanwhile moves the view on to the new
+ * newest; choosing one reads its content and the content before it, and the
+ * version history draws what that revision changed. Where it stands is its
+ * address's alone (`version-history-route.ts`), so every choice is a move
+ * asked of the router, and the history gone back to stands where it stood.
+ * Opened from a section's "Edited by", it opens instead on the revision that
+ * made the section's last save, reading older pages until one shows it, and
+ * on the newest where none can be read.
  * Restoring the version is the service's write; the description it answers arrives
  * in the document through main's view like any other save, and the history
  * reads again on it. A restore is undone by restoring the version that stood
@@ -117,7 +117,7 @@ export interface DescriptionHistoryControl {
   /** The version drawn, once the list holds the revision chosen. */
   viewing: ViewedVersion | undefined;
   onSelect: (seq: number) => void;
-  /** Where the version history stands while it does, which it opens on again given as `returnTo`. */
+  /** Where the version history stands while it does. */
   spot: HistorySpot | undefined;
   /** Chooses a revision and opens the sections it changed, the first drawn. */
   onOpenSections: (seq: number) => void;
@@ -134,8 +134,6 @@ export interface DescriptionHistoryControl {
   listed: boolean;
   /** Goes back from the version chosen to the list. */
   onList: () => void;
-  /** Stands the history open where `spot` says, as the window's history goes back or forward within it. */
-  onStand: (spot: HistorySpot) => void;
   onRetry: () => void;
   /** Reads the version chosen again after its read failed, leaving its sections open. */
   onRetryVersion: () => void;
@@ -150,56 +148,6 @@ const RESTORE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: "The version could not be restored. Try again.",
 };
-
-/**
- * A version chosen on one task: its revision, none while the newest is
- * followed, so a save landing moves the view onto it; the moment of the save
- * it was opened to find, until the pages read show which revision made it;
- * the revision whose sections are open, drawn only while it is the one
- * chosen; and whether the list stands rather than the version. Its content
- * is read through TanStack Query (`taskRevisionQueryOptions`).
- */
-interface HeldVersion {
-  readonly taskId: string;
-  readonly seq: number | undefined;
-  readonly seeking: number | undefined;
-  readonly opened: OpenedSections | undefined;
-  readonly listed: boolean;
-}
-
-/** The version history opened on a task: following the newest, seeking a save's revision, or where it stood before, nothing read yet. */
-function openedOn(
-  taskId: string,
-  seek: number | undefined,
-  returnTo: HistorySpot | undefined,
-): HeldVersion {
-  return {
-    taskId,
-    seq: returnTo?.revision,
-    seeking: seek,
-    opened: returnTo?.opened,
-    listed: returnTo?.listed ?? (seek === undefined && returnTo === undefined),
-  };
-}
-
-/**
- * The version history standing open on `held` moved to `spot`: its list kept
- * as it was where the spot is the list, and the version and sections the spot
- * names otherwise.
- */
-function stoodAt(held: HeldVersion, spot: HistorySpot): HeldVersion {
-  if (spot.listed === true) return { ...held, listed: true };
-  if (held.seeking === undefined && held.seq === spot.revision) {
-    return { ...held, opened: spot.opened, listed: false };
-  }
-  return {
-    ...held,
-    seq: spot.revision,
-    seeking: undefined,
-    opened: spot.opened,
-    listed: false,
-  };
-}
 
 /** The history main holds as the list draws it: its pages once read, failed where it never answered, and none while it reads. */
 function listOf(
@@ -249,16 +197,18 @@ function versionRead(version: UseQueryResult<TasksRevisionAnswer>): VersionRead 
 }
 
 /**
- * The open description's history. `planId` is the open task, none while no task is
- * drawn; `history` its history as main holds it, which the caller holds
- * while the version history is shown; `editedAt` its last edit, which reads
- * the version drawn again and which a list must be as new as to be sought
- * in; `name` its name, under which a version is formatted, so a rename reads
- * the version drawn again; `shown` whether the description's version history is on
- * screen, which is what reads it and what a version chosen stands on; and
- * `seek` the moment of the save whose revision it opens on, read as it
- * opens, none to open on the description as it stands or, given `returnTo`, where
- * it stood on an earlier visit.
+ * The open description's history. `taskId` is the open task, none while no
+ * task is drawn; `history` its history as main holds it, which the caller
+ * holds while the version history is shown; `editedAt` its last edit, which
+ * reads the version drawn again and which a list must be as new as to be
+ * sought in; `name` its name, under which a version is formatted, so a
+ * rename reads the version drawn again; `at` where the version history
+ * stands, as its address says (`version-history-route.ts`), none while it
+ * stands nowhere, which is what reads it; `seek` the moment of the save whose
+ * revision it opens on, sought as it opens, which `onSought` hears found or
+ * given up on; and `narrow` whether the room shows one pane at a time, where
+ * its list stands apart. Every move is asked of `onMove`, which stands the
+ * history where it is asked to.
  */
 export function useDescriptionHistory(input: {
   source: DescriptionHistorySource;
@@ -266,74 +216,68 @@ export function useDescriptionHistory(input: {
   history: HeldHistory;
   editedAt: number | undefined;
   name: string | undefined;
-  shown: boolean;
+  at: HistorySpot | undefined;
   seek: number | undefined;
-  returnTo: HistorySpot | undefined;
+  narrow: boolean;
+  onMove: (spot: HistorySpot) => void;
+  onSought: () => void;
   /**
    * Says a restore landed, with the way to undo it: a restore of the
    * version that stood before it, where the history read names one.
    */
   onRestored: (undo: (() => Promise<Kept>) | undefined) => void;
 }): DescriptionHistoryControl {
-  const { source, taskId, history, editedAt, name, shown, seek, returnTo, onRestored } = input;
-  const [version, setVersion] = useState<HeldVersion | undefined>(undefined);
-  // Note that the source is read where it is called rather than named by the
-  // reads below, because a caller's acts are a new object on each of its
-  // renders, and a read keyed on them would read again on every one.
-  const latest = useRef(source);
-  latest.current = source;
-  const reading = shown && taskId !== undefined;
+  const { source, taskId, history, editedAt, name, at, seek, narrow, onRestored } = input;
+  // Note that the source and the doors are read where they are called rather
+  // than named by the reads below, because a caller's acts are a new object
+  // on each of its renders, and a read keyed on them would read again on every one.
+  const latest = useRef({ source, onMove: input.onMove, onSought: input.onSought });
+  latest.current = { source, onMove: input.onMove, onSought: input.onSought };
+  const chosen = taskId === undefined ? undefined : at;
+  const reading = chosen !== undefined;
 
-  // A version stands while the version history does, on its own task.
-  const chosen = reading && version?.taskId === taskId ? version : undefined;
-  if (version !== undefined && chosen === undefined) setVersion(undefined);
   const heldRows = reading ? history.rows : undefined;
   const heldFailed = reading && history.failed;
   const held = useMemo(() => listOf(heldRows, heldFailed), [heldRows, heldFailed]);
   const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
   // Until one is chosen, the description as it stands is, whichever revision that is now.
   const newest = revisions[0]?.seq;
-  if (reading && taskId !== undefined && chosen === undefined) {
-    setVersion(openedOn(taskId, seek, returnTo));
-  }
-  // A save sought is its revision once the pages read show it, kept as chosen
-  // from then on. Note that it is sought only in a list as new as the task's
-  // last edit, because a list kept from an earlier visit may lack the
-  // revision the save made since, and would find the one before it.
+  // A save sought is its revision once the pages read show it, which the
+  // history then stands on. Note that it is sought only in a list as new as
+  // the task's last edit, because a list kept from an earlier visit may lack
+  // the revision the save made since, and would find the one before it.
   const current =
     held?.kind === HISTORY_READ.READY &&
     (editedAt === undefined || (revisions[0]?.lastEdit.at ?? -1) >= editedAt);
   const complete = current && held.earlier === undefined;
-  const seeking = chosen?.seeking;
+  const seeking = reading ? seek : undefined;
   const sought =
     seeking === undefined || !current ? undefined : revisionOfSave(revisions, seeking, complete);
-  if (chosen !== undefined && sought !== undefined) {
-    setVersion({ ...chosen, seq: sought === newest ? undefined : sought, seeking: undefined });
-  }
-  // A version gone back to that no page read so far shows is read for on
-  // older pages as a save is, and gives way to the description as it stands where
+  // A version stood on that no page read so far shows is read for on older
+  // pages as a save is, and gives way to the description as it stands where
   // the whole history read holds none.
-  const returned = seeking === undefined ? chosen?.seq : undefined;
+  const returned = seeking === undefined ? chosen?.revision : undefined;
   const unread =
     returned !== undefined && current && !revisions.some((line) => line.seq === returned);
-  if (chosen !== undefined && unread && complete) {
-    setVersion({ ...chosen, seq: undefined, opened: undefined });
-  }
   const readBefore =
     (seeking !== undefined && sought === undefined) || unread
       ? current
         ? held.earlier
         : undefined
       : undefined;
+  useEffect(() => {
+    if (sought === undefined) return;
+    latest.current.onMove({ revision: sought, opened: undefined, listed: false });
+    latest.current.onSought();
+  }, [sought]);
+  const gaveWay = unread && complete;
+  useEffect(() => {
+    if (gaveWay) latest.current.onMove({ revision: undefined, opened: undefined, listed: true });
+  }, [gaveWay]);
 
-  const seq =
-    chosen === undefined
-      ? undefined
-      : chosen.seeking === undefined
-        ? (chosen.seq ?? newest)
-        : sought;
+  const seq = !reading ? undefined : seeking === undefined ? (chosen.revision ?? newest) : sought;
   const versionQuery = useQuery({
-    ...taskRevisionQueryOptions(taskId, chosen === undefined ? undefined : seq, editedAt, name),
+    ...taskRevisionQueryOptions(taskId, seq, editedAt, name),
     // Note that the version drawn stands while a save or a rename reads it again, never another version's.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === taskId && previousQuery?.queryKey[2] === seq
@@ -343,28 +287,16 @@ export function useDescriptionHistory(input: {
   const read = versionRead(versionQuery);
   const readAgain = versionQuery.refetch;
 
-  // Choosing the version drawn again leaves it as it is, unless its read
-  // failed; choosing the newest follows the newest from then on.
+  // Choosing the version drawn again leaves it as it is, unless its read failed.
   const onSelect = useCallback(
     (chosenSeq: number) => {
-      if (taskId === undefined) return;
-      const same =
-        chosen?.taskId === taskId &&
-        chosen.seeking === undefined &&
-        (chosen.seq ?? newest) === chosenSeq;
+      if (chosen === undefined) return;
+      const same = seeking === undefined && seq === chosenSeq;
       if (same && read.kind === HISTORY_READ.FAILED) void readAgain();
-      setVersion((held) => {
-        if (same && held !== undefined) return held.listed ? { ...held, listed: false } : held;
-        return {
-          taskId,
-          seq: chosenSeq === newest ? undefined : chosenSeq,
-          seeking: undefined,
-          opened: undefined,
-          listed: false,
-        };
-      });
+      if (same && chosen.listed !== true) return;
+      latest.current.onMove({ revision: chosenSeq, opened: undefined, listed: false });
     },
-    [taskId, newest, chosen, read.kind, readAgain],
+    [chosen, seeking, seq, read.kind, readAgain],
   );
   const onRetry = history.onRetry;
   // Note that the sections stay open, since they are drawn from the very version this reads again.
@@ -375,20 +307,24 @@ export function useDescriptionHistory(input: {
     if (read.kind === HISTORY_READ.FAILED || read.kind === HISTORY_READ.READING) onRetryVersion();
   });
   // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
-  const onOpenSections = (sectionsOf: number) => {
-    onSelect(sectionsOf);
-    setVersion(
-      (held) => held && { ...held, opened: { seq: sectionsOf, heading: undefined }, listed: true },
-    );
+  const onOpenSections = (sectionsOf: number) =>
+    latest.current.onMove({
+      revision: sectionsOf,
+      opened: { seq: sectionsOf, heading: undefined },
+      listed: true,
+    });
+  const onChooseSection = (heading: string | undefined) => {
+    if (chosen?.opened === undefined) return;
+    latest.current.onMove({ ...chosen, opened: { ...chosen.opened, heading }, listed: false });
   };
-  const onChooseSection = (heading: string | undefined) =>
-    setVersion(
-      (held) => held?.opened && { ...held, opened: { ...held.opened, heading }, listed: false },
-    );
-  const onCloseSections = () =>
-    setVersion((held) => held && { ...held, opened: undefined, listed: true });
-  const onList = () => setVersion((held) => held && { ...held, listed: true });
-  const onStand = (spot: HistorySpot) => setVersion((held) => held && stoodAt(held, spot));
+  // Note that a narrow room's sections close onto every version, its list, and a wide room's onto the version they were of.
+  const onCloseSections = () => {
+    if (chosen === undefined) return;
+    latest.current.onMove({ revision: chosen.revision, opened: undefined, listed: narrow });
+  };
+  const onList = () => {
+    if (chosen !== undefined) latest.current.onMove({ ...chosen, listed: true });
+  };
 
   // Note that the page is drawn from what main holds, which lays it after the history held.
   const onLoadEarlier = async (): Promise<boolean> => {
@@ -399,19 +335,22 @@ export function useDescriptionHistory(input: {
     return answer !== undefined && !("failure" in answer);
   };
 
-  // A save or a version gone back to that no page read so far shows is
-  // sought on the next older page, and one whose page could not be read gives
-  // way to the description as it stands, unless the view has since been opened on
-  // another task, another save, or another version.
+  // A save or a version stood on that no page read so far shows is sought
+  // on the next older page, and one whose page could not be read gives way
+  // to the description as it stands: a save sought is given up on, and a
+  // version stood on leaves for the newest, unless the history has since
+  // moved on to another task or another version.
+  const standingOn = useRef({ taskId, returned });
+  standingOn.current = { taskId, returned };
   useEffect(() => {
     if (readBefore === undefined || taskId === undefined) return;
     onLoadEarlier().then((landed) => {
-      if (landed) return;
-      setVersion((held) => {
-        if (held === undefined || held.taskId !== taskId || held.seeking !== seeking) return held;
-        if (seeking !== undefined) return { ...held, seeking: undefined };
-        return held.seq === returned ? { ...held, seq: undefined, opened: undefined } : held;
-      });
+      const now = standingOn.current;
+      if (landed || now.taskId !== taskId) return;
+      if (seeking !== undefined) latest.current.onSought();
+      else if (now.returned === returned) {
+        latest.current.onMove({ revision: undefined, opened: undefined, listed: true });
+      }
     });
   }, [readBefore]);
 
@@ -424,7 +363,7 @@ export function useDescriptionHistory(input: {
     onRestored(
       before === undefined || before === at
         ? undefined
-        : () => askKept(latest.current.restore(taskId, before)),
+        : () => askKept(latest.current.source.restore(taskId, before)),
     );
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
@@ -432,16 +371,14 @@ export function useDescriptionHistory(input: {
   // A newer version arriving while the newest's sections are open moves the
   // history on to it, as it does over the list, so the sections give way.
   const opened = chosen?.opened?.seq === seq ? chosen?.opened : undefined;
-  // Note that the spot is the same object while it stands as it was, because
-  // the window's history records it on every change.
-  const standing = chosen !== undefined;
-  const revision = chosen?.seq;
+  // Note that the spot is the same object while it stands as it was, because what reads it keys on it.
+  const revision = chosen?.revision;
   const openedSeq = opened?.seq;
   const heading = opened?.heading;
   const spot = useMemo((): HistorySpot | undefined => {
-    if (!standing) return undefined;
+    if (!reading) return undefined;
     return { revision, opened: openedSeq === undefined ? undefined : { seq: openedSeq, heading } };
-  }, [standing, revision, openedSeq, heading]);
+  }, [reading, revision, openedSeq, heading]);
 
   const line = revisions.find((each) => each.seq === seq);
   return {
@@ -462,7 +399,6 @@ export function useDescriptionHistory(input: {
     onCloseSections,
     listed: chosen?.listed ?? true,
     onList,
-    onStand,
     onRetry,
     onRetryVersion,
     onLoadEarlier,
