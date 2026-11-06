@@ -1,23 +1,15 @@
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
-import {
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isFileTab,
-  isLocalTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  isTranscriptTab,
-  pullRequestLabelOf,
-  TAB_WORDS,
-} from "@repo/ui/tab-strip-model";
-import { mainTabLabel } from "./desktop/main-tabs.js";
 import type { StepTitle } from "./navigation-history.js";
 import { ROUTED_PLACE, type RoutedPlace } from "./route-gates.js";
 import { agentName } from "./tasks/agent-model.js";
+import {
+  stripTabTitle,
+  type TabNames,
+  UNREAD_TAB_NAMES,
+  untitledStripTab,
+} from "./tasks/strip-tab-kinds.js";
 import { isOverviewTab, type MainTab } from "./tasks/use-main-tabs.js";
-import { SIDE_PANEL_TAB_KIND, type SidePanelTab } from "./tasks/use-side-panel.js";
+import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 
 /**
@@ -46,16 +38,8 @@ const VERSION_HISTORY_WORDS = "Version history";
 /** What the Inbox's step is called. */
 const INBOX_WORDS = "Inbox";
 
-/** What a Page tab is called where the window does not read its page's title. */
-const PAGE_WORDS = "Page";
-
 /** The parts of the Tasks tab a step's name is read again from: the task list, the open task's agents and pages. */
 type StepNameTasks = Pick<TasksControl, "tasks" | "activeTaskId" | "agents" | "pages">;
-
-/** The last part of a path, which a File tab is named by. */
-function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
 
 /** The name an agent of a task goes by now: as the open task's agents say, else as the task's row's agent line does; none where neither names it. */
 function agentNameNow(tasks: StepNameTasks, taskId: string, agentId: string): string | undefined {
@@ -71,36 +55,36 @@ function agentNameNow(tasks: StepNameTasks, taskId: string, agentId: string): st
   return line === undefined ? undefined : agentName(line, tasks.agents.models);
 }
 
+/**
+ * How a task's step names its tabs now: an agent as `agentNameNow` does, a
+ * page by its title where its task is the open one, whose pages alone are
+ * read, and a worker by the word for one.
+ */
+function stepNames(tasks: StepNameTasks, taskId: string): TabNames {
+  return {
+    ...UNREAD_TAB_NAMES,
+    agent: (agentId) => agentNameNow(tasks, taskId, agentId),
+    subagent: () => "Worker",
+    page: (tab) =>
+      taskId === tasks.activeTaskId
+        ? tasks.pages?.find((page) => page.id === tab.page)?.title
+        : undefined,
+  };
+}
+
 /** What a column tab of a task is called now; none for an agent named nowhere the window reads. */
 function columnTabLabel(tab: MainTab, taskId: string, tasks: StepNameTasks): string | undefined {
-  return isAgentTab(tab) ? agentNameNow(tasks, taskId, tab.agent) : mainTabLabel(tab, tasks.agents);
+  return stripTabTitle(tab, stepNames(tasks, taskId));
 }
 
 /** What a side panel tab of a task is called under its task's name now; none for an agent named nowhere the window reads, or a page of a task not open, whose pages are not read. */
 function sideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): string | undefined {
-  if (isFileTab(tab)) return fileName(tab.file);
-  if (isChangesTab(tab)) {
-    return tab.number === undefined
-      ? TAB_WORDS.PULL_REQUEST
-      : pullRequestLabelOf({ number: tab.number, title: TAB_WORDS.PULL_REQUEST });
-  }
-  if (isPageTab(tab)) {
-    return taskId === tasks.activeTaskId
-      ? tasks.pages?.find((page) => page.id === tab.page)?.title
-      : undefined;
-  }
-  if (isTerminalTab(tab) || isLocalTab(tab)) return tab.title;
-  if (isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
-  if (isSubagentTab(tab)) return "Worker";
-  if (isTranscriptTab(tab)) return agentNameNow(tasks, taskId, tab.transcript);
-  return SIDE_PANEL_TAB_KIND[tab].label;
+  return stripTabTitle(tab, stepNames(tasks, taskId));
 }
 
 /** What a side panel tab is called as the window stands on it, its kind's word where nothing names it. */
 function shownSideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): string {
-  const named = sideTabLabel(tab, taskId, tasks);
-  if (named !== undefined) return named;
-  return isPageTab(tab) ? PAGE_WORDS : TAB_WORDS.AGENT;
+  return sideTabLabel(tab, taskId, tasks) ?? untitledStripTab(tab);
 }
 
 /** The parts of the Tasks tab a step's name reads. */

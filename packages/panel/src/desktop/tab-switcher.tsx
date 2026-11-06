@@ -49,18 +49,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
-import {
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isFileTab,
-  isLocalTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  sameTab,
-  TAB_WORDS,
-} from "@repo/ui/tab-strip-model";
+import { isAgentTab, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -77,8 +66,9 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { ROUTED_PLACE } from "../route-gates.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
+import { stripTabLook } from "../tasks/strip-tab-kinds.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
@@ -166,24 +156,8 @@ interface CardLook extends KindLook {
 
 /** A tab's look where its strip never drew it in this window: its kind's glyph and word, Overview's its own, the Plan's named for its task where the window lists it. */
 function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined): KindLook {
-  if (isOverviewTab(tab)) return tabLook({ kind: TAB_KIND.OVERVIEW });
-  if (typeof tab === "string") {
-    const plan = task === undefined ? undefined : { name: task.name, status: task.status };
-    return tabLook({ kind: TAB_KIND.PANEL, tab, plan });
-  }
-  if (isAgentTab(tab)) return tabLook({ kind: TAB_KIND.AGENT, name: undefined, agent: undefined });
-  if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
-  if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
-  if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, title: tab.title });
-  if (isLocalTab(tab)) return tabLook({ kind: TAB_KIND.LOCAL, title: tab.title });
-  if (isCloudBrowserTab(tab)) {
-    return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
-  }
-  if (isPageTab(tab)) return tabLook({ kind: TAB_KIND.PAGE, title: "Page" });
-  if (isSubagentTab(tab)) {
-    return tabLook({ kind: TAB_KIND.SUBAGENT, name: "Subagent", model: undefined, state: "rest" });
-  }
-  return tabLook({ kind: TAB_KIND.DRAFT });
+  const plan = task === undefined ? undefined : { name: task.name, status: task.status };
+  return tabLook(stripTabLook(tab, { plan }));
 }
 
 /** The task's name, as the window lists it. */

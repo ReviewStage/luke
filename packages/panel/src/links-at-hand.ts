@@ -10,7 +10,7 @@ import type { PagePlace } from "@repo/features/page-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
 import type { SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@repo/ui/tab-strip-model";
+import { isAgentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
 import { type AdminView, adminLinkFields } from "./admin/routing.js";
@@ -18,6 +18,7 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
+import { stripTabLink } from "./tasks/strip-tab-kinds.js";
 import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
@@ -149,23 +150,7 @@ export function panelTabPlace(
   holder: PagePlace,
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
-  if (tab === undefined) return undefined;
-  if (isPageTab(tab)) {
-    return "taskId" in holder
-      ? { kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: tab.page }
-      : { kind: LINK_PLACE.PAGE, agentId: holder.agentId, pageId: tab.page };
-  }
-  // A Changes tab on another pull request of the agent's repository, by its number, is no place a link names.
-  if (isChangesTab(tab)) {
-    return tab.number === undefined
-      ? { kind: LINK_PLACE.CHANGES, agentId: tab.changes }
-      : undefined;
-  }
-  if (!isSubagentTab(tab)) return undefined;
-  const agent = tab.delegation?.agent ?? ("agentId" in holder ? holder.agentId : undefined);
-  return agent === undefined
-    ? undefined
-    : { kind: LINK_PLACE.WORKER, agentId: agent, callId: tab.subagent };
+  return tab === undefined ? undefined : stripTabLink(tab, holder);
 }
 
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
