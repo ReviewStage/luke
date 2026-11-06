@@ -27,7 +27,7 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onQueryClient, onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { heardWords } from "../testing/heard-words.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -90,7 +90,7 @@ function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMenti
   });
   act(() =>
     root.render(
-      onQueryClient(
+      withQueryClient(
         page === undefined
           ? turn
           : onRegistry(
@@ -478,7 +478,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   ]);
   act(() =>
     root.render(
-      onQueryClient(
+      withQueryClient(
         createElement(AgentMessage, {
           message,
           plan: false,
@@ -531,7 +531,7 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
   ]);
   act(() =>
     root.render(
-      onQueryClient(
+      withQueryClient(
         createElement(AgentMessage, {
           message,
           plan: false,
@@ -592,7 +592,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
   ]);
   act(() =>
     root.render(
-      onQueryClient(
+      withQueryClient(
         createElement(AgentMessage, {
           message,
           plan: false,

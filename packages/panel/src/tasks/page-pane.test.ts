@@ -23,7 +23,7 @@ import { runAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { onQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
@@ -89,7 +89,7 @@ function mount(
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        onQueryClient(
+        withQueryClient(
           createElement(
             LinkWorkspaceProvider,
             { value: "acme" },
@@ -460,7 +460,7 @@ test("on a phone the page draws no bar, and the task's header's ⋯ offers every
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onQueryClient(element)));
+  act(() => root.render(withQueryClient(element)));
 
   assert.equal(container.querySelector(".file-view-bar"), null);
   assert.equal(container.querySelectorAll("button").length, 0, "nothing over the page presses");

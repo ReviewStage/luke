@@ -9,7 +9,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { toolCallView } from "./tool-call-model.js";
 
@@ -49,7 +49,7 @@ function rowOf(tool: string, input: WireRecord, output: WireRecord) {
   roots.push(root);
   act(() =>
     root.render(
-      onQueryClient(
+      withQueryClient(
         createElement(AgentMessage, {
           message,
           plan: false,
