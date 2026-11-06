@@ -496,7 +496,7 @@ function DescriptionDocument({
     summary,
     column,
     tasks.sidePanel.fullScreen,
-    agentsComing || summaryHolds(tasks, inbox.board),
+    agentsComing || summaryHolds(tasks),
   );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
@@ -1460,7 +1460,6 @@ function DescriptionDocument({
                               tasks={summaryTasks}
                               layout={summaryLayout}
                               cardId={summaryCard}
-                              inbox={inbox.board}
                               held={views.held}
                               onOpenAgent={openAgentColumn}
                             />

@@ -140,7 +140,7 @@ const NEW_AGENT_ROW = "new-agent";
 const NEW_AGENT_STARTING = "Starting…";
 
 /** The row that opens the task's Inbox, which no agent's id spells. */
-export const INBOX_ROW = "inbox";
+const INBOX_ROW = "inbox";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
@@ -414,25 +414,9 @@ export function agentEntries(
   });
 }
 
-/**
- * The task's Inbox as a row: its tray and its name, then at its end the
- * Draft pencil where one of its items' boxes holds a draft, as the sidebar's
- * row for the task wears it, and what waits on the developer counted in the
- * attention tone the rows it counts wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
- * panel's other kinds; picking it opens the window's Inbox narrowed to the task.
- */
-export function inboxEntry(onPick: () => void, waiting: number, drafted = false): AddEntry {
-  const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
-  const count = waitingMark(waiting);
-  const endMark = drafted ? (
-    <>
-      <DraftMark />
-      {count}
-    </>
-  ) : (
-    count
-  );
-  return { row, endMark, onPick };
+/** The task's Inbox as a row, its tray and its name, which picking opens through `onPick`. */
+function inboxEntry(onPick: () => void): AddEntry {
+  return { row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) }, onPick };
 }
 
 /** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
@@ -459,7 +443,7 @@ export function inboxEntries(
 ): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0 && !waiting) return [];
-  return [inboxEntry(onPick, 0)];
+  return [inboxEntry(onPick)];
 }
 
 /**
