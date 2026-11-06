@@ -427,6 +427,10 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
+  // Note that a card reading what it names draws its skeleton until the read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.ui-tooltip-card [class*="skeleton"]') === null, true),
+  );
   const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {

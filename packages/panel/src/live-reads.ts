@@ -30,7 +30,10 @@
  *   from the query cache's `observerAdded`, `observerRemoved`, and
  *   `observerOptionsUpdated` events (`QueryCache.subscribe`), so a surface
  *   reads a live read with `useQuery(factory(ids))` and nothing beside it. A
- *   read the host holds for the session takes no follow (`LIVE_FOLLOWS`).
+ *   read the host holds for the session takes no follow (`LIVE_FOLLOWS`). A
+ *   read whose follow needs more than its key's ids carries it on the
+ *   query's `meta`, the docs' place for what a query carries beside its key,
+ *   which its follow decodes (a page's comments name their task there).
  * - **Its Try again** is `useMutation` over the read's `*_RETRY` act, one
  *   `mutationOptions` factory per read beside its query's. The host lays the
  *   read unread as it asks again, and the subscription resets a failed
@@ -46,9 +49,21 @@
  * that open a follow (`anti-slop/no-follow-outside-host-read`).
  */
 
+import {
+  BROWSER_TABS_PLACE,
+  type BrowserTabsPlace,
+  browserTabsPlaceId,
+  browserTabsPlaceKind,
+} from "@repo/features/agent-browser-tab-wire";
 import { type AgentInboxScope, agentInboxScopeSchema } from "@repo/features/agent-view";
 import { LIVE_READ } from "@repo/features/live-wire";
-import type { TasksLinkStandingParams } from "@repo/features/tasks-view";
+import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
+import {
+  COMMENT_SUBJECT,
+  type TasksCommentsFollow,
+  type TasksLinkStandingParams,
+  tasksCommentsFollowSchema,
+} from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -91,10 +106,17 @@ type LinkStandingKey = TasksLinkStandingParams;
 /** The holder a holder inbox's ids name, as its follow takes it; its key is built from one (`holderInboxQuery`), so it always reads. */
 const readHolder = Schema.decodeUnknownSync(agentInboxScopeSchema);
 
-/** A follow, a stream on the act port that carries nothing and that the host keeps the read followed for, by the read's ids. */
+/** A follow, a stream on the act port that carries nothing and that the host keeps the read followed for, by the read's ids and what its query carries on `meta`. */
 type LiveFollow = (
   ids: readonly string[],
+  meta: Readonly<Record<string, unknown>> | undefined,
 ) => Promise<AsyncIteratorObject<unknown, unknown, unknown>>;
+
+/** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
+export type CommentSubject = TasksCommentsFollow;
+
+/** The comments a follow holds, as its query carries them on `meta`; its factory puts one there (`planCommentsQuery`), so it always reads. */
+const readCommentSubject = Schema.decodeUnknownSync(tasksCommentsFollowSchema);
 
 /**
  * The follow of each live read moved here that the panel holds. Note that
@@ -113,6 +135,19 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
     askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, readHolder({ kind, id })),
   [LIVE_READ.LINK_STANDINGS]: ([workspaceId = "", address = ""]) =>
     askAct(ACT_KIND.TASKS_LINK_STANDING_FOLLOW, { workspaceId, address }),
+  [LIVE_READ.PAGES]: ([owner, id = ""]) =>
+    askAct(
+      ACT_KIND.TASKS_PAGES_FOLLOW,
+      owner === PAGE_OWNER.TASK ? { taskId: id } : { agentId: id },
+    ),
+  [LIVE_READ.BROWSER_TABS]: ([kind, id = ""]) =>
+    askAct(
+      ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
+      kind === BROWSER_TABS_PLACE.TASK ? { taskId: id } : { agentId: id },
+    ),
+  [LIVE_READ.PLAN_DOCUMENT]: ([taskId = ""]) => askAct(ACT_KIND.TASKS_DOCUMENT_FOLLOW, { taskId }),
+  [LIVE_READ.PLAN_COMMENTS]: (_ids, meta) =>
+    askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, readCommentSubject(meta?.follow)),
 };
 
 /** Every live read moved here, by its name, which `use-host-read.ts` reads no more. */
@@ -128,6 +163,10 @@ const LIVE_QUERY_READS = [
   LIVE_READ.INBOX_ITEMS,
   LIVE_READ.HOLDER_INBOX,
   LIVE_READ.LINK_STANDINGS,
+  LIVE_READ.PAGES,
+  LIVE_READ.BROWSER_TABS,
+  LIVE_READ.PLAN_DOCUMENT,
+  LIVE_READ.PLAN_COMMENTS,
 ] as const satisfies readonly LiveReadName[];
 
 /** A live read moved here, by its name. */
@@ -236,10 +275,15 @@ function firstAnswer<Read extends LiveReadName>(
  * since a push may have landed between the first answer and the fiber's
  * resuming, and no newer rows may be overwritten by older.
  */
-function liveReadQuery<Read extends LiveReadName>(read: Read, ids: readonly string[] | undefined) {
+function liveReadQuery<Read extends LiveReadName>(
+  read: Read,
+  ids: readonly string[] | undefined,
+  meta?: Readonly<Record<string, unknown>>,
+) {
   const queryKey: LiveReadKey<Read> = ids === undefined ? [read] : [read, ...ids];
   return queryOptions({
     queryKey,
+    ...(meta === undefined ? {} : { meta }),
     queryFn: ({ client, signal }) =>
       rendererPromise(firstAnswer(client, read, ids ?? []), signal).then(
         (answered) =>
@@ -305,6 +349,45 @@ export const linkStandingQuery = (link: LinkStandingKey | undefined) =>
     link === undefined ? undefined : [link.workspaceId, link.address],
   );
 
+/** One task's pages, or one agent's on no task, by its place; none offers Try again, since the host reads them again on its own. */
+export const pagesQuery = (place: PagePlace | undefined) =>
+  liveReadQuery(
+    LIVE_READ.PAGES,
+    place === undefined
+      ? undefined
+      : "taskId" in place
+        ? [PAGE_OWNER.TASK, place.taskId]
+        : [PAGE_OWNER.AGENT, place.agentId],
+  );
+
+/** One task's cloud Browser tabs, every one of its agents', or one agent's, by its place; none offers Try again, since the host reads them again on its own. */
+export const browserTabsQuery = (place: BrowserTabsPlace | undefined) =>
+  liveReadQuery(
+    LIVE_READ.BROWSER_TABS,
+    place === undefined ? undefined : [browserTabsPlaceKind(place), browserTabsPlaceId(place)],
+  );
+
+/** One task's plan, by the task, which the window's open task holds. */
+export const planDocumentQuery = (taskId: string | undefined) =>
+  liveReadQuery(LIVE_READ.PLAN_DOCUMENT, taskId === undefined ? undefined : [taskId]);
+
+/** The comments a surface holds, as the acts name them, with no page key where it reads the plan's. */
+function commentsFollowOf({ taskId, pageId }: CommentSubject): CommentSubject {
+  return pageId === undefined ? { taskId } : { taskId, pageId };
+}
+
+/** One plan's comments, or one of its task's pages', by the subject; the follow's subject rides on `meta`, since a page's key names no task. */
+export const planCommentsQuery = (subject: CommentSubject | undefined) =>
+  liveReadQuery(
+    LIVE_READ.PLAN_COMMENTS,
+    subject === undefined
+      ? undefined
+      : subject.pageId === undefined
+        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        : [COMMENT_SUBJECT.PAGE, subject.pageId],
+    subject === undefined ? undefined : { follow: commentsFollowOf(subject) },
+  );
+
 /** Try again on the account's preferences row. */
 export const accountPreferencesRetryMutation = () => actMutation(ACT_KIND.AGENTS_PREFERENCES_RETRY);
 
@@ -328,6 +411,11 @@ export const inboxItemsRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_I
 
 /** Try again on one holder's own inbox. */
 export const holderInboxRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_RETRY);
+/** Try again on a plan's or a page's comments, by the subject. */
+export const planCommentsRetryMutation = () => actMutation(ACT_KIND.TASKS_COMMENTS_RETRY);
+
+/** Try again on a task's plan. */
+export const planDocumentRetryMutation = () => actMutation(ACT_KIND.TASKS_DOCUMENT_RETRY);
 
 /**
  * Writes what each push lays of a live read into its query: the rows of
@@ -388,7 +476,7 @@ export function useLiveReadSubscription(): void {
         follows.set(
           query,
           streamFrom(
-            () => follow(live.ids),
+            () => follow(live.ids, query.meta),
             () => undefined,
           ),
         );

@@ -1,9 +1,4 @@
 import {
-  type BrowserTabsPlace,
-  browserTabsPlaceId,
-  browserTabsPlaceKind,
-} from "@repo/features/agent-browser-tab-wire";
-import {
   type AgentPullRequestReadParams,
   type AgentTranscriptKey,
   PULL_REQUEST_PART,
@@ -12,9 +7,7 @@ import {
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
-import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -79,14 +72,6 @@ export interface HostRead<Rows> extends HeldRead<Rows> {
 /** A repository list's scope as its acts name it: its workspace, or nothing for every one (`EVERY_WORKSPACE`). */
 function repositoryScope(workspace: string): { readonly workspaceId?: string } {
   return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
-}
-
-/** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
-export type CommentSubject = TasksCommentsFollow;
-
-/** The comments a surface holds, as the act names them, with no page key where it reads the plan's. */
-function commentsFollowOf({ taskId, pageId }: CommentSubject): TasksCommentsFollow {
-  return pageId === undefined ? { taskId } : { taskId, pageId };
 }
 
 /** The integration server whose tools a surface reads: its provider, and its account where the server is not the provider's own. */
@@ -211,15 +196,11 @@ function pullRequestPartRead(part: PullRequestPart) {
 /**
  * Every read a surface reads through `useHostRead`, by its name, but
  * those moved onto TanStack Query (`live-reads.ts`): where the account's integrations stand, by the account, which every
- * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
- * page, the panel beside an Inbox item, an agent's page, and a page's card
- * or frame each hold; the parts of one agent's pull request a Pull request
+ * surface drawing an integration holds; the parts of one agent's pull request a Pull request
  * tab holds while it shows, its pull request, checks, conversation, and what
  * the agent published, by the number the tab names or the agent's own; one
  * agent's pull request's chapters, by the number its Pull request tab's own
- * read of it found; one task's cloud Browser tabs,
- * every one of its agents', or one agent's, which a side panel listing them
- * holds; one agent's own tools, which its
+ * read of it found; one agent's own tools, which its
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the outside MCP clients the account allowed, by
  * the account, which Settings › MCP holds; one agent's or worker's
@@ -228,8 +209,7 @@ function pullRequestPartRead(part: PullRequestPart) {
  * memories, which Settings › Memory holds; the skills the account sees in
  * one workspace, which Settings › Skills holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
- * one plan's comments, or one page's, which the open task's plan and a
- * page's tab each hold; one task's plan history, which its version history
+ * one task's plan history, which its version history
  * holds while it shows; one workspace's people, its members and who its work names but
  * left, which every surface naming them holds; one workspace's token
  * repositories, which Settings › Workspace and onboarding's GitHub step
@@ -239,12 +219,7 @@ function pullRequestPartRead(part: PullRequestPart) {
  * automation's editor hold; the channels of one workspace's Slack team,
  * which an owner's or an admin's Settings › Workspace holds; each listed
  * workspace's photo, which the host fetches as its version moves and holds
- * for the session; and one task's plan, which the window's open task holds.
- * Pages and Browser tabs offer no Try again,
- * because the host reads those that did not answer again on its own, and
- * those it was refused, a plan's or an agent's the reader cannot reach,
- * stand failed until every surface lets them go and one holds them anew
- * (`@repo/host`'s `live-push.ts`). A workspace's photo offers
+ * for the session. A workspace's photo offers
  * none, since the host fetches it again as the workspaces next move.
  */
 const HOST_READS = {
@@ -272,17 +247,6 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
-    slice: APP_SLICE.PAGES,
-    path: (place: PagePlace) =>
-      "taskId" in place ? [PAGE_OWNER.TASK, place.taskId] : [PAGE_OWNER.AGENT, place.agentId],
-    hold: (place) =>
-      askAct(
-        ACT_KIND.TASKS_PAGES_FOLLOW,
-        "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
-      ),
-    retry: undefined,
   }),
   [LIVE_READ.PULL_REQUEST]: hostRead(LIVE_READ.PULL_REQUEST, {
     slice: APP_SLICE.PULL_REQUEST,
@@ -319,16 +283,6 @@ const HOST_READS = {
     path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
     hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
     retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
-  }),
-  [LIVE_READ.BROWSER_TABS]: hostRead(LIVE_READ.BROWSER_TABS, {
-    slice: APP_SLICE.BROWSER_TABS,
-    path: (place: BrowserTabsPlace) => [browserTabsPlaceKind(place), browserTabsPlaceId(place)],
-    hold: (place) =>
-      askAct(
-        ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
-        "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
-      ),
-    retry: undefined,
   }),
   [LIVE_READ.WORKSPACE_INVITATIONS]: hostRead(LIVE_READ.WORKSPACE_INVITATIONS, {
     slice: APP_SLICE.WORKSPACE_INVITATIONS,
@@ -400,26 +354,11 @@ const HOST_READS = {
     slice: APP_SLICE.AUTOMATION_RUNS,
     ...automationsRead(AUTOMATION_FOLLOW.RUNS),
   }),
-  [LIVE_READ.PLAN_COMMENTS]: hostRead(LIVE_READ.PLAN_COMMENTS, {
-    slice: APP_SLICE.PLAN_COMMENTS,
-    path: (subject: CommentSubject) =>
-      subject.pageId === undefined
-        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
-        : [COMMENT_SUBJECT.PAGE, subject.pageId],
-    hold: (subject) => askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, commentsFollowOf(subject)),
-    retry: (subject) => tellAct(ACT_KIND.TASKS_COMMENTS_RETRY, commentsFollowOf(subject)),
-  }),
   [LIVE_READ.HISTORY]: hostRead(LIVE_READ.HISTORY, {
     slice: APP_SLICE.HISTORY,
     path: (taskId: string) => [taskId],
     hold: (taskId) => askAct(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }),
     retry: (taskId) => tellAct(ACT_KIND.TASKS_HISTORY_RETRY, { taskId }),
-  }),
-  [LIVE_READ.PLAN_DOCUMENT]: hostRead(LIVE_READ.PLAN_DOCUMENT, {
-    slice: APP_SLICE.PLAN_DOCUMENT,
-    path: (taskId: string) => [taskId],
-    hold: (taskId) => askAct(ACT_KIND.TASKS_DOCUMENT_FOLLOW, { taskId }),
-    retry: (taskId) => tellAct(ACT_KIND.TASKS_DOCUMENT_RETRY, { taskId }),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 
@@ -572,17 +511,4 @@ export function useHostReads<Read extends HostReadName>(
     [entry],
   );
   return { readOf, retry };
-}
-
-/**
- * The pages of each place given, a task's or an agent's on no task, held by
- * this surface while it names them: what a side panel reads of the places
- * its page tabs stand on beside the one it stands for. Answers each place's
- * pages, none until they are read.
- */
-export function usePlacesPages(
-  places: readonly PagePlace[],
-): (place: PagePlace) => readonly PageLine[] | undefined {
-  const { readOf } = useHostReads(LIVE_READ.PAGES, places);
-  return useCallback((place) => readOf(place).rows, [readOf]);
 }
