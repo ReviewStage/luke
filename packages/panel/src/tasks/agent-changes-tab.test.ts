@@ -1046,7 +1046,7 @@ test("the diff settings set the layout, the indicators, and a switch for every d
     ligatures: true,
     backgrounds: false,
   };
-  assert.deepEqual(lastDrawn().look, expected);
+  await vi.waitFor(() => assert.deepEqual(lastDrawn().look, expected));
   assert.deepEqual((await drawTab()).look, expected);
 });
 
@@ -1116,7 +1116,7 @@ test("with Changed words Off a changed line is tinted whole, for this view and t
   await drawTab();
 
   await pick(openSettings(), "Changed words", "Off");
-  assert.equal(lastDrawn().look.inlineDiff, "none");
+  await vi.waitFor(() => assert.equal(lastDrawn().look.inlineDiff, "none"));
 
   assert.equal((await drawTab()).look.inlineDiff, "none");
 });
@@ -1974,7 +1974,10 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   assert.equal(note().querySelector(".drawn-thread")?.textContent, "why-42");
 
   press(listBox(), { key: "i" });
-  await flush();
+  // Note that the setting is drawn once its write's mutation hands it to React, a tick after the press.
+  await vi.waitFor(() =>
+    assert.equal(note().querySelector(".diff-thread-chip-row > summary") === null, false),
+  );
   const chip =
     note().querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("a chip stands");
@@ -2008,11 +2011,12 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   );
 
   press(listBox(), { key: "i" });
-  await flush();
-  assert.equal(
-    note().querySelector(".diff-thread-chip-row > summary"),
-    null,
-    "I again draws every thread whole",
+  await vi.waitFor(() =>
+    assert.equal(
+      note().querySelector(".diff-thread-chip-row > summary") === null,
+      true,
+      "I again draws every thread whole",
+    ),
   );
 });
 
@@ -2023,13 +2027,18 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   };
   await drawTab({ threads });
   press(listBox(), { key: "i" });
-  await flush();
-  const [outdated, current] = lastDrawn().files[0]?.annotations ?? [];
   const chipOf = (key: string | undefined) =>
     lastDrawn()
       .renderAnnotation("src/seats.ts", key ?? "")
       .querySelector(".diff-thread-chip-row");
-  assert.equal(chipOf(outdated?.key)?.hasAttribute("data-above"), true, "above the diff");
+  await vi.waitFor(() =>
+    assert.equal(
+      chipOf(lastDrawn().files[0]?.annotations[0]?.key)?.hasAttribute("data-above"),
+      true,
+      "above the diff",
+    ),
+  );
+  const [, current] = lastDrawn().files[0]?.annotations ?? [];
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
@@ -2078,16 +2087,15 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
 
   // Minimized, the thread that moved is its line's chip.
   press(listBox(), { key: "i" });
-  await flush();
-  assert.equal(
+  const gapChip = () =>
     lastDrawn()
       .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
-      .querySelector(".diff-thread-chip-row > summary")
-      ?.getAttribute("aria-label"),
-    "1 comment by octo · 1 open, show",
+      .querySelector(".diff-thread-chip-row > summary");
+  await vi.waitFor(() =>
+    assert.equal(gapChip()?.getAttribute("aria-label"), "1 comment by octo · 1 open, show"),
   );
   press(listBox(), { key: "i" });
-  await flush();
+  await vi.waitFor(() => assert.equal(gapChip() === null, true));
 
   // The gap closed again, its patch read anew.
   act(() => lastDrawn().onDrawn?.("src/seats.ts", []));

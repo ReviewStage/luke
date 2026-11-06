@@ -24,7 +24,7 @@ import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { type HostReadsHanded, handHostReads } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
   pressKeyIn,
@@ -146,10 +146,12 @@ afterEach(() => {
   motion.restore();
 });
 
+/** Waits until no write is out, each answered, so the next press meets the service as the test now stands it. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await vi.waitFor(() => assert.equal(testQueryClientNow().isMutating(), 0));
 }
 
 /** Where the page opened Settings, as the window's opener heard it. */
