@@ -21,12 +21,12 @@
  * key is looked for before the clip is read.
  */
 
+import { middlewareGen } from "@orpc/experimental-effect";
 import { PROVIDER_KEY_UNREADABLE } from "@repo/database/models/provider-key-seal";
 import { spendDictationMeter } from "@repo/database/models/quota";
 import { base64Bytes } from "@repo/features/agent-wire";
 import { DICTATION_BOUNDS } from "@repo/features/dictation-wire";
 import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { middlewareGen } from "@orpc/experimental-effect";
 import { Clock, Effect, type Redacted } from "effect";
 import { ownApiKeyOf } from "../accounts/own-api-key.js";
 import { HostedEnvironment } from "../environment.js";
@@ -47,12 +47,8 @@ const openAiKeyMiddleware = middlewareGen<
   HostedContext & HostedCaller,
   { readonly openAiKey: Redacted.Redacted<string> }
 >(function* ({ context, next }) {
-  const { providerKeyEncryptionKeys } = yield* HostedEnvironment;
-  const key = yield* ownApiKeyOf(
-    context.userId,
-    PROVIDER_KEY_PROVIDER.OPENAI,
-    providerKeyEncryptionKeys,
-  ).pipe(
+  const environment = yield* HostedEnvironment;
+  const key = yield* ownApiKeyOf(context.userId, PROVIDER_KEY_PROVIDER.OPENAI, environment).pipe(
     Effect.tapError(logStoreFailure),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );

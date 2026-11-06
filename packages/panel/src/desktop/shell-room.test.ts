@@ -178,6 +178,7 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
       onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },

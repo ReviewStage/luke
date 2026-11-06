@@ -50,7 +50,7 @@ const LINKS: readonly (readonly [LinkPlace, Landing])[] = [
   [
     { kind: LINK_PLACE.VERSION, planId: "42", revision: 3 },
     {
-      routeId: "/places/$workspace/task/$taskId/version/$revision",
+      routeId: "/version-history/$workspace/task/$taskId/version/$revision/",
       params: { workspace: W, taskId: "42", revision: "3" },
     },
   ],
@@ -282,6 +282,20 @@ describe("the panel's route tree", () => {
     expect(landingOf(`/${W}/automation/au1/runs`)).toEqual({
       routeId: "/places/$workspace/automation-pages/automation/$automationId/runs",
       params: { workspace: W, automationId: "au1" },
+      search: {},
+    });
+  });
+
+  it("names the version history's places no link names, its list, a version's sections, and one of them", () => {
+    expect(landingOf(`/${W}/task/42/versions`).routeId).toBe(
+      "/version-history/$workspace/task/$taskId/versions",
+    );
+    expect(landingOf(`/${W}/task/42/version/3/sections`).routeId).toBe(
+      "/version-history/$workspace/task/$taskId/version/$revision/sections",
+    );
+    expect(landingOf(`/${W}/task/42/version/3/section/Rollout%20plan`)).toEqual({
+      routeId: "/version-history/$workspace/task/$taskId/version/$revision/section/$heading",
+      params: { workspace: W, taskId: "42", revision: "3", heading: "Rollout plan" },
       search: {},
     });
   });

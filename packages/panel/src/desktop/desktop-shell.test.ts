@@ -150,6 +150,7 @@ function shellProps(
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
       onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -215,7 +216,9 @@ function mount(
         ? SHELL_AT.ADMIN
         : overrides.automationsView?.open === true
           ? SHELL_AT.AUTOMATIONS
-          : undefined;
+          : overrides.history?.open === true
+            ? SHELL_AT.VERSION_HISTORY
+            : undefined;
   act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
   return container;
 }
@@ -530,6 +533,44 @@ test("Home, pressed or by its chord from Settings, brings the Tasks tab forward 
   const tasks = mount(false, { onGoHome: () => (home += 1) });
   act(() => homeRow(tasks).click());
   assert.equal(home, 2);
+});
+
+test("a sidebar press over a page holding unsaved work asks once, and Leave both leaves the routed place standing and opens the row", () => {
+  // As the window's guard does, the page holds one question, which a later ask takes the place of.
+  let asked: (() => void) | undefined;
+  let passing = false;
+  const guard: TasksControl["leaveGuard"]["guard"] =
+    (leave) =>
+    (...args) => {
+      if (passing) {
+        leave(...args);
+        return;
+      }
+      asked = () => {
+        passing = true;
+        try {
+          leave(...args);
+        } finally {
+          passing = false;
+        }
+      };
+    };
+  const went: string[] = [];
+  const control = tasksControl();
+  mount(
+    false,
+    {
+      leaveGuard: { ...control.leaveGuard, guard },
+      onGoHome: guard(() => went.push("home")),
+    },
+    PANEL_TAB.TASKS,
+    guard((tab: PanelTab) => went.push(tab)),
+  );
+
+  act(() => homeRow(document.body).click());
+  act(() => asked?.());
+
+  assert.deepEqual(went, [PANEL_TAB.TASKS, "home"]);
 });
 
 const ACME: Workspace = {
@@ -1054,6 +1095,10 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
   handState({});
   const page = mount(false, { history });
+  // The router goes to the history, whose frame stands while its chunk is read.
+  await act(async () => {
+    await Promise.resolve();
+  });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
   assert.equal(
@@ -1196,6 +1241,7 @@ function PlacedShell({
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
       onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -1259,6 +1305,12 @@ async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
 
 const PLACES = Object.values(PLACE);
 
+/** Where the router stands for a place it draws, Settings and a version history; none for a place the shell's props say. */
+function routedAt(place: Place): string | undefined {
+  if (place === PLACE.SETTINGS) return SHELL_AT.SETTINGS;
+  return place === PLACE.VERSION_HISTORY ? SHELL_AT.VERSION_HISTORY : undefined;
+}
+
 test("the side panel's toggle stands on a plan and on an agent's page, which keeps a panel of its own, and nowhere else the plan's place is taken", async () => {
   await handBridge();
   const container = document.createElement("div");
@@ -1269,13 +1321,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   for (const place of PLACES) {
     act(() =>
       root?.render(
-        onRegistry(
-          registry,
-          underRouter(
-            createElement(PlacedShell, { place }),
-            place === PLACE.SETTINGS ? SHELL_AT.SETTINGS : undefined,
-          ),
-        ),
+        onRegistry(registry, underRouter(createElement(PlacedShell, { place }), routedAt(place))),
       ),
     );
     await settle();
@@ -1337,10 +1383,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
       root?.render(
         onRegistry(
           AtomRegistry.make(),
-          underRouter(
-            createElement(PlacedShell, { place }),
-            place === PLACE.SETTINGS ? SHELL_AT.SETTINGS : undefined,
-          ),
+          underRouter(createElement(PlacedShell, { place }), routedAt(place)),
         ),
       ),
     );
@@ -1367,7 +1410,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
   });
 });
 
-test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", () => {
+test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", async () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, {
@@ -1389,6 +1432,8 @@ test("a plan's chip in a description's version history hangs the plan's card, as
       },
     },
   });
+  await act(() => routed().settled());
+  await settle();
   const chip = page.querySelector("[data-mention-ref]");
   assert.ok(chip, "the version draws the plan's chip");
 

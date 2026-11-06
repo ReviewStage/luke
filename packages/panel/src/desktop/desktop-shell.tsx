@@ -35,7 +35,6 @@ import {
   Activity,
   createContext,
   type RefObject,
-  Suspense,
   useContext,
   useLayoutEffect,
   useMemo,
@@ -84,7 +83,6 @@ import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark } from "./offline-mark.js";
-import { VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneAccount } from "./phone-account.js";
@@ -970,10 +968,9 @@ export function DesktopShell({
 
 /**
  * The window's places beside the sidebar, the layout every place but
- * Settings shares (`panel-router.tsx`'s pathless `places` route): the
- * sidebar, the work in its content slot, the route's `Outlet`, and the pages
- * kept drawn between visits beside it. A plan's version history takes the
- * whole window in their place, as the window's state says.
+ * Settings and a version history shares (`panel-router.tsx`'s pathless
+ * `places` route): the sidebar, the work in its content slot, the route's
+ * `Outlet`, and the pages kept drawn between visits beside it.
  */
 export function ShellPlaces(): React.JSX.Element {
   const {
@@ -998,41 +995,6 @@ export function ShellPlaces(): React.JSX.Element {
   } = useShellPlaces();
   const { account } = settings;
   useFocusHandedBack(focusHolder);
-  // A description's version history takes the whole window too, its versions listed
-  // where the sidebar was, and hands the task back as it found it.
-  if (tasks.history.open) {
-    const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
-    return (
-      <div className="desktop-shell" data-room={room}>
-        {/* A chip in a version's words hangs the cards the description's own words do. */}
-        <MentionedAgents value={mentionedAgents}>
-          <ChipCards value={chipCards}>
-            <Suspense
-              fallback={
-                <VersionHistoryLoading
-                  onExit={exitHistory}
-                  place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
-                  onList={tasks.history.onList}
-                  hidden={hiddenColumns(room, tasks.history.listed)}
-                />
-              }
-            >
-              <VERSION_HISTORY.Route
-                sidebar={sidebar}
-                room={room}
-                history={history}
-                tasks={tasks}
-                account={account}
-                onExit={exitHistory}
-                onRestored={history.onLeaveVersionHistory}
-              />
-            </Suspense>
-          </ChipCards>
-        </MentionedAgents>
-        {newTaskDialog}
-      </div>
-    );
-  }
   const inboxOpen = tasks.inboxView.open;
   const inboxShown = inboxOpen && !tasks.adminView.open;
   const pageAgent = tasks.agentView.agentId;
@@ -1259,6 +1221,48 @@ export function SettingsFrame({
       {children(exitSettings)}
       {settingsBar ? <MobileBar tasks={tasks} leave={() => onTabChange(PANEL_TAB.TASKS)} /> : null}
     </div>
+  );
+}
+
+/**
+ * A task's version history over the whole window, as its route draws it
+ * (`version-history-route.lazy.tsx`), its versions listed where the sidebar
+ * was: a chip in a version's words hangs the cards the description's own
+ * words do, and New task's dialog stands over it as it does over the tasks.
+ * Its way out goes back a step, or leaves it for its task where none stands
+ * behind it.
+ */
+export function VersionHistoryFrame({
+  children,
+}: {
+  children: (exit: () => void) => React.ReactNode;
+}): React.JSX.Element {
+  const { tasks, history, room, mentionedAgents, chipCards, newTaskDialog } = useShellPlaces();
+  const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
+  return (
+    <div className="desktop-shell" data-room={room}>
+      <MentionedAgents value={mentionedAgents}>
+        <ChipCards value={chipCards}>{children(exitHistory)}</ChipCards>
+      </MentionedAgents>
+      {newTaskDialog}
+    </div>
+  );
+}
+
+/** A version history's frame while its chunk loads, and while the task it is of opens under it. */
+export function VersionHistoryRouteLoading(): React.JSX.Element {
+  const { tasks, history, room } = useShellPlaces();
+  return (
+    <VersionHistoryFrame>
+      {(exit) => (
+        <VersionHistoryLoading
+          onExit={exit}
+          place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
+          onList={tasks.history.onList}
+          hidden={hiddenColumns(room, tasks.history.listed)}
+        />
+      )}
+    </VersionHistoryFrame>
   );
 }
 

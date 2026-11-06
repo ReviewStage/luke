@@ -350,6 +350,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */

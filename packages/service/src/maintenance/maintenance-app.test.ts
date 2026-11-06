@@ -67,6 +67,7 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
     titleAnthropicApiKey: undefined,
+    previewApiKeys: {},
   };
 }
 

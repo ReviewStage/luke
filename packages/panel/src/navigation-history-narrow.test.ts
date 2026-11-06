@@ -39,6 +39,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
+import { useVersionHistoryRoute, type VersionHistoryRoute } from "./version-history-route.js";
 
 /**
  * navigation-history-narrow.test.ts -- on a stage as narrow as a phone's,
@@ -81,11 +82,6 @@ interface Standing {
     /** Whether the Inbox shows one column by its own width, as one narrower than its split does in a room still wide. */
     readonly single?: boolean;
   };
-  readonly versions: {
-    readonly open: boolean;
-    readonly revision: number | undefined;
-    readonly listed: boolean;
-  };
   /** The coding agent whose page stands, while one does. */
   readonly agent: string | undefined;
   /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
@@ -100,19 +96,17 @@ interface Standing {
 const ON_TASK: Standing = {
   panel: { open: false, tab: undefined },
   inbox: { open: false, chosen: undefined },
-  versions: { open: false, revision: undefined, listed: true },
   agent: undefined,
 };
 
-/** The Tasks tab over where the window stands, each press moving it as the real one does. */
+/** The Tasks tab over where the window stands, each press moving it as the real one does, its version history where the router stands it. */
 function tasksTab(
   at: Standing,
   patch: (move: (held: Standing) => Standing) => void,
   room: ShellRoom,
+  versions: VersionHistoryRoute,
 ): TasksControl {
   const base = tasksControl();
-  const versions = (next: Partial<Standing["versions"]>) =>
-    patch((held) => ({ ...held, versions: { ...held.versions, ...next } }));
   const panel = (next: Standing["panel"]) => patch((held) => ({ ...held, panel: next }));
   const inbox = (next: Partial<Standing["inbox"]>) =>
     patch((held) => ({ ...held, inbox: { ...held.inbox, ...next } }));
@@ -193,22 +187,18 @@ function tasksTab(
       onChoose: (chosen) => inbox({ chosen }),
       onClear: () => inbox({ chosen: undefined }),
     },
+    // As the real history does, each choice is a move of the router's.
     history: {
       ...base.history,
-      open: at.versions.open,
-      selected: at.versions.revision,
-      spot: at.versions.open ? { revision: at.versions.revision, opened: undefined } : undefined,
-      listed: at.versions.listed,
-      onSelect: (revision) => versions({ revision, listed: false }),
-      onList: () => versions({ listed: true }),
-      // As the real history does, the list stands over the version chosen, and a version is read again.
-      onStand: (spot) =>
-        versions(
-          spot.listed === true ? { listed: true } : { revision: spot.revision, listed: false },
-        ),
-      onReturn: (_taskId, spot) =>
-        versions({ open: true, revision: spot?.revision, listed: spot?.listed ?? false }),
-      onClose: () => versions({ open: false }),
+      open: versions.open,
+      selected: versions.spot?.revision,
+      spot: versions.spot,
+      listed: versions.spot?.listed ?? true,
+      onSelect: (revision) => versions.onMove({ revision, opened: undefined, listed: false }),
+      onList: () => {
+        if (versions.spot !== undefined) versions.onMove({ ...versions.spot, listed: true });
+      },
+      onClose: versions.onClose,
     },
   });
 }
@@ -239,6 +229,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
   let settings: SettingsRoute | undefined;
   let admin: AdminViewControl | undefined;
   let automations: AutomationsRoute | undefined;
+  let versions: VersionHistoryRoute | undefined;
   function Probe() {
     const [at, setAt] = useState(start);
     standing = at;
@@ -250,8 +241,17 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       narrow: room === SHELL_ROOM.NARROW,
     });
     admin = useAdminRoute({ listedSlug: () => ACME.slug, onClose: () => undefined });
-    automations = useAutomationsRoute({ onClose: () => undefined });
-    const tab = tasksTab(at, setAt, room);
+    automations = useAutomationsRoute({
+      narrow: room === SHELL_ROOM.NARROW,
+      onClose: () => undefined,
+      onStay: () => undefined,
+    });
+    versions = useVersionHistoryRoute({
+      narrow: room === SHELL_ROOM.NARROW,
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    const tab = tasksTab(at, setAt, room, versions);
     const tasks: TasksControl = {
       ...tab,
       adminView: admin,
@@ -283,6 +283,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       settingsList: settings.listAddress,
       onSettingsList: settings.list,
       automations,
+      versionHistory: versions,
       room,
       tasks,
     });
@@ -312,6 +313,10 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
     admin: () => admin ?? assert.fail("Admin stands"),
     /** The Automations pages as the router stands them. */
     automations: () => automations ?? assert.fail("the Automations route stands"),
+    /** The task's version history as the router stands it. */
+    versions: () => versions ?? assert.fail("the version history's route stands"),
+    /** Opens the task's version history by the router, as its menu item does. */
+    openVersions: () => act(() => versions?.onOpen(ACME.slug, DOCUMENT_TASK.id)),
     /** Opens an Automations page by the router, as a link or a press does, past the leave guard as the page it leaves let go. */
     openAutomation: (to: AutomationsPlace) => act(() => automations?.onOpen(to, ACME.slug)),
     /** Opens Settings where `link` names, as a Settings link does. */
@@ -581,23 +586,25 @@ test("on a narrow stage a Settings page chosen from its list is a step, whose li
   );
 });
 
-test("on a narrow stage a version chosen from the list is a step, which Back leaves for the list as it stood", () => {
-  const window = mount(SHELL_ROOM.NARROW, {
-    ...ON_TASK,
-    versions: { open: true, revision: undefined, listed: true },
-  });
+test("on a narrow stage a version chosen from the list is a step, which Back and its way back leave for the list", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  window.openVersions();
   window.press(() => window.shown().history.onSelect(2));
 
-  assert.deepEqual(window.addresses(), [TASK_PATH, `${TASK_PATH}/version/2`]);
+  assert.deepEqual(window.addresses(), [
+    TASK_PATH,
+    `${TASK_PATH}/versions`,
+    `${TASK_PATH}/version/2`,
+  ]);
   assert.equal(window.standingAddress(), copiedHere());
-  backAndForth(window, (at) => at.versions.listed, true, false);
-
-  // The list has no link of its own, so its step is the task's, though a version stays chosen behind it.
   act(() => window.history().onBack());
-  assert.equal(window.standingAddress(), TASK_PATH);
-  assert.equal(window.standingAddress(), copiedHere());
+  assert.equal(window.versions().spot?.listed, true, "Back stands the list");
   act(() => window.history().onForward());
-  assert.equal(window.at().versions.revision, 2, "the version chosen comes back");
+  assert.equal(window.versions().spot?.revision, 2, "Forward stands the version again");
+
+  window.press(() => window.shown().history.onList());
+  assert.equal(window.standingAddress(), `${TASK_PATH}/versions`);
+  assert.equal(window.history().canGoForward, true, "the way back stepped back to the list");
 });
 
 test("on a narrow stage a Settings page a link opened has no list behind it, so the way back stands the list in the page's step and Back leaves Settings", () => {
@@ -634,8 +641,11 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
       },
     ],
     [
-      { ...ON_TASK, versions: { open: true, revision: undefined, listed: true } },
-      (window) => window.press(() => window.shown().history.onSelect(2)),
+      ON_TASK,
+      (window) => {
+        window.openVersions();
+        window.press(() => window.shown().history.onSelect(2));
+      },
     ],
   ];
   for (const [start, open] of moves) {
@@ -647,8 +657,8 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
       window.shown().inboxView.onClear();
       window.shown().history.onList();
     });
-    // Note that Settings, entered, is a step of its own after the task, however its pages turn.
-    const entered = window.settings().standing ? 1 : 0;
+    // Note that Settings and a version history, entered, are a step of their own after the task, however their pages turn.
+    const entered = window.settings().standing || window.versions().open ? 1 : 0;
     assert.equal(window.addresses().length, 1 + entered, "one step, however the panes turn");
     assert.equal(window.history().canGoBack, entered === 1);
     unmountAll();

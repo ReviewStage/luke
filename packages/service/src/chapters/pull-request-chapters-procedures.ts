@@ -283,9 +283,7 @@ const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: Chap
 const ownKeyFor = (userId: string) =>
   Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
-    return yield* hostedStoreOrUnavailable(
-      ownKeyOf(userId, MODEL_PROVIDER.ANTHROPIC, environment.providerKeyEncryptionKeys),
-    );
+    return yield* hostedStoreOrUnavailable(ownKeyOf(userId, MODEL_PROVIDER.ANTHROPIC, environment));
   });
 
 /** What a Generate on the member's own key runs on: Haiku's tier, on the provider of that key. */

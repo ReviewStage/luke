@@ -98,6 +98,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The repository an agent works in where a test gives it one, and the installation reaching it. */

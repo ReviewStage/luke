@@ -152,6 +152,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */

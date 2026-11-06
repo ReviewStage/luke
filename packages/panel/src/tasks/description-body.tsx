@@ -56,7 +56,6 @@ import {
   type DescriptionEditorHandle,
   PLACEMENT_END,
 } from "../description-editor/contract.js";
-import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import { useEditedLinksHost } from "../link-menu.js";
 import {
   type LinkDrawer,
@@ -250,6 +249,7 @@ function EditTime({
   at,
   label,
   onShow,
+  onPreload,
   short = false,
   whole = false,
 }: {
@@ -257,6 +257,8 @@ function EditTime({
   /** What the press is called, from how long ago the edit was, "2 hours ago". */
   label: (ago: string) => string;
   onShow: (() => void) | undefined;
+  /** Reads the history ahead, as the pointer or the keyboard comes to the press. */
+  onPreload: (() => void) | undefined;
   short?: boolean;
   /** Whether its press is drawn whole, a finger's press on a coarse pointer, as the byline's is. */
   whole?: boolean;
@@ -272,8 +274,8 @@ function EditTime({
         lines={whole ? TEXT_BUTTON_LINES.WHOLE : TEXT_BUTTON_LINES.ONE}
         aria-label={label(agoText(at, now))}
         // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
-        onPointerEnter={VERSION_HISTORY.prefetch}
-        onFocus={VERSION_HISTORY.prefetch}
+        onPointerEnter={onPreload}
+        onFocus={onPreload}
         onClick={(event) => {
           event.stopPropagation();
           onShow();
@@ -329,6 +331,7 @@ function DescriptionByline({
   place,
   saves,
   onShowHistory,
+  onPreloadHistory,
   comments,
 }: {
   task: Task;
@@ -338,6 +341,7 @@ function DescriptionByline({
   /** How many of the reader's saves of this description landed, which its Saved tick confirms; none while Descriptions is off, which saves nothing. */
   saves: number | undefined;
   onShowHistory: ShowHistory | undefined;
+  onPreloadHistory: (() => void) | undefined;
   /** Whether the description's comments are drawn here, whose toggle ends the line. */
   comments: boolean;
 }): React.JSX.Element {
@@ -359,6 +363,7 @@ function DescriptionByline({
               at={edit.at}
               label={editedLabel}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+              onPreload={onPreloadHistory}
               whole
             />
           </>
@@ -424,6 +429,7 @@ interface SectionMarks {
   readonly changed: ReadonlySet<string>;
   readonly place: EditPlace;
   readonly onShowHistory: ShowHistory | undefined;
+  readonly onPreloadHistory: (() => void) | undefined;
 }
 
 /**
@@ -439,7 +445,7 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
   if (heading === "") return null;
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
-  const { onShowHistory, place } = marks;
+  const { onShowHistory, onPreloadHistory, place } = marks;
   return (
     <span className={UNIT_BYLINE_CLASS}>
       {/* Note that the face and the time stay the line's own children, which alone take the pointer, so only the bare word is marked. */}
@@ -452,6 +458,7 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
         at={edit.at}
         label={(ago) => `${heading}: edited ${ago}. Show version history`}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+        onPreload={onPreloadHistory}
         short
       />
     </span>
@@ -1057,6 +1064,7 @@ export interface TitleRename {
 export const DescriptionBody = memo(function DescriptionBody({
   task,
   onShowHistory,
+  onPreloadHistory,
   edit,
   onRename,
   onDraftName = NO_DRAFT,
@@ -1072,6 +1080,8 @@ export const DescriptionBody = memo(function DescriptionBody({
 }: {
   task: Task;
   onShowHistory?: ShowHistory;
+  /** Reads the version history ahead, as the pointer comes to a way into it. */
+  onPreloadHistory?: () => void;
   /** The writes to the plan's words, each place writing them holding its own mutation over them (`descriptionEditMutation`); none where nothing is edited. */
   edit?: DescriptionEditMutation | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
@@ -1120,14 +1130,16 @@ export const DescriptionBody = memo(function DescriptionBody({
   const descriptionWrites = edit ?? descriptionEditMutation(task.id, NO_EDIT);
   const editing = useDescriptionEditing(task.id, text, descriptionWrites, place);
   const showHistory = useSteadyDoor(onShowHistory);
+  const preloadHistory = useSteadyDoor(onPreloadHistory);
   const marks = useMemo<SectionMarks>(
     () => ({
       edits: new Map(place.sections.map(({ section, ...edit }) => [section, edit])),
       changed: looks.changed,
       place,
       onShowHistory: showHistory,
+      onPreloadHistory: preloadHistory,
     }),
-    [place, looks.changed, showHistory],
+    [place, looks.changed, showHistory, preloadHistory],
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -1456,6 +1468,7 @@ export const DescriptionBody = memo(function DescriptionBody({
             place={place}
             saves={documented ? editing.saves : undefined}
             onShowHistory={onShowHistory}
+            onPreloadHistory={onPreloadHistory}
             comments={documented && commentsHere}
           />
           {documented ? <ChangedLine looks={looks} marks={marks} /> : null}

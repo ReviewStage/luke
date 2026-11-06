@@ -8,7 +8,8 @@
  * `/automation/<id>`, its runs alone at `/automation/<id>/runs`, and one of
  * its runs at `/automation/<id>/run/<runId>`, which a narrow room stands
  * alone too. Each is a step of its own but the automation a new page made,
- * which takes that page's step, and its setup stood again from its runs,
+ * which takes that page's step, an automation's runs outside a narrow room,
+ * which take its setup's, and its setup stood again from its runs,
  * which the window's history steps back to or takes in place
  * (`navigation-history.ts`'s `lists.runs`). An automation deleted is held
  * for as long as the window lives, so Back passes over its steps for good.
@@ -109,8 +110,12 @@ function navigationTo(to: AutomationsPlace, workspace: string): NavigateOptions 
   }
 }
 
-/** The Automations pages as the router stands them, left by `onClose`. */
-export function useAutomationsRoute(input: { onClose: () => void }): AutomationsRoute {
+/** The Automations pages as the router stands them, in a room `narrow` or not, left by `onClose`, and kept standing by `onStay` where a leave was asked of them before a door asked for the page standing. */
+export function useAutomationsRoute(input: {
+  narrow: boolean;
+  onClose: () => void;
+  onStay: () => void;
+}): AutomationsRoute {
   const router = useRouter();
   const navigate = useNavigate();
   const here = useRoutedLocation();
@@ -122,8 +127,12 @@ export function useAutomationsRoute(input: { onClose: () => void }): Automations
   const onOpen = (to: AutomationsPlace, workspace: string) => {
     if (to.kind === AUTOMATIONS_PAGE.LIST && to.deleted !== undefined) deleted.add(to.deleted);
     const options = navigationTo(to, workspace);
-    // Opening the page already standing moves nothing, as pressing the place standing always has.
-    if (router.buildLocation(options).href === here.href) return;
+    // Opening the page already standing moves nothing, as pressing the place standing always has,
+    // and keeps it standing where the door that asked for it left the routed place first, as a link's and ⌘K's do.
+    if (router.buildLocation(options).href === router.history.location.href) {
+      input.onStay();
+      return;
+    }
     // The automation a new page made takes that page's step.
     const replace = to.kind === AUTOMATIONS_PAGE.EDIT && to.created === true;
     void navigate({ ...options, replace });
@@ -136,11 +145,16 @@ export function useAutomationsRoute(input: { onClose: () => void }): Automations
     automation === undefined
       ? undefined
       : ({ to: "/$workspace/automation/$automationId", params: automation } as const);
+  // Note that the runs alone are a step of their own in a narrow room alone, as a page of Settings is; a wide room's take the setup's step, as its setup takes theirs back.
   const onRuns = (shown: boolean) => {
     if (setup === undefined || standing?.runs === shown) return;
-    if (shown)
-      void navigate({ to: "/$workspace/automation/$automationId/runs", params: setup.params });
-    else void navigate({ ...setup, replace: true });
+    if (shown) {
+      void navigate({
+        to: "/$workspace/automation/$automationId/runs",
+        params: setup.params,
+        replace: !input.narrow,
+      });
+    } else void navigate({ ...setup, replace: true });
   };
   const onTurn = (workspace: string) => {
     if (standingIn === undefined || standingIn === workspace) return;

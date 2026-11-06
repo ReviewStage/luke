@@ -16,6 +16,8 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 // (`admin-route.lazy.tsx`), so the module is read here first and its load settles
 // within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/admin-route.lazy.js";
+import "./desktop/automations-route.lazy.js";
+import "./desktop/board-route.lazy.js";
 import "./desktop/person-route.lazy.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -31,7 +33,8 @@ import { type TestWindowRouter, windowRouter } from "./testing/window-router.js"
  * once the read says it is not, and a link opened for an account known to be
  * no admin opens nothing. A person's page loaded under a workspace the
  * reader is not in, as a reload of another's address is, opens the same
- * person under the workspace listed, as a link to them does.
+ * person under the workspace listed, as a link to them does, and a link
+ * to the Automations page or the Board already standing leaves it standing.
  */
 
 const ACME = {
@@ -179,3 +182,19 @@ test("a person's page loaded under a workspace the reader is not in opens the sa
 
   assert.equal(router.history.location.pathname, "/acme/person/user-ada");
 });
+
+test.each([
+  ["the Automations page", "/acme/automations", LINK_PLACE.AUTOMATIONS],
+  ["the Board", "/acme/tasks", LINK_PLACE.BOARD],
+] as const)(
+  "a link to %s already standing leaves it standing, as pressing the place standing always has",
+  async (_place, address, kind) => {
+    const router = await drawWindow(address);
+    await settle();
+
+    act(() => showLink?.({ workspace: "acme", place: { kind } }));
+    await settle();
+
+    assert.equal(router.history.location.pathname, address);
+  },
+);

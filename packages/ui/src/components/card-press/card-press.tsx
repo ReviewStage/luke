@@ -250,6 +250,7 @@ export function CardPress({
         onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
           pulseCard(event.currentTarget);
           // Note that a ⌘- or ⇧-click that chose rows is no press of the card.
+          if (!choosable) selecting?.passOver(event);
           if (!(choosable && selecting.press(selectKey, event))) onPress(event);
           onClick?.(event);
         }}

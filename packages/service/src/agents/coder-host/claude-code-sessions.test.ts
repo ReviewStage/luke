@@ -160,6 +160,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
@@ -179,12 +180,16 @@ function readyingScript(api: ReturnType<typeof runnerSandboxApi>): string {
 const FIXTURE_IMAGE = Layer.succeed(AgentImage, { reference: Effect.succeed(IMAGE) });
 
 /** Everything but the store, around the fake Vercel given. */
-function services(api: ReturnType<typeof runnerSandboxApi>, http = api.layer) {
+function services(
+  api: ReturnType<typeof runnerSandboxApi>,
+  http = api.layer,
+  environment = NO_KEYS,
+) {
   return Layer.mergeAll(
     http,
     machineOver(http),
     GITHUB_APP_WITH_TOKENS,
-    Layer.succeed(HostedEnvironment, NO_KEYS),
+    Layer.succeed(HostedEnvironment, environment),
     FIXTURE_IMAGE,
   );
 }
@@ -1007,7 +1012,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "an agent its starter's API key pays for, whose saved key does not open under this deployment's ring, is refused as unreadable and starts nothing",
+    "an agent its starter's API key pays for, whose saved key does not open under this deployment's ring, is refused as unreadable and starts nothing, but on a Preview launches on the Preview's stand-in key",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1058,6 +1063,23 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           keyRefusal: KEY_REFUSAL.UNREADABLE,
         });
         assert.deepEqual(api.commands, []);
+
+        const standIn = "sk-ant-api03-fixture-preview-key";
+        const preview = runnerSandboxApi();
+        const onPreview = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(
+            services(preview, preview.layer, {
+              ...NO_KEYS,
+              previewApiKeys: { [PROVIDER_KEY_PROVIDER.ANTHROPIC]: Redacted.make(standIn) },
+            }),
+          ),
+        );
+        const opened = yield* onPreview.open(message(started.value.agent, "Go."));
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const placeholder = preview.commands[0]?.env[RUNNER_ENV.API_KEY];
+        assert.deepEqual(anthropicSwaps(preview, preview.sandboxes[0]?.currentSessionId), [
+          { header: "x-api-key", at: placeholder, sets: standIn },
+        ]);
       }),
   );
 
