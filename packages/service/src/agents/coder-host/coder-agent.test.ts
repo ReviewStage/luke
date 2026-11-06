@@ -479,7 +479,7 @@ test("an agent is told whose its commits are and to end each on the trailer it i
   }
 });
 
-test("an agent on its starter's own token reads its checks and its pull request over GitHub's REST API under its repository, never gh pr, and is told a draft cannot be marked ready from its sandbox", () => {
+test("an agent on its starter's own token reads its checks and its pull request over GitHub's REST API under its repository, never gh pr, is told a draft cannot be marked ready from its sandbox, and is told nothing on its pull request wakes it without the App", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(AGENT_BRIEF)) {
     const words = (memberToken: boolean) =>
@@ -501,6 +501,8 @@ test("an agent on its starter's own token reads its checks and its pull request 
     assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/commits/<sha>/check-runs`"), brief);
     assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/pulls/<number>/reviews`"), brief);
     assert.ok(onToken.includes("A draft cannot be marked ready from here"), brief);
+    assert.ok(!onToken.includes("reaches you as a message from GitHub"), brief);
+    assert.ok(onToken.includes("GitHub App on the repository gets you woken"), brief);
   }
 });
 
