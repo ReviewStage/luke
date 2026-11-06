@@ -18,7 +18,9 @@
  * off its place's firewall; a command still recorded as running ended; and
  * its record cleared, so the next message relaunches. For a Mac that
  * stopped beating, its open launch is settled instead, which the Mac's own
- * beat reads as a run it holds no longer once it is back. Then every lapsed turn is
+ * beat reads as a run it holds no longer once it is back, and where its
+ * runner never opened a turn, the turn its message waits on is queued first,
+ * so it too fails naming the Mac. Then every lapsed turn is
  * settled through the writer's own end (`settleRunnerLostTurns`): canceled
  * where a Stop was asked of it, and failed otherwise, its detail the fixed
  * sentence the status words read, then how the runner ended where that
@@ -39,17 +41,19 @@ import {
 } from "@repo/database/models/abandoned-turns";
 import { type Agent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
 import {
+  type DeviceAgentLaunch,
   latestDeviceAgentLaunch,
   settleLapsedDeviceAgentLine,
 } from "@repo/database/models/device-agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
 import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
-import { storeWriter } from "@repo/database/models/writer";
+import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, DEVICE_LEASE } from "@repo/features/agent-wire";
 import { redactCredentials } from "@repo/features/credential-redaction";
 import { failureKind } from "@repo/runtime/effect";
 import { Cause, Clock, Data, Effect, ErrorReporter, Option } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { queuedUnopenedTurn } from "../device-agent.js";
 import type { FoundPlace, MachineLifecycle, RecordedRunner } from "../machine/agent-machine.js";
 import { RUNNER_RECORD } from "../machine/agent-machine.js";
 import { deploymentLifecycle } from "../machine/agent-machines.js";
@@ -107,15 +111,27 @@ const deviceLapse = (agent: LapsedAgent, now: number) =>
     return { kind: "device", deviceName: device.name, seenBefore } as const satisfies Lapse;
   });
 
-/** The turns of the agent whose runner is lost at `now`, and why: every open one where its Mac stopped beating, else those past their lease. */
+/**
+ * The turns of the agent whose runner is lost at `now`, and why: every open
+ * one where its Mac stopped beating, else those past their lease; and
+ * whether the Mac holds a launch still open, which its runner may not have
+ * opened a turn for yet, so the settle has a run to take though no turn
+ * stands open.
+ */
 const lapsedOf = (agent: LapsedAgent, now: number) =>
   Effect.gen(function* () {
     const device = yield* deviceLapse(agent, now);
     if (device !== undefined) {
-      return { lapse: device as Lapse, turnIds: yield* runningTurnIds(agent.conversationId) };
+      const launch = yield* latestDeviceAgentLaunch(agent.userId, agent.id);
+      const launchOpen = Option.exists(launch, (each) => !each.settled && !each.stopped);
+      return {
+        lapse: device as Lapse,
+        turnIds: yield* runningTurnIds(agent.conversationId),
+        launchOpen,
+      };
     }
     const turnIds = yield* lapsedTurnIds(agent.conversationId, now);
-    return { lapse: { kind: "lease" } as Lapse, turnIds };
+    return { lapse: { kind: "lease" } as Lapse, turnIds, launchOpen: false };
   });
 
 /** The agent's place, found by the session its conversation records; none where it records none, or the place is another agent's. */
@@ -186,30 +202,59 @@ const letGo = (
  * the one statement that writes it (`settleLapsedDeviceAgentLine`), so a Mac
  * that beat since keeps its launch, and the settle then takes nothing; one
  * that settled its launch itself, or holds none, has no run to keep.
+ * Answers the launch this call took, none where there was none to take, or
+ * false where the Mac beat since.
  */
 const launchTaken = (agent: LapsedAgent, lapse: Extract<Lapse, { kind: "device" }>, now: number) =>
   Effect.gen(function* () {
     const launch = yield* latestDeviceAgentLaunch(agent.userId, agent.id);
-    if (Option.isNone(launch)) return true;
+    if (Option.isNone(launch)) return Option.none<DeviceAgentLaunch>();
     const taken = yield* settleLapsedDeviceAgentLine(
       agent.userId,
       launch.value.id,
       lapse.seenBefore,
     );
-    if (Option.isSome(taken)) return true;
+    if (Option.isSome(taken)) return launch;
     // Read again, since a launch the guard left open is one whose Mac beat since.
-    return (yield* deviceLapse(agent, now)) !== undefined;
+    return (yield* deviceLapse(agent, now)) === undefined
+      ? false
+      : Option.none<DeviceAgentLaunch>();
+  });
+
+/**
+ * The turns of the Mac's run to settle, once its launch is taken: every turn
+ * still open, the one its message waits on queued first where its runner
+ * never opened one (`queuedUnopenedTurn`), as a launch its Mac settled
+ * unstarted has, so that turn fails naming the Mac rather than the line
+ * waiting out its grace with no word of why.
+ */
+const deviceRunTurns = (
+  writer: Pick<StoreWriter, "enqueueTurn">,
+  agent: LapsedAgent,
+  taken: Option.Option<DeviceAgentLaunch>,
+) =>
+  Effect.gen(function* () {
+    if (Option.isSome(taken)) {
+      yield* queuedUnopenedTurn(writer, agent.userId, agent.conversationId, taken.value);
+    }
+    return new Set(yield* runningTurnIds(agent.conversationId));
   });
 
 /** The settle the header describes, its caller holding the agent's runner lease: the ids of the turns it settled failed. */
 const settledHolding = (agent: LapsedAgent, readFirst: ReadonlySet<string>) =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
-    const { lapse, turnIds } = yield* lapsedOf(agent, now);
+    const { lapse, turnIds, launchOpen } = yield* lapsedOf(agent, now);
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     // Read again under the lease, so a turn whose runner posted since the first read keeps running.
-    const lost = new Set(turnIds.filter((id) => readFirst.has(id)));
+    let lost = new Set(turnIds.filter((id) => readFirst.has(id)));
+    if (lapse.kind === "device") {
+      if (lost.size === 0 && !launchOpen) return [];
+      const taken = yield* launchTaken(agent, lapse, now);
+      if (taken === false) return [];
+      lost = yield* deviceRunTurns(writer, agent, taken);
+    }
     if (lost.size === 0) return [];
-    if (lapse.kind === "device" && !(yield* launchTaken(agent, lapse, now))) return [];
     const machine = yield* deploymentLifecycle;
     const found = yield* placeOf(machine, agent).pipe(Effect.orElseSucceed(() => undefined));
     const ended = yield* letGo(machine, agent, found, lapse);
@@ -219,7 +264,6 @@ const settledHolding = (agent: LapsedAgent, readFirst: ReadonlySet<string>) =>
         : ended === undefined
           ? RUNNER_LOST_DETAIL
           : exitedDetail(ended.exit, ended.stderr);
-    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const failed = yield* settleRunnerLostTurns(writer, agent.conversationId, now, detail, lost);
     if (failed.length === 0) return failed;
     const report = new RunnerLost({
@@ -247,8 +291,8 @@ export const settleLapsedRunner = /* @__PURE__ */ Effect.fn("web/settleLapsedRun
   agent: LapsedAgent,
 ): Effect.fn.Return<readonly string[], never, DatabaseServices> {
   return yield* Effect.gen(function* () {
-    const { turnIds } = yield* lapsedOf(agent, yield* Clock.currentTimeMillis);
-    if (turnIds.length === 0) return [];
+    const { turnIds, launchOpen } = yield* lapsedOf(agent, yield* Clock.currentTimeMillis);
+    if (turnIds.length === 0 && !launchOpen) return [];
     const settled = yield* holdingRunnerIfFree(agent.id, settledHolding(agent, new Set(turnIds)));
     return Option.getOrElse(settled, (): readonly string[] => []);
   }).pipe(
