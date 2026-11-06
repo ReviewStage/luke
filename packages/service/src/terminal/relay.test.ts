@@ -38,8 +38,8 @@ import {
  * resizes reaching the PTY and its output reaching the desktop; the shell's
  * exit ends the connection as exited; an open connection holds and keeps
  * alive its sandbox, typed in or not; and the GitHub token at the firewall is
- * set when due, once between two connections, or, where it is a member's
- * own, at every check and taken off at the close.
+ * set when due, once between two connections, and claimed again only at its
+ * deadline, or, where it is a member's own, once as the terminal attaches.
  */
 
 const AGENT = "agent-1";
@@ -102,6 +102,7 @@ function world(options: {
     resumed: 0,
     tokens: 0,
     released: 0,
+    claims: [] as number[],
     policies,
     keptAlive,
   };
@@ -162,10 +163,13 @@ function world(options: {
       }),
     claimRenewal: (_conversation, _session, now, renewedBefore) =>
       Effect.sync(() => {
+        asked.claims.push(now.getTime());
         if (credentialAt !== undefined && credentialAt >= renewedBefore.getTime()) return false;
         credentialAt = now.getTime();
         return true;
       }),
+    renewedAt: () =>
+      Effect.sync(() => Option.fromNullishOr(credentialAt).pipe(Option.map((at) => new Date(at)))),
     releaseRenewal: (_conversation, _session, claimedAt) =>
       Effect.sync(() => {
         asked.released += 1;
@@ -176,7 +180,12 @@ function world(options: {
         Effect.sync(() => void keptAlive.push({ sessionId, at })),
       ),
   };
-  return { deps, asked, heldUntil: () => heldUntil };
+  /** Another window's renewal of the token, at the instant given. */
+  const renewElsewhere = (at: number) =>
+    Effect.sync(() => {
+      credentialAt = at;
+    });
+  return { deps, asked, heldUntil: () => heldUntil, renewElsewhere };
 }
 
 /** Lets every fiber the last step woke, the relay's own renewals among them, run to its next wait. */
@@ -403,7 +412,35 @@ it.effect(
     }),
 );
 
-it.effect("a member's own token is set at every check rather than claimed", () =>
+it.effect(
+  "the token's renewal is claimed only at its deadline, read again then for another window's renewal",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const device = yield* scriptedSocket;
+      const open = world({ pty });
+      const minute = 60_000;
+
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(device.socket, ASK, open.deps)),
+      );
+      yield* settle;
+      yield* TestClock.adjust(Duration.minutes(30));
+      yield* open.renewElsewhere(30 * minute);
+      // Past the first renewal's deadline, and on past the one another window's renewal sets.
+      for (let step = 0; step < 4; step += 1) {
+        yield* TestClock.adjust(Duration.minutes(25));
+        yield* settle;
+      }
+      yield* device.leave;
+      yield* Fiber.join(relay);
+
+      assert.deepEqual(open.asked.claims, [0, 80 * minute + 1]);
+      assert.equal(open.asked.tokens, 2);
+    }),
+);
+
+it.effect("a member's own token is set once as the terminal attaches, and never claimed", () =>
   Effect.gen(function* () {
     const pty = yield* scriptedSocket;
     const idle = yield* scriptedSocket;
@@ -411,39 +448,41 @@ it.effect("a member's own token is set at every check rather than claimed", () =
 
     const one = yield* Effect.forkChild(Effect.scoped(relayTerminal(idle.socket, ASK, alone.deps)));
     yield* settle;
-    yield* TestClock.adjust(Duration.minutes(4));
-    yield* idle.push({ bytes: encode("x") });
+    yield* TestClock.adjust(CODER.GITHUB_TOKEN_REFRESH);
     yield* settle;
-    yield* TestClock.adjust(Duration.minutes(1));
+    yield* TestClock.adjust(CODER.GITHUB_TOKEN_REFRESH);
     yield* settle;
     yield* idle.leave;
     yield* Fiber.join(one);
 
-    assert.deepEqual(alone.asked.policies, [SANDBOX_SESSION, SANDBOX_SESSION]);
+    assert.deepEqual(alone.asked.policies, [SANDBOX_SESSION]);
+    assert.deepEqual(alone.asked.claims, []);
   }),
 );
 
-it.effect("a renewal GitHub refused gives its claim back, and the next check renews", () =>
-  Effect.gen(function* () {
-    const pty = yield* scriptedSocket;
-    const device = yield* scriptedSocket;
-    const refusing = world({ pty, tokensRefused: 1 });
+it.effect(
+  "a renewal GitHub refused gives its claim back, and is tried again after the retry bound",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const device = yield* scriptedSocket;
+      const refusing = world({ pty, tokensRefused: 1 });
 
-    const relay = yield* Effect.forkChild(
-      Effect.scoped(relayTerminal(device.socket, ASK, refusing.deps)),
-    );
-    yield* Effect.yieldNow;
-    const afterRefusal = [...refusing.asked.policies];
-    yield* device.push({ bytes: encode("x") });
-    yield* TestClock.adjust(Duration.minutes(5));
-    yield* Effect.yieldNow;
-    yield* device.leave;
-    yield* Fiber.join(relay);
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(device.socket, ASK, refusing.deps)),
+      );
+      yield* Effect.yieldNow;
+      const afterRefusal = [...refusing.asked.policies];
+      yield* device.push({ bytes: encode("x") });
+      yield* TestClock.adjust(Duration.minutes(5));
+      yield* Effect.yieldNow;
+      yield* device.leave;
+      yield* Fiber.join(relay);
 
-    assert.deepEqual(afterRefusal, []);
-    assert.equal(refusing.asked.released, 1);
-    assert.deepEqual(refusing.asked.policies, [SANDBOX_SESSION]);
-  }),
+      assert.deepEqual(afterRefusal, []);
+      assert.equal(refusing.asked.released, 1);
+      assert.deepEqual(refusing.asked.policies, [SANDBOX_SESSION]);
+    }),
 );
 
 it.effect("a renewal cut off by its connection closing gives its claim back", () =>
