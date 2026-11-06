@@ -134,7 +134,7 @@ function useDeviceLogin(
             : { kind: STANDING.WAITING, login: answer },
         );
       });
-  }, [sendChatgptDeviceStart, sendChatgptDeviceWait, sendChatgptDeviceCancel]);
+  }, [sendChatgptDeviceStart, sendChatgptDeviceCancel]);
 
   useEffect(() => {
     if (!open) return;
@@ -177,7 +177,7 @@ function useDeviceLogin(
       waiting = false;
       sendChatgptDeviceCancel({ loginId });
     };
-  }, [login, sendChatgptDeviceStart, sendChatgptDeviceWait, sendChatgptDeviceCancel]);
+  }, [login, sendChatgptDeviceWait, sendChatgptDeviceCancel]);
 
   return { standing, retry: start };
 }
