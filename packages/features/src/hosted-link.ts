@@ -6,10 +6,11 @@ import { LIVE_POLL } from "./live-wire.js";
  * An `OpenAPILink` over `hostedContract` whose transport is `accountCall`'s
  * `send`, so everything that call owns stays its own: the credential read
  * fresh for every attempt, the one renew-and-retry of a 401 while the
- * holder stands, the no-credential fault, the deadline, and the ambient
- * `HttpClient` a test fakes with `fakeCloudApi`. The answer's body is read
- * whole within a deadline of its own before oRPC reads it, so a body that
- * stalls after its headers is let go rather than awaited forever. Wrapped in
+ * holder stands, the no-credential fault, and the ambient `HttpClient` a
+ * test fakes with `fakeCloudApi`. The answer's body is read whole before
+ * oRPC reads it, and the one deadline covers the call whole, its headers and
+ * its body together, so a body that stalls after its headers is let go when
+ * the call's deadline ends rather than awaited past it. Wrapped in
  * `createEffectClient`, so a procedure is a lazy Effect.
  *
  * The link reads the wire as the service writes it (`contract/errors.ts`):
@@ -46,16 +47,31 @@ import type {
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
 import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@repo/wire";
-import { Cause, type Context, Data, Duration, Effect, Exit, Random, Result, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  type Context,
+  Data,
+  Duration,
+  Effect,
+  Exit,
+  Random,
+  Result,
+  Schema,
+} from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
+  type AccountCallEffects,
   accountCall,
-  type CALL_FAULT,
+  CALL_FAULT,
+  type CallAnswer,
   type CallCredential,
   type CallRequest,
   callAnswered,
+  DEADLINE_ERROR_NAME,
   sendInSession,
 } from "./account-call.js";
+import { MAC_PRESENCE } from "./agent-wire.js";
 import { HOSTED_REFUSAL_DATA, refusalCarriesData } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
 import { outputWireSchema, refusalDeclared } from "./contract/output-schema.js";
@@ -72,8 +88,9 @@ import {
  * The deadlines a procedure is asked under, by how long its answer may
  * take: the usual one, a held read the service keeps open for as long as it
  * waits on the next change (or a dictated clip the model hears through), a
- * message to an agent, which waits on the agent's conversation and on its
- * session taking the words before it answers, and a Start, which may copy another
+ * read of the account's devices' beats, which must land or fail inside a
+ * poll, a message to an agent, which waits on the agent's conversation and on
+ * its session taking the words before it answers, and a Start, which may copy another
  * agent's work before it answers.
  */
 export const HOSTED_DEADLINE = {
@@ -83,6 +100,7 @@ export const HOSTED_DEADLINE = {
   START: "start",
   CHAPTERS: "chapters",
   BROWSER_OPEN: "browser-open",
+  PRESENCE: "presence",
 } as const;
 
 export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLINE];
@@ -98,7 +116,8 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * Generate of a pull request's chapters outlasts the function it runs in
  * (`@repo/service/chapters/chapters-function`'s 240 seconds), and a Browser
  * tab opened in an agent's browser outlasts its sandbox's resume (a minute)
- * and its bridge's bound (twenty seconds, `agent-browser.ts`).
+ * and its bridge's bound (twenty seconds, `agent-browser.ts`), and a read
+ * of the devices' beats is `MAC_PRESENCE.READ_TIMEOUT_MS`.
  */
 const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
@@ -106,6 +125,7 @@ const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.START]: 120_000,
   [HOSTED_DEADLINE.CHAPTERS]: 250_000,
   [HOSTED_DEADLINE.BROWSER_OPEN]: 120_000,
+  [HOSTED_DEADLINE.PRESENCE]: MAC_PRESENCE.READ_TIMEOUT_MS,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 
 /** The span a hosted ask runs under, whose trace every attempt it sends carries. */
@@ -321,9 +341,6 @@ function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<
  * A response's body read whole within the deadline, so the link reads it
  * from memory; nothing, its stream canceled so its connection is let go,
  * where it has not ended by then or could not be read.
- * Note that the account call's own deadline ends with the headers, and a
- * renewal can spend all of it before an answer that did arrive is read, so
- * the body is given one deadline more of its own rather than what is left.
  */
 export function textWithin(
   response: Response,
@@ -338,6 +355,42 @@ export function textWithin(
       orElse: () => Effect.as(Effect.ignore(Effect.tryPromise(() => reader.cancel())), undefined),
     }),
   );
+}
+
+/**
+ * The request sent and its answer's body read, within one budget for the
+ * whole call: the headers, and a 401's renewal and retry among them, are
+ * bounded by it, and the body is given only what is left of it. Note that a
+ * renewal shares the budget rather than getting a fresh one, because the
+ * deadline is what a caller bounds its own wait by, and a call that could
+ * run past it would have every caller stack a timeout of its own on top; a
+ * renewal that spends the budget ends the call as the deadline, as a slow
+ * first attempt does.
+ */
+function readWhole(
+  send: AccountCallEffects["send"],
+  request: CallRequest,
+  budgetMs: number,
+): Effect.Effect<
+  { readonly answer: CallAnswer; readonly text?: string | undefined },
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.gen(function* () {
+    const startedAt = yield* Clock.currentTimeMillis;
+    const answer = yield* send(request).pipe(
+      Effect.timeoutOrElse({
+        duration: Duration.millis(budgetMs),
+        orElse: () =>
+          Effect.succeed<CallAnswer>({ fault: CALL_FAULT.NETWORK, errorName: DEADLINE_ERROR_NAME }),
+      }),
+    );
+    if (!callAnswered(answer)) return { answer };
+    // The body gets what the headers left of the budget, never a deadline of its own.
+    const leftMs = Math.max(0, budgetMs - ((yield* Clock.currentTimeMillis) - startedAt));
+    const text = yield* textWithin(answer.response, Duration.millis(leftMs));
+    return { answer, text };
+  });
 }
 
 /**
@@ -368,11 +421,11 @@ async function sent(
       ? request
       : { ...request, headers: { ...request.headers, [IDEMPOTENCY_KEY.HEADER]: idempotencyKey } };
   const exit = await Effect.runPromiseExitWith(context.services)(
-    send(keyed),
+    readWhole(send, keyed, call.requestTimeoutMs),
     init.signal ? { signal: init.signal } : undefined,
   );
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
-  const answer = exit.value;
+  const { answer, text } = exit.value;
   if (!callAnswered(answer)) {
     throw new HostedUnanswered({
       fault: answer.fault,
@@ -380,10 +433,6 @@ async function sent(
     });
   }
   const { response } = answer;
-  const text = await Effect.runPromiseWith(context.services)(
-    textWithin(response, Duration.millis(call.requestTimeoutMs)),
-    init.signal ? { signal: init.signal } : undefined,
-  );
   if (text === undefined) {
     throw new HostedUnanswered({ unread: HOSTED_UNREAD.BODY, status: response.status });
   }

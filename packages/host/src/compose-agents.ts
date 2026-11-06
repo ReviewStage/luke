@@ -734,8 +734,8 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
  * account's; that the models are asked again as the keys move, since a key,
  * a plan, or a plan's default moves which models no credential pays for;
  * and that
- * an ask of the beats which fails, or runs past
- * `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the beats it
+ * an ask of the beats which fails, its deadline of
+ * `MAC_PRESENCE.READ_TIMEOUT_MS` among the ways, after one answered keeps the beats it
  * answered, marked stale, under the new instant, so a window says it cannot
  * check rather than that a device left.
  */
@@ -755,15 +755,10 @@ function fetchedReads(
       fetch: (userId, held) =>
         Effect.gen(function* () {
           if (userId !== accountId()) return Option.none();
-          // Note that a read past its bound counts as one that failed, so a window says it cannot check rather than letting every device age away while it hangs.
-          const answer = yield* Effect.timeoutOption(
-            asked(client.devicePresence()),
-            Duration.millis(MAC_PRESENCE.READ_TIMEOUT_MS),
-          );
+          // Note that a read past its deadline fails like any other, so a window says it cannot check rather than letting every device age away while it hangs.
+          const answer = yield* asked(client.devicePresence());
           const askedAt = yield* Clock.currentTimeMillis;
-          if (Option.isSome(answer) && !("failure" in answer.value)) {
-            return Option.some(presenceOf(answer.value, askedAt));
-          }
+          if (!("failure" in answer)) return Option.some(presenceOf(answer, askedAt));
           return held === undefined
             ? Option.none()
             : Option.some({ beats: held.beats, askedAt, stale: true as const });
