@@ -108,7 +108,8 @@ const { startPairing, pollPairing, enrollOwn, ...deviceCalls } = deviceAgentsCon
  * refusals, as it shipped: below the floor as needing an upgrade, braked
  * where the service takes no more starts from the box's address, and every
  * other refusal (a malformed start, a poll on no poll secret, a store that
- * could not answer) as refused.
+ * could not answer, a method its path is not served on) as refused. An own
+ * enroll keeps not found as its own.
  */
 const HOST_JOIN_RENAMES = {
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: "upgrade-needed",
@@ -117,6 +118,13 @@ const HOST_JOIN_RENAMES = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: "refused",
   [HOSTED_API_ERROR.UNAVAILABLE]: "refused",
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: "refused",
+  [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: "refused",
+} as const;
+
+/** How a pairing's call reads its refusals: as a join does, and not found, a service from before the route, as refused too. */
+const HOST_PAIRING_RENAMES = {
+  ...HOST_JOIN_RENAMES,
+  [HOSTED_API_ERROR.NOT_FOUND]: "refused",
 } as const;
 
 /**
@@ -137,7 +145,7 @@ const DEVICE_AGENT_FAILURE = failureSetOf(deviceCalls, { as: DEVICE_AGENT_RENAME
 /** How a pairing's start or poll failed: upgrade needed, braked, refused, or unanswered. */
 export const HOST_PAIRING_FAILURE = failureSetOf(
   { startPairing, pollPairing },
-  { as: HOST_JOIN_RENAMES },
+  { as: HOST_PAIRING_RENAMES },
 );
 
 /** How a pairing's start or poll failed (`HOST_PAIRING_FAILURE`), under its older name. */
@@ -146,7 +154,7 @@ export const HOST_PAIRING_OUTCOME = HOST_PAIRING_FAILURE;
 /** A pairing's start or poll as it failed, with the floor an upgrade must reach where it names one. */
 export type HostPairingFailed = HostedFailed<
   DeclaredBy<typeof startPairing> | DeclaredBy<typeof pollPairing>,
-  typeof HOST_JOIN_RENAMES
+  typeof HOST_PAIRING_RENAMES
 >;
 
 /** A pairing call's answer, or how it failed. */
@@ -164,7 +172,7 @@ export function startHostPairing(
   request: HostPairingStartRequest,
 ): Effect.Effect<HostPairingOutcome<HostPairingStartAnswer>, never, HttpClient.HttpClient> {
   const hosted = hostedClient({ baseUrl: serviceBaseUrl, credential: {} });
-  return hostedCall(hosted.deviceAgents.startPairing, request, { as: HOST_JOIN_RENAMES });
+  return hostedCall(hosted.deviceAgents.startPairing, request, { as: HOST_PAIRING_RENAMES });
 }
 
 /**
@@ -183,7 +191,7 @@ export function pollHostPairing(
     baseUrl: serviceBaseUrl,
     credential: { authorization: () => Effect.succeed(bearer) },
   });
-  return hostedCall(hosted.deviceAgents.pollPairing, undefined, { as: HOST_JOIN_RENAMES });
+  return hostedCall(hosted.deviceAgents.pollPairing, undefined, { as: HOST_PAIRING_RENAMES });
 }
 
 /** The machine an own enroll names, which the service creates the device from where the account never registered its id, and which machine it is where it was read (`DeviceMachine`). */

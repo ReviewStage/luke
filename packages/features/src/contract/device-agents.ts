@@ -19,7 +19,11 @@
  * carries `hostRemoved` where no standing host holds the secret
  * (`invalid-token`'s fields, which any procedure declares). The enroll is
  * refused as not found for an id it may not convert, and the pairing's
- * start is braked per address (`quota-exhausted`). The outputs are the wire schemas
+ * start is braked per address (`quota-exhausted`). Each also declares the
+ * refusals the service's handler answers on its path before any procedure
+ * matches (`packages/service/src/orpc/handler.ts`): `method-not-allowed`,
+ * and for the pairing's calls `not-found`, a service from before the
+ * route, which a host has always read as refused. The outputs are the wire schemas
  * flipped, so oRPC's output check encodes the handler's value into the
  * bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
@@ -62,24 +66,42 @@ const SMALL_BODY_BYTES = 4 * 1_024;
 const ANSWER_BODY_BYTES =
   Math.ceil((DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES * 2 * 4) / 3) + 64 * 1_024;
 
-/** A call on the device secret: refused below the floor, and not found for a device it may not act for or one gone. */
+/** A call on the device secret: refused below the floor, not found for a device it may not act for or one gone, and under a method its path is not served on. */
 const deviceProcedure = declaredProcedure.errors(
-  refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED, HOSTED_API_ERROR.NOT_FOUND),
+  refuses(
+    HOSTED_API_ERROR.HOST_UPGRADE_NEEDED,
+    HOSTED_API_ERROR.NOT_FOUND,
+    HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+  ),
+);
+
+/** A pairing's call: refused below the floor, on a service from before the route, and under a method its path is not served on. */
+const pairingProcedure = declaredProcedure.errors(
+  refuses(
+    HOSTED_API_ERROR.HOST_UPGRADE_NEEDED,
+    HOSTED_API_ERROR.NOT_FOUND,
+    HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+  ),
 );
 
 export const deviceAgentsContract = {
-  startPairing: declaredProcedure
-    .errors(refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED, HOSTED_API_ERROR.QUOTA_EXHAUSTED))
+  startPairing: pairingProcedure
+    .errors(refuses(HOSTED_API_ERROR.QUOTA_EXHAUSTED))
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_PAIRING_START }))
     .input(exactInput(hostPairingStartRequestSchema))
     .output(EffectSchema.flip(hostPairingStartAnswerSchema)),
-  pollPairing: declaredProcedure
-    .errors(refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED))
+  pollPairing: pairingProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_PAIRING_POLL }))
     .output(EffectSchema.flip(hostPairingPollAnswerSchema)),
   enrollOwn: declaredProcedure
-    .errors(refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED, HOSTED_API_ERROR.NOT_FOUND))
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.HOST_UPGRADE_NEEDED,
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      ),
+    )
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL_OWN }))
     .input(exactInput(ownDeviceEnrollRequestSchema))
