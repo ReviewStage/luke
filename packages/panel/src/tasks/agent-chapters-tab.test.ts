@@ -55,7 +55,7 @@ import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -461,11 +461,14 @@ function Switching({ control, first }: { control: AgentsControl; first: PullRequ
   });
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 /** Draws the agent's tab on its Chapters view, or the view given, its reads landed. */
