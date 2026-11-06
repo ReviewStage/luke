@@ -6,6 +6,7 @@ import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -110,11 +111,11 @@ function button(name: string): HTMLButtonElement {
 }
 
 test("signed out from Settings, a fresh account that finishes setup lands on Home", async () => {
-  // Grace has walked setup on this machine to its last step, Connect your tools.
-  window.localStorage.setItem(
-    "app.setupPlace",
-    JSON.stringify({ "account-grace": { audience: "me", at: 3 } }),
-  );
+  // Grace has walked setup to its last step, Connect your tools, and her account carries the place.
+  const graceMidway: AppStateSnapshot = {
+    ...GRACE,
+    settings: appSettingsWire(settingsView({ setupPlace: '{"audience":"me","at":3}' })),
+  };
   // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
   await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -128,7 +129,7 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   await vi.waitFor(() =>
     assert.equal(document.querySelector(".desktop-onboarding") !== null, true),
   );
-  await deliver(GRACE, 3);
+  await deliver(graceMidway, 3);
   await vi.waitFor(() => assert.equal(finishStands(), true));
   act(() => button("Finish").click());
 
