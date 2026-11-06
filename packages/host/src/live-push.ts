@@ -1,8 +1,8 @@
-import { Duration, Effect, Option, Stream } from "effect";
+import { Effect, Option, Stream } from "effect";
 import {
-  FOLLOW_RESEAL,
   LiveBroken,
   liveRows,
+  resealWait,
   type SealedRead,
   type TxWait,
   waitOrRegained,
@@ -38,12 +38,6 @@ export interface LivePushDependencies<Part extends string, Value> {
   readonly publish: (value: Value | undefined) => Effect.Effect<void>;
   /** Handed how to wait for a write's transaction on the read where it has one, and none once it is let go (`liveRows`). */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
-}
-
-/** How long to wait before reading again after `fruitless` reads in a row that published nothing: the first wait, doubled for each after the first, never past the longest. */
-function resealWait(fruitless: number): Duration.Duration {
-  const doubled = Duration.times(FOLLOW_RESEAL.FIRST, 2 ** Math.max(0, fruitless - 1));
-  return Duration.min(doubled, FOLLOW_RESEAL.LONGEST);
 }
 
 /** The read followed until interrupted, each change published, or until the service refuses it for good. */
