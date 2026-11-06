@@ -2,7 +2,9 @@ DROP TRIGGER IF EXISTS "app_sync_update" ON "workspace_experiment";
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS "app_sync_write" ON "workspace_experiment";
 --> statement-breakpoint
-CREATE TABLE "workspace_experiment" (
+-- Note that this migration may run where an earlier name of it already made the table, on a
+-- preview database forked before it was generated again on main, so each step stands if done.
+CREATE TABLE IF NOT EXISTS "workspace_experiment" (
 	"organization_id" text,
 	"experiment" text,
 	"on" boolean NOT NULL,
@@ -11,8 +13,8 @@ CREATE TABLE "workspace_experiment" (
 	CONSTRAINT "workspace_experiment_pkey" PRIMARY KEY("organization_id","experiment")
 );
 --> statement-breakpoint
-ALTER TABLE "workspace_experiment" ADD CONSTRAINT "workspace_experiment_organization_id_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "workspace_experiment" ADD CONSTRAINT "workspace_experiment_changed_by_user_id_fkey" FOREIGN KEY ("changed_by") REFERENCES "user"("id") ON DELETE SET NULL;
+DO $$ BEGIN ALTER TABLE "workspace_experiment" ADD CONSTRAINT "workspace_experiment_organization_id_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("id") ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "workspace_experiment" ADD CONSTRAINT "workspace_experiment_changed_by_user_id_fkey" FOREIGN KEY ("changed_by") REFERENCES "user"("id") ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION "app_sync_workspace_experiment"() RETURNS trigger LANGUAGE plpgsql AS $app_sync$
 DECLARE
