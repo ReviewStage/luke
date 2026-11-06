@@ -32,6 +32,7 @@ import {
 } from "@repo/database/models/agent-store";
 import { appendSessionEntries } from "@repo/database/models/claude-session-entries";
 import { readNativeRewind, rewindConversation } from "@repo/database/models/conversation-rewind";
+import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { installSkill } from "@repo/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
@@ -51,6 +52,10 @@ import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  deviceAgentLaunchSecretsSchema,
+} from "@repo/features/device-agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -72,6 +77,7 @@ import {
   Option,
   Redacted,
   Result,
+  Schema,
 } from "effect";
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -99,6 +105,7 @@ import {
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AGENT_DRIVE, agentDriveName } from "../agent-drive.js";
 import { BASE_DRIVE } from "../base-drive.js";
+import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -106,6 +113,7 @@ import {
   KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
+import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { AGENT_TAG, SANDBOX_NAME, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
@@ -919,11 +927,28 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           new Date(0),
         );
         const onKey = runnerSandboxApi();
-        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(onKey)));
+        const machines = agentMachinesLayer({
+          readToken: deploymentOidcToken,
+          run: (effect) => Effect.runPromise(effect),
+        }).pipe(Layer.provide(onKey.layer));
+        // Note that the machines are provided innermost, so the Mac's machine answers rather than the fake sandbox's.
+        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(machines),
+          Effect.provide(services(onKey)),
+        );
         assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [launch] = yield* deviceAgentLinesWaiting(userId, deviceId);
+        assert.ok(launch?.kind === DEVICE_AGENT_LINE_KIND.LAUNCH);
+        const claimed = Option.getOrThrow(
+          yield* claimedDeviceAgentLine(userId, deviceId, launch.id).pipe(
+            Effect.provide(Layer.succeed(HostedEnvironment, NO_KEYS)),
+          ),
+        );
+        assert.ok("secrets" in claimed);
+        const { env } = Schema.decodeUnknownSync(deviceAgentLaunchSecretsSchema)(claimed.secrets);
         // A Mac has no firewall of ours, so its CLI is handed the key itself, and no swap is set.
-        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.API_KEY], API_KEY);
-        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        assert.equal(env[RUNNER_ENV.API_KEY], API_KEY);
+        assert.equal(env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.deepEqual(onKey.policies, []);
       }),
   );

@@ -86,7 +86,17 @@ import { type Agent, hasRepository, type WithRepository } from "@repo/database/m
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, type Context, Duration, Effect, Layer, Option, Result, Schedule } from "effect";
+import {
+  Brand,
+  type Context,
+  Duration,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  Schedule,
+} from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
@@ -117,8 +127,12 @@ import {
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
 import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
+  type FirewallEntry,
   type FirewallSession,
   type FirewallSources,
+  type LaunchSwapKind,
+  newPlaceholder,
+  placeholderSwap,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
 import {
@@ -140,6 +154,7 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
+  type DeliveredCredentials,
   type FoundPlace,
   type MachineKept,
   type MachineLayout,
@@ -150,6 +165,7 @@ import {
   PLACE_RESUME,
   type RecordedRunner,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerMark,
   type RunnerRecord,
@@ -371,6 +387,37 @@ function sessionOfPlace(place: OpenedPlace): SessionRef {
 /** The same session as its firewall names it, with the account whose agent it is. */
 function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession {
   return { userId, name: place.name, sandboxSessionId: place.running };
+}
+
+/**
+ * A launch's credentials as a sandbox's runner takes them: each a
+ * placeholder minted for the launch in its variable, and a swap its
+ * firewall keeps for the launch, which sets the value in the placeholder's
+ * place on requests to its target that present it, so no value enters the
+ * sandbox. Note that the swap matches the placeholder and not the target
+ * alone, because every process in the sandbox reaches out through that
+ * firewall, a Terminal's shell and a page in the agent's browser among them,
+ * and only one that reads the placeholder, the runner's own user, may act
+ * as the agent. A renewed credential is held the same way, and the sweep
+ * renews its swap.
+ */
+function heldAtFirewall(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const env: Record<string, string> = {};
+  const swaps = new Map<LaunchSwapKind, FirewallEntry>();
+  for (const credential of credentials) {
+    const placeholder = Redacted.value(newPlaceholder());
+    env[credential.variable] = placeholder;
+    swaps.set(
+      credential.slot,
+      placeholderSwap({
+        ...credential.target,
+        header: credential.header,
+        placeholder: Redacted.make(`${credential.scheme}${placeholder}`),
+        value: Redacted.make(`${credential.scheme}${Redacted.value(credential.value)}`),
+      }),
+    );
+  }
+  return { env, swaps };
 }
 
 /** The launch a record tells of: its first event number and fingerprint, of a launch that reads its lines, as every sandbox's does. */
@@ -850,6 +897,8 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     ...vercelLifecycle(api),
 
     layout: () => Effect.succeed(SANDBOX_LAYOUT),
+
+    deliverCredentials: (_agent, credentials) => heldAtFirewall(credentials),
 
     // What the checkout's finish reads of GitHub (`agentCheckoutPlan`) is read beside the sandbox's
     // opening and the caller's own reads, and kept as it ended, so a read that failed fails the
