@@ -17,8 +17,8 @@ import { listOAuthGrants, revokeOAuthClientTokens } from "../oauth-grants.js";
  * A member's OAuth grants over a real dialect, as the provider leaves its
  * rows: a member lists only their own consents, less the clients left out,
  * each with its client's name and redirects and its newest refresh, and a
- * client that skipped consent by the live token it holds for them, until
- * it is revoked; and a revoke deletes that member's tokens for that client
+ * client named that skipped consent by the live token it holds for them,
+ * until it is revoked, but never one not named; and a revoke deletes that member's tokens for that client
  * and nobody else's.
  *
  * Synthetic accounts, clients, and tokens throughout.
@@ -112,21 +112,23 @@ const held = (userId: string, clientId: string) =>
 
 it.layer(getTestDB())("a member's OAuth grants", (it) => {
   it.effect(
-    "a member lists their own consents and live consentless tokens, less the clients left out, with each one's newest refresh",
+    "a member lists their own consents, less the clients left out, and the named clients' live consentless tokens, with each one's newest refresh",
     () =>
       Effect.gen(function* () {
         const { owner, other, claude, codex } = yield* openGrants;
+        // Only claude is listed by its tokens alone, so owner's live codex token with no consent stays off the list.
+        const listed = { except: [DESKTOP], tokenOnly: [claude] };
         yield* allow(owner, claude);
         yield* allow(owner, DESKTOP);
         yield* allow(other, codex);
         yield* mint(owner, claude);
         yield* mint(owner, claude, { rotatedAt: REFRESHED_AT });
         yield* mint(owner, DESKTOP);
-        yield* mint(owner, codex, { rotatedAt: REFRESHED_AT });
+        yield* mint(owner, codex);
         yield* mint(other, claude, { mintedAt: MINTED_AT, rotatedAt: REFRESHED_AT });
         yield* mint(other, claude, { mintedAt: REFRESHED_AT });
 
-        assert.deepEqual(yield* listOAuthGrants(owner, [DESKTOP]), [
+        assert.deepEqual(yield* listOAuthGrants(owner, listed), [
           {
             clientId: claude,
             name: "Claude",
@@ -142,7 +144,7 @@ it.layer(getTestDB())("a member's OAuth grants", (it) => {
           allowedAt: ALLOWED_AT,
           lastRefreshedAt: null,
         };
-        assert.deepEqual(yield* listOAuthGrants(other, [DESKTOP]), [
+        assert.deepEqual(yield* listOAuthGrants(other, listed), [
           {
             clientId: claude,
             name: "Claude",
@@ -154,7 +156,8 @@ it.layer(getTestDB())("a member's OAuth grants", (it) => {
         ]);
 
         yield* revokeOAuthClientTokens(other, claude);
-        assert.deepEqual(yield* listOAuthGrants(other, [DESKTOP]), [codexGrant]);
+        yield* mint(other, claude, { rotatedAt: REFRESHED_AT });
+        assert.deepEqual(yield* listOAuthGrants(other, listed), [codexGrant]);
       }),
   );
 

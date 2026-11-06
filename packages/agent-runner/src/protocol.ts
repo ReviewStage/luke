@@ -68,12 +68,38 @@ export const RUNNER_ENV = {
    */
   CODEX_TOKEN: "APP_CODEX_TOKEN",
   /**
+   * Which backend a Codex launch on the plan sends its requests to
+   * (`CODEX_PLAN_BACKEND`): set where the plan was connected through Codex's
+   * own device-code login, whose token only Codex's ChatGPT backend accepts,
+   * and unset for OpenAI's API, where a third-party sign-in's token goes.
+   */
+  CODEX_PLAN_BACKEND: "APP_CODEX_PLAN_BACKEND",
+  /**
+   * The ChatGPT workspace a device-code plan pays from, which Codex's
+   * ChatGPT backend reads from the account header of each request; unset
+   * where the plan's ID token named none. A workspace id is no secret.
+   */
+  CHATGPT_ACCOUNT_ID: "APP_CHATGPT_ACCOUNT_ID",
+  /**
    * Where the runner runs, where its starter says (`RUNNER_PLACE`): set by a
    * host's daemon alone, on a Linux box and a Mac alike, This Mac's among
    * them, and unset in the cloud's sandbox.
    */
   PLACE: "APP_RUNNER_PLACE",
 } as const;
+
+/**
+ * The backends a Codex launch on the plan sends its requests to, as its
+ * starter names one in `RUNNER_ENV.CODEX_PLAN_BACKEND`: OpenAI's API, for a
+ * token a third-party sign-in was issued, or Codex's ChatGPT backend, for
+ * one Codex's own device-code login was issued.
+ */
+export const CODEX_PLAN_BACKEND = {
+  OPENAI_API: "openai_api",
+  CHATGPT: "chatgpt",
+} as const;
+
+export type CodexPlanBackend = (typeof CODEX_PLAN_BACKEND)[keyof typeof CODEX_PLAN_BACKEND];
 
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
 export const RUNNER_PLACE = {

@@ -289,6 +289,16 @@
     min-width: 0;
   }
 
+  /* A held chip standing straight in a tight list's item is words on the
+     item's line, not a block of the item, so it takes none of the space
+     between an item's blocks (`li > * + *`, above): an inline box's margin
+     would make its line taller, pushing the words below the item's box,
+     which stands in the gutter at the line's top. The words then stand as
+     they do in the plan's editor, which holds them in a paragraph. */
+  .ui-markdown li > .link-glued {
+    margin-top: 0;
+  }
+
   /* The site's documents, the privacy policy and each changelog release,
      are read start to finish, so they set more rhythm than the marketing
      copy around them: a clear step between heading levels and generous room

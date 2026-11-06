@@ -191,7 +191,7 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
         <TextLink href={SITE_PAGE.PRIVACY} current={currentOf(SITE_PAGE.PRIVACY, current)}>
           Privacy
         </TextLink>
-        <TextLink href="mailto:founders@stagereview.app">Contact</TextLink>
+        <TextLink href="mailto:founders@vespin.dev">Contact</TextLink>
       </div>
       {/* The notice sits under its own rule at the foot of the column, the
             way stagereview.app closes its footer, so the link row above stays

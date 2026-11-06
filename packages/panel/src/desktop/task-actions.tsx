@@ -77,11 +77,12 @@ import {
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChordLinks } from "../copy-link-item.js";
-import { DraftMark } from "../draft-mark.js";
+import { leftMark } from "../draft-mark.js";
 import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
+import { useTaskSendFailed } from "../tasks/failed-lines.js";
 import { lastEditOf } from "../tasks/plan-body.js";
 import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
@@ -1010,7 +1011,8 @@ function SidebarTaskCard({
  * it waits on is still open (`BlockedMark`), which the press says after
  * the status, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
- * their own words (`draft-mark.tsx`), and before that the face of who
+ * their own words, or the failed mark in its place while a message sent to
+ * one of its agents was not delivered (`draft-mark.tsx`), and before that the face of who
  * is on it (`rowFaceOf`, drawn as `AssigneeFaceMark`): its assignee's,
  * where someone other than the reader is assigned, read against the members of the directory around the
  * list, or the dashed unassigned mark where no one is; a task assigned to
@@ -1089,6 +1091,7 @@ export function SidebarTask({
   const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const chosen = useContext(ChosenTasksContext)(task.id);
   const drafted = usePlanDrafted(task.id) && !open;
+  const sendFailed = useTaskSendFailed(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, whose keys it hears while focused.
@@ -1162,7 +1165,7 @@ export function SidebarTask({
                   </span>
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
-                {drafted ? <DraftMark /> : null}
+                {leftMark(sendFailed, drafted)}
                 {task.blocked === true ? <BlockedMark aria-hidden="true" /> : null}
                 {childCount === undefined ? null : (
                   <ProgressCount

@@ -1,5 +1,5 @@
 /**
- * installed-skills-procedures.ts -- the skills members install into the app: list the ones a workspace offers the account, read one, preview a paste, install from it, turn one on or off, update one, share a personal one with a workspace, and remove it.
+ * installed-skills-procedures.ts -- the skills members install into the app: list the ones a workspace offers the account, read one, preview a paste, install from it, and remove one.
  *
  * Every procedure resolves the caller (`accountMiddleware`, on the
  * resource so it runs before an input is read) before it touches a row.
@@ -18,10 +18,7 @@
  * its GitHub source through the workspace named, which is the
  * installation that reads it. Every skill an install makes is written in
  * one transaction, so a name already taken among several installs none.
- * An update reads a GitHub skill's folder at the commit its ref stands at
- * now and replaces its files. A share moves the account's own
- * personal skill into a workspace it is a member of, never its personal
- * one, on the same rule as an install's scope. Each write answers the
+ * Each write answers the
  * transaction it committed in, which a desktop holding the skills live
  * waits for (`installedSkillsLive`); the list still answers a desktop
  * released before it.
@@ -32,14 +29,11 @@ import {
   type InstalledSkill,
   type InstalledSkillFilesRefused,
   type InstalledSkillNameTaken,
-  type InstalledSkillWithFiles,
+  type InstalledSkillRead,
   installSkill,
   listInstalledSkills,
   readInstalledSkill,
   removeInstalledSkill,
-  setInstalledSkillEnabled,
-  shareInstalledSkill,
-  updateInstalledSkill,
   type WrittenSkill,
 } from "@repo/database/models/installed-skill-store";
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
@@ -49,9 +43,7 @@ import type {
   InstalledSkillSummary,
 } from "@repo/features/installed-skill-route-wire";
 import {
-  INSTALLED_SKILL_MAIN_FILE,
   INSTALLED_SKILL_SCOPE,
-  INSTALLED_SKILL_SOURCE,
   type InstalledSkillScope,
 } from "@repo/features/installed-skill-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
@@ -73,7 +65,7 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { parseSkillPaste } from "./skill-paste.js";
-import { madeFromPaste, previewOfPaste, revisionAtRef } from "./skill-paste-install.js";
+import { madeFromPaste, previewOfPaste } from "./skill-paste-install.js";
 
 export interface InstalledSkillsProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -130,7 +122,7 @@ function summaryOf(skill: InstalledSkill, manageable: boolean): InstalledSkillSu
     description: skill.description,
     userInvocable: skill.userInvocable,
     source: skill.source,
-    enabled: skill.enabled,
+    enabled: true,
     ...(skill.organizationId === null ? undefined : { workspaceId: skill.organizationId }),
     installedBy: skill.installedByUserId,
     manageable,
@@ -140,12 +132,11 @@ function summaryOf(skill: InstalledSkill, manageable: boolean): InstalledSkillSu
 }
 
 /** One skill read whole for the wire: its `SKILL.md` as text, and every file's path and size. */
-function contentOf(skill: InstalledSkillWithFiles): InstalledSkillContent {
-  const main = skill.files.find((file) => file.path === INSTALLED_SKILL_MAIN_FILE);
+function contentOf(skill: InstalledSkillRead): InstalledSkillContent {
   return {
     id: skill.id,
-    skillFile: main === undefined ? "" : new TextDecoder().decode(main.bytes),
-    files: skill.files.map((file) => ({ path: file.path, bytes: file.bytes.byteLength })),
+    skillFile: new TextDecoder().decode(skill.skillFile),
+    files: skill.files,
   };
 }
 
@@ -206,18 +197,6 @@ function storeWrite<A, R>(
     Result.isSuccess(result) ? Effect.succeed(result.success) : Effect.fail(result.failure),
   );
 }
-
-/** The skill named among the ones the account sees in the workspace; not found where it is none of them. */
-const visibleSkill = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  workspace: MemberWorkspace,
-  id: string,
-): Effect.fn.Return<InstalledSkill, HostedRefusal, DatabaseServices> {
-  const listed = yield* hostedStoreOrUnavailable(listInstalledSkills(userId, workspace.id));
-  const skill = listed.find((one) => one.id === id);
-  if (skill === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return skill;
-});
 
 /** Why a write the store refused was refused: not permitted where the account still reads the skill, not found where it does not. */
 const refusedWrite = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -292,56 +271,6 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
         skills: installed.map((skill) => summaryOf(skill, true)),
         ...txidOf(installed[0]),
       };
-    }),
-
-    /** One skill turned on or off. */
-    setEnabled: skills.setEnabled.effect(function* ({
-      input: { params, body },
-      context: { userId },
-    }) {
-      const id = yield* pathUuid(params.id);
-      const written = yield* hostedStoreOrUnavailable(
-        setInstalledSkillEnabled(userId, id, body.enabled),
-      );
-      if (Option.isNone(written)) return yield* refusedWrite(userId, id);
-      yield* skillChanged(
-        userId,
-        body.enabled ? SERVER_SKILL_ACTION.ENABLE : SERVER_SKILL_ACTION.DISABLE,
-      );
-      return { skill: summaryOf(written.value, true), txid: written.value.txid };
-    }),
-
-    /** A GitHub skill's files read again at its ref and put in place of its own. */
-    update: skills.update.effect(function* ({ input: { params, body }, context: { userId } }) {
-      const id = yield* pathUuid(params.id);
-      const workspace = yield* memberWorkspace(userId, body.workspaceId);
-      const skill = yield* visibleSkill(userId, workspace, id);
-      if (!managedBy(userId, workspace, skill))
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      const { source } = skill;
-      if (source.type !== INSTALLED_SKILL_SOURCE.GITHUB) {
-        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      }
-      const revision = yield* revisionAtRef(userId, workspace.id, skill.name, source);
-      const written = yield* storeWrite(updateInstalledSkill(userId, id, revision), skill.name);
-      if (Option.isNone(written)) return yield* refusedWrite(userId, id);
-      yield* skillChanged(userId, SERVER_SKILL_ACTION.UPDATE);
-      return {
-        skill: summaryOf(written.value, true),
-        changed: written.value.computedHash !== skill.computedHash,
-        txid: written.value.txid,
-      };
-    }),
-
-    /** The account's own personal skill moved into a workspace it is a member of. */
-    share: skills.share.effect(function* ({ input: { params, body }, context: { userId } }) {
-      const id = yield* pathUuid(params.id);
-      const workspace = yield* memberWorkspace(userId, body.workspaceId);
-      yield* checkedScope(workspace, INSTALLED_SKILL_SCOPE.WORKSPACE);
-      const written = yield* storeWrite(shareInstalledSkill(userId, id, workspace.id), undefined);
-      if (Option.isNone(written)) return yield* refusedWrite(userId, id);
-      yield* skillChanged(userId, SERVER_SKILL_ACTION.SHARE);
-      return { skill: summaryOf(written.value, true), txid: written.value.txid };
     }),
 
     /** One skill removed with its files. */

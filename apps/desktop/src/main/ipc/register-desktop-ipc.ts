@@ -8,6 +8,7 @@ import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
 import {
   browserLiveProcedures,
   createActPortHandler,
+  macShellProcedures,
   type PlatformActProcedures,
   terminalProcedures,
 } from "@repo/host/act-port";
@@ -25,8 +26,11 @@ import {
   webContents,
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
+import { installCli } from "../native/cli-install";
+import { spawnMacShell } from "../native/mac-shell";
 import type { DesktopServices } from "../services/compose-desktop";
 import { windowPushes } from "../window/window-pushes";
+import { cliProcedures } from "./cli-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
@@ -118,6 +122,16 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
       createId: randomUUID,
       run,
+    }),
+    ...cliProcedures({ install: () => installCli(config.hostedServiceBaseUrl) }),
+    ...macShellProcedures<WebContents>({
+      spawn: spawnMacShell,
+      ports: {
+        open: portTo(TERMINAL_PORT_CHANNEL),
+        whenGone: whenPageGone,
+      },
+      whenClosed: (contents, then) => void contents.once("destroyed", then),
+      createId: randomUUID,
     }),
     ...macTerminalProcedures({
       home: os.homedir(),

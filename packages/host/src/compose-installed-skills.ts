@@ -12,9 +12,6 @@ import {
   installedSkillIdParamsSchema,
   installedSkillInstallParamsSchema,
   installedSkillPreviewParamsSchema,
-  installedSkillShareParamsSchema,
-  installedSkillToggleParamsSchema,
-  installedSkillUpdateParamsSchema,
 } from "@repo/features/installed-skill-view";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import { declaredMethod, type EntityPool } from "@repo/sync";
@@ -29,17 +26,14 @@ import type { HostKernel } from "./host-kernel.js";
 import {
   heldInstalledSkills,
   SKILL_MADE,
-  skillEnabled,
   skillRemoved,
   skillRowOf,
-  skillShared,
-  skillUpdated,
 } from "./installed-skills-follow.js";
 import type { HeldSlice } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-installed-skills.ts -- the skills the account installs, held for the windows that draw them and asked of the service on the window's behalf: one read, a paste previewed and installed, one toggled, updated, shared with a workspace, or removed.
+ * compose-installed-skills.ts -- the skills the account installs, held for the windows that draw them and asked of the service on the window's behalf: one read, a paste previewed and installed, or one removed.
  *
  * What Settings › Skills draws, a workspace's skills beside the account's
  * own, it holds (`heldSlice`): the host follows them on the service's live
@@ -50,10 +44,9 @@ import type { RunMode } from "./run-mode.js";
  * every follow go and lays none, and the account gate opening follows the
  * holds anew (`open`).
  *
- * A toggle, a share, and a removal are writes declared there, drawn over
- * every held read of the skill the moment they are asked; an update and an
- * install draw from their answers, since only the service reads what they
- * install. Each answers the service's answer whole, as the window's view of
+ * A removal is a write declared there, drawn over every held read of the
+ * skill the moment it is asked; an install draws from its answer, since
+ * only the service reads what it installs. Each answers the service's answer whole, as the window's view of
  * it: the answer, or why there is none, with the skill it names. A skill
  * read whole and a preview are fetched and held nowhere. Behind a closed account gate, or on a run that
  * sends nothing, every ask answers unanswered.
@@ -62,20 +55,13 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of installed skills, as this concern asks it. */
 export type InstalledSkillsClient = Pick<
   HostedInstalledSkillClient,
-  | "installedSkillsLive"
-  | "read"
-  | "preview"
-  | "install"
-  | "setEnabled"
-  | "update"
-  | "share"
-  | "remove"
+  "installedSkillsLive" | "read" | "preview" | "install" | "remove"
 >;
 
 export interface InstalledSkillsDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
-  /** The account signed in now, which a follow names from its start and a share names as its sharer; none where nobody is. */
+  /** The account signed in now, which a follow names from its start; none where nobody is. */
   accountId: () => string | undefined;
   client: InstalledSkillsClient;
   /** The sync engine's pool, which each held workspace's skills stand in. */
@@ -155,9 +141,6 @@ function composed(
       : Effect.succeed(UNANSWERED);
 
   const whole = <Answer>(answer: Answer) => answer;
-  const updated = skillUpdated((update) =>
-    asked(client.update(update.workspaceId, update.skillId), whole),
-  );
 
   const methods: HostMethodTable = {
     // Note that the windows' hold on a workspace is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -234,38 +217,6 @@ function composed(
         }
         return carried<InstalledSkillInstallView>(view);
       }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED]: declaredMethod(
-      pool,
-      skillEnabled((toggle) => asked(client.setEnabled(toggle.skillId, toggle.enabled), whole)),
-      (params: WireRecord) =>
-        readParams(
-          installedSkillToggleParamsSchema,
-          params,
-          "a toggle names a skill and whether it is on",
-        ),
-    ),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE]: (params) =>
-      Effect.gen(function* () {
-        const update = yield* readParams(
-          installedSkillUpdateParamsSchema,
-          params,
-          "an update names a workspace and a skill",
-        );
-        return yield* pool.write(updated, update);
-      }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_SHARE]: declaredMethod(
-      pool,
-      skillShared(
-        (share) => asked(client.share(share.workspaceId, share.skillId), whole),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          installedSkillShareParamsSchema,
-          params,
-          "a share names a workspace and a skill",
-        ),
-    ),
     [GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE]: declaredMethod(
       pool,
       skillRemoved((removal) => asked(client.remove(removal.skillId), whole)),

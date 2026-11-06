@@ -157,27 +157,31 @@ afterEach(() => {
 });
 
 it.layer(getTestDB())("a coding agent's sandbox", (it) => {
-  it.effect("a stopped sandbox lists no shells and is never woken by a list or a start", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = vercel("stopped");
+  it.effect(
+    "a stopped sandbox lists no shells and no ports, and is never woken by a list or a start",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel("stopped");
 
-      const { listed, started } = yield* Effect.gen(function* () {
-        const sandbox = yield* AgentSandbox;
-        return {
-          listed: yield* sandbox.terminals(SESSION),
-          started: yield* sandbox.start(SESSION, SHELL, undefined),
-        };
-      }).pipe(Effect.provide(api.layer));
+        const { listed, ports, started } = yield* Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          return {
+            listed: yield* sandbox.terminals(SESSION),
+            ports: yield* sandbox.listeningPorts(SESSION),
+            started: yield* sandbox.start(SESSION, SHELL, undefined),
+          };
+        }).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(listed, { sandbox: SANDBOX_STATE.STOPPED, terminals: [] });
-      assert.deepEqual(
-        started,
-        Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
-      );
-      assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") === null));
-      assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
-    }),
+        assert.deepEqual(listed, { sandbox: SANDBOX_STATE.STOPPED, terminals: [] });
+        assert.deepEqual(ports, { running: false, ports: [] });
+        assert.deepEqual(
+          started,
+          Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
+        );
+        assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") === null));
+        assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
+      }),
   );
 
   it.effect(
@@ -210,6 +214,118 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const run = api.asked.find((call) => call.args !== undefined);
         assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
         assert.deepEqual(unopened, { sandbox: SANDBOX_STATE.STARTING, terminals: [] });
+      }),
+  );
+
+  it.effect(
+    "a running sandbox's ports are the ones its servers listen on, each once, never root's or the browser's, and tables it could not read are an outage",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        // The kernel's tables as `cat` prints them, by hand: the sandbox's init on 23456 as root,
+        // the browser's DevTools on 9333, a dev server on 3000 over both families with a connection
+        // to it, and a server on 5173.
+        const tables = [
+          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+          "   0: 00000000:5BA0 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 3107 1",
+          "   1: 0100007F:2475 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4100 1",
+          "   2: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4200 1",
+          "   3: 0100007F:A2D2 0100007F:0BB8 01 00000000:00000000 00:00000000 00000000  1002        0 4300 1",
+          "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+          "   0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4500 1",
+          "   1: 00000000000000000000000000000000:1435 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 4600 1",
+        ];
+        const api = vercel("running", tables);
+        const unread = vercel("running", [], 1);
+
+        const ports = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.listeningPorts(SESSION),
+        ).pipe(Effect.provide(api.layer));
+        const outage = yield* Effect.flip(
+          Effect.flatMap(AgentSandbox, (sandbox) => sandbox.listeningPorts(SESSION)).pipe(
+            Effect.provide(unread.layer),
+          ),
+        );
+
+        assert.deepEqual(ports, { running: true, ports: [3000, 5173] });
+        const run = api.asked.find((call) => call.args !== undefined);
+        assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
+        assert.ok(outage instanceof SandboxUnavailable);
+      }),
+  );
+
+  it.effect(
+    "turning forwarding on wakes a stopped sandbox and starts the repository's run command in its checkout without capabilities, and starts nothing where a port listens",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const header =
+          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid";
+        const listener =
+          "   0: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002";
+        /** Vercel with the session's sandbox in the status given, its tables printing the rows given, and the checkout's `.vespin.json` naming `pnpm dev` where no row listens. */
+        const forwarding = (status: string, rows: readonly string[]) => {
+          const started: { readonly url: URL; readonly body: Record<string, unknown> }[] = [];
+          const resumed: URL[] = [];
+          const layer = Layer.provide(
+            agentSandboxLayer,
+            Layer.merge(
+              LOCAL_AGENT_ENVIRONMENT,
+              fakeHttpClientLayer(async (url, init) => {
+                const parsed = new URL(url);
+                if (parsed.pathname.endsWith("/cmd")) {
+                  const body = JSON.parse(await new Response(init.body).text());
+                  if (body.attachStdin === true) {
+                    started.push({ url: parsed, body });
+                    return Response.json({ command: { id: "cmd_run", exitCode: null } });
+                  }
+                  const [file] = body.args;
+                  if (file !== "/workspace/repository/.vespin.json") {
+                    return commandStream(0, [header, ...rows].join("\n"));
+                  }
+                  // Where a port listens the file is never read, so a read there fails the call.
+                  return rows.length > 0
+                    ? new Response(null, { status: 503 })
+                    : commandStream(0, '{ "run": "pnpm dev" }');
+                }
+                if (init.method === "PATCH") return Response.json({ sandbox: { name: SANDBOX } });
+                if (parsed.searchParams.get("resume") === "true") {
+                  resumed.push(parsed);
+                  return Response.json({
+                    sandbox: { name: SANDBOX, status: "running" },
+                    session: { id: "sbs_resumed", status: "running" },
+                  });
+                }
+                return Response.json({
+                  sandboxes: [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
+                });
+              }),
+            ),
+          );
+          return { layer, started, resumed };
+        };
+        const stopped = forwarding("stopped", []);
+        const serving = forwarding("running", [listener]);
+
+        const woken = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.startForwarding(SESSION),
+        ).pipe(Effect.provide(stopped.layer));
+        const listening = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.startForwarding(SESSION),
+        ).pipe(Effect.provide(serving.layer));
+
+        assert.deepEqual(woken, { started: true });
+        assert.equal(stopped.resumed[0]?.pathname, `/api/v2/sandboxes/${SANDBOX}`);
+        const [run] = stopped.started;
+        assert.ok(run !== undefined);
+        assert.equal(run.url.pathname, "/api/v2/sandboxes/sessions/sbs_resumed/cmd");
+        assert.equal(run.body.command, "setpriv");
+        assert.equal(run.body.cwd, "/workspace/repository");
+        assert.equal(run.body.sudo, false);
+        assert.ok((run.body.args as readonly string[]).includes("pnpm dev"));
+        assert.deepEqual(listening, { started: false });
+        assert.deepEqual(serving.started, []);
+        assert.deepEqual(serving.resumed, []);
       }),
   );
 

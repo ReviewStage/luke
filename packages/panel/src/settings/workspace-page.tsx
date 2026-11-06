@@ -57,6 +57,7 @@ import {
   SettingsRowMark,
   type SettingsRowSkeletonShape,
   SettingsRowStateLine,
+  SettingsRowsFold,
   SettingsRowsSkeleton,
   SettingsRowValue,
   SettingsSection,
@@ -110,6 +111,7 @@ import { SwitchRow } from "./switch-row.js";
 import { GitHubAccountRows, type ShownConnection } from "./workspace-github-accounts.js";
 import {
   AddTokenRepository,
+  TOKEN_REPOSITORIES_READ,
   TokenOwnerRows,
   useTokenRepositories,
 } from "./workspace-token-repositories.js";
@@ -250,14 +252,33 @@ function transferAsk(
 /** The outline face an invited address wears until it is a member, so its words stand in the members' column. */
 const INVITED_ACTOR = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED } as const;
 
-/** What the GitHub row says where no GitHub is connected, by who is reading it. */
-const GITHUB_UNCONNECTED = {
+/**
+ * What every integration's row says under its name, GitHub's, Slack's, and
+ * Sentry's alike: Connected once it is, else that it is not, and to a member,
+ * who cannot connect it, whom to ask.
+ */
+const CONNECTION_LINE = {
+  CONNECTED: "Connected",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
 
-/** What the GitHub row says to a member once an account is connected, who has no Manage on GitHub to say it: where its access is changed. */
-const GITHUB_CONNECTED_MEMBER = "Accounts and repositories are managed on GitHub.";
+/** What an integration's row presses to connect it, the same word on every row. */
+const CONNECT = "Connect";
+
+/** An integration's line under its name, by whether it is connected and whether the reader may connect it. */
+function connectionLine(connected: boolean, manages: boolean): React.ReactNode {
+  if (!connected) return manages ? CONNECTION_LINE.MANAGES : CONNECTION_LINE.MEMBER;
+  return (
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+      {CONNECTION_LINE.CONNECTED}
+    </SettingsRowStateLine>
+  );
+}
+
+/** The chevrons folding an integration's own rows under its row, each closed until pressed. */
+const GITHUB_FOLD = "GitHub accounts";
+const SLACK_BOT_FOLD = "Slack settings";
 
 /** GitHub's own mark, which leads its row as a provider's leads Settings › Integrations'. */
 const GITHUB_MARK = (
@@ -273,38 +294,12 @@ const SENTRY_MARK = (
   </SettingsRowMark>
 );
 
-/** Slack's own mark, which leads the Slack bot's row as Sentry's leads Sentry's. */
+/** Slack's own mark, which leads Slack's row as Sentry's leads Sentry's. */
 const SLACK_MARK = (
   <SettingsRowMark>
     <ProviderMark provider={INTEGRATION_PROVIDER.SLACK} />
   </SettingsRowMark>
 );
-
-/**
- * What the Slack bot row's line says, by whether it is connected and who is
- * reading it. Note that every line asking for it names messages to members,
- * because this row is easily read as the Slack an agent reads through, which
- * is each member's own in Settings › Integrations; this one is the bot that
- * writes to the workspace's members.
- */
-const SLACK_BOT_LINE = {
-  CONNECTED: "Connected",
-  MANAGES: `Not connected. Connect ${PRODUCT_NAME}'s bot to message members in Slack.`,
-  MEMBER: `Not connected. Ask an owner or admin to connect ${PRODUCT_NAME}'s bot.`,
-} as const;
-
-/**
- * What the Sentry row's line says, by whether an installation stands and who
- * is reading it. Note that every line asking for it names automations,
- * because this row is easily read as the Sentry an agent reads through, which
- * is each member's own in Settings › Integrations; this one only carries
- * Sentry's alerts and new issues to the workspace's automations.
- */
-const SENTRY_LINE = {
-  INSTALLED: "Connected",
-  MANAGES: "Not installed. Install to start automations from Sentry alerts.",
-  MEMBER: "Not installed. Ask an owner or admin to install it for automations.",
-} as const;
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -335,8 +330,8 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
 /** The services the Workspace connections group draws a row for, in order, each by its own row. */
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
-  { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
   { service: INTEGRATION_PROVIDER.SLACK, Row: WorkspaceSlackBotRow },
+  { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
 ] as const;
 
 /**
@@ -1054,6 +1049,7 @@ function ManagedGitHub({
   connections,
   add,
   addRefusal,
+  chevron,
 }: {
   workspace: Workspace;
   connections: readonly ShownConnection[];
@@ -1061,6 +1057,8 @@ function ManagedGitHub({
   add: React.ReactNode;
   /** What the last add was refused with, said under the row. */
   addRefusal: string | undefined;
+  /** The chevron folding GitHub's accounts under the row, last at its end. */
+  chevron: React.ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1086,7 +1084,7 @@ function ManagedGitHub({
       <SettingsRow
         leading={GITHUB_MARK}
         label="GitHub"
-        description={connected ? undefined : GITHUB_UNCONNECTED.MANAGES}
+        description={connectionLine(connected, true)}
         error={replayMaskedError(
           refusedShown(refusal ?? addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB),
         )}
@@ -1111,9 +1109,10 @@ function ManagedGitHub({
                 busyLabel="Connecting"
                 onClick={open}
               >
-                Connect
+                {CONNECT}
               </Button>
             )}
+            {chevron}
           </>
         )}
       </SettingsRow>
@@ -1140,45 +1139,53 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
       onRefused={setAddRefusal}
     />
   );
+  // Note that the token rows say their read while it is out or failed, so GitHub folds those lines too.
+  const owns =
+    connections.length > 0 ||
+    repositories.read !== TOKEN_REPOSITORIES_READ.READY ||
+    repositories.listed.length > 0;
   return (
-    <>
-      {managesWorkspace(workspace) ? (
-        <ManagedGitHub
-          workspace={workspace}
-          connections={connections}
-          add={add}
-          addRefusal={addRefusal}
-        />
-      ) : (
-        <SettingsRow
-          leading={GITHUB_MARK}
-          label="GitHub"
-          description={
-            connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_MEMBER
-          }
-          error={replayMaskedError(refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB))}
-        >
-          {() => add}
-        </SettingsRow>
-      )}
-      <GitHubAccountRows workspaceId={workspace.id} connections={connections} />
-      <TokenOwnerRows repositories={repositories} />
-    </>
-  );
-}
-
-/** The Sentry row's line: Connected once it is installed, or the ask to install it. */
-function sentryLine(sentry: WorkspaceSentry, manages: boolean): React.ReactNode {
-  if (sentry.installations.length === 0) return manages ? SENTRY_LINE.MANAGES : SENTRY_LINE.MEMBER;
-  return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-      {SENTRY_LINE.INSTALLED}
-    </SettingsRowStateLine>
+    <SettingsRowsFold
+      label={GITHUB_FOLD}
+      head={(chevron) =>
+        managesWorkspace(workspace) ? (
+          <ManagedGitHub
+            workspace={workspace}
+            connections={connections}
+            add={add}
+            addRefusal={addRefusal}
+            chevron={chevron}
+          />
+        ) : (
+          <SettingsRow
+            leading={GITHUB_MARK}
+            label="GitHub"
+            description={connectionLine(connections.length > 0, false)}
+            error={replayMaskedError(refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB))}
+          >
+            {() => (
+              <>
+                {add}
+                {chevron}
+              </>
+            )}
+          </SettingsRow>
+        )
+      }
+      rows={
+        owns ? (
+          <>
+            <GitHubAccountRows workspaceId={workspace.id} connections={connections} />
+            <TokenOwnerRows repositories={repositories} />
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
 /**
- * The workspace's Sentry, for an owner or an admin: Install for workspace
+ * The workspace's Sentry, for an owner or an admin: Connect
  * while none stands, which opens Sentry's install page in the browser, an
  * install that could not be begun saying why under the row; and once one
  * stands, a ⋯ whose menu disconnects each installation, which asks first.
@@ -1252,7 +1259,7 @@ function ManagedSentry({
         row={{
           leading: SENTRY_MARK,
           label: "Sentry",
-          description: sentryLine(sentry, true),
+          description: connectionLine(sentry.installations.length > 0, true),
           error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SENTRY)),
           control:
             sentry.installations.length > 0 ? null : (
@@ -1262,9 +1269,11 @@ function ManagedSentry({
                 busyLabel="Opening Sentry"
                 onClick={install}
               >
-                Install for workspace
+                {CONNECT}
               </Button>
             ),
+          // Note that Sentry folds nothing, so it keeps the chevron's room for its controls to end in GitHub's and Slack's column.
+          chevron: <SettingsRowActSlot />,
         }}
       />
       <ConfirmDialog
@@ -1309,24 +1318,18 @@ function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.
     return <ManagedSentry workspace={workspace} sentry={sentry} />;
   }
   return (
-    <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(sentry, false)}>
+    <SettingsRow
+      leading={SENTRY_MARK}
+      label="Sentry"
+      description={connectionLine(sentry.installations.length > 0, false)}
+    >
       {() => null}
     </SettingsRow>
   );
 }
 
-/** The Slack bot row's line: Connected once it is, or the ask to connect it. */
-function slackBotLine(slack: WorkspaceSlack, manages: boolean): React.ReactNode {
-  if (slack.team === undefined) return manages ? SLACK_BOT_LINE.MANAGES : SLACK_BOT_LINE.MEMBER;
-  return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-      {SLACK_BOT_LINE.CONNECTED}
-    </SettingsRowStateLine>
-  );
-}
-
 /**
- * The workspace's Slack bot, for an owner or an admin: Connect Slack bot
+ * The workspace's Slack bot, for an owner or an admin: Connect
  * while it is not connected, which asks Slack which team the bot answers
  * for and keeps it, a connect that failed saying why under the row; and
  * once it is, a ⋯ whose menu disconnects it, which asks first, as the
@@ -1339,10 +1342,13 @@ function ManagedSlackBot({
   workspace,
   slack,
   channels,
+  chevron,
 }: {
   workspace: Workspace;
   slack: WorkspaceSlack;
   channels: readonly SlackListedChannel[] | undefined;
+  /** The chevron folding the bot's rows under its row, last at its end. */
+  chevron: React.ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1387,13 +1393,13 @@ function ManagedSlackBot({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        thing="Slack bot"
+        thing="Slack"
         alone
         actions={actions}
         row={{
           leading: SLACK_MARK,
-          label: "Slack bot",
-          description: slackBotLine(slack, true),
+          label: "Slack",
+          description: connectionLine(slack.team !== undefined, true),
           error: replayMaskedError(
             refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT) ??
               refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
@@ -1414,9 +1420,10 @@ function ManagedSlackBot({
                 busyLabel="Connecting"
                 onClick={connect}
               >
-                Connect Slack bot
+                {CONNECT}
               </Button>
             ),
+          chevron,
         }}
       />
       <ConfirmDialog
@@ -1466,9 +1473,10 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
 }
 
 /**
- * An owner's or an admin's bot row, and under it, where the bot is
- * connected, its repositories and channels (`slack-bot-channels.tsx`): the
- * channels are Slack's own list, which the host holds while the row shows.
+ * An owner's or an admin's bot row, and folded under it, where the bot is
+ * connected, its repositories and channels (`slack-bot-channels.tsx`) and
+ * the reader's own switch: the channels are Slack's own list, which the host
+ * holds while the row shows.
  */
 function ManagedSlackBotRows({
   workspace,
@@ -1479,16 +1487,29 @@ function ManagedSlackBotRows({
 }): React.JSX.Element {
   const channels = useHostRead(LIVE_READ.SLACK_CHANNELS, workspace.id);
   return (
-    <>
-      <ManagedSlackBot workspace={workspace} slack={slack} channels={channels.rows} />
-      {slack.team === undefined ? null : (
-        <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.rows} />
+    <SettingsRowsFold
+      label={SLACK_BOT_FOLD}
+      head={(chevron) => (
+        <ManagedSlackBot
+          workspace={workspace}
+          slack={slack}
+          channels={channels.rows}
+          chevron={chevron}
+        />
       )}
-    </>
+      rows={
+        slack.team === undefined ? undefined : (
+          <>
+            <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.rows} />
+            <SlackNotificationsRow workspaceId={workspace.id} />
+          </>
+        )
+      }
+    />
   );
 }
 
-/** The bot's row, and under it, where the bot is connected, an owner's or admin's repositories and channels and the reader's own switch. */
+/** The bot's row, and folded under it, where the bot is connected, an owner's or admin's repositories and channels and the reader's own switch. */
 function SlackBotRows({
   workspace,
   slack,
@@ -1496,22 +1517,25 @@ function SlackBotRows({
   workspace: Workspace;
   slack: WorkspaceSlack;
 }): React.JSX.Element {
+  if (managesWorkspace(workspace))
+    return <ManagedSlackBotRows workspace={workspace} slack={slack} />;
   // Note that the rows stand side by side as the card's own, as GitHub's do, so the card rules a line between each.
   return (
-    <>
-      {managesWorkspace(workspace) ? (
-        <ManagedSlackBotRows workspace={workspace} slack={slack} />
-      ) : (
+    <SettingsRowsFold
+      label={SLACK_BOT_FOLD}
+      head={(chevron) => (
         <SettingsRow
           leading={SLACK_MARK}
-          label="Slack bot"
-          description={slackBotLine(slack, false)}
+          label="Slack"
+          description={connectionLine(slack.team !== undefined, false)}
         >
-          {() => null}
+          {() => chevron}
         </SettingsRow>
       )}
-      {slack.team === undefined ? null : <SlackNotificationsRow workspaceId={workspace.id} />}
-    </>
+      rows={
+        slack.team === undefined ? undefined : <SlackNotificationsRow workspaceId={workspace.id} />
+      }
+    />
   );
 }
 

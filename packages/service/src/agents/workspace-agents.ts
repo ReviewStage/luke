@@ -223,6 +223,24 @@ function storeNarrowingOf(filter: AgentListFilter) {
   };
 }
 
+/** A page cut from a list read one past its bound, and the next page's offset where that one past stood; null where the list ended. */
+export interface ListedPage<A> {
+  readonly page: readonly A[];
+  readonly nextOffset: number | null;
+}
+
+/**
+ * A page of a list the store read from `offset` at one past `bound`, so a
+ * next page is known to stand without a count of its own: the agent tools'
+ * list and the hosted list (`agents-procedures.ts`) cut their pages here.
+ */
+export function listedPage<A>(listed: readonly A[], offset: number, bound: number): ListedPage<A> {
+  return {
+    page: listed.slice(0, bound),
+    nextOffset: listed.length > bound ? offset + bound : null,
+  };
+}
+
 /**
  * A page of the workspace's agents, archived ones among them unless the
  * filter leaves them out, narrowed as the filter asks, the calling agent left out: its starter and the agents
@@ -256,11 +274,11 @@ export const workspaceAgentsOf = (
       // One past the bound tells whether a next page stands, without a count of its own.
       limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
     });
-    const agents = listed.slice(0, WORKSPACE_AGENTS_LIST_LIMIT);
-    const nextOffset =
-      listed.length > WORKSPACE_AGENTS_LIST_LIMIT
-        ? filter.offset + WORKSPACE_AGENTS_LIST_LIMIT
-        : null;
+    const { page: agents, nextOffset } = listedPage(
+      listed,
+      filter.offset,
+      WORKSPACE_AGENTS_LIST_LIMIT,
+    );
     const names = yield* taskNamesOf(
       userId,
       agents.flatMap((agent) => agent.taskId ?? []),

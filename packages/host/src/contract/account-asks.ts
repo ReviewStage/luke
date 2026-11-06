@@ -1,6 +1,9 @@
 import { eventIterator, type } from "@orpc/contract";
 import {
-  chatGptSignInAnswerViewSchema,
+  chatGptDeviceLoginParamsSchema,
+  chatGptDevicePollAnswerViewSchema,
+  chatGptDeviceStartAnswerViewSchema,
+  chatGptDeviceWaitParamsSchema,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
   githubTokenAnswerViewSchema,
@@ -52,16 +55,21 @@ export const accountAskActsContract = {
   )
     .input(exactInput(providerKeyForAgentsParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actProcedure(
-    "Couldn't continue with ChatGPT on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START]: actProcedure(
+    "Couldn't start connecting Codex on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(chatGptSignInAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actProcedure(
-    "Couldn't stop waiting for ChatGPT on this system.",
+    .output(EffectSchema.flip(chatGptDeviceStartAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT]: actProcedure(
+    "Couldn't wait for Codex on this system.",
   )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
+    .input(exactInput(chatGptDeviceWaitParamsSchema))
+    .output(EffectSchema.flip(chatGptDevicePollAnswerViewSchema)),
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL]: actProcedure(
+    "Couldn't stop connecting Codex on this system.",
+  )
+    .input(exactInput(chatGptDeviceLoginParamsSchema))
+    .output(EffectSchema.flip(chatGptDevicePollAnswerViewSchema)),
   // Note that the hold's stream carries nothing: the held token reaches the panel on app state, and the stream is the window's hold on it.
   [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW]: actProcedure(
     "Could not follow your GitHub token on this system.",

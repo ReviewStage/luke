@@ -11,6 +11,13 @@
  * starts only in a running sandbox; asked of any other, the service answers
  * where the sandbox stands instead.
  *
+ * The ports a server listens on are read the same way, from the kernel's
+ * socket tables in the running session (`listening-ports.ts`), and never
+ * from a sandbox that is not running. Turning forwarding on is the one
+ * read that wakes a stopped sandbox, the developer having asked for the
+ * app, and starts the repository's run command (`run-command.ts`) where no
+ * port listens in it yet.
+ *
  * The GitHub credential the firewall carries for the agent is set here in
  * the agent's own GitHub slot, in the shape its own session and a copy of
  * its work set it (`../sandbox-firewall.ts`'s `githubEntry`): an
@@ -21,6 +28,10 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
+import type {
+  ForwardingStartAnswer,
+  ListeningPortsAnswer,
+} from "@repo/features/listening-ports-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
@@ -46,6 +57,8 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
+import { listeningPortsOf, readSocketTables } from "./listening-ports.js";
+import { readRunConfig, runCommandOf, startRunCommand } from "./run-command.js";
 import {
   holdsTerminal,
   killTerminal,
@@ -89,9 +102,22 @@ type SandboxAttach =
   | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING }
   | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly gone: true };
 
+/** What an open finds: a running sandbox's PTY, minted for one connection, or where the sandbox stands instead. */
+export type SandboxOpen =
+  | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly shell: InteractiveShell }
+  | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING };
+
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
+  /** Whether the agent's sandbox is running, and the ports a server listens on in it; none while it is not running, which a read never changes. */
+  readonly listeningPorts: (
+    sessionId: string,
+  ) => Effect.Effect<ListeningPortsAnswer, SandboxUnavailable>;
+  /** The agent's sandbox woken where it was stopped, and the repository's run command started there where no port listens. */
+  readonly startForwarding: (
+    sessionId: string,
+  ) => Effect.Effect<ForwardingStartAnswer, SandboxUnavailable>;
   /** A new shell in the agent's running sandbox, under the id given, named where the developer named it. */
   readonly start: (
     sessionId: string,
@@ -109,6 +135,8 @@ export interface AgentSandboxService {
     sessionId: string,
     terminalId: string,
   ) => Effect.Effect<SandboxAttach, SandboxUnavailable>;
+  /** A PTY minted on the running sandbox for a command of the caller's own, or where the sandbox stands; a stopped sandbox is never woken here. */
+  readonly open: (sessionId: string) => Effect.Effect<SandboxOpen, SandboxUnavailable>;
   /**
    * A fresh credential set in the GitHub slot of the running sandbox
    * session's firewall, in the shape the agent's own session sets it
@@ -172,6 +200,16 @@ function agentSandboxOver(
       ),
     );
 
+  /** The sandbox's running session, woken from its snapshot where it was stopped; none where it was never opened. */
+  const woken = (sessionId: string) =>
+    Effect.gen(function* () {
+      const { sandbox, running } = yield* standing(sessionId);
+      if (sandbox === undefined || running !== undefined) return running;
+      // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+      yield* capSandboxTimeout(api, sandbox);
+      return (yield* api.resume(sandbox.name)).currentSessionId;
+    });
+
   return {
     terminals: (sessionId) =>
       Effect.gen(function* () {
@@ -181,6 +219,27 @@ function agentSandboxOver(
         // A list tmux could not give is an outage, never a sandbox with no shells.
         if (listed === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
         return { sandbox: state, terminals: listed };
+      }),
+    listeningPorts: (sessionId) =>
+      Effect.gen(function* () {
+        const { running } = yield* standing(sessionId);
+        if (running === undefined) return { running: false, ports: [] };
+        const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
+        // Tables the kernel could not be read for are an outage, never a sandbox with no servers.
+        if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        return { running: true, ports };
+      }),
+    startForwarding: (sessionId) =>
+      Effect.gen(function* () {
+        const running = yield* woken(sessionId);
+        if (running === undefined) return { started: false };
+        const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
+        if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        if (ports.length > 0) return { started: false };
+        const command = runCommandOf(yield* api.run(running, readRunConfig()));
+        if (command === undefined) return { started: false };
+        yield* api.start(running, { ...startRunCommand(command), sudo: false });
+        return { started: true };
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>
@@ -217,6 +276,19 @@ function agentSandboxOver(
         // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
         const shell = yield* api.openInteractive(running);
         return { state: SANDBOX_STATE.RUNNING, sandboxSessionId: running, shell };
+      }),
+    open: (sessionId) =>
+      Effect.gen(function* () {
+        const { state, running } = yield* standing(sessionId);
+        if (running === undefined) {
+          return {
+            state:
+              state === SANDBOX_STATE.STARTING ? SANDBOX_STATE.STARTING : SANDBOX_STATE.STOPPED,
+          };
+        }
+        // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
+        const shell = yield* api.openInteractive(running);
+        return { state: SANDBOX_STATE.RUNNING, shell };
       }),
     setCredential: (session, credential) =>
       Effect.provideContext(

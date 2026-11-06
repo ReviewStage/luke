@@ -315,6 +315,7 @@ const SETTINGS_PAGES = [
   "Agents",
   "Integrations",
   "Vespin MCP",
+  "Vespin CLI",
   "Appearance",
   "This Mac",
   "Experimental",

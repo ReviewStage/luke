@@ -265,6 +265,29 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // The CLI page's two groups, drawn once an account is signed in: the command's install, and its sign-in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CLI_INSTALL,
+          label: "Install the vespin command",
+          page: SETTINGS_VIEW.CLI,
+          haystack: [
+            "Install the vespin command",
+            "cli command-line tool terminal shell npm path reinstall",
+          ],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CLI_SIGN_IN,
+          label: "Sign in from your terminal",
+          page: SETTINGS_VIEW.CLI,
+          haystack: [
+            "Sign in from your terminal",
+            "cli command-line tool vespin login sign out everywhere logout",
+          ],
+        }
+      : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,

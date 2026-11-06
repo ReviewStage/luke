@@ -494,11 +494,15 @@ test("a list's places are its rows', a held one kept and a new one where it stan
   ]);
 });
 
-test("an item is done with once it is settled, answered or closed, and read; one open, or settled and unread since, is not", () => {
+test("an item is done with once it is settled, answered or closed, and read, or closed without an answer however unread; one open, answered and unread since, or closed and marked unread or written on since, is not", () => {
+  const withdrawn = { status: INBOX_STATUS.CLOSED, unread: true, settledAt: 2_000 } as const;
   assert.equal(isDone(item({ id: "answered", status: INBOX_STATUS.ANSWERED })), true);
   assert.equal(isDone(item({ id: "closed", status: INBOX_STATUS.CLOSED })), true);
+  assert.equal(isDone(item({ id: "withdrawn", ...withdrawn })), true);
   assert.equal(isDone(item({ id: "open" })), false);
   assert.equal(isDone(item({ id: "again", status: INBOX_STATUS.ANSWERED, unread: true })), false);
+  assert.equal(isDone(item({ id: "marked", ...withdrawn, markedUnread: true })), false);
+  assert.equal(isDone(item({ id: "written", ...withdrawn, updatedAt: 3_000 })), false);
 });
 
 test("Open lists only what the reader is not done with, and the item chosen where one is given, as the steps through the list keep it", () => {
@@ -599,7 +603,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
 });
 
-test("Needs you lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they snoozed, or a question that waits on a teammate", () => {
+test("Needs you lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they set a reminder on, or a question that waits on a teammate", () => {
   const question = [asking({ type: INBOX_ASK.ANSWER })];
   const groups = [
     {
@@ -607,7 +611,7 @@ test("Needs you lists and counts only the questions whose ask waits on the reade
       items: [
         item({ id: "asks-me", startedBy: DANA, waitsOn: ME, thread: question, updatedAt: 30 }),
         item({ id: "tells-me", startedBy: ME, updatedAt: 20 }),
-        item({ id: "snoozed", waitsOn: ME, thread: question, snoozedUntil: 5_000, updatedAt: 15 }),
+        item({ id: "reminded", waitsOn: ME, thread: question, remindAt: 5_000, updatedAt: 15 }),
         item({ id: "asks-dana", startedBy: ME, waitsOn: DANA, thread: question, updatedAt: 10 }),
       ],
     },
@@ -627,13 +631,20 @@ test("Needs you lists and counts only the questions whose ask waits on the reade
   assert.equal(inboxCounts(groups, ME.userId, dana)[INBOX_SHOW.NEEDS_ME], 1);
 });
 
-test("a task done or canceled hides none of its items: Open lists and counts its open ones and its unread settled ones as any task's", () => {
+test("a task done or canceled hides none of its items: Open lists and counts its open ones and its unread answered ones as any task's, and leaves out the asks its settle withdrew, which All keeps", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
       items: [
         item({ id: "done-open", updatedAt: 20 }),
         item({ id: "done-unread", status: INBOX_STATUS.ANSWERED, updatedAt: 5, unread: true }),
+        item({
+          id: "done-withdrawn",
+          status: INBOX_STATUS.CLOSED,
+          updatedAt: 3,
+          settledAt: 30,
+          unread: true,
+        }),
       ],
     },
     {
@@ -646,7 +657,7 @@ test("a task done or canceled hides none of its items: Open lists and counts its
   ];
   const counts = inboxCounts(finished, undefined);
   assert.equal(counts[INBOX_SHOW.OPEN], 4);
-  assert.equal(counts[INBOX_SHOW.ALL], 4);
+  assert.equal(counts[INBOX_SHOW.ALL], 5);
   const open = inboxList(finished, {
     readerId: undefined,
     chosen: undefined,
@@ -702,7 +713,7 @@ test("Open addressed to the reader lists their own open items, read or not, and 
     [INBOX_SHOW.NEEDS_ME]: 0,
     [INBOX_SHOW.OPEN]: 4,
     [INBOX_SHOW.ALL]: 4,
-    [INBOX_SHOW.SNOOZED]: 0,
+    [INBOX_SHOW.REMINDERS]: 0,
   });
 });
 
@@ -746,31 +757,35 @@ test("Addressed to lists anyone's items, the reader's own, items whose starter t
     [INBOX_SHOW.NEEDS_ME]: 0,
     [INBOX_SHOW.OPEN]: 1,
     [INBOX_SHOW.ALL]: 2,
-    [INBOX_SHOW.SNOOZED]: 0,
+    [INBOX_SHOW.REMINDERS]: 0,
   });
 });
 
-test("an item the reader snoozed leaves Open and All for Snoozed until its snooze passes, then comes back unread at the top, and a change that made it unread ended its snooze early", () => {
+test("an item the reader set a reminder on leaves Open and All for Reminders until its reminder comes due, read or unread alike, then comes back at the top as read or unread as it was", () => {
   const groups = [
     {
       holder: taskHolder(BILLING),
       items: [
-        item({ id: "snoozed", updatedAt: 10, unread: false, snoozedUntil: 500 }),
-        item({ id: "woken", updatedAt: 20, unread: true, snoozedUntil: 500 }),
+        item({ id: "reminded", updatedAt: 10, unread: false, remindAt: 500 }),
+        item({ id: "unread", updatedAt: 20, unread: true, remindAt: 400 }),
         item({ id: "plain", updatedAt: 30 }),
       ],
     },
   ];
   const rows = (now: number, show: InboxShow) =>
     drawn(inboxList(inboxAtNow(groups, now), { show, readerId: undefined, chosen: undefined }));
-  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain", "woken"]);
-  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain", "woken"]);
-  assert.deepEqual(rows(100, INBOX_SHOW.SNOOZED), ["snoozed"]);
-  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.SNOOZED], 1);
-  assert.deepEqual(rows(500, INBOX_SHOW.OPEN), ["snoozed", "plain", "woken"]);
-  assert.deepEqual(rows(500, INBOX_SHOW.SNOOZED), []);
-  const back = inboxAtNow(groups, 500)[0]?.items.find((each) => each.id === "snoozed");
-  assert.equal(back?.unread, true, "it comes back unread");
+  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.REMINDERS), ["unread", "reminded"]);
+  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.REMINDERS], 2);
+  assert.deepEqual(rows(500, INBOX_SHOW.ALL), ["reminded", "unread", "plain"]);
+  assert.deepEqual(rows(500, INBOX_SHOW.REMINDERS), []);
+  const back = inboxAtNow(groups, 500)[0]?.items;
+  assert.deepEqual(
+    ["reminded", "unread"].map((id) => back?.find((each) => each.id === id)?.unread),
+    [false, true],
+    "each comes back read or unread as it was",
+  );
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {

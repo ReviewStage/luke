@@ -6,6 +6,7 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  IconButton,
   Inline,
   JUSTIFY,
   MARK_PROVIDER,
@@ -27,6 +28,7 @@ import {
   type SettingsRowControl,
   SettingsRowMark,
   SettingsRowStateLine,
+  SettingsRowsFold,
   SettingsRowValue,
   SettingsSavedMark,
   SettingsSection,
@@ -42,7 +44,7 @@ import {
   TextButton,
   TextField,
 } from "@repo/ui";
-import { ExternalLinkIcon } from "@repo/ui/icons";
+import { ExternalLinkIcon, GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -62,7 +64,8 @@ import { CatalogSection } from "../section";
  * provider's row; and accounts that fold their repositories open under
  * their words, one open from the start with a long name among them, one
  * folded with Show all at its foot, one with a ⋯ before its chevron, at a page's measure and
- * narrower than 380px.
+ * narrower than 380px; and integrations that fold the rows they own under
+ * their own row, closed until pressed, beside one that owns none.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -397,6 +400,111 @@ function FoldRows(): React.JSX.Element {
   );
 }
 
+/** Integrations that fold their own rows under their row, closed until pressed, and one with no rows to fold. */
+function RowsFoldRows(): React.JSX.Element {
+  return (
+    <SettingsSection title="Workspace connections">
+      <SettingsRowsFold
+        label="GitHub accounts"
+        head={(chevron) => (
+          <SettingsRow
+            label="GitHub"
+            description={
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+                Connected
+              </SettingsRowStateLine>
+            }
+            leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+          >
+            {() => (
+              <>
+                <Button
+                  variant={BUTTON_VARIANT.OUTLINE}
+                  icon={<ExternalLinkIcon aria-hidden="true" />}
+                >
+                  Manage on GitHub
+                </Button>
+                {chevron}
+              </>
+            )}
+          </SettingsRow>
+        )}
+        rows={
+          <SettingsFoldRow
+            indent={SETTINGS_ROW_INDENT.MARK}
+            label="analytical-engine"
+            description="All 3 repositories"
+            leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+            foldLabel="analytical-engine's repositories"
+          >
+            <SettingsFoldLine>mill</SettingsFoldLine>
+            <SettingsFoldLine>store</SettingsFoldLine>
+            <SettingsFoldLine>cards</SettingsFoldLine>
+          </SettingsFoldRow>
+        }
+      />
+      <SettingsRowsFold
+        label="Slack settings"
+        head={(chevron) => (
+          <SettingsRow
+            label="Slack"
+            description={
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+                Connected
+              </SettingsRowStateLine>
+            }
+            leading={<Mark provider={MARK_PROVIDER.SLACK} />}
+          >
+            {() => (
+              <>
+                <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
+                  Add channel
+                </Button>
+                <IconButton icon={<GLYPH.DISCONNECT />} label="Disconnect" />
+                {chevron}
+              </>
+            )}
+          </SettingsRow>
+        )}
+        rows={
+          <>
+            <SettingsRow indent={SETTINGS_ROW_INDENT.MARK} label="Default repository">
+              {() => <SettingsRowValue>analytical-engine/mill</SettingsRowValue>}
+            </SettingsRow>
+            <SettingsRow indent={SETTINGS_ROW_INDENT.MARK} label="# engineering">
+              {() => <SettingsRowValue>Default</SettingsRowValue>}
+            </SettingsRow>
+            <SettingsRow label="Slack notifications">
+              {(control) => <HeldSwitch label="Slack notifications" control={control} />}
+            </SettingsRow>
+          </>
+        }
+      />
+      <SettingsRowsFold
+        label="Sentry settings"
+        head={(chevron) => (
+          <SettingsRow
+            label="Sentry"
+            description={
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+                Connected
+              </SettingsRowStateLine>
+            }
+            leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
+          >
+            {() => (
+              <>
+                <IconButton icon={<GLYPH.DISCONNECT />} label="Disconnect" />
+                {chevron}
+              </>
+            )}
+          </SettingsRow>
+        )}
+      />
+    </SettingsSection>
+  );
+}
+
 function SettingsRows(): React.JSX.Element {
   return (
     <>
@@ -433,6 +541,11 @@ function SettingsRows(): React.JSX.Element {
       <CatalogSection id="settings-row-fold-narrow" title="Folding narrower than 380px">
         <div className="catalog-settings catalog-settings-narrow">
           <FoldRows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-rows-fold" title="Folding the rows a row owns">
+        <div className="catalog-settings">
+          <RowsFoldRows />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-row-state" title="State, mark, and value">

@@ -657,8 +657,10 @@ it.effect(
         };
       }).pipe(Effect.provide(services));
 
+      // A delete of a section the member keeps none of is deleted as nothing, as the sidebar's is.
       for (const answer of answers) {
-        assert.equal(answer.refused, true, `${answer.name}: ${answer.text}`);
+        const deletes = answer.name === MEMBER_MCP_TOOL.DELETE_SECTION;
+        assert.equal(answer.refused, !deletes, `${answer.name}: ${answer.text}`);
         assert.ok(
           !answer.text.includes(taskId) &&
             !answer.text.includes(rows.elsewhere) &&

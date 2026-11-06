@@ -32,7 +32,10 @@ import { Clock, DateTime, Effect, Layer, Logger, Option, Redacted, Result } from
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import {
+  CODEX_DEVICE_OAUTH,
+  sealCodexDeviceCredentials,
+} from "../../accounts/chatgpt-credentials.js";
 import { HOST_VERSION, mintHostSecret } from "../../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { GitHubApp } from "../../github/github-app.js";
@@ -81,19 +84,20 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };
 
-/** OpenAI's token endpoint: each renewal rotates the refresh token and answers the next access token, good for an hour. */
+/** OpenAI's token endpoint, in Codex's JSON: each renewal rotates the refresh token and answers the next access token, good for an hour. */
 function openAi() {
   const state = { renewals: 0 };
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
-    assert.equal(url, CHATGPT_OAUTH.TOKEN_URL);
-    const form = new URLSearchParams(await new Response(init.body).text());
-    assert.equal(form.get("refresh_token"), `refresh-${state.renewals}`);
+    assert.equal(url, CODEX_DEVICE_OAUTH.TOKEN_URL);
+    const body = JSON.parse(await new Response(init.body).text()) as {
+      readonly refresh_token?: string;
+    };
+    assert.equal(body.refresh_token, `refresh-${state.renewals}`);
     state.renewals += 1;
     return Response.json({
       access_token: `access-${state.renewals}`,
       refresh_token: `refresh-${state.renewals}`,
       expires_in: 3600,
-      scope: `${CHATGPT_OAUTH.USAGE_SCOPE} offline_access openid`,
     });
   };
   return { state, respond };
@@ -170,24 +174,19 @@ const agentOn = (
 
 const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.CHATGPT_SUBSCRIPTION);
 
-/** The account's ChatGPT sign-in, its access token `access-0` good for the minutes given. */
+/** The account's ChatGPT plan, its access token `access-0` good for the minutes given. */
 const signIn = (userId: string, minutesLeft: number) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(
-      ring(),
-      userId,
-      {
-        clientId: "oaiapp_test_client",
-        accountId: "chatgpt-subject",
-        accessToken: "access-0",
-        refreshToken: "refresh-0",
-        idToken: "id-token-0",
-        expiresInSeconds: minutesLeft * 60,
-        scopes: [CHATGPT_OAUTH.USAGE_SCOPE, "offline_access", "openid"],
-      },
-      now,
-    );
+    const accessExpiresAt = new Date(now.getTime() + minutesLeft * 60_000);
+    const { sealed, hint } = sealCodexDeviceCredentials(ring(), userId, {
+      accessToken: "access-0",
+      refreshToken: "refresh-0",
+      idToken: "id-token-0",
+      accountId: "chatgpt-subject",
+      chatgptAccountId: undefined,
+      accessExpiresAt,
+    });
     yield* saveProviderKey(
       userId,
       PROVIDER_KEY_PROVIDER.OPENAI,

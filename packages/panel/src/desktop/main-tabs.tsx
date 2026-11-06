@@ -28,13 +28,14 @@ import { memo, useRef, useState } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { DraftMark } from "../draft-mark.js";
+import { DraftMark, leftMark } from "../draft-mark.js";
 import { agentName, startsOwnAgents } from "../tasks/agent-model.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
+import { useFailedAgents } from "../tasks/failed-lines.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
@@ -289,7 +290,8 @@ interface DrawnTab {
  * through `main`. An agent's card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab,
  * and the draft's, wears the Draft pencil at its end while its box holds
- * words and another tab is chosen (`draft-mark.tsx`); an agent's failure
+ * words and another tab is chosen (`draft-mark.tsx`), or the failed mark in
+ * its place while a message sent to it was not delivered; an agent's failure
  * says more, so it keeps its failed mark in the pencil's place.
  */
 function agentTabs(input: {
@@ -299,10 +301,12 @@ function agentTabs(input: {
   views: TabViews;
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
   drafted: readonly string[];
+  /** The started agents holding a message not delivered (`useFailedAgents`). */
+  failed: readonly string[];
   /** The threads waiting on the developer, by the agent that posted them, which an agent's tab counts. */
   waiting: ReadonlyMap<string, readonly unknown[]> | undefined;
 }): DrawnTab[] {
-  const { main, agents, unread, views, drafted, waiting } = input;
+  const { main, agents, unread, views, drafted, failed, waiting } = input;
   const chosen = (tab: MainTab) => main.tab !== undefined && sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -316,7 +320,10 @@ function agentTabs(input: {
     const tab = { agent: agent.id };
     const label = agentName(agent, agents.models);
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
-    const draftMark = drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined;
+    // A message to it that did not go wears the failed mark in the pencil's place.
+    const placeMark = chosen(tab)
+      ? undefined
+      : (leftMark(failed.includes(agent.id), drafted.includes(agent.id)) ?? undefined);
     return {
       tab,
       agent,
@@ -326,7 +333,7 @@ function agentTabs(input: {
         endMark:
           waitingMark(waiting?.get(agent.id)?.length ?? 0) ??
           agentEndMark(agent, false) ??
-          draftMark,
+          placeMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -419,14 +426,24 @@ export function agentEntries(
 }
 
 /**
- * The task's Inbox as a row: its tray and its name, then what waits on the
- * developer counted at its end in the attention tone the rows it counts
- * wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
+ * The task's Inbox as a row: its tray and its name, then at its end the
+ * Draft pencil where one of its items' boxes holds a draft, as the sidebar's
+ * row for the task wears it, and what waits on the developer counted in the
+ * attention tone the rows it counts wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
  * panel's other kinds; picking it opens the window's Inbox narrowed to the task.
  */
-export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
+export function inboxEntry(onPick: () => void, waiting: number, drafted = false): AddEntry {
   const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
-  return { row, endMark: waitingMark(waiting), onPick };
+  const count = waitingMark(waiting);
+  const endMark = drafted ? (
+    <>
+      <DraftMark />
+      {count}
+    </>
+  ) : (
+    count
+  );
+  return { row, endMark, onPick };
 }
 
 /** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
@@ -639,12 +656,13 @@ export function MainTabBars({
   actions?: React.ReactNode;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
+  const failed = useFailedAgents();
   // The slot the bar keeps for the chosen agent's ⋯, portaled in from its tab (`strip-tabs.tsx`'s `DoorsTab`).
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // The agents' and the draft's tabs in the column's order, which the
   // developer's moves and their opening set (`use-main-tabs.ts`).
   const strip = inTaskOrder(
-    agentTabs({ main, agents, unread, views, drafted, waiting }),
+    agentTabs({ main, agents, unread, views, drafted, failed, waiting }),
     main.tabs,
     (entry) => entry.tab,
   );

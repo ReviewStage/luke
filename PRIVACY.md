@@ -263,7 +263,7 @@ Depending on your jurisdiction, you may have the right to:
 - Request a copy of your data in a portable format
 - Withdraw consent at any time
 
-To exercise any of these rights, contact us at founders@stagereview.app. You
+To exercise any of these rights, contact us at founders@vespin.dev. You
 can also act directly in the app:
 
 - **Usage data:** turn off Settings › Account › "Share usage data". It is set
@@ -326,7 +326,7 @@ California Consumer Privacy Act (CCPA) and the California Privacy Rights Act
 - **Right to non-discrimination:** we will not discriminate against you for
   exercising any of these rights.
 
-To exercise these rights, contact us at founders@stagereview.app. We will
+To exercise these rights, contact us at founders@vespin.dev. We will
 verify your identity before processing your request.
 
 ## 13\. International data transfers
@@ -369,4 +369,4 @@ provisions.
 ## 17\. Contact us
 
 If you have questions about this Privacy Policy, please contact us at
-founders@stagereview.app.
+founders@vespin.dev.

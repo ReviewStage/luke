@@ -415,12 +415,6 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   /** The skills a paste makes, installed for the account or its workspace, all or none, drawn over every held read whose scope they are in once the service answers; or why none were. */
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
-  /** One installed skill turned on or off, drawn so at once over the held skills; the skill as it then stands, or why it is unchanged. */
-  INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
-  /** A GitHub skill's files read again at its ref, drawn over the held skills as the service answers it; the skill as it then stands, or why it is unchanged. */
-  INSTALLED_SKILLS_UPDATE: "installedSkills.update",
-  /** The account's own personal skill moved into a workspace it is a member of, drawn there at once over the held skills; the skill as it then stands, or why it is unchanged. */
-  INSTALLED_SKILLS_SHARE: "installedSkills.share",
   /** One installed skill removed with its files, drawn gone at once over the held skills; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   /**
@@ -455,8 +449,6 @@ export const GATEWAY_METHOD = {
   AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
   /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
-  /** The Claude model the account's Generate chapters runs on, drawn over the account's preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
@@ -492,10 +484,12 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** A ChatGPT sign-in for our hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
+  CHATGPT_DEVICE_START: "chatGpt.device.start",
+  /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
+  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
+  /** A device-code login withdrawn, by its login id; how it then stands. */
+  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * The member's own GitHub token as its login, hint, and status, never the
    * token, held for a window from now until it is let go, asked of the
@@ -550,8 +544,9 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item snoozed for the account until an instant, which marks it read, or its snooze ended; its read state, or why there is no answer. */
-  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
+  /** One item's reminder set for the account for an instant, or canceled, whether it is read standing as it was; its read state, or why there is no answer. */
+  // Note that setting a reminder keeps Snooze's id, because a write queued offline is kept on disk by its method's id, and one under an id no host answers is dropped.
+  AGENTS_INBOX_REMIND: "agents.inboxSnooze",
   /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */

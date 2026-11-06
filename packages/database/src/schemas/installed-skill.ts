@@ -22,10 +22,7 @@ import { organization, user } from "./auth.js";
  * outlives its installer's account while a personal one goes with it. A name is the repository skills' rule (lowercase
  * letters and digits in words joined by single hyphens, at most 64), held
  * once per owner: one personal skill of a name per account, one workspace
- * skill of a name per workspace. `source` says where the files came from,
- * and `computed_hash` is the SHA-256 the store computes over every file's
- * path and hash, so a source read again is known changed or not. `enabled`
- * false keeps it installed and offers it to no agent.
+ * skill of a name per workspace. `source` says where the files came from.
  */
 
 const literal = (value: string) => sql.raw(`'${value}'`);
@@ -56,9 +53,6 @@ export const installedSkill = pgTable(
     userInvocable: boolean("user_invocable").notNull().default(true),
     /** Where its files came from, such as `{type: "github", owner, repo, path, ref, sha}`. */
     source: jsonb("source").$type<InstalledSkillSource>().notNull(),
-    /** The hex SHA-256 over its files' paths and hashes, in path order. */
-    computedHash: text("computed_hash").notNull(),
-    enabled: boolean("enabled").notNull().default(true),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -101,8 +95,6 @@ export const installedSkillFile = pgTable(
     /** The file's path from the skill's folder, such as `SKILL.md` or `scripts/run.sh`. */
     path: text("path").notNull(),
     bytes: bytea("bytes").notNull(),
-    /** The hex SHA-256 of `bytes`. */
-    sha256: text("sha256").notNull(),
   },
   (table) => [
     // A skill holds a path once; its files are read by the skill.

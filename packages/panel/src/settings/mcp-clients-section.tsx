@@ -9,6 +9,7 @@ import {
   shellLine,
 } from "@repo/features/mcp-connect";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { oauthRedirectDestination } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -22,6 +23,7 @@ import {
   CHOICE_BAR_SIZE,
   ChoiceBar,
   CONFIRM_LOSS,
+  COPY_FIELD_PROMPT,
   COPY_FIELD_WIDTH,
   ConfirmDialog,
   CopyField,
@@ -78,7 +80,9 @@ import { MenuRow } from "./menu-row.js";
  * their own settings, and any other agent by the address alone. An agent
  * that arrives while the page shows, which is how a member comes back from
  * the browser, lights its row and is said to be connected under the step.
- * While the account has none, Connect an agent stands first.
+ * While the account has none, Connect an agent stands first. The `vespin`
+ * command, which the read lists too, is left out of Connected: its sign-in
+ * is Settings › CLI's (`cli-page.tsx`).
  *
  * Each agent is led by its brand's mark, in the picker and on its row, an
  * allowed agent's found by the name it registered under; Other stands in
@@ -347,12 +351,15 @@ function ClientRow({
   );
 }
 
-/** The agents the account allowed, and those revoked while the page shows, in the order they were allowed, newest first. */
+/** The agents the account allowed, and those revoked while the page shows, in the order they were allowed, newest first; never the `vespin` command, which Settings › CLI signs out. */
 function shownClients(
   listed: readonly McpClient[],
   revoked: ReadonlyMap<string, McpClient>,
 ): readonly McpClient[] {
-  const standing = listed.filter((client) => !revoked.has(client.clientId));
+  const standing = listed.filter(
+    (client) =>
+      client.clientId !== FIRST_PARTY_OAUTH_CLIENT_ID.CLI && !revoked.has(client.clientId),
+  );
   return [...standing, ...revoked.values()].toSorted(
     (one, other) => (other.allowedAt ?? 0) - (one.allowedAt ?? 0),
   );
@@ -397,6 +404,9 @@ function ConnectStepRow({
                 what={step.command === undefined ? "URL" : "command"}
                 copy={copyThroughShell}
                 width={COPY_FIELD_WIDTH.FULL}
+                prompt={
+                  step.command === undefined ? COPY_FIELD_PROMPT.NONE : COPY_FIELD_PROMPT.SHELL
+                }
               />
             ),
           })}

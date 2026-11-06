@@ -81,6 +81,7 @@ import {
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { stubCanvas, webpBytes } from "../testing/photo-canvas.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ToastHost } from "../toast.js";
@@ -900,42 +901,6 @@ const photos = () =>
     request.kind === ACT_KIND.WORKSPACE_PHOTO_SET ? [request.payload] : [],
   );
 
-/** What the platform's canvas was asked to draw: the picture's part, and the canvas it was drawn on. */
-interface Drawn {
-  readonly source: readonly number[];
-  readonly canvas: readonly number[];
-}
-
-/** A WebP's bytes as the encoder answers them: its RIFF and WEBP signature, then filler, `length` bytes in all. */
-function webpBytes(length = 16): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(length);
-  bytes.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
-  return bytes;
-}
-
-/**
- * The platform's image decoder and canvas, which jsdom has not got, standing
- * in at the browser's edge: every picture decodes at `width` by `height`, and
- * every canvas writes `bytes` of WebP, so the real encoder runs between them.
- */
-function stubCanvas(width: number, height: number, bytes: Uint8Array<ArrayBuffer>): Drawn[] {
-  const drawn: Drawn[] = [];
-  vi.stubGlobal("createImageBitmap", () => Promise.resolve({ width, height, close: () => {} }));
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (
-    this: HTMLCanvasElement,
-  ) {
-    // SAFETY: the encoder calls drawImage alone on the context it is handed.
-    return {
-      drawImage: (_bitmap: CanvasImageSource, ...at: number[]) =>
-        drawn.push({ source: at.slice(0, 4), canvas: [this.width, this.height] }),
-    } as unknown as CanvasRenderingContext2D;
-  });
-  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback, type) =>
-    callback(new Blob([bytes], type === undefined ? {} : { type })),
-  );
-  return drawn;
-}
-
 /** Lets the encoder's file read, which jsdom answers on the next turn, land. */
 async function drain(): Promise<void> {
   for (let turn = 0; turn < 4; turn += 1) {
@@ -1581,11 +1546,27 @@ const rowWords = (row: HTMLElement) => [
 
 /** What every row of the Integrations group says, in order. */
 const integrationRows = (page: HTMLElement) =>
-  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)].map(rowWords);
+  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)]
+    .filter((row) => row.closest("[hidden]") === null)
+    .map(rowWords);
 
-/** The words of every button a row draws. */
+/** The chevrons folding an integration's own rows under its row. */
+const FOLD = { GITHUB: "GitHub accounts", SLACK_BOT: "Slack settings" } as const;
+
+/** The words of every button a row draws, bar the chevron folding its rows. */
 const rowButtons = (row: HTMLElement) =>
-  [...row.querySelectorAll("button")].map((each) => each.textContent);
+  [...row.querySelectorAll("button")]
+    .filter((each) => !Object.values<string | null>(FOLD).includes(each.getAttribute("aria-label")))
+    .map((each) => each.textContent);
+
+/** Opens the rows an integration's row folds under it, which start closed. */
+function unfold(page: HTMLElement, label: string): void {
+  const chevron =
+    page.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ??
+    assert.fail(`no ${label} fold`);
+  assert.equal(chevron.getAttribute("aria-expanded"), "false", `${label} starts folded`);
+  act(() => chevron.click());
+}
 
 /** The row's ⋯, which opens its menu. */
 const ellipsisOn = (row: HTMLElement) =>
@@ -1601,8 +1582,8 @@ const githubSent = () =>
       : [],
   );
 
-/** The words GitHub's row says to a member once an account is connected. */
-const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
+/** The words GitHub's row says once an account is connected, as every integration's does. */
+const MANAGED_ON_GITHUB = "Connected";
 
 test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
@@ -1624,8 +1605,10 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       `a ${role}'s controls`,
     );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
+    assert.deepEqual(integrationRows(page), [["GitHub", "Connected"]], "the accounts start folded");
+    unfold(page, FOLD.GITHUB);
     assert.deepEqual(integrationRows(page), [
-      ["GitHub", undefined],
+      ["GitHub", "Connected"],
       ["acme-org", "0 repositories"],
     ]);
     for (const name of ["acme-org"]) {
@@ -1652,18 +1635,21 @@ const foldLines = (row: HTMLElement) =>
 
 /** The chevron that folds an account's repositories open under its row. */
 const foldOn = (row: HTMLElement) =>
-  row.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? assert.fail("no fold");
+  row.querySelector<HTMLButtonElement>('button[aria-label$="repositories"]') ??
+  assert.fail("no fold");
 
-test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it by name, and an inactive account draws no row", async () => {
+test("an active account counts the App's repositories whose owner is its login in any case and folds them under it by name, closed until pressed, and an inactive account draws no row", async () => {
   githubRepositories = ["acme-org/relay", "ACME-ORG/site", "acme-labs/old", "other/thing"];
   tokenReach = ["acme-org/forked"];
   const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
   const org = rowNamed(group, "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [["acme-org", "2 repositories"]]);
   assert.equal(foldOn(org).getAttribute("aria-label"), "acme-org's repositories");
-  assert.equal(foldOn(org).getAttribute("aria-expanded"), "true");
+  assert.deepEqual(foldLines(org), [], "a few repositories start folded too");
+  act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), ["relay", "site"]);
 });
 
@@ -1686,6 +1672,7 @@ test("an account given every repository says All N and opens on six lines before
       { installationId: 13, login: "acme-tools", active: true },
     ],
   });
+  unfold(page, FOLD.GITHUB);
   const org = rowNamed(githubGroup(page), "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [
@@ -1693,7 +1680,6 @@ test("an account given every repository says All N and opens on six lines before
     ["acme-labs-renamed", "1 repository"],
     ["acme-tools", "2 repositories"],
   ]);
-  assert.deepEqual(foldLines(org), [], "more than five start folded");
   act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), [
     ...shown.slice(0, 6).map((fullName) => fullName.split("/")[1]),
@@ -1709,12 +1695,14 @@ test("an account given every repository says All N and opens on six lines before
 test("while the repositories are read each account's line says so, and a read that failed says so once with Retry rather than as none, which reads them again", async () => {
   repositoriesReadHeld = true;
   const reading = await mount(SEVERAL);
+  unfold(reading.page, FOLD.GITHUB);
   assert.deepEqual(integrationRows(reading.page).slice(1), [["acme-org", "Reading repositories"]]);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   repositoriesReadHeld = false;
   repositoriesReadFails = true;
   const { page } = await mount(SEVERAL);
+  unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
   assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", undefined]]);
   assert.equal(group.textContent?.includes("Repositories could not be read."), true);
@@ -1742,9 +1730,10 @@ test("Manage on GitHub opens GitHub through the same connect as Connect, and not
 test("a service from before several connections names one GitHub account alone, which is listed as the only one", async () => {
   const { githubInstallations: _dropped, ...legacy } = CONNECTED;
   const { page } = await mount(legacy);
+  unfold(page, FOLD.GITHUB);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", undefined],
+    ["GitHub", "Connected"],
     ["acme-org", "0 repositories"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
@@ -1806,6 +1795,7 @@ test("an owner or an admin of a workspace with no GitHub, or none still active, 
 test("a member reads every account connected, or is told to ask an owner or admin, and is offered Add repository alone: no Manage on GitHub, Connect, or right-click menu", async () => {
   const connected = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const unconnected = await mount(ACME);
+  unfold(connected.page, FOLD.GITHUB);
 
   assert.deepEqual(integrationRows(connected.page), [
     ["GitHub", MANAGED_ON_GITHUB],
@@ -1833,14 +1823,16 @@ test("the repositories members added on their tokens stand by owner after the Ap
     { fullName: "ACME/notes", addedBy: READER_ID, addedAt: 1, removable: true },
   ];
   const { page } = await mount(SEVERAL);
+  unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", undefined],
+    ["GitHub", "Connected"],
     ["acme-org", "0 repositories"],
     ["acme", "2 repositories"],
     ["octo-member", "1 repository"],
   ]);
+  act(() => foldOn(rowNamed(group, "acme")).click());
   assert.deepEqual(foldLines(rowNamed(group, "acme")), ["relay", "notes"]);
   assert.deepEqual(rowActions(rowNamed(group, "octo-member")), []);
   assert.deepEqual(rowActions(rowNamed(group, "acme")), ["Remove relay", "Remove notes"]);
@@ -1886,6 +1878,8 @@ test("Add repository offers the repositories the reader's own token may push to 
       .map((one) => one.payload),
     [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
   );
+  unfold(page, FOLD.GITHUB);
+  act(() => foldOn(rowNamed(githubGroup(page), "octo-member")).click());
   assert.deepEqual(foldLines(rowNamed(githubGroup(page), "octo-member")), ["side", "notes"]);
 });
 
@@ -1970,6 +1964,7 @@ test("the token repositories say Reading while they are read, and a refused read
     release = resolve;
   });
   const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  unfold(page, FOLD.GITHUB);
   const reading = page.textContent?.includes("Reading token repositories");
   release();
   await settle();
@@ -2448,13 +2443,10 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   const row = rowNamed(githubGroup(page), "Sentry");
   const before = rowWords(row);
 
-  act(() => button(row, "Install for workspace").click());
+  act(() => button(row, "Connect").click());
   await settle();
 
-  assert.deepEqual(before, [
-    "Sentry",
-    "Not installed. Install to start automations from Sentry alerts.",
-  ]);
+  assert.deepEqual(before, ["Sentry", "Not connected."]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
@@ -2480,10 +2472,7 @@ test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, 
       { workspaceId: ACME.id, installationId: "installation-1" },
     ],
   ]);
-  assert.deepEqual(after, [
-    "Sentry",
-    "Not installed. Install to start automations from Sentry alerts.",
-  ]);
+  assert.deepEqual(after, ["Sentry", "Not connected."]);
   assert.deepEqual(rowWords(memberRow), ["Sentry", "Connected"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
@@ -2493,26 +2482,23 @@ const SLACK_TEAM = { id: "T0001", name: "Acme Slack" };
 test("an admin connects the Slack bot, which then says Connected, and disconnects it after asking; a member sees it read only", async () => {
   slackBot = { configured: true };
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
 
-  act(() => button(rowNamed(githubGroup(admin.page), "Slack bot"), "Connect Slack bot").click());
+  act(() => button(rowNamed(githubGroup(admin.page), "Slack"), "Connect").click());
   await settle();
-  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
-  await chooseAction(rowNamed(githubGroup(admin.page), "Slack bot"), "Disconnect");
+  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
+  await chooseAction(rowNamed(githubGroup(admin.page), "Slack"), "Disconnect");
   await confirm("Disconnect Slack bot");
-  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
   for (const root of roots.splice(0)) act(() => root.unmount());
   slackBot = { configured: true, team: SLACK_TEAM };
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
-  const memberRow = rowNamed(githubGroup(member.page), "Slack bot");
+  const memberRow = rowNamed(githubGroup(member.page), "Slack");
 
-  assert.deepEqual(before, [
-    "Slack bot",
-    "Not connected. Connect Vespin's bot to message members in Slack.",
-  ]);
-  assert.deepEqual(connected, ["Slack bot", "Connected"]);
+  assert.deepEqual(before, ["Slack", "Not connected."]);
+  assert.deepEqual(connected, ["Slack", "Connected"]);
   assert.deepEqual(after, before);
-  assert.deepEqual(rowWords(memberRow), ["Slack bot", "Connected"]);
+  assert.deepEqual(rowWords(memberRow), ["Slack", "Connected"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 

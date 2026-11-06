@@ -1,0 +1,76 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Vespin",
+  "description": "Vespin is an inbox for all your coding agents.",
+  "colors": {
+    "primary": "#cf7b26",
+    "light": "#cf7b26",
+    "dark": "#a7611b"
+  },
+  "appearance": {
+    "default": "dark",
+    "strict": true
+  },
+  "background": {
+    "color": {
+      "light": "#fffcfa",
+      "dark": "#0f0d0b"
+    }
+  },
+  "fonts": {
+    "heading": {
+      "family": "Bricolage Grotesque",
+      "weight": 700
+    },
+    "body": {
+      "family": "Geist",
+      "weight": 400
+    }
+  },
+  "logo": {
+    "light": "/logo/dark.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://vespin.dev"
+  },
+  "favicon": "/favicon.svg",
+  "navbar": {
+    "links": [
+      {
+        "label": "About",
+        "href": "https://vespin.dev/about"
+      },
+      {
+        "label": "Changelog",
+        "href": "https://vespin.dev/changelog"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/ReviewStage/vespin"
+      },
+      {
+        "label": "Sign in",
+        "href": "https://vespin.dev/app"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Download",
+      "href": "https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg"
+    }
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": ["index", "install", "quickstart"]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ReviewStage/vespin",
+      "website": "https://vespin.dev"
+    }
+  }
+}

@@ -623,18 +623,19 @@ the hint, and the status; it is replaced whole by a save, deleted by a
 removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
-A ChatGPT sign-in (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
-is a row of the same table, saved by the desktop on
-`PUT /api/account/chatgpt/credentials` after it signs in under the account's
-host id (`GET /api/account/chatgpt/host`, minted once into
-`account_chatgpt_host` and kept across sign-outs). Its seal holds the access,
-refresh and ID tokens, the issued client and the account's subject, bound to
-the kind; `access_expires_at` beside it says when a renewal is due. A
-renewal runs under the row's lock across OpenAI's token endpoint, so
-renewals of one sign-in are serialized as OpenAI asks, and replaces the
-tokens, the expiry and the scopes together. Removing it revokes its refresh
-token at OpenAI first and answers `revocationUnconfirmed` where OpenAI did
-not confirm.
+A ChatGPT plan (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
+is a row of the same table, kept by the service as Codex's device-code
+login connects (`POST /api/account/chatgpt/device`, then its `poll`,
+`src/accounts/chatgpt-device-login.ts`). Its seal holds the access, refresh
+and ID tokens, Codex's client and the account's subject, bound to the kind;
+`access_expires_at` beside it says when a renewal is due. A renewal runs
+under the row's lock across OpenAI's token endpoint, so renewals of one plan
+are serialized, and replaces the tokens and the expiry together. Removing
+it revokes its refresh token at OpenAI first and answers
+`revocationUnconfirmed` where OpenAI did not confirm. A row the retired
+third-party Sign in with ChatGPT sealed can no longer renew: it is removed
+as it is opened, without asking OpenAI anything, and the plan reads as not
+connected.
 
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
 `HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
@@ -914,7 +915,7 @@ project's directory:
 ```
 vercel link
 vercel connect create mcp.executor.sh --name executor          # Executor; corrected below
-vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
+vercel connect create linear --name vespin                     # Linear, Connect's managed connector; scoped below
 vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
@@ -938,14 +939,20 @@ rest by their server's address. Vercel's MCP server accepts only the clients
 Vercel has reviewed, which is why it is created through Connect's own Vercel
 target rather than by address. A connector created this way asks for no
 scopes, and the provider grants its own default, which is enough for
-Linear, Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
+Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
 and a refresh token (`offline_access`), only when asked; Y Combinator's
 server asks for `mcp:access` and Stripe's for `mcp`; and PostHog's and
 Supabase's granular scopes are better asked for in full than left to a
 default. Those five connectors
 ask for every scope their server publishes (`scopes_supported` in its
 `/.well-known/oauth-protected-resource`), set on the connector's
-`data.userAuthorization.scopes`. Resend's resource publishes none, and its
+`data.userAuthorization.scopes`, less the ones that administer the account
+rather than work in it: PostHog's `access_control:write`,
+`organization:write`, `account:write`, `user:write`, `integration:write`, and
+`llm_provider_key:read`, and Supabase's `secrets:read`, which would hand an
+agent a project's API keys, its service role key among them. A token keeps
+the scopes it was granted, so a narrowed connector reaches a member only
+when they connect again. Resend's resource publishes none, and its
 authorization server (`https://api.resend.com`) publishes `full_access`
 beside the narrower `emails:send`, so its connector asks for `full_access`
 alone:
@@ -980,6 +987,21 @@ client ID metadata document support; should the client Connect registers
 fail there, a public client is registered by hand at
 `https://access.stripe.com/mcp/oauth2/register` and the connector PATCHed to
 it, as Granola's is below.
+
+**Linear's connector.** Linear is Connect's managed Linear connector,
+created by its catalog name, which registers a Linear OAuth application
+named Vespin in the team's Linear workspace and is what Linear's consent page
+names. Its tokens are Linear API tokens, which Linear's MCP server takes as
+its own. Its user scopes are `read` and `write` alone, the two that server
+publishes, and never `admin`, which would let an agent administer the
+member's Linear workspace; `write` covers `issues:create` and
+`comments:create`. They are set on the connector's `data.userScopes`, and its
+`data.appScopes` (the application acting as itself) serve no integration:
+
+```
+# ~/linear-scopes.json: {"data":{"userScopes":["read","write"]}}
+vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/linear-scopes.json
+```
 
 **Neon's connector.** Neon's registration endpoint refuses a client that
 does not name its `response_types`, which Connect's registration leaves
@@ -1514,9 +1536,11 @@ as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
-`chaptersModel` is the Claude model Generate chapters runs on, one of
-`@repo/features/chapters-model-choice`'s fixed set, Claude Haiku 5.5 until
-the account chooses; any other value is `invalid-request`.
+`chaptersModel` is the Claude model an earlier desktop let the account pick
+for Generate chapters, one of `@repo/features/chapters-model-choice`'s fixed
+set, Claude Haiku 5.5 until it chose; any other value is `invalid-request`.
+It is kept for the builds that still write it, but Generate no longer reads
+it: every Generate runs on Haiku.
 
 `experiments` is the last part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@repo/settings`'s
@@ -1584,8 +1608,8 @@ the answer), holds the answer to the diff, asks once more for any hunk it left
 out, and closes the story with "Other changes": the files a reader reads past,
 those with no hunk, and whatever is still outside. The model is a seam: the
 route hands in `chaptersModelOf(own, modelId)` on the API key the member who
-pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
-Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Vespin's
+pressed Generate saved (`ownKeyOf`), Claude Haiku on an Anthropic key and
+OpenAI's model of its tier on an OpenAI key alone, never Vespin's
 key; a member who saved none reads `generatable: false`. A test hands in a
 scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
 call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is

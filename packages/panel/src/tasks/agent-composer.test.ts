@@ -16,8 +16,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import type { SkillOption } from "@repo/ui/skill-mention";
-import { MESSAGE_ROLE } from "@repo/wire";
-import { sentLineId } from "@repo/wire/host-ids";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -46,7 +44,8 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 /**
  * The agent's message box as the developer works it, on the editor bundle's
  * editor: typing reaches the draft, Enter sends it and the box empties, a
- * message that did not go comes back into the box, an input method's Enter
+ * message refused for what is mended elsewhere offers that remedy under the
+ * box and sends the same line again once it lands, an input method's Enter
  * sends nothing, the box takes the caret as it opens and gives it up on
  * Escape, a `/` opens the repository's skills and a pick writes its chip,
  * and a dictation's words land where the caret stood as it began.
@@ -198,19 +197,6 @@ test("a paste that fits the cap says nothing of a cut", async () => {
   assert.equal(box.container.querySelector(".ui-composer-foot-note"), null);
 });
 
-test("a paste into a full box whose message did not go leaves the failure and its Retry standing", async () => {
-  const box = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-  typeInComposer(box.container, "x".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS));
-  pressInComposer(box.container, "Enter");
-  await settle();
-  const retry = () =>
-    [...box.container.querySelectorAll("button")].find((each) => each.textContent === "Retry");
-  assert.ok(retry(), "Retry is offered");
-
-  pasteInComposer(box.container, "more");
-  assert.ok(retry(), "the cut paste took nothing from the failure");
-});
-
 test("the length counter stands from four fifths of the cap and not before", async () => {
   const box = await mounted();
   const cap = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
@@ -246,30 +232,6 @@ test("words selected raise the format toolbar, its marks alone, and a message bo
     box.sent.map((each) => each.text),
     ["Ship **it** now"],
   );
-});
-
-test("a message that did not go comes back into the box, the caret at its end, and Retry sends it again under its key", async () => {
-  const box = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-  typeInComposer(box.container, "Fix the bug");
-  pressInComposer(box.container, "Enter");
-  await settle();
-
-  assert.equal(box.shown(), "Fix the bug");
-  const retry = [...box.container.querySelectorAll("button")].find(
-    (each) => each.textContent === "Retry",
-  );
-  assert.ok(retry, "Retry is offered");
-  act(() => retry.click());
-  await settle();
-  assert.deepEqual(
-    box.sent.map((each) => each.text),
-    ["Fix the bug", "Fix the bug"],
-  );
-  assert.equal(box.sent[0]?.clientKey, box.sent[1]?.clientKey);
-
-  composerEditor(box.container).focus();
-  typeInComposer(box.container, ", please");
-  assert.equal(box.shown(), "Fix the bug, please", "typing goes on at the words' end");
 });
 
 /** The agent as the service answers a message it took. */
@@ -337,94 +299,6 @@ test("a message sent while one is out goes once the one before it answers, so th
     ["First", "Second"],
   );
   assert.notEqual(box.sent[0]?.clientKey, box.sent[1]?.clientKey);
-});
-
-test("a message refused after the developer wrote on keeps their words in the box, and Retry sends the refused one again under its key", async () => {
-  const box = await answeredInTurn();
-  typeInComposer(box.container, "First");
-  pressInComposer(box.container, "Enter");
-  await settle();
-  typeInComposer(box.container, "Still writing");
-
-  await box.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.equal(box.shown(), "Still writing", "the newer words stay");
-  const retry =
-    [...box.container.querySelectorAll("button")].find((each) => each.textContent === "Retry") ??
-    assert.fail("Retry is offered");
-  act(() => retry.click());
-  await settle();
-  assert.deepEqual(
-    box.sent.map((each) => each.text),
-    ["First", "First"],
-  );
-  assert.equal(box.sent[1]?.clientKey, box.sent[0]?.clientKey);
-  assert.equal(box.shown(), "Still writing", "and are never sent over");
-});
-
-test("a message refused while another waits behind it still lets that one go, and comes back into the box with its Retry", async () => {
-  const box = await answeredInTurn();
-  typeInComposer(box.container, "First");
-  pressInComposer(box.container, "Enter");
-  await settle();
-  typeInComposer(box.container, "Second");
-  pressInComposer(box.container, "Enter");
-  await settle();
-
-  await box.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.deepEqual(
-    box.sent.map((each) => each.text),
-    ["First", "Second"],
-    "the refusal drops nothing behind it",
-  );
-  assert.equal(box.shown(), "First", "the refused words wait in the box");
-  assert.ok(
-    [...box.container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
-    "with Retry beside them",
-  );
-});
-
-test("a message refused after its row was read back comes back into the box with Retry, since the service withdrew that row", async () => {
-  let answer: (answered: AgentAgentAnswer) => void = ignore;
-  const keys: string[] = [];
-  const sender: MessageSender = (_agentId, _text, clientKey) => {
-    keys.push(clientKey);
-    return new Promise((resolve) => {
-      answer = resolve;
-    });
-  };
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const registry = AtomRegistry.make();
-  const draw = (messages: readonly AgentTranscriptMessage[]) =>
-    act(async () => root.render(onRegistry(registry, createElement(Box, { sender, messages }))));
-  await draw([]);
-  await settle();
-  typeInComposer(container, "Fix the bug");
-  pressInComposer(container, "Enter");
-  await settle();
-
-  // The service writes the line's row before the agent is handed it, and the transcript reads it back.
-  const row: AgentTranscriptMessage = {
-    id: "m-1",
-    role: MESSAGE_ROLE.USER,
-    parts: [{ type: "text", text: "Fix the bug" }],
-    clientId: sentLineId(keys[0] ?? assert.fail("the line went")),
-  };
-  await draw([row]);
-  await settle();
-  // The agent did not take it, so the service withdraws the row and refuses the send.
-  answer({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  await settle();
-  await draw([]);
-  await settle();
-
-  assert.equal(composerEditor(container).textContent, "Fix the bug");
-  assert.ok(
-    [...container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
-    "with Retry beside them",
-  );
 });
 
 test("a message sent with Send hands the caret to the box as it opens again", async () => {
@@ -798,7 +672,7 @@ async function mountedRefusedForMove() {
 
 test("a message refused for a repository its owner's other workspace reaches moves the plan, then sends the same words again under the same key", async () => {
   const box = await mountedRefusedForMove();
-  assert.equal(composerEditor(box.container).textContent, "Rebase on main");
+  assert.equal(composerEditor(box.container).textContent, "", "the words stay on their line");
 
   await box.landMove();
 
@@ -807,33 +681,6 @@ test("a message refused for a repository its owner's other workspace reaches mov
     ["Rebase on main", "Rebase on main"],
   );
   assert.equal(box.sent[1]?.clientKey, box.sent[0]?.clientKey);
-});
-
-test("words edited while the move is out are never overwritten by the words that were refused", async () => {
-  const box = await mountedRefusedForMove();
-  typeInComposer(box.container, " and fix CI");
-
-  await box.landMove();
-
-  assert.deepEqual(
-    box.sent.map((each) => each.text),
-    ["Rebase on main"],
-  );
-  assert.equal(composerEditor(box.container).textContent, "Rebase on main and fix CI");
-});
-
-test("a message sent and refused while the move is out is not sent again when the move lands", async () => {
-  const box = await mountedRefusedForMove();
-  typeInComposer(box.container, " and fix CI");
-  pressInComposer(box.container, "Enter");
-  await settle();
-
-  await box.landMove();
-
-  assert.deepEqual(
-    box.sent.map((each) => each.text),
-    ["Rebase on main", "Rebase on main and fix CI"],
-  );
 });
 
 /** What a remedy's press opened: pages of GitHub's, and places in Settings. */

@@ -104,7 +104,10 @@ test("a press says which sign-in is opening and holds the other choice until it 
 
   await act(async () => buttonNamed(page, "Continue with GitHub").click());
 
-  expect(buttonNamed(page, "Opening GitHub").getAttribute("aria-busy")).toBe("true");
+  // Note that Query draws a mutation's pending state on its next scheduled tick.
+  await vi.waitFor(() =>
+    expect(buttonNamed(page, "Opening GitHub").getAttribute("aria-busy")).toBe("true"),
+  );
   expect(buttonNamed(page, "Continue with Google").disabled).toBe(true);
 });
 

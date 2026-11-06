@@ -23,6 +23,7 @@ import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view
 import { readingWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
+  CornerCount,
   cn,
   cssCustomProperties,
   ERROR_STATE_PLACEMENT,
@@ -76,10 +77,12 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { type HeldComment, PageReviewSection, usePageReview } from "./page-review.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
   COMMENTS_FILTER,
   type CommentsFilter,
+  HeldCommentCard,
   ownWordsIn,
   PAGE_COMMENT_WORDS,
   PageCommentLayer,
@@ -667,6 +670,7 @@ function useCommenting(place: PlanCommentPlace | undefined) {
     pending,
     open,
     toggleColumn: () => setColumn(!column),
+    showColumn: () => setColumn(true),
     startPick: () => {
       setOpen(undefined);
       setPicking(true);
@@ -695,11 +699,22 @@ function pageReserve(row: HTMLElement): number {
   return row.getBoundingClientRect().width * (1 - COMMENTS_SHARE);
 }
 
-/** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected. */
-function threadMarks(threads: readonly PlanCommentThread[]): readonly PageMark[] {
-  return [...threadsByElement(threads)].map(([path, [first]]) =>
+/** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected; then those holding only comments held in the reader's review. */
+function threadMarks(
+  threads: readonly PlanCommentThread[],
+  held: readonly HeldComment[],
+): readonly PageMark[] {
+  const posted = [...threadsByElement(threads)].map(([path, [first]]) =>
     first?.scope === PLAN_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
   );
+  const marked = new Set(posted.map((mark) => mark.path));
+  const heldMarks = held.flatMap((comment) => {
+    const on = comment.element;
+    if (on === undefined || marked.has(on.path)) return [];
+    marked.add(on.path);
+    return [on.words === true ? { path: on.path, words: on.quote } : { path: on.path }];
+  });
+  return [...posted, ...heldMarks];
 }
 
 /**
@@ -742,7 +757,8 @@ export function PagePane({
   const frame = useRef<HTMLIFrameElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const threads = comments?.control.threads;
-  const marks = useMemo(() => threadMarks(threads ?? []), [threads]);
+  const review = usePageReview(comments?.control, page.id);
+  const marks = useMemo(() => threadMarks(threads ?? [], review.held), [threads, review.held]);
   const [hinted, setHinted] = useState<string | undefined>(undefined);
   const shown = threads?.find((thread) => commenting.open?.includes(thread.id) === true)?.page
     ?.element;
@@ -933,7 +949,12 @@ export function PagePane({
                     </Tooltip>
                     <Tooltip label={commentsLabel}>
                       <IconButton
-                        icon={<SidePanelIcon />}
+                        // Note that the column's toggle wears how many comments the reader holds in their review, which the column lists at its head.
+                        icon={
+                          <CornerCount count={review.held.length}>
+                            <SidePanelIcon />
+                          </CornerCount>
+                        }
                         label={commentsLabel}
                         aria-expanded={commenting.column}
                         onClick={commenting.toggleColumn}
@@ -984,6 +1005,18 @@ export function PagePane({
                   onStopPick={commenting.stopPick}
                   onStarted={commenting.started}
                   onCancel={commenting.dismiss}
+                  // Note that a phone draws no bar for the review's press, so its comments post at once.
+                  review={{
+                    // Note that holding a comment opens the column, where the review it joins is listed.
+                    control: {
+                      ...review,
+                      hold: (comment) => {
+                        review.hold(comment);
+                        commenting.showColumn();
+                      },
+                    },
+                    onOpen: commenting.showColumn,
+                  }}
                 />
               )}
             </PageFrame>
@@ -1010,6 +1043,14 @@ export function PagePane({
                 onFilter={setCommentsFilter}
                 onOpen={(thread) =>
                   commenting.setOpen(thread === undefined ? undefined : [thread.id])
+                }
+                lead={
+                  <PageReviewSection
+                    review={review}
+                    cardOf={(held, onRemove) => (
+                      <HeldCommentCard comment={held} onRemove={onRemove} />
+                    )}
+                  />
                 }
               />
             </aside>

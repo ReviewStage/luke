@@ -1,7 +1,6 @@
 import type { GitHubRepository } from "@repo/features";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import { countWords, orList, readingWords } from "@repo/features/words";
@@ -10,28 +9,24 @@ import { EVERY_WORKSPACE } from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import {
   AVATAR_SIZE,
-  BUTTON_VARIANT,
-  Button,
   CHIP_LOOK,
   Chip,
   type ChipLook,
   ChipName,
   type ChipWidth,
   ErrorState,
-  GearIcon,
+  MARK_PROVIDER,
+  MenuNoteRow,
   type MenuRow,
   NoRepositoryGlyph,
   POPOVER_ALIGN,
   type PopoverAlign,
+  ProviderMark,
   RepositoryCard,
   RepositoryPicture,
   repositoryMenuRow,
   SearchableMenu,
   Spinner,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   Tooltip,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
@@ -40,7 +35,7 @@ import { repositoryFailureNote } from "@repo/ui/tasks-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { failureShown } from "../failure-report.js";
-import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
+import { useOpenSettings } from "../open-settings.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
@@ -63,11 +58,13 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * repository, which a task can start with. An opener that may stand on
  * no repository, as New task and an automation's editor may, is offered No repository
  * pinned under the list, which lets the pick go. With no
- * GitHub connected to the workspace, or one GitHub removed or suspended,
- * the menu says which in the list's place: an owner or an admin is offered
- * Open Settings at the workspace's GitHub repositories, the one place they
- * are set, and a member is told which owners and admins, by name, to ask;
- * the same holds where GitHub is installed and reaches no repository. The list is held by the host while the chip stands, drawn at once from its
+ * GitHub connected to the workspace, one GitHub removed or suspended, or
+ * one installed that reaches no repository, the list's place holds one
+ * GitHub row, as a disconnected server's row in the Integrations menu is
+ * drawn (`MenuNoteRow`): an owner or an admin is offered Connect, Reconnect,
+ * or Choose repositories at its end, each opening the workspace's GitHub
+ * repositories in Settings, the one place they are set, and a member is
+ * told there which owners and admins, by name, to ask. The list is held by the host while the chip stands, drawn at once from its
  * last answer, and asked again whenever a window comes forward, so a
  * developer back from connecting GitHub in the browser sees the change on
  * the next opening; nothing polls. The menu
@@ -91,12 +88,10 @@ export interface RepositoryChooser {
   scope?: string | undefined;
   /** Whether the account manages that workspace, so can connect its GitHub; a member is told to ask. */
   manages: boolean;
-  /** The workspace's name, which a list with no GitHub connected says it of. */
-  workspaceName?: string | undefined;
   /**
    * Whether the workspace has a GitHub connected, as its row last said: a read
    * that then finds none installed means GitHub removed or suspended it, which
-   * the list says rather than that none is connected, whether or not the row
+   * the row offers Reconnect for rather than Connect, whether or not the row
    * has heard yet.
    */
   connected?: boolean | undefined;
@@ -126,61 +121,40 @@ const READING_LABEL = "Repository";
 /** The id of the row pinned under the list that chooses no repository. */
 const NONE_ROW = "none";
 
-/** What the menu says in the list's place. */
-const MENU_NOTE = {
-  NONE_REACHED: `${PRODUCT_NAME} cannot see any repository yet.`,
-  NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
-  NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
-  LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",
-  LAPSED_IN: (workspace: string) =>
-    `${workspace}'s GitHub connection was removed or suspended on GitHub.`,
-  NO_MATCH: "No repositories match",
+/** What the menu says where the search matches no repository. */
+const NO_MATCH = "No repositories match";
+
+/** What the row in the list's place names, where nothing can be picked. */
+const GITHUB_LABEL = "GitHub";
+
+/**
+ * Each way the list can stand empty for want of GitHub: the press an owner
+ * or an admin mends it with, and what a member asks them to do, finishing
+ * "Ask … to".
+ */
+const DEAD_END = {
+  NOT_CONNECTED: { action: "Connect", ask: "connect" },
+  LAPSED: { action: "Reconnect", ask: "reconnect" },
+  NONE_REACHED: { action: "Choose repositories", ask: "choose repositories" },
 } as const;
 
-/** What a member is told to ask the workspace's owners and admins to do, each finishing "Ask … to". */
-const OWNER_ASK = {
-  CONNECT: "connect GitHub",
-  RECONNECT: "reconnect GitHub",
-  ADD_REPOSITORY: `add a repository to ${PRODUCT_NAME}'s GitHub App`,
-} as const;
+type DeadEnd = (typeof DEAD_END)[keyof typeof DEAD_END];
 
-type OwnerAsk = (typeof OWNER_ASK)[keyof typeof OWNER_ASK];
-
-/** How many owners and admins a member's note names before it counts the rest. */
+/** How many owners and admins a member's row names before it counts the rest. */
 const NAMED_OWNERS = 3;
 
 /**
- * What a menu with nothing to pick says first, for an owner or an admin or
- * for a member: that GitHub was removed or suspended, or that none is
- * connected, which a member is told through the ask beneath instead. A
- * lapsed workspace says so to both.
+ * A member's way out of a dead end: the GitHub row, ending in the
+ * workspace's owners and admins by name, who alone can mend it, read while
+ * the row stands. Until the read answers, or if it never does, it says an
+ * owner or admin without names, since a name is only ever a help.
  */
-function unconnectedLines(chooser: RepositoryChooser): readonly string[] {
-  const name = chooser.workspaceName;
-  if (chooser.connected === true) {
-    return [name === undefined ? MENU_NOTE.LAPSED : MENU_NOTE.LAPSED_IN(name)];
-  }
-  if (chooser.manages) {
-    return [name === undefined ? MENU_NOTE.NOT_CONNECTED : MENU_NOTE.NOT_CONNECTED_IN(name)];
-  }
-  return [];
-}
-
-/**
- * A member's way out of a dead end: the workspace's owners and admins by
- * name, who alone can fix it, read while the note stands. Until the read
- * answers, or if it never does, the note says an owner or admin without
- * names, since a name is only ever a help.
- */
-function AskOwners({
+function AskOwnersRow({
   workspaceId,
-  workspaceName,
   ask,
 }: {
   workspaceId: string | undefined;
-  /** The workspace, named where the note above does not name it. */
-  workspaceName: string | undefined;
-  ask: OwnerAsk;
+  ask: DeadEnd["ask"];
 }): React.JSX.Element {
   const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspaceId).rows?.members;
   const owners = (members ?? [])
@@ -189,14 +163,13 @@ function AskOwners({
   const named = owners.slice(0, NAMED_OWNERS);
   const rest = owners.length - named.length;
   const others = rest > 0 ? [countWords(rest, { one: "other", many: "others" })] : [];
-  const words =
-    owners.length === 0
-      ? `Ask an owner or admin${workspaceName === undefined ? "" : ` of ${workspaceName}`} to ${ask}.`
-      : `Ask ${orList([...named, ...others])} to ${ask}${workspaceName === undefined ? "" : ` for ${workspaceName}`}.`;
+  const whom = owners.length === 0 ? "an owner or admin" : orList([...named, ...others]);
   return (
-    <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      {words}
-    </Text>
+    <MenuNoteRow
+      glyph={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+      label={GITHUB_LABEL}
+      end={{ words: `Ask ${whom} to ${ask}` }}
+    />
   );
 }
 
@@ -356,27 +329,17 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
       : chooser.reading === true || props.pending === true
         ? READING_LABEL
         : CHOOSE_LABEL);
-  // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
-  const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
-    <>
-      {lines.map((words) => (
-        <Text key={words} as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {words}
-        </Text>
-      ))}
-      {chooser.manages ? (
-        <Button
-          variant={BUTTON_VARIANT.QUIET}
-          icon={<GearIcon />}
-          onClick={() => choose(() => openSettings(workspaceGitHub))}
-        >
-          {OPEN_SETTINGS_LABEL}
-        </Button>
-      ) : (
-        <AskOwners workspaceId={chooser.scope} workspaceName={askedOf} ask={ask} />
-      )}
-    </>
-  );
+  // A list with nothing to pick is mended at the workspace's GitHub, by an owner or an admin, whom a member is told to ask.
+  const deadEnd = (way: DeadEnd) =>
+    chooser.manages ? (
+      <MenuNoteRow
+        glyph={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+        label={GITHUB_LABEL}
+        end={{ action: way.action, onClick: () => choose(() => openSettings(workspaceGitHub)) }}
+      />
+    ) : (
+      <AskOwnersRow workspaceId={chooser.scope} ask={way.ask} />
+    );
   const note =
     failure !== undefined ? (
       <ErrorState
@@ -386,17 +349,13 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         {repositoryFailureNote(failure)}
       </ErrorState>
     ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (
-      // Only an owner or an admin can connect the workspace's GitHub, so a member is shown whom to ask.
-      deadEnd(
-        unconnectedLines(chooser),
-        chooser.connected === true ? OWNER_ASK.RECONNECT : OWNER_ASK.CONNECT,
-        chooser.connected === true ? undefined : chooser.workspaceName,
-      )
+      // Note that a workspace whose row says GitHub is connected, yet whose read finds none installed, had it removed or suspended on GitHub.
+      deadEnd(chooser.connected === true ? DEAD_END.LAPSED : DEAD_END.NOT_CONNECTED)
     ) : listed === undefined ? (
       <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
       // Installed but giving us nothing: the repositories are chosen on GitHub, through the workspace's row.
-      deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)
+      deadEnd(DEAD_END.NONE_REACHED)
     ) : undefined;
 
   return {
@@ -435,7 +394,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         rows={rows.map((row) => ({ ...row, replayMasked: true }))}
         value={value ?? undefined}
         note={note}
-        noMatch={MENU_NOTE.NO_MATCH}
+        noMatch={NO_MATCH}
         align={props.align ?? POPOVER_ALIGN.END}
         onPick={(repository) => choose(() => props.onChoose(repository))}
         foot={

@@ -26,7 +26,7 @@ import { WINDOW_SURFACE_ACT_KIND } from "./kinds.js";
  * the act rather than sent by the panel, so the act can open no other
  * address.
  */
-export const CONTACT_MAILTO = "mailto:founders@stagereview.app";
+export const CONTACT_MAILTO = "mailto:founders@vespin.dev";
 
 /**
  * The longest text a File tab copies or saves of its file: the service

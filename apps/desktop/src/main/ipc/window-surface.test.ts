@@ -198,7 +198,7 @@ it("words are copied, a mail and the settings opened, and feedback carried", asy
   });
   assert.deepEqual(heard, [
     "copy:",
-    "open:mailto:founders@stagereview.app",
+    "open:mailto:founders@vespin.dev",
     "open:x-apple.systempreferences:com.apple.Notifications-Settings.extension",
     "feedback:The panel is lovely.",
   ]);

@@ -144,8 +144,8 @@ import {
   NEEDS_YOU,
   narrowedByWhose,
 } from "./inbox-model.js";
+import { type InboxReminder, useInboxReminding } from "./inbox-remind.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
-import { type InboxSnoozer, useInboxSnoozing } from "./inbox-snooze.js";
 import { PlanGlyph } from "./tab-look.js";
 import { cardTitle } from "./tool-call-model.js";
 
@@ -180,7 +180,7 @@ import { cardTitle } from "./tool-call-model.js";
  * The head names the Inbox, whatever it lists, and, at its right, offers the view's
  * menu: first what the list shows, Open, every thread still open, a
  * question or an update not yet opened, All, every item, each leaving out
- * what the developer snoozed, or Snoozed, those items alone; then Addressed
+ * what the developer set a reminder on, or Reminders, those items alone; then Addressed
  * to, the developer's own, anyone's, or one teammate's by face and name,
  * which a chip over the list then says, its × listing the developer's own
  * again. Open addressed to the developer is Needs you, the threads the
@@ -239,7 +239,7 @@ const SCOPE_WORDS = {
   [INBOX_SHOW.NEEDS_ME]: { label: "Needs you", icon: <GLYPH.PERSON /> },
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
-  [INBOX_SHOW.SNOOZED]: { label: "Snoozed", icon: <GLYPH.TIME /> },
+  [INBOX_SHOW.REMINDERS]: { label: "Reminders", icon: <GLYPH.TIME /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
 /** The scopes the window's Inbox's view's menu offers, in its order. */
@@ -247,7 +247,7 @@ const INBOX_SCOPES = [
   INBOX_SHOW.NEEDS_ME,
   INBOX_SHOW.OPEN,
   INBOX_SHOW.ALL,
-  INBOX_SHOW.SNOOZED,
+  INBOX_SHOW.REMINDERS,
 ] as const satisfies readonly InboxShow[];
 
 /** The Inbox's name at its head, whatever it lists, the view's menu saying the rest. */
@@ -295,8 +295,8 @@ function regionLabel(head: InboxListHead): string {
 /** What a task's own Inbox says holding nothing at all. */
 export const NOTHING_HERE = "Nothing here";
 
-/** What the Snoozed scope says holding nothing the reader snoozed. */
-const NOTHING_SNOOZED = "Nothing snoozed";
+/** What the Reminders scope says holding no item the reader set a reminder on. */
+const NO_REMINDERS = "No reminders";
 
 /** What Open says holding no thread the reader is not done with. */
 const NOTHING_OPEN = "Nothing open";
@@ -310,19 +310,19 @@ const SHOW_EMPTY = {
     [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
     [INBOX_SHOW.OPEN]: NOTHING_OPEN,
     [INBOX_SHOW.ALL]: "Nothing addressed to you",
-    [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
+    [INBOX_SHOW.REMINDERS]: NO_REMINDERS,
   },
   [INBOX_WHOSE.EVERYONE]: {
     [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
     [INBOX_SHOW.OPEN]: NOTHING_OPEN,
     [INBOX_SHOW.ALL]: NOTHING_HERE,
-    [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
+    [INBOX_SHOW.REMINDERS]: NO_REMINDERS,
   },
   [INBOX_WHOSE.PERSON]: {
     [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
     [INBOX_SHOW.OPEN]: "Nothing addressed to them",
     [INBOX_SHOW.ALL]: "Nothing addressed to them",
-    [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
+    [INBOX_SHOW.REMINDERS]: NO_REMINDERS,
   },
 } as const satisfies Record<InboxWhose["kind"], Record<InboxShow, string>>;
 
@@ -449,8 +449,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   onChoose,
   onMark,
   onAskClose,
-  onSnooze,
-  onPickSnooze,
+  onRemind,
+  onPickRemind,
   place,
 }: {
   listed: InboxListed;
@@ -481,10 +481,10 @@ export const InboxItemRow = memo(function InboxItemRow({
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
   /** Asks to close an open item without an answer, through the list's one question; none where the row offers no close. */
   onAskClose?: ((item: InboxItem) => void) | undefined;
-  /** Snoozes the item, or ends its snooze; none where the row offers no snooze. */
-  onSnooze?: InboxSnoozer | undefined;
-  /** Opens the date picker on the row for a snooze of the reader's own time, where the row offers a snooze. */
-  onPickSnooze?: ((item: InboxItem) => void) | undefined;
+  /** Sets the item's reminder, or cancels it; none where the row offers no reminder. */
+  onRemind?: InboxReminder | undefined;
+  /** Opens the date picker on the row for a reminder at the reader's own time, where the row offers a reminder. */
+  onPickRemind?: ((item: InboxItem) => void) | undefined;
   /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`); none where every row is drawn. */
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
@@ -505,10 +505,10 @@ export const InboxItemRow = memo(function InboxItemRow({
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
     onAskClose,
     keyed: chosen,
-    snooze:
-      onSnooze === undefined || onPickSnooze === undefined
+    remind:
+      onRemind === undefined || onPickRemind === undefined
         ? undefined
-        : { onSnooze, onPick: onPickSnooze },
+        : { onRemind, onPick: onPickRemind },
   });
   return (
     <RowHintOptions card={<InboxItemCard listed={listed} models={models} readerId={readerId} />}>
@@ -596,7 +596,7 @@ function whoseEntries(
 
 /**
  * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Needs you, Open, All, or Snoozed, the one shown checked; then, but
+ * it shows, Needs you, Open, All, or Reminders, the one shown checked; then, but
  * under Needs you, Addressed to, a submenu of Anyone, Me, or a teammate by
  * face and name, its choice checked.
  */
@@ -1395,7 +1395,7 @@ export function InboxList({
   onChoose,
   onMark,
   onClose,
-  onSnooze,
+  onRemind,
   onPointing,
 }: {
   view: InboxListView;
@@ -1419,8 +1419,8 @@ export function InboxList({
   onMark?: InboxListMark | undefined;
   /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
-  /** Snoozes an item from its row's menu or H, or ends its snooze; none where the rows offer no snooze. */
-  onSnooze?: InboxSnoozer | undefined;
+  /** Sets an item's reminder from its row's menu or H, or cancels it; none where the rows offer no reminder. */
+  onRemind?: InboxReminder | undefined;
   /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
   onPointing?: ((pointing: boolean) => void) | undefined;
 }): React.JSX.Element {
@@ -1476,16 +1476,16 @@ export function InboxList({
   // because the page hands new ones on every draw and a row handed a new door draws again (`InboxItemRow`).
   const choose = useSteadyDoor(onChoose);
   const mark = useSteadyDoor(onMark);
-  const snooze = useSteadyDoor(onSnooze);
-  // Note that H snoozes the chosen item from its row, and a time of the reader's own is picked there, in the list's room.
-  const snoozing = useInboxSnoozing({
+  const remind = useSteadyDoor(onRemind);
+  // Note that H sets a reminder on the chosen item from its row, and a time of the reader's own is picked there, in the list's room.
+  const reminding = useInboxReminding({
     room: bodyRef,
     rowOf: rows.find,
     chosen: drawn.find(({ item }) => item.id === chosen)?.item,
     active: head.shown,
-    onSnooze,
+    onRemind,
   });
-  const pickSnooze = useSteadyDoor(snoozing.onPick);
+  const pickRemind = useSteadyDoor(reminding.onPick);
   // Note that every row asks its close through the list's one question, rather than each drawing its own shut.
   const closing = useInboxCloseAsk(
     onClose,
@@ -1516,8 +1516,8 @@ export function InboxList({
       onChoose={choose}
       onMark={mark}
       onAskClose={onClose === undefined ? undefined : closing.ask}
-      onSnooze={onSnooze === undefined ? undefined : snooze}
-      onPickSnooze={onSnooze === undefined ? undefined : pickSnooze}
+      onRemind={onRemind === undefined ? undefined : remind}
+      onPickRemind={onRemind === undefined ? undefined : pickRemind}
     />
   );
   const body = (
@@ -1567,7 +1567,7 @@ export function InboxList({
         onClose={onClose}
       />
       {closing.dialog}
-      {snoozing.popover}
+      {reminding.popover}
       {columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );

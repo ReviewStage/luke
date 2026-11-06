@@ -6,9 +6,11 @@ import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
-import { Duration, Effect, Fiber } from "effect";
+import { Duration, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
+import { afterEach, vi } from "vitest";
 import { fixtureToken, runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
+import { sandboxDeleted, sandboxFetchOver, sandboxFound } from "../testing/vercel-sandbox-fake.js";
 import {
   COMMAND_GONE,
   SANDBOX_CALL,
@@ -64,7 +66,6 @@ const CALLS: readonly {
   { call: SANDBOX_CALL.GET, ask: (api) => api.getNamed(NAME) },
   { call: SANDBOX_CALL.LIST, ask: (api) => api.listNamed("luke-native-") },
   { call: SANDBOX_CALL.LIST, ask: (api) => api.listTagged("session_fixture") },
-  { call: SANDBOX_CALL.DELETE, ask: (api) => api.deleteSandbox(NAME) },
 ];
 
 /** The API under the fixture's token, over the responder given. */
@@ -72,7 +73,9 @@ function apiOver(
   respond: Parameters<typeof fakeHttpClientLayer>[0],
   readToken: () => Promise<string> = () => Promise.resolve(fixtureToken()),
 ) {
-  return vercelSandboxApi(readToken).pipe(Effect.provide(fakeHttpClientLayer(respond)));
+  return vercelSandboxApi(readToken).pipe(
+    Effect.provide(Layer.merge(fakeHttpClientLayer(respond), sandboxFetchOver(respond))),
+  );
 }
 
 /** A responder that answers each call with the next of the answers given, the last again once they run out. */
@@ -85,6 +88,10 @@ function answering(...answers: readonly (() => Response)[]) {
     return answer();
   };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const refusedWith = (status: number) => () => Response.json({ error: REFUSAL }, { status });
 const started = () => Response.json({ command: { id: COMMAND, exitCode: null } });
@@ -362,5 +369,51 @@ it.effect(
       const text = record.toString("utf8");
       assert.equal(text, `${Buffer.byteLength(text)} path=${path.slice(1)}\n`);
       assert.equal(String.fromCharCode(tar[1024 + 156] ?? 0), "0");
+    }),
+);
+
+/** A stopped sandbox as Vercel's list names it. */
+const STOPPED_SANDBOX = {
+  name: NAME,
+  status: "stopped",
+  currentSessionId: SESSION,
+  createdAt: Date.UTC(2026, 10, 5),
+} as const;
+
+/** Vercel's answer to a lookup and to a delete, as `@vercel/sandbox` reads them. */
+const sandboxAnswer = (method: string) =>
+  Response.json(
+    method === "DELETE" ? sandboxDeleted(STOPPED_SANDBOX) : sandboxFound(STOPPED_SANDBOX),
+  );
+
+it.effect(
+  "a delete wakes no stopped sandbox, takes its orphan snapshots, counts one gone as deleted, and names Vercel's refusal",
+  () =>
+    Effect.gen(function* () {
+      // The SDK reads its own copy of the deployment's token before each call.
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const asked: { readonly method: string; readonly url: URL }[] = [];
+      let answer: (method: string) => Response = sandboxAnswer;
+      const api = yield* apiOver((url, init) => {
+        const method = init.method ?? "GET";
+        asked.push({ method, url: new URL(url) });
+        return answer(method);
+      });
+
+      yield* api.deleteSandbox(NAME);
+      const [lookup, deletion] = asked;
+      assert.equal(lookup?.url.searchParams.get("resume"), "false");
+      assert.equal(deletion?.method, "DELETE");
+      assert.equal(deletion?.url.searchParams.get("deleteOrphanSnapshots"), "true");
+
+      answer = () => refusedWith(404)();
+      yield* api.deleteSandbox(NAME);
+
+      answer = () => refusedWith(400)();
+      const failure = yield* Effect.flip(api.deleteSandbox(NAME));
+      assert.equal(failure.call, SANDBOX_CALL.DELETE);
+      assert.equal(failure.status, 400);
+      assert.equal(failure.detail, `${REFUSAL.code}: ${REFUSAL.message}`);
+      assert.equal(failure.message.includes(fixtureToken()), false);
     }),
 );

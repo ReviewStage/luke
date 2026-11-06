@@ -4,6 +4,7 @@ import {
   Banner,
   BUTTON_VARIANT,
   Button,
+  COPY_FIELD_PROMPT,
   COPY_FIELD_WIDTH,
   CopyField,
   STATUS_TONE,
@@ -119,6 +120,7 @@ export function GitHubSignInCard({
         what={GITHUB_SIGN_IN_WORDS.COMMAND_WHAT}
         copy={copy}
         width={COPY_FIELD_WIDTH.FULL}
+        prompt={COPY_FIELD_PROMPT.SHELL}
       />
     </Banner>
   );

@@ -50,9 +50,9 @@
      row's own stronger fill or a chosen row's. */
   @media (hover: hover) {
     .ui-list-row:has(> button.ui-list-row-main):hover:not(
-      [data-current="true"],
-      [data-selected="true"]
-    ) {
+        [data-current="true"],
+        [data-selected="true"]
+      ) {
       background: var(--ui-color-fill-hover);
     }
   }
@@ -731,7 +731,9 @@
       transform var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  .ui-list-row[data-actions="hover"][data-meta="title"] .ui-list-row-actions {
+  /* A mail-style row's acts, whether they always stand or come in on
+     hover, stand level with its title's line, as its ⋯ does. */
+  .ui-list-row[data-meta="title"] .ui-list-row-actions {
     align-self: start;
     height: var(--ui-list-row-head-leading);
     margin-block-start: var(--ui-list-row-inset-block);

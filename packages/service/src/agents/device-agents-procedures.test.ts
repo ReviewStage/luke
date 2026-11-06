@@ -51,6 +51,7 @@ const PATH = {
   LINE_CLAIM: "/api/device-agents/lines/claim",
   LIVE_AGENTS: "/api/device-agents/live-agents",
   ENROLL_OWN: "/api/device-agents/devices/enroll",
+  LEAVE: "/api/device-agents/devices/leave",
   HOSTS: "/api/hosts",
   HOST_REMOVE: "/api/hosts/remove",
   PAIRING_START: "/api/device-agents/pairing",
@@ -492,6 +493,46 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       ]);
       assert.deepEqual(countedProperties(other, SERVER_EVENT.HOST_PAIRING_CHANGE), []);
     }),
+  );
+
+  it.effect(
+    "a host leaves its account on its own secret, and its secret removes no other host",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const leaving = yield* pairedHost(owner);
+        const staying = yield* pairedHost(owner);
+        const onHost = yield* agentRunningOn(owner, leaving.deviceId);
+
+        const leftForOther = yield* statusOf(
+          request(leaving.secret, PATH.LEAVE, {
+            version: HOST_VERSION.FLOOR,
+            body: { deviceId: staying.deviceId },
+          }),
+        );
+        const left = yield* statusOf(
+          request(leaving.secret, PATH.LEAVE, {
+            version: HOST_VERSION.FLOOR,
+            body: { deviceId: leaving.deviceId },
+          }),
+        );
+        const beat = yield* answerOf(hostBeat(leaving.secret, leaving.deviceId));
+        const listed = yield* answerOf(request(owner, PATH.HOSTS));
+        const turns = yield* latestTurnsOfReached([onHost]);
+
+        assert.equal(leftForOther, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(left, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(beat.body, { error: "invalid-token", hostRemoved: true });
+        assert.deepEqual(
+          listed.body.hosts.map((host: { id: string }) => host.id),
+          [staying.deviceId],
+        );
+        assert.equal(
+          turns.get(onHost)?.status,
+          TURN_STATUS.FAILED,
+          "the host's agent no longer runs",
+        );
+      }),
   );
 
   it.effect("removing a host settles its agents' running turns as failed, and no one else's", () =>

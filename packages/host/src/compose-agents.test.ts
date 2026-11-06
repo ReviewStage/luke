@@ -27,7 +27,6 @@ import {
   PULL_REQUEST_STATE,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
@@ -552,11 +551,6 @@ function fakeService() {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHAPTERS;
       }),
-    writeChaptersModel: (model) =>
-      Effect.sync(() => {
-        asked.push(`chapters-model-write:${model}`);
-        return { model };
-      }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
         asked.push(`overview-pull-request:${agentId}`);
@@ -615,6 +609,9 @@ function fakeService() {
         asked.push(`forAgents:${change.kind}:${String(change.forAgents)}`);
         return { keys: [] };
       }),
+    startChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    pollChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    cancelChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readGitHubToken: () =>
       Effect.sync(() => {
         asked.push("token");
@@ -695,9 +692,9 @@ function fakeService() {
         asked.push(`inbox-unread:${itemId}`);
         return { id: itemId, unread: true, ...committedIn };
       }),
-    snoozeInboxItem: (itemId, until) =>
+    remindInboxItem: (itemId, until) =>
       Effect.sync(() => {
-        asked.push(`inbox-snooze:${itemId}:${until ?? "none"}`);
+        asked.push(`inbox-remind:${itemId}:${until ?? "none"}`);
         return { id: itemId, unread: false, ...committedIn };
       }),
     markInboxRead: (request) =>
@@ -1294,10 +1291,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHAPTERS,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
-      { model: CHAPTERS_MODEL.OPUS },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
         agentId: AGENT_ID,
         src: "https://camo.githubusercontent.com/abc",
@@ -1416,7 +1409,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, { itemId: ITEM.id, until: 5_000 }),
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, { itemId: ITEM.id, until: 5_000 }),
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
@@ -1447,7 +1440,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
-      `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
@@ -1460,7 +1452,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-start:${AGENT_ID}:Annual plan copy:Draft the annual plan's line too.:start-1`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
-      `inbox-snooze:${ITEM.id}:5000`,
+      `inbox-remind:${ITEM.id}:5000`,
       `inbox-read-all:${WORKSPACE_ID}`,
     ]);
   }),

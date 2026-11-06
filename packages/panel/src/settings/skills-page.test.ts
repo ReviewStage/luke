@@ -38,11 +38,9 @@ import { SkillsPage } from "./skills-page.js";
  * service would: the skills of the workspace Settings shows are held for it
  * and drawn as the host lays them, the workspace's standing before the
  * account's own, each with its source and who installed it; a member who is
- * not an owner or admin sees a workspace skill's switch unavailable and
- * View alone in its ⋯; Update sends its act; View reads the skill's text
- * and files; Share asks in plain words, moves the skill into the
- * workspace, and says a taken name in the question; Delete asks first; and
- * an install lights its rows. In the dialog, a GitHub source's skills are
+ * not an owner or admin sees View alone in a workspace skill's ⋯; View
+ * reads the skill's text and files; Delete asks first; and an install
+ * lights its rows. In the dialog, a GitHub source's skills are
  * one list to tick, searched once it is long, the named one ticked, and
  * Install sends the ticked ones with the commit previewed; a skill's text
  * fills Name and Description from its frontmatter, Install waiting for a
@@ -170,8 +168,6 @@ function laySkills(): void {
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Whether the next install is refused, for a credential in the named skill. */
 let refuseInstall = false;
-/** Whether the workspace already holds a skill of the shared one's name. */
-let nameTaken = false;
 /** What the next source preview answers. */
 let sourcePreview: InstalledSkillPreview = SOURCE;
 /** How many of the next previews the service never answers, which the port refuses. */
@@ -219,7 +215,6 @@ beforeEach(() => {
   });
   sent = [];
   refuseInstall = false;
-  nameTaken = false;
   sourcePreview = SOURCE;
   unreachedPreviews = 0;
   fakeActPort({
@@ -229,10 +224,6 @@ beforeEach(() => {
       // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(laySkills);
       return quietHold();
-    },
-    [ACT_KIND.INSTALLED_SKILLS_UPDATE]: (payload) => {
-      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_UPDATE, payload });
-      return Promise.resolve({ skill: RELEASE_NOTES, changed: true });
     },
     [ACT_KIND.INSTALLED_SKILLS_READ]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_READ, payload });
@@ -244,20 +235,6 @@ beforeEach(() => {
           { path: "examples/good.md", bytes: 2_048 },
         ],
       });
-    },
-    // The host draws a share and a removal the moment it is asked, which here is as the service takes it.
-    [ACT_KIND.INSTALLED_SKILLS_SHARE]: (payload) => {
-      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_SHARE, payload });
-      if (nameTaken) return Promise.resolve({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN });
-      const found = stored.find((each) => each.id === payload.skillId) ?? assert.fail("no skill");
-      const shared = {
-        ...found,
-        scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
-        workspaceId: payload.workspaceId,
-      };
-      stored = stored.map((each) => (each.id === shared.id ? shared : each));
-      laySkills();
-      return Promise.resolve({ skill: shared });
     },
     [ACT_KIND.INSTALLED_SKILLS_REMOVE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_REMOVE, payload });
@@ -365,10 +342,6 @@ const button = (words: string, within: ParentNode = document) =>
   [...within.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === words,
   ) ?? assert.fail(`no ${words} button`);
-
-const switchOf = (name: string) =>
-  document.querySelector<HTMLButtonElement>(`[role="switch"][aria-label="Use ${name}"]`) ??
-  assert.fail(`no switch for ${name}`);
 
 const checkboxOf = (name: string) =>
   [...document.querySelectorAll<HTMLLabelElement>("label")]
@@ -490,53 +463,6 @@ test("a skill's row leads with the book in the settings mark slot, and hangs the
   assert.equal(card?.querySelector('.ui-hover-card-row[data-look="detail"]'), null);
 });
 
-test("the account's own skill offers Share with workspace, which asks in plain words and moves it there", async () => {
-  await mountPage();
-
-  assert.deepEqual(menuOf("pr-style"), ["Open", "Share with workspace", "Delete"]);
-  await choose("pr-style", "Share with workspace");
-  const question = dialog("alertdialog");
-  assert.match(question.textContent ?? "", /Share pr-style with Stage\?/u);
-  assert.match(
-    question.textContent ?? "",
-    /Everyone in Stage will get pr-style\. It leaves your personal skills\./u,
-  );
-  act(() => button("Share with workspace", question).click());
-  await settle();
-
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_SHARE), [
-    { workspaceId: "workspace-stage", skillId: PR_STYLE.id },
-  ]);
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  const [, shared, personal] = [...document.querySelectorAll("section")];
-  assert.match(shared?.textContent ?? "", /pr-style describedPasted · by you/u);
-  assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
-});
-
-test("a share the workspace already has the name for is refused in the question, and the skill stays the account's own", async () => {
-  nameTaken = true;
-  await mountPage();
-
-  await choose("pr-style", "Share with workspace");
-  act(() => button("Share with workspace", dialog("alertdialog")).click());
-  await settle();
-
-  assert.match(
-    dialog("alertdialog").textContent ?? "",
-    /Stage already has a skill named pr-style\. Remove one of them first\./u,
-  );
-  const row = rowOf("pr-style");
-  assert.match(row.textContent ?? "", /Pasted/u);
-  assert.equal(row.closest("section")?.querySelector("h2")?.textContent, "Only you");
-});
-
-test("Share is never offered in a personal workspace", async () => {
-  stored = [PR_STYLE];
-  await mountPage(workspace({ personal: true }));
-
-  assert.deepEqual(menuOf("pr-style"), ["Open", "Delete"]);
-});
-
 test("View reads the skill and draws its text as written and every file with its size", async () => {
   await mountPage();
 
@@ -591,16 +517,6 @@ test("a personal workspace lists the account's own skills alone", async () => {
   );
 });
 
-test("a GitHub skill offers Update in its ⋯, which sends its act", async () => {
-  await mountPage();
-
-  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Delete"]);
-  await choose("release-notes", "Update");
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
-    { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
-  ]);
-});
-
 test("an install lights its own rows once", async () => {
   await mountPage();
 
@@ -616,13 +532,12 @@ test("an install lights its own rows once", async () => {
   assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
 });
 
-test("a workspace skill a member may not change draws its switch unavailable and View alone in its ⋯", async () => {
+test("a workspace skill a member may not remove holds View alone in its ⋯", async () => {
   stored = [{ ...RELEASE_NOTES, manageable: false }, PR_STYLE];
   await mountPage(workspace({ role: WORKSPACE_ROLE.MEMBER }));
 
-  assert.equal(switchOf("release-notes").disabled, true);
-  assert.equal(switchOf("pr-style").disabled, false);
   assert.deepEqual(menuOf("release-notes"), ["Open"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Delete"]);
 });
 
 test("a GitHub source lists its skills to tick, the one the paste named ticked, and Install sends the ticked ones with the commit previewed", async () => {

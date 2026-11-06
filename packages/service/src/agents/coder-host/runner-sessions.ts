@@ -80,7 +80,8 @@
  * a launch refused for the account's plan says which way its plan failed.
  * A launch past its Start's answer says each step it reaches, and one that
  * fails, dies, or is interrupted there is the agent's failed turn, with why.
- * Nothing is retried.
+ * Nothing is retried but a resume that meets its sandbox still stopping or
+ * being snapshotted, and a launch that finds the image still being prepared.
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -140,6 +141,7 @@ import {
   Option,
   Redacted,
   Ref,
+  Schedule,
 } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
@@ -532,7 +534,7 @@ function launchFingerprint(
  * Whether the agent's turn ended longer ago than the warm window of the
  * machine given (`CODER.RUNNER_WARM`), so we have closed or are closing it,
  * and the runner may soon end itself at its own idle cap. Never where the
- * window is zero, which the IDLE's own retire closes (`runnerIdled`). An
+ * window is zero, whose runner is launched to end at its turn's end. An
  * ended turn with no settle time stamped reads as ended long ago, as the
  * sweep reads it.
  */
@@ -557,6 +559,16 @@ function recordOf(found: FoundPlace, agentId: string) {
   return { machine: found.machine, session: found.session, name: found.name, agentId };
 }
 
+/** How a message reached its runner, as the handoff counts it. */
+type HandoffPath = (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH];
+
+/** A resume past an answer tried again while its sandbox is still stopping or being snapshotted (`CODER.RESUME_WHILE_ENDING`). */
+const RESUME_WHILE_ENDING = {
+  schedule: Schedule.spaced(CODER.RESUME_WHILE_ENDING.SPACING),
+  times: CODER.RESUME_WHILE_ENDING.TRIES,
+  while: sessionEnding,
+};
+
 /** The place found first under the session: the newest, which is listed first (`findPlaces`). */
 function firstPlace(machine: MachineLifecycle, sessionId: string) {
   return Effect.map(machine.findPlaces(sessionId), (places) => Option.fromNullishOr(places[0]));
@@ -567,16 +579,19 @@ function firstPlace(machine: MachineLifecycle, sessionId: string) {
  * runner was started in, and that runner has not exited. Only an exit read,
  * or a command no longer known, says the runner is down; the machine not
  * answering fails the call, so a passing outage neither relaunches a runner
- * beside one still running nor drops a Stop.
+ * beside one still running nor drops a Stop. The exit is waited for at most
+ * `within`, the machine's own wait where none is given, which a live runner
+ * costs whole.
  */
 function liveRunner(
   machine: MachineLifecycle,
   found: FoundPlace,
+  within?: Duration.Duration,
 ): Effect.Effect<RecordedRunner | undefined, SandboxUnavailable> {
   const runner = found.runner;
   if (runner === undefined) return Effect.succeed(undefined);
   return machine
-    .runnerExit(runner.handle)
+    .runnerExit(runner.handle, within)
     .pipe(Effect.map((exit) => (exit === null ? runner : undefined)));
 }
 
@@ -834,8 +849,15 @@ export const runnerSessions = <
                   firstSequence,
                   rewindBefore,
                 );
+                // Note that a runner stays warm past the agent's turn only on a machine with a warm
+                // window (`CODER.RUNNER_WARM`), for its sweep to retire; a sandbox's ends at its turn's end.
+                const warm = !Duration.isZero(CODER.RUNNER_WARM[place.running.machine]);
                 return {
-                  config: layout.linesRead ? { ...config, linesUrl: options.linesUrl } : config,
+                  config: {
+                    ...config,
+                    ...(layout.linesRead ? { linesUrl: options.linesUrl } : undefined),
+                    ...(warm ? { warm } : undefined),
+                  },
                   rewind,
                 };
               });
@@ -1162,12 +1184,19 @@ export const runnerSessions = <
         return now !== runner.fingerprint;
       });
 
-    /** A message to the session, under the agent's runner lease: the place and the agent read afresh, since a call the lease waited behind may have relaunched. */
+    /**
+     * A message to the session, under the agent's runner lease: the place and
+     * the agent read afresh, since a call the lease waited behind may have
+     * relaunched. `handsOn` says whether a runner that must be resumed or
+     * launched again is left to the hand-on past the answer (`handedOnAfter`),
+     * the message queued for the launch it starts.
+     */
     const sendHolding = (
       sessionId: string,
       message: EveMessage<Turn>,
       layout: MachineLayout,
       sent: RunnerMessage,
+      handsOn: boolean,
     ) =>
       Effect.gen(function* () {
         // The agent is read beside the place, and its read answers only for a place found.
@@ -1192,7 +1221,7 @@ export const runnerSessions = <
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
         const handedAt = yield* Clock.currentTimeMillis;
-        const handed = (path: (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH]) =>
+        const handed = (path: HandoffPath) =>
           recordServerEvent(
             SERVER_EVENT.AGENT_HANDOFF,
             { userId, workspaceId: agent.organizationId },
@@ -1308,6 +1337,22 @@ export const runnerSessions = <
         }
         // The place stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         const wasUp = found.value.running !== undefined;
+        if (handsOn) {
+          // Note that the request answers once the message is queued, the turn's words ahead of it
+          // composed on whether the harness's session resumes, and the resume and the launch that
+          // reads it run past the answer, so a resume that waits out a stop's snapshot never holds
+          // the send past the store's dispatch deadline. Its words count as handed once queued, as
+          // a warm runner's do, since whichever launch runs next reads the line.
+          const routing = yield* readAgentRouting(userId, agent.id);
+          const fresh = Option.isNone(
+            Option.flatMapNullishOr(routing, (read) => read.nativeSession),
+          );
+          const opened = yield* openedLine(agent, sessionId, sent, fresh);
+          yield* queued(agent, ANY_LAUNCH, [opened.line]);
+          yield* opened.taken;
+          yield* handedOnAfter(sessionId, agent, sent.line.uuid, handed);
+          return accepted;
+        }
         // Note that a place whose stop began as the send reached it (a launch's end or the sweep
         // stopped it a moment before) refuses every call until it has stopped, so it is resumed
         // once more and the runner launched in the session that opens, as Vercel's SDK does.
@@ -1361,7 +1406,8 @@ export const runnerSessions = <
         if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
           return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
-        const live = yield* liveRunner(machine, found.value);
+        // Note that its exit is read at most `CODER.RUNNER_EXIT_READ`, as a message reads it, so a Stop never waits out a live runner's exit.
+        const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
         if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
         yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]).pipe(
           Effect.catchIf(
@@ -1502,19 +1548,28 @@ export const runnerSessions = <
      * ago than a line reads as awaiting its turn (`CODER.LINE_GRACE`), and no
      * runner runs to read it, the place is resumed, or a fresh one opened
      * where its disk is gone, and the runner launched on the harness's session
-     * with no message of its own, which reads them. Nothing on a machine
-     * whose runner takes its lines on stdin, which queues none. Answers
-     * whether a runner was launched.
+     * with no message of its own, which reads them. A resume that meets the
+     * sandbox still stopping or being snapshotted waits it out
+     * (`RESUME_WHILE_ENDING`), since this runs past an answer. Nothing on a
+     * machine whose runner takes its lines on stdin, which queues none.
+     * Answers how the launch reached its runner, or none where no runner was
+     * launched.
      */
     const deliverWaitingHolding = (sessionId: string, agent: Agent) =>
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, sessionId);
-        if (Option.isNone(found) || found.value.agentId !== agent.id) return false;
-        if (!(yield* linesWaitAt(userId, agent.id))) return false;
-        if ((yield* liveRunner(machine, found.value)) !== undefined) return false;
+        if (Option.isNone(found) || found.value.agentId !== agent.id) return undefined;
+        if (!(yield* linesWaitAt(userId, agent.id))) return undefined;
+        if ((yield* liveRunner(machine, found.value)) !== undefined) return undefined;
         const layout = yield* machine.layout(agent);
-        if (!layout.linesRead) return false;
-        const resumed = yield* machine.resume(found.value);
+        if (!layout.linesRead) return undefined;
+        const wasUp = found.value.running !== undefined;
+        const resumed = yield* Effect.gen(function* () {
+          const place = yield* machine.resume(found.value);
+          if (place === PLACE_RESUME.GONE) return place;
+          yield* relaunched(agent, sessionId, found.value.name, place, layout, undefined);
+          return place;
+        }).pipe(Effect.retry(RESUME_WHILE_ENDING));
         if (resumed === PLACE_RESUME.GONE) {
           yield* openedPlace(
             agent,
@@ -1525,10 +1580,9 @@ export const runnerSessions = <
             false,
           );
           yield* Effect.ignore(machine.discard(found.value));
-          return true;
+          return SERVER_HANDOFF_PATH.FRESH;
         }
-        yield* relaunched(agent, sessionId, found.value.name, resumed, layout, undefined);
-        return true;
+        return wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED;
       });
 
     /**
@@ -1626,24 +1680,70 @@ export const runnerSessions = <
       }).pipe(Effect.annotateLogs(agentLogIds(agent, sessionId)));
 
     /**
-     * A message queued while another call held the lease handed on once that
-     * call let go, under the lease: by `deliverWaitingHolding`, where the
-     * session's place is the agent's; taken back where no place stands for the
-     * session by then, said in the log, so no line waits that no launch will
-     * read.
+     * A queued message handed on, under the lease: by `deliverWaitingHolding`,
+     * where the session's place is the agent's, how it reached its runner
+     * counted where `handed` is given, as warm where a runner already up, or
+     * one another call launched, reads it; taken back where no place stands
+     * for the session by then, said in the log, so no line waits that no
+     * launch will read.
      */
-    const handedOn = (sessionId: string, agent: Agent, lineId: string) =>
+    const handedOn = (
+      sessionId: string,
+      agent: Agent,
+      lineId: string,
+      handed: ((path: HandoffPath) => Effect.Effect<void>) | undefined,
+    ) =>
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, sessionId);
         if (Option.isSome(found) && found.value.agentId === agent.id) {
-          return yield* deliverWaitingHolding(sessionId, agent);
+          const path = yield* deliverWaitingHolding(sessionId, agent);
+          if (handed !== undefined) yield* handed(path ?? SERVER_HANDOFF_PATH.WARM);
+          return;
         }
         yield* Effect.logWarning(
           `A ${harness.name} message queued behind another call found its session ended`,
         );
         yield* withdrawRunnerLine(userId, agent.id, lineId);
-        return false;
       });
+
+    /** The work given, run again once the agent's sandbox image is prepared where it found the image still being prepared. */
+    const onceImagePrepared = <A, E extends { readonly _tag: string }, R>(
+      work: Effect.Effect<A, E, R>,
+    ) =>
+      work.pipe(
+        Effect.catchIf(
+          (failure) => failure instanceof ImagePreparing,
+          () =>
+            Effect.flatMap(AgentSandboxImage, (image) => Effect.ignore(image.prepared)).pipe(
+              Effect.andThen(Effect.retry(work, IMAGE_READY)),
+            ),
+        ),
+      );
+
+    /**
+     * A queued message's hand-on (`handedOn`) run past the answer, under the
+     * lease, waiting on it as long as a lease can stand, so it outlasts a
+     * launch it is behind; a fresh sandbox that finds the image still being
+     * prepared waits on its build. Note that a hand-on that fails is only
+     * logged, and its line read as failed once it has waited past
+     * `CODER.LINE_GRACE`, which offers Continue.
+     */
+    const handedOnAfter = (
+      sessionId: string,
+      agent: Agent,
+      lineId: string,
+      handed?: (path: HandoffPath) => Effect.Effect<void>,
+    ) =>
+      afterResponse(
+        `A ${harness.name} hand-on`,
+        onceImagePrepared(
+          holdingRunner(
+            agent.id,
+            handedOn(sessionId, agent, lineId, handed),
+            CODER.RUNNER_LEASE.HOLD,
+          ),
+        ),
+      );
 
     /**
      * A message to the session for the agent its conversation is, as `send`
@@ -1663,9 +1763,9 @@ export const runnerSessions = <
         const queues = layout.linesRead && sent.files.length === 0 && answersFirst;
         const handed = yield* (
           queues
-            ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
+            ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent, true))
             : Effect.map(
-                holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
+                holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent, false)),
                 Option.some,
               )
         ).pipe(
@@ -1675,15 +1775,9 @@ export const runnerSessions = <
               Effect.as(
                 afterResponse(
                   `A ${harness.name} relaunch`,
-                  Effect.flatMap(AgentSandboxImage, (image) => Effect.ignore(image.prepared)).pipe(
-                    Effect.andThen(
-                      Effect.retry(
-                        holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                        IMAGE_READY,
-                      ),
-                    ),
-                    Effect.catch(launchFailed(agent, sessionId)),
-                  ),
+                  onceImagePrepared(
+                    holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent, false)),
+                  ).pipe(Effect.catch(launchFailed(agent, sessionId))),
                 ),
                 Option.some({
                   outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -1712,14 +1806,7 @@ export const runnerSessions = <
         yield* recorded === undefined
           ? queued(agent, ANY_LAUNCH, [sent.line])
           : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
-        yield* afterResponse(
-          `A ${harness.name} hand-on`,
-          holdingRunner(
-            agent.id,
-            handedOn(sessionId, agent, sent.line.uuid),
-            CODER.RUNNER_LEASE.HOLD,
-          ),
-        );
+        yield* handedOnAfter(sessionId, agent, sent.line.uuid);
         return {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
@@ -1796,7 +1883,11 @@ export const runnerSessions = <
       // A message to a runner that reads its lines never waits behind another call's lease, as a
       // Start's launch holds it while its sandbox comes up: it is queued at once, read by the runner
       // that call leaves running, and handed on past the answer where none does (`deliverWaiting`).
-      // Note that one naming files still waits on the lease, since they are written into a running place.
+      // One that finds no runner up is queued too, and its sandbox resumed and its runner launched
+      // past the answer (`handedOnAfter`), so the send answers once its line is written. Note that
+      // one naming files still waits on the lease, and resumes in the request, since they are
+      // written into a running place before its line names them, which a launch another message's
+      // hand-on started could read first.
       send: (sessionId, message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
@@ -1902,6 +1993,7 @@ export const runnerSessions = <
         Effect.gen(function* () {
           const agent = yield* agentOf(conversationId);
           return yield* holdingRunner(agent.id, deliverWaitingHolding(sessionId, agent)).pipe(
+            Effect.map((path) => path !== undefined),
             Effect.catch((failure) => Effect.as(launchFailed(agent, sessionId)(failure), false)),
             Effect.annotateLogs(agentLogIds(agent, sessionId)),
           );
@@ -2007,7 +2099,7 @@ const retiredHolding = (machine: MachineLifecycle, retiring: WarmRunner) =>
     if (yield* runnerMayBeAtWork(retiring.agentId, yield* DateTime.nowAsDate)) return false;
     const found = yield* firstPlace(machine, retiring.sessionId);
     if (Option.isNone(found)) return false;
-    const live = yield* liveRunner(machine, found.value);
+    const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
     if (live === undefined || live.handle.running !== retiring.running) return false;
     const retire: InputLine = { type: INPUT_LINE.RETIRE };
     yield* deliveredTo(machine, retiring.userId, retiring.agentId, live, [retire]);
@@ -2066,7 +2158,7 @@ export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(fu
 /** How a launch's end left its place. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",
-  /** A developer's Terminal holds the place, which the sweep stops once its lease lapses. */
+  /** A developer's Terminal holds the place, left up with every credential taken off, for its timeout to stop. */
   HELD: "held",
   /** The END is from a launch a newer one replaced, or the place is gone or already down. */
   STALE: "stale",
@@ -2081,16 +2173,18 @@ export const RUNNER_ENDED = {
 } as const;
 
 /**
- * A launch's end, as its END event tells it, for either harness: the place
- * stopped, every credential taken off the firewall first, unless a
- * developer's Terminal holds it or a message waits for the launch that hands
- * it on, either of which takes off only the credentials the ended runner
- * alone sent (`RUNNER_SLOTS`), and nothing for an END older than the launch
- * its place runs now. Decided and stopped under the agent's runner lease,
- * read again once it is held, so a `send` relaunching the runner either
- * finishes first, and its newer launch makes this END stale, or starts after
- * the stop and resumes the place. Fails where the machine or the store could
- * not be asked, or the lease stayed held past its wait.
+ * A launch's end, as its END event tells it, for either harness: every
+ * credential taken off the firewall, then the place stopped unless a
+ * developer's Terminal holds it, which leaves it to its timeout; where a
+ * message waits for the launch that hands it on, the place is left up with
+ * only the credentials the ended runner alone sent (`RUNNER_SLOTS`) taken
+ * off; and nothing for an END older than the launch its place runs now.
+ * Decided and stopped under the agent's runner lease, read again once it is
+ * held, so a `send` relaunching the runner either finishes first, and its
+ * newer launch makes this END stale, or starts after the stop and resumes
+ * the place; a message sent meanwhile is queued and handed on once the
+ * lease is let go. Fails where the machine or the store could not be asked,
+ * or the lease stayed held past its wait.
  */
 export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: RunnerEnding) {
   const machine = yield* deploymentLifecycle;
@@ -2103,31 +2197,28 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
 });
 
 /**
- * A launch's IDLE, its runner warm past the agent's turn: the runner
- * retired at once (`retireWarmRunner`), whose END then stops the place,
- * where its machine's warm window is zero (`CODER.RUNNER_WARM`), as a
- * sandbox's is, or where its device last beat that it waits to switch
- * release (`HOST_UPDATE.WAITING`), so a host waiting to update goes idle as
- * its last turn ends. A device's runner otherwise stays warm for the next
- * message, and is retired past its window by the sweep
+ * A device's launch's IDLE, its runner warm past the agent's turn: the
+ * runner retired at once (`retireWarmRunner`) where its device last beat
+ * that it waits to switch release (`HOST_UPDATE.WAITING`), so a host waiting
+ * to update goes idle as its last turn ends. It otherwise stays warm for the
+ * next message, and is retired past its window by the sweep
  * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it
  * (`sendHolding`). Retiring under the runner lease is what keeps a message
  * sent at the turn's end: one a send wrote first is taken by the runner,
  * which still reads its stdin, and one sent after finds the runner no
- * longer told of and relaunches. Nothing for an IDLE older than the launch
- * its place runs now. Answers whether the retire line was written.
+ * longer told of and relaunches. Nothing for a sandbox's runner, which is
+ * launched to end at its turn's end rather than warm, nor for an IDLE older
+ * than the launch its place runs now. Answers whether the retire line was
+ * written.
  */
 export const runnerIdled = Effect.fn("web/runnerIdled")(function* (idle: RunnerEnding) {
   const machine = yield* deploymentLifecycle;
   const found = yield* firstPlace(machine, idle.sessionId);
-  if (Option.isNone(found)) return false;
+  if (Option.isNone(found) || found.value.machine !== AGENT_MACHINE.DEVICE) return false;
   const { agentId, launch, running } = found.value;
   if (agentId === undefined || running === undefined) return false;
   if (launch !== undefined && idle.sequence < launch.firstSequence) return false;
-  const closes =
-    Duration.isZero(CODER.RUNNER_WARM[found.value.machine]) ||
-    (yield* deviceAgentAwaitsUpdate(idle.target.userId, agentId));
-  if (!closes) return false;
+  if (!(yield* deviceAgentAwaitsUpdate(idle.target.userId, agentId))) return false;
   return yield* retireWarmRunner({
     sessionId: idle.sessionId,
     userId: idle.target.userId,
@@ -2188,15 +2279,14 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
     );
     return RUNNER_ENDED.LINES_WAITING;
   }
-  // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place,
-  // less the credentials only the ended runner sent.
+  // Every credential comes off first, and a place they would not come off is left up rather than
+  // stopped with them: the call fails, and the place stops at its own timeout.
+  yield* machine.firewall.clear(running);
+  // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the
+  // place, which its timeout then stops once nothing keeps it alive.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
-    yield* runnerSlotsWithdrawn(machine, running, ending.target.userId);
     return RUNNER_ENDED.HELD;
   }
-  // Every credential comes off first, and a place they would not come off is left up rather than
-  // stopped with them: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
-  yield* machine.firewall.clear(running);
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });

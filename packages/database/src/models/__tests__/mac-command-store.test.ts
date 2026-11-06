@@ -34,7 +34,7 @@ import { user } from "../../schemas/auth.js";
 import { macCommand } from "../../schemas/mac-command.js";
 import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER, type MessageSender } from "../../storage-vocabulary.js";
-import { getTestDB, openWorkspace } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
   claimAutomationRun,
   createAutomation,
@@ -49,10 +49,12 @@ import {
   macCommandsLiveStatement,
   macCommandsWaiting,
   macListeningSince,
+  macOwnerOf,
   markMacListening,
   queueMacCommand,
   settleMacCommand,
 } from "../mac-command-store.js";
+import { createTask } from "../task-store.js";
 
 /**
  * The commands an account's agents queue for its Mac, over a real dialect:
@@ -385,6 +387,35 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
       }
     }),
+  );
+
+  it.effect(
+    "an agent's commands go to its task's assignee's Mac, whoever has written to it, and to its starter's where no one is assigned",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, workspace } = yield* people;
+        yield* joinWorkspace(workspace, teammate);
+        const db = yield* Database;
+        const agent = yield* openAgent(starter, workspace);
+        const target = { userId: starter, conversationId: agent.conversationId };
+        assert.equal(yield* macOwnerOf(target), starter, "no task");
+        const handed = yield* createTask(starter, {
+          organizationId: workspace,
+          assigneeId: teammate,
+        });
+        yield* db.update(agentTable).set({ taskId: handed.id }).where(eq(agentTable.id, agent.id));
+        yield* sendLine(starter, agent.conversationId, 1, {
+          kind: MESSAGE_SENDER.MEMBER,
+          userId: starter,
+        });
+        const worker = yield* openWorker(starter, agent.conversationId);
+        assert.equal(yield* macOwnerOf(target), teammate, "handed to a teammate");
+        assert.equal(
+          yield* macOwnerOf({ userId: starter, conversationId: worker }),
+          teammate,
+          "its worker's too",
+        );
+      }),
   );
 
   it.effect("a line whose sender is gone counts as another account's", () =>

@@ -15,6 +15,7 @@ import {
   INBOX_CHANGE,
   INBOX_ITEM,
   type InboxChange,
+  remindAtAfter,
   settles,
 } from "./inbox-collections.js";
 import { answeredCollection, rowsOf } from "./live-collection.js";
@@ -111,12 +112,16 @@ function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer
 /** An open item as the read lists it, a task's or an agent's with no task. */
 type Entry = AccountInboxLiveRows["items"][number] | AccountInboxLiveRows["planless"][number];
 
-/** What a change leaves of an open item: gone where it settles it, its read mark where it flips it, and none where it leaves it alone, as an item changed since the service answered it. */
+/** What a change leaves of an open item: gone where it settles it, its reminder where it sets or cancels one, its read mark where it flips it, and none where it leaves it alone, as an item changed since the service answered it. */
 function entryChanged<Row extends Entry>(
   change: InboxChange,
   entry: Row,
 ): Row | "gone" | undefined {
   if (!changedIds(change).includes(entry.id)) return undefined;
+  if (change.kind === INBOX_CHANGE.REMINDED) {
+    const until = remindAtAfter(entry.remindAt, change) ?? null;
+    return (entry.remindAt ?? null) === until ? undefined : { ...entry, remindAt: until };
+  }
   if (change.kind === INBOX_CHANGE.ANSWERED && entry.updatedAt > change.item.updatedAt) {
     return undefined;
   }

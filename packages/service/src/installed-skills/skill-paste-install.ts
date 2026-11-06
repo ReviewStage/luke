@@ -12,7 +12,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import type { InstalledSkillRevision } from "@repo/database/models/installed-skill-store";
+import type { NewInstalledSkill } from "@repo/database/models/installed-skill-store";
 import {
   type InstalledSkillCandidate,
   type InstalledSkillPreview,
@@ -21,7 +21,6 @@ import {
 } from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_MAIN_FILE,
-  INSTALLED_SKILL_REFUSAL,
   INSTALLED_SKILL_SOURCE,
 } from "@repo/features/installed-skill-wire";
 import { SKILL_FRONTMATTER } from "@repo/features/skill-file";
@@ -39,10 +38,8 @@ import {
   skillFolders,
 } from "./skill-source.js";
 
-/** A skill an install makes: its name and the revision the store keeps of it. */
-export interface MadeSkill extends InstalledSkillRevision {
-  readonly name: string;
-}
+/** A skill an install makes, as the store keeps it, whoever's it is. */
+export type MadeSkill = Omit<NewInstalledSkill, "owner">;
 
 /** One skill folder of a source, with what its `SKILL.md` says of it. */
 interface FoundSkill extends SkillHead {
@@ -241,50 +238,4 @@ export const madeFromPaste = /* @__PURE__ */ Effect.fnUntraced(function* (
     case SKILL_PASTE_KIND.UNSUPPORTED:
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-});
-
-/**
- * A GitHub skill's revision at the commit its ref stands at now: its
- * folder read there and held to the one check, under the name it was
- * installed by, which an update keeps. Refused where the folder holds no
- * skill now, or one of another name.
- */
-export const revisionAtRef = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  workspaceId: string,
-  name: string,
-  source: {
-    readonly owner: string;
-    readonly repo: string;
-    readonly path: string;
-    readonly ref: string;
-  },
-): Effect.fn.Return<InstalledSkillRevision, HostedRefusal, SourceServices> {
-  const read = yield* readSource(
-    userId,
-    workspaceId,
-    { kind: SKILL_PASTE_KIND.SOURCE, ...source, skills: [] },
-    undefined,
-  );
-  const found = read.skills.find((one) => one.folder.path === source.path);
-  if (found === undefined) {
-    return yield* Effect.fail(
-      installedSkillRefused(
-        HOSTED_REFUSAL.SKILL_FILES_REFUSED,
-        name,
-        INSTALLED_SKILL_REFUSAL.NO_SKILL_FILE,
-      ),
-    );
-  }
-  // Note that an update keeps the skill's name, so a `SKILL.md` that now names another is refused rather than stored beside it.
-  if (found.name !== name) {
-    return yield* Effect.fail(
-      installedSkillRefused(
-        HOSTED_REFUSAL.SKILL_FILES_REFUSED,
-        name,
-        INSTALLED_SKILL_REFUSAL.SKILL_FILE_INVALID,
-      ),
-    );
-  }
-  return yield* madeFromFolder(read, found);
 });

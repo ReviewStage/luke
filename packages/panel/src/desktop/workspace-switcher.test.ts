@@ -239,7 +239,7 @@ test("the workspace menu closes when the sidebar folds away", () => {
 /** The name field of the open New workspace card, found by the visible label that names it. */
 function nameInput(): HTMLInputElement | null {
   const label = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')].find(
-    (candidate) => candidate.textContent === "Workspace name",
+    (candidate) => candidate.textContent === "Name",
   );
   const input = label === undefined ? null : document.getElementById(label.htmlFor);
   return input instanceof HTMLInputElement ? input : null;

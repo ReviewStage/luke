@@ -29,6 +29,36 @@
     border-top: 1px solid var(--ui-color-border);
   }
 
+  /* The rows a row folds under it (`SettingsRowsFold`) stand in a box of
+     their own, ruled as the card's own: each from the row above it, the
+     first from the head row, an inset row from its inset edge. The box
+     draws no rule, and a closed one stands nowhere. */
+  .ui-settings-rows-fold {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .ui-settings-rows-fold[hidden] {
+    display: none;
+  }
+
+  .ui-settings-section-card > .ui-settings-rows-fold {
+    border-top: none;
+  }
+
+  .ui-settings-rows-fold > * {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
+  .ui-settings-rows-fold > *:not(.ui-settings-row):has(> .ui-settings-row[data-indent="mark"]) {
+    border-top: none;
+  }
+
+  .ui-settings-rows-fold > * > .ui-settings-row[data-indent="mark"] {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
   /* The rows a setting reveals (reveal.css) are ruled as the card's own,
      and a reveal with none to draw stands nowhere, so it draws no rule. */
   .ui-settings-section-card .ui-reveal > * + * {

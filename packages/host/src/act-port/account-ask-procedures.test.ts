@@ -44,9 +44,9 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Couldn't remove your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]:
     "Couldn't change your plan's default on this system.",
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Couldn't continue with ChatGPT on this system.",
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
-    "Couldn't stop waiting for ChatGPT on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START]: "Couldn't start connecting Codex on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT]: "Couldn't wait for Codex on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL]: "Couldn't stop connecting Codex on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",
 } as const;
@@ -77,7 +77,21 @@ const ACTS = [
     },
     ask: "providerKeyForAgents",
   },
-  { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START,
+    payload: undefined,
+    ask: "chatGptDeviceStart",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT,
+    payload: { loginId: "login-1", intervalSeconds: 5 },
+    ask: "chatGptDeviceWait",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL,
+    payload: { loginId: "login-1" },
+    ask: "chatGptDeviceCancel",
+  },
   {
     kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET,
     payload: { workspaceId: "workspace-1", id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },
@@ -117,16 +131,7 @@ function windowPort(
         return answer();
       });
   // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
-  const host = Object.fromEntries([
-    ...ACTS.map((act) => [act.ask, ask(act.ask)]),
-    [
-      "chatGptSignInCancel",
-      () =>
-        Effect.sync(() => {
-          asked.push(["chatGptSignInCancel"]);
-        }),
-    ],
-  ]) as HostAsk;
+  const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
   const port = testActPort(accountAskProcedures({ host }));
   ports.push(port);
   const client = port.as(actor, { trusted: options.trusted ?? true });
@@ -228,25 +233,10 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
     { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE] },
   );
   assert.deepEqual(
-    await settled(client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, {
+    await settled(client, ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START, {
       provider: PROVIDER_KEY_PROVIDER.OPENAI,
     }),
-    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL] },
+    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START] },
   );
   assert.deepEqual(asked, []);
-});
-
-it("a ChatGPT sign-in waiting on the browser is withdrawn by a panel alone, and a window that is not a panel is refused", async () => {
-  const panel = windowPort(PANEL);
-  assert.deepEqual(
-    await settled(panel.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
-    { answer: undefined },
-  );
-  assert.deepEqual(panel.asked, [["chatGptSignInCancel"]]);
-  const other = windowPort(OTHER_WINDOW);
-  assert.deepEqual(
-    await settled(other.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
-    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL] },
-  );
-  assert.deepEqual(other.asked, []);
 });

@@ -41,6 +41,7 @@ import {
   useState,
 } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
+import { rowDrafted, useInboxRowDrafts } from "../composer-drafts.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
@@ -405,17 +406,18 @@ function withCards(
 
 /**
  * The rows the summary lists, before their cards: the plan's Inbox leads,
- * counting what waits on the developer, while it holds an item, waiting or
- * settled, and opens the window's Inbox narrowed to the plan; then the
- * panel's kinds and what they hold, then the agents.
+ * counting what waits on the developer and wearing the Draft pencil where
+ * one of its items' boxes holds a draft (`inboxDrafted`), while it holds an
+ * item, waiting or settled, and opens the window's Inbox narrowed to the
+ * plan; then the panel's kinds and what they hold, then the agents.
  */
-function summaryRows(tasks: TasksControl, inbox: InboxBoardView) {
+function summaryRows(tasks: TasksControl, inbox: InboxBoardView, inboxDrafted = false) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
   const taskId = tasks.activeTaskId;
   const inboxRow =
     taskId !== undefined && inbox.open.length + inbox.settled.length > 0
-      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length)]
+      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length, inboxDrafted)]
       : [];
   const rows = [
     ...inboxRow,
@@ -451,8 +453,9 @@ function summarySections(
   inbox: InboxBoardView,
   held: HeldTranscripts,
   onOpenAgent: (agentId: string) => void,
+  inboxDrafted: boolean,
 ): SummarySection[] {
-  const { rows, changes } = summaryRows(tasks, inbox);
+  const { rows, changes } = summaryRows(tasks, inbox, inboxDrafted);
   const entries = withCards(rows, { tasks, inbox, held, changes, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
@@ -882,7 +885,12 @@ export function TaskSummary({
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const sections = summarySections(tasks, inbox, held, onOpenAgent);
+  const rowDrafts = useInboxRowDrafts();
+  // Note that a draft is read as its item's row reads it, so picks made on an ask since changed mark nothing.
+  const inboxDrafted = [...inbox.open, ...inbox.settled].some((item) =>
+    rowDrafted(rowDrafts.get(item.id), item),
+  );
+  const sections = summarySections(tasks, inbox, held, onOpenAgent, inboxDrafted);
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,

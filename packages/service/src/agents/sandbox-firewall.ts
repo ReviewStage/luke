@@ -86,7 +86,7 @@ export const FIREWALL_SLOT = {
   RUNNER: "runner",
   /** A Codex launch's OpenAI API key, swapped in for its placeholder on OpenAI's API, for that launch alone. */
   OPENAI_KEY: "openai-key",
-  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on OpenAI's API and renewed by the sweep while it stands. */
+  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on the plan's backend (OpenAI's API, or Codex's ChatGPT backend) and renewed by the sweep while it stands. */
   OPENAI_PLAN: "openai-plan",
 } as const;
 
@@ -140,12 +140,14 @@ export interface FirewallSession {
 
 /**
  * A secret swapped in at the firewall for a placeholder: on requests to
- * `domain` whose `header`, named in lower case, is the placeholder's whole
- * value (a scheme ahead of it included, as `Bearer <placeholder>`), the
- * header is set to `value`, whole as well.
+ * `domain`, under `path` alone where one is named, whose `header`, named in
+ * lower case, is the placeholder's whole value (a scheme ahead of it
+ * included, as `Bearer <placeholder>`), the header is set to `value`, whole
+ * as well.
  */
 export interface PlaceholderSwap {
   readonly domain: string;
+  readonly path?: { readonly startsWith: string };
   readonly header: string;
   readonly placeholder: Redacted.Redacted;
   readonly value: Redacted.Redacted;
@@ -325,7 +327,10 @@ export function placeholderSwap(swap: PlaceholderSwap): FirewallEntry {
       swap.domain,
       [
         {
-          match: { headers: [placeholder] },
+          match: {
+            ...(swap.path === undefined ? undefined : { path: swap.path }),
+            headers: [placeholder],
+          },
           transform: [{ headers: { [swap.header]: Redacted.value(swap.value) } }],
         },
       ],

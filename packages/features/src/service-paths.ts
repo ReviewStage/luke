@@ -25,14 +25,12 @@ export const HOSTED_SERVICE_PATH = {
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
-  /**
-   * The account's ChatGPT sign-in for our hosted runtime, as the desktop
-   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
-   * its kind. The answer is the provider keys' and never carries a token.
-   */
-  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
-  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for our hosted runtime under (GET). */
-  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
+  /** A ChatGPT plan's connection through Codex's device-code login begun (POST): the code to enter, and the login to poll. */
+  ACCOUNT_CHATGPT_DEVICE: "/api/account/chatgpt/device",
+  /** One check of a device-code connection (POST), by its login. */
+  ACCOUNT_CHATGPT_DEVICE_POLL: "/api/account/chatgpt/device/poll",
+  /** A device-code connection dropped (POST), by its login. */
+  ACCOUNT_CHATGPT_DEVICE_CANCEL: "/api/account/chatgpt/device/cancel",
   /**
    * The memories our agents kept in a workspace the account is a member
    * of, named in the query: read them (GET), or forget one by its id
@@ -188,6 +186,8 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_LIVE_AGENTS: "/api/device-agents/live-agents",
   /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
+  /** A host removing itself from its account, on its own device secret, as Settings › Hosts' Remove does (POST): `vespin-host uninstall` calls it before it deletes the secret. */
+  DEVICE_AGENT_LEAVE: "/api/device-agents/devices/leave",
   /** A box's pairing started with no credential: its poll secret, the code it shows and the link that opens it, how long the code lasts, and how often to poll (POST). `host-wire.ts` declares the bodies. */
   HOST_PAIRING_START: "/api/device-agents/pairing",
   /** A pairing box's poll on its poll secret: pending, slow down, denied, expired, or approved with its device secret, answered once (POST). */

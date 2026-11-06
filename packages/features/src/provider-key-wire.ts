@@ -34,10 +34,9 @@ export const PROVIDER_KEY_KIND = {
   /** A Claude subscription's long-lived token, as `claude setup-token` prints it; Anthropic's alone. */
   CLAUDE_SETUP_TOKEN: "claude_setup_token",
   /**
-   * A ChatGPT plan's renewable sign-in, as OpenAI's open-source Sign in with
-   * ChatGPT issues it to the desktop for our hosted runtime; OpenAI's
-   * alone. It is saved through its own route (`chatGptCredentialsSaveRequestSchema`),
-   * never as a pasted key.
+   * A ChatGPT plan's renewable sign-in, as Codex's device-code login issues
+   * it to the service for our hosted runtime; OpenAI's alone. The service
+   * keeps it as the login connects, never as a pasted key.
    */
   CHATGPT_OAUTH: "chatgpt_oauth",
 } as const;
@@ -137,13 +136,6 @@ export const PROVIDER_KEY_REJECTION = {
   UNREACHABLE: "unreachable",
   /** The account saved too many keys in too short a time; nothing was sent to the provider. */
   TOO_MANY_TRIES: "too_many_tries",
-  /**
-   * A ChatGPT sign-in whose ID token is not one OpenAI signed for its issued
-   * client, has expired, or names another account than the one handed over,
-   * or whose access token names another client, audience or issuer; nothing
-   * was kept.
-   */
-  UNVERIFIED_SIGN_IN: "unverified_sign_in",
 } as const;
 
 export type ProviderKeyRejection =
@@ -261,64 +253,88 @@ export const providerKeyForAgentsRequestSchema = EffectSchema.Struct({
   forAgents: EffectSchema.Boolean,
 });
 
-/** No OAuth token, client id, or subject we are handed is longer; a field past it is no credential. */
-const CHATGPT_CREDENTIAL_BOUNDS = {
-  MAX_TOKEN_CHARS: 16_384,
-  MAX_ID_CHARS: 512,
-  MAX_SCOPES: 32,
-  /** OpenAI's access tokens last an hour; an expiry past a day is no token of this flow. */
-  MAX_EXPIRES_IN_SECONDS: 86_400,
+/**
+ * How a ChatGPT plan's connection through Codex's device-code login
+ * stands, as a poll answers it: still waiting for the code to be entered,
+ * connected, or one of a fixed set of failures. A failure is answered as a
+ * fixed sentence of ours (`CHATGPT_DEVICE_FAILURE_MESSAGE`) and never in
+ * OpenAI's words.
+ */
+export const CHATGPT_DEVICE_LOGIN = {
+  /** The code has not been entered yet; poll again after the interval. */
+  PENDING: "pending",
+  /** The plan is connected, replacing whichever ChatGPT sign-in the account held. */
+  CONNECTED: "connected",
+  /** The code was not entered before it lapsed. */
+  EXPIRED: "expired",
+  /** OpenAI refused the login, or answered nothing a sign-in could be kept from. */
+  REFUSED: "refused",
+  /** The login was canceled, replaced by a newer one, or is none of the account's. */
+  CANCELED: "canceled",
 } as const;
 
-const credentialToken = EffectSchema.String.check(
-  EffectSchema.isMinLength(1),
-  EffectSchema.isMaxLength(CHATGPT_CREDENTIAL_BOUNDS.MAX_TOKEN_CHARS),
-  EffectSchema.isPattern(/^\S+$/u),
-);
+export type ChatGptDeviceLoginOutcome =
+  (typeof CHATGPT_DEVICE_LOGIN)[keyof typeof CHATGPT_DEVICE_LOGIN];
 
-const credentialId = EffectSchema.String.check(
-  EffectSchema.isMinLength(1),
-  EffectSchema.isMaxLength(CHATGPT_CREDENTIAL_BOUNDS.MAX_ID_CHARS),
-  EffectSchema.isPattern(/^\S+$/u),
-);
+/** How a login settled, which every poll after the one that settled it answers again. */
+export type ChatGptDeviceSettled =
+  | typeof CHATGPT_DEVICE_LOGIN.CONNECTED
+  | typeof CHATGPT_DEVICE_LOGIN.EXPIRED
+  | typeof CHATGPT_DEVICE_LOGIN.REFUSED;
+
+/** The one sentence each failure is answered with. */
+export const CHATGPT_DEVICE_FAILURE_MESSAGE = {
+  [CHATGPT_DEVICE_LOGIN.EXPIRED]:
+    "The code expired before it was entered. Start again for a new one.",
+  [CHATGPT_DEVICE_LOGIN.REFUSED]:
+    "ChatGPT did not connect this account. Start again to try once more.",
+  [CHATGPT_DEVICE_LOGIN.CANCELED]: "This connection was canceled. Start again for a new code.",
+} as const satisfies Record<
+  Exclude<
+    ChatGptDeviceLoginOutcome,
+    typeof CHATGPT_DEVICE_LOGIN.PENDING | typeof CHATGPT_DEVICE_LOGIN.CONNECTED
+  >,
+  string
+>;
+
+/** No login id we mint is longer; one past it is none of ours. */
+const CHATGPT_DEVICE_LOGIN_ID_MAX_CHARS = 64;
 
 /**
- * A ChatGPT sign-in the desktop completed for our hosted runtime (PUT),
- * as OpenAI's token endpoint answered it and its ID token validated on the
- * desktop: the issued client it renews under, the account's validated
- * subject, the tokens, the access token's lifetime from the moment the
- * desktop received it, and the scopes granted. It travels once, in this
- * body, and no answer ever carries any of it back. A save replaces the
- * account's ChatGPT sign-in whole.
+ * A device-code connection begun (POST): the login the panel polls and
+ * cancels by, the code the account enters at the verification page, how
+ * often to poll, and when the code lapses, in epoch milliseconds. What
+ * claims the sign-in at OpenAI stays on the service.
  */
-export const chatGptCredentialsSaveRequestSchema = EffectSchema.Struct({
-  /** The `client_id` OpenAI issued at registration, never `dynamic_agent_client`. */
-  clientId: credentialId,
-  /** The validated ID token's subject: which ChatGPT account the sign-in is. */
-  accountId: credentialId,
-  accessToken: credentialToken,
-  refreshToken: credentialToken,
-  /** The ID token retained for a later sign-in's `id_token_hint`. */
-  idToken: credentialToken,
-  expiresInSeconds: EffectSchema.Int.check(
-    EffectSchema.isGreaterThan(0),
-    EffectSchema.isLessThanOrEqualTo(CHATGPT_CREDENTIAL_BOUNDS.MAX_EXPIRES_IN_SECONDS),
-  ),
-  scopes: EffectSchema.Array(credentialId).check(
-    EffectSchema.isMaxLength(CHATGPT_CREDENTIAL_BOUNDS.MAX_SCOPES),
+export const chatGptDeviceStartAnswerSchema = EffectSchema.Struct({
+  loginId: EffectSchema.String,
+  userCode: EffectSchema.String,
+  verificationUrl: EffectSchema.String,
+  intervalSeconds: countedNumber,
+  expiresAt: countedNumber,
+});
+
+export type ChatGptDeviceStartAnswer = typeof chatGptDeviceStartAnswerSchema.Type;
+
+/** A poll or a cancel of a device-code connection (POST), by the login its start answered. */
+export const chatGptDeviceLoginRequestSchema = EffectSchema.Struct({
+  loginId: EffectSchema.String.check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(CHATGPT_DEVICE_LOGIN_ID_MAX_CHARS),
   ),
 });
 
-export type ChatGptCredentialsSaveRequest = typeof chatGptCredentialsSaveRequestSchema.Type;
+export type ChatGptDeviceLoginRequest = typeof chatGptDeviceLoginRequestSchema.Type;
 
 /**
- * The account's `ext_agent_host_id` for our hosted runtime (GET), minted
- * on the first read and the same on every read after it, a sign-out's
- * included, which the desktop names as the host when it signs in for the app.
- * An opaque identifier, not a credential.
+ * How a device-code connection stands (a poll's answer, and a cancel's):
+ * its outcome, the fixed sentence of a failure, and the account's keys as
+ * they then stand once it connected.
  */
-export const chatGptHostAnswerSchema = EffectSchema.Struct({
-  extAgentHostId: EffectSchema.String,
+export const chatGptDevicePollAnswerSchema = EffectSchema.Struct({
+  outcome: EffectSchema.Literals(Object.values(CHATGPT_DEVICE_LOGIN)),
+  message: EffectSchema.optionalKey(EffectSchema.String),
+  keys: EffectSchema.optionalKey(providerKeysAnswerSchema),
 });
 
-export type ChatGptHostAnswer = typeof chatGptHostAnswerSchema.Type;
+export type ChatGptDevicePollAnswer = typeof chatGptDevicePollAnswerSchema.Type;

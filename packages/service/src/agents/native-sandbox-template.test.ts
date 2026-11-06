@@ -9,7 +9,12 @@ import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Fiber, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { commandRead } from "../testing/runner-sandbox-fake.js";
-import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
+import {
+  sandboxDeleted,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+} from "../testing/vercel-sandbox-fake.js";
 import { PREPARE_STAGES } from "./agent-runtime/sandbox-image.js";
 import {
   AgentSandboxImage,
@@ -157,9 +162,9 @@ function vercel() {
       }
       if (method === "DELETE") {
         sandbox.deleted = true;
-        return Response.json({});
+        return Response.json(sandboxDeleted(listed(sandbox)));
       }
-      const answer = { sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } };
+      const answer = sandboxFound(listed(sandbox));
       const hook = hooks.onceOnRead;
       hooks.onceOnRead = undefined;
       await hook?.();
@@ -234,7 +239,7 @@ function vercel() {
     return commandRead(command, parsed, init, false);
   };
   return {
-    layer: fakeHttpClientLayer(respond),
+    layer: Layer.merge(fakeHttpClientLayer(respond), sandboxFetchOver(respond)),
     sandboxes,
     commands,
     uploads,

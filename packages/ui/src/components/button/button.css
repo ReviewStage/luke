@@ -119,6 +119,19 @@
     --ui-button-ink: var(--ui-color-danger-text);
   }
 
+  /* A failure's mark: no fill at rest, its glyph in the danger ink, which a
+     glyph-alone button's muted ink would otherwise take. */
+  .ui-button[data-variant="danger-quiet"] {
+    --ui-button-ink: var(--ui-color-danger-text);
+  }
+
+  .ui-button[data-variant="danger-quiet"]:where(
+    [aria-haspopup][aria-expanded="true"],
+    :active:not(:disabled, [aria-disabled="true"])
+  ) {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 16%, transparent);
+  }
+
   /* A row, a card's act drawn as a menu's row (its box is the `row` size's),
      lit by the menu row's fill under the pointer and the keyboard alike,
      never ringed. */
@@ -170,8 +183,8 @@
 
   @media (hover: hover) {
     .ui-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
-      :hover:not(:disabled, [aria-disabled="true"])
-    ) {
+        :hover:not(:disabled, [aria-disabled="true"])
+      ) {
       --ui-button-fill: var(--ui-color-fill-selected);
       --ui-button-ink: var(--ui-color-text);
       background: linear-gradient(var(--ui-button-fill), var(--ui-button-fill))
@@ -197,8 +210,8 @@
 
   @media (hover: hover) {
     .ui-button[data-icon-only="true"][data-lights="glyph"]:where(
-      :hover:not(:disabled, [aria-disabled="true"])
-    ) {
+        :hover:not(:disabled, [aria-disabled="true"])
+      ) {
       --ui-button-fill: transparent;
       background: transparent;
     }
@@ -213,9 +226,9 @@
 
   @media (hover: hover) {
     .ui-button[data-variant="danger"][aria-pressed="false"]:hover:not(
-      :disabled,
-      [aria-disabled="true"]
-    ) {
+        :disabled,
+        [aria-disabled="true"]
+      ) {
       --ui-button-fill: var(--ui-color-fill-selected);
       --ui-button-ink: var(--ui-color-text);
     }
@@ -230,9 +243,9 @@
 
   @media (hover: hover) {
     .ui-button[data-variant="danger"][aria-pressed="true"]:hover:not(
-      :disabled,
-      [aria-disabled="true"]
-    ) {
+        :disabled,
+        [aria-disabled="true"]
+      ) {
       --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 24%, transparent);
     }
 
@@ -245,6 +258,10 @@
     }
 
     .ui-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
+      --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 12%, transparent);
+    }
+
+    .ui-button[data-variant="danger-quiet"]:hover:not(:disabled, [aria-disabled="true"]) {
       --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 12%, transparent);
     }
   }
@@ -261,9 +278,9 @@
 
   @media (hover: hover) {
     .ui-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
-      :disabled,
-      [aria-disabled="true"]
-    ) {
+        :disabled,
+        [aria-disabled="true"]
+      ) {
       filter: brightness(1.1);
     }
   }

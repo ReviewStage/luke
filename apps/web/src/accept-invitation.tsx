@@ -8,6 +8,7 @@ import {
   invitationAcceptQuery,
   type WorkspaceInvitation,
 } from "@repo/features/workspace-invitation-wire";
+import { QUERY_ROOT } from "@repo/panel/query-keys";
 import {
   type AuthAction,
   AuthMark,
@@ -19,9 +20,10 @@ import {
   Button,
   SocialSignInCard,
 } from "@repo/ui";
+import { queryOptions, skipToken, useMutation, useQuery } from "@tanstack/react-query";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { openAppFromMac } from "./open-app";
 import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
@@ -182,20 +184,41 @@ function refused(
   return UNREACHED;
 }
 
-/** The invitation the address names, read on the signed-in session through our own route. */
-async function readInvitation(query: InvitationAcceptQuery, signedIn: string): Promise<View> {
-  const { id } = query;
-  if (id === undefined) {
-    return said(
-      "Nothing to accept",
-      "Open the invitation link you were sent.",
-      LANDING_TONE.DANGER,
-    );
-  }
-  const answer = await browserClient.workspaceInvitations
-    .offer({ [INVITATION_OFFER_QUERY.ID]: id })
-    .catch(() => undefined);
-  if (answer === undefined) return UNREACHED;
+/**
+ * The invitation the address names, read on the signed-in session through our
+ * own route. Who is signed in, and whether their address is verified, are in
+ * its key though the route reads them off the session, so the invitation is
+ * read again when either changes and not whenever the session is: accepting
+ * makes Better Auth read the session again, and a read of an invitation just
+ * accepted says the reader is already a member. It is read once per key and
+ * kept (`staleTime: Infinity`), and a failed read says so at once
+ * (`retry: false`), as the page did before it read through Query.
+ */
+function invitationOfferQuery(
+  id: string | undefined,
+  signedIn: string | undefined,
+  verified: boolean | undefined,
+) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.INVITATION_OFFER, id, signedIn, verified],
+    queryFn:
+      id === undefined || signedIn === undefined
+        ? skipToken
+        : () => browserClient.workspaceInvitations.offer({ [INVITATION_OFFER_QUERY.ID]: id }),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+type OfferAnswer = Awaited<ReturnType<typeof browserClient.workspaceInvitations.offer>>;
+
+/** What the route's answer about the invitation `id` means for the reader signed in as `signedIn`. */
+function offerView(
+  answer: OfferAnswer,
+  id: string,
+  query: InvitationAcceptQuery,
+  signedIn: string,
+): View {
   if ("member" in answer) {
     const { workspaceName } = answer.member;
     return inWorkspace(
@@ -217,6 +240,31 @@ async function readInvitation(query: InvitationAcceptQuery, signedIn: string): P
     inviter: answer.offer.inviter?.name,
     role: answer.offer.role,
   };
+}
+
+/** Where the page stands before any accept: a sign-in, a link with nothing to accept, or the invitation's read. */
+function readView(
+  query: InvitationAcceptQuery,
+  signedIn: string | undefined,
+  failed: boolean,
+  answer: OfferAnswer | undefined,
+): View {
+  if (signedIn === undefined) {
+    return signIn(
+      "Sign in to accept your invitation",
+      `Use the Google or GitHub account at ${query.email ?? "the address you were invited at"}.`,
+    );
+  }
+  if (query.id === undefined) {
+    return said(
+      "Nothing to accept",
+      "Open the invitation link you were sent.",
+      LANDING_TONE.DANGER,
+    );
+  }
+  if (failed) return UNREACHED;
+  if (answer === undefined) return WORKING;
+  return offerView(answer, query.id, query, signedIn);
 }
 
 async function accept(offer: { id: string; name: string }, addresses: Addresses): Promise<View> {
@@ -288,35 +336,21 @@ function SignInCard({
  */
 function AcceptInvitation(): React.JSX.Element {
   const [query] = useState(() => invitationAcceptQuery(window.location.search));
-  const [view, setView] = useState<View>(WORKING);
-  const [accepting, setAccepting] = useState(false);
   const session = authClient.useSession();
   const signedIn = session.data?.user.email;
   const verified = session.data?.user.emailVerified;
+  const offer = useQuery(invitationOfferQuery(query.id, signedIn, verified));
+  const joining = useMutation({
+    mutationFn: (invitation: { id: string; name: string }) =>
+      accept(invitation, { invited: query.email, signedIn: signedIn ?? "" }),
+  });
+  const view =
+    joining.data ??
+    (session.isPending ? WORKING : readView(query, signedIn, offer.isError, offer.data));
 
-  // Note that the invitation is read again only when who is signed in, or
-  // whether their address is verified, changes, not whenever the session is:
-  // accepting makes Better Auth read the session again, and a read of an
-  // invitation just accepted says the reader is already a member.
-  useEffect(() => {
-    if (session.isPending) return;
-    if (signedIn === undefined) {
-      setView(
-        signIn(
-          "Sign in to accept your invitation",
-          `Use the Google or GitHub account at ${query.email ?? "the address you were invited at"}.`,
-        ),
-      );
-      return;
-    }
-    void readInvitation(query, signedIn).then(setView);
-  }, [query, session.isPending, signedIn, verified]);
-
-  const join = async (offer: { id: string; name: string }) => {
-    if (accepting) return;
-    setAccepting(true);
-    setView(await accept(offer, { invited: query.email, signedIn: signedIn ?? "" }));
-    setAccepting(false);
+  const join = (invitation: { id: string; name: string }) => {
+    if (joining.isPending) return;
+    joining.mutate(invitation);
   };
 
   if (view.kind === VIEW.SIGN_IN) {
@@ -333,9 +367,9 @@ function AcceptInvitation(): React.JSX.Element {
       {view.kind === VIEW.OFFER ? (
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
-          busy={accepting}
+          busy={joining.isPending}
           busyLabel="Joining"
-          onClick={() => void join(view)}
+          onClick={() => join(view)}
         >
           Accept invitation
         </Button>

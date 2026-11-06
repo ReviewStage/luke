@@ -8,9 +8,9 @@ import type { PageThumbFrame } from "../page-thumb/page-thumb.js";
  * Where an agent shows a page, the page stands in the words that tell of it,
  * a transcript's or an Inbox thread's, rather than only behind a chip. It is
  * drawn on the words' own ground, as a picture is, with no border or fill of
- * ours around it, only its corners rounded, so a page that leaves its root
- * clear reads as part of the words and one that paints its own ground still
- * stands as a soft-cornered block. It is sandboxed as the caller says, and
+ * ours around it and its corners square, so a page that leaves its root
+ * clear reads as part of the words and one that paints its own ground
+ * stands as a block flush with them. It is sandboxed as the caller says, and
  * may be read and pressed in as in its tab.
  *
  * Its height is the caller's to hand, as the page reports it: until it does,
@@ -18,7 +18,11 @@ import type { PageThumbFrame } from "../page-thumb/page-thumb.js";
  * height, so the page is scrolled with the words rather than inside a box of
  * its own; and at a screenful where the page fills whatever frame holds it
  * (`@repo/features/page-size`'s `pageFitAfter`), since such a page has no
- * height of its own to stand at. Until the page has loaded the frame is
+ * height of its own to stand at. The frame never scrolls itself, because
+ * where scroll bars always show, one drawn while the page overflowed its
+ * stand-in narrows the page, which then reports the height it has at that
+ * narrower width and keeps the bar for good; a page past the runaway's bound
+ * is read whole in its tab. Until the page has loaded the frame is
  * hidden over a quiet ground, because the blank document it loads through is
  * light only and would flash in a dark window. The frame loads only once it
  * nears the screen where the caller asks, so a long transcript loads the
@@ -98,6 +102,7 @@ function LiveFrame({
       allow=""
       referrerPolicy="no-referrer"
       loading={frame.lazy === true ? "lazy" : undefined}
+      scrolling="no"
       onLoad={onLoaded}
     />
   );
@@ -120,7 +125,7 @@ export function PageEmbed({
   const load = useLoaded(frame.src);
   return (
     <div
-      className="ui-page-embed ph-no-capture overflow-hidden rounded-card bg-muted data-[loaded=true]:bg-transparent"
+      className="ui-page-embed ph-no-capture bg-muted data-[loaded=true]:bg-transparent"
       data-loaded={String(load.loaded)}
     >
       <LiveFrame

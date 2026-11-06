@@ -259,6 +259,12 @@ const planCommentPlanStartSchema = EffectSchema.Struct({
  * of the section it stands in. The service takes the page's
  * title as the quote of a thread on the whole page. It may name the
  * thread's id as a start on the plan does.
+ *
+ * A member may gather several comments on a page into a review before any
+ * agent hears them: each but the last is started held, posted for every
+ * member to read but handed to no one, and the last names the held ones
+ * along with it, so each agent in any of them is handed them all in one
+ * message rather than one message a comment.
  */
 const planCommentPageStartSchema = EffectSchema.Struct({
   id: EffectSchema.optionalKey(chosenIdSchema),
@@ -277,6 +283,14 @@ const planCommentPageStartSchema = EffectSchema.Struct({
   ),
   words: planCommentWordsSchema,
   attachments: planCommentFilesSchema,
+  /** Whether the thread is held in a review: posted, but handed to no agent until the start that sends the review names it along. */
+  held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The threads of the same page this member started held in the review this start sends, by their ids, handed over together with this one; no more than a page holds. */
+  along: EffectSchema.optionalKey(
+    EffectSchema.Array(wireUuidSchema).check(
+      EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN),
+    ),
+  ),
 });
 
 /** A thread started on the plan's words. */

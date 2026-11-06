@@ -26,7 +26,6 @@ export default defineConfig({
       "packages/panel",
       "apps/catalog",
       "tools/claude-code-probe",
-      "tools/codex-probe",
       "packages/agent-runner",
       "tools/anti-slop",
       "tools/polish",

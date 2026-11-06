@@ -33,8 +33,8 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
+  type AgentInboxRemindParams,
   type AgentInboxScope,
-  type AgentInboxSnoozeParams,
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
@@ -82,8 +82,12 @@ import {
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptOlderAnswerSchema,
-  type ChatGptSignInAnswerView,
-  chatGptSignInAnswerViewSchema,
+  type ChatGptDeviceLoginParams,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
+  type ChatGptDeviceWaitParams,
+  chatGptDevicePollAnswerViewSchema,
+  chatGptDeviceStartAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -143,17 +147,10 @@ import {
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
-  type InstalledSkillShareParams,
-  type InstalledSkillToggleParams,
-  type InstalledSkillUpdatedView,
-  type InstalledSkillUpdateParams,
-  type InstalledSkillView,
   installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
-  installedSkillUpdatedViewSchema,
-  installedSkillViewSchema,
 } from "@repo/features/installed-skill-view";
 import {
   INTEGRATION_CALL_FAILURE,
@@ -174,9 +171,6 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
-  type ChaptersModelAnswerView,
-  type ChaptersModelWriteParams,
-  chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
@@ -827,8 +821,6 @@ export interface HostOperator {
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
-  /** The account's chapters model drawn over its preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -847,14 +839,6 @@ export interface HostOperator {
   installedSkillsInstall(
     params: InstalledSkillInstallParams,
   ): Effect.Effect<InstalledSkillInstallView>;
-  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
-  installedSkillsSetEnabled(params: InstalledSkillToggleParams): Effect.Effect<InstalledSkillView>;
-  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
-  installedSkillsUpdate(
-    params: InstalledSkillUpdateParams,
-  ): Effect.Effect<InstalledSkillUpdatedView>;
-  /** The account's own personal skill moved into a workspace; the skill as it then stands, or why it is unchanged. */
-  installedSkillsShare(params: InstalledSkillShareParams): Effect.Effect<InstalledSkillView>;
   /** One installed skill removed; or why it stands. */
   installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
@@ -887,10 +871,12 @@ export interface HostOperator {
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
   providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  chatGptSignInCancel(): Effect.Effect<void>;
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
+  chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
+  /** A device-code login waited on until it settles or an ask after it goes unanswered; the keys as they then stand once it connected. */
+  chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
+  /** A device-code login withdrawn; how it then stands. */
+  chatGptDeviceCancel(params: ChatGptDeviceLoginParams): Effect.Effect<ChatGptDevicePollAnswerView>;
   /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
   githubTokenFollow(): Effect.Effect<void>;
   /** The member's GitHub token let go by the windows. */
@@ -935,7 +921,7 @@ export interface HostOperator {
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
-  agentInboxSnooze(params: AgentInboxSnoozeParams): Effect.Effect<AgentInboxReadStateView>;
+  agentInboxRemind(params: AgentInboxRemindParams): Effect.Effect<AgentInboxReadStateView>;
   /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
   agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
@@ -2244,11 +2230,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chaptersModelWrite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     installedSkillsFollow: (params) =>
       fire(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
@@ -2280,21 +2261,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
         answerOf(installedSkillInstallViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsSetEnabled: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
-        answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsUpdate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
-        answerOf(installedSkillUpdatedViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsShare: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SHARE, params),
-        answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsRemove: (params) =>
       Effect.map(
@@ -2370,12 +2336,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chatGptSignIn: () =>
+    chatGptDeviceStart: () =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
-        answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_START),
+        answerOf(chatGptDeviceStartAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
+    chatGptDeviceWait: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_WAIT, {
+          loginId: params.loginId,
+          intervalSeconds: params.intervalSeconds,
+        }),
+        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    chatGptDeviceCancel: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL, { loginId: params.loginId }),
+        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
+      ),
     githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
     githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
     githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
@@ -2496,9 +2474,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
       ),
-    agentInboxSnooze: (params) =>
+    agentInboxRemind: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, {
           itemId: params.itemId,
           until: params.until,
         }),

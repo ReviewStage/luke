@@ -6,7 +6,6 @@ import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-v
 import {
   type InstalledSkillOwner,
   installSkill,
-  setInstalledSkillEnabled,
 } from "@repo/database/models/installed-skill-store";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import {
@@ -658,7 +657,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "the skills a member may choose are the repository's, then the workspace's installed ones, then their own, a name an earlier source holds left out, a repository skill the model alone loads holding its name too, as are an installed skill turned off or the model's alone; with no repository named, the installed ones alone",
+    "the skills a member may choose are the repository's, then the workspace's installed ones, then their own, a name an earlier source holds left out, a repository skill the model alone loads holding its name too, as is an installed skill the model alone loads; with no repository named, the installed ones alone",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -708,8 +707,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
         yield* install(shared, "model-only", { userInvocable: false });
         yield* install(mine, "triage");
         yield* install(mine, "pr-style");
-        const off = yield* install(mine, "paused");
-        yield* setInstalledSkillEnabled(owner, off, false);
         const skillsOf = (userId: string, repository: string | undefined) =>
           Effect.map(
             read(userId, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, [

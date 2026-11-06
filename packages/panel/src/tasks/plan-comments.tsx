@@ -38,6 +38,7 @@ import {
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   ChoiceBar,
+  COMMENT_PIN_LOOK,
   COMMENT_PIN_STANDS,
   COMPOSER_LOOK,
   CONFIRM_LOSS,
@@ -67,6 +68,7 @@ import {
   moreLabel,
   PaneBar,
   POPOVER_SIDE,
+  QuietWords,
   RectFloat,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
@@ -150,7 +152,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { enterSubmitKey } from "../enter-sends.js";
 import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
-import { usePerson } from "../member-directory.js";
+import { useMemberDirectory, usePerson } from "../member-directory.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -169,6 +171,7 @@ import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
+import { type HeldComment, PAGE_REVIEW_WORDS, type PageReviewControl } from "./page-review.js";
 import { CommentFiles } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.js";
@@ -1038,6 +1041,14 @@ function PlainCommentText({
   );
 }
 
+/** What a field that may hold its words in the writer's review is handed. */
+interface CommentReview {
+  /** Whether the writer already holds comments in the review, so Return adds to it rather than posting. */
+  readonly open: boolean;
+  /** Holds the words and files in the review, unsent. */
+  readonly onHold: (words: string, attachments: readonly AgentAttachment[]) => void;
+}
+
 /** The field under a thread that answers it, or starts it where it is the thread being started. */
 function ReplyField({
   label,
@@ -1047,6 +1058,7 @@ function ReplyField({
   autoFocus,
   failure,
   variant = REPLY_VARIANT.REPLY,
+  review,
 }: {
   label: string;
   /** Where the words are kept unsent, so Esc, a press away, or the thread closing finds them as the field opens again. */
@@ -1063,6 +1075,8 @@ function ReplyField({
   failure?: string | undefined;
   /** A thread's first comment, which is the card itself, or a reply under its comments, which stays a line until it is used. */
   variant?: ReplyVariant;
+  /** Where the words may be held in the writer's review rather than posted; none where they may not. */
+  review?: CommentReview | undefined;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const [heard, setHeard] = useState<string | undefined>(undefined);
@@ -1147,6 +1161,29 @@ function ReplyField({
       key: same && was !== undefined ? was.key : crypto.randomUUID(),
     });
   };
+  // Note that holding lets the words and files go from the field as sending does, into the review rather than to the service.
+  const hold = () => {
+    const trimmed = words.trim();
+    if (review === undefined || trimmed === "" || files.reading || unsent.length > 0) return;
+    const { attachments } = files;
+    attempt.current = undefined;
+    setWords("");
+    files.set([]);
+    review.onHold(trimmed, attachments);
+  };
+  // Note that once a review is held, every comment joins it until it is sent or discarded, as a batch of notes on a page does; until then Start a review stands beside the send.
+  const holds = review?.open === true;
+  const submit = holds ? hold : send;
+  const other =
+    review === undefined || holds ? undefined : (
+      <Button
+        size={BUTTON_SIZE.COMPACT}
+        disabled={words.trim() === "" || files.reading || unsent.length > 0}
+        onClick={hold}
+      >
+        <ReplayUnmask>{PAGE_REVIEW_WORDS.START}</ReplayUnmask>
+      </Button>
+    );
   const retry = () => {
     if (unsent.length === 0) return;
     dropUnsent();
@@ -1216,7 +1253,7 @@ function ReplyField({
           value={words}
           label={label}
           onChange={setWords}
-          onSubmit={send}
+          onSubmit={submit}
           onCancel={onCancel}
           autoFocus={autoFocus}
           editor={editor}
@@ -1236,13 +1273,24 @@ function ReplyField({
             ? { length: words.length, limit: PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS }
             : undefined
         }
-        actions={dictates ? <DictateButton dictation={dictation} disabled={false} /> : undefined}
+        actions={
+          dictates || other !== undefined ? (
+            <>
+              {other}
+              {dictates ? <DictateButton dictation={dictation} disabled={false} /> : null}
+            </>
+          ) : undefined
+        }
         strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
         send={{
-          label: label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY,
+          label: holds
+            ? PAGE_REVIEW_WORDS.ADD
+            : label === COMMENT_WORDS.ADD
+              ? COMMENT_WORDS.COMMENT
+              : COMMENT_WORDS.REPLY,
           empty: words.trim() === "",
           held: files.reading || unsent.length > 0,
-          onSend: send,
+          onSend: submit,
         }}
         // Note that a file refused is said over a dictation's note or a cut paste, as the agent box says it.
         note={
@@ -1611,6 +1659,7 @@ function PendingCard({
   begin,
   onStarted,
   onCancel,
+  review,
 }: {
   /** What the thread is started on, which its unsent words are kept under. */
   on: { readonly quote: string; readonly scope: PlanCommentThread["scope"] };
@@ -1622,6 +1671,8 @@ function PendingCard({
   /** Hands the card's place to the thread it started, by its id. */
   onStarted: (threadId: string) => void;
   onCancel: () => void;
+  /** Where its first comment may be held in the writer's review rather than posted; the card closes once it is. */
+  review?: CommentReview | undefined;
 }): React.JSX.Element {
   return (
     <CommentCard place={place} open data-thread={PENDING_THREAD}>
@@ -1632,6 +1683,17 @@ function PendingCard({
         autoFocus
         onCancel={onCancel}
         variant={REPLY_VARIANT.FIRST}
+        review={
+          review === undefined
+            ? undefined
+            : {
+                open: review.open,
+                onHold: (words, attachments) => {
+                  review.onHold(words, attachments);
+                  onCancel();
+                },
+              }
+        }
         onSend={(words, clientKey, attachments) => {
           const started = doors.control.start(
             begin({
@@ -2929,9 +2991,12 @@ function ThreadsPane({
   list,
   className,
   onShowWords,
+  lead,
 }: {
   control: PlanCommentsControl;
   doors: ThreadDoors;
+  /** What stands over the threads in the list: the reader's review of a page; nothing elsewhere. */
+  lead?: ReactNode;
   filter: CommentsFilter;
   onFilter: (filter: CommentsFilter) => void;
   /** What the list says when it holds nothing, by its filter. */
@@ -2962,6 +3027,9 @@ function ThreadsPane({
           }
         />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+          {lead === undefined || lead === null ? null : (
+            <div className="box-border px-ui-16 pt-ui-16">{lead}</div>
+          )}
           <ThreadList
             key={filter}
             control={control}
@@ -3056,9 +3124,12 @@ export function PageComments({
   filter,
   onFilter,
   onOpen,
+  lead,
 }: {
   /** The page's threads, as `usePlanComments` holds them for the page. */
   control: PlanCommentsControl;
+  /** What stands over the threads: the reader's review of the page, while they hold one. */
+  lead?: ReactNode;
   doors: Omit<ThreadDoors, "control">;
   /** The threads whose element is outlined, by their ids. */
   open: readonly string[] | undefined;
@@ -3098,6 +3169,7 @@ export function PageComments({
       onFilter={onFilter}
       empty={NO_PAGE_COMMENTS}
       list={list}
+      lead={lead}
       className="page-comments relative h-full"
       onShowWords={(thread) =>
         thread.page?.element === undefined ? undefined : () => onOpen(thread)
@@ -3198,6 +3270,107 @@ function PagePin({
 }
 
 /**
+ * A comment held in the reader's review, drawn in the comments column as a
+ * thread's first comment is, in their name and marked Pending, with Remove.
+ */
+export function HeldCommentCard({
+  comment,
+  onRemove,
+}: {
+  comment: HeldComment;
+  /** Takes it out of the review; none while the review is on its way. */
+  onRemove: (() => void) | undefined;
+}): React.JSX.Element {
+  const { readerId } = useMemberDirectory();
+  const reader = usePerson(readerId === undefined ? undefined : { userId: readerId, name: "" });
+  return (
+    <CommentCard place={THREAD_PLACE.LIST} open data-thread={comment.clientKey}>
+      <div className="flex min-w-0 flex-col gap-tight-gap">
+        <Comment
+          author={commentAuthor(reader)}
+          nameRef={<ActorRef actor={reader} nameOnly />}
+          trailing={
+            <QuietWords>
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.PENDING}</ReplayUnmask>
+            </QuietWords>
+          }
+        >
+          {comment.element === undefined ? (
+            <QuietWords>
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.WHOLE_PAGE}</ReplayUnmask>
+            </QuietWords>
+          ) : null}
+          {comment.attachments.length > 0 ? (
+            <AttachedFileChips files={attachmentChips(comment.attachments)} />
+          ) : null}
+          <CommentWords words={comment.words} />
+        </Comment>
+        {onRemove === undefined ? null : (
+          <div>
+            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.REMOVE}</ReplayUnmask>
+            </TextButton>
+          </div>
+        )}
+      </div>
+    </CommentCard>
+  );
+}
+
+/** How far left of an element a pin of held comments stands where a pin of its posted threads stands beside it already, so neither covers the other. */
+const HELD_PIN_STEP = 28;
+
+/**
+ * The pin of the comments the reader holds on one element in their review,
+ * dashed, wearing their own face and told the first's first line; a press
+ * opens the review.
+ */
+function HeldPin({
+  held,
+  stands,
+  onOpen,
+  onHint,
+}: {
+  held: readonly HeldComment[];
+  stands: CommentPinStands;
+  onOpen: () => void;
+  onHint: (over: boolean) => void;
+}): React.JSX.Element {
+  const { readerId } = useMemberDirectory();
+  const reader = usePerson(readerId === undefined ? undefined : { userId: readerId, name: "" });
+  const first = held[0];
+  return (
+    <CommentPin
+      author={commentAuthor(reader)}
+      count={held.length}
+      label={PAGE_REVIEW_WORDS.pin(held.length)}
+      open={false}
+      look={COMMENT_PIN_LOOK.HELD}
+      stands={stands}
+      onPress={onOpen}
+      onHover={onHint}
+      preview={
+        first === undefined ? null : (
+          <HoverCard>
+            <div className="comment-clamp line-clamp-2">{firstLine(first.words)}</div>
+          </HoverCard>
+        )
+      }
+    />
+  );
+}
+
+/** The comments held in a review on each element of the page, by its path, in the order they were held; one on the whole page is on none. */
+function heldByElement(held: readonly HeldComment[]): ReadonlyMap<string, readonly HeldComment[]> {
+  const by = new Map<string, HeldComment[]>();
+  for (const comment of held) {
+    const path = comment.element?.path;
+    if (path !== undefined) by.set(path, [...(by.get(path) ?? []), comment]);
+  }
+  return by;
+}
+
+/**
  * A page's comments over the page itself, as the plan's folded margin draws
  * its own: each element holding open threads pinned with the face of who
  * started them, the pointer over a pin outlining its element faintly and
@@ -3207,7 +3380,9 @@ function PagePin({
  * while the page is picking an element, a line saying so, with Whole page
  * and Cancel; and Reply by words selected in the page, which quotes them
  * into the comment being written, or starts one on the element holding
- * them. A card closes on a press away, a press in the page among them, as a
+ * them. A comment being started may be held in the reader's review
+ * instead, pinned dashed to its element until the review is sent. A card
+ * closes on a press away, a press in the page among them, as a
  * plan's does. It stands over the frame's room, where every box the frame
  * says it measured in its own viewport stands as it is, and takes no press
  * but its own.
@@ -3230,9 +3405,12 @@ export function PageCommentLayer({
   onStopPick,
   onStarted,
   onCancel,
+  review,
 }: {
   control: PlanCommentsControl;
   doors: Omit<ThreadDoors, "control">;
+  /** The reader's review of the page and what opens it; none where comments are not held, which posts each at once. */
+  review?: { readonly control: PageReviewControl; readonly onOpen: () => void } | undefined;
   /** The page and the version shown, which a thread is started on. */
   page: { readonly id: string; readonly version: number };
   /** The frame's room, which the layer fills. */
@@ -3267,8 +3445,30 @@ export function PageCommentLayer({
     if (box === undefined || box === null || box.bottom < 0) return [];
     return [{ path, threads, box }];
   });
+  const heldPins = [...heldByElement(review?.control.held ?? [])].flatMap(([path, held]) => {
+    const box = marks.get(path);
+    if (box === undefined || box === null || box.bottom < 0) return [];
+    return [{ path, held, box, step: byElement.has(path) ? HELD_PIN_STEP : 0 }];
+  });
   return (
     <div className="page-comment-layer">
+      {review === undefined
+        ? null
+        : heldPins.map(({ path, held, box, step }) => (
+            <span
+              key={path}
+              className="page-comment-pin"
+              data-stands={pinStands(box)}
+              style={{ left: Math.max(box.left - step, 0), top: Math.max(box.top, 0) }}
+            >
+              <HeldPin
+                held={held}
+                stands={pinStands(box)}
+                onOpen={review.onOpen}
+                onHint={(over) => onHint(over ? path : undefined)}
+              />
+            </span>
+          ))}
       {pins.map(({ path, threads, box }) => (
         // Note that the bubble's pointed corner touches its element's top start corner, beside it, or inside it where the room has none beside it.
         <span
@@ -3342,6 +3542,21 @@ export function PageCommentLayer({
               })}
               onStarted={onStarted}
               onCancel={onCancel}
+              review={
+                review === undefined
+                  ? undefined
+                  : {
+                      open: review.control.held.length > 0,
+                      onHold: (words, attachments) =>
+                        review.control.hold({
+                          clientKey: crypto.randomUUID(),
+                          version: page.version,
+                          element: pending.element,
+                          words,
+                          attachments,
+                        }),
+                    }
+              }
             />
           </div>
         )}

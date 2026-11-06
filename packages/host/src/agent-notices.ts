@@ -229,13 +229,11 @@ function asking(item: { readonly asking?: boolean }): boolean {
   return item.asking !== false;
 }
 
-/** An item's snooze as the window counts it: until when, while it is read, since a change that makes it unread ends the snooze; nothing where it is not snoozed. */
-function snoozeOf(item: { readonly unread?: boolean; readonly snoozedUntil?: number | null }): {
-  readonly snoozedUntil?: number;
+/** An item's reminder as the window counts it: when it comes due, read or unread alike, since the service answers none once a change ended it; nothing where it has none. */
+function reminderOf(item: { readonly remindAt?: number | null }): {
+  readonly remindAt?: number;
 } {
-  return item.unread === true || item.snoozedUntil === undefined || item.snoozedUntil === null
-    ? {}
-    : { snoozedUntil: item.snoozedUntil };
+  return item.remindAt === undefined || item.remindAt === null ? {} : { remindAt: item.remindAt };
 }
 
 /** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
@@ -248,7 +246,7 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
       title: item.title,
       postedAt: item.postedAt,
       ...(item.asking === undefined ? undefined : { asking: item.asking }),
-      ...snoozeOf(item),
+      ...reminderOf(item),
     };
     const held = tasks.get(item.planId);
     if (held === undefined) tasks.set(item.planId, [waiting]);
@@ -274,7 +272,7 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
     ...(item.waitsOn === undefined ? undefined : { waitsOn: item.waitsOn }),
     ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
-    ...snoozeOf(item),
+    ...reminderOf(item),
   }));
 }
 

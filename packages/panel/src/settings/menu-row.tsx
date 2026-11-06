@@ -65,6 +65,8 @@ interface MenuRowWords {
   indent?: SettingsRowIndent;
   /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, the chevron's name, and whether it starts open. */
   fold?: { lines: ReactNode; label: string; defaultOpen: boolean };
+  /** The chevron of the rows the row folds under it (`SettingsRowsFold`), last at its end. */
+  chevron?: ReactNode;
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -187,6 +189,7 @@ export function MenuRow({
                     {more}
                   </div>
                 )}
+                {row.chevron}
               </>
             )}
           </SettingsRow>

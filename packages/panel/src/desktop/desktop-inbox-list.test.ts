@@ -1111,14 +1111,14 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
-test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, and H on the Snooze an open item offers, after Copy link", async () => {
+test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, and H on the Remind me every item offers, after Copy link", async () => {
   world.listedWorkspace = ACME;
   const keys = standKeymap();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const retry = "How is a failed email retried?";
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread", "Remind me"]);
   act(() => menuItem("Mark as unread").click());
   await settle();
   assert.equal(unreadOf(page, retry), true);
@@ -1128,7 +1128,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
     "a press on the mark opens nothing",
   );
 
-  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read", "Remind me"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
@@ -1136,7 +1136,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
     "Copy link",
     "—",
     "Mark as unreadU",
-    "SnoozeH",
+    "Remind meH",
     "—",
     "Resolve without answering",
   ]);
@@ -1194,7 +1194,7 @@ test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
   act(() => options.click());
-  assert.deepEqual(menuWords(), ["Needs you", "Open", "All", "Snoozed", "—", "Addressed to"]);
+  assert.deepEqual(menuWords(), ["Needs you", "Open", "All", "Reminders", "—", "Addressed to"]);
   act(() => options.click());
   act(() => {
     runAppCommand(APP_COMMAND.MARK_INBOX_READ);
@@ -1540,22 +1540,13 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "2 steps left · Add the secret"]);
 
-  // Mark done pressed in the box ticks every step on the row and its card, as the box shows them.
+  // Mark done pressed in the box ticks every step on the row, as the box shows them.
   act(() => rowNamed(page, STEPS.title).click());
   await settle();
   act(() => askPress(itemPane(page), "Mark done").click());
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
-  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-item-card]");
-  assert.deepEqual(
-    [
-      ...document.querySelectorAll(
-        '.ui-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
-      ),
-    ].map((step) => step.getAttribute("data-done")),
-    ["true", "true", "true"],
-  );
 });
 
 /** Types `words` into the list's search, as a reader's keys put them in its field. */
