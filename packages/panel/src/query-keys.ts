@@ -16,4 +16,9 @@
  */
 
 /** The first element of every panel query key, one per read. */
-export const QUERY_ROOT = {} as const;
+export const QUERY_ROOT = {
+  /** The web app's invitation page: the invitation its link names, as the signed-in session reads it. */
+  INVITATION_OFFER: "invitation-offer",
+  /** The web app's consent page: the client and account an OAuth authorization asks about. */
+  CONSENT_REQUEST: "consent-request",
+} as const;

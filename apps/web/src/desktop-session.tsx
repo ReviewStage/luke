@@ -27,9 +27,10 @@ import {
 } from "@repo/features/desktop-session-wire";
 import { LANDING_TONE } from "@repo/features/landing-outcome";
 import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialSignInChoices } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { openAppFromMac } from "./open-app";
 import { useSocialSignIn } from "./sign-in-choices";
@@ -109,8 +110,9 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
  * is said in the page's alert region rather than under the choices.
  */
 function DesktopSession(): React.JSX.Element {
-  const [view, setView] = useState<View>(WORKING);
   const started = useRef(false);
+  const handing = useMutation({ mutationFn: handOff });
+  const view = handing.data ?? WORKING;
   const signInChoices = useSocialSignIn(authClient);
 
   // Note that the hand-off runs once even where StrictMode runs an effect
@@ -118,8 +120,8 @@ function DesktopSession(): React.JSX.Element {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void handOff(desktopSessionPageQuery(window.location.search)).then(setView);
-  }, []);
+    handing.mutate(desktopSessionPageQuery(window.location.search));
+  }, [handing.mutate]);
 
   return (
     <AuthPage
