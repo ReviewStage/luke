@@ -18,6 +18,7 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { newestToastSays } from "../testing/toast.js";
+import { WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
@@ -83,18 +84,23 @@ function drawn(): HTMLElement {
     root.render(
       onRegistry(
         ownRegistry(),
-        createElement(DescriptionBody, {
-          task: TASK,
-          edit: descriptionEditMutation(TASK.id, () =>
-            Promise.reject(new Error("Nothing is saved in this test.")),
-          ),
-          sectionLinks: {
-            workspace: "acme",
-            onOpen: () => undefined,
-            onOpenFile: () => undefined,
-            reveal: undefined,
-          },
-        }),
+        createElement(
+          Fragment,
+          null,
+          createElement(DescriptionBody, {
+            task: TASK,
+            edit: descriptionEditMutation(TASK.id, () =>
+              Promise.reject(new Error("Nothing is saved in this test.")),
+            ),
+            sectionLinks: {
+              workspace: "acme",
+              onOpen: () => undefined,
+              onOpenFile: () => undefined,
+              reveal: undefined,
+            },
+          }),
+          createElement(WordsOwner),
+        ),
       ),
     ),
   );
@@ -135,6 +141,7 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
               },
             }),
             createElement(ToastHost),
+            createElement(WordsOwner),
           ),
         ),
       ),

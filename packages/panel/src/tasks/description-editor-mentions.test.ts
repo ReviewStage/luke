@@ -14,7 +14,7 @@ import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -22,6 +22,7 @@ import { handState, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { WordsOwner } from "../testing/words-owner.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -106,7 +107,12 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
     root.render(
       onRegistry(
         registry,
-        page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
+        createElement(
+          Fragment,
+          null,
+          page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
+          createElement(WordsOwner),
+        ),
       ),
     ),
   );

@@ -50,10 +50,11 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
-import { useDescriptionWordsOwner, useDescriptionWordsUnsaved } from "./use-description-editing.js";
+import { useDescriptionWordsUnsaved } from "./use-description-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../description-editor/`),
@@ -222,12 +223,6 @@ function commentsOver(threads: readonly DescriptionCommentThread[]): Description
 /** What the window tells its shell of the descriptions' words, drawn beside the description as a shell would read it. */
 function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
-}
-
-/** The descriptions' words told which account is signed in, as the window tells them. */
-function WordsOwner(): null {
-  useDescriptionWordsOwner();
-  return null;
 }
 
 /** Main's document handed again with the account signed in now naming its id, as a refresh hands it. */
