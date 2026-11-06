@@ -1,5 +1,5 @@
 /**
- * relay.ts -- one attached shell: a panel's socket, the desktop's or the web app's, piped to the shell's PTY in the agent's sandbox, held while someone types and closed when nobody has for five minutes.
+ * relay.ts -- one attached shell: a panel's socket, the desktop's or the web app's, piped to the shell's PTY in the agent's sandbox, holding the sandbox for as long as the socket stands.
  *
  * A connection reaches its agent through the one rule every agent route
  * keeps, then attaches only to a sandbox that is running: a stopped one is
@@ -12,14 +12,15 @@
  * counted, here or anywhere the relay writes.
  *
  * The connection holds the agent's sandbox through the lease every terminal
- * of it shares (`sandbox-terminal-lease.ts`): an attach holds it, and typing
- * moves it on, written at most once a minute and so held a minute past the
- * idle bound, which no keystroke between two writes outlasts. Each
- * connection closes as idle once nobody has typed in it for the bound,
- * whatever its sandbox's other terminals do, and the sweep stops the
- * sandbox once the lease every terminal moved on has lapsed past its grace.
- * While a terminal is connected it also keeps the sandbox alive past its
- * short timeout, every keep-alive interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`,
+ * of it shares (`sandbox-terminal-lease.ts`) for as long as it stands, typed
+ * in or not, as an open terminal holds its machine: the attach writes the
+ * lease, and it is written again every minute, each write reaching two, so
+ * a slow write never lets it lapse under an open tab and a closed one stops
+ * holding it within two minutes. Nothing here closes a connection for want
+ * of typing; the host ends it when the tab goes, or once the terminal has
+ * gone ten minutes unused (`@repo/host`'s `compose-terminals.ts`). While a terminal is connected
+ * it also keeps the sandbox alive past its short timeout, every keep-alive
+ * interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`,
  * `agents/sandbox-keep-alive.ts`), so a developer typing after the agent's
  * turn ended is never cut off by it. While a terminal is connected, the GitHub token at the sandbox's firewall
  * is kept fresh on the rule the agent's own steps keep it by, claimed
@@ -46,7 +47,6 @@ import {
 import { readEither } from "@repo/wire/effect";
 import {
   type Cause,
-  Clock,
   DateTime,
   Deferred,
   Duration,
@@ -70,12 +70,10 @@ import { jsonOf } from "../http/http-effect.js";
 import { frameBytes } from "../http/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
-  /** How long a terminal stays connected past its last keystroke. */
-  IDLE: Duration.minutes(5),
-  /** How often typing moves the lease on, so a keystroke is not a write. */
+  /** How often a connection moves the lease on while it stands. */
   LEASE_WRITE_EVERY: Duration.minutes(1),
-  /** How often a connection asks whether it has gone the idle bound untyped in. */
-  IDLE_CHECK_EVERY: Duration.seconds(30),
+  /** How far past each write the lease reaches: two writes, so one slow write never lets it lapse. */
+  LEASE_REACH: Duration.minutes(2),
   /** How often a connection asks whether the GitHub token is due. */
   CREDENTIAL_CHECK_EVERY: Duration.minutes(5),
   /** The most the desktop may send while its shell waits on its first token, a paste's largest piece; past it the shell attaches without waiting longer, so what was sent reaches it rather than piling up. */
@@ -155,7 +153,6 @@ const PIPE_END = {
   DEVICE_LEFT: "device-left",
   UPSTREAM_LEFT: "upstream-left",
   EXITED: "exited",
-  IDLE: "idle",
 } as const;
 
 type PipeEnd = (typeof PIPE_END)[keyof typeof PIPE_END];
@@ -166,10 +163,19 @@ const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema
 const readResize = readEither(terminalRelayResizeSchema);
 const readPtyExit = readEither(PtyExitSchema);
 
-/** The instant the lease reaches to from a write at the instant given: the idle bound, and the minute a keystroke after this write may wait for the next. */
-function heldFrom(instant: Date): Date {
-  const reach = Duration.sum(TERMINAL_RELAY_BOUNDS.IDLE, TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY);
-  return new Date(instant.getTime() + Duration.toMillis(reach));
+/** The lease moved on now, before the shell attaches, and again every write interval for as long as the connection's scope stands. */
+function holdWhileConnected(
+  deps: RelayDependencies,
+  agent: RelayAgent,
+): Effect.Effect<void, never, Scope.Scope> {
+  const hold = Effect.flatMap(DateTime.nowAsDate, (at) =>
+    deps.hold(
+      agent.conversationId,
+      new Date(at.getTime() + Duration.toMillis(TERMINAL_RELAY_BOUNDS.LEASE_REACH)),
+    ),
+  );
+  const renewed = Effect.schedule(hold, Schedule.spaced(TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY));
+  return Effect.andThen(hold, Effect.asVoid(Effect.forkScoped(renewed)));
 }
 
 /** The credential set at the firewall; a set that failed is logged, and the next check tries again. */
@@ -255,30 +261,14 @@ function readDevice(
   return Effect.ensuring(read, Queue.end(fromDevice));
 }
 
-/** The desktop's frames to the PTY: typing as it came, noted as this connection's last and moving the lease on at most once a minute, and a resize as the PTY's own frame. */
+/** The desktop's frames to the PTY: typing as it came, and a resize as the PTY's own frame. */
 function deviceToPty(
-  deps: RelayDependencies,
-  agent: RelayAgent,
-  lastTyped: Ref.Ref<number>,
   fromDevice: Stream.Stream<RelayFrame>,
   pty: RelaySocket,
 ): Effect.Effect<PipeEnd> {
   return Effect.gen(function* () {
-    const lastHeld = yield* Ref.make(yield* Clock.currentTimeMillis);
     yield* Stream.runForEach(fromDevice, (frame) => {
-      if ("bytes" in frame) {
-        return Effect.andThen(
-          Effect.gen(function* () {
-            const at = yield* DateTime.nowAsDate;
-            yield* Ref.set(lastTyped, at.getTime());
-            const since = at.getTime() - (yield* Ref.get(lastHeld));
-            if (since < Duration.toMillis(TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY)) return;
-            yield* Ref.set(lastHeld, at.getTime());
-            yield* deps.hold(agent.conversationId, heldFrom(at));
-          }),
-          pty.send(frame),
-        );
-      }
+      if ("bytes" in frame) return pty.send(frame);
       const resize = readResize(jsonOf(frame.text));
       if (Result.isFailure(resize)) return Effect.void;
       const { cols, rows } = resize.success;
@@ -312,26 +302,10 @@ function ptyToDevice(device: RelaySocket, pty: RelaySocket): Effect.Effect<PipeE
   });
 }
 
-/** Ends once nobody has typed in this connection for the idle bound, whatever the sandbox's other terminals do. */
-function idleWatch(lastTyped: Ref.Ref<number>): Effect.Effect<PipeEnd> {
-  const typedLately = Effect.gen(function* () {
-    const since = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastTyped));
-    return since < Duration.toMillis(TERMINAL_RELAY_BOUNDS.IDLE);
-  });
-  return Effect.as(
-    Effect.repeat(typedLately, {
-      schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.IDLE_CHECK_EVERY),
-      while: (typed) => typed,
-    }),
-    PIPE_END.IDLE,
-  );
-}
-
 /** The close each end of the pipe is answered with; a desktop that left takes nothing. */
 const CLOSE_OF_END = {
   [PIPE_END.UPSTREAM_LEFT]: TERMINAL_RELAY_CLOSE.UNAVAILABLE,
   [PIPE_END.EXITED]: TERMINAL_RELAY_CLOSE.EXITED,
-  [PIPE_END.IDLE]: TERMINAL_RELAY_CLOSE.IDLE,
 } as const satisfies Record<Exclude<PipeEnd, typeof PIPE_END.DEVICE_LEFT>, number>;
 
 /** One connection, from its reach to its close, everything it opens belonging to the scope it runs in. */
@@ -357,11 +331,8 @@ export function relayTerminal(
           : TERMINAL_RELAY_CLOSE.STARTING,
       );
     }
-    // An attach is the developer using the terminal: it holds the sandbox, and starts its idle bound.
-    const attachedAt = yield* DateTime.nowAsDate;
-    const lastTyped = yield* Ref.make(attachedAt.getTime());
-    yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
-    // The sandbox is kept alive from the attach for as long as the connection stands, which nobody typing ends.
+    // An attached terminal is the developer using the sandbox: it is held and kept alive from the attach for as long as the connection stands.
+    yield* holdWhileConnected(deps, agent);
     const { sessionId } = agent;
     yield* Effect.forkScoped(
       Effect.repeat(deps.keepAlive(sessionId), {
@@ -417,9 +388,8 @@ export function relayTerminal(
     if (leftFirst) return yield* pty.success.close(NORMAL_CLOSE);
     yield* device.send({ text: JSON.stringify({ type: TERMINAL_RELAY_FRAME.ATTACHED }) });
     const end = yield* Effect.raceAll([
-      deviceToPty(deps, agent, lastTyped, Stream.fromQueue(fromDevice), pty.success),
+      deviceToPty(Stream.fromQueue(fromDevice), pty.success),
       ptyToDevice(device, pty.success),
-      idleWatch(lastTyped),
     ]);
     yield* pty.success.close(NORMAL_CLOSE);
     if (end !== PIPE_END.DEVICE_LEFT) yield* device.close(CLOSE_OF_END[end]);

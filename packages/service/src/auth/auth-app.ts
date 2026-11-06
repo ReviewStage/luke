@@ -5,6 +5,7 @@ import { catchAllButInterrupt, causeKind } from "@repo/runtime/effect";
 import { Effect, Layer, Option } from "effect";
 import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { readAccountPerson } from "../accounts/account-person.js";
+import { inviteAcceptReported, signUpReported } from "../accounts/onboarding-events.js";
 import { WelcomeMail } from "../accounts/welcome-mail.js";
 import { SERVER_EVENT } from "../events/server-events.js";
 import { hostedNotFoundRoute } from "../http/http-effect.js";
@@ -126,6 +127,21 @@ function welcomeOfSignUp(count: AuthCount): Effect.Effect<void, never, DatabaseS
 }
 
 /**
+ * What Resend's onboarding emails are told of a count (`onboarding-events.ts`):
+ * a sign-up starts them, and an accepted invitation stops them.
+ */
+function onboardingOfCount(count: AuthCount): Effect.Effect<void, never, DatabaseServices> {
+  switch (count.name) {
+    case SERVER_EVENT.ACCOUNT_SIGN_UP:
+      return signUpReported(count.actor.userId);
+    case SERVER_EVENT.WORKSPACE_INVITE_ACCEPT:
+      return inviteAcceptReported(count.actor.userId);
+    case SERVER_EVENT.GITHUB_ACCOUNT_LINK:
+      return Effect.void;
+  }
+}
+
+/**
  * The handler's own `Response`, answered unchanged.
  *
  * The request handed over is the very `Request` this edge was invoked with,
@@ -140,7 +156,8 @@ function welcomeOfSignUp(count: AuthCount): Effect.Effect<void, never, DatabaseS
  * covers, since there the record is all the web handler reads. An account
  * the request signed up has its personal workspace made before it is
  * answered (`workspaceOfSignUp`), and is sent the founder's welcome note
- * (`welcomeOfSignUp`).
+ * (`welcomeOfSignUp`); a sign-up and an accepted invitation are told to the
+ * onboarding emails (`onboardingOfCount`).
  */
 const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(function* (
   handle: WebRequestHandler,
@@ -158,6 +175,7 @@ const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(functio
     discard: true,
   });
   yield* Effect.forEach(counts, welcomeOfSignUp, { discard: true });
+  yield* Effect.forEach(counts, onboardingOfCount, { discard: true });
   yield* Effect.forEach(counts, recordAuthCount, { discard: true });
   return incoming.method === BODYLESS_METHOD.HEAD
     ? bodylessAnswer(answer)

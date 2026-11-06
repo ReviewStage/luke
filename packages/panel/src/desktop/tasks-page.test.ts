@@ -317,14 +317,10 @@ test("a row and a card count the questions waiting on the reader, a notice and a
   const sidebarRoot = createRoot(document.createElement("div"));
   roots.push(sidebarRoot);
   act(() => sidebarRoot.render(onRegistry(AtomRegistry.make(), createElement(Sidebar))));
-  // Note that the badge's words are read as a text of their own, since a row's key runs into them.
+  // Note that the count's words are read as an element's own, since a row's key runs into them.
   const says = (holder: Element | undefined) => {
-    const texts = document.createTreeWalker(
-      holder ?? document.createElement("i"),
-      NodeFilter.SHOW_TEXT,
-    );
-    for (let text = texts.nextNode(); text !== null; text = texts.nextNode()) {
-      const count = /^(\d+) needs? you$/u.exec(text.textContent ?? "")?.[1];
+    for (const each of holder?.querySelectorAll("*") ?? []) {
+      const count = /^(\d+) needs? you$/u.exec(each.textContent ?? "")?.[1];
       if (count !== undefined) return Number(count);
     }
     return 0;

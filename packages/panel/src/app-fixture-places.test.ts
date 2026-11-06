@@ -11,7 +11,7 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach } from "vitest";
+import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 // Note that the places are loaded as the window loads them, on first use
 // (the router's lazy routes, and `desktop-shell.tsx`'s Automations), so each module is read here first and its load
 // settles within the test's own ticks rather than on a clock a busy machine outruns.
@@ -154,9 +154,14 @@ it.effect(
     Effect.gen(function* () {
       yield* drawWindow(RUN_PROFILE.AUTOMATIONS_RUNS);
 
-      assert.equal(
-        document.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-        "Check each deploy",
+      // Note that we wait on the automation's name itself, because its page and its read land after hops a busy runner stretches past any fixed count of ticks.
+      yield* Effect.promise(() =>
+        vi.waitFor(() =>
+          assert.equal(
+            document.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+            "Check each deploy",
+          ),
+        ),
       );
     }),
 );

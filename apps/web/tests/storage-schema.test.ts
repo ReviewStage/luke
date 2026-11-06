@@ -53,6 +53,7 @@ const DECLARED_TABLES = [
   "attachment",
   "automation",
   "automation_run",
+  "claude_session_entries",
   "conversations",
   "device",
   "device_agent_line",

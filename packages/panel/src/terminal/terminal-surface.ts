@@ -17,22 +17,27 @@ import { TERMINAL_KEY, terminalKey } from "./terminal-keys.js";
 import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
 
 /**
- * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, colored from the window's tokens, its keys sorted between the shell and the window.
+ * terminal-surface.ts -- a terminal's screen: xterm.js made once for the terminal's life, shown in whichever box its tab draws, fitted to it, colored from the window's tokens, its keys sorted between the shell and the window.
  *
- * It draws with WebGL, and with xterm's DOM renderer where WebGL is not to be
- * had, the DOM renderer's rules reaching the page as adopted sheets
- * (`./adopted-styles.ts`). It draws in the window's monospace face, or, while
- * a web page is still fetching that face, in the system's until it lands,
- * so its cells are never measured in one face and drawn in another, which
- * would draw the screen past its box. Wide characters are measured as
- * Unicode 11 measures them, so an emoji or a CJK character in a prompt takes
- * the two cells a shell expects. It fits its box whenever the box changes,
- * once a frame at most, and says so only when that changes its size in
- * cells, which is what a shell is told. It knows nothing of where its bytes
- * come from: the tab hands it a shell's output and takes what is typed.
+ * The screen is one element of its own, opened in the first box it is shown
+ * in and moved between boxes after that, so a tab hidden and shown again
+ * keeps its scrollback and the shell's own drawing, and a screen out of any
+ * box goes on drawing what its shell prints. It draws with WebGL, and with
+ * xterm's DOM renderer once the GPU process loses its context or where
+ * WebGL is not to be had, the DOM renderer's rules
+ * reaching the page as adopted sheets (`./adopted-styles.ts`). It draws in
+ * the window's monospace face, or, while a web page is still fetching that
+ * face, in the system's until it lands, so its cells are never measured in
+ * one face and drawn in another, which would draw the screen past its box.
+ * Wide characters are measured as Unicode 11 measures them, so an emoji or a
+ * CJK character in a prompt takes the two cells a shell expects. It fits its
+ * box whenever the box changes, once a frame at most, and never a box with
+ * no room, and says so only when that changes its size in cells, which is
+ * what a shell is told. It knows nothing of where its bytes come from: the
+ * session hands it a shell's output and takes what is typed.
  */
 
-/** The class the host wears while a terminal is mounted in it, which `index.css` styles. */
+/** The class the screen's own element wears, which `index.css` styles. */
 const SURFACE_CLASS = "terminal-surface";
 
 /** The token the terminal's typeface is read from, and the face it falls back to without one. */
@@ -59,14 +64,6 @@ const TERMINAL_LOOK = {
   allowProposedApi: true,
 } as const;
 
-/** The attribute the tab sets on the host while no shell is connected, which dims the output. */
-const DIM_ATTRIBUTE = "data-dim";
-
-/** Whether the tab has the screen dimmed. */
-function isDim(host: HTMLElement): boolean {
-  return host.getAttribute(DIM_ATTRIBUTE) === "true";
-}
-
 /** The Unicode version wide characters are measured by. */
 const UNICODE_VERSION = "11";
 
@@ -84,22 +81,23 @@ function loadWebgl(terminal: Terminal): WebglAddon | undefined {
 }
 
 /**
- * Draws with WebGL, on a fresh context whenever the GPU process loses one.
- * Where none can be made the DOM renderer draws instead, its colors held to
- * the palette: it writes a 24-bit color, or one it adjusted for contrast,
- * as a style attribute, which the panel's policy refuses, so a cell left to
- * it would lose its color altogether, where a palette color reaches it as
- * a class (`./adopted-styles.ts`).
+ * Draws with WebGL, and with the DOM renderer once the GPU process loses its
+ * context, or where WebGL is not to be had; `dom` hears the DOM renderer
+ * take over. Note that the DOM renderer's colors are held to the palette:
+ * it writes a 24-bit color, or one it adjusted for contrast, as a style
+ * attribute, which the panel's policy refuses, so a cell left to it would
+ * lose its color altogether, where a palette color reaches it as a class
+ * (`./adopted-styles.ts`).
  */
-function drawWithWebgl(terminal: Terminal): void {
+function drawWithWebgl(terminal: Terminal, dom: () => void): void {
   const webgl = loadWebgl(terminal);
   if (webgl === undefined) {
-    terminal.options.minimumContrastRatio = 1;
+    dom();
     return;
   }
   webgl.onContextLoss(() => {
     webgl.dispose();
-    drawWithWebgl(terminal);
+    dom();
   });
 }
 
@@ -175,18 +173,16 @@ function onFaceLanded(face: string, then: () => void): void {
   document.fonts.load(face).then(then, () => undefined);
 }
 
-export function mountTerminal(host: HTMLElement, props: TerminalProps): TerminalHandle {
-  host.classList.add(SURFACE_CLASS);
-  const stopAdopting = adoptInlineStyles(host);
-  const family = monospaceFont(host);
-  const face = `${TERMINAL_LOOK.fontSize}px ${family}`;
-  // Note that a face still on its way is stood in for by the system's, because the terminal measures its cells as it opens.
-  const landed = faceLoaded(face);
-  const terminal = new Terminal({
-    ...TERMINAL_LOOK,
-    fontFamily: landed ? family : FALLBACK_FONT,
-    theme: terminalTheme(host, isDim(host)),
-  });
+/** Whether a box has room to fit a screen into: in the document, and with a width and a height. */
+function hasRoom(element: HTMLElement): boolean {
+  return element.isConnected && element.clientWidth > 0 && element.clientHeight > 0;
+}
+
+export function createTerminal(props: TerminalProps): TerminalHandle {
+  const screen = document.createElement("div");
+  screen.classList.add(SURFACE_CLASS);
+  const stopAdopting = adoptInlineStyles(screen);
+  const terminal = new Terminal(TERMINAL_LOOK);
   terminal.attachCustomKeyEventHandler((event) => {
     const key = terminalKey(event);
     if (key.kind === TERMINAL_KEY.SHELL) return true;
@@ -209,33 +205,33 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
       if (event.metaKey) props.onLink(url);
     }),
   );
-  terminal.open(host);
-  drawWithWebgl(terminal);
-  const contrast = terminal.options.minimumContrastRatio ?? 1;
-  const find = scrollbackFind(terminal, host);
-  const heard = [terminal.onData(props.onInput), terminal.onResize(props.onResize)];
-  fit.fit();
-
-  // A face that lands later is drawn in from then, its cells measured again as a change of face measures them, and the screen fitted to them.
-  let mounted = true;
-  if (!landed) {
-    onFaceLanded(face, () => {
-      if (!mounted) return;
-      terminal.options.fontFamily = family;
-      fit.fit();
-    });
-  }
-
-  // The tokens' values flip with the appearance, and the canvas holds the old ones until told.
-  // Note that a dimmed screen is dimmed in its colors, never by the box's opacity, which would dim the notes the terminal prints as well, and its contrast floor is lifted, because the floor would lift the output back out of its dimming.
+  const find = scrollbackFind(terminal, screen);
+  // Whether the output is dimmed, and the contrast floor the renderer drawing now takes.
+  let dimmed = false;
+  let contrast: number = TERMINAL_LOOK.minimumContrastRatio;
+  // Note that a dimmed screen is dimmed in its colors, never by the box's opacity, and its contrast floor is lifted, because the floor would lift the output back out of its dimming.
   const retheme = () => {
-    const dim = isDim(host);
-    terminal.options.theme = terminalTheme(host, dim);
-    terminal.options.minimumContrastRatio = dim ? 1 : contrast;
+    if (!screen.isConnected) return;
+    terminal.options.theme = terminalTheme(screen, dimmed);
+    terminal.options.minimumContrastRatio = dimmed ? 1 : contrast;
   };
-  const stopRetheming = onDrawnThemeChange(retheme);
-  const dimming = new MutationObserver(retheme);
-  dimming.observe(host, { attributes: true, attributeFilter: [DIM_ATTRIBUTE] });
+
+  // The size is said once the screen has first been fitted to a box with room, then as it changes.
+  let fitted = false;
+  const heard = [
+    terminal.onData(props.onInput),
+    // Note that the size is handed on as columns and rows alone, because xterm's event carries more, and an act that takes the size refuses a key it does not name.
+    terminal.onResize(({ cols, rows }) => {
+      if (fitted) props.onResize({ cols, rows });
+    }),
+  ];
+  const fitNow = () => {
+    if (!hasRoom(screen) || fit.proposeDimensions() === undefined) return;
+    fit.fit();
+    if (fitted) return;
+    fitted = true;
+    props.onResize({ cols: terminal.cols, rows: terminal.rows });
+  };
 
   // A box resized many times in a frame is fitted once, at the frame.
   let frame: number | undefined;
@@ -243,27 +239,65 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     if (frame !== undefined) return;
     frame = requestAnimationFrame(() => {
       frame = undefined;
-      fit.fit();
+      fitNow();
     });
   });
-  resized.observe(host);
+  resized.observe(screen);
+  const stopRetheming = onDrawnThemeChange(retheme);
+
+  // The screen opens in the first box it is shown in, which its face and colors are read from.
+  let opened = false;
+  let disposed = false;
+  const open = () => {
+    opened = true;
+    const family = monospaceFont(screen);
+    const face = `${TERMINAL_LOOK.fontSize}px ${family}`;
+    // Note that a face still on its way is stood in for by the system's, because the terminal measures its cells as it opens.
+    const landed = faceLoaded(face);
+    terminal.options.fontFamily = landed ? family : FALLBACK_FONT;
+    retheme();
+    terminal.open(screen);
+    drawWithWebgl(terminal, () => {
+      contrast = 1;
+      retheme();
+    });
+    // A face that lands later is drawn in from then, its cells measured again as a change of face measures them, and the screen fitted to them.
+    if (landed) return;
+    onFaceLanded(face, () => {
+      if (disposed) return;
+      terminal.options.fontFamily = family;
+      fitNow();
+    });
+  };
 
   return {
     write: (data, written) => terminal.write(data, written),
-    size: () => ({ cols: terminal.cols, rows: terminal.rows }),
+    attach: (host) => {
+      host.append(screen);
+      if (!opened) open();
+      else {
+        // Note that the colors are read again, since the appearance may have flipped while the screen stood out of the document.
+        retheme();
+        terminal.refresh(0, terminal.rows - 1);
+      }
+      fitNow();
+    },
+    detach: () => screen.remove(),
+    dim: (dim) => {
+      dimmed = dim;
+      retheme();
+    },
     focus: () => terminal.focus(),
-    reset: () => terminal.reset(),
     find,
-    unmount: () => {
-      mounted = false;
+    dispose: () => {
+      disposed = true;
       resized.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
       stopRetheming();
-      dimming.disconnect();
       for (const each of heard) each.dispose();
       terminal.dispose();
       stopAdopting();
-      host.classList.remove(SURFACE_CLASS);
+      screen.remove();
     },
   };
 }

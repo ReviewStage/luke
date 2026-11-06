@@ -8,7 +8,9 @@ import {
   BACK_BUTTON_LOOK,
   BackButton,
   COLLECTION_STATE,
+  CORNER_DOT_TONE,
   CollectionPage,
+  CornerDot,
   DrawerScrim,
   IconButton,
   NOT_FOUND_THING,
@@ -88,6 +90,7 @@ import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneAccount } from "./phone-account.js";
 import { PhoneHead, phoneBar } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
+import { useInboxWaiting } from "./places-waiting.js";
 import { SidePanelChord, SidePanelToggle, usePanelToggleRoom } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
@@ -382,15 +385,34 @@ export interface DesktopGates {
  * takes their place at the window's edge (`window-full-screen.ts`). It
  * stands only where there is a sidebar to fold, so it offers the chord too.
  * A peek is not yet open, so over one it still offers to show the sidebar.
+ * While the sidebar is away, its Inbox row's count is too, so the toggle
+ * wears a dot in the attention tone while anything waits on the developer
+ * (`useInboxWaiting`), and says how many in its name, since the dot is
+ * hidden from a reader; over a peek the row is in view again, so neither.
  */
-function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Element {
+function SidebarToggle({
+  sidebar,
+  tasks,
+}: {
+  sidebar: SidebarCollapse;
+  tasks: TasksControl;
+}): React.JSX.Element {
   const shown = !sidebar.collapsed || sidebar.overlay === SIDEBAR_OVERLAY.OPEN;
   const label = shown ? "Hide sidebar" : "Show sidebar";
+  const away = sidebar.collapsed && sidebar.overlay === SIDEBAR_OVERLAY.CLOSED;
+  const waiting = useInboxWaiting(tasks);
+  const marked = away && waiting > 0;
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
-    <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
-      <IconButton icon={<SidebarIcon />} label={label} onClick={sidebar.onToggle} />
-    </Tooltip>
+    <CornerDot shown={marked} tone={CORNER_DOT_TONE.ATTENTION}>
+      <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
+        <IconButton
+          icon={<SidebarIcon />}
+          label={marked ? `${label}, ${waiting} need you` : label}
+          onClick={sidebar.onToggle}
+        />
+      </Tooltip>
+    </CornerDot>
   );
 }
 
@@ -485,6 +507,7 @@ function useFocusHandedBack(held: RefObject<Holder | undefined>): void {
  */
 function usePlaceCommands(
   pastGate: boolean,
+  tab: PanelTab,
   onTabChange: (tab: PanelTab) => void,
   tasks: TasksControl,
   settings: SettingsPanelProps,
@@ -499,7 +522,8 @@ function usePlaceCommands(
     APP_COMMAND.NEW_TASK,
     pastGate && tasks.signedIn
       ? () => {
-          onTabChange(PANEL_TAB.TASKS);
+          // Note that the card stands over whatever place stands, so only Settings, which takes the window, is left for it.
+          if (tab === PANEL_TAB.SETTINGS) onTabChange(PANEL_TAB.TASKS);
           tasks.onNewTask();
         }
       : undefined,
@@ -781,6 +805,7 @@ export function DesktopShell({
   const founding = !gated && tasks.newWorkspace.open;
   usePlaceCommands(
     !gated && setup === SETUP_GATE.NONE && !founding,
+    tab,
     onTabChange,
     tasks,
     settings,
@@ -1084,7 +1109,7 @@ export function ShellPlaces(): React.JSX.Element {
         <SidebarChord sidebar={sidebar} />
       ) : (
         <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
-          <SidebarToggle sidebar={sidebar} />
+          <SidebarToggle sidebar={sidebar} tasks={tasks} />
           {sidebar.collapsed ? <NewTaskButton tasks={tasks} /> : null}
           {sidebar.collapsed ? (
             <ReplayUnmask>

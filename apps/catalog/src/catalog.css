@@ -742,12 +742,6 @@ body {
   font-size: var(--ui-type-label-size);
 }
 
-.catalog-public-footer {
-  color: var(--ui-color-text-muted);
-  font-family: var(--ui-font-mono);
-  font-size: var(--ui-type-caption-size);
-}
-
 /* A recording's stand-in in the landing's example, at the demo's own shape. */
 .catalog-public-media {
   aspect-ratio: 1240 / 864;

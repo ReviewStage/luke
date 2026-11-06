@@ -152,7 +152,6 @@ export const SANDBOX_CALL = {
   DRIVE_CREATE: "drive-create",
   DRIVE_FORK: "drive-fork",
   DRIVE_DELETE: "drive-delete",
-  USER: "user",
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
@@ -209,6 +208,8 @@ export interface ListedSandbox {
   readonly createdAt?: number | undefined;
   /** The timeout each session of the sandbox opens with, which Vercel reapplies at every resume. */
   readonly timeout?: number | undefined;
+  /** How many vCPUs each session of the sandbox runs on, as its create asked. */
+  readonly vcpus?: number | undefined;
   /** When its running session ends, in epoch milliseconds, which an extension moves on. */
   readonly expiresAt?: number | undefined;
   /** How many of its snapshots Vercel keeps and for how long; none where none was set, which keeps every one. */
@@ -308,7 +309,8 @@ interface SandboxCreate {
   readonly image: string;
   readonly tags: Readonly<Record<string, string>>;
   readonly timeoutMs: number;
-  readonly vcpus: number;
+  /** How many vCPUs it runs on; where unsaid, Vercel's default. */
+  readonly vcpus?: number;
   readonly keepLastSnapshots: {
     readonly count: number;
     /** How long a kept snapshot lasts; where unsaid, the sandbox's own default. */
@@ -320,6 +322,24 @@ interface SandboxCreate {
   readonly mounts?: Readonly<Record<string, string>>;
   /** Whether its filesystem is restored at its next session, and snapshotted at each stop for that; so where unsaid. */
   readonly persistent?: boolean;
+}
+
+/**
+ * A user made in a sandbox as the SDK makes one (`createUser`), in the
+ * group of the sandbox's default user, who writes what the API writes, the
+ * checkout among it, so the two share it; the folders given, by their
+ * absolute paths in its home, made its own; and that home then closed to
+ * every other user, as Vercel's multi-agent docs suggest for files only that
+ * user should read (https://vercel.com/docs/sandbox/concepts/multi-agent).
+ */
+interface SandboxUser {
+  readonly name: string;
+  readonly homeFolders: readonly string[];
+}
+
+/** A sandbox got or created: as a create opens it, with the user it names, where it names one, made in it where the call creates it. */
+interface SandboxGetOrCreate extends SandboxCreate {
+  readonly user?: SandboxUser;
 }
 
 /** A drive as a lookup names it: its name, and the sandbox it is mounted read-write in, where one holds it. */
@@ -455,26 +475,15 @@ export interface VercelSandboxApi {
    * standing, resumed where it was stopped; else one created as `create`
    * opens it; and where the one standing can never resume, its snapshot
    * gone, that one deleted and another created under the same name. A
-   * sandbox it created is handed to `onCreate` before it answers, and a
-   * rejection of it fails the call.
+   * sandbox it created has the user the ask names, where it names one, made
+   * in it in its `onCreate`, and is then handed to the caller's `onCreate`
+   * where it gives one, before the call answers; a failure of either fails
+   * the call.
    */
   readonly getOrCreate: (
-    ask: SandboxCreate,
-    onCreate: (created: OpenedSandbox) => Promise<void>,
+    ask: SandboxGetOrCreate,
+    onCreate?: (created: OpenedSandbox) => Promise<void>,
   ) => Effect.Effect<OpenedSandbox, SandboxUnavailable>;
-  /**
-   * Makes the user in the named sandbox as the SDK does (`createUser`), in
-   * the group of the sandbox's default user, who writes what the API writes,
-   * the checkout among it, so the two share it; the folders given, by their
-   * absolute paths in its home, made its own; and that home then closed to
-   * every other user, as Vercel's multi-agent docs suggest for files only
-   * that user should read (https://vercel.com/docs/sandbox/concepts/multi-agent).
-   */
-  readonly createUser: (
-    name: string,
-    username: string,
-    homeFolders: readonly string[],
-  ) => Effect.Effect<void, SandboxUnavailable>;
   /**
    * Starts a detached command as the user in the named sandbox, its stdin
    * held open for `writeStdin`, as the SDK does (`asUser(...).runCommand`),
@@ -722,6 +731,16 @@ function driveMounts(mounts: Readonly<Record<string, string>>) {
   );
 }
 
+/** The user made in the sandbox as the SDK makes one, its home's folders made and the home closed (`SandboxUser`). */
+async function madeUser(sandbox: Sandbox, made: SandboxUser, signal: AbortSignal): Promise<void> {
+  const user = await sandbox.createUser(made.name, { signal });
+  const { group } = await sandbox.getDefaultUser({ signal });
+  await sandbox.addUserToGroup(made.name, group, { signal });
+  for (const folder of made.homeFolders) await user.mkDir(folder, { signal });
+  const closed = await user.runCommand("chmod", ["700", user.homeDir], { signal });
+  if (closed.exitCode !== 0) throw new Error(`${user.homeDir} could not be closed`);
+}
+
 /** A create as `@vercel/sandbox` takes it: persistent unless the ask says not, on the open internet. */
 function createParams(ask: SandboxCreate) {
   return {
@@ -731,7 +750,7 @@ function createParams(ask: SandboxCreate) {
     ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
     tags: { ...ask.tags },
     timeout: ask.timeoutMs,
-    resources: { vcpus: ask.vcpus },
+    ...(ask.vcpus === undefined ? undefined : { resources: { vcpus: ask.vcpus } }),
     keepLastSnapshots: { ...ask.keepLastSnapshots },
     env: { ...ask.env },
     networkPolicy: sdkPolicyOf(OPEN_INTERNET_POLICY),
@@ -756,6 +775,7 @@ function listedOf(listed: ListedMetadata): ListedSandbox {
     currentSnapshotId: listed.currentSnapshotId,
     createdAt: listed.createdAt,
     timeout: listed.timeout,
+    vcpus: listed.vcpus,
     expiresAt: listed.expiresAt,
     keepLastSnapshots: listed.keepLastSnapshots,
   };
@@ -772,6 +792,7 @@ function openedOf(sandbox: Sandbox): OpenedSandbox {
     currentSnapshotId: sandbox.currentSnapshotId,
     createdAt: sandbox.createdAt.getTime(),
     timeout: sandbox.timeout,
+    vcpus: sandbox.vcpus,
     expiresAt: sandbox.expiresAt?.getTime(),
     keepLastSnapshots: sandbox.keepLastSnapshots,
   };
@@ -1092,35 +1113,33 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           openedOf,
         ),
       getOrCreate: (ask, onCreate) =>
-        asked(SANDBOX_CALL.GET_OR_CREATE, (signal, under) =>
-          Sandbox.getOrCreate({
-            ...under,
-            ...createParams(ask),
-            resume: true,
-            signal,
-            onCreate: (created) => onCreate(openedOf(created)),
+        Effect.map(
+          asked(SANDBOX_CALL.GET_OR_CREATE, async (signal, under) => {
+            /** A sandbox this call created, set up as the ask says before it is handed back. */
+            const setUp = async (created: Sandbox) => {
+              if (ask.user !== undefined) await madeUser(created, ask.user, signal);
+              await onCreate?.(openedOf(created));
+            };
+            try {
+              return await Sandbox.getOrCreate({
+                ...under,
+                ...createParams(ask),
+                resume: true,
+                signal,
+                onCreate: setUp,
+              });
+            } catch (failure) {
+              // Note that the name is taken where the SDK tried again a create whose first answer was lost, so the sandbox holding it is the one this call created, which `onCreate` never saw.
+              if (!(failure instanceof APIError) || failure.response.status !== NAME_TAKEN_STATUS) {
+                throw failure;
+              }
+              const joined = await Sandbox.get({ ...under, name: ask.name, resume: true, signal });
+              await setUp(joined);
+              return joined;
+            }
           }),
-        ).pipe(
-          Effect.map(openedOf),
-          // Note that the name is taken where the SDK tried again a create whose first answer was lost, so the sandbox holding it is the one this call created, which `onCreate` never saw.
-          Effect.catchIf(
-            (failure) => failure.status === NAME_TAKEN_STATUS,
-            () =>
-              Effect.tap(resume(ask.name), (joined) =>
-                sdkCall(SANDBOX_CALL.GET_OR_CREATE, () => onCreate(joined)),
-              ),
-          ),
+          openedOf,
         ),
-      createUser: (name, username, homeFolders) =>
-        asked(SANDBOX_CALL.USER, async (signal, under) => {
-          const sandbox = await Sandbox.get({ ...under, name, resume: false, signal });
-          const user = await sandbox.createUser(username, { signal });
-          const { group } = await sandbox.getDefaultUser({ signal });
-          await sandbox.addUserToGroup(username, group, { signal });
-          for (const folder of homeFolders) await user.mkDir(folder, { signal });
-          const closed = await user.runCommand("chmod", ["700", user.homeDir], { signal });
-          if (closed.exitCode !== 0) throw new Error(`${user.homeDir} could not be closed`);
-        }),
       startAsUser: (name, username, ask) =>
         asked(SANDBOX_CALL.CMD, async (signal, under) => {
           const sandbox = await Sandbox.get({ ...under, name, resume: false, signal });

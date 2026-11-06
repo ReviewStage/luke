@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,7 +85,7 @@ const AGENT: AgentSummary = {
 };
 
 /** The agent's tab in the task's column. */
-const AGENT_TAB: MainTab = { agent: AGENT.id };
+const AGENT_TAB: MainTab = agentTab(AGENT.id);
 
 const roots: Root[] = [];
 

@@ -22,6 +22,7 @@ import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
+import { draftTab, fileTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -459,6 +460,31 @@ test("with the sidebar folded, New task stands beside its toggle over Home and t
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
 });
 
+test("with the sidebar folded away, its toggle tells a reader how many wait on them in the Inbox, and says nothing of it while the sidebar is shown", () => {
+  const waiting: Partial<TasksControl> = {
+    tasks: [DOCUMENT_TASK],
+    inbox: [
+      {
+        taskId: DOCUMENT_TASK.id,
+        items: ["Retry?", "Alert at 80%?", "Ship it?"].map((title, at) => ({
+          id: `item-${at}`,
+          agentId: "agent-1",
+          title,
+          postedAt: at,
+        })),
+      },
+    ],
+  };
+  assert.deepEqual(titleBarButtons(mount(false, waiting)), [
+    "Show sidebar, 3 need you",
+    "New task",
+  ]);
+  act(() => root?.unmount());
+  root = undefined;
+  const shown = mount(false, waiting, PANEL_TAB.TASKS, ignore, { collapsed: false });
+  assert.deepEqual(titleBarButtons(shown), ["Hide sidebar"]);
+});
+
 test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
   const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
   assert.ok(controls, "the title bar's buttons stand");
@@ -775,6 +801,28 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
   // Note that choosing the page is what opens Settings on it, so no tab change makes a second step before it.
   assert.deepEqual(tabs, []);
+});
+
+test("New task, by its chord or the sidebar's row, opens its card over the Inbox and leaves nothing, and from Settings brings the Tasks tab forward", async () => {
+  const tabs: PanelTab[] = [];
+  const card = () => document.querySelector('[role="dialog"][aria-modal="true"]');
+  const page = mount(true, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab), { collapsed: false });
+  await settle();
+  act(() => runAppCommand(APP_COMMAND.NEW_TASK));
+  const byChord = card() !== null;
+  act(() => {
+    card()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  act(() => placeRow(page, "New task")?.click());
+  const byRow = card() !== null;
+
+  // Note that leaving would stand the window's state, a task or Home, behind the card in the Inbox's place.
+  assert.deepEqual([byChord, byRow, tabs], [true, true, []]);
+  act(() => root?.unmount());
+
+  mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  act(() => runAppCommand(APP_COMMAND.NEW_TASK));
+  assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
 });
 
 test("the Tasks row pressed while the Board stands leaves nothing, the Board being the router's place it opens", async () => {
@@ -1174,7 +1222,7 @@ const PLACE = {
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
 /** A draft agent's tab, which the column shows beside a panel. */
-const DRAFT_TAB = { draft: "draft" };
+const DRAFT_TAB = draftTab("draft");
 
 /** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
@@ -1199,11 +1247,11 @@ function placed(place: Place) {
         ...control.sidePanel,
         open: true,
         fullScreen: true,
-        strip: [{ file: "docs/notes.md" }],
+        strip: [fileTab("docs/notes.md")],
         files: [
           { path: "docs/notes.md", range: undefined, opened: 0, browsedOn: DOCUMENT_TASK.id },
         ],
-        tab: { file: "docs/notes.md" },
+        tab: fileTab("docs/notes.md"),
       },
     },
     [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },

@@ -48,13 +48,10 @@ import { redactCredentials } from "@repo/features/credential-redaction";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Cause, Data, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { SANDBOX_NAME } from "../agents/agent-sandbox-open.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  agentTag,
-  SANDBOX_NAME,
-  SANDBOX_NAME_BEFORE_RENAME,
-} from "../agents/machine/vercel-machine.js";
+import { agentTag, SANDBOX_NAME_BEFORE_RENAME } from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
 import { sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {

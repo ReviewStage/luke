@@ -15,7 +15,7 @@ import { rendererRegistry } from "../renderer-runtime.js";
 import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { appStateQuery, selectRun } from "../use-app-state.js";
 import {
   ListedPullRequests,
@@ -89,10 +89,12 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
   );
   act(() =>
     root?.render(
-      createElement(
-        OpenLinkProvider,
-        { value: (link: ReadLink) => links.push(link) },
-        createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
+      withQueryClient(
+        createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => links.push(link) },
+          createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
+        ),
       ),
     ),
   );
@@ -122,10 +124,12 @@ test("a new list of tasks draws no part opening links again, and a link opened a
     links.push(link);
   };
   const draw = (tasks: readonly TaskSummary[]) =>
-    createElement(
-      OpenLinkProvider,
-      { value: openPlace },
-      createElement(ListedPullRequests, { tasks, children: createElement(Opener) }),
+    withQueryClient(
+      createElement(
+        OpenLinkProvider,
+        { value: openPlace },
+        createElement(ListedPullRequests, { tasks, children: createElement(Opener) }),
+      ),
     );
   fakeAppPlatform({ openGitHub: () => undefined });
   root = createRoot(document.body.appendChild(document.createElement("div")));

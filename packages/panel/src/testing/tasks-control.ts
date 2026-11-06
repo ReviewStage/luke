@@ -621,6 +621,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onTaskAgents: () => undefined,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
+    onThreadsShown: ignore,
     personView: {
       userId: undefined,
       name: undefined,

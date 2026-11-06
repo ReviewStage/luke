@@ -43,7 +43,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
-import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { changesTab, isTerminalTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -374,6 +374,8 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  // The window's terminals are kept in its session storage, which each test starts without.
+  window.sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -756,7 +758,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
     [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["Pages", "Terminal", "Local", "Browser"],
+    ["Pages", "Cloud Terminal", "Local Terminal", "Browser"],
   );
   const row =
     [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")].find(
@@ -944,7 +946,7 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
     ),
     headings,
   );
-  assert.deepEqual(headings, ["Pull requests", "Terminal", "Local", "Browser"]);
+  assert.deepEqual(headings, ["Pull requests", "Cloud Terminal", "Local Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the + offers the agent's pull request");
   act(() => changes.click());
@@ -1483,7 +1485,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
-  assert.deepEqual(chosen, [{ changes: AGENT_ID, number: 2905 }]);
+  assert.deepEqual(chosen, [changesTab(AGENT_ID, 2905)]);
 });
 
 test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {
@@ -1685,7 +1687,13 @@ test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal t
   await settle();
 
   assert.equal(offered, true, "⌘J is offered on the page");
-  assert.deepEqual(chosen, [{ terminal: AGENT_ID }, { terminal: AGENT_ID }]);
+  assert.deepEqual(
+    chosen.map((tab) => (isTerminalTab(tab) ? [tab.terminal, tab.title] : tab)),
+    [
+      [AGENT_ID, "Cloud 1"],
+      [AGENT_ID, "Cloud 1"],
+    ],
+  );
 });
 
 test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its sandbox taking no shell", async () => {

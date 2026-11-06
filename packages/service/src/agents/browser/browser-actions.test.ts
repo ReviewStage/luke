@@ -20,6 +20,7 @@ import type { CdpEvent, PageTarget } from "@repo/features/browser-cdp";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import {
+  FAKE_IMAGE,
   type FakeCdpAnswer,
   type FakeCdpCommand,
   type FakeCdpPeer,
@@ -91,7 +92,7 @@ function run(
   keep = false,
 ) {
   const { api } = fakeSandboxApi({ status: "running", sessionId: SESSION });
-  const service = agentBrowserOver(api, fakeBridgePty(peer));
+  const service = agentBrowserOver(api, fakeBridgePty(peer), FAKE_IMAGE);
   const options = {
     ...(cursor === undefined ? undefined : { cursor }),
     ...(keep ? { keepScreenshots: true } : undefined),

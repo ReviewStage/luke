@@ -21,6 +21,7 @@ import {
   ProgressCount,
   PULL_REQUEST_GLYPH,
   RELATED_TASK_CELLS,
+  RowCount,
   SCROLL_SIZE,
   ScrollArea,
   SKELETON_SHAPE,
@@ -61,8 +62,10 @@ import { CatalogSection } from "../section";
  * rows' kinds leading and their × at their ends; and a quick add's draft
  * raised as a card over a row, its chips in their cells; the same related
  * tasks drawn only near the view of the scroller they stand in, each row
- * placed out of the list's grid at its columns' widths; and a list never
- * chosen still being read, its rows' blocks in their cells. Synthetic tasks.
+ * placed out of the list's grid at its columns' widths; tasks as the Tasks
+ * page lists them, one counting the threads that need the reader in the
+ * attention tone; and a list never chosen still being read, its rows'
+ * blocks in their cells. Synthetic tasks.
  */
 
 /** Does nothing: the catalog's menus act on nothing. */
@@ -401,6 +404,61 @@ const GLANCE_CELLS = [
   TASK_ROW_CELL.UPDATED,
 ] as const;
 
+/** The cells the Tasks page's List draws by default, what waits on the reader among them. */
+const TASKS_PAGE_CELLS = [
+  TASK_ROW_CELL.PRIORITY,
+  TASK_ROW_CELL.KEY,
+  TASK_ROW_CELL.STATUS,
+  TASK_ROW_CELL.WAITING,
+  TASK_ROW_CELL.ASSIGNEE,
+] as const;
+
+/** Tasks as the Tasks page lists them: one with threads waiting on the reader, counted in the attention tone, and one with none. */
+function TasksPageRows(): React.JSX.Element {
+  return (
+    <TaskRows label="Tasks" cells={TASKS_PAGE_CELLS}>
+      {[
+        { task: PARENT, waiting: 2 },
+        { task: RELATED, waiting: 0 },
+      ].map(({ task, waiting }) => (
+        <TaskRow
+          key={task.id}
+          taskId={task.id}
+          name={task.name}
+          cells={TASKS_PAGE_CELLS}
+          content={{
+            [TASK_ROW_CELL.PRIORITY]: (
+              <MarkChip
+                mark={<TaskPriorityMark priority={task.priority} />}
+                words={task.priority}
+              />
+            ),
+            [TASK_ROW_CELL.KEY]: <Key task={task} />,
+            [TASK_ROW_CELL.STATUS]: (
+              <MarkChip mark={<TaskStatusMark status={task.status} />} words={task.status} />
+            ),
+            [TASK_ROW_CELL.WAITING]: (
+              <RowCount
+                value={waiting}
+                noun={waiting === 1 ? "needs you" : "need you"}
+                tone={STATUS_TONE.ATTENTION}
+              />
+            ),
+            [TASK_ROW_CELL.ASSIGNEE]:
+              task.assignee === undefined ? (
+                <UnassignedAvatar size={AVATAR_SIZE.MARK} />
+              ) : (
+                <Avatar name={task.assignee} size={AVATAR_SIZE.MARK} />
+              ),
+          }}
+          menu={{ thing: "Task", groups: taskMenu(task.name) }}
+          onOpen={ignore}
+        />
+      ))}
+    </TaskRows>
+  );
+}
+
 /** How wide each placeholder row's name stands. */
 const READING_NAMES = ["46%", "38%", "54%"] as const;
 
@@ -433,6 +491,12 @@ function TaskRowsExample(): React.JSX.Element {
         title="A task's related tasks, led by their relations, one nested"
       >
         <RelatedTasks />
+      </CatalogSection>
+      <CatalogSection
+        id="task-rows-waiting"
+        title="Tasks as the Tasks page lists them, counting what needs you"
+      >
+        <TasksPageRows />
       </CatalogSection>
       <CatalogSection id="task-rows-run" title="Related tasks drawn only near the view">
         <RelatedTasksRun />

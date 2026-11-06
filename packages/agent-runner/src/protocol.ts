@@ -239,6 +239,74 @@ export const RunnerLinesAnswerSchema = Schema.Struct({
 });
 export type RunnerLinesAnswer = typeof RunnerLinesAnswerSchema.Type;
 
+/**
+ * How a runner keeps its CLI's transcript at the service where its config
+ * names `transcriptsUrl`: Anthropic's reference `SessionStore`'s five calls
+ * (the Agent SDK's `append`, `load`, `listSessions`, `delete`,
+ * `listSubkeys`), each one POST under the runner's bearer, run against the
+ * agent's own rows.
+ */
+export const RUNNER_TRANSCRIPTS = {
+  CALL: {
+    APPEND: "append",
+    LOAD: "load",
+    LIST_SESSIONS: "listSessions",
+    DELETE: "delete",
+    LIST_SUBKEYS: "listSubkeys",
+  },
+} as const;
+
+/** The SDK's `SessionKey`: a project, a session, and a subpath, absent for the main transcript. */
+const TranscriptKeySchema = Schema.Struct({
+  projectKey: Schema.String,
+  sessionId: Schema.String,
+  subpath: Schema.optionalKey(Schema.String),
+});
+
+/** One transcript line, opaque but for its `type`, as the SDK's `SessionStoreEntry` is. */
+const TranscriptEntrySchema = Schema.Record(Schema.String, Schema.Unknown);
+
+/** One call of a runner's transcript store. */
+export const RunnerTranscriptCallSchema = Schema.Union([
+  Schema.Struct({
+    call: Schema.Literal(RUNNER_TRANSCRIPTS.CALL.APPEND),
+    key: TranscriptKeySchema,
+    entries: Schema.Array(TranscriptEntrySchema),
+  }),
+  Schema.Struct({
+    call: Schema.Literal(RUNNER_TRANSCRIPTS.CALL.LOAD),
+    key: TranscriptKeySchema,
+  }),
+  Schema.Struct({
+    call: Schema.Literal(RUNNER_TRANSCRIPTS.CALL.LIST_SESSIONS),
+    projectKey: Schema.String,
+  }),
+  Schema.Struct({ call: Schema.Literal(RUNNER_TRANSCRIPTS.CALL.DELETE), key: TranscriptKeySchema }),
+  Schema.Struct({
+    call: Schema.Literal(RUNNER_TRANSCRIPTS.CALL.LIST_SUBKEYS),
+    key: Schema.Struct({ projectKey: Schema.String, sessionId: Schema.String }),
+  }),
+]);
+export type RunnerTranscriptCall = typeof RunnerTranscriptCallSchema.Type;
+
+/** What a load is answered: the whole transcript, none where it was never written. */
+export const RunnerTranscriptLoadSchema = Schema.Struct({
+  entries: Schema.NullOr(Schema.Array(TranscriptEntrySchema)),
+});
+export type RunnerTranscriptLoad = typeof RunnerTranscriptLoadSchema.Type;
+
+/** What a listing of a project's sessions is answered: each with its last append, in epoch milliseconds. */
+export const RunnerTranscriptSessionsSchema = Schema.Struct({
+  sessions: Schema.Array(Schema.Struct({ sessionId: Schema.String, mtime: Schema.Number })),
+});
+export type RunnerTranscriptSessions = typeof RunnerTranscriptSessionsSchema.Type;
+
+/** What a listing of a session's subkeys is answered. */
+export const RunnerTranscriptSubkeysSchema = Schema.Struct({
+  subkeys: Schema.Array(Schema.String),
+});
+export type RunnerTranscriptSubkeys = typeof RunnerTranscriptSubkeysSchema.Type;
+
 /** The image types the Messages API takes in a base64 image block. */
 export const IMAGE_MEDIA_TYPE = {
   PNG: "image/png",
@@ -295,6 +363,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   resume: Schema.optionalKey(Schema.String),
   /** The service's id of a prompt a rewind dropped: the resumed session is cut just before it, and resumed whole where it holds no such prompt. */
   rewindBefore: Schema.optionalKey(Schema.String),
+  /** Whether the session resumed is another agent's, which a continued or forked agent forks as its own (the SDK's `forkSession`). */
+  fork: Schema.optionalKey(Schema.Boolean),
   firstSequence: SequenceSchema,
   /** Where the runner posts its events. */
   eventsUrl: Schema.String,
@@ -302,6 +372,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   linesUrl: Schema.optionalKey(Schema.String),
   /** Our MCP server's streamable-HTTP endpoint. */
   mcpUrl: Schema.String,
+  /** Where the CLI's transcript is kept at the service (`RUNNER_TRANSCRIPTS`), handed to the SDK as its `sessionStore`; none where the CLI's own files are all it keeps. */
+  transcriptsUrl: Schema.optionalKey(Schema.String),
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /**
@@ -351,11 +423,15 @@ export const CodexConfigSchema = Schema.Struct({
   threadId: Schema.optionalKey(Schema.String),
   /** The service's id of a message a rewind dropped: the resumed thread is reverted to before the turn that took it, and resumed whole where none did. */
   rewindBefore: Schema.optionalKey(Schema.String),
+  /** Whether the thread is another agent's, which a continued or forked agent forks as its own (`thread/fork`). */
+  fork: Schema.optionalKey(Schema.Boolean),
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
   /** Where the runner reads the service's lines past its config (`RUNNER_LINES`); none where the service writes them to its stdin. */
   linesUrl: Schema.optionalKey(Schema.String),
   mcpUrl: Schema.String,
+  /** Where Codex's rollout is kept at the service (`RUNNER_TRANSCRIPTS`), mirrored as Codex writes it and written back to `CODEX_HOME` where it is missing; none where Codex's own files are all it keeps. */
+  transcriptsUrl: Schema.optionalKey(Schema.String),
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /**

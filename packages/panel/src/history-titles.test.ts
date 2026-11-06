@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { type FileStripTab, fileTab } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { test } from "vitest";
 import { liveStepTitle, NAMED_STEP, stepTitle } from "./history-titles.js";
-import { ROUTED_PLACE } from "./route-gates.js";
+import { ROUTED_PLACE } from "./places/routed-places.js";
 import { MAIN_TAB } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "./tasks/use-side-panel.js";
 import type { InboxChoice } from "./tasks/use-tasks-tab.js";
@@ -25,7 +26,7 @@ const TASK = {
 
 /** The window on the task, its side panel open on the tab given or shut. */
 function onTask(
-  side: (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB] | { file: string } | undefined,
+  side: (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB] | FileStripTab | undefined,
 ) {
   const base = tasksControl();
   return tasksControl({
@@ -47,7 +48,7 @@ test("a task's step is named by the task, with the side panel's tab while it is 
     detail: "Comments",
     panes: { column: undefined, side: "Comments" },
   });
-  assert.deepEqual(stepTitle(undefined, onTask({ file: "apps/web/session-store.ts" })), {
+  assert.deepEqual(stepTitle(undefined, onTask(fileTab("apps/web/session-store.ts"))), {
     label: "Auth refactor",
     detail: "session-store.ts",
     panes: { column: undefined, side: "session-store.ts" },
@@ -83,7 +84,10 @@ test("the Inbox's step names the task its item is of, Settings and Home are name
     tasks: [TASK],
     inboxView: { ...base.inboxView, open: true, chosen },
   });
-  assert.deepEqual(stepTitle(undefined, inbox), { label: "Inbox", detail: "Auth refactor" });
+  assert.deepEqual(stepTitle(ROUTED_PLACE.INBOX, inbox), {
+    label: "Inbox",
+    detail: "Auth refactor",
+  });
   assert.deepEqual(stepTitle(ROUTED_PLACE.SETTINGS, base), { label: "Settings" });
   assert.deepEqual(stepTitle(undefined, base), { label: "Home" });
   assert.deepEqual(stepTitle(ROUTED_PLACE.ADMIN, base), { label: "Home" });

@@ -94,8 +94,6 @@ export const TERMINAL_RELAY = {
 
 /** How the relay ends a shell's socket, by what the tab should show. */
 export const TERMINAL_RELAY_CLOSE = {
-  /** Nobody typed in the sandbox's terminals for five minutes; the tab reconnects on a key press. */
-  IDLE: 4000,
   /** The sandbox is stopped; only the developer's resume brings it back. */
   STOPPED: 4001,
   /** The agent has not opened its sandbox yet. */

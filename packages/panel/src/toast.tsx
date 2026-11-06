@@ -145,6 +145,14 @@ export type ToastNotice = {
   readonly replayUnmasked?: boolean | undefined;
   /** What the developer sending it away, by its × or Escape, tells whoever showed it, so a question they set aside can be asked again. */
   readonly onDismiss?: () => void;
+  /**
+   * What it tells whoever showed it once it is gone, however it went: its
+   * hold run out, pushed out, dismissed, withdrawn, or its action pressed.
+   * Note that it is told once the toast's exit is done, after its action's
+   * press has run, so an act its Undo stands over goes only once that Undo
+   * can no longer be pressed.
+   */
+  readonly onGone?: () => void;
 } & ToastSaying &
   (
     | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
@@ -421,6 +429,23 @@ function reportSaid(step: ToastStep, at: number): ToastStep | undefined {
   return { ...step, notice: { ...step.notice, details } };
 }
 
+/** The notices `before` held, standing or waiting, that `after` no longer holds. */
+function goneBetween(before: ToastLine, after: ToastLine): readonly ToastNotice[] {
+  const held = (stack: ToastLine) => [
+    ...stack.shown.map((toast) => toast.notice),
+    ...stack.waiting,
+  ];
+  const still = new Set<ToastNotice>(held(after));
+  return held(before).filter((notice) => !still.has(notice));
+}
+
+/** Tells each notice `before` held that `after` no longer does that it is gone. */
+function tellGone(before: ToastLine, after: ToastLine): Effect.Effect<void> {
+  return Effect.sync(() => {
+    for (const notice of goneBetween(before, after)) notice.onGone?.();
+  });
+}
+
 /**
  * The toasts' lives, as an atom whose work is their waits: each step lands
  * on the stack, which then runs down to its next change and lets it happen,
@@ -437,6 +462,7 @@ const toastLifeAtom = Atom.keepAlive(
       const before = get(toastStackAtom);
       let stack = settle(said === undefined ? before : stepped(before, said, at), at);
       get.set(toastStackAtom, stack);
+      yield* tellGone(before, stack);
       // Note that the stack is carried here rather than read back, because
       // nothing else writes it while this runs, and each settle past a due
       // moves it on, so the loop ends even under a registry already disposed.
@@ -445,8 +471,10 @@ const toastLifeAtom = Atom.keepAlive(
         if (dues.length === 0) return;
         const now = yield* Clock.currentTimeMillis;
         yield* Effect.sleep(Duration.millis(Math.max(0, Math.min(...dues) - now)));
+        const was = stack;
         stack = settle(stack, yield* Clock.currentTimeMillis);
         get.set(toastStackAtom, stack);
+        yield* tellGone(was, stack);
       }
     }),
   ),

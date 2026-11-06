@@ -6,7 +6,7 @@ import { searchTokens } from "@repo/ui/search-tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { afterPaint } from "../after-paint.js";
 import { useInboxViewChoices } from "../desktop/folded-groups.js";
-import { useInboxCloser } from "./inbox-close.js";
+import { useInboxResolver } from "./inbox-close.js";
 import {
   EVERYONES,
   INBOX_HOLDER,
@@ -394,7 +394,7 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
     retryAgents();
   }, [retryLive, retryAgents]);
   const choose = useCallback((listed: InboxListed) => chooseFirst(choiceOf(listed)), [chooseFirst]);
-  const closeItem = useInboxCloser();
+  const resolveItems = useInboxResolver();
   // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
   const failed = read.failed || tasks.listFailed;
   const onRetry = () => {
@@ -433,7 +433,7 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
     failed,
     choose,
     clear,
-    closeItem,
+    resolveItems,
     onRetry,
   };
 }

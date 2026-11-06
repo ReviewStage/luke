@@ -7,6 +7,7 @@ import {
   List,
   PAGE_FRAME,
   STATUS_TONE,
+  useMinute,
   useRovingKeys,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
@@ -19,7 +20,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { NOTICE_LOOK } from "../tasks/connect-agent-banner.js";
 import { InboxItemRow, inboxRowDraft } from "../tasks/inbox-list.js";
-import { type InboxListed, needsYou } from "../tasks/inbox-model.js";
+import { type InboxListed, waitsOnReaderNow } from "../tasks/inbox-model.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
@@ -134,8 +135,9 @@ function useArriving(tasks: TasksControl, read: WaitingItems, waiting: number): 
 }
 
 /**
- * Inbox: the items waiting on the reader, a teammate's left to the Inbox,
- * as the Dock's badge counts them, or a refused read's Retry; nothing while
+ * Inbox: the items waiting on the reader, a teammate's left to the Inbox and
+ * one with a reminder still ahead left out until it comes due, as the
+ * sidebar's Inbox row counts them (`waitsOnReaderNow`), or a refused read's Retry; nothing while
  * none waits. A press on a row opens the Inbox on its item.
  */
 function HomeInbox({
@@ -278,7 +280,9 @@ export function DesktopHome({
   // Note that on a phone the words leave the caret alone, because a field typed in puts the places bar away (`mobile-bar.tsx`).
   const takesFocus = room !== SHELL_ROOM.NARROW;
   const read = useWaitingItems(tasks);
-  const waiting = read.items.filter((listed) => needsYou(listed, tasks.me));
+  // Note that the clock moves with the minute, so an item whose reminder comes due joins the section without a read.
+  const now = useMinute();
+  const waiting = read.items.filter(({ item }) => waitsOnReaderNow(item, tasks.me, now));
   const arriving = useArriving(tasks, read, waiting.length);
   return (
     // Note that the greeting welcomes the reader back while the list is read, because an account is new but once.

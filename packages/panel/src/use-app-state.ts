@@ -14,7 +14,7 @@ import {
   NO_EXPERIMENTS,
 } from "@repo/settings";
 import { type AppSettingsView, appSettingsView } from "@repo/settings/wire";
-import { queryOptions, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -24,7 +24,11 @@ import { appBridge } from "./app-bridge.js";
 import { QUERY_ROOT } from "./query-keys.js";
 import { rendererPromise, rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 import { onFixtureMoved } from "./tasks/fixture-moves.js";
-import { loadedTasksFixture, loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
+import {
+  handFixtureClient,
+  loadedTasksFixture,
+  loadTasksFixture,
+} from "./tasks/tasks-fixture-loader.js";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
 interface AppStateSource {
@@ -237,18 +241,24 @@ export function useAppStateSubscription(): void {
   const registry = useContext(RegistryContext);
   // Note that the reading held now is written as the hook mounts (`immediate`), because a
   // delivery adopted between the root's first read and this mount would otherwise wait for the next.
-  useEffect(
-    () =>
-      registry.subscribe(
-        appStateAtom,
-        (result) => {
-          const state = AsyncResult.value(result);
-          if (Option.isSome(state)) queryClient.setQueryData(appStateQuery.queryKey, state.value);
-        },
-        { immediate: true },
-      ),
-    [queryClient, registry],
-  );
+  useEffect(() => {
+    // Note that the client written into is handed to the fixture, whose staged acts read the run
+    // from it (`act.ts`); the task that feeds the document straight into the cache rewrites this
+    // subscription, and that hand-off must survive it.
+    const takeBack = handFixtureClient(queryClient);
+    const stop = registry.subscribe(
+      appStateAtom,
+      (result) => {
+        const state = AsyncResult.value(result);
+        if (Option.isSome(state)) queryClient.setQueryData(appStateQuery.queryKey, state.value);
+      },
+      { immediate: true },
+    );
+    return () => {
+      stop();
+      takeBack();
+    };
+  }, [queryClient, registry]);
 }
 
 /** `useAppStateSubscription` as an element, for a root to mount beside the surface it draws. */
@@ -258,17 +268,15 @@ export function AppStateSubscription(): null {
 }
 
 /**
- * The snapshot as it stands, for a callback that cannot wait a render: two
- * acts asked in one breath arrive as two calls in one turn, and the second
- * has to read what the first left. Not a hook, so nothing redraws for it.
+ * The document as `client` holds it, for a callback that cannot wait a
+ * render: two acts asked in one breath arrive as two calls in one turn, and
+ * the second has to read what the first left. The client is the caller's,
+ * `useQueryClient`'s in a component and the one a test drew with in a test,
+ * read with `getQueryData` as the docs' guide to reading the cache outside a
+ * component does. Not a hook, so nothing redraws for it.
  */
-export function appStateNow(): AppStateSnapshot | undefined {
-  return Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
-}
-
-/** Whether the platform this window runs on offers `capability` (`selectCapability`), for a callback that cannot wait a render. */
-export function capabilityNow(capability: HostCapability): boolean {
-  return appStateNow()?.run.capabilities.includes(capability) === true;
+export function appStateIn(client: QueryClient): AppStateSnapshot | undefined {
+  return client.getQueryData(appStateQuery.queryKey);
 }
 
 /**

@@ -3,30 +3,20 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@repo/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { HOST_CAPABILITY } from "@repo/settings";
-import { noNetwork } from "@repo/wire/testing";
-import { ConfigProvider, Effect, Layer, Path, Result } from "effect";
+import { Effect, Layer, Path, Result } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { AccountSourceHost } from "./account-source.js";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { HostAssemblyTag, HostTag, hostStandingLayer } from "./effect/host.js";
-import { hostKernelLayer } from "./effect/kernel.js";
 import {
-  AppIdentity,
-  Environment,
-  IdSource,
   LoopbackListener,
   MirrorPlatform,
-  RunMode,
-  reporterLayer,
   SecretCipher,
-  ShutdownSignal,
   SignInConsent,
-  StateRoot,
   TerminalSocket,
   ThisMacHost,
 } from "./effect/seams.js";
@@ -40,8 +30,8 @@ import {
   NOT_ON_THIS_PLATFORM,
 } from "./host-concerns.js";
 import { oauthAccountSourceLayer } from "./oauth-account-source.js";
-import { runModeFor } from "./run-mode.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
+import { machineOver } from "./testing/host-machine.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 /**
@@ -50,32 +40,6 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
  * with none of their seams provided and refuses their methods, where the
  * desktop's, built with all of them, answers.
  */
-
-/**
- * Every seam a host stands on whatever it was built with, the kernel over
- * them. The account source is each test's own, so none of the desktop's
- * source's seams are here.
- */
-const machineOver = (stateRoot: string) =>
-  Layer.provideMerge(
-    hostKernelLayer,
-    Layer.mergeAll(
-      Layer.succeed(StateRoot, stateRoot),
-      Layer.succeed(RunMode, runModeFor({ capture: false, fixture: true })),
-      Layer.succeed(AppIdentity, {
-        appVersion: "0.0.0-test",
-        packaged: false,
-        platform: PRODUCT_PLATFORM.DESKTOP,
-      }),
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      Layer.succeed(IdSource, { create: () => "id" }),
-      reporterLayer(() => undefined),
-      Layer.succeed(ShutdownSignal, { notify: undefined }),
-      NodeFileSystem.layer,
-      NodePath.layer,
-      noNetwork,
-    ),
-  );
 
 /** The desktop's own account source, over its cipher and its loopback consent. */
 const desktopAccountSource = Layer.provide(

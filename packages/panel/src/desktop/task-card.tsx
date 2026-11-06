@@ -51,9 +51,10 @@ import { WorkspaceRef } from "./workspace-ref.js";
 /**
  * task-card.tsx -- a sidebar task's agents at a glance: the one icon at its row's end, and the card its row hangs while the pointer rests on it.
  *
- * The icon is how the task's agents stand, most pressing first: a question
- * waiting on the reader, a failure, an agent at work, or the pull request
- * they left, in `@repo/ui`'s `TaskAgentsMark` (`task-agents-model.ts`). The card leads, as the
+ * The icon is how the task's agents stand, most pressing first: a failure,
+ * an agent at work, or the pull request they left, in `@repo/ui`'s
+ * `TaskAgentsMark` (`task-agents-model.ts`); a question waiting on the reader
+ * is no status there. The card leads, as the
  * task board's card does, with its status's mark and its name, its key, its
  * repository, and how long ago it was updated under the name, and its
  * priority's mark and its assignee's face in the corner, icons alone, each

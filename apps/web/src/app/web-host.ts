@@ -244,6 +244,7 @@ const pageTerminalPorts: TerminalPortSeam<WebSender> = {
     return {
       post: (message) => port1.postMessage(message),
       onMessage: (listener) => port1.addEventListener("message", (event) => listener(event.data)),
+      onClose: (then) => port1.addEventListener("close", then, { once: true }),
       close: () => port1.close(),
     };
   },
@@ -319,6 +320,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    acts: operator.acts,
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
@@ -420,6 +422,7 @@ const composedWeb = (
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
+        acts: assembly.acts,
         nodes: assembly.nodes,
         node: { openExternal: async (url) => tabs.open(url) },
         state,

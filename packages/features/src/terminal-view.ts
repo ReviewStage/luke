@@ -43,7 +43,7 @@ export const TERMINAL_CONNECTION = {
   ATTACHED: "attached",
   /** The socket dropped — a sleep, a network change, the relay's bound — and the host is reconnecting on its own. */
   RECONNECTING: "reconnecting",
-  /** Closed after five minutes without typing; the host does not reconnect until the tab attaches again. */
+  /** Ended by the host after ten minutes with nothing typed, printed, or shown, or as a sign-out ends it; the host does not reconnect until the tab attaches again. */
   IDLE: "idle",
   /** The sandbox is stopped; only the developer's resume brings it back. */
   STOPPED: "stopped",

@@ -27,7 +27,7 @@ import { CatalogSection } from "../section";
 
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
- * the one shown, one unavailable, one unread; a place whose ⋯ comes in
+ * the one shown, one unavailable, one unread; counts past 99 drawn 99+; a place whose ⋯ comes in
  * over its count under the pointer; an account's menu trigger;
  * links with addresses of their own; long names in a narrow column;
  * steps read in order, their names on two lines over a meta line; a
@@ -200,6 +200,25 @@ function NavItems(): React.JSX.Element {
     <>
       <CatalogSection id="nav-item-places" title="Places, with counts, marks, and chords">
         <Places />
+      </CatalogSection>
+      <CatalogSection
+        id="nav-item-capped"
+        title="Counts past 99 are drawn 99+ and still read whole: 99 stands as it is, 128 draws 99+"
+      >
+        <div className="catalog-narrow">
+          <NavItem
+            icon={<FolderIcon />}
+            count={{ value: 99, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+          >
+            Inbox
+          </NavItem>
+          <NavItem
+            icon={<FolderIcon />}
+            count={{ value: 128, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+          >
+            Overview
+          </NavItem>
+        </div>
       </CatalogSection>
       <CatalogSection id="nav-item-actions" title="A place with a ⋯ of its own">
         <WithActions />

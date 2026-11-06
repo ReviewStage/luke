@@ -145,7 +145,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Attach files", "Integrations", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["Attach files", "MCP servers", "62% of context used", "Dictate"]);
 });
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers none of its rows", async () => {
@@ -157,15 +157,15 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
   assert.deepEqual(offered, ["62% of context used", "Dictate"]);
 });
 
-test("the + raises a menu of Attachment and Integrations, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
+test("the + raises a menu of Attachment and MCP servers, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
   const box = await drawnAt(CARD.WIDE);
   act(() => box.press("Add files and more").click());
   const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   assert.deepEqual(
     rows.map((item) => item.textContent),
-    ["Attach files", "Integrations"],
+    ["Attach files", "MCP servers"],
   );
-  const servers = rows[1] ?? assert.fail("Integrations stands");
+  const servers = rows[1] ?? assert.fail("MCP servers stands");
   act(() => servers.click());
 
   const popover =
@@ -178,7 +178,7 @@ test("the + raises a menu of Attachment and Integrations, whose servers popover 
   });
   assert.equal(document.querySelector(".ui-menu-panel"), null);
   assert.equal(document.activeElement, servers);
-  assert.equal(box.container.querySelector('button[aria-label="Integrations"]'), null);
+  assert.equal(box.container.querySelector('button[aria-label="MCP servers"]'), null);
 });
 
 test("the ⋯'s menu closes once the card changes width, as a panel dragged narrower would, so it never offers a stale set of presses", async () => {

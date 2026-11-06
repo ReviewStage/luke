@@ -9,6 +9,7 @@ import {
 import { isComposingKey } from "../../composing-key.js";
 import { ShadcnInput } from "../../shadcn/input.js";
 import { STATUS_TONE } from "../../status-tone.js";
+import { CountFigure } from "../count-figure/count-figure.js";
 import {
   DisclosureChevron,
   type DisclosureControl,
@@ -221,7 +222,7 @@ function said(node: ReactNode): boolean {
   return node !== undefined && node !== null && node !== false && node !== "";
 }
 
-/** The count after the label, read with its noun, at whatever value its caller gave. */
+/** The count after the label, read with its noun, at whatever value its caller gave, drawn "99+" past 99. */
 function Count({ count }: { count: NavCount }): React.JSX.Element {
   const shown = count.shown ?? NAV_COUNT_SHOWN.ALWAYS;
   const tone = count.tone ?? STATUS_TONE.NEUTRAL;
@@ -233,7 +234,7 @@ function Count({ count }: { count: NavCount }): React.JSX.Element {
       data-shown={shown}
       data-tone={tone}
     >
-      {count.value}
+      <CountFigure value={count.value} />
       {count.noun === undefined ? null : <span className="ui-visually-hidden"> {count.noun}</span>}
     </span>
   );

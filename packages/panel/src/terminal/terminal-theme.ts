@@ -39,19 +39,6 @@ const THEME_TOKENS = {
   brightWhite: "--terminal-bright-white",
 } as const satisfies Record<string, `--terminal-${string}`>;
 
-/**
- * The terminal's own notes are printed in palette slot 245 (`38;5;245`, which
- * `use-terminal-session.ts` writes), a mid gray of the 256-color ramp, read
- * off `--terminal-note`. A palette slot rather than a 24-bit color because
- * the DOM renderer draws a slot through a class, which the panel's policy
- * admits, and a slot follows the appearance as it flips. A shell that
- * prints that gray itself gets the note's, which is a gray beside it, and a
- * dimmed screen leaves the slot undimmed so the note stays legible over
- * output that is not.
- */
-const NOTE_SLOT = 245;
-const NOTE_TOKEN = "--terminal-note";
-
 /** The colors a dimmed screen gives back to the ground: the text and the sixteen the shell's own output is drawn in. */
 const DIMMED_COLORS: ReadonlySet<string> = new Set([
   "foreground",
@@ -144,24 +131,16 @@ function dimmed(color: string, ground: string | undefined, keep: number): string
  * stylesheet does not reach, as in a document without the panel's styles,
  * is left out, and the terminal keeps its own default for it. While the
  * screen is dimmed its output's colors stand a part of the way back to the
- * ground, and the terminal's own notes, in their slot, stay as they are.
+ * ground.
  */
 export function terminalTheme(host: Element, dim: boolean): ITheme {
-  const colors = resolvedColors(host, [...Object.values(THEME_TOKENS), NOTE_TOKEN]);
+  const colors = resolvedColors(host, Object.values(THEME_TOKENS));
   const ground = colors.get(THEME_TOKENS.background);
-  const theme = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(THEME_TOKENS).flatMap(([color, token]) => {
       const value = colors.get(token);
       if (value === undefined) return [];
-      return [
-        [color, dim && DIMMED_COLORS.has(color) ? dimmed(value, ground, DIM_KEEP) : value],
-      ];
+      return [[color, dim && DIMMED_COLORS.has(color) ? dimmed(value, ground, DIM_KEEP) : value]];
     }),
   );
-  const note = colors.get(NOTE_TOKEN);
-  if (note === undefined) return theme;
-  // Note that the slots between the sixteen and the note's are left empty, which the terminal fills with its own cube.
-  const extendedAnsi: string[] = [];
-  extendedAnsi[NOTE_SLOT - 16] = note;
-  return { ...theme, extendedAnsi };
 }

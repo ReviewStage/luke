@@ -389,7 +389,7 @@ test("Fast on a model nothing pays for lands on its harness's row in Settings, a
   assert.equal(chip.textContent?.includes("Fast"), false);
 });
 
-test("a server switched off from the + menu's Integrations is handed to the agent's start, and a refused card opened again keeps it off", async () => {
+test("a server switched off from the + menu's MCP servers is handed to the agent's start, and a refused card opened again keeps it off", async () => {
   holdIntegrations(() => ({
     rows: {
       integrations: {
@@ -404,7 +404,7 @@ test("a server switched off from the + menu's Integrations is handed to the agen
     const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     assert.deepEqual(
       rows.map((row) => row.textContent),
-      ["Attach files", "Integrations", "Task relation"],
+      ["Attach files", "MCP servers", "Task relation"],
     );
     act(() => rows[1]?.click());
     await settle();

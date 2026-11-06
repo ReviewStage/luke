@@ -10,9 +10,7 @@ import {
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
   type AgentInboxAnswerParams,
-  type AgentInboxAttachmentView,
   type AgentInboxCloseParams,
-  type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
   type AgentInboxReadAllParams,
@@ -37,22 +35,17 @@ import {
   agentDefaultWriteParamsSchema,
   agentGitHubImageParamsSchema,
   agentInboxAnswerParamsSchema,
-  agentInboxAttachmentParamsSchema,
   agentInboxCloseParamsSchema,
-  agentInboxItemHomeParamsSchema,
-  agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
   agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
-  agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMarkReadParamsSchema,
   agentMessageParamsSchema,
   agentMessagesParamsSchema,
   agentPageParamsSchema,
   agentPartParamsSchema,
-  agentPictureParamsSchema,
   agentPinParamsSchema,
   agentPullRequestActionParamsSchema,
   agentPullRequestParamsSchema,
@@ -67,21 +60,11 @@ import {
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
   type ChatGptDevicePollAnswerView,
-  type ChatGptDeviceStartAnswerView,
-  chatGptDeviceLoginParamsSchema,
-  chatGptDeviceWaitParamsSchema,
-  type DictationTranscribeAnswerView,
-  dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
-  githubTokenSaveParamsSchema,
   hostIdParamsSchema,
   INBOX_SCOPE_KIND,
   memoriesFollowParamsSchema,
-  memoryForgetParamsSchema,
   type ProviderKeysAnswerView,
-  providerKeyForAgentsParamsSchema,
-  providerKeyRemoveParamsSchema,
-  providerKeySaveParamsSchema,
   pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
@@ -133,6 +116,7 @@ import {
   type AnyWrite,
   anyWrite,
   declaredMethod,
+  declaredWrite,
   type EntityPool,
   type FieldChange,
   ROW_GONE,
@@ -141,6 +125,7 @@ import {
 import type { WireRecord, WireValue } from "@repo/wire";
 import {
   Clock,
+  Deferred,
   Duration,
   Effect,
   FiberHandle,
@@ -184,8 +169,10 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { ACCOUNT_ASK_ACTS, AGENT_INBOX_ACTS } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import { heldHosts, hostRemove } from "./hosts-follow.js";
 import {
@@ -388,13 +375,20 @@ export interface AgentsDependencies {
   repositoriesMoved?: Effect.Effect<void>;
 }
 
+/** The acts this composer answers: the account's own asks and the Inbox's. */
+type AgentsActs = HostActTable<typeof ACCOUNT_ASK_ACTS> & HostActTable<typeof AGENT_INBOX_ACTS>;
+
 export interface AgentsComposer extends Composer {
+  /** The account's own asks and the Inbox's acts, answered directly as the panel's port asks them. */
+  readonly acts: AgentsActs;
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
   /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
   readonly queueable: readonly AnyWrite[];
+  /** Every close a window still holds for its Undo let go as sent, answering once each is answered, so a quit drops none. */
+  readonly flushHeldCloses: Effect.Effect<void>;
 }
 
 /** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
@@ -416,6 +410,31 @@ function gateClosed(by: string): GateClosed {
     cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: by },
   };
 }
+
+/**
+ * The longest a held close waits for the window that holds it to let it go
+ * before it goes by itself: well past the Undo toast's hold, which a pointer
+ * over the toast pauses, so it stands for a window that closed, or a tab
+ * reloaded, while its Undo stood.
+ */
+const HELD_CLOSE_BOUND = Duration.minutes(1);
+
+/** What a held close its window took back answers: refused, so the pool takes back what it drew and keeps nothing to send again, and the window that undid it reads nothing of it. */
+const CLOSE_UNDONE: AgentInboxAnsweredView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+
+/**
+ * The names the Inbox's writes that may wait are queued under, which were
+ * their Gateway methods' ids. Note that each is kept byte for byte, and
+ * a reminder keeps Snooze's, because a write queued offline is kept on disk
+ * by its name, and one under a name no host declares is dropped.
+ */
+const INBOX_QUEUED_WRITE = {
+  ANSWER: "agents.inboxAnswer",
+  CLOSE: "agents.inboxClose",
+  READ_STATE: "agents.inboxReadState",
+  REMIND: "agents.inboxSnooze",
+  READ_ALL: "agents.inboxReadAll",
+} as const;
 
 /** Whether a commit names a read, by the rule a File tab's read at a commit is held to. */
 const isCommitSha = Schema.is(commitShaSchema);
@@ -1078,32 +1097,24 @@ function composed(
   const inboxWrite = <Input, Answer extends Parameters<typeof writtenOf>[0]>(
     keys: (input: Input) => readonly string[],
     change: (input: Input) => InboxChange,
-    send: (input: Input, key: string | undefined) => Effect.Effect<Answer>,
+    send: (input: Input, key: string | undefined, waited: boolean) => Effect.Effect<Answer>,
     queue?: {
       readonly name: string;
       readonly input: Schema.Codec<Input, unknown>;
       readonly queued: (input: Input) => Answer;
     },
-  ): WriteDeclaration<InboxItem, InboxChange, Input, WireValue> => {
-    const keptAs =
-      queue === undefined ? undefined : (input: Input) => carried<Answer>(queue.queued(input));
-    return {
-      kind: INBOX_ITEM,
-      keys,
-      change,
-      send: (input, { key }) =>
-        Effect.map(send(input, key), (answer) => {
-          const answered = carried<Answer>(answer);
-          if (keptAs === undefined || !("failure" in answer)) {
-            return inboxSent(answered, writtenOf(answer));
-          }
-          return untaken(writeUntakenOf(answer.cause), { kept: keptAs(input), refused: answered });
-        }),
-      ...(queue === undefined || keptAs === undefined
-        ? undefined
-        : { queue: { name: queue.name, input: queue.input, queued: keptAs } }),
-    };
-  };
+  ): WriteDeclaration<InboxItem, InboxChange, Input, Answer> => ({
+    kind: INBOX_ITEM,
+    keys,
+    change,
+    send: (input, { key, waited }) =>
+      Effect.map(send(input, key, waited), (answer) =>
+        queue === undefined || !("failure" in answer)
+          ? inboxSent(answer, writtenOf(answer))
+          : untaken(writeUntakenOf(answer.cause), { kept: queue.queued(input), refused: answer }),
+      ),
+    ...(queue === undefined ? undefined : { queue }),
+  });
   /** A nod or a close that waits, answered as taken over the item as the reads now draw it, or unanswered where none holds it. */
   const settledAs = ({ itemId }: { readonly itemId: string }): AgentInboxAnsweredView => {
     const item = dependencies.pool.row(INBOX_ITEM, itemId);
@@ -1123,12 +1134,85 @@ function composed(
     },
     ({ itemId, ...request }, key) => asked(client.answerInbox(itemId, request, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
+      name: INBOX_QUEUED_WRITE.ANSWER,
       input: agentInboxAnswerParamsSchema,
       queued: settledAs,
     },
   );
-  /** An open item closed without an answer, settling it. */
+  /** The closes windows hold for their Undo, by each close's key: told once whether it goes to the service, and answered once it has. */
+  const heldCloses = new Map<
+    string,
+    { readonly told: Deferred.Deferred<boolean>; readonly answered: Deferred.Deferred<void> }
+  >();
+  /**
+   * What a window decided of a held close before the close came to wait, by
+   * its key, with when: as an Undo pressed while an earlier write on the same
+   * item was still out, or while the close waited behind writes the service
+   * had not answered. The close reads it once it comes to be sent.
+   */
+  const decidedEarly = new Map<string, { readonly send: boolean; readonly at: number }>();
+  /** The held closes already let go, by key, with when, so an Undo that comes after hears it came too late. */
+  const letGoAt = new Map<string, number>();
+  /** Every early decision and let-go older than `HELD_CLOSE_BOUND` forgotten, since no window asks after one that old. */
+  const forgetStale = (now: number) => {
+    const bound = Duration.toMillis(HELD_CLOSE_BOUND);
+    for (const [key, { at }] of decidedEarly) if (now - at > bound) decidedEarly.delete(key);
+    for (const [key, at] of letGoAt) if (now - at > bound) letGoAt.delete(key);
+  };
+  /** The early decision on the close under `clientKey`, taken so it is read once; none where its window said nothing yet. */
+  const takeDecided = (clientKey: string): boolean | undefined => {
+    const early = decidedEarly.get(clientKey);
+    decidedEarly.delete(clientKey);
+    return early?.send;
+  };
+  /**
+   * The held close under `clientKey`, `send` once its window lets it go,
+   * once its Undo can no longer be pressed, or is; or, past
+   * `HELD_CLOSE_BOUND` with no word from its window, as sent. What `send`
+   * answers, or `undone`, it answers. Note that it is answered to a quit's
+   * flush however it ends, interrupted too, so the quit never waits on it.
+   */
+  const released = <Answer>(
+    clientKey: string,
+    send: Effect.Effect<Answer>,
+    undone: Answer,
+  ): Effect.Effect<Answer> =>
+    Effect.gen(function* () {
+      const held = {
+        told: yield* Deferred.make<boolean>(),
+        answered: yield* Deferred.make<void>(),
+      };
+      heldCloses.set(clientKey, held);
+      const settled = Effect.sync(() => {
+        heldCloses.delete(clientKey);
+        letGoAt.set(clientKey, kernel.now());
+      }).pipe(Effect.andThen(Deferred.succeed(held.answered, undefined)));
+      return yield* Effect.gen(function* () {
+        const heard = yield* Effect.timeoutOption(Deferred.await(held.told), HELD_CLOSE_BOUND);
+        heldCloses.delete(clientKey);
+        return yield* Option.getOrElse(heard, () => true) ? send : Effect.succeed(undone);
+      }).pipe(Effect.ensuring(settled));
+    });
+  // Note that the closes are read before they are told, since telling one takes it out of the map.
+  const flushHeldCloses = Effect.suspend(() => {
+    const held = [...heldCloses.values()];
+    heldCloses.clear();
+    return Effect.forEach(
+      held,
+      ({ told, answered }) =>
+        Effect.andThen(Deferred.succeed(told, true), Deferred.await(answered)),
+      { concurrency: "unbounded", discard: true },
+    );
+  });
+  /**
+   * An open item closed without an answer, settling it. A close the window
+   * holds for its Undo (`held`) is drawn at once like any other, and goes to
+   * the service only once released, so an Undo takes back what was drawn
+   * before the service, the agent, or another member hears of it. Note
+   * that only its first attempt waits: one sent again from the writes that
+   * waited for the service goes by what its window decided meanwhile, if
+   * anything, as one its window decided before it came to be sent does.
+   */
   const closed = inboxWrite<AgentInboxCloseParams, AgentInboxAnsweredView>(
     ({ itemId }) => [itemId],
     ({ itemId, revision }) => {
@@ -1139,9 +1223,19 @@ function composed(
         item: (item) => (item.revision === revision ? closedNow(item, by, at) : undefined),
       };
     },
-    ({ itemId, ...request }, key) => asked(client.closeInbox(itemId, request, key)),
+    ({ itemId, held, ...request }, key, waited) =>
+      Effect.suspend(() => {
+        const send = asked(client.closeInbox(itemId, request, key));
+        if (held !== true) return send;
+        // Note that a decision its window made before the close came to be sent is the one it goes by.
+        const decided = takeDecided(request.clientKey);
+        if (decided === undefined && !waited)
+          return released(request.clientKey, send, CLOSE_UNDONE);
+        letGoAt.set(request.clientKey, kernel.now());
+        return decided === false ? Effect.succeed(CLOSE_UNDONE) : send;
+      }),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_CLOSE,
+      name: INBOX_QUEUED_WRITE.CLOSE,
       input: agentInboxCloseParamsSchema,
       queued: settledAs,
     },
@@ -1181,7 +1275,7 @@ function composed(
         unread ? client.markInboxItemUnread(itemId, key) : client.markInboxItemRead(itemId, key),
       ),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_READ_STATE,
+      name: INBOX_QUEUED_WRITE.READ_STATE,
       input: agentInboxReadStateParamsSchema,
       queued: ({ itemId, unread }) => ({ id: itemId, unread }),
     },
@@ -1192,7 +1286,7 @@ function composed(
     ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
     ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_REMIND,
+      name: INBOX_QUEUED_WRITE.REMIND,
       input: agentInboxRemindParamsSchema,
       queued: ({ itemId }) => ({
         id: itemId,
@@ -1206,7 +1300,7 @@ function composed(
     ({ itemIds }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set(itemIds), unread: false }),
     ({ itemIds: _listed, ...request }, key) => asked(client.markInboxRead(request, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_READ_ALL,
+      name: INBOX_QUEUED_WRITE.READ_ALL,
       input: agentInboxReadAllParamsSchema,
       queued: ({ itemIds }) => ({ marked: itemIds.length }),
     },
@@ -1227,8 +1321,7 @@ function composed(
     });
 
   /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
-  const keysWritten = (answer: ProviderKeysAnswerView) =>
-    Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
+  const keysWritten = (answer: ProviderKeysAnswerView) => Effect.as(keysAnswered(answer), answer);
   /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them, and the models asked again, whose marks they move. */
   const keysAnswered = (answer: ProviderKeysAnswerView) =>
     Effect.suspend(() => {
@@ -1245,7 +1338,7 @@ function composed(
   const deviceAnswered = (answer: ChatGptDevicePollAnswerView) =>
     Effect.as(
       "keys" in answer && answer.keys !== undefined ? keysAnswered(answer.keys) : Effect.void,
-      carried<ChatGptDevicePollAnswerView>(answer),
+      answer,
     );
 
   /**
@@ -1267,8 +1360,76 @@ function composed(
           userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
         );
       }),
-      carried<GitHubTokenAnswerView>(answer),
+      answer,
     );
+
+  /** The account's own asks (`ACCOUNT_ASK_ACTS`) and the Inbox's acts, answered as the panel's port asks them. */
+  const acts: AgentsActs = {
+    PROVIDER_KEYS_SAVE: (save) => Effect.flatMap(asked(client.saveProviderKey(save)), keysWritten),
+    PROVIDER_KEYS_REMOVE: (removal) =>
+      Effect.flatMap(asked(client.removeProviderKey(removal)), keysWritten),
+    PROVIDER_KEYS_FOR_AGENTS: (change) =>
+      Effect.flatMap(asked(client.setProviderKeyForAgents(change)), keysWritten),
+    CHATGPT_DEVICE_START: () => asked(client.startChatGptDeviceLogin()),
+    // Note that the login is asked after here, on the interval its start named, so a window waits on one answer rather than asking again on a timer of its own.
+    CHATGPT_DEVICE_WAIT: ({ loginId, intervalSeconds }) => {
+      const interval = Duration.seconds(intervalSeconds);
+      const poll = Effect.suspend(() => asked(client.pollChatGptDeviceLogin({ loginId })));
+      return Effect.andThen(
+        Effect.sleep(interval),
+        Effect.repeat(poll, { schedule: Schedule.spaced(interval), until: deviceSettled }),
+      ).pipe(Effect.flatMap(deviceAnswered));
+    },
+    CHATGPT_DEVICE_CANCEL: (login) =>
+      Effect.flatMap(asked(client.cancelChatGptDeviceLogin(login)), deviceAnswered),
+    GITHUB_TOKEN_SAVE: (save) => Effect.flatMap(asked(client.saveGitHubToken(save)), tokenWritten),
+    GITHUB_TOKEN_REMOVE: () => Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
+    MEMORIES_FORGET: declaredWrite(
+      dependencies.pool,
+      memoryForget((forget) => asked(client.forgetMemory(forget))),
+    ),
+    // Note that the clip passes through once and is noted nowhere, because its words are the developer's voice.
+    DICTATION_TRANSCRIBE: (clip) => asked(client.transcribeDictation(clip)),
+    // The Inbox's acts (`AGENT_INBOX_ACTS`): each row write drawn over the pool the moment it is asked.
+    AGENTS_INBOX_ANSWER: declaredWrite(dependencies.pool, nodded),
+    AGENTS_INBOX_CLOSE: declaredWrite(dependencies.pool, closed),
+    AGENTS_INBOX_CLOSE_RELEASE: ({ clientKey, send }) =>
+      Effect.gen(function* () {
+        const held = heldCloses.get(clientKey);
+        if (held !== undefined) {
+          heldCloses.delete(clientKey);
+          yield* Deferred.succeed(held.told, send);
+          return { held: true };
+        }
+        if (letGoAt.has(clientKey)) return { held: false };
+        // Note that a close not yet come to be sent, behind an earlier write on its item or among those waiting for the service, goes by this decision once it is.
+        const now = kernel.now();
+        forgetStale(now);
+        decidedEarly.set(clientKey, { send, at: now });
+        return { held: true };
+      }),
+    AGENTS_INBOX_MESSAGE: declaredWrite(dependencies.pool, messaged),
+    AGENTS_INBOX_START: (start) =>
+      Effect.tap(asked(client.startInboxThread(start)), (answer) =>
+        accountWide.confirm("failure" in answer ? undefined : answer.txid),
+      ),
+    AGENTS_INBOX_READ_STATE: declaredWrite(dependencies.pool, marked),
+    AGENTS_INBOX_REMIND: declaredWrite(dependencies.pool, reminded),
+    AGENTS_INBOX_ITEM_HOME: ({ itemId }) => asked(client.inboxItemHome(itemId)),
+    AGENTS_INBOX_READ_ALL: declaredWrite(dependencies.pool, markedAll),
+    AGENTS_INBOX_ATTACHMENT: ({ itemId, attachmentId }) =>
+      keptAsked(
+        new InboxAttachmentKey({ itemId, attachmentId }),
+        client.inboxAttachment(itemId, attachmentId),
+        (attachment) => ("base64" in attachment ? attachment : undefined),
+      ),
+    AGENTS_PICTURE: ({ agentId, pictureId, callId }) =>
+      keptAsked(
+        new AgentPictureKey({ agentId, pictureId, callId }),
+        client.agentPicture(agentId, pictureId, callId),
+        (picture) => ("base64" in picture ? picture : undefined),
+      ),
+  };
 
   const methods: HostMethodTable = {
     // The models are held for the windows while any draws a model or a device, under the account signed in, and told only on the app state (`MODELS_CHANGED`).
@@ -1342,16 +1503,6 @@ function composed(
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : keys.retry(userId), {});
       }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: (params) =>
-      Effect.gen(function* () {
-        // Note that the sentence names the shape and never the value, because the value is a key.
-        const save = yield* readParams(
-          providerKeySaveParamsSchema,
-          params,
-          "a save names a provider and a key",
-        );
-        return yield* keysWritten(yield* asked(client.saveProviderKey(save)));
-      }),
     // A workspace's memories are held for the windows while Settings › Memory shows them, and told only on the app state (`MEMORIES_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.MEMORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1388,74 +1539,6 @@ function composed(
         yield* memories.retry(workspaceId);
         return {};
       }),
-    [GATEWAY_METHOD.MEMORIES_FORGET]: declaredMethod(
-      dependencies.pool,
-      memoryForget((forget) => asked(client.forgetMemory(forget))),
-      (params: WireRecord) =>
-        readParams(
-          memoryForgetParamsSchema,
-          params,
-          "a forget names a workspace and a memory's id",
-        ),
-    ),
-    [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
-      Effect.gen(function* () {
-        // Note that the sentence names the shape and never the words, because they are the developer's voice.
-        const clip = yield* readParams(
-          dictationTranscribeParamsSchema,
-          params,
-          "a clip names its audio, its length, and its words",
-        );
-        const answer = yield* asked(client.transcribeDictation(clip));
-        return carried<DictationTranscribeAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_REMOVE]: (params) =>
-      Effect.gen(function* () {
-        const removal = yield* readParams(
-          providerKeyRemoveParamsSchema,
-          params,
-          "a removal names a provider",
-        );
-        return yield* keysWritten(yield* asked(client.removeProviderKey(removal)));
-      }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
-      Effect.gen(function* () {
-        const change = yield* readParams(
-          providerKeyForAgentsParamsSchema,
-          params,
-          "a default names a provider, a plan, and on or off",
-        );
-        return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
-      }),
-    [GATEWAY_METHOD.CHATGPT_DEVICE_START]: () =>
-      Effect.map(asked(client.startChatGptDeviceLogin()), (answer) =>
-        carried<ChatGptDeviceStartAnswerView>(answer),
-      ),
-    // Note that the login is asked after here, on the interval its start named, so a window waits on one answer rather than asking again on a timer of its own.
-    [GATEWAY_METHOD.CHATGPT_DEVICE_WAIT]: (params) =>
-      Effect.gen(function* () {
-        const { loginId, intervalSeconds } = yield* readParams(
-          chatGptDeviceWaitParamsSchema,
-          params,
-          "a wait names a login and its interval",
-        );
-        const interval = Duration.seconds(intervalSeconds);
-        const poll = Effect.suspend(() => asked(client.pollChatGptDeviceLogin({ loginId })));
-        const answer = yield* Effect.andThen(
-          Effect.sleep(interval),
-          Effect.repeat(poll, { schedule: Schedule.spaced(interval), until: deviceSettled }),
-        );
-        return yield* deviceAnswered(answer);
-      }),
-    [GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL]: (params) =>
-      Effect.gen(function* () {
-        const login = yield* readParams(
-          chatGptDeviceLoginParamsSchema,
-          params,
-          "a cancel names a login",
-        );
-        return yield* deviceAnswered(yield* asked(client.cancelChatGptDeviceLogin(login)));
-      }),
     // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
     [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
     [GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW]: () => Effect.as(tokenHold.unfollow, {}),
@@ -1464,14 +1547,6 @@ function composed(
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : token.retry(userId), {});
       }),
-    [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
-      Effect.gen(function* () {
-        // Note that the sentence names the shape and never the value, because the value is a token.
-        const save = yield* readParams(githubTokenSaveParamsSchema, params, "a save names a token");
-        return yield* tokenWritten(yield* asked(client.saveGitHubToken(save)));
-      }),
-    [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
-      Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
     [GATEWAY_METHOD.AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* readParams(
@@ -1915,34 +1990,6 @@ function composed(
         yield* holders.retry(new InboxScopeKey(scope));
         return {};
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT]: (params) =>
-      Effect.gen(function* () {
-        const { itemId, attachmentId } = yield* readParams(
-          agentInboxAttachmentParamsSchema,
-          params,
-          "reading an inbox item's image names the item and the attachment",
-        );
-        const answer = yield* keptAsked(
-          new InboxAttachmentKey({ itemId, attachmentId }),
-          client.inboxAttachment(itemId, attachmentId),
-          (attachment) => ("base64" in attachment ? attachment : undefined),
-        );
-        return carried<AgentInboxAttachmentView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_PICTURE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, pictureId, callId } = yield* readParams(
-          agentPictureParamsSchema,
-          params,
-          "reading an agent's picture names the agent and the picture",
-        );
-        const answer = yield* keptAsked(
-          new AgentPictureKey({ agentId, pictureId, callId }),
-          client.agentPicture(agentId, pictureId, callId),
-          (picture) => ("base64" in picture ? picture : undefined),
-        );
-        return carried<AgentInboxAttachmentView>(answer);
-      }),
     [GATEWAY_METHOD.AGENTS_PART]: (params) =>
       Effect.gen(function* () {
         const { agentId, messageId, index, callId } = yield* readParams(
@@ -1953,86 +2000,6 @@ function composed(
         const answer = yield* asked(client.agentPart(agentId, messageId, index, callId));
         return carried<AgentPartView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_ANSWER]: declaredMethod(
-      dependencies.pool,
-      nodded,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxAnswerParamsSchema,
-          params,
-          "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgment, and the nod's key",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_CLOSE]: declaredMethod(
-      dependencies.pool,
-      closed,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxCloseParamsSchema,
-          params,
-          "closing an inbox item names the item, the revision it closes, the close's key, and the note it may carry",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(
-      dependencies.pool,
-      messaged,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxMessageParamsSchema,
-          params,
-          "a message on an inbox item names the item, the words or files, and the message's key",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_START]: (params) =>
-      Effect.gen(function* () {
-        const request = yield* readParams(
-          agentInboxStartParamsSchema,
-          params,
-          "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
-        );
-        const answer = yield* asked(client.startInboxThread(request));
-        yield* accountWide.confirm("failure" in answer ? undefined : answer.txid);
-        return carried<AgentInboxMessagedView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_READ_STATE]: declaredMethod(
-      dependencies.pool,
-      marked,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxReadStateParamsSchema,
-          params,
-          "marking an inbox item names the item and whether it reads as unread",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_REMIND]: declaredMethod(
-      dependencies.pool,
-      reminded,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxRemindParamsSchema,
-          params,
-          "setting an inbox item's reminder names the item and when, or none to cancel it",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
-      Effect.gen(function* () {
-        const { itemId } = yield* readParams(
-          agentInboxItemHomeParamsSchema,
-          params,
-          "finding where an inbox item stands names the item",
-        );
-        return carried<AgentInboxItemHomeView>(yield* asked(client.inboxItemHome(itemId)));
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_READ_ALL]: declaredMethod(
-      dependencies.pool,
-      markedAll,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxReadAllParamsSchema,
-          params,
-          "marking the inbox read names the workspace it lists, where it lists one, and the items it lists there",
-        ),
-    ),
     [GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
         const tell = (answer: AgentAccountInboxAnswerView) =>
@@ -2099,6 +2066,7 @@ function composed(
 
   return {
     methods,
+    acts,
     lifetime: Effect.void,
     open,
     reset,
@@ -2112,5 +2080,6 @@ function composed(
       anyWrite(reminded),
       anyWrite(markedAll),
     ],
+    flushHeldCloses,
   };
 }

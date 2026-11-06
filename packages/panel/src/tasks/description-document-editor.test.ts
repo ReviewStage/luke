@@ -38,7 +38,12 @@ import {
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith, stateWith } from "../testing/app-state.js";
-import { onRegistry, settledWrites, writeAppState } from "../testing/copy-feedback.js";
+import {
+  onRegistry,
+  settledWrites,
+  settleQueries,
+  writeAppState,
+} from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -261,6 +266,9 @@ function unsavedWords(container: HTMLElement): boolean {
     container.querySelector("[data-unsaved-words]")?.getAttribute("data-unsaved-words") === "true"
   );
 }
+
+/** The fixture task with no description written yet. */
+const EMPTY_TASK: Task = { ...DOCUMENT_TASK, document: { body: "", assumptions: [] } };
 
 function mount(
   answers: readonly TasksEditAnswer[] = [],
@@ -595,6 +603,9 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
       { base: written, value: written.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
+  // Note that we wait for the saves to settle, because their answers, the refused one's rollback among them, reach the boxes on Query's notify queue.
+  await settledWrites();
+  await settleQueries();
   assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
   assert.equal(newestToastSays(), "The description could not be saved.");
@@ -856,26 +867,67 @@ test("a press anywhere on an empty description's room opens its text with the ca
   assert.ok(body.contains(container.querySelector(".description-document-editor")));
 });
 
-test("an empty description at rest says to write it, a button whose press opens its text with the caret in it", () => {
-  const { container, render } = mount();
-  render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
-  const line = [...container.querySelectorAll("button")].find(
-    (each) => each.textContent === "Write the description",
-  );
-  assert.ok(line, "the empty description's line");
-
-  act(() => line.focus());
-  assert.equal(document.activeElement, line, "the keyboard reaches it");
+test("an empty description at rest says to write it in a block of the document, which a press or Return opens and Escape gives the keyboard back to", async () => {
+  const pressed = mount();
+  pressed.render(EMPTY_TASK);
+  const line = block(pressed.container, "Description");
+  assert.equal(line.textContent, "Write the description");
   act(() => line.click());
+  assert.deepEqual(open().placement, PLACEMENT_END);
+  assert.equal(
+    pressed.container.querySelector('[aria-label="Description"]'),
+    null,
+    "the block goes once the editor stands in its place",
+  );
+  pressed.unmount();
 
+  const keyed = mount();
+  keyed.render(EMPTY_TASK);
+  _press(block(keyed.container, "Description"), "Enter");
   assert.equal(open().markdown, "");
   assert.deepEqual(open().placement, PLACEMENT_END);
+
+  act(() => open().onFinish(0, FINISH.ESCAPE));
+  await settle();
   assert.ok(
-    ![...container.querySelectorAll("button")].some(
-      (each) => each.textContent === "Write the description",
-    ),
-    "the line goes once the editor stands in its place",
+    document.activeElement === block(keyed.container, "Description"),
+    "the keyboard is back on the block it opened from",
   );
+});
+
+test("an editor emptied of a description's words gives the keyboard back to its placeholder once the save lands", async () => {
+  const { container, render } = mount();
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(""));
+  act(() => open().onFinish(0, FINISH.ESCAPE));
+  await settle();
+
+  render(EMPTY_TASK);
+  assert.ok(
+    document.activeElement === block(container, "Description"),
+    "the keyboard is on the placeholder",
+  );
+});
+
+test("an empty description pressed while the editor's bundle loads goes on saying to write it", async () => {
+  const landed = bundles;
+  const gate = Promise.withResolvers<DescriptionEditorModule>();
+  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  try {
+    const { container, render } = mount();
+    render(EMPTY_TASK);
+    act(() => block(container, "Description").click());
+    const editor = container.querySelector(".description-document-editor");
+
+    assert.ok(editor, "the editor stands in the block's place");
+    assert.equal(editor.textContent, "Write the description");
+    await act(async () => {
+      gate.resolve(STAND_IN);
+      await gate.promise;
+    });
+  } finally {
+    bundles = landed;
+  }
 });
 
 test("a press on a description's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {

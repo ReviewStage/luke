@@ -77,7 +77,7 @@ import {
 } from "@repo/ui";
 import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -595,7 +595,7 @@ function accountPinOf(
 function agentPinOf(pin: TaskAgentPin, agent: AgentSummary, tasks: TasksControl): AgentPin {
   const drawn = {
     task: pin.taskId,
-    tab: { agent: agent.id },
+    tab: agentTab(agent.id),
     label: agentName(agent, tasks.agents.models),
     at: pin.pinnedAt,
     model: agent.model,
@@ -1874,7 +1874,6 @@ function SidebarColumn({
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   const waiting = useInboxWaiting(tasks);
-  // The Inbox's row marks its threads read from its right-click.
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing; a task's row goes back to work
   // on it, on the agent waiting on the developer where one does (`onResume`).
@@ -1886,7 +1885,9 @@ function SidebarColumn({
       door();
     })();
   const openTask = (taskId: string) => leaveFor(() => tasks.onResume(taskId));
-  const newTask = () => leaveFor(() => tasks.onNewTask());
+  // Note that New task's card stands over whatever place stands, so it leaves only Settings, which takes the window, for it.
+  const newTaskOver = (door: () => void) => (onTasks ? door() : leaveFor(door));
+  const newTask = () => newTaskOver(() => tasks.onNewTask());
   const openPinnedTab = (pin: SidebarPin) => leaveFor(() => tasks.onOpenPinnedTab(pin));
   // Note that the Inbox, the Board, and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
   const openInbox = () => tasks.inboxView.onOpen();
@@ -1898,7 +1899,7 @@ function SidebarColumn({
   // place. New task's composer is on it, so its row draws no Draft pencil
   // for the words shown there.
   const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
-  const newTaskIn = (repository: string) => leaveFor(() => tasks.onNewTaskIn(repository));
+  const newTaskIn = (repository: string) => newTaskOver(() => tasks.onNewTaskIn(repository));
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
   // The Tasks head's own menu, on a right-click and a long press, drawn only once it offers more than the buttons beside it.

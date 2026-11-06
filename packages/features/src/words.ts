@@ -48,14 +48,22 @@ export const VERB = {
 } as const;
 
 /**
- * What the account's connected services are called as a heading or a label:
- * Settings' page, the agent box's popover and ⋯, the @ menu, and the
- * automation editor all say it. "MCP server" names only a custom server added
- * by its URL, never one of these.
+ * What the account's connected services are called where they are connected:
+ * Settings' Integrations page and the setup that leads to it.
  */
 export const INTEGRATION_LABEL = {
   one: "Integration",
   many: "Integrations",
+} as const satisfies Noun;
+
+/**
+ * What those same services are called where an agent is handed them: the
+ * agent box's + menu and popover, the @ menu, and the automation editor's
+ * field, since an agent reaches each one as an MCP server.
+ */
+export const MCP_SERVER_LABEL = {
+  one: "MCP server",
+  many: "MCP servers",
 } as const satisfies Noun;
 
 /**
@@ -169,11 +177,16 @@ export function selectedWords(count: number): string {
   return `${formatCount(count)} selected`;
 }
 
-/** What a selection says of a row in it, the selection bar's Clear, and the name that Clear is heard by. */
+/** What a selection says of a row in it, the selection bar's Clear, the name that Clear is heard by, and the head's box and the menu beside it. */
 export const SELECTION_WORDS = {
   SELECTED: "Selected",
   CLEAR: "Clear",
   CLEAR_SELECTION: "Clear selection",
+  SELECT_ALL: "Select all",
+  SELECT_NONE: "Select none",
+  SELECT: "Select",
+  ALL: "All",
+  NONE: "None",
 } as const;
 
 /** An Inbox item as a count of arrivals names it: "1 new item", "2 new items". */
