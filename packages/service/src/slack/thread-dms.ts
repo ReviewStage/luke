@@ -13,7 +13,8 @@
  * the thread's open ask, the title DM says that ask's words under the title,
  * and the title alone once it settles (`redrawTitleDms`), so a member reading
  * down their DMs sees which threads wait on them; either way it ends in the
- * open button to the thread. Before the thread has a
+ * open button to the thread, beside the open ask's own buttons while it
+ * waits, so it is answered from the title as from its reply. Before the thread has a
  * DM, a follow-up that asks nothing new on a thread still open writes
  * nothing. A member's
  * reply in a DM's Slack thread is found back to its thread by that DM
@@ -60,6 +61,7 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
+  inboxReadAskSchema,
   knownAsk,
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
@@ -234,7 +236,10 @@ function wordsWithSteps(text: string, steps: readonly string[]): string {
  * Mark done and Couldn't do it, each under an action id of its own. None for
  * any other ask.
  */
-function askControls(itemId: string, message: InboxMessage): AskControls {
+function askControls(
+  itemId: string,
+  message: { readonly id: string; readonly ask?: InboxReadAsk | undefined },
+): AskControls {
   if (message.ask === undefined || message.ask.status !== INBOX_ASK_STATUS.OPEN) {
     return NO_CONTROLS;
   }
@@ -312,19 +317,26 @@ function openButton(link: string): SlackBlock {
 
 /**
  * The DM a thread's Slack thread stands under: its title as the header, the
- * open ask's words under it where given, clipped short, and the open button.
- * Note that the button stands whether an ask is open or not, because the
- * title DM is what a member scanning their DMs sees, and the reply that
- * carries the thread's own button is a press further in.
+ * open ask's words under it where given, clipped short, the ask's own
+ * controls, its options or Mark done, and the open button. Note that the
+ * button stands whether an ask is open or not, and the ask's controls while
+ * it is, because the title DM is what a member scanning their DMs sees, and
+ * the reply that carries them too is a press further in.
  */
-function titleDmContent(title: string, link: string, openAsk = ""): SlackMessageContent {
+function titleDmContent(
+  title: string,
+  link: string,
+  openAsk = "",
+  controls: AskControls = NO_CONTROLS,
+): SlackMessageContent {
   const words = openAsk.trim();
   return {
     text: `${TITLE_PREFIX}${title}`,
     blocks: [
       titleHeader(title),
       ...(words === "" ? [] : [slackMarkdownBlock(words, OPEN_ASK_PREVIEW_CHARS)]),
-      { type: "actions", elements: [openButton(link)] },
+      ...controls.blocks,
+      { type: "actions", elements: [...controls.buttons, openButton(link)] },
     ],
   };
 }
@@ -463,24 +475,18 @@ interface TitleDm {
 }
 
 /**
- * The words, and a do ask's steps, of the item's message whose reply stands
- * in the Slack thread under the title DM and whose ask stands open; nothing
+ * The item's message whose reply stands in the Slack thread under the title
+ * DM and whose ask stands open: its id, its words, and its ask; nothing
  * where none does, so another member's DM never says an ask that waits on
  * someone else.
  */
 const findOpenAskAt = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, channel: Schema.String, ts: Schema.String }),
-  Result: Schema.Struct({
-    text: Schema.String,
-    steps: Schema.NullOr(Schema.Array(Schema.String)),
-  }),
+  Result: Schema.Struct({ id: Schema.String, text: Schema.String, ask: inboxReadAskSchema }),
   execute: ({ itemId, channel, ts }) =>
     Database.use((db) =>
       db
-        .select({
-          text: inboxMessage.text,
-          steps: sql<unknown>`case when ${inboxMessage.ask} ->> 'type' = ${INBOX_ASK.DO} then ${inboxMessage.ask} -> 'steps' end`,
-        })
+        .select({ id: inboxMessage.id, text: inboxMessage.text, ask: inboxMessage.ask })
         .from(inboxMessage)
         .where(
           and(
@@ -603,8 +609,8 @@ function titleDmsOf(dms: readonly (typeof SlackDmSchema.Type)[]): readonly Title
 
 /**
  * Rewrites each title DM to say the open ask whose reply stands in its Slack
- * thread under the item's title, or the title alone where none does, with
- * the thread's link, as `titleDmContent` draws it.
+ * thread under the item's title, with that ask's controls, or the title alone
+ * where none does, with the thread's link, as `titleDmContent` draws it.
  */
 function redrawTitleDms(
   bot: SlackBotService,
@@ -616,11 +622,17 @@ function redrawTitleDms(
     titles,
     (at) =>
       Effect.flatMap(findOpenAskAt({ itemId, ...at }), (open) => {
-        const words = Option.match(open, {
-          onNone: () => "",
-          onSome: ({ text, steps }) => wordsWithSteps(text, steps ?? []),
+        const content = Option.match(open, {
+          onNone: () => titleDmContent(thread.title, thread.link),
+          onSome: (message) =>
+            titleDmContent(
+              thread.title,
+              thread.link,
+              wordsWithSteps(message.text, askSteps(message.ask)),
+              askControls(itemId, message),
+            ),
         });
-        return bot.update(at.channel, at.ts, titleDmContent(thread.title, thread.link, words));
+        return bot.update(at.channel, at.ts, content);
       }),
     { discard: true },
   );
@@ -675,8 +687,10 @@ export function threadDmAt(
 /**
  * Rewrites one DM the bot wrote about the item's message to say the line
  * given in its buttons' place, as a press on an ask already settled is
- * told, keeping the title of one that stands alone; nothing where the
- * runtime holds no bot or the item is gone.
+ * told, keeping the title of one that stands alone; a press on the title DM
+ * the message's reply stands under draws that title DM again, as
+ * `redrawTitleDms` does, so it keeps its title and says the ask open now,
+ * if any; nothing where the runtime holds no bot or the item is gone.
  */
 export function rewriteThreadDm(
   dm: SlackMessage,
@@ -694,10 +708,16 @@ export function rewriteThreadDm(
     const place = yield* findItemPlace(itemId);
     if (Option.isNone(place)) return;
     const kept = yield* findMessageDm(message.id);
+    const link = threadLink(itemId, place.value);
+    // A press on the title DM, which the message's reply stands under, has it say the thread's open ask anew rather than the reply's line.
+    if (Option.isSome(kept) && kept.value.dm.thread === dm.ts) {
+      yield* redrawTitleDms(bot.value, itemId, { title: place.value.title, link }, [dm]);
+      return;
+    }
     const view = {
       title: place.value.title,
       text: wordsWithSteps(message.text, askSteps(message.ask)),
-      link: threadLink(itemId, place.value),
+      link,
       titled: Option.isSome(kept) && kept.value.dm.thread === undefined,
     };
     yield* bot.value.update(dm.channel, dm.ts, threadDmContent(view, line));
