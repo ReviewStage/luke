@@ -708,6 +708,76 @@ export function heldLines<Line>(): Atom.Writable<readonly Line[]> {
   );
 }
 
+/** What `keptLines` keeps a line as in storage, and reads it back from. */
+export interface KeptLines<Line, Kept> {
+  /** Where in the renderer's storage they are kept. */
+  readonly key: string;
+  /** A line as storage holds it. */
+  readonly kept: Schema.Codec<Kept, Kept>;
+  /** A line as it is kept, leaving out what storage cannot hold, its files among them. */
+  readonly toKept: (line: Line) => Kept;
+  readonly fromKept: (kept: Kept) => Line;
+  /** What tells one kept line from another, whichever window wrote it. */
+  readonly idOf: (kept: Kept) => string;
+}
+
+/**
+ * Lines a window holds for the account signed in to it, as `heldLines`
+ * does, that also outlast a reload and a relaunch on this Mac: each is
+ * kept in the renderer's storage as `toKept` makes it, with its account's
+ * id, and read back for that account alone, so what storage cannot hold,
+ * a line's files, stays in this window. Note that a write starts from what
+ * storage holds, as the drafts' does, because another window keeps its
+ * lines there too, so it changes only the lines this window held or holds.
+ * A window not signed in keeps nothing.
+ */
+export function keptLines<Line, Kept>(spec: KeptLines<Line, Kept>): Atom.Writable<readonly Line[]> {
+  const stored = Schema.fromJsonString(
+    Schema.Array(Schema.Struct({ accountId: Schema.String, line: spec.kept })),
+  );
+  const read = (owner: Owner): readonly Line[] =>
+    owner === null
+      ? []
+      : readKept(spec.key, stored, [])
+          .filter((entry) => entry.accountId === owner)
+          .map((entry) => spec.fromKept(entry.line));
+  const write = (owner: string, was: readonly Line[], next: readonly Line[]) => {
+    const touched = new Set([...was, ...next].map((line) => spec.idOf(spec.toKept(line))));
+    const others = readKept(spec.key, stored, []).filter(
+      (entry) => entry.accountId !== owner || !touched.has(spec.idOf(entry.line)),
+    );
+    writeKept(spec.key, stored, [
+      ...others,
+      ...next.map((line) => ({ accountId: owner, line: spec.toKept(line) })),
+    ]);
+  };
+  const all = Atom.keepAlive(Atom.make<ReadonlyMap<Owner, readonly Line[]>>(new Map()));
+  ADOPTERS.push((ctx, address, accountId) => {
+    const moved = readKept(spec.key, stored, []).map((entry) =>
+      entry.accountId === address ? { ...entry, accountId } : entry,
+    );
+    writeKept(spec.key, stored, moved);
+    const lines = new Map(ctx.get(all));
+    lines.delete(address);
+    lines.delete(accountId);
+    ctx.set(all, lines);
+  });
+  return Atom.keepAlive(
+    Atom.writable(
+      (get) => {
+        const owner = get(ownerAtom);
+        return get(all).get(owner) ?? read(owner);
+      },
+      (ctx, next: readonly Line[]) => {
+        const owner = ctx.get(ownerAtom);
+        const was = ctx.get(all).get(owner) ?? read(owner);
+        ctx.set(all, new Map(ctx.get(all)).set(owner, next));
+        if (owner !== null) write(owner, was, next);
+      },
+    ),
+  );
+}
+
 /**
  * Hands what the window holds for an account's address to its id, the
  * drafts' files and every store of held lines alike, once its identity

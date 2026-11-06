@@ -16,7 +16,7 @@ import type { Task } from "@repo/features/task-wire";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
 import { sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import { Clock, Context, Effect } from "effect";
+import { Clock, Context, Effect, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
@@ -27,6 +27,7 @@ import {
   DRAFT_PLACE,
   type DraftControl,
   type DraftWriter,
+  keptLines,
   useDraft,
   useDraftsOwner,
   useDraftWriter,
@@ -368,6 +369,38 @@ test("a draft outlasts a reload of the window, words and mark alike", async () =
   assert.equal(after.rowDrafted(INVITES.plan.name), true);
   await after.show(INVITES);
   assert.equal(after.box(), "Expire invites after a week");
+});
+
+test("lines a window keeps for its account outlast a reload, but for what storage leaves out, and reach no other account", async () => {
+  const lines = keptLines<
+    { readonly id: string; readonly words: string; readonly files: readonly string[] },
+    { readonly id: string; readonly words: string }
+  >({
+    key: "app.testKeptLines",
+    kept: Schema.Struct({ id: Schema.String, words: Schema.String }),
+    toKept: ({ files: _files, ...kept }) => kept,
+    fromKept: (kept) => ({ ...kept, files: [] }),
+    idOf: (kept) => kept.id,
+  });
+  const signedIn = (account: { readonly id: string; readonly email: string }) => {
+    const registry = AtomRegistry.make();
+    const Owner = () => {
+      useDraftsOwner(account);
+      return null;
+    };
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    roots.push(root);
+    act(() => root.render(onRegistry(registry, createElement(Owner))));
+    return registry;
+  };
+  const ada = { id: "account-ada", email: "ada@acme.test" };
+
+  signedIn(ada).set(lines, [{ id: "held-1", words: "Say who it goes to.", files: ["invite.png"] }]);
+
+  assert.deepEqual(signedIn(ada).get(lines), [
+    { id: "held-1", words: "Say who it goes to.", files: [] },
+  ]);
+  assert.deepEqual(signedIn({ id: "account-grace", email: "grace@acme.test" }).get(lines), []);
 });
 
 test("a message sent takes its words out of the draft, so the box comes back empty and nothing is marked", async () => {

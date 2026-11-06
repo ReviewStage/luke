@@ -16,8 +16,9 @@ import { GLYPH } from "@repo/ui/icons";
 import type { PlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { Schema } from "effect";
 import { Fragment, useMemo, useState } from "react";
-import { heldLines } from "../composer-drafts.js";
+import { keptLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 
@@ -28,9 +29,10 @@ import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
  * posted, and each one wakes it again. A member with several things to say
  * instead starts a review (`PAGE_REVIEW_WORDS.START`), which holds the
  * comment here; while one is held, every comment on the page joins it
- * until it is sent or discarded. Held comments are the reader's alone: this
- * window keeps them for the account signed in to it (`heldLines`), the way
- * a send refused is kept, so a relaunch lets them go. Each is pinned to its
+ * until it is sent or discarded. Held comments are the reader's alone, kept
+ * for the account signed in, in the renderer's storage as drafts are
+ * (`keptLines`), so a reload or a relaunch finds them; their files stay in
+ * the window that attached them, as a draft's do. Each is pinned to its
  * element, dashed, until it is sent.
  *
  * Sending the review starts each comment's thread held (`held`), which
@@ -94,8 +96,35 @@ export interface HeldComment {
   readonly posted: boolean;
 }
 
-/** Every comment this window holds in a review, the account signed in's alone, in the order they were held. */
-const reviewAtom = heldLines<HeldComment>();
+/** A held comment as the renderer's storage keeps it: all of it but its files. */
+const keptHeldSchema = Schema.Struct({
+  planId: Schema.String,
+  pageId: Schema.String,
+  clientKey: Schema.String,
+  version: Schema.Number,
+  element: Schema.optionalKey(
+    Schema.Struct({
+      path: Schema.String,
+      quote: Schema.String,
+      section: Schema.String,
+      words: Schema.optionalKey(Schema.Literal(true)),
+    }),
+  ),
+  words: Schema.String,
+  posted: Schema.Boolean,
+});
+
+/** Every comment held in a review, the account signed in's alone, in the order they were held, kept across a relaunch but for their files. */
+const reviewAtom = keptLines<HeldComment, typeof keptHeldSchema.Type>({
+  key: "app.pageReviews",
+  kept: keptHeldSchema,
+  toKept: ({ attachments: _files, element, ...rest }) => ({
+    ...rest,
+    ...(element === undefined ? undefined : { element }),
+  }),
+  fromKept: (kept) => ({ ...kept, element: kept.element, attachments: [] }),
+  idOf: (kept) => kept.clientKey,
+});
 
 /** Whether a held comment is the page's, on the plan named. */
 function heldOn(comment: HeldComment, planId: string | undefined, pageId: string): boolean {
