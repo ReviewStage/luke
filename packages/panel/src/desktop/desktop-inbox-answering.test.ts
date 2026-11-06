@@ -1576,9 +1576,9 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     "Charles Pan resolved this without an answer",
     "and the close names who resolved it",
   );
+});
 
-  act(() => world.root?.unmount());
-  world.root = undefined;
+test("an ask replaced by a message that asks nothing names no newer question, and one a follow-up left open has its line stand before the question that replaced it", async () => {
   const noticed = await mountThread(
     threadItem([
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -1610,9 +1610,9 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     ],
     "a follow-up that asks nothing leaves the ask open, so the line stands before the question that replaced it",
   );
+});
 
-  act(() => world.root?.unmount());
-  world.root = undefined;
+test("a member's close of the item keeps an earlier close's line where it stood, and its note stands under the line saying who resolved it", async () => {
   const closedTwice = await mountThread(
     threadItem(
       [
@@ -1673,9 +1673,9 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     ],
     "a close's note stands under the line saying who resolved it, never as a message of its own, and names the closer of a close no longer standing",
   );
+});
 
-  act(() => world.root?.unmount());
-  world.root = undefined;
+test("a settled ask keeps the controls its type offered: a to-do its steps, none ticked, and neither a to-do naming no steps nor an ask of words alone any, the withdrawn line still saying why", async () => {
   const toDo = await mountThread(
     threadItem([
       askingMessage(

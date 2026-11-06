@@ -13,12 +13,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach } from "vitest";
 // Note that the places are loaded as the window loads them, on first use
-// (`pages-on-demand.ts`, and the router's lazy routes), so each module is read here first and its load
+// (the router's lazy routes, and `desktop-shell.tsx`'s Automations), so each module is read here first and its load
 // settles within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/automations-page.js";
 import "./desktop/admin-route.lazy.js";
 import "./desktop/settings-route.lazy.js";
-import "./desktop/person-page.js";
+import "./desktop/person-route.lazy.js";
 import { runAppCommand } from "./app-commands.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";

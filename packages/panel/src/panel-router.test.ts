@@ -1,3 +1,4 @@
+import { it } from "@effect/vitest";
 import { hostConnectPath } from "@repo/features/host-wire";
 import {
   ADMIN_LINK_SECTION,
@@ -8,8 +9,12 @@ import {
 } from "@repo/features/link-grammar";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, type RouteIds } from "@tanstack/react-router";
-import { describe, expect, it } from "vitest";
+import { Effect } from "effect";
+import { describe, expect } from "vitest";
 import { createPanelRouter, type PanelRouter } from "./panel-router.js";
+import { fakeAppBridge } from "./testing/app-bridge.js";
+import { stateWith } from "./testing/app-state.js";
+import { appStateFirstRead } from "./use-app-state.js";
 
 type PanelRouteId = RouteIds<PanelRouter["routeTree"]>;
 
@@ -172,19 +177,19 @@ const LINKS: readonly (readonly [LinkPlace, Landing])[] = [
   ],
   [
     { kind: LINK_PLACE.AUTOMATIONS },
-    { routeId: "/places/$workspace/automations", params: { workspace: W } },
+    { routeId: "/places/$workspace/automation-pages/automations/", params: { workspace: W } },
   ],
   [
     { kind: LINK_PLACE.AUTOMATION, automationId: "au1" },
     {
-      routeId: "/places/$workspace/automation/$automationId/",
+      routeId: "/places/$workspace/automation-pages/automation/$automationId/",
       params: { workspace: W, automationId: "au1" },
     },
   ],
   [
     { kind: LINK_PLACE.AUTOMATION_RUN, automationId: "au1", runId: "r1" },
     {
-      routeId: "/places/$workspace/automation/$automationId/run/$runId",
+      routeId: "/places/$workspace/automation-pages/automation/$automationId/run/$runId",
       params: { workspace: W, automationId: "au1", runId: "r1" },
     },
   ],
@@ -267,8 +272,38 @@ describe("the panel's route tree", () => {
     });
   });
 
+  it("names the Automations pages no link names, the Runs tab, a new automation's page, and an automation's runs alone", () => {
+    expect(landingOf(`/${W}/automations/runs`).routeId).toBe(
+      "/places/$workspace/automation-pages/automations/runs",
+    );
+    expect(landingOf(`/${W}/automations/new`).routeId).toBe(
+      "/places/$workspace/automation-pages/automations/new",
+    );
+    expect(landingOf(`/${W}/automation/au1/runs`)).toEqual({
+      routeId: "/places/$workspace/automation-pages/automation/$automationId/runs",
+      params: { workspace: W, automationId: "au1" },
+      search: {},
+    });
+  });
+
   it("covers every place kind", () => {
     const kinds = new Set(LINKS.map(([place]) => place.kind));
     expect([...kinds].sort()).toEqual(Object.values(LINK_PLACE).sort());
   });
+
+  it.effect(
+    "is made before the window's bridge stands without spoiling the window's first read",
+    () =>
+      Effect.gen(function* () {
+        // The desktop's entry makes its router as the module loads, before its root installs the bridge (`window-root.tsx`).
+        landingOf("/app");
+        const state = stateWith({}, {});
+        fakeAppBridge({
+          requestAppState: () => Promise.resolve(state),
+          onAppState: () => () => undefined,
+        });
+
+        expect(yield* appStateFirstRead).toEqual(state);
+      }),
+  );
 });

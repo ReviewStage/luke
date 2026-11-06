@@ -30,6 +30,7 @@ import {
   setPlanStatus,
   setProviderKeyStatus,
 } from "@repo/database/models/provider-key-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
@@ -59,14 +60,13 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../../environme
 import { sweepCodexPlanSwaps } from "../../maintenance/codex-plan-sweep.js";
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import {
-  fixtureToken,
   launchBearer,
   launchLines,
   linesOf,
   runnerSandboxApi,
   runnerTook,
 } from "../../testing/runner-sandbox-fake.js";
-import { sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
+import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -839,6 +839,12 @@ it.layer(getTestDB())("the scheduled renewal of a Codex plan's token", (it) => {
         const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // Recorded as the routing above these sessions records every open (`runtime-sessions.ts`), which is how the sweep finds the sandbox.
+        yield* claimRuntimeSession(
+          { userId, conversationId: agent.conversationId },
+          opened.sessionId,
+          yield* DateTime.nowAsDate,
+        );
         const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
         const swept = Effect.flatMap(DateTime.nowAsDate, (now) =>
           sweepCodexPlanSwaps(NO_KEYS.providerKeyEncryptionKeys, now).pipe(

@@ -3,9 +3,8 @@ import { AGENT_STATUS, type AgentPullRequest } from "@repo/features/agent-wire";
 import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import type { PullRequestActionRequest } from "@repo/features/pull-request-write-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useMutation } from "@tanstack/react-query";
-import { createContext, useCallback, useContext, useMemo } from "react";
-import { actMutation } from "../act-mutations.js";
+import { createContext, useContext, useMemo } from "react";
+import { sendAct } from "../act.js";
 import { agentStillWriting } from "./agent-model.js";
 import { pullRequestAsked, pullRequestOfTab } from "./pull-request-number.js";
 import type { WritePlace } from "./pull-request-writes.js";
@@ -53,16 +52,13 @@ export function usePullRequestSource(): PullRequestSource | undefined {
   return useContext(PullRequestSourceContext);
 }
 
-/** One change to the agent's pull request, or to the one of its repository by the number given, sent on its mutation. */
-export function useAgentPullRequestWrite(
+/** One change to the agent's pull request, or to the one of its repository by the number given, sent through the port; the change's mutation is its caller's (`pull-request-writes.tsx`). */
+export function agentPullRequestWrite(
   agentId: string,
   number: number | undefined,
 ): PullRequestSource["write"] {
-  const { mutateAsync: sendWrite } = useMutation(actMutation(ACT_KIND.AGENTS_PULL_REQUEST_ACTION));
-  return useCallback(
-    (request) => sendWrite({ ...pullRequestAsked(agentId, number), request }),
-    [sendWrite, agentId, number],
-  );
+  return (request) =>
+    sendAct(ACT_KIND.AGENTS_PULL_REQUEST_ACTION, { ...pullRequestAsked(agentId, number), request });
 }
 
 /**
@@ -76,7 +72,7 @@ export function useAgentPullRequestSource(
   agentId: string,
   number: number | undefined,
 ): PullRequestSource {
-  const write = useAgentPullRequestWrite(agentId, number);
+  const write = useMemo(() => agentPullRequestWrite(agentId, number), [agentId, number]);
   const agent =
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);

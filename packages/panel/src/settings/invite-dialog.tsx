@@ -20,7 +20,7 @@ import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { actMutation } from "../act-mutations.js";
+import { sendAct } from "../act.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";
 import { useInvitees, useSignedIn } from "../invitees.js";
@@ -64,45 +64,45 @@ export function useInviteDialog({
   workspaceName: string;
   owner: boolean;
 }): InviteAsk {
-  const { mutateAsync: sendWorkspaceInvite } = useMutation(actMutation(ACT_KIND.WORKSPACE_INVITE));
   const invitees = useInvitees(useSignedIn()?.email);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const field = useRef<HTMLInputElement | null>(null);
 
+  // Note that the run reads the addresses it was asked with, one invite
+  // after another through the port, and leaves in the field only those it
+  // did not invite, so a retry sends none twice.
+  const inviting = useMutation({
+    mutationKey: [ACT_KIND.WORKSPACE_INVITE, workspaceId],
+    mutationFn: (asked: readonly string[]): Promise<ActionResult> =>
+      asked.reduce<Promise<ActionResult>>(
+        (before, email, index) =>
+          before.then((result) =>
+            result.status !== ACTION_RESULT_STATUS.ACCEPTED
+              ? result
+              : sendAct(ACT_KIND.WORKSPACE_INVITE, {
+                  workspaceId,
+                  email,
+                  // Note that a reader no longer the owner invites a member, whatever the bar last held.
+                  role: owner ? role : INVITATION_ROLE.MEMBER,
+                }).then(
+                  () => result,
+                  (refusal: Error) => {
+                    invitees.keep(asked.slice(index));
+                    return refused(refusal.message);
+                  },
+                ),
+          ),
+        Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      ),
+  });
   // Note that a second press joins the run under way rather than starting
   // another, because it can land before the render that stills the act.
   const flight = useRef<Promise<ActionResult> | undefined>(undefined);
   const send = (): Promise<ActionResult> => {
-    flight.current ??= sendAll().finally(() => {
+    flight.current ??= inviting.mutateAsync(invitees.commit().pending).finally(() => {
       flight.current = undefined;
     });
     return flight.current;
-  };
-
-  // Note that the run reads the addresses it was asked with, and leaves in
-  // the field only those it did not invite, so a retry sends none twice.
-  const sendAll = (): Promise<ActionResult> => {
-    const { pending: addresses } = invitees.commit();
-    return addresses.reduce<Promise<ActionResult>>(
-      (before, email, index) =>
-        before.then((result) =>
-          result.status !== ACTION_RESULT_STATUS.ACCEPTED
-            ? result
-            : sendWorkspaceInvite({
-                workspaceId,
-                email,
-                // Note that a reader no longer the owner invites a member, whatever the bar last held.
-                role: owner ? role : INVITATION_ROLE.MEMBER,
-              }).then(
-                () => result,
-                (refusal: Error) => {
-                  invitees.keep(addresses.slice(index));
-                  return refused(refusal.message);
-                },
-              ),
-        ),
-      Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-    );
   };
 
   const confirm = useConfirmDialog(

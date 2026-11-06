@@ -37,6 +37,15 @@ export const SELECT_BOX_PLACE = {
    * draws its status mark under its key (`desktop.css`).
    */
   CARD_HEAD: "card-head",
+  /**
+   * Over a list row's unread gutter (`UnreadMark`), centered on its dot, on
+   * the row's first line where its marks stand there (`LIST_ROW_META.TITLE`)
+   * and its middle otherwise, in the room the row keeps before its words, so a list of mail adds no
+   * gutter of its own; the row hides its dot while the box shows
+   * (`list-row.css`), its words' weight still saying it is unread. It comes
+   * in while the row is under the pointer, the row being its hover's group.
+   */
+  UNREAD_GUTTER: "unread-gutter",
 } as const;
 
 export type SelectBoxPlace = (typeof SELECT_BOX_PLACE)[keyof typeof SELECT_BOX_PLACE];
@@ -58,6 +67,8 @@ const PLACED: Record<SelectBoxPlace, string> = {
   [SELECT_BOX_PLACE.GUTTER]: "top-1/2 left-row-inset -translate-y-1/2",
   [SELECT_BOX_PLACE.CARD_HEAD]:
     "top-[calc(var(--spacing-row-inset)+(var(--spacing-ui-20)-var(--spacing-select-box))/2)] left-[calc(var(--spacing-list-inset)-var(--ui-space-4)+var(--spacing-select-box-inset))]",
+  [SELECT_BOX_PLACE.UNREAD_GUTTER]:
+    "top-1/2 left-[calc(var(--ui-list-row-inset-inline)+(var(--spacing-status-dot)-var(--spacing-select-box))/2)] -translate-y-1/2 group-hover/list-row:opacity-100 group-data-[meta=title]/list-row:top-[calc(var(--ui-list-row-inset-block)+(var(--ui-list-row-head-leading)-var(--spacing-select-box))/2)] group-data-[meta=title]/list-row:translate-y-0",
 };
 
 /** The box of the row keyed `selectKey`, in the selection it stands in; nothing outside one. */

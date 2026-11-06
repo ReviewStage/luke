@@ -35,7 +35,7 @@
  * machine that did not answer.
  */
 
-import type { DatabaseServices } from "@repo/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
@@ -55,10 +55,11 @@ export type MachineName = string & Brand.Brand<"MachineName">;
 /** What a machine keeps of a place it found, for its own later calls on it. Opaque to every caller but the machine. */
 export type MachineKept = Brand.Brand<"MachineKept">;
 
-/** One agent's place on a machine: which machine, our runtime session id, and where that session runs now. */
+/** One agent's place on a machine: which machine, our runtime session id, the place's lifecycle name, and where that session runs now. */
 export interface MachinePlace {
   readonly machine: AgentMachineKind;
   readonly session: string;
+  readonly name: MachineName;
   readonly running: MachineRunning;
 }
 
@@ -231,6 +232,8 @@ export interface RunnerLaunch<A, E, R, EL, RL> {
    * or a log.
    */
   readonly env: Readonly<Record<string, string>>;
+  /** The account the runner's record is kept under: the agent's starter's. */
+  readonly userId: string;
   /** The agent the runner is launched for, whose place's record names it. */
   readonly agentId: string;
   /** Where the repositories the agent works in beside its own are checked out (`extraCheckoutPaths`), which a sandbox's launch marks as it marks the agent's own checkout; none for an agent in one repository or none. */
@@ -273,20 +276,22 @@ export interface AgentMachineService {
     E | EB | LaunchRefused | { readonly _tag: string },
     R | RB | MachineServices
   >;
-  /** Every place opened under the session, the newest first; none where none stands. */
+  /** Every place opened under the account's session, the newest first; none where none stands. */
   readonly findPlaces: (
+    userId: string,
     session: string,
-  ) => Effect.Effect<readonly FoundPlace[], SandboxUnavailable>;
-  /** What the place's record says of its runner, in place of whatever it said. */
+  ) => Effect.Effect<readonly FoundPlace[], SandboxUnavailable | StoreFailure, DatabaseServices>;
+  /** What the place's record says of its runner, in place of whatever it said, kept under the account given. */
   readonly recordRunner: (
     place: {
       readonly machine: AgentMachineKind;
       readonly session: string;
       readonly name: MachineName;
+      readonly userId: string;
       readonly agentId: string;
     },
     record: RunnerRecord,
-  ) => Effect.Effect<void, SandboxUnavailable>;
+  ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
   /** The running place's firewall, every write to it composing what stands whole. */
   readonly firewall: MachineFirewall;
   /** The found place run again, where it is not, and where it runs now; gone where its disk is lost for good. */
@@ -295,8 +300,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<MachinePlace | typeof PLACE_RESUME.GONE, SandboxUnavailable>;
   /** The running place stopped, its disk kept for a later resume. */
   readonly stop: (place: MachinePlace) => Effect.Effect<void, SandboxUnavailable>;
-  /** The found place thrown away, with whatever runs in it. */
-  readonly discard: (found: FoundPlace) => Effect.Effect<void, SandboxUnavailable>;
+  /** The found place thrown away, with whatever runs in it and its record. */
+  readonly discard: (
+    found: FoundPlace,
+  ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
   /** Files written into the running place, as the machine's default user, before a later line names them; refused (`LaunchRefused`'s `deviceAway`) where they would go to a device that is away, as the line naming them would be. */
   readonly writeFiles: (
     place: MachinePlace,

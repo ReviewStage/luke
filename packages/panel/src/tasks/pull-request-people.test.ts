@@ -252,6 +252,8 @@ test("a pull request's tab card says who opened it and its reviewers once its ta
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
+  // Note that each draw's window holds the members anew, so the host lays them for it.
+  handMembers(() => ({ rows: { members: [CHARLES] } }));
   const read = await draw(card(PEOPLE));
   assert.match(read.textContent ?? "", /Opened by luke-agent/u);
   assert.equal(read.querySelectorAll('[aria-label="Reviewers"] > li').length, 4);

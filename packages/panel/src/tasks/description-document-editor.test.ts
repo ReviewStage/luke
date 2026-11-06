@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
@@ -16,28 +17,28 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@repo/features/tasks-vi
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import {
   type DescriptionCommentsControl,
   DescriptionCommentsProvider,
 } from "@repo/ui/description-comments";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
-  FINISH,
-  PLACEMENT_END,
-  type PlacedWords,
   type DescriptionEditorModule,
   type DescriptionEditorPlacement,
   type DescriptionEditorProps,
+  FINISH,
+  PLACEMENT_END,
+  type PlacedWords,
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { registryWith } from "../testing/app-state.js";
-import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
+import { registryWith, stateWith } from "../testing/app-state.js";
+import { onRegistry, settledWrites, writeAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -47,7 +48,7 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
-import { useDescriptionWordsUnsaved } from "./use-description-editing.js";
+import { useDescriptionWordsOwner, useDescriptionWordsUnsaved } from "./use-description-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../description-editor/`),
@@ -218,6 +219,42 @@ function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
 }
 
+/** The descriptions' words told which account is signed in, as the window tells them. */
+function WordsOwner(): null {
+  useDescriptionWordsOwner();
+  return null;
+}
+
+/** Main's document handed again with the account signed in now naming its id, as a refresh hands it. */
+function accountGainsId(): void {
+  writeAppState(
+    stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
+      account: {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        id: "user-dev",
+        email: "dev@example.com",
+        name: "Dev",
+        provider: "github",
+      },
+    }),
+  );
+}
+
+/** Main's document handed again with a teammate signed in, as an account switch hands it. */
+function signInTeammate(): void {
+  writeAppState(
+    stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
+      account: {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        id: "user-teammate",
+        email: "teammate@example.com",
+        name: "Teammate",
+        provider: "github",
+      },
+    }),
+  );
+}
+
 /** Whether the window says a description holds words not saved. */
 function unsavedWords(container: HTMLElement): boolean {
   return (
@@ -265,13 +302,20 @@ function mount(
               commented(page),
               createElement(ToastHost),
               createElement(UnsavedWords),
+              createElement(WordsOwner),
             ),
           ),
         ),
       ),
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    draw(createElement(DescriptionBody, { task, edit: descriptionEditMutation(task.id, door), onRename }));
+    draw(
+      createElement(DescriptionBody, {
+        task,
+        edit: descriptionEditMutation(task.id, door),
+        onRename,
+      }),
+    );
   /** The description as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
@@ -599,13 +643,14 @@ test("a press while a tick is out waits its turn, and both land, the second over
     ["One", "Upload screenshot"],
   );
 
+  const ticked = () => boxes.map((box) => box.getAttribute("aria-checked") === "true");
   act(() => {
     for (const box of boxes) box.click();
   });
-  await settle();
-  assert.equal(sent.length, 1, "the second waits for the first");
+  await vi.waitFor(() => expect(ticked()).toEqual([true, true]));
+  assert.equal(sent.length, 1, "the second waits for the first, drawn as pressed meanwhile");
   answers[0]?.resolve({ saved: true });
-  await settle();
+  await vi.waitFor(() => expect(sent.length).toBe(2));
   answers[1]?.resolve({ saved: true });
   await settle();
 
@@ -617,10 +662,7 @@ test("a press while a tick is out waits its turn, and both land, the second over
       { base: first, value: first.replace("[ ] ![Upload", "[x] ![Upload") },
     ],
   );
-  assert.deepEqual(
-    boxes.map((box) => box.getAttribute("aria-checked") === "true"),
-    [true, true],
-  );
+  await vi.waitFor(() => expect(ticked()).toEqual([true, true]));
   assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
 });
 
@@ -710,8 +752,11 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   assert.ok(box, "the box is drawn");
 
   act(() => box.click());
+  await vi.waitFor(() => expect(box.getAttribute("aria-checked")).toBe("true"));
   act(() => box.click());
+  await vi.waitFor(() => expect(box.getAttribute("aria-checked")).toBe("false"));
   first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  await vi.waitFor(() => expect(newestToastSays()).toBe("The description could not be saved."));
   await settle();
 
   assert.equal(
@@ -721,6 +766,26 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   );
   assert.equal(box.getAttribute("aria-checked"), "false");
   assert.equal(newestToastSays(), "The description could not be saved.");
+});
+
+test("a box in a later section ticks its own item after an earlier section's words grew", async () => {
+  const body = "## Goal\n\nInvite by email.\n\n## Steps\n- [ ] One\n";
+  const grown = body.replace("Invite by email.", "Invite by email, or by a link.");
+  const { container, sent, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  render({ ...DOCUMENT_TASK, document: { body: grown, assumptions: [] } });
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  await vi.waitFor(() => expect(sent.length).toBe(1));
+
+  assert.deepEqual(sent[0]?.document, {
+    base: grown,
+    value: grown.replace("[ ] One", "[x] One"),
+  });
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
@@ -933,6 +998,111 @@ test("words whose save is refused as the developer leaves the description are ke
   assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
   assert.equal(newestToastSays(), undefined, "the toast goes once the words are back");
   assert.equal(sent.length, 1, "nothing saves them on its own");
+});
+
+test("words a description was left with go once another account signs in, so neither Retry nor coming back saves them as it", async () => {
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+  const retry = newestToastAction();
+
+  signInTeammate();
+  render(other);
+  await settle();
+  act(() => retry?.click());
+  await settle();
+  render(DOCUMENT_TASK);
+  await settle();
+
+  assert.equal(newestToastSays(), undefined, "the toast over them goes with them");
+  assert.equal(sent.length, 1, "nothing saves them as the account now signed in");
+  assert.equal(container.querySelector(".description-document-editor"), null);
+  assert.equal(unsavedWords(container), false);
+});
+
+test("an editor open on words not yet saved closes once another account signs in, and leaving sends none of them", async () => {
+  const { container, sent, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  signInTeammate();
+  render(DOCUMENT_TASK);
+  await settle();
+  const closed = container.querySelector(".description-document-editor") === null;
+  render(other);
+  await settle();
+
+  assert.ok(closed, "the editor closed as the account changed");
+  assert.equal(sent.length, 0, "nothing saves them as the account now signed in");
+  assert.equal(unsavedWords(container), false);
+});
+
+test("words left before the window has drawn another account signing in are not sent as it", async () => {
+  const { container, sent, unmount } = mount();
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  signInTeammate();
+  unmount();
+  await settle();
+
+  assert.equal(sent.length, 0, "nothing saves them as the account now signed in");
+});
+
+test("words whose leaving save waits on one still out are not sent once another account signs in", async () => {
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: DescriptionEditRequest[] = [];
+  const door = (request: DescriptionEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return sent.length === 1 ? first.promise : Promise.resolve({ saved: true });
+  };
+  const { container, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  render(DOCUMENT_TASK, door);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  act(() => open().onDraft(`${BODY}Mine, and more.\n`));
+  render(other, door);
+  await settle();
+  const outFirst = sent.length;
+
+  signInTeammate();
+  render(other, door);
+  await settle();
+  first.resolve({ saved: true });
+  await settle();
+
+  assert.equal(outFirst, 1, "one save was out as the description was left");
+  assert.equal(
+    sent.length,
+    1,
+    "the words that waited on it are not sent as the account now signed in",
+  );
+  assert.equal(unsavedWords(container), false);
+});
+
+test("words a description was left with stay once the account signed in comes to name its id", async () => {
+  const { container, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+
+  accountGainsId();
+  render(other);
+  await settle();
+  const toastStood = newestToastSays() === "Your description edits could not be saved.Retry";
+  render(DOCUMENT_TASK);
+  await settle();
+
+  assert.ok(toastStood, "the toast over them stands");
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
 });
 
 test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {

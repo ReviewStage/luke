@@ -15,6 +15,7 @@ import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
+import { type Store, useCreateStore, useSelector } from "@tanstack/react-store";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -111,6 +112,19 @@ export type FindSubject =
   | { readonly agent: string }
   | { readonly page: FindPage; readonly at?: string | undefined };
 
+/** What a scope's find holds: the query, the subject its bar stands open over, none while shut, and the match it is at, -1 at none. */
+export interface FindHeld {
+  readonly query: string;
+  readonly bar: FindSubject | undefined;
+  readonly at: number;
+}
+
+/** A scope's find as a store holds it, which a page hands where its find should outlive it. */
+export type FindStore = Store<FindHeld>;
+
+/** A find never summoned. */
+export const NO_FIND: FindHeld = { query: "", bar: undefined, at: -1 };
+
 /** A find's matches as its bar reads them, and the step through them. */
 interface FindMatches {
   readonly tally: FindTally;
@@ -168,14 +182,25 @@ function sameSubject(a: FindSubject, b: FindSubject): boolean {
  * read again over new text, keeps to the match it was at (`matchFrom`);
  * only a new query and a step bring the match into view.
  */
-function useFindMatches(root: HTMLElement | null, query: string): FindMatches {
+function useFindMatches(
+  root: HTMLElement | null,
+  query: string,
+  kept: { readonly at: number; readonly onAt: (at: number) => void },
+): FindMatches {
   const painting = useRef<FindPainting>(NO_PAINTING);
   const [tally, setTally] = useState<FindTally>({ count: 0, at: -1 });
-  const paint = useCallback((next: FindPainting) => {
-    repaint(painting.current, next);
-    painting.current = next;
-    setTally({ count: next.ranges.length, at: next.at });
-  }, []);
+  const { onAt } = kept;
+  const paint = useCallback(
+    (next: FindPainting) => {
+      repaint(painting.current, next);
+      painting.current = next;
+      setTally({ count: next.ranges.length, at: next.at });
+      onAt(next.at);
+    },
+    [onAt],
+  );
+  // The match a find held where its scope is drawn again, which its first search stands on rather than the first.
+  const resumed = useRef(kept.at);
 
   useEffect(() => {
     if (root === null || query.length === 0) {
@@ -185,10 +210,16 @@ function useFindMatches(root: HTMLElement | null, query: string): FindMatches {
     const search = (shown: boolean) => {
       const held = painting.current;
       const ranges = findRanges(root, query);
-      const at = matchFrom(ranges, held.ranges[held.at], root);
+      const resume = resumed.current;
+      resumed.current = -1;
+      // Note that a find drawn again stands where it was without bringing the match into view, since the page keeps where it stood scrolled.
+      const at =
+        resume >= 0 && resume < ranges.length
+          ? resume
+          : matchFrom(ranges, held.ranges[held.at], root);
       paint({ ranges, at });
       const range = ranges[at];
-      if (shown && range !== undefined) reveal(range, root);
+      if (shown && resume < 0 && range !== undefined) reveal(range, root);
     };
     search(true);
     return watchText(root, () => search(false));
@@ -375,32 +406,49 @@ export function useFindPress(): (chord: FindChord) => void {
 export function FindScope({
   active,
   subject,
+  held,
   className,
   children,
   ...props
 }: Omit<ComponentProps<"div">, "ref"> & {
   active: boolean;
   subject: FindSubject;
+  /** Where the find is held where it should outlive the scope; in a store of the scope's own otherwise. */
+  held?: FindStore | undefined;
 }): React.JSX.Element {
   const [root, setRoot] = useState<HTMLElement | null>(null);
-  const [query, setQuery] = useState("");
-  // Where the bar stands open, and how many times ⌘F has summoned it.
-  const [bar, setBar] = useState<FindSubject | undefined>(undefined);
+  const own = useCreateStore<FindHeld>(NO_FIND);
+  const store = held ?? own;
+  // The query, and where the bar stands open.
+  const { query, bar, at } = useSelector(store);
+  const setQuery = (next: string) => store.setState((was) => ({ ...was, query: next }));
+  const setBar = (next: FindSubject | undefined) =>
+    store.setState((was) => ({ ...was, bar: next }));
+  const onAt = useCallback(
+    (next: number) => store.setState((was) => (was.at === next ? was : { ...was, at: next })),
+    [store],
+  );
+  // How many times ⌘F has summoned the bar.
   const [summons, setSummons] = useState(0);
   const back = useRef<HTMLElement | null>(null);
   // Note that the bar is let go as the tab changes, rather than left to
-  // stand for a tab no longer shown, which a return would draw again.
-  const [shown, setShown] = useState(subject);
-  if (!sameSubject(shown, subject)) {
-    setShown(subject);
-    setBar(undefined);
-  }
+  // stand for a tab no longer shown, which a return would draw again; it is
+  // let go after the draw, because a store's write redraws its readers.
+  const shown = useRef(subject);
+  useEffect(() => {
+    if (sameSubject(shown.current, subject)) return;
+    shown.current = subject;
+    store.setState((was) => (was.bar === undefined ? was : { ...was, bar: undefined }));
+  });
   const open = bar !== undefined && sameSubject(bar, subject);
   // Note that the bar is held drawn through its exit, saying what it last said, since the matches it tallies go with the query it closes on.
   const drawn = useDisclosure(open);
   // A tab that hands a source of its own finds in its words, never the DOM's.
   const [source, setSource] = useState<FindSource | undefined>(undefined);
-  const domMatches = useFindMatches(source === undefined ? root : null, open ? query : "");
+  const domMatches = useFindMatches(source === undefined ? root : null, open ? query : "", {
+    at,
+    onAt,
+  });
   const sourceMatches = useSourceMatches(source, open ? query : "");
   const { tally, step } = source === undefined ? domMatches : sourceMatches;
   const [tallied, setTallied] = useState(tally);
@@ -482,6 +530,7 @@ export function PageFind({
   at,
   active,
   hidden,
+  held,
   children,
 }: {
   page: FindPage;
@@ -490,10 +539,18 @@ export function PageFind({
   active: boolean;
   /** Whether the page is hidden under a side panel filling the window beside it, as the Inbox's is. */
   hidden?: boolean | undefined;
+  /** Where the page's find is held where it should outlive the page (`FindScope`). */
+  held?: FindStore | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <FindScope className="page-find" active={active} subject={{ page, at }} hidden={hidden}>
+    <FindScope
+      className="page-find"
+      active={active}
+      subject={{ page, at }}
+      hidden={hidden}
+      held={held}
+    >
       {children}
     </FindScope>
   );

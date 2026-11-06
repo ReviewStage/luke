@@ -45,7 +45,7 @@ import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-
 import { unrunnableChoice } from "./agent-model.js";
 import { repositorySkillsQueryOptions } from "./agent-reads.js";
 import type { AgentServersControl } from "./agent-servers.js";
-import { ConnectAgentBanner } from "./connect-agent-banner.js";
+import { ConnectAgentBanner, NOTICE_LOOK, type NoticeLook } from "./connect-agent-banner.js";
 import type { MentionMenuSide } from "./mention-picker.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import {
@@ -57,6 +57,7 @@ import {
   treeKind,
   treeRelationOf,
 } from "./new-task-relation.js";
+import { NoRepositoriesBanner } from "./no-repositories-banner.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { NewTaskRunsOnChip, newTaskRunsOn, useNewTaskRunsOn } from "./runs-on.js";
@@ -356,6 +357,7 @@ export function NewTaskComposer({
   titleId,
   listSide,
   purpose = NEW_TASK_PURPOSE.TASK,
+  notices = NOTICE_LOOK.INSET,
 }: {
   newTask: TasksControl["newTask"];
   /** The workspace the task starts in, the owner's to choose; none before the workspaces are read. */
@@ -374,6 +376,8 @@ export function NewTaskComposer({
   listSide: MentionMenuSide;
   /** What the card starts; a task's agent where none is named. */
   purpose?: NewTaskPurpose | undefined;
+  /** How what holds a start is said: a line inside the card, as the dialog says it, or cards over it, as Home does, which also says the workspace has no repositories yet. */
+  notices?: NoticeLook | undefined;
 }): React.JSX.Element {
   const forAutomation = purpose === NEW_TASK_PURPOSE.AUTOMATION;
   const draft = useDraft(newTaskPlace(workspaceId, purpose));
@@ -783,8 +787,20 @@ export function NewTaskComposer({
     ? undefined
     : [relationMenuPanel(relationSearchId, relationControl, relationKind, setRelationKind)];
 
+  const agentNotice =
+    unpaid === undefined || newTask.models === undefined ? null : (
+      <ConnectAgentBanner models={newTask.models} unpaid={unpaid} look={notices} />
+    );
+  const carded = notices === NOTICE_LOOK.CARD;
   const card = (
     <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
+      {/* Note that Home's cards stand over the head row, the agent's first, since it holds Start and a repository does not. */}
+      {carded ? (
+        <div className="new-task-notices mb-control-gap flex min-w-0 flex-col gap-control-gap empty:hidden">
+          {agentNotice}
+          <NoRepositoriesBanner chooser={repositories} />
+        </div>
+      ) : null}
       <div className="new-task-head flex min-w-0 flex-wrap items-center gap-item-gap">
         <div className="new-task-title flex min-w-0 max-w-full items-center gap-item-gap">
           {forAutomation ? (
@@ -820,9 +836,7 @@ export function NewTaskComposer({
           <NewTaskRelationRows control={relationControl} />
         </div>
       )}
-      {unpaid === undefined || newTask.models === undefined ? null : (
-        <ConnectAgentBanner models={newTask.models} unpaid={unpaid} />
-      )}
+      {carded ? null : agentNotice}
       <AgentComposer
         status={AGENT_STATUS.STARTING}
         composer={composer}

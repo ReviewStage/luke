@@ -128,6 +128,7 @@ import {
 import { actMutation, pressMutation } from "../act-mutations.js";
 import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
+import type { AutomationsRoute } from "../automations-route.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import {
@@ -150,6 +151,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
+import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -180,7 +182,6 @@ import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { ComposerNote } from "./use-agent-composer.js";
@@ -346,6 +347,8 @@ interface PersonViewControl {
   /** Opens their page in `workspaceId`, the window listing it first where it lists another; in the listed workspace where none is named. */
   readonly onOpen: (userId: string, name?: string, workspaceId?: string) => void;
   readonly onClose: () => void;
+  /** Reads their page ahead of a press the pointer says is coming, in `workspaceId`, or the listed workspace where none is named. */
+  readonly onPreload: (userId: string, workspaceId?: string) => void;
 }
 
 /** The places that are an agent's own, which open on its task where it has one, else on its page. */
@@ -382,34 +385,17 @@ type TaskTabPlace =
 const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
-  PERSON: "person",
-  AUTOMATIONS: "automations",
-  BOARD: "board",
   /** A workspace's Home or Board asked for under a step naming none of the reader's workspaces. */
   UNKNOWN_WORKSPACE: "unknown-workspace",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, a person's page, the Automations page, the Board, or a workspace not there for the reader. */
+/** The window's Inbox with the item chosen in it, one agent's page, or a workspace not there for the reader. */
 type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
       readonly chosen: InboxChoice | undefined;
     }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
-  | {
-      readonly kind: typeof STAND_IN.PERSON;
-      readonly userId: string;
-      readonly name?: string;
-      /** The workspace the page is the person's in, which it gives way to another listed in its place. */
-      readonly workspaceId: string | undefined;
-    }
-  | {
-      readonly kind: typeof STAND_IN.AUTOMATIONS;
-      readonly place: AutomationsPlace;
-      /** Whether an automation's runs stand alone over its setup, which only a narrow room draws apart; a page opened on a run's link does until said otherwise. */
-      readonly runs?: boolean | undefined;
-    }
-  | { readonly kind: typeof STAND_IN.BOARD }
   | { readonly kind: typeof STAND_IN.UNKNOWN_WORKSPACE };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
@@ -429,6 +415,8 @@ interface BoardViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
+  /** Reads the Board ahead of a press the pointer says is coming. */
+  readonly onPreload: () => void;
 }
 
 /** A workspace's address naming none of the reader's workspaces: whether its not-found state stands in the plan's place, and its way out. */
@@ -449,7 +437,7 @@ export const AUTOMATIONS_PAGE = {
 export type AutomationsPlace =
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.LIST;
-      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
+      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on; an opening's alone, which no address holds. */
       readonly deleted?: string;
     }
   | { readonly kind: typeof AUTOMATIONS_PAGE.RUNS }
@@ -459,7 +447,7 @@ export type AutomationsPlace =
       readonly automationId: string;
       /** The run a link named, which its runs mark and bring into view. */
       readonly runId?: string;
-      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history. */
+      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history; an opening's alone, which no address holds. */
       readonly created?: true;
     };
 
@@ -468,20 +456,9 @@ export function automationsTab(place: AutomationsPlace): boolean {
   return place.kind === AUTOMATIONS_PAGE.LIST || place.kind === AUTOMATIONS_PAGE.RUNS;
 }
 
-/** The list, where the Automations pages open with none asked for. */
-const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
-
-/** What a fixture run's profile stands in the task's place at launch: an Automations page; none for a place that is no stand-in. */
-function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
-  if (place === undefined) return undefined;
-  if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
-  return undefined;
-}
-
-/** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
-function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
-  if (automationsTab(place)) return false;
-  return runs ?? (place.kind === AUTOMATIONS_PAGE.EDIT && place.runId !== undefined);
+/** The step a workspace's address names it by: its slug, or its id where an older service answered none, as `linkOf` writes it. */
+function stepOf(workspace: Pick<Workspace, "id" | "slug">): string {
+  return workspace.slug ?? workspace.id;
 }
 
 /** The window's Automations pages: whether one stands in the task's place, which, and the presses that open, move between, and leave them. */
@@ -495,8 +472,8 @@ interface AutomationsViewControl {
    * link does, and any other does not until its Runs is chosen.
    */
   readonly runs: boolean;
-  /** Opens the page asked for, the list where none is, on its runs where `runs` says so. */
-  readonly onOpen: (place?: AutomationsPlace, runs?: boolean) => void;
+  /** Opens the page asked for, the list where none is, under the listed workspace; nothing while none is listed. */
+  readonly onOpen: (place?: AutomationsPlace) => void;
   /** Stands the page's runs alone, or its setup again; it leaves no page, so it asks nothing. */
   readonly onRuns: (shown: boolean) => void;
   readonly onClose: () => void;
@@ -954,6 +931,8 @@ export interface TasksControl {
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
   /** The same delete, as a question asking it first holds its own mutation over it. */
   deleteTask: TaskDeleteMutation;
+  /** Several deletes at once, as a selection's question holds its own mutation over them. */
+  deleteTasks: TasksDeleteMutation;
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
@@ -1244,6 +1223,17 @@ export function taskDeleteMutation(run: (taskId: string) => Promise<ActedResult>
 /** A task's delete, as a place asking it holds it. */
 type TaskDeleteMutation = ReturnType<typeof taskDeleteMutation>;
 
+/** Several tasks deleted at once, as a selection's question holds its own mutation over them, each through `run`, answering each in the order asked. */
+export function tasksDeleteMutation(run: (taskId: string) => Promise<ActedResult>) {
+  return mutationOptions({
+    mutationKey: [ACT_KIND.TASKS_DELETE],
+    mutationFn: (taskIds: readonly string[]) => Promise.all(taskIds.map(run)),
+  });
+}
+
+/** Several tasks deleted at once, as a selection's question holds it. */
+type TasksDeleteMutation = ReturnType<typeof tasksDeleteMutation>;
+
 /** A task moved to another workspace, and whether a refusal goes unsaid, as the Move dialog says it under its list. */
 interface TaskMoveAsk {
   readonly taskId: string;
@@ -1421,6 +1411,12 @@ export function useTasksTab(input: {
   room: ShellRoom;
   /** Admin as the router stands it, which a link to it opens (`admin-route.ts`). */
   adminView: AdminViewControl;
+  /** The listed workspace's Board as the router stands it (`workspace-routes.ts`). */
+  boardView: BoardRoute;
+  /** A person's page as the router stands it (`workspace-routes.ts`). */
+  personView: PersonRoute;
+  /** The listed workspace's Automations pages as the router stands them (`automations-route.ts`). */
+  automationsView: AutomationsRoute;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1475,10 +1471,7 @@ export function useTasksTab(input: {
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
-  // The Admin and Automations profiles open their place at launch.
-  const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
-    launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
-  );
+  const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   // Note that the Inbox already open has no opening to time.
   const timeInboxOpen = () => {
@@ -1567,9 +1560,48 @@ export function useTasksTab(input: {
   }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
-  if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
-    setStandIn(undefined);
-  }
+  const personWorkspace =
+    input.personView.workspace === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.personView.workspace)?.id;
+  // Note that an address naming none of the reader's workspaces is its route's gate's to answer (`route-gates.ts`).
+  const personElsewhere =
+    input.personView.userId !== undefined &&
+    listedWorkspace !== undefined &&
+    personWorkspace !== undefined &&
+    personWorkspace !== listedWorkspace.id;
+  const closePerson = input.personView.onClose;
+  useEffect(() => {
+    if (personElsewhere) closePerson();
+  }, [personElsewhere, closePerson]);
+  // The Board is the listed workspace's, so another listed in its place stands its Board in the step's place.
+  const boardWorkspace =
+    input.boardView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.boardView.standingIn)?.id;
+  const boardElsewhere =
+    input.boardView.open &&
+    listedWorkspace !== undefined &&
+    boardWorkspace !== undefined &&
+    boardWorkspace !== listedWorkspace.id;
+  const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+  const turnBoard = input.boardView.onTurn;
+  useEffect(() => {
+    if (boardElsewhere && listedStep !== undefined) turnBoard(listedStep);
+  }, [boardElsewhere, listedStep, turnBoard]);
+  // The Automations pages are the listed workspace's too, so another listed in its place stands the same page under it in the step's place.
+  const automationsWorkspace =
+    input.automationsView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.automationsView.standingIn)?.id;
+  const automationsElsewhere =
+    listedWorkspace !== undefined &&
+    automationsWorkspace !== undefined &&
+    automationsWorkspace !== listedWorkspace.id;
+  const turnAutomations = input.automationsView.onTurn;
+  useEffect(() => {
+    if (automationsElsewhere && listedStep !== undefined) turnAutomations(listedStep);
+  }, [automationsElsewhere, listedStep, turnAutomations]);
   const listedWorkspaceId = listedWorkspace?.id;
   const sidebar = useMemo(() => sidebarList(tasks.tasks), [tasks.tasks]);
   const listedSidebar = useMemo(
@@ -1912,8 +1944,14 @@ export function useTasksTab(input: {
   // shows something else; a fixture's staged agents are no one's to announce.
   // The window's Inbox stands in the column's place, showing the task whose item is chosen there.
   // Whether the column stands on screen, a fixture's among them.
-  // Note that Admin stands over the window's state, which stays as it was under it (`admin-route.ts`), so none of it is on screen then.
-  const stateShown = shown && !input.adminView.open;
+  // Note that a routed place beside the sidebar, Admin, the Board, a person's page, or the Automations pages, stands over the window's state, which stays
+  // as it was under it (`admin-route.ts`, `workspace-routes.ts`), so none of it is on screen then.
+  const routedOver =
+    input.adminView.open ||
+    input.boardView.open ||
+    input.personView.userId !== undefined ||
+    input.automationsView.open;
+  const stateShown = shown && !routedOver;
   const columnInView =
     stateShown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
@@ -2149,12 +2187,13 @@ export function useTasksTab(input: {
   // delete that landed says nothing, since the task leaving the list says it;
   // a refusal is said where the question that asked it stands, or in a toast
   // where the task leaving took it away (`use-refusal-heard.ts`).
-  const deleteTaskOptions = taskDeleteMutation(async (taskId) => {
+  const sendDeleteTask = async (taskId: string): Promise<ActedResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await askKept(sendAct(ACT_KIND.TASKS_DELETE, { taskId }));
     if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     return { ...DELETE_REFUSED, cause: deleted.cause };
-  });
+  };
+  const deleteTaskOptions = taskDeleteMutation(sendDeleteTask);
   const { mutateAsync: deleteTask } = useMutation(deleteTaskOptions);
 
   // The tasks the tab draws as they stand at each call, and each row write's
@@ -3039,12 +3078,9 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    // Note that Home under Admin is no Home on screen, so its composer is no New task there (`admin-route.ts`).
+    // Note that Home under a routed place is no Home on screen, so its composer is no New task there (`admin-route.ts`).
     const atHome =
-      page === TASKS_PAGE.HOME &&
-      standIn === undefined &&
-      historyFor === undefined &&
-      !input.adminView.open;
+      page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined && !routedOver;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -3415,6 +3451,52 @@ export function useTasksTab(input: {
     }
   };
 
+  // The Board of `home`, the listed workspace where none is named, opened past whatever stood in the plan's place, which gives way to it.
+  const openBoard = (home: Pick<Workspace, "id" | "slug"> | undefined) => {
+    const shown = home ?? listedWorkspace;
+    if (shown === undefined) return;
+    setHistoryFor(undefined);
+    setStandIn(undefined);
+    input.boardView.onOpen(stepOf(shown));
+  };
+
+  /**
+   * A person's page in `home`, the listed workspace where none is named,
+   * listed first where another is, because the page reads the listed
+   * workspace's work, and only listed, as a link's place is: reopening its
+   * last plan behind the page would only hide it again.
+   */
+  const openPerson = (
+    userId: string,
+    name: string | undefined,
+    home: Pick<Workspace, "id" | "slug"> | undefined,
+  ) => {
+    const shown = home ?? listedWorkspace;
+    if (shown === undefined) return;
+    setHistoryFor(undefined);
+    setStandIn(undefined);
+    // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
+    // asked before it, answering late, lists nothing and leaves nothing over it.
+    navigations.current += 1;
+    if (shown.id !== listedWorkspace?.id) chooseListed(shown.id);
+    input.personView.onOpen(userId, name, stepOf(shown));
+  };
+
+  /**
+   * An Automations page under the workspace whose address step is
+   * `workspace`, listed first where the account is in it, the listed one
+   * otherwise, opened past whatever stood in the plan's place, which gives
+   * way to it.
+   */
+  const openAutomations = (to: AutomationsPlace, workspace?: string) => {
+    const listedId = workspace === undefined ? listedWorkspace?.id : listLinked(workspace);
+    const shown = viewed.workspaces.find((each) => each.id === listedId) ?? listedWorkspace;
+    if (shown === undefined) return;
+    setHistoryFor(undefined);
+    setStandIn(undefined);
+    input.automationsView.onOpen(to, stepOf(shown));
+  };
+
   // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
   const goHome = () => {
     setHistoryFor(undefined);
@@ -3447,7 +3529,7 @@ export function useTasksTab(input: {
         }
         listLinked(workspace);
         if (place.kind === LINK_PLACE.HOME) goHome();
-        else standInFor({ kind: STAND_IN.BOARD });
+        else openBoard(workspaceOfSlug(viewed.workspaces, workspace));
         return;
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
@@ -3496,11 +3578,7 @@ export function useTasksTab(input: {
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
         const home = workspaceOfSlug(viewed.workspaces, workspace);
         listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.PERSON,
-          userId: place.userId,
-          workspaceId: home?.id ?? listedWorkspace?.id,
-        });
+        openPerson(place.userId, undefined, home);
         return;
       }
       case LINK_PLACE.INBOX: {
@@ -3516,26 +3594,19 @@ export function useTasksTab(input: {
         openInboxItem(workspace, place);
         return;
       case LINK_PLACE.AUTOMATIONS:
-        listLinked(workspace);
-        standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
+        openAutomations({ kind: AUTOMATIONS_PAGE.LIST }, workspace);
         return;
       case LINK_PLACE.AUTOMATION:
-        listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.AUTOMATIONS,
-          place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
-        });
+        openAutomations(
+          { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
+          workspace,
+        );
         return;
       case LINK_PLACE.AUTOMATION_RUN:
-        listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.AUTOMATIONS,
-          place: {
-            kind: AUTOMATIONS_PAGE.EDIT,
-            automationId: place.automationId,
-            runId: place.runId,
-          },
-        });
+        openAutomations(
+          { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId, runId: place.runId },
+          workspace,
+        );
         return;
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
       // workspace's accounts, so it lists nothing; one naming the place alone opens on its Overview.
@@ -3946,58 +4017,47 @@ export function useTasksTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // A person's page stands over the plan's place as an agent's does, so a version history there gives way.
+    // A person's page is the router's, which draws it in the plan's place (`workspace-routes.ts`); a version history there gives way.
     personView: {
-      userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
-      name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
-      workspaceId: standIn?.kind === STAND_IN.PERSON ? standIn.workspaceId : undefined,
+      userId: input.personView.userId,
+      name: input.personView.name,
+      workspaceId: personWorkspace,
       onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
-        setHistoryFor(undefined);
-        // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
-        // asked before it, answering late, lists nothing and leaves nothing over it.
-        navigations.current += 1;
-        // Note that the workspace is listed first, because the page reads the listed workspace's
-        // work, and only listed, as a link's place is: reopening its last plan behind the page
-        // would only hide it again, and a reopen refused would take the page with it.
-        if (workspaceId !== undefined && workspaceId !== listedWorkspace?.id) {
-          chooseListed(workspaceId);
-        }
-        const opened = {
-          kind: STAND_IN.PERSON,
+        openPerson(
           userId,
-          workspaceId: workspaceId ?? listedWorkspace?.id,
-        } as const;
-        setStandIn(name === undefined ? opened : { ...opened, name });
+          name,
+          workspaceId === undefined
+            ? undefined
+            : viewed.workspaces.find((each) => each.id === workspaceId),
+        );
       }),
-      onClose: guard(() => setStandIn(undefined)),
+      onClose: guard(input.personView.onClose),
+      onPreload: (userId: string, workspaceId?: string) => {
+        const home = viewed.workspaces.find((each) => each.id === workspaceId) ?? listedWorkspace;
+        if (home !== undefined) input.personView.onPreload(userId, stepOf(home));
+      },
     },
     // The Admin place is the router's, which draws it in the task's place (`admin-route.ts`).
     adminView: { ...input.adminView, onOpen: guard(input.adminView.onOpen) },
-    // The Automations page stands over the task's place as the Inbox does, each giving way to the others.
+    // The Automations pages are the router's, which draw them in the plan's place (`automations-route.ts`); a version history there gives way.
     automationsView: {
-      open: standIn?.kind === STAND_IN.AUTOMATIONS,
-      place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,
-      runs: standIn?.kind === STAND_IN.AUTOMATIONS && runsStanding(standIn.place, standIn.runs),
-      onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST, runs?: boolean) => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.AUTOMATIONS, place, runs });
-      }),
-      onRuns: (shown) =>
-        setStandIn((held) =>
-          held?.kind === STAND_IN.AUTOMATIONS && !automationsTab(held.place)
-            ? { ...held, runs: shown }
-            : held,
-        ),
-      onClose: guard(() => setStandIn(undefined)),
+      open: input.automationsView.open,
+      place: input.automationsView.place,
+      runs: input.automationsView.runs,
+      onOpen: guard((place: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) =>
+        openAutomations(place),
+      ),
+      onRuns: input.automationsView.onRuns,
+      onClose: guard(input.automationsView.onClose),
     },
-    // The Board stands over the plan's place as the Automations page does, each giving way to the others.
+    // The Board is the router's, which draws it in the plan's place (`workspace-routes.ts`).
     boardView: {
-      open: standIn?.kind === STAND_IN.BOARD,
-      onOpen: guard(() => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.BOARD });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
+      open: input.boardView.open,
+      onOpen: guard(() => openBoard(listedWorkspace)),
+      onClose: guard(input.boardView.onClose),
+      onPreload: () => {
+        if (listedWorkspace !== undefined) input.boardView.onPreload(stepOf(listedWorkspace));
+      },
     },
     unknownWorkspace: {
       open: standIn?.kind === STAND_IN.UNKNOWN_WORKSPACE,
@@ -4134,6 +4194,7 @@ export function useTasksTab(input: {
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     deleteTask: deleteTaskOptions,
+    deleteTasks: tasksDeleteMutation(sendDeleteTask),
     back,
     leaveGuard,
   });

@@ -216,8 +216,9 @@ const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
       if (sandbox.currentSessionId === undefined || !UP_STATUSES.has(sandbox.status ?? "")) {
         continue;
       }
-      yield* sandboxFirewall(api).clear(sandbox.currentSessionId);
-      yield* api.stopSession(sandbox.currentSessionId);
+      const running = { name: sandbox.name, sessionId: sandbox.currentSessionId };
+      yield* sandboxFirewall(api).clear(running);
+      yield* (yield* api.session(running)).stop();
     }
   }).pipe(
     Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
@@ -277,14 +278,14 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     // Note that the stop is registered ahead of the wake, so a wake cut short by the bound is stopped too.
     if (!up) yield* Effect.addFinalizer(() => stopWoken(api, ask));
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
-    const owner = { userId: ask.userId, sandboxSessionId: session };
+    const owner = { userId: ask.userId, name: sandbox.name, sandboxSessionId: session };
     const credential = yield* ask.credential;
     // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.
     if (credential.access.kind === GITHUB_ACCESS.TOKEN) {
       yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, owner, ask));
     }
     yield* sandboxFirewall(api).write(owner, { github: credential });
-    const ran = yield* api.run(session, {
+    const ran = yield* (yield* api.session({ name: sandbox.name, sessionId: session })).run({
       command: "sh",
       args: ["-c", SNAPSHOT_SCRIPT, "sh", ask.branch, ask.message],
       cwd: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,

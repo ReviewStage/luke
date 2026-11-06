@@ -63,7 +63,7 @@ import {
   stateWith,
 } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
@@ -571,11 +571,14 @@ function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   return container;
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
   // Note that the list and the runs the host lays reach their queries a tick after they land, so the page is read once neither still stands out, bar one the test holds or a page over no workspace reads; a list held out holds the runs out too, since the page's skeleton reads them until the list lands.
   if (listHeld || unlisted) return;
   await vi.waitFor(() => {
@@ -938,6 +941,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         open: false,
         onOpen: leaveGuard.guard(() => boardOpens.push(1)),
         onClose: () => undefined,
+        onPreload: () => undefined,
       },
       workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],

@@ -6,17 +6,20 @@
  * `/connect/<code>`, and the bare `/app`, the address of a place with no
  * link (`navigation-history.ts`'s `NO_LINK_ADDRESS`), so a link written
  * before the router stood reads the same through it; Settings stands at
- * `/app/settings` too, while the window lists no workspace. A place's leaf
+ * `/app/settings` too, while the window lists no workspace, and the
+ * Automations pages hold the places no link names, their Runs tab, a new
+ * automation's page, and an automation's runs alone. A place's leaf
  * is an index route under the path it shares with the places beneath it,
  * so `/task/<id>` and `/task/<id>/version/<n>` are both a route of their own.
  *
  * The root draws `App`, whose shell draws the route standing through its
  * `Outlet` (`desktop-shell.tsx`). Every place but Settings stands beside the
  * sidebar, under the pathless `places` layout, which stays drawn as the
- * window moves between them. Settings and Admin are routed places: the
- * router alone says the window stands on them, their routes draw them as
- * lazy routes, and each gate is a `beforeLoad` over a predicate the
- * window's Back and Forward ask too (`route-gates.ts`). Every other place
+ * window moves between them. Settings, Admin, a workspace's Board, a
+ * person's page, and the Automations pages are routed places: the router alone says the window stands
+ * on them, their routes draw them as lazy routes, and each gate is a
+ * `beforeLoad` over a predicate the window's Back and Forward ask too
+ * (`route-gates.ts`). Every other place
  * is still the window's state's, which its routes draw through one
  * component (`StatePlace`), so moving a place onto the router swaps its
  * route's component and deletes its place kind from `navigation-history.ts`.
@@ -24,7 +27,7 @@
 
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { ReloadState } from "@repo/ui/error-boundary";
-import { type QueryClient, useQuery } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
   createRoute,
@@ -37,10 +40,13 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { Schema } from "effect";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { App } from "./app.js";
 import {
   AdminRouteLoading,
+  AutomationsRouteLoading,
+  BoardRouteLoading,
+  PersonRouteLoading,
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
@@ -48,16 +54,12 @@ import {
 import {
   adminRouteStands,
   type RouteAccess,
-  routeAccessNow,
   settingsPageRouteStands,
+  UNREAD_ROUTE_ACCESS,
+  useRouteAccess,
+  workspaceRouteStands,
 } from "./route-gates.js";
-import {
-  appStateQuery,
-  selectSettingsHeld,
-  useAdminAccess,
-  useAdminAccessPending,
-  useExperimentChoices,
-} from "./use-app-state.js";
+import { pathUnder } from "./routed-location.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
 const taskSearchSchema = Schema.toStandardSchemaV1(
@@ -155,11 +157,24 @@ const homeRoute = createRoute({
   component: StatePlace,
 });
 
+/**
+ * A workspace's Board, the Tasks page, of one of the reader's workspaces
+ * (`workspaceRouteStands`): an address naming none of theirs gives way to
+ * that address's Home, which says the workspace is not there for them. Its
+ * page is a chunk of its own, read ahead as the pointer comes to its row,
+ * and once the signed-in window is idle; what stands while it loads is the
+ * page's own frame.
+ */
 const boardRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "tasks",
-  component: StatePlace,
-});
+  beforeLoad: ({ context, params }) => {
+    if (workspaceRouteStands(params.workspace, context.access)) return;
+    throw redirect({ to: "/$workspace", params: { workspace: params.workspace }, replace: true });
+  },
+  pendingComponent: BoardRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() => import("./desktop/board-route.lazy.js").then((loaded) => loaded.boardLazyRoute));
 
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
@@ -254,30 +269,76 @@ const inboxTaskRoute = createRoute({ getParentRoute: () => inboxRoute, path: "ta
 
 const inboxItemRoute = createRoute({ getParentRoute: () => inboxRoute, path: "$itemId" });
 
-const automationsRoute = createRoute({
+/**
+ * The Automations pages of one of the reader's workspaces: the list, its
+ * Runs tab, a new automation's page, and an automation's, its runs alone
+ * where a narrow room stands them apart, or one of its runs. One layout
+ * draws them all, so the new page's editor stands on as the automation it
+ * made takes its step, and moving between them draws no new page. An
+ * address naming none of the reader's workspaces opens the same page under
+ * the workspace listed, as a link to it does. Its pages are a chunk of
+ * their own, opened seldom, whose list's frame stands while it loads.
+ */
+const automationPagesRoute = createRoute({
   getParentRoute: () => workspaceRoute,
+  id: "automation-pages",
+  beforeLoad: ({ context, params, location }) => {
+    const { listed } = context.access;
+    if (workspaceRouteStands(params.workspace, context.access) || listed === undefined) return;
+    throw redirect({ href: pathUnder(location.pathname, listed), replace: true });
+  },
+  pendingComponent: AutomationsRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() =>
+  import("./desktop/automations-route.lazy.js").then((loaded) => loaded.automationsLazyRoute),
+);
+
+const automationsRoute = createRoute({
+  getParentRoute: () => automationPagesRoute,
   path: "automations",
-  component: StatePlace,
 });
 
+const automationsIndexRoute = createRoute({ getParentRoute: () => automationsRoute, path: "/" });
+
+const automationsRunsRoute = createRoute({ getParentRoute: () => automationsRoute, path: "runs" });
+
+const automationsNewRoute = createRoute({ getParentRoute: () => automationsRoute, path: "new" });
+
 const automationRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
+  getParentRoute: () => automationPagesRoute,
   path: "automation/$automationId",
-  component: StatePlace,
 });
 
 const automationIndexRoute = createRoute({ getParentRoute: () => automationRoute, path: "/" });
+
+const automationRunsRoute = createRoute({ getParentRoute: () => automationRoute, path: "runs" });
 
 const automationRunRoute = createRoute({
   getParentRoute: () => automationRoute,
   path: "run/$runId",
 });
 
+/**
+ * A person's page in one of the reader's workspaces: an address naming none
+ * of theirs opens the same person under the workspace listed, as a link to
+ * them does. Its page is a chunk of its own, read ahead as the pointer comes
+ * to a person's name, its frame standing while it loads.
+ */
 const personRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "person/$userId",
-  component: StatePlace,
-});
+  beforeLoad: ({ context, params }) => {
+    const { listed } = context.access;
+    if (workspaceRouteStands(params.workspace, context.access) || listed === undefined) return;
+    throw redirect({
+      to: "/$workspace/person/$userId",
+      params: { workspace: listed, userId: params.userId },
+      replace: true,
+    });
+  },
+  pendingComponent: PersonRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() => import("./desktop/person-route.lazy.js").then((loaded) => loaded.personLazyRoute));
 
 /**
  * Admin, an admin's alone (`adminRouteStands`): an address of it loaded or
@@ -396,8 +457,18 @@ const routeTree = rootRoute.addChildren([
         agentInboxItemRoute,
       ]),
       inboxRoute.addChildren([inboxIndexRoute, inboxTaskRoute, inboxItemRoute]),
-      automationsRoute,
-      automationRoute.addChildren([automationIndexRoute, automationRunRoute]),
+      automationPagesRoute.addChildren([
+        automationsRoute.addChildren([
+          automationsIndexRoute,
+          automationsRunsRoute,
+          automationsNewRoute,
+        ]),
+        automationRoute.addChildren([
+          automationIndexRoute,
+          automationRunsRoute,
+          automationRunRoute,
+        ]),
+      ]),
       personRoute,
       adminRoute.addChildren([
         adminIndexRoute,
@@ -412,14 +483,21 @@ const routeTree = rootRoute.addChildren([
   appSettingsRoute.addChildren([appSettingsIndexRoute, appSettingsPageRoute]),
 ]);
 
-/** The panel's router over `history`, a window's own, which its root makes, one per window, its routes handed the window's `queryClient`. */
+/**
+ * The panel's router over `history`, a window's own, which its root makes, one per window, its routes handed the window's `queryClient`.
+ * Note that it starts on the unread access and reads no state, because the desktop's entry makes it as the module loads, before
+ * its root installs the bridge, and a read then would keep the bridge's absence as the window's first read; `PanelRouterProvider`
+ * hands it the window's access as it draws, before the router first loads.
+ */
 export function createPanelRouter(history: RouterHistory, queryClient: QueryClient) {
   return createRouter({
     routeTree,
     history,
-    context: { queryClient, access: routeAccessNow() },
+    context: { queryClient, access: UNREAD_ROUTE_ACCESS },
     parseSearch: readSearch,
     stringifySearch: writeSearch,
+    // Every scroller stands where it stood as the window comes back to a step, as TanStack Router's docs set it up.
+    scrollRestoration: true,
   });
 }
 
@@ -433,14 +511,7 @@ export type PanelRouter = ReturnType<typeof createPanelRouter>;
  * gate no longer lets stand gives way.
  */
 export function PanelRouterProvider({ router }: { router: PanelRouter }): React.JSX.Element {
-  const admin = useAdminAccess();
-  const adminPending = useAdminAccessPending();
-  const experiments = useExperimentChoices();
-  const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
-  const access = useMemo(
-    (): RouteAccess => ({ admin: admin || adminPending, experiments, experimentsRead }),
-    [admin, adminPending, experiments, experimentsRead],
-  );
+  const access = useRouteAccess();
   const asked = useRef(access);
   useEffect(() => {
     if (asked.current === access) return;

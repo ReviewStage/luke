@@ -38,7 +38,6 @@ import {
   sessionSandboxDeleted,
 } from "@repo/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
-import type { HttpClient } from "effect/http";
 import { afterResponse } from "../http/after-response.js";
 import { discardedOrLogged } from "./device-discard.js";
 import { sandboxFirewall } from "./sandbox-firewall.js";
@@ -92,7 +91,7 @@ export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionS
   "SessionSandboxes",
 ) {}
 
-/** A session's sandboxes, deleted or stopped, over the REST calls `vercel-sandbox-api.ts` makes. */
+/** A session's sandboxes, deleted or stopped, over the calls `vercel-sandbox-api.ts` makes. */
 function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
   return {
     keepAliveFor: (sessionId) =>
@@ -106,7 +105,8 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (endsAt === undefined) continue;
           const extension = keepAliveExtension(endsAt, yield* Clock.currentTimeMillis);
           if (extension === undefined) continue;
-          yield* api.extendTimeout(running, extension);
+          const session = yield* api.session({ name: sandbox.name, sessionId: running });
+          yield* session.extendTimeout(extension);
           extended += 1;
         }
         return extended;
@@ -129,8 +129,9 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
           // The credentials come off first, as at a launch's end and in the sweeps, because a stopped
           // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
-          yield* sandboxFirewall(api).clear(running);
-          yield* api.stopSession(running);
+          const session = { name: sandbox.name, sessionId: running };
+          yield* sandboxFirewall(api).clear(session);
+          yield* Effect.flatMap(api.session(session), (held) => held.stop());
           stopped += 1;
         }
         return stopped;
@@ -139,11 +140,10 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
 }
 
 /** The service as the deployment runs it, on the function's own OIDC token. */
-export const sessionSandboxesLayer: Layer.Layer<SessionSandboxes, never, HttpClient.HttpClient> =
-  Layer.effect(
-    SessionSandboxes,
-    Effect.map(vercelSandboxApi(deploymentOidcToken), sessionSandboxesOver),
-  );
+export const sessionSandboxesLayer: Layer.Layer<SessionSandboxes> = Layer.effect(
+  SessionSandboxes,
+  Effect.map(vercelSandboxApi(deploymentOidcToken), sessionSandboxesOver),
+);
 
 /**
  * The session's sandbox kept alive on the function's own OIDC token, as a
@@ -151,9 +151,7 @@ export const sessionSandboxesLayer: Layer.Layer<SessionSandboxes, never, HttpCli
  * is logged by its status alone, since the next one tries again well before
  * the sandbox would stop.
  */
-export function keepSessionSandboxAlive(
-  sessionId: string,
-): Effect.Effect<void, never, HttpClient.HttpClient> {
+export function keepSessionSandboxAlive(sessionId: string): Effect.Effect<void> {
   return Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.keepAliveFor(sessionId)).pipe(
     Effect.provide(sessionSandboxesLayer),
     Effect.asVoid,
@@ -165,7 +163,7 @@ export function keepSessionSandboxAlive(
 
 /** What an archive of an agent asks of the deployment beside it: the service that stops its sandbox, Vercel's in production and a script's in a test, and what keeps the function awake for the stop. */
 export interface SandboxStopReach {
-  readonly sessionSandboxes: Layer.Layer<SessionSandboxes, never, HttpClient.HttpClient>;
+  readonly sessionSandboxes: Layer.Layer<SessionSandboxes>;
   /**
    * Runs the work on past the archive's answer and answers at once. Vercel
    * may freeze a function once it has answered unless the work is handed to

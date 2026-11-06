@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
+import { MODEL_PROVIDER } from "./models-wire.js";
 import { chapterSchema } from "./pull-request-chapters.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -14,7 +15,8 @@ import { countedNumber } from "./service-wire.js";
  * one the tab's own read of the pull request found. Each answers the same way
  * (`pullRequestChaptersAnswerSchema`): none where the agent published no pull
  * request, or the number names none; else whether this deployment can
- * generate chapters at all, and the workspace's newest chapters for the pull
+ * generate chapters at all, and on which model and whose key (`runsOn`),
+ * and the workspace's newest chapters for the pull
  * request with the head they were made for, whatever it is, which the panel
  * holds against the heads its own reads hold, drawing chapters made for
  * another as stale beside a Regenerate.
@@ -74,6 +76,17 @@ const pullRequestChaptersStateSchema = EffectSchema.Union([
 
 export type PullRequestChaptersState = typeof pullRequestChaptersStateSchema.Type;
 
+/**
+ * The model the asking member's Generate would run on, by its provider's
+ * id, and the provider whose API key, the member's own, it runs on.
+ */
+export const chaptersRunsOnSchema = EffectSchema.Struct({
+  provider: EffectSchema.Literals(Object.values(MODEL_PROVIDER)),
+  model: EffectSchema.NonEmptyString,
+});
+
+export type ChaptersRunsOn = typeof chaptersRunsOnSchema.Type;
+
 /** A Generate of a pull request's chapters: the agent in the path, and the number in the query where the tab names one. */
 export const pullRequestChaptersRequestSchema = EffectSchema.Struct({
   id: EffectSchema.String,
@@ -89,13 +102,16 @@ export const pullRequestChaptersReadRequestSchema = EffectSchema.Struct({
 /**
  * A pull request's chapters as the service answers a read or a Generate:
  * none where there is no pull request to tell; else whether this deployment
- * can generate chapters, and the newest chapters.
+ * can generate chapters, what the asker's Generate would run on, and the
+ * newest chapters.
  */
 export const pullRequestChaptersAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       number: githubPullRequestNumberSchema,
       generatable: EffectSchema.Boolean,
+      /** What the asker's Generate would run on; absent where they can generate none, and from a service older than it. */
+      runsOn: EffectSchema.optionalKey(chaptersRunsOnSchema),
       chapters: pullRequestChaptersStateSchema,
     }),
   ),

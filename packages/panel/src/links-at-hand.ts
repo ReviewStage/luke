@@ -114,6 +114,8 @@ export interface WindowAt {
   readonly sidePanelFocused: boolean;
   /** The Admin view the router stands on, while Admin stands. */
   readonly admin?: AdminView | undefined;
+  /** Whether the links asked for are the place the window's state says, under whatever routed place stands, as a routed place is left for it. */
+  readonly underRouted?: boolean;
   readonly pageWorkspace?: PageWorkspace | undefined;
   /** Whether the room is narrow, showing one pane at a time. */
   readonly narrow?: boolean;
@@ -283,6 +285,32 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
   }
+  // A person's page, the Board, and the Automations pages are routed places over whatever the window's state says, on the same terms as Admin;
+  // a person's page is theirs in the workspace it opened in, which their link names.
+  const { userId, workspaceId } = tasks.personView;
+  if (userId !== undefined && at.underRouted !== true) {
+    const home = workspaceId === undefined ? listed : slugOf(tasks.workspaces, workspaceId);
+    return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
+  }
+  if (tasks.boardView.open && at.underRouted !== true) {
+    return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
+  }
+  if (tasks.automationsView.open && at.underRouted !== true) {
+    const list: LinkPlace = { kind: LINK_PLACE.AUTOMATIONS };
+    const { place } = tasks.automationsView;
+    if (place.kind === AUTOMATIONS_PAGE.EDIT) {
+      return [
+        at_(
+          { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
+          LINK_THING.AUTOMATION,
+        ),
+        within(list, LINK_THING.AUTOMATIONS),
+      ];
+    }
+    // A new automation's page is a step with no link of its own, so it offers the list it is in.
+    if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
+    return [at_(list, LINK_THING.AUTOMATIONS)];
+  }
   const { agentId } = tasks.agentView;
   if (agentId !== undefined) {
     const page = at.pageWorkspace;
@@ -294,12 +322,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (held === undefined || thing === undefined) return [own];
     const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
     return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
-  }
-  // A person's page is theirs in the workspace it opened in, which their link names.
-  const { userId, workspaceId } = tasks.personView;
-  if (userId !== undefined) {
-    const home = workspaceId === undefined ? listed : slugOf(tasks.workspaces, workspaceId);
-    return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
   if (tasks.inboxView.open) {
     // An Inbox narrowed to a task is linked by it, so a copied link or a reload opens it narrowed again.
@@ -317,26 +339,9 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     }
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
   }
-  if (tasks.automationsView.open) {
-    const list: LinkPlace = { kind: LINK_PLACE.AUTOMATIONS };
-    const { place } = tasks.automationsView;
-    if (place.kind === AUTOMATIONS_PAGE.EDIT) {
-      return [
-        at_(
-          { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
-          LINK_THING.AUTOMATION,
-        ),
-        within(list, LINK_THING.AUTOMATIONS),
-      ];
-    }
-    // A new automation's page is a step with no link of its own, so it offers the list it is in.
-    if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
-    return [at_(list, LINK_THING.AUTOMATIONS)];
-  }
   // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
   if (tasks.unknownWorkspace.open) return [];
-  // The Board stands over the plan, on the same terms; and with no task bound for, the window stands on the home page.
-  if (tasks.boardView.open) return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
+  // With no task bound for, the window stands on the home page.
   if (tasks.boundFor === undefined) {
     return [at_({ kind: LINK_PLACE.HOME }, LINK_THING.HOME)];
   }
@@ -419,6 +424,7 @@ export function useCopyLink(
   const standing = linksAt(false).find((each) => each.step === true)?.link;
   const placed = linksAtHand(tasks, {
     settings: undefined,
+    underRouted: true,
     sidePanelFocused: false,
     pageWorkspace,
     narrow: room === SHELL_ROOM.NARROW,

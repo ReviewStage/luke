@@ -34,6 +34,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TIME_LOOK,
   Time,
   VisuallyHidden,
 } from "@repo/ui";
@@ -82,6 +83,17 @@ import { useOpenPlace } from "./use-open-link.js";
  */
 const INBOX_ROW_ATTENTION =
   "inbox-row-attention inline-flex [&_.attention-mark]:size-ui-12 [&_.attention-mark_svg]:size-attention-glyph-small";
+
+/**
+ * An item put away until a reminder says when it comes back in its age's
+ * place, after the clock glyph the reminder's acts wear, in the accent's
+ * ink, so a row put away reads apart from one that changed.
+ */
+const INBOX_ROW_DUE =
+  "inbox-row-due inline-flex items-center gap-tight-gap text-accent-ink [&>svg]:size-caption-glyph";
+
+/** What a reminded row says to a reader before its time, the glyph being drawn for the eye alone. */
+const REMINDER_DUE = "Reminder";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
@@ -550,7 +562,16 @@ export function InboxItemMarks({
         <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
       ) : null}
       <TaskStatusChip holder={holder} drawn={standing} />
-      <Time at={item.updatedAt} now={now} hint={false} />
+      {/* Note that an item put away until a reminder says when it comes back in its age's place, as Mail's Remind Me list does. */}
+      {item.remindAt === undefined ? (
+        <Time at={item.updatedAt} now={now} hint={false} />
+      ) : (
+        <span className={INBOX_ROW_DUE}>
+          <GLYPH.TIME />
+          <VisuallyHidden>{REMINDER_DUE}</VisuallyHidden>
+          <Time at={item.remindAt} look={TIME_LOOK.DUE} now={now} hint={false} />
+        </span>
+      )}
       {after}
     </InboxRowMeta>
   );

@@ -21,7 +21,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
@@ -1103,11 +1103,14 @@ test("a sidebar task whose rename was refused reopens its field holding the name
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  await act(async () => undefined);
-
+  // Note that the refusal reaches the row through the rename's mutation, a moment after it is answered.
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector<HTMLInputElement>('input[aria-label="Task name"]')?.value,
+      "Ship the launch",
+    ),
+  );
   assert.deepEqual(asked.renamed, [[OTHER.id, "Ship the launch"]]);
-  const reopened = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
-  assert.equal(reopened?.value, "Ship the launch");
   assert.match(document.body.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });
 

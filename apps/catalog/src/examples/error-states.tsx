@@ -62,7 +62,7 @@ function ErrorStates(): React.JSX.Element {
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-reload" title="A place that failed to draw">
-        <div className="catalog-frame catalog-region catalog-error-region">
+        <div className="catalog-frame catalog-reload-room">
           <ReloadState failure="This window could not be shown." onReload={stay} />
         </div>
       </CatalogSection>

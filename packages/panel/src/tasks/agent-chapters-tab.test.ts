@@ -18,6 +18,7 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@repo/features/agent-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -26,6 +27,7 @@ import {
 } from "@repo/features/pull-request-chapters";
 import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import {
+  type ChaptersRunsOn,
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersState,
@@ -53,7 +55,7 @@ import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -210,12 +212,25 @@ const CONVERSATION: AgentOverviewConversation = {
   earlier: 0,
 };
 
-/** The read answering these newest chapters. */
+/** What a member who saved an Anthropic key generates on. */
+const ON_HAIKU: ChaptersRunsOn = {
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  model: "claude-haiku-5-5",
+};
+
+/** The read answering these newest chapters, to a member whose Generate runs on `runsOn`, or who can generate none. */
 function answering(
   chapters: PullRequestChaptersState,
-  generatable = true,
+  runsOn: ChaptersRunsOn | null = ON_HAIKU,
 ): PullRequestChaptersAnswerView {
-  return { pullRequest: { number: 42, generatable, chapters } };
+  return {
+    pullRequest: {
+      number: 42,
+      generatable: runsOn !== null,
+      ...(runsOn === null ? {} : { runsOn }),
+      chapters,
+    },
+  };
 }
 
 /** Ready chapters made for `headSha`, "Other changes" put first, as no reader reads it. */
@@ -446,11 +461,14 @@ function Switching({ control, first }: { control: AgentsControl; first: PullRequ
   });
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 /** Draws the agent's tab on its Chapters view, or the view given, its reads landed. */
@@ -566,9 +584,17 @@ function press(tab: HTMLElement, init: KeyboardEventInit): void {
   });
 }
 
-test("Chapters stands after Checks; with none yet it offers Generate chapters, which stands as generating until it answers, then the chapters, counted on the tab, Other changes last", async () => {
+test("Chapters stands after Checks; with none yet it offers Generate chapters on the model and key the read names, which stands as generating until it answers, then the chapters, counted on the tab, Other changes last", async () => {
   const generated = Promise.withResolvers<PullRequestChaptersAnswerView>();
-  const tab = await draw(controlAnswering({ generateChapters: () => generated.promise }));
+  const tab = await draw(
+    controlAnswering({
+      chapters: answering(
+        { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+        { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+      ),
+      generateChapters: () => generated.promise,
+    }),
+  );
 
   assert.deepEqual(
     tabNames(tab)
@@ -577,7 +603,8 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
     ["Conversation", "Checks", "Chapters", "Files"],
   );
   // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
-  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  const generate = await vi.waitFor(() => button(tab, "Generate with GPT-6 Luna"));
+  assert.match(tab.textContent ?? "", /Generating them runs on your OpenAI API key\./u);
   act(() => generate.click());
   await settle();
   assert.match(tab.textContent ?? "", /Generating chapters/u);
@@ -840,7 +867,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
   );
 
   // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
-  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  const generate = await vi.waitFor(() => button(tab, "Generate with Haiku 5.5"));
   act(() => generate.click());
   await settle();
   assert.equal(heading(tab), "Read the expiry");
@@ -896,7 +923,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
 
   const unavailable = await draw(
     controlAnswering({
-      chapters: answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false),
+      chapters: answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, null),
     }),
   );
   await vi.waitFor(() =>
@@ -907,7 +934,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some((each) =>
-      each.textContent?.startsWith("Generate chapters"),
+      each.textContent?.startsWith("Generate"),
     ),
     false,
   );

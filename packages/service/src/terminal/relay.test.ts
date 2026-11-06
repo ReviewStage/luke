@@ -130,6 +130,7 @@ function world(options: {
         return state === SANDBOX_STATE.RUNNING
           ? {
               state,
+              sandboxName: "sandbox-relay",
               sandboxSessionId: SANDBOX_SESSION,
               shell: { url: "wss://pty.test", token: Redacted.make("pty-token") },
             }

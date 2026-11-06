@@ -6,10 +6,14 @@ import { readFirewallLaunch } from "@repo/database/models/sandbox-firewall-store
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
-import { fixtureToken } from "../testing/runner-sandbox-fake.js";
+import {
+  fixtureToken,
+  sandboxFetchOver,
+  sandboxFound,
+  sessionAnswered,
+} from "../testing/vercel-sandbox-fake.js";
 import {
   composePolicy,
   LAUNCH_SWAP,
@@ -78,28 +82,43 @@ const bearerLaunch = {
   ]),
 };
 
-/** A sandbox session of its own, under an account of its own. */
+/** A sandbox session of its own, in a sandbox of its own, under an account of its own. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
-  return { userId, sandboxSessionId: `sbs_${randomUUID()}` };
+  return { userId, name: `sandbox-${randomUUID()}`, sandboxSessionId: `sbs_${randomUUID()}` };
 });
 
-/** Vercel's network-policy write as the scenario has it: each policy kept as it lands, in that order. */
-function vercel() {
+/** Vercel as the scenario has it: the session's sandbox found running it, and each policy kept as it lands, in that order. */
+function vercel(session: Effect.Success<typeof ownSession>) {
   const landed: unknown[] = [];
-  const layer = fakeHttpClientLayer(async (url, init) => {
-    assert.ok(new URL(url).pathname.endsWith("/network-policy"), `an unexpected call: ${url}`);
+  const layer = sandboxFetchOver(async (url, init) => {
+    const { pathname } = new URL(url);
+    if (pathname === `/api/v2/sandboxes/${session.name}`) {
+      return Response.json(
+        sandboxFound({
+          name: session.name,
+          status: "running",
+          currentSessionId: session.sandboxSessionId,
+          createdAt: 0,
+        }),
+      );
+    }
+    assert.equal(
+      pathname,
+      `/api/v2/sandboxes/sessions/${session.sandboxSessionId}/network-policy`,
+      `an unexpected call: ${url}`,
+    );
     landed.push(JSON.parse(await new Response(init.body).text()));
-    return Response.json({});
+    return Response.json(sessionAnswered({ id: session.sandboxSessionId, status: "running" }));
   });
   return { layer, landed };
 }
 
 /** The firewall over the scripted Vercel, and its services: the scripted Vercel, and the suite's key ring. */
-const firewallOver = (layer: ReturnType<typeof vercel>["layer"]) =>
+const firewallOver = (layer: Layer.Layer<never>) =>
   Effect.map(vercelSandboxApi(async () => fixtureToken()).pipe(Effect.provide(layer)), (api) => ({
     firewall: sandboxFirewall(api),
     services: Effect.provide(Layer.merge(layer, LOCAL_AGENT_ENVIRONMENT)),
@@ -110,8 +129,8 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
     "each write carries what its writer names beside the launch's swaps, the kept launch holds no value in the clear, and its end and a clear take the swaps off",
     () =>
       Effect.gen(function* () {
-        const api = vercel();
         const session = yield* ownSession;
+        const api = vercel(session);
         const { firewall, services } = yield* firewallOver(api.layer);
 
         const kept = yield* Effect.gen(function* () {
@@ -122,7 +141,7 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
           yield* firewall.endLaunch(session, { github: write });
           yield* firewall.write(session, {});
           yield* firewall.keepLaunch(session, bearerLaunch);
-          yield* firewall.clear(session.sandboxSessionId);
+          yield* firewall.clear({ name: session.name, sessionId: session.sandboxSessionId });
           return row;
         }).pipe(services);
 
@@ -160,8 +179,8 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
     "a renewal sets the plan's new token behind the launch's placeholder, which every write after sends",
     () =>
       Effect.gen(function* () {
-        const api = vercel();
         const session = yield* ownSession;
+        const api = vercel(session);
         const { firewall, services } = yield* firewallOver(api.layer);
         const placeholder = "Bearer plan-placeholder-fixture";
 

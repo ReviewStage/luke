@@ -19,6 +19,10 @@ import {
   releaseAgentRunnerLease,
 } from "@repo/database/models/agent-runner-lease";
 import {
+  readAgentRunnerRecord,
+  writeAgentRunnerRecord,
+} from "@repo/database/models/agent-runner-record";
+import {
   type Agent,
   createAgent,
   latestTurnsOfReached,
@@ -82,14 +86,13 @@ import {
   type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import {
-  fixtureToken,
   launchBearer,
   launchLines,
   runnerSandboxApi,
   runnerTook,
   swappedBearer,
 } from "../../testing/runner-sandbox-fake.js";
-import { sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
+import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -97,7 +100,7 @@ import {
   KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
+import { AGENT_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
@@ -503,7 +506,7 @@ const repositorySnapshots = (api: ReturnType<typeof runnerSandboxApi>) =>
 
 /** The agent's own sandbox still standing, by the agent's tag. */
 const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: Agent) =>
-  api.sandboxes.find((each) => !each.deleted && each.tags[RUNNER_TAG.AGENT] === agent.id);
+  api.sandboxes.find((each) => !each.deleted && each.tags[AGENT_TAG] === agent.id);
 
 /** A host's rule in a policy the fake took, as far as a swap reads it. */
 interface SentRule {
@@ -1523,16 +1526,15 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
 
         const halted = yield* sessions.halt(opened.sessionId, agent.conversationId);
-        // Note that the sandbox's tags no longer name the ended runner, so no message is written to it.
-        const tagsAfterHalt = { ...api.sandboxes[0]?.tags };
+        // Note that the session's record no longer names the ended runner, so no message is written to it.
+        const recordAfterHalt = yield* readAgentRunnerRecord(userId, opened.sessionId);
         // Read before the relaunch, which drops what the ended launch was written but its untaken messages.
         const haltedWith = (yield* launchLines(api.commands[0])).at(-1);
         yield* rewindConversation(target, lineId);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Fix only the emails."));
 
         assert.equal(halted, true);
-        assert.equal(tagsAfterHalt[RUNNER_TAG.COMMAND], undefined);
-        assert.equal(tagsAfterHalt[RUNNER_TAG.AGENT], agent.id);
+        assert.ok(Option.isNone(recordAfterHalt));
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.sandboxes[0]?.deleted, false);
@@ -1930,7 +1932,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Again."));
-        assert.deepEqual(canceled, { outcome: "failed", status: 503 });
+        // The fake refuses the read with a 400, a status `@vercel/sandbox` never tries again.
+        assert.deepEqual(canceled, { outcome: "failed", status: 400 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
         assert.equal((yield* launchLines(api.commands[0])).length, before);
@@ -2207,8 +2210,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
         yield* TestClock.adjust("5 seconds");
         assert.equal(sandbox.status, "running");
-        // The send's relaunch writes its launch's tag, past the END's sequence, and lets go.
-        sandbox.tags[RUNNER_TAG.LAUNCH] = "42";
+        // The send's relaunch records its launch, past the END's sequence, and lets go.
+        const recorded = Option.getOrThrow(yield* readAgentRunnerRecord(userId, opened.sessionId));
+        yield* writeAgentRunnerRecord(userId, opened.sessionId, { ...recorded, firstSequence: 42 });
         yield* releaseAgentRunnerLease(agent.id, elsewhere);
         yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
 
@@ -2685,7 +2689,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.commands.length, 3);
         // The sandbox the refusal opened from the second snapshot was deleted, and the snapshot with it.
         const refusedOpen = api.sandboxes.find(
-          (each) => each.tags[RUNNER_TAG.AGENT] === afterRefusal.id && each.image !== IMAGE,
+          (each) => each.tags[AGENT_TAG] === afterRefusal.id && each.image !== IMAGE,
         );
         assert.equal(refusedOpen?.deleted, true);
         assert.equal(repositorySnapshots(api).length, 0);

@@ -153,18 +153,18 @@ function picked(page: HTMLElement): string[] {
     .map(titleOf);
 }
 
-/** The selection's bar under the list, or none while nothing is chosen. */
+/** The selection's acts in the list's head, named by how many are chosen, or none while nothing is. */
 function selectionBar(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>(".inbox-tasks .ui-selection-bar");
+  return page.querySelector<HTMLElement>(".inbox-tasks .ui-selection-toolbar");
 }
 
-/** The selection bar's button named `name`. */
+/** The selection's button named `name`, a glyph named by its label. */
 function barButton(page: HTMLElement, name: string): HTMLButtonElement {
   const button = [
     ...(selectionBar(page) ?? assert.fail("the bar stands")).querySelectorAll<HTMLButtonElement>(
       "button",
     ),
-  ].find((each) => each.textContent?.trim() === name);
+  ].find((each) => (each.getAttribute("aria-label") ?? each.textContent?.trim()) === name);
   assert.ok(button, `the bar offers ${name}`);
   return button;
 }
@@ -187,7 +187,7 @@ test("⌘-clicking two open items chooses both across their tasks, opening neith
   commandClick(page, threshold);
   commandClick(page, expiry);
   assert.deepEqual(picked(page), [expiry, threshold]);
-  assert.match(selectionBar(page)?.textContent ?? "", /2 selected/u);
+  assert.match(selectionBar(page)?.getAttribute("aria-label") ?? "", /2 selected/u);
 
   act(() => barButton(page, "Resolve").click());
   await settle();
@@ -276,6 +276,31 @@ test("the bar's marks say in one toast how many the service refused", async () =
   assert.equal(newestToastSays(), "Could not mark 2 items unread");
 });
 
+test("a right-click on a row chosen among several offers the selection's acts under how many, one mark turned to read while any is unread, which marks only those", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const retry = "How is a failed email retried?";
+  world.readMarks = [];
+  rowMenu(page, retry);
+  act(() => menuItem("Mark as unread").click());
+  await settle();
+  await vi.waitFor(() => assert.equal(unreadOf(page, retry), true));
+
+  commandClick(page, retry);
+  commandClick(page, expiry);
+  assert.deepEqual(rowMenu(page, expiry), ["—", "Mark as read", "Remind me", "—", "Resolve"]);
+  assert.match(
+    [...document.querySelectorAll('[role="menu"]')].at(-1)?.textContent ?? "",
+    /^2 items/u,
+  );
+  act(() => menuItem("Mark as read").click());
+  await settle();
+
+  assert.deepEqual(world.readMarks, [`unread:${RETRY.id}`, `read:${RETRY.id}`]);
+  assert.deepEqual(picked(page), [], "the selection is let go");
+});
+
 test("Esc lets the selection go, in the list as in its bar", async () => {
   const { page, asked } = mount();
   await settle();
@@ -291,8 +316,14 @@ test("Esc lets the selection go, in the list as in its bar", async () => {
   assert.equal(asked.closed, 0, "the key goes no further than the list");
 
   commandClick(page, expiry);
-  keyOn(barButton(page, "Clear"), "Escape");
+  const clear = barButton(page, "Clear selection");
+  act(() => clear.focus());
+  keyOn(clear, "Escape");
   assert.deepEqual(picked(page), [], "Esc in the bar chooses none");
+  assert.ok(
+    document.activeElement?.matches(".inbox-tasks button.ui-list-row-main"),
+    "the focus the bar held goes back to the list",
+  );
 });
 
 test("a plain click still opens its item, leaving what is chosen as it stands", async () => {
@@ -308,7 +339,7 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
   assert.equal(rowNamed(page, retry).getAttribute("aria-current"), "page", "the item opens");
   assert.notEqual(rowNamed(page, expiry).getAttribute("aria-current"), "page");
   assert.deepEqual(picked(page), [expiry], "the selection stands");
-  assert.match(selectionBar(page)?.textContent ?? "", /1 selected/u);
+  assert.match(selectionBar(page)?.getAttribute("aria-label") ?? "", /1 selected/u);
 });
 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the pointer is over the list and sorted anew once it leaves; Open then lists only what is still open, and the choice outlives a relaunch", async () => {

@@ -213,7 +213,9 @@ function mount(
       ? SHELL_AT.SETTINGS
       : overrides.adminView?.open === true
         ? SHELL_AT.ADMIN
-        : undefined;
+        : overrides.automationsView?.open === true
+          ? SHELL_AT.AUTOMATIONS
+          : undefined;
   act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
   return container;
 }
@@ -508,6 +510,15 @@ test("the sidebar's Home row is the place shown on Home, and not over the Inbox"
   assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
 });
 
+test("a person's page stands over Home with no row of the place under it current", async () => {
+  const page = mount(false, {
+    personView: { ...tasksControl().personView, userId: "user-charles" },
+  });
+  await settle();
+
+  assert.equal(homeRow(page).getAttribute("aria-current"), null);
+});
+
 test("Home, pressed or by its chord from Settings, brings the Tasks tab forward on Home", () => {
   let home = 0;
   const tabs: PanelTab[] = [];
@@ -719,6 +730,27 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
   // Note that choosing the page is what opens Settings on it, so no tab change makes a second step before it.
   assert.deepEqual(tabs, []);
+});
+
+test("the Tasks row pressed while the Board stands leaves nothing, the Board being the router's place it opens", async () => {
+  const tabs: PanelTab[] = [];
+  const opened: string[] = [];
+  const page = mount(
+    false,
+    {
+      boardView: { ...tasksControl().boardView, open: true, onOpen: () => opened.push("board") },
+    },
+    PANEL_TAB.TASKS,
+    (tab) => tabs.push(tab),
+  );
+  await settle();
+  const row = placeRow(page, "Tasks");
+  assert.ok(row);
+  act(() => row.click());
+
+  // Note that leaving would stand the window's state over the Board, which opening the Board standing does not undo.
+  assert.deepEqual(tabs, []);
+  assert.deepEqual(opened, ["board"]);
 });
 
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
@@ -995,6 +1027,10 @@ test("while the Automations pages are still loading their frame stands the list 
     {},
     registry,
   );
+  // The router goes to the pages, whose frame stands while their chunk is read.
+  await act(async () => {
+    await Promise.resolve();
+  });
   const loading = page.querySelector("section[aria-label=Automations]");
   assert.ok(loading, "the pages' frame stands");
   assert.equal(loading.querySelector("h1")?.textContent, "Automations");
@@ -1066,6 +1102,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
 
   handState({});
   const page = mount(false, overrides);
+  await act(() => routed().settled());
   await settle();
   assert.ok(page.querySelector("section[aria-label=Automations]"));
   assert.equal(document.title, "Automations — Acme");
@@ -1665,7 +1702,13 @@ test("a find on the Tasks page stands as it was after a visit to Admin over it",
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
-  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
+  // The Board is the router's place, which the window stands at before Admin and comes back to after it.
+  act(() =>
+    root?.render(
+      onRegistry(AtomRegistry.make(), underRouter(createElement(Shell), SHELL_AT.BOARD)),
+    ),
+  );
+  await act(() => routed().settled());
   await settle();
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.FIND), "⌘F is offered on the Tasks page");
@@ -1688,7 +1731,7 @@ test("a find on the Tasks page stands as it was after a visit to Admin over it",
   assert.ok(container.querySelector("section[aria-label=Admin]"), "Admin stands over the page");
   act(() => {
     setAdmin(false);
-    routed().go(SHELL_AT.PLACES);
+    routed().go(SHELL_AT.BOARD);
   });
   await act(() => routed().settled());
 
@@ -1703,7 +1746,7 @@ function shownToReader(element: Element): boolean {
   return true;
 }
 
-test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and come back as they stood", async () => {
+test("the Inbox left stays drawn, hidden from a reader, and comes back as it stood, and the Tasks page left comes back on the view it stood on", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -1720,6 +1763,15 @@ test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and co
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
+  // The Board is the router's place, which the window moves to as it opens and off as it is left.
+  const stand = async (open: { inbox: boolean; board: boolean }) => {
+    act(() => {
+      setOpen(open);
+      routed().go(open.board ? SHELL_AT.BOARD : SHELL_AT.PLACES);
+    });
+    await act(() => routed().settled());
+    await settle();
+  };
   act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
   const search = () =>
     container.querySelector<HTMLInputElement>('.inbox-tasks input[aria-label="Search inbox"]');
@@ -1731,35 +1783,23 @@ test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and co
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  act(() => setOpen({ inbox: false, board: true }));
+  await stand({ inbox: false, board: true });
   assert.equal(search(), input, "the Inbox left is the same Inbox, kept");
   assert.equal(shownToReader(input), false, "and hidden from a reader while the window is away");
-  // The Tasks page is a chunk of its own, read the first time it is drawn.
-  await act(async () => {
-    await import("./tasks-page.js");
-  });
-  await settle();
   const columns = () =>
     [...container.querySelectorAll<HTMLElement>('[aria-label="Tasks view"] [role="radio"]')].find(
       (each) => each.textContent?.trim() === "Columns",
     );
   act(() => columns()?.click());
-  const chosen = columns();
-  assert.ok(chosen, "the Tasks page offers Columns");
-  assert.equal(chosen.getAttribute("aria-checked"), "true", "and stands on it");
+  assert.equal(columns()?.getAttribute("aria-checked"), "true", "the Tasks page stands on Columns");
 
-  act(() => setOpen({ inbox: false, board: false }));
-  // Note that elements are compared by identity alone, since a failed comparison would print both whole.
-  assert.ok(columns() === chosen, "the Tasks page left is the same page, kept");
-  assert.equal(shownToReader(chosen), false, "and hidden from a reader");
+  await stand({ inbox: false, board: false });
+  assert.equal(columns(), undefined, "the Tasks page left is let go");
 
-  act(() => setOpen({ inbox: false, board: true }));
-  assert.ok(columns() === chosen, "the same page comes back");
-  assert.equal(shownToReader(chosen), true);
-  assert.equal(chosen.getAttribute("aria-checked"), "true", "its view as it stood");
+  await stand({ inbox: false, board: true });
+  assert.equal(columns()?.getAttribute("aria-checked"), "true", "and comes back on its view");
 
-  act(() => setOpen({ inbox: true, board: false }));
-  assert.equal(shownToReader(chosen), false);
+  await stand({ inbox: true, board: false });
   assert.equal(shownToReader(input), true);
-  assert.equal(search()?.value, "zzz", "its search as it stood");
+  assert.equal(search()?.value, "zzz", "the Inbox's search as it stood");
 });

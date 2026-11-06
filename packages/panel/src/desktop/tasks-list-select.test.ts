@@ -12,11 +12,13 @@ import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/task
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Option, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -24,10 +26,11 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
-import { ADMIN_AWAY } from "../testing/tasks-control.js";
+import { ADMIN_AWAY, AUTOMATIONS_AWAY, BOARD_AWAY, PERSON_AWAY } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
+import { TasksPageHeld } from "./tasks-page-held.js";
 
 /**
  * tasks-list-select.test.ts -- the Tasks page's List chooses rows as a Mac's list does: ⌘-click two tasks and the bar's Mark done sets both Done at once, under one toast whose Undo puts both back where they stood; Set status and Move to section act on them all alike; a right-click on a chosen row offers the bar's acts on them all, one on a row not chosen its own menu; a finger's row draws no ⋯, its menu a long press away; and Esc lets the selection go.
@@ -167,7 +170,7 @@ async function settle(): Promise<void> {
  * the service keeps every status asked of it. Answers how to hand the tab
  * the list main holds next, as the service's word reaches it.
  */
-async function mountPage(): Promise<{
+async function mountPage(held?: TasksPageHeld): Promise<{
   page: HTMLElement;
   hold: (tasks: readonly TaskSummary[], taskSections?: TaskSections) => void;
 }> {
@@ -213,8 +216,11 @@ async function mountPage(): Promise<{
       leaveGuard: useLeaveGuard(),
       room: SHELL_ROOM.WIDE,
       adminView: ADMIN_AWAY,
+      boardView: BOARD_AWAY,
+      personView: PERSON_AWAY,
+      automationsView: AUTOMATIONS_AWAY,
     });
-    return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE });
+    return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }
   const page = document.createElement("div");
   document.body.append(page);
@@ -326,6 +332,34 @@ test("⌘-clicking two tasks chooses them without opening either, and the bar's 
   ]);
   assert.match(newestToastSays() ?? "", /2 tasks marked done/u);
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
+});
+
+test("the page left and drawn again with what the shell holds for it keeps the tasks chosen and its find as they stood", async () => {
+  const held = new TasksPageHeld();
+  const first = await mountPage(held);
+  commandClick(first.page, "ACME-39");
+  commandClick(first.page, "ACME-42");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  const field = first.page.querySelector<HTMLInputElement>('input[aria-label="Find"]');
+  assert.ok(field, "the find bar stands");
+  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "auth");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+
+  const again = await mountPage(held);
+
+  assert.deepEqual(chosen(again.page), ["ACME-42", "ACME-39"]);
+  assert.equal(
+    again.page.querySelector<HTMLInputElement>('input[aria-label="Find"]')?.value,
+    "auth",
+  );
 });
 
 test("Status's Undo puts both tasks back at the status each stood at", async () => {

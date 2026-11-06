@@ -9,11 +9,29 @@
  * (`navigation-history.ts`'s `reachable`), so the two never disagree.
  */
 
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { type ExperimentChoices, NO_EXPERIMENTS } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
+import { useQuery } from "@tanstack/react-query";
 import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { useKeptChoice } from "./desktop/chosen-workspace.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
-import { appStateNow } from "./use-app-state.js";
+import {
+  appStateNow,
+  appStateQuery,
+  selectSettingsHeld,
+  useAdminAccess,
+  useAdminAccessPending,
+  useExperimentChoices,
+} from "./use-app-state.js";
+
+/** What a workspace's gate reads of each of the reader's workspaces: what an address's first step may name it by. */
+type GateWorkspace = Pick<Workspace, "id" | "slug" | "formerSlugs">;
+
+/** The reader's workspaces before their first read lands. */
+const NO_WORKSPACES: readonly GateWorkspace[] = [];
 
 /** What the gates read: whether the account may reach Admin, its access still being read counting as may, its experiments, and whether they are read yet. */
 export interface RouteAccess {
@@ -21,7 +39,20 @@ export interface RouteAccess {
   readonly experiments: ExperimentChoices;
   /** Whether the account's settings, its experiments among them, have been read; a page an experiment holds waits on the read rather than giving way. */
   readonly experimentsRead: boolean;
+  /** The reader's workspaces, none before their first read lands, which a workspace's place waits on rather than giving way. */
+  readonly workspaces: readonly GateWorkspace[];
+  /** The step the listed workspace's address names it by, which a person's page naming none of the reader's opens under; none while none is listed. */
+  readonly listed: string | undefined;
 }
+
+/** The access before the window's state is read: Admin waits on it, as a page an experiment holds waits on the settings. */
+export const UNREAD_ROUTE_ACCESS: RouteAccess = {
+  admin: true,
+  experiments: NO_EXPERIMENTS,
+  experimentsRead: false,
+  workspaces: NO_WORKSPACES,
+  listed: undefined,
+};
 
 /** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
 export function routeAccessNow(): RouteAccess {
@@ -32,7 +63,53 @@ export function routeAccessNow(): RouteAccess {
     admin: access === undefined || access.pending === true || access.admin === true,
     experiments: state?.settings?.experiments ?? NO_EXPERIMENTS,
     experimentsRead: state?.settings !== undefined,
+    workspaces: state?.tasks?.workspaces ?? NO_WORKSPACES,
+    // Note that a reading off the state alone lists the first workspace, as the window does with none kept.
+    listed: stepOf(state?.tasks?.workspaces?.[0]),
   };
+}
+
+/** The step a workspace's address names it by: its slug, or its id where an older service answered none. */
+function stepOf(workspace: GateWorkspace | undefined): string | undefined {
+  return workspace === undefined ? undefined : (workspace.slug ?? workspace.id);
+}
+
+/** The reader's workspaces as main's document holds them. */
+function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
+  return state.tasks?.workspaces ?? NO_WORKSPACES;
+}
+
+/**
+ * The window's access as it draws, for the router's context and the
+ * window's Back and Forward alike. Note that the workspaces stand as the
+ * same object while a read names the same ones, by Query's structural
+ * sharing, because the task list carrying them is read again as any task
+ * moves, and each new access asks the routes standing again.
+ */
+export function useRouteAccess(): RouteAccess {
+  const admin = useAdminAccess();
+  const adminPending = useAdminAccessPending();
+  const experiments = useExperimentChoices();
+  const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
+  const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data ?? NO_WORKSPACES;
+  const listed = stepOf(useKeptChoice(workspaces));
+  return useMemo(
+    (): RouteAccess => ({
+      admin: admin || adminPending,
+      experiments,
+      experimentsRead,
+      workspaces,
+      listed,
+    }),
+    [admin, adminPending, experiments, experimentsRead, workspaces, listed],
+  );
+}
+
+/** Whether a workspace's place stands at an address whose first step is `workspace`: one of the reader's, or any while their workspaces are not yet read. */
+export function workspaceRouteStands(workspace: string, access: RouteAccess): boolean {
+  return (
+    access.workspaces.length === 0 || workspaceOfSlug(access.workspaces, workspace) !== undefined
+  );
 }
 
 /** Whether Admin stands: an admin's alone, or while the account's access is still read. */
@@ -52,10 +129,13 @@ export function settingsPageRouteStands(page: string, access: RouteAccess): bool
   return settingsPageExperimentStands(view, access.experiments);
 }
 
-/** The places the router alone says the window stands on, rather than the window's state: Settings and Admin. */
+/** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, a person's page, and the Automations pages. */
 export const ROUTED_PLACE = {
   SETTINGS: "settings",
   ADMIN: "admin",
+  BOARD: "board",
+  PERSON: "person",
+  AUTOMATIONS: "automations",
 } as const;
 
 export type RoutedPlace = (typeof ROUTED_PLACE)[keyof typeof ROUTED_PLACE];
@@ -65,6 +145,9 @@ const ROUTED_ROUTES = {
   "/$workspace/settings": ROUTED_PLACE.SETTINGS,
   "/app/settings": ROUTED_PLACE.SETTINGS,
   "/places/$workspace/admin": ROUTED_PLACE.ADMIN,
+  "/places/$workspace/tasks": ROUTED_PLACE.BOARD,
+  "/places/$workspace/person/$userId": ROUTED_PLACE.PERSON,
+  "/places/$workspace/automation-pages": ROUTED_PLACE.AUTOMATIONS,
 } as const satisfies Partial<Record<RouteIds<RegisteredRouter["routeTree"]>, RoutedPlace>>;
 
 /** What a routed place's gate reads of a match: its route and the params it was matched with. */
@@ -86,6 +169,15 @@ export function routedPlaceOf(matches: readonly RouteMatchSeen[]): RoutedPlace |
 export function routedStands(matches: readonly RouteMatchSeen[], access: RouteAccess): boolean {
   const place = routedPlaceOf(matches);
   if (place === ROUTED_PLACE.ADMIN) return adminRouteStands(access);
+  if (
+    place === ROUTED_PLACE.BOARD ||
+    place === ROUTED_PLACE.PERSON ||
+    place === ROUTED_PLACE.AUTOMATIONS
+  ) {
+    const workspace = matches.find((match) => match.params.workspace !== undefined)?.params
+      .workspace;
+    return workspace === undefined || workspaceRouteStands(workspace, access);
+  }
   if (place !== ROUTED_PLACE.SETTINGS) return true;
   const page = matches.find((match) => match.params.page !== undefined)?.params.page;
   return page === undefined || settingsPageRouteStands(page, access);

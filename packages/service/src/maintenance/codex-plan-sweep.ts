@@ -12,7 +12,8 @@
  * holds the plan's swap sets the account's token as it stands behind the
  * same placeholder, renewed first where less than the launch's margin is
  * left of it, and sends the session's whole policy with the agent's
- * repository credential minted afresh (`renewPlanSwap`). A swap that already
+ * repository credential minted afresh (`renewPlanSwap`), to the sandbox its
+ * agent's session tag finds running that session. A swap that already
  * carries it is left, so a session is written, and its policy sent, only as
  * its account's token moves on, about every quarter hour. The swap stands no
  * longer than its runner: it is cleared ahead of its sandbox's stop, and let
@@ -44,7 +45,6 @@ import {
 import { Effect, type Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { PLAN_RENEWAL, renewPlanSwap } from "../agents/coder-host/codex-sessions.js";
-import { sandboxFirewall } from "../agents/sandbox-firewall.js";
 import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
 import type { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -104,7 +104,7 @@ export const sweepCodexPlanSwaps = /* @__PURE__ */ Effect.fn("web/sweepCodexPlan
     );
     return { renewed: 0, failed: 0 };
   }
-  const firewall = sandboxFirewall(yield* vercelSandboxApi(deploymentOidcToken));
+  const api = yield* vercelSandboxApi(deploymentOidcToken);
   const standing = yield* countStandingFirewalls();
   const { width, pages } = windowOf(standing, now);
   if (standing > width * CODEX_PLAN_SWEEP.ROUND_MINUTES) {
@@ -116,7 +116,7 @@ export const sweepCodexPlanSwaps = /* @__PURE__ */ Effect.fn("web/sweepCodexPlan
   const renewals = yield* Effect.forEach(
     sessions,
     (session) =>
-      Effect.result(renewPlanSwap(firewall, session, ring.success)).pipe(
+      Effect.result(renewPlanSwap(api, session, ring.success)).pipe(
         Effect.tap((renewal) =>
           Result.isFailure(renewal)
             ? Effect.logWarning(`a Codex plan's swap was not renewed: ${renewal.failure.message}`)

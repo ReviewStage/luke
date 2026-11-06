@@ -161,7 +161,7 @@ const PAYER_WORDS = {
 } as const satisfies Record<Exclude<AgentPayer, typeof AGENT_PAYER.API_KEY>, string>;
 
 /** The member's own API key, named by the provider it is for. */
-const API_KEY_WORDS = {
+export const API_KEY_WORDS = {
   [MODEL_PROVIDER.ANTHROPIC]: "Anthropic API key",
   [MODEL_PROVIDER.OPENAI]: "OpenAI API key",
 } as const satisfies Record<ModelProvider, string>;
@@ -363,7 +363,12 @@ export function lineSender(
     case AGENT_SENDER.APP:
       return APP_ACTOR;
     case AGENT_SENDER.AUTOMATION:
-      return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
+      return {
+        kind: ACTOR_KIND.AUTOMATION,
+        ...(sentBy.automationId === undefined ? undefined : { automationId: sentBy.automationId }),
+        name: sentBy.name,
+        state: ACTOR_STATE.REST,
+      };
     case AGENT_SENDER.GITHUB:
       return githubLoginActor(sentBy.name);
     case AGENT_SENDER.FORMER:

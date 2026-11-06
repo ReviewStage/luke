@@ -98,6 +98,7 @@ import {
   useVirtualRuns,
   VIRTUAL_ROW_KEY_ATTRIBUTE,
   VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowMeasurements,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
@@ -799,6 +800,7 @@ function TasksListGroup({
   properties,
   place,
   row,
+  measured,
 }: {
   group: TasksGroup;
   head: GroupHead;
@@ -815,7 +817,10 @@ function TasksListGroup({
   place: ListRunsPlace;
   /** Draws a task's row, wearing its place in the run. */
   row: (task: TaskSummary, at: VirtualRowPlace) => ReactNode;
+  /** What each group's run measured, by the group's key, held across the page's visits. */
+  measured: Map<string, VirtualRowMeasurements> | undefined;
 }): React.JSX.Element {
+  const runKey = groupKey(group.head);
   const drawn = useLeaving(group.tasks, taskIdOf);
   const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
   const run = useRef<VirtualRowsHandle>(null);
@@ -876,6 +881,8 @@ function TasksListGroup({
             data-row-drop-rows={ordered(group.head) ? "" : undefined}
             onPointerDown={draggable ? drag : undefined}
             handle={run}
+            measurements={measured?.get(runKey)}
+            onMeasurements={(rows) => measured?.set(runKey, rows)}
           >
             {(index, at) => {
               const entry = drawn[index];
@@ -1052,7 +1059,6 @@ export function TasksList({
   const drops = listDrops(tasks, () => latest.current, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  const scrollRef = useMemo(() => joinRefs(scroller, frame.scroll), [frame.scroll]);
   // Every open group's tasks, in the order drawn down the page, those its run leaves undrawn among them; a folded group's are not drawn.
   const order = groups.flatMap((group) =>
     folds.folded(group.head) ? [] : group.tasks.map(taskIdOf),
@@ -1089,7 +1095,7 @@ export function TasksList({
   });
   const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
   // Note that only rows an open group lists stay chosen, so a task the filter or a fold took away is never acted on.
-  const selection = useTasksSelection(tasks, new Set(order));
+  const selection = useTasksSelection(tasks, new Set(order), frame.chosen);
   const { regionId, selected } = selection;
   // Note that the motion is handed what lays the rows out, so a draw that moved none measures none; a fold tells it of its own (`useListMotionReplay`).
   const laidOut = useMemo(() => ({ groups, properties }), [groups, properties]);
@@ -1099,7 +1105,7 @@ export function TasksList({
       width={PAGE_WIDTH.FULL}
       label={TASKS}
       toolbar={frame.toolbar}
-      scrollRef={scrollRef}
+      scrollRef={scroller}
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
@@ -1176,6 +1182,7 @@ export function TasksList({
                     tasks={tasks}
                     properties={properties}
                     place={runsPlace}
+                    measured={frame.measured}
                     row={(task, at) => (
                       <TasksPageRow
                         key={task.id}

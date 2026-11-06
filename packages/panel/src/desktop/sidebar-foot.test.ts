@@ -21,7 +21,7 @@ import {
   handState,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 
@@ -62,7 +62,8 @@ afterEach(() => {
 
 /**
  * Hands the window main's document with `patch`, its run a development build
- * of `branch`, and waits for the foot to draw that branch: one client holds a
+ * of `branch`, and waits for the foot to draw that branch and for what Query
+ * notifies beside it: one client holds a
  * test's document across its mounts, so the branch is what says this one landed.
  */
 async function footOn(
@@ -74,6 +75,8 @@ async function footOn(
   handState({}, { ...patch, run: { ...base, commit: { sha: "a10eee5", dirty: false, branch } } });
   mount(DEAN, options);
   await vi.waitFor(() => assert.equal(document.body.textContent?.includes(branch), true));
+  // Note that a slice drawn apart from the branch, the network's or the run's capabilities, may reach the foot a Query notification later.
+  await settleQueries();
 }
 
 /** Lets the window's document, handed through the bridge's promise, reach what is drawn. */

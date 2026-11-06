@@ -23,6 +23,7 @@ import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
+import type { AutomationsRoute } from "../automations-route.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
@@ -43,8 +44,10 @@ import {
   taskDeleteMutation,
   taskMoveMutation,
   taskRenameMutation,
+  tasksDeleteMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
+import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
 
 const ignore = () => undefined;
@@ -389,6 +392,40 @@ export const ADMIN_AWAY: AdminViewControl = {
   onPreload: ignore,
 };
 
+/** The Board's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const BOARD_AWAY: BoardRoute = {
+  open: false,
+  standingIn: undefined,
+  onOpen: ignore,
+  onClose: ignore,
+  onTurn: ignore,
+  onPreload: ignore,
+};
+
+/** The Automations route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const AUTOMATIONS_AWAY: AutomationsRoute = {
+  open: false,
+  place: { kind: AUTOMATIONS_PAGE.LIST },
+  runs: false,
+  standingIn: undefined,
+  deleted: new Set(),
+  setupAddress: undefined,
+  onOpen: ignore,
+  onRuns: ignore,
+  onClose: ignore,
+  onTurn: ignore,
+};
+
+/** A person's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const PERSON_AWAY: PersonRoute = {
+  userId: undefined,
+  name: undefined,
+  workspace: undefined,
+  onOpen: ignore,
+  onClose: ignore,
+  onPreload: ignore,
+};
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
@@ -557,11 +594,12 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       workspaceId: undefined,
       onOpen: ignore,
       onClose: ignore,
+      onPreload: ignore,
     },
     inboxTaskless: [],
     failedRuns: [],
     adminView: ADMIN_AWAY,
-    boardView: { open: false, onOpen: ignore, onClose: ignore },
+    boardView: { open: false, onOpen: ignore, onClose: ignore, onPreload: ignore },
     unknownWorkspace: { open: false, onClose: ignore },
     automationsView: {
       open: false,
@@ -628,6 +666,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onMovePins: ignore,
     onDeleteTask,
     deleteTask: taskDeleteMutation((taskId) => onDeleteTask(taskId)),
+    deleteTasks: tasksDeleteMutation((taskId) => onDeleteTask(taskId)),
     back: () => false,
     // No page asks before it is left, so every way out goes at once.
     leaveGuard: {

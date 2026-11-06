@@ -9,6 +9,14 @@ import {
   type AgentSummary,
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
+} from "@repo/features/automation-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -23,10 +31,11 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handMembers, handState } from "../testing/app-state.js";
+import { handHostReads, handMembers, handState, holdAutomations } from "../testing/app-state.js";
 import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, listedAgent, pushedTranscripts } from "../testing/tasks-control.js";
@@ -96,6 +105,24 @@ const AGENT: AgentSummary = {
   turnId: null,
   brief: AGENT_BRIEF.PROMPT,
   startedBy: DEAN,
+};
+
+/** The automation whose runs go to the same agent, which started it. */
+const TRIAGE: AutomationSummary = {
+  id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
+  planId: null,
+  planName: null,
+  workspaceId: ACME.id,
+  name: "Nightly triage",
+  enabled: true,
+  pausedReason: null,
+  trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage the failures." },
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: null,
+  lastRun: null,
+  createdAt: 1,
+  scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
 /** One of the developer's messages, with what sent it where its row kept it. */
@@ -175,12 +202,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The developer's messages as `reader` sees the tab drawn, one element for each of `messages`, every place a press opened kept in `opened`. */
+/** The developer's messages as `reader` sees the tab drawn, one element for each of `messages`, every place a press opened kept in `opened`, and every automation's page in `automations`' own, where the workspace lists them. */
 async function drawnFor(
   reader: string,
   opened: LinkPlace[] = [],
   agent: AgentSummary = AGENT,
   messages: readonly AgentTranscriptMessage[] = MESSAGES,
+  automations?: { readonly rows: readonly AutomationSummary[]; readonly opened: string[] },
 ): Promise<readonly Element[]> {
   fakeActs({
     act: (): Promise<FakeActAnswer> =>
@@ -188,6 +216,11 @@ async function drawnFor(
   });
   handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [listedAgent(SENDER_NOW)] } });
   handMembers(() => ({ rows: { members: MEMBERS } }));
+  if (automations !== undefined) {
+    holdAutomations(handHostReads({}).deliverAutomations, {
+      [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: automations.rows }),
+    });
+  }
   pushedTranscripts(() => [
     {
       messages: [...messages],
@@ -211,12 +244,18 @@ async function drawnFor(
           children: createElement(MemberDirectory, {
             workspace: ACME,
             readerId: reader,
-            children: createElement(AgentTab, {
-              agent,
-              control,
-              shown: true,
-              onOpenSubagent: () => undefined,
-              onHeld: () => undefined,
+            children: createElement(AutomationDirectory, {
+              workspace: { id: ACME.id, name: "Acme" },
+              // Note that the place around the tab reads no automations, since no agent of it was started by one.
+              wanted: false,
+              onOpen: (automationId: string) => automations?.opened.push(automationId),
+              children: createElement(AgentTab, {
+                agent,
+                control,
+                shown: true,
+                onOpenSubagent: () => undefined,
+                onHeld: () => undefined,
+              }),
             }),
           }),
         }),
@@ -357,6 +396,36 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
     MODEL_PROVIDER.ANTHROPIC,
   );
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, agentId: SENDER_ID }]);
+  fakeAppBridge({});
+});
+
+test("a line an automation sent hangs its card and opens its page, on an agent it did not start", async () => {
+  const messages = [
+    line("task", "Add the invite flow."),
+    line("run", "Triage the failures.", {
+      name: TRIAGE.name,
+      kind: AGENT_SENDER.AUTOMATION,
+      automationId: TRIAGE.id,
+    }),
+  ];
+  const opened: string[] = [];
+  const drawn = await drawnFor(DEAN.userId, [], AGENT, messages, { rows: [TRIAGE], opened });
+  const sender = drawn[1]?.querySelector<HTMLElement>(`${SENDER} [data-actor-ref]`);
+  assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
+
+  restOn(sender);
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.ok(
+    document.querySelector(".ui-tooltip-card [data-actor-card='automation']"),
+    "the automation's card hangs",
+  );
+  act(() => {
+    sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  act(() => sender.click());
+  assert.deepEqual(opened, [TRIAGE.id]);
   fakeAppBridge({});
 });
 

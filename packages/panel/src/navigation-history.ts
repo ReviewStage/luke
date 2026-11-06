@@ -2,7 +2,8 @@
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
  * A place is a task's page, a description's version history, the home page,
- * the Inbox, or a routed place, Settings or Admin, and the history is the one a browser keeps: the places behind,
+ * the Inbox, or a routed place, Settings, Admin, a workspace's Board, or a
+ * person's page, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
  * moves it, so a task opened from the sidebar, by a key, by starting it, or
@@ -22,11 +23,14 @@
  * the tab's own. The router's history names only the entry standing, so the
  * trail of steps around it is kept here beside it (`WindowTrail`).
  *
- * Settings and Admin are the router's places (`panel-router.tsx`): the
- * router writes their entries as it navigates there, and the trail follows
- * each write as a routed step (`PLACE_KIND.ROUTED`), which holds only its
- * address, stands where the router's history stands, and is reachable as
- * its route's gate lets it be (`route-gates.ts`). Settings is one step
+ * Settings, Admin, the Board, and a person's page are the router's places
+ * (`panel-router.tsx`): the router writes their entries as it navigates
+ * there, and the trail follows each write as a routed step
+ * (`PLACE_KIND.ROUTED`), which holds only its address, stands where the
+ * router's history stands, and is reachable as its route's gate lets it be
+ * (`route-gates.ts`); the Board and a person's page are theirs in the
+ * workspace their address names, so Back passes over them once another is
+ * listed. Settings is one step
  * however many of its pages are turned, since each turn replaces its entry
  * (`settings-link.ts`), so Back from any page of it returns to wherever it
  * was opened from; leaving one for a place the window's state says is a
@@ -59,20 +63,21 @@
  * was shut, while a tab chosen in its strip, its toggle, and its tabs
  * arriving take the standing step in place.
  *
- * Each Automations page is a step of its own, the list and each automation's
- * page alike, so Back from an automation opened from the list returns to the
- * list. A new automation's page is one step with the automation it makes,
- * which stands in its place once Create lands, so Back from what it made
- * returns to wherever the new page was opened from. An automation's page is
- * of the workspace it was opened in, so Back passes over it once another is
- * listed, as it does a person's page, and passes over it for good once it
- * is deleted, as it does a deleted plan.
+ * The Automations pages are the router's too (`automations-route.ts`), each
+ * a step of its own, the list and each automation's page alike, so Back from
+ * an automation opened from the list returns to the list. A new automation's
+ * page is one step with the automation it makes, which the router writes in
+ * its entry's place once Create lands, so Back from what it made returns to
+ * wherever the new page was opened from. They are the workspace's their
+ * address names, so Back passes over them once another is listed, as it does
+ * a person's page, and over an automation's for good once it is deleted, as
+ * it does a deleted plan.
  *
  * A narrow room, a phone's, stands the window as one pane at a time
  * (`shell-room.ts`), and there each pane opened over another is a step of its
  * own, which Back closes: the side panel over the plan, an Inbox item, a
- * Settings page over its list (a step of the router's), a version, or an automation's
- * runs over its setup. Each such step
+ * Settings page over its list or an automation's runs over its setup (steps
+ * of the router's), or a version. Each such step
  * holds its sub-step beside its place, and a wide room holds none, so two
  * places are one step there as they always were, and a room turned from one
  * to the other takes the step standing in place. Going to a step stands its
@@ -95,6 +100,7 @@
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
 import { linkOf, type ReadLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
+import { workspaceOfSlug } from "@repo/features/workspace-wire";
 import { EXPERIMENT, experimentOn } from "@repo/settings";
 import {
   isAgentTab,
@@ -112,7 +118,6 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
-import { useQuery } from "@tanstack/react-query";
 import { type HistoryLocation, type RouterHistory, useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
 import {
@@ -124,8 +129,15 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { AutomationsRoute } from "./automations-route.js";
 import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
-import { ROUTED_PLACE, type RouteAccess, type RoutedPlace, routedStands } from "./route-gates.js";
+import {
+  ROUTED_PLACE,
+  type RoutedPlace,
+  routedPlaceOf,
+  routedStands,
+  useRouteAccess,
+} from "./route-gates.js";
 import { useRoutedLocation } from "./routed-location.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
@@ -133,21 +145,8 @@ import type { HistorySpot } from "./tasks/use-description-history.js";
 import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
-import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  automationsTab,
-  type InboxChoice,
-  type LeaveGuard,
-  type TasksControl,
-} from "./tasks/use-tasks-tab.js";
-import {
-  appStateQuery,
-  selectSettingsHeld,
-  useAdminAccess,
-  useAdminAccessPending,
-  useExperimentChoices,
-} from "./use-app-state.js";
+import type { InboxChoice, LeaveGuard, TasksControl } from "./tasks/use-tasks-tab.js";
+import { useExperimentChoices } from "./use-app-state.js";
 import { useHostRead } from "./use-host-read.js";
 import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 
@@ -157,6 +156,13 @@ export const MOUSE_BUTTON = {
   FORWARD: 4,
 } as const;
 
+/** The routed places that stand over the plan's place beside the sidebar, the window's state staying as it was under them, and whose workspace is their address's. */
+const OVER_THE_PLAN: ReadonlySet<RoutedPlace | undefined> = new Set([
+  ROUTED_PLACE.BOARD,
+  ROUTED_PLACE.PERSON,
+  ROUTED_PLACE.AUTOMATIONS,
+]);
+
 /** Which kind of place the window is on. */
 const PLACE_KIND = {
   TASK: "plan",
@@ -164,10 +170,7 @@ const PLACE_KIND = {
   HOME: "home",
   INBOX: "inbox",
   AGENT: "agent",
-  PERSON: "person",
-  AUTOMATIONS: "automations",
-  BOARD: "board",
-  /** A place the router says the window stands on, Settings or Admin, which its route draws and its own history moves (`ROUTED_PLACE`). */
+  /** A place the router says the window stands on, Settings, Admin, a workspace's Board, a person's page, or the Automations pages, which its route draws and its own history moves (`ROUTED_PLACE`). */
   ROUTED: "routed",
 } as const;
 
@@ -184,8 +187,7 @@ interface PanelStep {
  * A place the window can stand on: a task, or its version history where it
  * stands, by its id, so a rename leaves it the same place. A place a narrow
  * room shows one pane of at a time holds which, its sub-step, and none in a
- * wide room: the side panel over a task, an automation's runs over its
- * setup, and whether Settings, a version history, or the Inbox stands
+ * wide room: the side panel over a task, and whether a version history or the Inbox stands
  * on its list (`listed`) or the item chosen in it.
  */
 type Place =
@@ -222,42 +224,25 @@ type Place =
       readonly side?: SideStep;
     }
   | {
-      readonly kind: typeof PLACE_KIND.PERSON;
-      readonly userId: string;
-      /** The name the page was opened with, which it is opened with again. */
-      readonly name: string | undefined;
-      /** The workspace the page was the person's in, which it is no place of another's. */
-      readonly workspaceId: string | undefined;
-    }
-  | {
-      readonly kind: typeof PLACE_KIND.AUTOMATIONS;
-      readonly page: AutomationsPlace;
-      /** The workspace listed as the page stood, whose automations it read. */
-      readonly workspaceId: string | undefined;
-      /** Whether an automation's runs stood alone over its setup, in a narrow room alone. */
-      readonly runs?: boolean | undefined;
-    }
-  | {
-      readonly kind: typeof PLACE_KIND.BOARD;
-      /** The workspace whose tasks stood, which is no place of another's. */
-      readonly workspaceId: string | undefined;
-    }
-  | {
       readonly kind: typeof PLACE_KIND.ROUTED;
       /** The address the router stood on, which its entry is held at, and which alone tells one routed step from another. */
       readonly address: string;
     };
 
-/** Where the router says the window stands, while it stands on a routed place: the place, and the address it stands at. */
+/** Where the router says the window stands, while it stands on a routed place: the place, the address it stands at, and the params its routes read there. */
 export interface RoutedStanding {
   readonly place: RoutedPlace;
   readonly address: string;
+  readonly params: Readonly<Record<string, string | undefined>>;
 }
 
 /** The routed place the router's history stands the window on; none while the window's state says where it stands. */
 export function useRoutedStanding(): RoutedStanding | undefined {
-  const { place, href } = useRoutedLocation();
-  return useMemo(() => (place === undefined ? undefined : { place, address: href }), [place, href]);
+  const { place, href, params } = useRoutedLocation();
+  return useMemo(
+    () => (place === undefined ? undefined : { place, address: href, params }),
+    [place, href, params],
+  );
 }
 
 /** What a step is called where the trail is listed: what stood in the window, and what it showed there, such as a task and its tabs. */
@@ -348,8 +333,6 @@ function namedStepOf(place: Place): NamedStep | undefined {
       const taskId = chosen !== undefined && "taskId" in chosen ? chosen.taskId : place.taskId;
       return { kind: NAMED_STEP.INBOX, taskId };
     }
-    case PLACE_KIND.PERSON:
-      return { kind: NAMED_STEP.PERSON, userId: place.userId };
     default:
       return undefined;
   }
@@ -362,40 +345,11 @@ function sameTitle(one: Place, other: Place): boolean {
   return mine?.label === theirs?.label && mine?.detail === theirs?.detail;
 }
 
-/** Whether two Automations pages are one step: the list, a new automation's page, or the same automation's, on whichever of its runs. */
-function sameAutomationsPage(one: AutomationsPlace, other: AutomationsPlace): boolean {
-  if (one.kind === AUTOMATIONS_PAGE.EDIT && other.kind === AUTOMATIONS_PAGE.EDIT) {
-    return one.automationId === other.automationId;
-  }
-  return one.kind === other.kind;
-}
-
-/** Whether one Automations page stands as it was opened: an automation's on the same run. */
-function sameAutomationsOpening(one: AutomationsPlace, other: AutomationsPlace): boolean {
-  if (one.kind === AUTOMATIONS_PAGE.EDIT && other.kind === AUTOMATIONS_PAGE.EDIT) {
-    return one.runId === other.runId;
-  }
-  return true;
-}
-
-/** Whether `place` is the automation a new automation's page standing made, which takes that page's step rather than being a visit after it; any other automation opened from it is a visit. */
-function madeFromNew(standing: Place, place: Place): boolean {
-  return (
-    standing.kind === PLACE_KIND.AUTOMATIONS &&
-    standing.page.kind === AUTOMATIONS_PAGE.NEW &&
-    place.kind === PLACE_KIND.AUTOMATIONS &&
-    place.page.kind === AUTOMATIONS_PAGE.EDIT &&
-    place.page.created === true
-  );
-}
-
-/** A place's sub-step in a narrow room, as a yes or no: the side panel open, an automation's runs standing, or the list standing; none in a wide room, or for a place with no sub-step. */
+/** A place's sub-step in a narrow room, as a yes or no: the side panel open, or the list standing; none in a wide room, or for a place with no sub-step. */
 function subStepOf(place: Place): boolean | undefined {
   switch (place.kind) {
     case PLACE_KIND.TASK:
       return place.panel?.open;
-    case PLACE_KIND.AUTOMATIONS:
-      return place.runs;
     case PLACE_KIND.VERSION_HISTORY:
     case PLACE_KIND.INBOX:
       return place.listed;
@@ -429,21 +383,14 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same description's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or a routed place at the same address. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same description's version history, the home page, the Inbox on any plan, the same agent's page, or a routed place at the same address. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED) {
     return one.address === other.address;
   }
-  if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
-    return sameAutomationsPage(one.page, other.page);
-  }
   if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
-  if ("userId" in one && "userId" in other) {
-    return one.userId === other.userId && one.workspaceId === other.workspaceId;
-  }
-  if ("workspaceId" in one && "workspaceId" in other) return one.workspaceId === other.workspaceId;
   return true;
 }
 
@@ -587,16 +534,10 @@ function surfacesOf(
       return withSide([{ surface: PRODUCT_SURFACE.INBOX }]);
     case PLACE_KIND.AGENT:
       return withSide([{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }]);
-    case PLACE_KIND.PERSON:
-      return [{ surface: PRODUCT_SURFACE.PERSON, of: place.userId }];
     case PLACE_KIND.HOME:
       return [{ surface: PRODUCT_SURFACE.HOME }];
-    case PLACE_KIND.AUTOMATIONS:
-      return [{ surface: PRODUCT_SURFACE.AUTOMATIONS }];
-    case PLACE_KIND.BOARD:
-      return [{ surface: PRODUCT_SURFACE.BOARD }];
     case PLACE_KIND.ROUTED:
-      // Note that a routed place is counted by the place its route stands on, which its step does not hold (`routedSurface`).
+      // Note that a routed place is counted by the place its route stands on, which its step does not hold (`routedSurfaces`).
       return [];
   }
 }
@@ -610,7 +551,7 @@ function sameSpot(one: HistorySpot | undefined, other: HistorySpot | undefined):
   );
 }
 
-/** Whether a step stands as it stood: its narrow sub-step the same, the side panel on the same tab, the same Inbox item standing alone, a version history where it was, a person's page by the name it was last opened with, an Automations page as it was opened. */
+/** Whether a step stands as it stood: its narrow sub-step the same, the side panel on the same tab, the same Inbox item standing alone, a version history where it was. */
 function samePlace(one: Place, other: Place): boolean {
   // A room turned takes the step standing in place, with its sub-step or without.
   if (subStepOf(one) !== subStepOf(other)) return false;
@@ -631,14 +572,8 @@ function samePlace(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.AGENT && other.kind === PLACE_KIND.AGENT) {
     return sameSide(one.side, other.side);
   }
-  if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
-    return one.workspaceId === other.workspaceId && sameAutomationsOpening(one.page, other.page);
-  }
   if (one.kind === PLACE_KIND.VERSION_HISTORY && other.kind === PLACE_KIND.VERSION_HISTORY) {
     return sameSpot(one.spot, other.spot);
-  }
-  if (one.kind === PLACE_KIND.PERSON && other.kind === PLACE_KIND.PERSON) {
-    return one.name === other.name;
   }
   return true;
 }
@@ -653,9 +588,41 @@ function pathOf(address: string): string {
   return new URL(address, "https://panel.invalid").pathname;
 }
 
-/** The surface a routed place shows, as the window counts it opened. */
-function routedSurface(place: RoutedPlace): OpenSurface["surface"] {
-  return place === ROUTED_PLACE.ADMIN ? PRODUCT_SURFACE.ADMIN : PRODUCT_SURFACE.SETTINGS;
+/** The step of an automation's address (`panel-router.tsx`), after its workspace's. */
+const AUTOMATION_STEP = "automation";
+
+/**
+ * Whether two places hold one draft: one page, or two routed steps of one
+ * automation's, its setup, its runs, or a run, which share its editor and
+ * what is written in it, since the path names the automation by its id
+ * after the step of its own.
+ */
+function sameDraft(one: Place, other: Place): boolean {
+  if (samePage(one, other)) return true;
+  if (one.kind !== PLACE_KIND.ROUTED || other.kind !== PLACE_KIND.ROUTED) return false;
+  const mine = pathOf(one.address).split("/");
+  const theirs = pathOf(other.address).split("/");
+  return (
+    mine[2] === AUTOMATION_STEP &&
+    mine[3] !== undefined &&
+    mine.slice(0, 4).every((step, at) => step === theirs[at])
+  );
+}
+
+/** The surfaces a routed place shows, as the window counts them opened. */
+function routedSurfaces(routed: RoutedStanding): readonly OpenSurface[] {
+  switch (routed.place) {
+    case ROUTED_PLACE.ADMIN:
+      return [{ surface: PRODUCT_SURFACE.ADMIN }];
+    case ROUTED_PLACE.SETTINGS:
+      return [{ surface: PRODUCT_SURFACE.SETTINGS }];
+    case ROUTED_PLACE.BOARD:
+      return [{ surface: PRODUCT_SURFACE.BOARD }];
+    case ROUTED_PLACE.PERSON:
+      return [{ surface: PRODUCT_SURFACE.PERSON, of: routed.params.userId }];
+    case ROUTED_PLACE.AUTOMATIONS:
+      return [{ surface: PRODUCT_SURFACE.AUTOMATIONS }];
+  }
 }
 
 /**
@@ -710,10 +677,7 @@ function visitWrite(
     standing !== undefined &&
     choosesWithin(standing.state, place) &&
     !ledWithin(standing.state, place, pressed, opened);
-  if (
-    standing !== undefined &&
-    (wentUp || settling || routedHere || madeFromNew(standing.state, place))
-  ) {
+  if (standing !== undefined && (wentUp || settling || routedHere)) {
     return { kind: TRAIL_WRITE.REPLACE, entry };
   }
   if (standing !== undefined && sameStep(standing.state, place)) {
@@ -784,16 +748,16 @@ function awayFrom(trail: Trail, reachable: (place: Place) => boolean): number | 
 
 /**
  * How a step to `to` asks: as the window's guard asks, unless it moves only
- * within the draft standing, between a narrow room's sub-steps or to the
- * same automation on another run, which leaves no page and so loses nothing
- * written on it; that way out is taken as it is.
+ * within the draft standing, between a narrow room's sub-steps or within one
+ * automation, between its setup, its runs, and a run (`sameDraft`), which
+ * leaves no page and so loses nothing written on it; that way out is taken as it is.
  */
 function asking(
   latest: { readonly place: Place | undefined; readonly guard: LeaveGuard["guard"] },
   to: Place | undefined,
 ): LeaveGuard["guard"] {
   const { place } = latest;
-  return place !== undefined && to !== undefined && samePage(place, to)
+  return place !== undefined && to !== undefined && sameDraft(place, to)
     ? (leave) => leave
     : latest.guard;
 }
@@ -839,15 +803,8 @@ function pageOf(place: Place): HistoryPage {
       return { kind: place.kind, of: place.taskId };
     case PLACE_KIND.AGENT:
       return { kind: place.kind, of: place.agentId };
-    case PLACE_KIND.PERSON:
-      return { kind: place.kind, of: place.userId };
     case PLACE_KIND.ROUTED:
       return { kind: place.kind, of: place.address };
-    case PLACE_KIND.AUTOMATIONS:
-      return {
-        kind: place.kind,
-        of: place.page.kind === AUTOMATIONS_PAGE.EDIT ? place.page.automationId : place.page.kind,
-      };
     default:
       return { kind: place.kind, of: undefined };
   }
@@ -1582,6 +1539,8 @@ export function useWindowHistory(input: {
   settingsList: string | undefined;
   /** Stands Settings on its page list, in the page's place. */
   onSettingsList: () => void;
+  /** What the history reads of the Automations pages beyond where they stand: the automations deleted, and an automation's setup under its runs (`automations-route.ts`). */
+  automations: Pick<AutomationsRoute, "deleted" | "setupAddress">;
   /** The room the panel's stage gives, narrow where it shows one pane at a time. */
   room: ShellRoom;
   tasks: Pick<
@@ -1608,6 +1567,7 @@ export function useWindowHistory(input: {
     | "activeTaskId"
     | "agents"
     | "pages"
+    | "workspaces"
   >;
 }): WindowHistoryLists {
   const { routed, tasks } = input;
@@ -1644,38 +1604,23 @@ export function useWindowHistory(input: {
     knownColumns.set(boundFor, new Set(tasks.mainTabs.tabs.map(tabKey)));
   }
   const pageAgent = tasks.agentView.agentId;
-  const pagePerson = tasks.personView.userId;
-  const personName = tasks.personView.name;
   const listedWorkspace = tasks.workspace?.id;
-  const automationsOpen = tasks.automationsView.open;
-  const automationsPage = tasks.automationsView.place;
-  // A narrow room stands an automation's runs alone over its setup, as a step of their own.
-  const automationRuns =
-    narrow && !automationsTab(automationsPage) ? tasks.automationsView.runs : undefined;
   const experiments = useExperimentChoices();
-  const boardOpen = tasks.boardView.open;
   const unknownWorkspace = tasks.unknownWorkspace.open;
   // A routed step is reachable as its route's gate would let the window stand there (`route-gates.ts`).
-  const adminOn = useAdminAccess();
-  const adminPending = useAdminAccessPending();
-  const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
-  const access: RouteAccess = { admin: adminOn || adminPending, experiments, experimentsRead };
+  const access = useRouteAccess();
   const router = useRouter();
-  // The window leaving the routed place standing for the place its state says, which it stands on as a visit.
-  const [leaving, setLeaving] = useState(false);
-  const routedAddress = leaving ? undefined : routed?.address;
+  // The routed place the window is leaving for the place its state says, which it stands on as a visit, by its address,
+  // so a move from it to another routed place, as from the Board to a person's page, stands that one.
+  const [leaving, setLeaving] = useState<string>();
+  const routedAddress = routed?.address === leaving ? undefined : routed?.address;
   useEffect(() => {
-    if (routed === undefined) setLeaving(false);
-  }, [routed]);
+    if (routed?.address !== leaving) setLeaving(undefined);
+  }, [routed, leaving]);
   const known = input.known;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const task of tasks.tasks) everListed.add(task.id);
-  // Only grows the same way: every automation the window has seen deleted.
-  const deletedAutomations = useRef(new Set<string>()).current;
-  if (automationsPage.kind === AUTOMATIONS_PAGE.LIST && automationsPage.deleted !== undefined) {
-    deletedAutomations.add(automationsPage.deleted);
-  }
   const titleLabel = input.title?.label;
   const titleDetail = input.title?.detail;
   const titleColumn = input.title?.panes?.column;
@@ -1695,23 +1640,6 @@ export function useWindowHistory(input: {
     }
     if (pageAgent !== undefined)
       return { kind: PLACE_KIND.AGENT, agentId: pageAgent, side: sideHeld };
-    if (pagePerson !== undefined) {
-      return {
-        kind: PLACE_KIND.PERSON,
-        userId: pagePerson,
-        name: personName,
-        workspaceId: listedWorkspace,
-      };
-    }
-    if (automationsOpen) {
-      return {
-        kind: PLACE_KIND.AUTOMATIONS,
-        page: automationsPage,
-        workspaceId: listedWorkspace,
-        runs: automationRuns,
-      };
-    }
-    if (boardOpen) return { kind: PLACE_KIND.BOARD, workspaceId: listedWorkspace };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: historyListed }
@@ -1741,13 +1669,6 @@ export function useWindowHistory(input: {
     inboxChosen,
     inboxTask,
     pageAgent,
-    pagePerson,
-    personName,
-    listedWorkspace,
-    automationsOpen,
-    automationsPage,
-    automationRuns,
-    boardOpen,
   ]);
   // Each surface the place shows is counted as it opens, from here rather than from the doors that open it, as the history is written.
   useSurfaceOpen(
@@ -1757,7 +1678,7 @@ export function useWindowHistory(input: {
           ? undefined
           : tabSurface(boundFor, sideTab, true);
       return untitled?.kind === PLACE_KIND.ROUTED && routed !== undefined
-        ? [{ surface: routedSurface(routed.place) }]
+        ? routedSurfaces(routed)
         : surfacesOf(untitled, columnKnown, beside);
     }, [untitled, columnKnown, sideTab, boundFor, routed]),
     input.room,
@@ -1778,15 +1699,23 @@ export function useWindowHistory(input: {
     const column = knownColumns.get(to.taskId);
     return to.column === undefined || column === undefined || column.has(tabKey(to.column));
   };
+  // A workspace's Board, a person's page, or the Automations pages name their workspace by their address's first step, which stands only while it is the one listed;
+  // an automation's page stands no more once it is deleted.
+  const { automations } = input;
+  const listedStands = (matches: ReturnType<typeof router.matchRoutes>) => {
+    const routedHere = routedPlaceOf(matches);
+    if (!OVER_THE_PLAN.has(routedHere)) return true;
+    const automationId = matches.at(-1)?.params.automationId;
+    if (automationId !== undefined && automations.deleted.has(automationId)) return false;
+    const step = matches.find((match) => match.params.workspace !== undefined)?.params.workspace;
+    return step === undefined || workspaceOfSlug(tasks.workspaces, step)?.id === listedWorkspace;
+  };
   const reachable = (to: Place) => {
     // A routed place stands only where its route's gate lets it, Admin an admin's alone, a Settings page an experiment holds only while it is on.
+    // A workspace's Board and a person's page are theirs in the workspace listed as they stood, so Back passes over them once another is.
     if (to.kind === PLACE_KIND.ROUTED) {
-      return routedStands(router.matchRoutes(pathOf(to.address)), access);
-    }
-    // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
-    if (to.kind === PLACE_KIND.AUTOMATIONS) {
-      if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
-      return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
+      const matches = router.matchRoutes(pathOf(to.address));
+      return routedStands(matches, access) && listedStands(matches);
     }
     // A task's version history is the description's, which stands only while the account has Descriptions on.
     if (
@@ -1795,10 +1724,6 @@ export function useWindowHistory(input: {
     ) {
       return false;
     }
-    // The Board is a workspace's tasks, so Back passes over it once another is listed.
-    if (to.kind === PLACE_KIND.BOARD) return to.workspaceId === listedWorkspace;
-    // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
-    if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (to.kind === PLACE_KIND.TASK && !tabsStand(to)) return false;
     // Note that an Inbox narrowed to a task is passed over once the task is deleted, as the task's own step is.
     if (!("taskId" in to) || to.taskId === undefined || to.taskId === boundFor) return true;
@@ -1809,8 +1734,17 @@ export function useWindowHistory(input: {
     );
   };
   const go = (to: Place) => {
-    // Note that a routed place is the router's to draw, which follows its history to it by itself.
-    if (to.kind === PLACE_KIND.ROUTED) return;
+    // Note that a routed place is the router's to draw, which follows its history to it by itself; the Board, a person's
+    // page, and the Automations pages stand over the plan's place as they always have, so whatever stood in it gives way,
+    // as opening any of them has it.
+    if (to.kind === PLACE_KIND.ROUTED) {
+      if (!OVER_THE_PLAN.has(routedPlaceOf(router.matchRoutes(pathOf(to.address))))) return;
+      if (inboxOpen) tasks.inboxView.onClose();
+      if (pageAgent !== undefined) tasks.agentView.onClose();
+      if (unknownWorkspace) tasks.unknownWorkspace.onClose();
+      if (historyOpen) tasks.history.onClose();
+      return;
+    }
     // Note that a version history stands on screen only off a routed place, which is read before the router leaves it.
     const historyStanding = routed === undefined && historyOpen && spot !== undefined;
     if (to.kind === PLACE_KIND.INBOX) {
@@ -1830,39 +1764,9 @@ export function useWindowHistory(input: {
       standSide(to.agentId, to.side);
       return;
     }
-    if (to.kind === PLACE_KIND.PERSON) {
-      tasks.personView.onOpen(to.userId, to.name);
-      return;
-    }
-    if (to.kind === PLACE_KIND.AUTOMATIONS) {
-      // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again;
-      // one that also marks another run of the same automation, as a run's link does, opens it on that run past the ask,
-      // since it keeps the draft.
-      const here: Place = {
-        kind: PLACE_KIND.AUTOMATIONS,
-        page: automationsPage,
-        workspaceId: listedWorkspace,
-      };
-      const sameDraft = automationsOpen && samePage(here, to);
-      if (!sameDraft) {
-        tasks.automationsView.onOpen(to.page, to.runs);
-      } else if (!sameAutomationsOpening(automationsPage, to.page)) {
-        tasks.leaveGuard.pass(() => tasks.automationsView.onOpen(to.page, to.runs));
-      } else if (to.runs !== undefined) {
-        tasks.automationsView.onRuns(to.runs);
-      }
-      return;
-    }
-    if (to.kind === PLACE_KIND.BOARD) {
-      tasks.boardView.onOpen();
-      return;
-    }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, the Automations page, and the Board stand over.
+    // Every other place of the Plans tab is the plan's, which the Inbox and an agent's page stand over.
     if (inboxOpen) tasks.inboxView.onClose();
     if (pageAgent !== undefined) tasks.agentView.onClose();
-    if (pagePerson !== undefined) tasks.personView.onClose();
-    if (automationsOpen) tasks.automationsView.onClose();
-    if (boardOpen) tasks.boardView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.
@@ -1901,21 +1805,39 @@ export function useWindowHistory(input: {
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
     else sidePanel.onSetOpen(panel.open);
   };
-  // The workspace's members, read only while a person's page stands on the trail, whose step is listed by the name they go by now.
+  // The person a routed step's page is, where it is one's, which its step is listed by the name they go by now.
+  const personOf = (to: Place): string | undefined => {
+    if (to.kind !== PLACE_KIND.ROUTED) return undefined;
+    const matches = router.matchRoutes(pathOf(to.address));
+    if (routedPlaceOf(matches) !== ROUTED_PLACE.PERSON) return undefined;
+    const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
+    return params.userId;
+  };
+  // The workspace's members, read only while a person's page stands on the trail.
   // Note that the place standing counts as on the trail already, so its visit, written after it draws, draws the window no second time.
-  const personStanding = untitled?.kind === PLACE_KIND.PERSON;
-  const held = trailOf(useRouter().history);
+  const personStanding = routed?.place === ROUTED_PLACE.PERSON;
+  const held = trailOf(router.history);
   const subscribeTrail = useCallback((listener: () => void) => listenTo(held, listener), [held]);
   const personListed = useSyncExternalStore(
     subscribeTrail,
     () =>
-      personStanding || held.trail.entries.some((entry) => entry.state.kind === PLACE_KIND.PERSON),
+      personStanding ||
+      held.trail.entries.some(
+        (entry) =>
+          entry.state.kind === PLACE_KIND.ROUTED &&
+          routedPlaceOf(router.matchRoutes(pathOf(entry.address))) === ROUTED_PLACE.PERSON,
+      ),
   );
   const members = useHostRead(
     LIVE_READ.WORKSPACE_MEMBERS,
     personListed ? tasks.workspace?.id : undefined,
   ).rows?.members;
-  const named = (to: Place) => liveStepTitle(namedStepOf(to), titleOf(to), tasks, members);
+  const named = (to: Place) => {
+    const person = personOf(to);
+    const step: NamedStep | undefined =
+      person === undefined ? namedStepOf(to) : { kind: NAMED_STEP.PERSON, userId: person };
+    return liveStepTitle(step, titleOf(to), tasks, members);
+  };
   const { backTo, upTo, inPlace, stepBack, stepAway, ...history } = useHistory({
     held,
     place,
@@ -1951,16 +1873,12 @@ export function useWindowHistory(input: {
             { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: true },
             tasks.history.onList,
           ),
-    runs: () =>
-      up(
-        {
-          kind: PLACE_KIND.AUTOMATIONS,
-          page: automationsPage,
-          workspaceId: listedWorkspace,
-          runs: false,
-        },
-        () => tasks.automationsView.onRuns(false),
-      ),
+    // Note that an automation's runs alone are a narrow room's step after its setup, as a page of Settings is after its list.
+    runs: () => {
+      const setup =
+        automations.setupAddress === undefined ? undefined : routedPlace(automations.setupAddress);
+      if (!narrow || setup === undefined || !backTo(setup)) tasks.automationsView.onRuns(false);
+    },
     // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
     // Note that the list stepped back to is under the task the Inbox stands narrowed to, as its step is.
     inbox: () => {
@@ -1991,7 +1909,7 @@ export function useWindowHistory(input: {
   return useSteadyDoors({
     ...history,
     onLeaveRouted: () => {
-      if (routed !== undefined) setLeaving(true);
+      if (routed !== undefined) setLeaving(routed.address);
     },
     onLeaveVersionHistory: () => {
       if (boundFor !== undefined && backTo({ kind: PLACE_KIND.TASK, taskId: boundFor })) return;

@@ -70,10 +70,10 @@ import {
   EXTRA_REPOSITORY_REFUSAL,
   LOCAL_AGENT_REFUSAL,
 } from "@repo/features/agent-wire";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import type { GitHubAccess } from "@repo/features/github-repositories-wire";
 import { agentName, automationRun } from "@repo/features/model-label";
 import { agentFallbackChoice, type ModelChoice } from "@repo/features/models-wire";
-import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { TASK_MODE, type Task } from "@repo/features/task-wire";
 import { bothInOrder, causeKind, failureKind } from "@repo/runtime/effect";
 import { EXPERIMENT } from "@repo/settings";
@@ -113,6 +113,7 @@ import {
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -123,7 +124,6 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -984,15 +984,15 @@ function sourceOf(carried: SlackLineMetadata | undefined): AgentSource | undefin
  */
 function openingOf(
   agent: Agent,
-  ask: Pick<StartAsk, "automationOrigin" | "startedBy" | "carried">,
+  ask: Pick<StartAsk, "automationId" | "automationOrigin" | "startedBy" | "carried">,
   brief: { readonly prompt: string | null },
   /** The agent it takes over from, continued or forked; none for a fresh Start. */
   taken: { readonly source: Agent; readonly continued: boolean } | undefined,
 ): { readonly sender: LineSender; readonly metadata: AwaitingLineMetadata } {
-  const { automationOrigin, startedBy, carried } = ask;
+  const { automationId, automationOrigin, startedBy, carried } = ask;
   if (automationOrigin !== undefined) {
     return {
-      sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
+      sender: { kind: MESSAGE_SENDER.AUTOMATION, automationId, name: automationOrigin.name },
       metadata: automationLineMetadata(automationOrigin.firing),
     };
   }

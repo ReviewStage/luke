@@ -250,8 +250,10 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           .update(messages)
           .set({ sender: sql`${LEGACY_APP_WORD}` })
           .where(eq(messages.id, byLegacyApp));
+        const automationId = randomUUID();
         const byAutomation = yield* line("automation", {
           kind: MESSAGE_SENDER.AUTOMATION,
+          automationId,
           name: "Nightly triage",
         });
         const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
@@ -302,7 +304,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             { kind: MESSAGE_SENDER.MEMBER, member: { userId: teammate, name: "Charles Pan" } },
             { kind: MESSAGE_SENDER.APP },
             { kind: MESSAGE_SENDER.APP },
-            { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
+            { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage", automationId },
             { kind: MESSAGE_SENDER.GITHUB, login: "octocat" },
             {
               kind: MESSAGE_SENDER.AGENT,

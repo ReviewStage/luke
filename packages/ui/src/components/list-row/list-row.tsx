@@ -37,6 +37,7 @@ import {
   selectionRoot,
   useListSelection,
 } from "../selection/list-selection.js";
+import { SELECT_BOX_PLACE, SelectBox } from "../selection/select-box.js";
 import {
   reachInRun,
   VIRTUAL_ROWS_ANCHOR,
@@ -374,7 +375,7 @@ const LIST_CLASS =
 
 /** The row: a grid of five tracks, its parts centered on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
-  "ui-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
+  "ui-list-row group/list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * The fold's chevron, a control of its own standing over the leading mark's
@@ -662,6 +663,7 @@ export function ListRow({
   onTitleClipped,
   id,
   selectKey,
+  selectBox = false,
   motionKey: followedBy,
   ref,
   onKeyDown,
@@ -743,6 +745,8 @@ export function ListRow({
   id?: string | undefined;
   /** What the row is chosen by in a `List` that chooses rows (`selection`); a row with none is never chosen. */
   selectKey?: string | undefined;
+  /** Whether the row draws the box the pointer chooses it by over its unread gutter (`SELECT_BOX_PLACE.UNREAD_GUTTER`), where it can be chosen. */
+  selectBox?: boolean | undefined;
   /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
   motionKey?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
@@ -817,6 +821,8 @@ export function ListRow({
   const selecting = useContext(ListSelectionContext);
   const choosable = selecting !== undefined && selectKey !== undefined;
   const chosen = choosable && selecting.selected.has(selectKey);
+  // Note that the box is the pointer's way into a selection, so a row that refuses its press draws none.
+  const boxed = choosable && selectBox && !disabled ? selecting : undefined;
   const [leadMeasured, leadClipped] = useClipped(plainWords(lead?.label));
   const heading = (
     <span
@@ -1049,6 +1055,9 @@ export function ListRow({
         data-current={current === undefined ? undefined : "true"}
         data-current-look={currentLook}
         data-selected={chosen ? "true" : undefined}
+        data-select-box={
+          boxed === undefined ? undefined : boxed.selected.size > 0 ? "shown" : "rest"
+        }
         data-unread={unread === true ? "true" : undefined}
         data-muted={muted === true ? "true" : undefined}
         data-latent={latent ? "true" : undefined}
@@ -1062,6 +1071,9 @@ export function ListRow({
         style={{ ...place?.style, ...rowProperties(depth) }}
       >
         {row}
+        {boxed === undefined || selectKey === undefined ? null : (
+          <SelectBox selectKey={selectKey} place={SELECT_BOX_PLACE.UNREAD_GUTTER} />
+        )}
       </li>
       {/* Note that the menu stands beside the row rather than in it, because a
           press or a key in the menu's portal would otherwise reach the row's

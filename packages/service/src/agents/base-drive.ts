@@ -37,7 +37,8 @@ import {
 } from "./repository-shell.js";
 import type { RepositorySnapshotCredential } from "./repository-snapshot.js";
 import {
-  type ListedSandbox,
+  NAME_TAKEN,
+  type OpenedSandbox,
   SandboxUnavailable,
   type VercelSandboxApi,
 } from "./vercel-sandbox-api.js";
@@ -117,7 +118,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   of: BaseDriveOf,
   image: string,
   credential: RepositorySnapshotCredential,
-  open: (running: string) => RepositorySandbox,
+  open: (sandbox: { readonly name: string; readonly running: string }) => RepositorySandbox,
 ) {
   const name = baseDriveName(of);
   if ((yield* api.getDrive(name)) !== undefined) return;
@@ -130,30 +131,30 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       tags: {},
       timeoutMs: Duration.toMillis(BASE_DRIVE.FILL_TIMEOUT),
       vcpus: CODER.SANDBOX_VCPUS,
-      keepLastSnapshots: {
-        count: 1,
-        expiration: Duration.toMillis(BASE_DRIVE.FILL_TIMEOUT),
-        deleteEvicted: true,
-      },
+      // Note that no expiration is sent, because Vercel refuses one as short as the fill, and a sandbox that is not persistent takes no snapshot to expire.
+      keepLastSnapshots: { count: 1, deleteEvicted: true },
       env: {},
       mounts: { [BASE_DRIVE.MOUNT_PATH]: name },
       persistent: false,
+      // Note that a name another fill holds is refused, because it is this fill's lock.
+      whenNameTaken: NAME_TAKEN.REFUSE,
     })
     .pipe(
       Effect.map(Option.some),
       Effect.catchIf(
         (failure) => failure.status === CONFLICT_STATUS,
-        () => Effect.succeed(Option.none<ListedSandbox>()),
+        () => Effect.succeed(Option.none<OpenedSandbox>()),
       ),
       Effect.tapError(() => Effect.ignore(api.deleteDrive(name))),
     );
   if (Option.isNone(created)) return;
   const running = created.value.currentSessionId;
   // Note that the stop goes first, because Vercel refuses to delete a drive still mounted.
-  const stopped = running === undefined ? Effect.void : api.stopSession(running);
+  const stopped = Effect.flatMap(api.session({ name, sessionId: running }), (session) =>
+    session.stop(),
+  );
   yield* Effect.gen(function* () {
-    if (running === undefined) return yield* new SandboxUnavailable({});
-    const sandbox = open(running);
+    const sandbox = open({ name, running });
     yield* cloneRepository(
       sandbox,
       {
