@@ -1,27 +1,3 @@
-/**
- * workspace-repository.ts -- a repository a workspace's task may use: one the workspace's GitHub installation on its owner reaches.
- *
- * A task names its repository at its start or in a change, and an agent is
- * started on the repository its task names, so the rule is read at each of
- * those moments rather than once when the task is written: an installation
- * suspended, removed, or reinstalled after the task named its repository
- * still decides whether an agent may start on it. A workspace with no
- * installation reaches no repository at all.
- *
- * A refusal says why (`@repo/features/repository-reach-wire`), and where
- * the owner's installation stands for another workspace the task's owner is
- * in, it names that workspace, since an installation stands for one
- * workspace alone and moving the task there is the one thing that reaches the
- * repository again: a task written in a workspace before its repositories
- * came only from its own installation (#2524) is left that way.
- *
- * Where no installation reaches it, the acting member's own GitHub token may
- * (`github-app.ts`), and the access a read found, the App's or the token's,
- * is what a task or an agent records as it is written. An agent acts as its
- * starter only where it recorded the token's access, so one on the App never
- * falls back to anyone's token, and an automation acts as no member.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
@@ -43,11 +19,6 @@ import { GitHubApp, type ReachedRepository } from "./github-app.js";
 import { memberWorkspaceOnOwner } from "./github-installations.js";
 import { githubReachOrRefusal, logWorkspaceReadFailure } from "./github-refusal.js";
 
-/**
- * The workspace of a task the account reaches, whose installation every
- * GitHub read of the task's repository goes through; none where the account
- * reaches no such task.
- */
 export function taskWorkspace(
   userId: string,
   taskId: string,
@@ -55,11 +26,6 @@ export function taskWorkspace(
   return readTaskWorkspace(userId, taskId);
 }
 
-/**
- * The workspace an agent's repository is reached through: its own, which
- * moves with its task (`task-store.ts`), read off its row where the account
- * sees the agent whole, its task included (`agentVisibleTo`); none otherwise.
- */
 export function agentWorkspace(
   userId: string,
   agent: Pick<Agent, "id">,
@@ -67,14 +33,6 @@ export function agentWorkspace(
   return readVisibleAgentWorkspace(userId, agent.id);
 }
 
-/**
- * The workspace of an agent acting as itself under its member, read as it
- * reads itself (`readAgent`), its task's visibility left out; none
- * where the member no longer reaches the agent. Note that the task is left
- * out on purpose, because an agent keeps its own tools and skills while its
- * starter no longer sees its task; what a member reads of someone else's
- * agent keeps `agentWorkspace`.
- */
 export function ownAgentWorkspace(
   userId: string,
   agent: Pick<Agent, "id">,
@@ -85,20 +43,10 @@ export function ownAgentWorkspace(
   );
 }
 
-/** The member an agent's GitHub reads act as: its starter where it recorded the token's access, and none otherwise. */
 export function agentMember(agent: Pick<Agent, "githubAccess" | "userId">): string | undefined {
   return agent.githubAccess === GITHUB_ACCESS.TOKEN ? agent.userId : undefined;
 }
 
-/**
- * The repository as GitHub spells it, with how it is reached, where the
- * workspace's installation reaches it, or else the member's own token
- * (`member`, none for an automation); refused as not reachable, with why,
- * where neither does, as GitHub unanswered where GitHub did not say, and as
- * unavailable where the store could not be read. `mover` is the account
- * that may move the task, its owner, where that is the account asking: only
- * then is another workspace of theirs on the owner named.
- */
 export const workspaceRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   repository: string,
@@ -124,8 +72,6 @@ export const workspaceRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   const elsewhere = yield* hostedStoreOrUnavailable(
     memberWorkspaceOnOwner(mover, owner, organizationId),
   );
-  // Note that the other workspace is named only where its installation lists the repository,
-  // because one on the owner may not have been given it, and a GitHub that does not say names none.
   const reachedThere =
     Option.isSome(elsewhere) &&
     Result.isSuccess(

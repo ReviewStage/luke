@@ -38,20 +38,6 @@ import {
 import { agentInboxLive, inboxItemsLive, inboxLive, taskInboxLive } from "./live-queries.js";
 import type { LiveParams, LiveQuery } from "./live-query.js";
 
-/**
- * The inbox's live reads on the migrated capture: each write that moves
- * an inbox, through its real writer, notifies exactly the topics its
- * tables' declarations name, and one of them wakes every read that shows
- * the write. An agent's post, a member's message and its file, and a
- * read mark wake the task's and the agent's inbox on their own topics; an
- * item, an automation, and a run wake the account-level reads
- * on the account of every member the write concerns, and no one outside
- * the workspace. A read mark is notified under the transaction its answer
- * names, which is what the desktop confirms the mark on.
- *
- * Synthetic accounts, workspaces, tasks, agents, and words throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -59,7 +45,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** An owner and a teammate in one workspace, the owner's task in it and an agent on the task, and an outsider in a workspace of their own. */
 const openInboxWorld = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -73,7 +58,6 @@ const openInboxWorld = Effect.gen(function* () {
 
 type InboxWorld = Effect.Success<typeof openInboxWorld>;
 
-/** What an item's own write notifies: its task, its agent, its workspace, and every member's account. */
 const itemTopics = (world: InboxWorld): readonly SyncTopic[] => [
   [TOPIC.TASK, world.taskId],
   [TOPIC.AGENT, world.agentId],
@@ -82,7 +66,6 @@ const itemTopics = (world: InboxWorld): readonly SyncTopic[] => [
   [TOPIC.ACCOUNT, world.teammate],
 ];
 
-/** A read as one reader follows it: its definition, and the params its procedure binds. */
 type Followed = readonly [LiveQuery<string, string, readonly SyncTopic[]>, LiveParams<string>];
 
 const wokenBy = (topics: readonly SyncTopic[], [query, params]: Followed) =>
@@ -90,7 +73,6 @@ const wokenBy = (topics: readonly SyncTopic[], [query, params]: Followed) =>
     .topics(params)
     .some((woken) => topics.some(([kind, id]) => woken[0] === kind && woken[1] === id));
 
-/** Runs the write, held to exactly the topics it notifies, and fails unless each followed read is woken by one of them. */
 const wakes = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],
@@ -104,7 +86,6 @@ const wakes = <A, E, R>(
     return fired;
   });
 
-/** The four reads of the world's inbox, as the member follows them. */
 const inboxReadsOf = (world: InboxWorld, userId: string) => ({
   account: [inboxLive, { userId }] as const,
   items: [inboxItemsLive, { userId, since: "0", settledSince: "0" }] as const,
@@ -112,7 +93,6 @@ const inboxReadsOf = (world: InboxWorld, userId: string) => ({
   agent: [agentInboxLive, { userId, agentId: world.agentId }] as const,
 });
 
-/** The agent's question on the world's task, posted as its tool posts one; the item's id. */
 const postQuestion = (world: InboxWorld) =>
   Effect.map(
     postInboxThread(
@@ -158,7 +138,6 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
         const itemId = yield* postQuestion(world);
         const teammate = inboxReadsOf(world, world.teammate);
         const clientKey = randomUUID();
-        // The reply comes after the post, so it moves the item's last change.
         yield* TestClock.adjust(Duration.seconds(1));
 
         yield* wakes(

@@ -27,32 +27,16 @@ import {
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
-/**
- * A member starting a plan related to others through the hosted oRPC
- * router, as the web route answers it, over a real dialect: the plan starts
- * as a sub-task of another, as its parent, or blocking or blocked by it,
- * through the old door's one `relation` or several at once, and every
- * relation is written with it. A start naming two parents, a plan twice, or
- * both doors is refused by its shape, a start as a plan's parent is refused
- * where that plan has a parent already, taking back the relations before
- * it, a start naming another repository than the tree's is refused as a
- * sub-task and as a parent alike, and a member who does not reach every
- * other plan is refused, each making nothing. Synthetic accounts, plans,
- * and tokens throughout.
- */
-
 const ORIGIN = "https://app.test";
 const SIDE = { owner: "octo-member", name: "side" } as const;
 const SIDE_REPOSITORY = `${SIDE.owner}/${SIDE.name}`;
 
-/** GitHub's `GET /repos/{owner}/{repo}` on any member's token: the repository, pushable; nothing else is reached. */
 function answer(sent: SentToGitHub): Response {
   return new URL(sent.url).pathname === `/repos/${SIDE.owner}/${SIDE.name}`
     ? Response.json(memberRepositoryJson(SIDE, true))
     : Response.json({ message: "Not Found" }, { status: 404 });
 }
 
-/** The plans procedures over the test's store and GitHub, each bearer answering for the account it maps to. */
 const starting = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const github = fakeGitHub(answer, GITHUB_APP_WITH_TOKENS);
@@ -77,7 +61,6 @@ const starting = (bearers: ReadonlyMap<string, string>) =>
         workspaces: yield* fakeWorkspaceSeams,
       }),
     });
-    // SAFETY: a start yields the store, the clock, and GitHub alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     return (bearer: string, body: TaskCreateRequest, idempotencyKey?: string) =>
       Effect.promise(async () => {
@@ -95,12 +78,10 @@ const starting = (bearers: ReadonlyMap<string, string>) =>
           }),
           webServices,
         );
-        // SAFETY: the router answers JSON; the test compares it as the wire value it is.
         return { status: response.status, body: JSON.parse(await response.text()) };
       });
   });
 
-/** The task's parent as the account reads it, which the test expects it to reach. */
 const parentOf = (userId: string, taskId: string) =>
   Effect.map(
     readTaskHeader(userId, taskId),
@@ -108,12 +89,10 @@ const parentOf = (userId: string, taskId: string) =>
       Option.getOrElse(header, () => assert.fail("the task was not reached")).parentTaskId,
   );
 
-/** The ids of every task the account reaches, sorted, since two started in one instant list in no fixed order. */
 const listedIds = (userId: string) =>
   Effect.map(listTasks(userId), (tasks) => tasks.map((each) => each.id).sort());
 
 it.layer(getTestDB())("a plan started in a relation to another", (it) => {
-  // Note that these starts go through the old door, `relation`, which released desktop builds still send.
   it.effect(
     "a plan starts as a sub-task of the other, as its parent in its repository, or blocking or blocked by it, the relation written with it",
     () =>
@@ -160,7 +139,6 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           [undefined, SIDE_REPOSITORY],
         );
         assert.equal(yield* parentOf(owner, below), parent.body.plan.id);
-        // The answer is the plan as it stands with its relation, since the window opens it without reading again.
         assert.deepEqual([blocker.body.plan.blockedBy, blocker.body.plan.blocks], [[], [waiting]]);
         assert.deepEqual([blocked.body.plan.blockedBy, blocked.body.plan.blocks], [[holding], []]);
         assert.deepEqual(
@@ -306,7 +284,6 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
         const { id: holding } = yield* createTask(owner, { organizationId: workspace, name: "H" });
         const send = yield* starting(new Map([["Bearer owner", owner]]));
 
-        // The block is written first, so the refusal after it must take the block back with the task.
         const held = yield* send("Bearer owner", {
           name: "Between",
           workspaceId: workspace,
@@ -359,7 +336,6 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           kind: TASK_CREATE_RELATION_KIND.PARENT_OF,
           taskId: side,
         });
-        // Naming no repository, the first plan it is the parent of names the one every other must share.
         const asParentOfTwoTrees = yield* send("Bearer owner", {
           name: "Across",
           workspaceId: workspace,
@@ -397,7 +373,6 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           ]),
         );
 
-        // The stranger's own plan comes first, so reaching it must not carry the start past the owner's.
         const byStranger = yield* send("Bearer stranger", {
           name: "Blocked",
           workspaceId: strangerWorkspace,
@@ -411,7 +386,6 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           workspaceId: elsewhere,
           relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: side },
         });
-        // An id the owner's plan holds is refused in the same words, so the answer names nothing of it.
         const underItsId = yield* send("Bearer stranger", {
           id: side,
           name: "Taken",

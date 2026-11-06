@@ -1,10 +1,3 @@
-/**
- * router.ts -- every implemented hosted resource, merged into the one router the web route serves.
- *
- * The seams are the deployment's: the resolvers a caller middleware reads,
- * handed in by the route so a test can hand in its own.
- */
-
 import { type AccountProcedureSeams, accountProcedures } from "../accounts/account-procedures.js";
 import { type ModelsProcedureSeams, modelsProcedures } from "../accounts/models-procedures.js";
 import {
@@ -112,7 +105,6 @@ import {
 } from "../triggers/sentry/sentry-install-procedures.js";
 import { hosted } from "./base.js";
 
-/** What the resources ask of the deployment: one line per resource, in alphabetical order. */
 export type HostedRouterSeams = AccountProcedureSeams &
   AdminProcedureSeams &
   AgentBrowserTabsProcedureSeams &
@@ -149,9 +141,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   SlackBotProcedureSeams &
   WorkspacesProcedureSeams;
 
-/** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
-  // One cache of the kept published answers for every resource that reads them or lets them go.
   const published = { ...seams, published: instancePublishedCache() };
   return hosted.router({
     account: accountProcedures(seams),

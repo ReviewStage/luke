@@ -1,62 +1,3 @@
-/**
- * device-agents-procedures.ts -- a local agent's Mac registers and beats, takes its agents' lines and its tools' requests, and says what came of each; a box pairs with a code.
- *
- * Every procedure but the own enroll and the pairing's reads the device's
- * bearer alone, never a browser's session cookie (`deviceMiddleware`), since
- * a line carries a runner's secrets and an answer is the word of the device
- * that ran it, and names the device's id: the machine's device secret, which
- * acts for its own device alone and answers not found for any other; any
- * other bearer is refused as unauthenticated. The own enroll's bearer is the
- * desktop's sign-in alone (`bearerOnlyMiddleware`, never a browser's cookie,
- * since it mints a credential), and it converts a device the member's account registered in place under its id, or creates one
- * under the account with the name, platform and architecture the enroll
- * sends where the account never registered the id, answering its new
- * secret this once; it answers not found for another account's id, and
- * for an id the account never registered where the enroll sent no
- * machine, and refuses an enroll naming only some of the machine's fields
- * as invalid. A host's every call,
- * the enroll's included, is refused as needing an upgrade where its daemon
- * is below the floor (`auth/device-secret.ts`). Every one but the enroll
- * and the register answers not found where the account holds no such Mac
- * (`agents/device-agent.ts`); a
- * register under an id another account holds writes nothing and answers
- * not found too, and a register naming a capability this service does not
- * know (`DEVICE_CAPABILITY`) is refused as invalid.
- * An own enroll, and a host's first register, which is a paired box's first
- * word naming its machine, fold the account's other Macs on that machine
- * into it (`@repo/database/models/host-store`), and the
- * turns their agents had running are settled lost as a removed host's are;
- * a later register never folds, so two hosts already running never remove
- * each other.
- * A beat keeps where the host's update stands, cleared by one naming none,
- * and answers the release published (`HOST_RELEASE`) where the host's
- * daemon is below it, which the host updates itself to.
- * The live agents' read answers the ids of the account's agents pinned to
- * that Mac and not archived (`GET /api/device-agents/live-agents`), which
- * the Mac keeps and removes everything else of ours it holds against.
- * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
- * `GET /api/device-agents/requests`), a claim takes one row by its id, a
- * launch line's secrets with it, a line's claim asked again under the
- * token it first carried answers that line again, a step keeps where the
- * Mac's launch of a launch line it claimed and has not settled stands, only
- * ever moved forward, answering not found for any other line, and a settle or an answer keeps what the
- * Mac said of a row it claimed.
- *
- * A box pairs with a code. Its start
- * (`POST /api/device-agents/pairing`) reads no credential, only its
- * daemon's version against the floor (`pairingHostMiddleware`), and is
- * braked per address in this instance, since a start costs little and
- * lapses; it opens a pairing under a fresh code, unavailable where a
- * standing pairing already shows the one minted, and answers the poll
- * secret, answered this once and kept as a hash, the code, and the link
- * on the origin the request reached that opens it. Its poll
- * (`POST /api/device-agents/pairing/poll`) reads the poll secret as its
- * bearer alone (`pollSecretMiddleware`), and answers where the pairing
- * stands (`@repo/database/models/host-pairing-store`): once a member
- * approved it, the host's id and a device secret minted for it, this once,
- * counted as an install as an own enroll is.
- */
-
 import { isIP } from "node:net";
 import {
   answerDeviceAgentRequest,
@@ -118,29 +59,24 @@ import { removeAccountHost } from "./hosts-procedures.js";
 import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface DeviceAgentsProcedureSeams {
-  /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and no other procedure's. */
   resolveUserId: UserIdResolver;
 }
 
 const DONE = { done: true } as const;
 
-/** The headers the platform names a request's address in: Vercel sets both and overwrites any a caller sent, so no caller names its own. */
 const ADDRESS_HEADER = {
   REAL_IP: "x-real-ip",
   FORWARDED_FOR: "x-forwarded-for",
 } as const;
 
-/** The brake's key for every start whose address the platform did not name, as on a machine of a developer's own. */
 const UNNAMED_ADDRESS = "unnamed";
 
-/** How many pairings one address may start: ten in ten minutes, a box started again several times over with room to spare. */
 const PAIRING_START_BRAKE = {
   windowMs: 10 * 60 * 1_000,
   maxRequestsPerWindow: 10,
   maxTrackedUsers: 10_000,
 };
 
-/** The address a request came from as the platform named it, or nothing where it named none that reads as one. */
 function requestAddressOf(request: Request): string | undefined {
   const named =
     request.headers.get(ADDRESS_HEADER.REAL_IP) ??
@@ -149,12 +85,10 @@ function requestAddressOf(request: Request): string | undefined {
   return isIP(address) === 0 ? undefined : address;
 }
 
-/** The link that opens the code given on the origin the request reached, so a Preview's box links its own. */
 function connectUrlOf(request: Request, userCode: string): string {
   return new URL(hostConnectPath(userCode), new URL(request.url).origin).href;
 }
 
-/** A pairing opened under a fresh code, answering the code; unavailable where a standing pairing already shows the code minted, and the box starts again. */
 const openedPairing = (opening: Omit<HostPairingOpening, "userCode">) =>
   Effect.gen(function* () {
     const userCode = mintHostUserCode();
@@ -164,11 +98,9 @@ const openedPairing = (opening: Omit<HostPairingOpening, "userCode">) =>
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   });
 
-/** The device named, where the caller may act for it (`actsForDevice`); not found otherwise. */
 const ownDevice = (caller: DeviceCaller, deviceId: string) =>
   actsForDevice(caller, deviceId) ? Effect.void : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
-/** The caller's own device, or not found. */
 const followed = (caller: DeviceCaller, deviceId: string) =>
   Effect.gen(function* () {
     yield* ownDevice(caller, deviceId);
@@ -178,7 +110,6 @@ const followed = (caller: DeviceCaller, deviceId: string) =>
     }
   });
 
-/** The machine an own enroll names, all of its name, platform and architecture or none; refused as invalid where it names only some. */
 const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
   if (name !== undefined && platform !== undefined && arch !== undefined) {
     return Effect.succeed({ name, platform, arch });
@@ -188,15 +119,9 @@ const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
     : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 };
 
-/** Kept, or not found where the account holds no such row. */
 const keptOrNotFound = (kept: boolean) =>
   kept ? Effect.succeed(DONE) : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
-/**
- * The release a beat names, where one is published and the request's
- * daemon is below it (`HOST_RELEASE`); none otherwise, so a host on it or
- * past it, a Preview's ahead of it among them, is told of nothing.
- */
 function newerReleaseFor(request: Request): DeviceAgentRelease | undefined {
   const version = presentedHostVersion(request);
   if (HOST_RELEASE === undefined || version === undefined) return undefined;
@@ -204,10 +129,8 @@ function newerReleaseFor(request: Request): DeviceAgentRelease | undefined {
   return { version: HOST_RELEASE.VERSION, sha256: HOST_RELEASE.SHA256 };
 }
 
-/** The device-agents resource: the own enroll on the desktop's sign-in, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware());
-  // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
   const signedIn = hosted.deviceAgents.use(bearerOnlyMiddleware(seams.resolveUserId));
   const pairing = hosted.deviceAgents.use(pairingHostMiddleware);
   const polling = hosted.deviceAgents.use(pollSecretMiddleware);
@@ -220,7 +143,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       }
       const poll = mintHostSecret(HOST_WIRE.POLL_SECRET_PREFIX);
       const { name, platform, arch } = input;
-      // Note that the pairing keeps no machine the start named, since the box's first register follows its approve at once and names it again.
       const userCode = yield* openedPairing({
         pollSecretHash: poll.hash,
         name,
@@ -238,7 +160,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       };
     }),
     pollPairing: polling.pollPairing.effect(function* ({ context }) {
-      // Note that a secret is minted for every poll, and the store keeps its hash only where it hands the pairing over.
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
       const polled = yield* hostedStoreOrUnavailable(
         pollHostPairing(hostSecretHash(context.pollSecret), minted.hash),
@@ -258,7 +179,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       const version = yield* admittedHostVersion(presentedHostVersion(context.request));
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
       const machine = yield* enrollingMachine(input);
-      // Note that a Mac enrolled before is keyed again here, which is no new install, so it is read first.
       const before = yield* hostedStoreOrUnavailable(hostsOf(userId));
       const enrolled = yield* hostedStoreOrUnavailable(
         enrollOwnDevice(userId, {
@@ -282,7 +202,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       }
       return { deviceId: input.deviceId, deviceSecret: minted.secret };
     }),
-    // Note that a host leaving is removed as Settings › Hosts' Remove removes it, and that it answers done where its host was already gone, since the box deletes its secret either way.
     leave: deviceAgents.leave.effect(function* ({ context, input }) {
       yield* ownDevice(context, input.deviceId);
       yield* removeAccountHost(context.userId, input.deviceId);
@@ -307,7 +226,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           beatDevice(context.userId, deviceId, { update, updateFailure }),
         ),
       );
-      // Note that the launches are read after the beat is written, so a claim the device finished before it sent the beat is among them.
       const openLaunches = yield* hostedStoreOrUnavailable(
         openDeviceAgentLaunches(context.userId, deviceId),
       );

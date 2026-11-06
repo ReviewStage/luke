@@ -1,75 +1,19 @@
-/**
- * recording-cursor.ts -- the agent's pointer drawn into a page while it is recorded, as the panel draws it over the live view: the source a page runs, the word that takes it out, and the file the sandbox image keeps it in.
- *
- * A video's frames are the page's own, and the pointer the panel draws over
- * a cloud Browser tab's live view is no part of them
- * (`@repo/panel`'s `cloud-browser-cursor.tsx`), so the pointer is drawn into
- * the page instead, in the panel's look. Two recorders add it: the browser
- * tool's (`sandbox-recorder.ts`), to every page it records, and an agent's own
- * Playwright script, which the coder's instructions tell to add the image's
- * copy (`RECORDING_CURSOR_FILE`) before it records a flow. Both send input a
- * page hears as a person's, so the one source follows either.
- *
- * Self-contained, since the image's build (`apps/web/scripts/agent-image.ts`)
- * writes it into the image.
- */
-
 import { BRAND_PALETTE } from "@repo/brand";
 import { BROWSER_RECORDING_POINTER_MARK } from "@repo/features/browser-agent-cdp";
 import { RECORDING_CURSOR_FONT } from "./recording-cursor-font.js";
 
-// The pointer's copper over a light page and a dark one, the brand's accent in either theme.
 const POINTER = { LIGHT: BRAND_PALETTE.LIGHT.ACCENT, DARK: BRAND_PALETTE.DARK.ACCENT } as const;
 
-/** A `#rrggbb` color as `rgba()` at an opacity written as the source writes it (`.42`), for the glow round the pointer. */
 function rgba(hex: string, alpha: string): string {
   const value = Number.parseInt(hex.slice(1), 16);
   return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
 }
 
-/**
- * Where the sandbox image keeps the pointer's source, every user's to read,
- * for a script to hand Playwright's `page.addInitScript({ path })`.
- */
 export const RECORDING_CURSOR_FILE = {
   DIRECTORY: "/usr/local/share/agent-recording",
   PATH: "/usr/local/share/agent-recording/cursor.js",
 } as const;
 
-/**
- * The agent's pointer, drawn into each page while it is recorded: the
- * panel's amber arrow with its white edge, in a closed shadow root on the document's
- * root, hidden from the accessibility tree and taking no pointer events. It
- * follows the input the agent sends, which a page hears as a person's
- * (`@repo/features/browser-agent-cdp`), gliding to each point on the panel's
- * spring (`--ui-spring-fast` over `--ui-duration-fast`). A press ripples at
- * its point at once, as the page reacts, and presses the arrow once it
- * arrives: the browser tool moves the pointer a beat before it presses, so the
- * arrow is there by then, and a script that clicks with no pause before the
- * press leaves it still gliding in. Typing bobs it over an
- * amber glow; over a dark page it is drawn in the dark mode's brighter amber, and near the page's
- * right or bottom edge it is mirrored about its tip. A key a viewer could
- * not otherwise see, such as Enter, Tab, Escape, an arrow, or a shortcut,
- * shows at the foot of the page on the window's tooltip surface, set as
- * `@repo/ui`'s `Shortcut` sets a chord, its keys tight and unboxed, the
- * newest in the tooltip's ink and the two before it in its chord's, fading a
- * beat after the last; a key that only types text never does, since the
- * field shows that itself and it may be a password. A key's glyph is drawn
- * as Lucide draws it, the window's icons, and its letters in Geist, which the
- * source adds to the page's fonts from its own bytes
- * (`recording-cursor-font.ts`), since the sandbox's Linux has neither and
- * its fallback faces set each glyph in a weight of its own. The panel's
- * tokens are
- * no part of the page, so their values are written out here: the pointer's
- * copper and its glow from the brand's accent (`BRAND_PALETTE`), as the
- * panel's `--agent-pointer` and its `-on-dark` and `-glow` siblings are; hold
- * the rest to its `-edge` and `-shadow`,
- * to the `.cloud-browser-cursor` rules, and to `--ui-color-tooltip`, its edge,
- * text, and chord inks, `--ui-tooltip-radius`, and `--ui-tooltip-shadow`; the
- * caps stand larger than a tooltip's words, which a compressed video blurs. Note that it does not rock while
- * still, as the panel's does while the agent works, because a video shows the
- * agent only as it acts.
- */
 export const RECORDING_CURSOR_SOURCE = `(function draw() {
   const root = document.documentElement;
   // A new document runs this before it has a root, so the pointer is drawn once it does.
@@ -283,5 +227,4 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   }, { once: true });
 })();`;
 
-/** Takes the pointer out of a document, its listeners with it, whether or not the page kept its host. */
 export const RECORDING_CURSOR_STOP = 'window.dispatchEvent(new Event("agent-recording-stop"));';

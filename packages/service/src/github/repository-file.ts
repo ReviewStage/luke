@@ -1,17 +1,3 @@
-/**
- * repository-file.ts -- one file of a repository as GitHub holds it on a branch or at a commit, read through the contents API on a token the App minted for that repository alone.
- *
- * The read answers facts and bytes, never a decision: whether the path is a
- * regular file of the tree, its size, and its bytes where GitHub carries
- * them, which `tasks/shown-file.ts` decides on exactly as it decides on the
- * brain checkout's probe. A path GitHub would resolve outside the
- * repository's contents (an empty, `.`, or `..` segment, which a URL folds
- * away) is asked nothing and reads as no file. A link, a directory, or a
- * submodule is no regular file. The request composes over the App
- * module's own kit (`githubRead`, `readBody`), so the token leaves this
- * module no more than it leaves that one.
- */
-
 import { Effect, type Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -25,7 +11,6 @@ import {
   send,
 } from "./github-app.js";
 
-/** What GitHub answers for a regular file: its size, and its bytes in base64 where it carries them (up to a megabyte). */
 const FileContentsSchema = Schema.Struct({
   type: Schema.Literal("file"),
   size: Schema.Number,
@@ -33,7 +18,6 @@ const FileContentsSchema = Schema.Struct({
   content: Schema.String,
 });
 
-/** Any other answer of the contents API: a link, a submodule, or a directory's listing. */
 const OtherContentsSchema = Schema.Union([
   Schema.Struct({ type: Schema.String }),
   Schema.Array(Schema.Unknown),
@@ -41,25 +25,16 @@ const OtherContentsSchema = Schema.Union([
 
 const ContentsSchema = Schema.Union([FileContentsSchema, OtherContentsSchema]);
 
-/** The encoding GitHub carries a file's bytes in. */
 const BASE64 = "base64";
 
-/**
- * One file of the tree as GitHub holds it: no regular file at the path, and
- * whether that is because GitHub found nothing there on the branch; or its
- * size and bytes, bytes absent where GitHub carries none.
- */
 export type RepositoryFile =
   | { readonly regular: false; readonly notFound: boolean }
   | { readonly regular: true; readonly bytes: number; readonly content: Uint8Array | undefined };
 
-/** Nothing at the path on the branch, as GitHub answered. */
 const NOT_FOUND: RepositoryFile = { regular: false, notFound: true };
 
-/** Something at the path that is no regular file, or a path nothing was asked of. */
 const NOT_REGULAR: RepositoryFile = { regular: false, notFound: false };
 
-/** A path's segments, or nothing where a segment would leave the repository's contents, as a URL folds an empty, `.`, or `..` one away. */
 export function repositorySegments(path: string): readonly string[] | undefined {
   const segments = path.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
@@ -68,12 +43,10 @@ export function repositorySegments(path: string): readonly string[] | undefined 
   return segments;
 }
 
-/** The path's segments encoded for the URL, or nothing where a segment would leave the repository's contents. */
 function contentsPath(path: string): string | undefined {
   return repositorySegments(path)?.map(encodeURIComponent).join("/");
 }
 
-/** The repository's file at the path on the branch or at the commit named, as the contents API holds it; read anonymously where the token is `null`. */
 export function readRepositoryFile(
   token: Redacted.Redacted | null,
   repository: { readonly fullName: string },
@@ -102,23 +75,16 @@ export function readRepositoryFile(
   });
 }
 
-/** What GitHub answers for a branch's ref: the commit it stands at. */
 const BranchRefSchema = Schema.Struct({
   object: Schema.Struct({ type: Schema.Literal("commit"), sha: Schema.String }),
 });
 
-/**
- * The commit a branch of the repository stands at now, so lines read at it
- * can be named by the commit they were read at; nothing where GitHub names
- * no commit for it.
- */
 export function readBranchHead(
   token: Redacted.Redacted,
   repository: { readonly fullName: string },
   branch: string,
 ): Effect.Effect<string | undefined, GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    // Note that a branch's name may hold a slash, which stays a step of the ref's path.
     const ref = branch.split("/").map(encodeURIComponent).join("/");
     const request = githubRead(`/repos/${repository.fullName}/git/ref/heads/${ref}`, token);
     return yield* Effect.scoped(
@@ -132,18 +98,8 @@ export function readBranchHead(
   });
 }
 
-/** The media type GitHub answers a commit with as its sha alone, rather than the commit with its every file's patch. */
 const COMMIT_SHA_MEDIA_TYPE = "application/vnd.github.sha";
 
-/**
- * The commit a branch, tag, or commit of the repository names now
- * (`GET /repos/{owner}/{repo}/commits/{ref}`,
- * https://docs.github.com/en/rest/commits/commits#get-a-commit), so files
- * read at it are pinned to it; nothing where GitHub names no commit for it,
- * as it answers an unknown ref (404, or 422 for one it cannot read as a
- * ref). Asked for as its sha alone, which is all this reads. Read
- * anonymously where the token is `null`.
- */
 export function readCommitSha(
   token: Redacted.Redacted | null,
   repository: { readonly fullName: string },

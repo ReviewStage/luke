@@ -1,12 +1,6 @@
 import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 
-/**
- * Our own native clients, and the record shape they are provisioned under:
- * public PKCE clients with no secret.
- */
-
-/** A client as this build provisions one: public, with no secret, under the scopes and redirects it names. */
 export interface OAuthClient {
   readonly id: string;
   readonly name: string;
@@ -29,11 +23,6 @@ export const DESKTOP_OAUTH_CLIENT = {
   type: "native",
 } as const satisfies OAuthClient;
 
-/**
- * The command-line tool, signed in as the Mac is: the same scopes, so its
- * token resolves through userinfo at the account routes, and the same
- * loopback redirect, which the provider matches on any port.
- */
 export const CLI_OAUTH_CLIENT = {
   id: FIRST_PARTY_OAUTH_CLIENT_ID.CLI,
   name: `${PRODUCT_NAME} CLI`,
@@ -45,7 +34,6 @@ export const CLI_OAUTH_CLIENT = {
   type: "native",
 } as const satisfies OAuthClient;
 
-/** One `oauth_client` row, camelCase as the auth service's own Kysely adapter reads and writes it. */
 interface OAuthClientRecord {
   readonly id: string;
   readonly clientId: string;
@@ -65,7 +53,6 @@ interface OAuthClientRecord {
   readonly requirePKCE: boolean;
 }
 
-/** One client's row as the seeder writes it: enabled, public, consent skipped, PKCE required. */
 export function oauthClientRecord(client: OAuthClient, now: Date): OAuthClientRecord {
   return {
     id: client.id,

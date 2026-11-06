@@ -40,26 +40,14 @@ import {
   viewerReactionsOf,
 } from "./pull-requests.js";
 
-/**
- * An agent's pull request as its Pull request tab draws it, read off a
- * scripted GitHub over a real dialect in its three reads: the pull request
- * itself, its description, branches, and mergeability; every check on its
- * head, a check run or a commit status, by where it stands; and its
- * comments and reviews as one conversation in time order, its people named
- * as an agent's changes name them. Each read stands without the others.
- * Synthetic accounts throughout.
- */
-
 const REPOSITORY = "acme/relay";
 const NUMBER = 7;
 const TOKEN = Redacted.make("ghs_fixture_installation_token");
 const PULL = `/repos/acme/relay/pulls/${NUMBER}`;
 const COMMENTS = `/repos/acme/relay/issues/${NUMBER}/comments`;
-/** The pull request's head as its checks are asked for: the ref GitHub keeps on it, one segment. */
 const COMMIT = `/repos/acme/relay/commits/refs%2Fpull%2F${NUMBER}%2Fhead`;
 const PAGE = `https://github.com/acme/relay/pull/${NUMBER}`;
 
-/** GitHub's record of an account. */
 function githubUser(id: number, login: string) {
   return {
     id,
@@ -72,13 +60,11 @@ function githubUser(id: number, login: string) {
 const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
-/** Another App's bot, which GitHub draws by its App's logo, at its App's address. */
 const DEVIN = {
   ...githubUser(1004, "devin-ai-integration[bot]"),
   avatar_url: "https://avatars.githubusercontent.com/in/811515?v=4",
 };
 
-/** What a test changes of the pull request GitHub answers. */
 interface PullOverrides {
   readonly state?: string;
   readonly merged?: boolean;
@@ -91,7 +77,6 @@ interface PullOverrides {
   readonly base?: { readonly ref: string };
 }
 
-/** The pull request as GitHub answers it whole, open and ready unless said otherwise. */
 function pull(overrides: PullOverrides = {}) {
   return {
     number: NUMBER,
@@ -116,7 +101,6 @@ function pull(overrides: PullOverrides = {}) {
   };
 }
 
-/** A check run as GitHub lists one. */
 function checkRun(name: string, status: string, conclusion: string | null) {
   return {
     name,
@@ -129,7 +113,6 @@ function checkRun(name: string, status: string, conclusion: string | null) {
   };
 }
 
-/** GitHub's GraphQL answer to the deployments read, the head's deployments newest first, as given, as many as the query asks for; none where none are given. */
 function deploymentsAnswer(
   deployments: readonly object[] | Response | undefined,
   query: string,
@@ -146,7 +129,6 @@ function deploymentsAnswer(
   };
 }
 
-/** A deployment as GitHub's GraphQL names one, with its newest status; one with none yet stands as queued. */
 function deployment(environment: string, status: string | null, url: string | null) {
   return {
     environment,
@@ -156,7 +138,6 @@ function deployment(environment: string, status: string | null, url: string | nu
   };
 }
 
-/** A repository answering the overview's reads as given, and not found for the rest. */
 function repository(answers: {
   readonly pull?: object;
   readonly checkRuns?: readonly object[] | Response;
@@ -165,7 +146,6 @@ function repository(answers: {
   readonly reviews?: readonly object[];
   readonly graphql?: object | Response;
   readonly deployments?: readonly object[] | Response;
-  /** The repository's open pull requests, as the stack's GraphQL read lists them. */
   readonly open?: readonly object[] | Response;
 }): RepositoryScript {
   return (sent) => {
@@ -177,11 +157,9 @@ function repository(answers: {
     ) {
       const asked: { variables: { owner: string; name: string; after: string | null } } =
         JSON.parse(sent.body);
-      // Note that the stack is read of the agent's repository alone.
       assert.deepEqual([asked.variables.owner, asked.variables.name], ["acme", "relay"]);
       const open = answers.open ?? [];
       if (open instanceof Response) return open;
-      // GitHub pages the listing a hundred to a page, the cursor here the place the next one starts.
       const from = Number(asked.variables.after ?? "0");
       const nodes = open.slice(from, from + 100);
       const more = from + 100 < open.length;
@@ -198,7 +176,6 @@ function repository(answers: {
     }
     if (pathname === "/graphql" && sent.method === "POST") {
       const asked: { query: string; variables?: object } = JSON.parse(sent.body);
-      // Note that the threads and the deployments are each asked of this one pull request by name and number.
       assert.deepEqual(asked.variables, { owner: "acme", name: "relay", number: NUMBER });
       const answer = asked.query.startsWith("query Deployments")
         ? deploymentsAnswer(answers.deployments, asked.query)
@@ -207,7 +184,6 @@ function repository(answers: {
         return answer instanceof Response ? answer : Response.json(answer);
       }
     }
-    // Note that the bodies are GitHub's to render, so a read of one that does not ask for its rendering is refused.
     const rendered = sent.headers.get("accept") === "application/vnd.github.full+json";
     if ([PULL, COMMENTS, `${PULL}/reviews`].includes(pathname) && !rendered) {
       return Response.json({ message: "Unsupported Media Type" }, { status: 415 });
@@ -219,7 +195,6 @@ function repository(answers: {
     }
     if (pathname === `${COMMIT}/status`) return Response.json({ statuses: answers.statuses ?? [] });
     if (pathname === COMMENTS) {
-      // GitHub pages a listing a hundred to a page.
       const page = Number(new URL(sent.url).searchParams.get("page") ?? "1");
       return Response.json((answers.comments ?? []).slice((page - 1) * 100, page * 100));
     }
@@ -228,7 +203,6 @@ function repository(answers: {
   };
 }
 
-/** One open pull request as the stack's GraphQL read lists it. */
 function openPull(number: number, head: string, base: string) {
   return {
     number,
@@ -241,7 +215,6 @@ function openPull(number: number, head: string, base: string) {
   };
 }
 
-/** A coding agent the account started on a plan of the repository, its sandbox on the branch given, its pull request as last read the one numbered. */
 const agentPublishing = (userId: string, branch: string, number: number) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invites", repository: REPOSITORY });
@@ -271,7 +244,6 @@ const agentPublishing = (userId: string, branch: string, number: number) =>
     return agent;
   });
 
-/** A user account that signed in with GitHub as the GitHub account given. */
 const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -287,7 +259,6 @@ const linkedAccount = (githubId: number) =>
     return userId;
   });
 
-/** The pull request itself read off the repository given and named for an agent of the workspace given, its stack read where `stacked` says so; none where GitHub holds no such pull request. */
 const pullRequestPartOf = (organizationId: string, stacked = true) =>
   Effect.flatMap(pullRequestOverview(TOKEN, REPOSITORY, NUMBER, stacked), (read) =>
     Option.isNone(read)
@@ -298,18 +269,15 @@ const pullRequestPartOf = (organizationId: string, stacked = true) =>
         ),
   );
 
-/** The conversation read off the repository given and named for an agent of the workspace given. */
 const conversationPartOf = (organizationId: string) =>
   Effect.flatMap(
     pullRequestConversation(TOKEN, REPOSITORY, { number: NUMBER, url: PAGE }),
     (read) => namedOverviewConversation({ organizationId }, NUMBER, read),
   );
 
-/** GitHub as the script given answers it. */
 const answering = (script: RepositoryScript) =>
   Effect.provide(githubReaching([], undefined, undefined, script).layer);
 
-/** The overview's three reads off the repository given, at once, as the tab draws them together; none where GitHub holds no such pull request. */
 const overviewOf = (organizationId: string, script: RepositoryScript) =>
   Effect.gen(function* () {
     const [pullRequest, checks, conversation] = yield* Effect.all(
@@ -751,8 +719,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         const workspace = yield* openWorkspace(charles);
         const hunk =
           "@@ -10,3 +10,4 @@ export function send()\n   const a = 1;\n-  twice();\n+  once();\n+  done();";
-        /** A comment as GitHub's GraphQL answers one. */
-        /** An author as GitHub's GraphQL names one. */
         interface Author {
           readonly __typename: string;
           readonly login: string;
@@ -1001,7 +967,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           avatarUrl: who.avatar_url,
           databaseId: who.id,
         });
-        /** A reaction as GitHub's GraphQL answers one, naming those given. */
         const group = (content: string, totalCount: number, nodes?: readonly object[]) => ({
           content,
           reactors: nodes === undefined ? { totalCount } : { totalCount, nodes },
@@ -1397,9 +1362,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         const charles = yield* linkedAccount(CHARLES.id);
         const workspace = yield* openWorkspace(charles);
         const below = yield* agentPublishing(charles, "luke/expiry-job", 5);
-        // A newer agent on the same branch published another pull request, so it names none of the stack.
         yield* agentPublishing(charles, "luke/expiry-job", 12);
-        // An agent of another workspace that published the one above names nothing here.
         const stranger = yield* linkedAccount(PRIYA.id);
         yield* openWorkspace(stranger);
         yield* agentPublishing(stranger, "luke/invite-copy", 9);

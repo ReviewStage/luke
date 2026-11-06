@@ -1,7 +1,3 @@
-/**
- * agents-app-support.ts -- the fixtures and helpers the `agents-app*.test.ts` files share: the routes' paths, the scripted eve, GitHub and catalog, and the request and answer builders.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@repo/database/core/query";
@@ -114,45 +110,32 @@ export const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
 export const AGENT_STARTS = "/api/agents/agents";
 export const AGENT = "/api/agents/agent";
 export const AGENT_INBOX = "/api/agents/{id}/inbox";
-/** Our own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
 export const AGENT_WORKSPACE_TOOLS = "/api/agents/workspace-tools";
 export const WORKSPACE_AGENTS = "/api/agents";
-/** The overview's three reads, each its own route. */
 export const AGENT_OVERVIEW = [
   "/api/agents/overview-pull-request",
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
-/** The public paths the inbox's procedures answer on the hosted oRPC router, its attachment's bytes aside. */
 const INBOX_PROCEDURE_PATH = /^\/api\/(?:inbox(?:\/.*)?|(?:plans|agents)\/[^/]+\/inbox)$/u;
-/** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
 export const TASKS = "/api/plans";
-/** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
 export const TASK = (taskId: string) => `${TASKS}/${taskId}`;
-/** A Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
-/** The brain's own transcript of a task, served by the hosted oRPC router. */
-/** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
   /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
-/** One part of a message of an agent's or a worker's transcript, whole, at its public path on the hosted oRPC router. */
 const TRANSCRIPT_PART_PATH =
   /^\/api\/agents\/[^/]+\/(?:subagents\/[^/]+\/)?messages\/[^/]+\/parts\/[^/]+$/u;
 
 export const RELAY = { owner: "Acme", name: "Relay" } as const;
 export const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** Where the group serves an image an agent's pull request's overview names. */
 export const AGENT_GITHUB_IMAGE = "/api/agents/github-image";
 
-/** An SVG a repository might hold, with a script in it that must never run as a page of the service. */
 export const SCRIPTED_SVG = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/api/plans")</script></svg>',
 );
 
-/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
 
-/** A fresh installation reaching the repository, on an account of its own. */
 export function freshInstallation(
   repositories: InstallationFixture["repositories"] = [RELAY],
 ): InstallationFixture {
@@ -163,21 +146,16 @@ export function freshInstallation(
 export const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved description as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 export const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 export const SOL = "openai/gpt-6.1-sol";
 
-/** A model offering two context windows, as OpenAI prices its long context apart. */
 const GPT_LONG = "openai/gpt-5.5";
 
-/** How many long turns a long source's transcript holds past its brief. */
 export const LONG_TURNS = 30;
 
-/** A model with a small window, which a long replay does not fit whole. */
 export const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as const;
 
-/** The models offered, each with its prices in dollars per token, one with two windows. */
 const CATALOG: readonly OfferedModel[] = [
   {
     id: SMALL_WINDOW.model,
@@ -215,48 +193,39 @@ export interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** One session opened, as the fake eve saw it. */
 interface Opened {
   readonly authorization: string;
   readonly message: EveMessage;
   readonly sessionId: string;
 }
 
-/** One follow-up handed to a session, as the fake eve saw it. */
 interface Sent {
   readonly authorization: string;
   readonly sessionId: string;
   readonly message: EveMessage;
 }
 
-/** How the fake eve answers a follow-up: accepted with a delivery of its own, or one of the refusals the client reads. */
 export type SendAnswer =
   | typeof EVE_SEND_OUTCOME.ACCEPTED
   | typeof EVE_SEND_OUTCOME.NOT_READY
   | typeof EVE_SEND_OUTCOME.RETIRED
   | typeof EVE_SEND_OUTCOME.FAILED;
 
-/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
 export function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
 export function deploymentFor(account: string): string {
   return `deployment for ${account}`;
 }
 
-/** eve as the group reaches it, answering from a script and writing down every open, send, cancel, and retire, with who asked it. */
 export function fakeEve(
   options: {
     readonly reachable?: boolean;
     readonly cancels?: boolean;
     readonly sends?: SendAnswer;
-    /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
     readonly cancelsTogether?: number;
-    /** What eve looks at as it is asked to retire a session, written down beside the retire. */
     readonly resetSees?: Effect.Effect<boolean>;
-    /** What happens while a cancel is out, before eve answers it, as a turn's end racing the Stop does. */
     readonly canceling?: Effect.Effect<void>;
   } = {},
 ) {
@@ -264,13 +233,9 @@ export function fakeEve(
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const canceled: (readonly [string, string])[] = [];
-  /** Who asked each cancel, in order: the request's bearer, or the deployment acting for an account. */
   const canceledAs: string[] = [];
-  /** Every session eve was asked to retire, in order. */
   const reset: string[] = [];
-  /** Who asked each retire, in order, as `canceledAs` writes it. */
   const resetAs: string[] = [];
-  /** What `resetSees` saw at each retire, in order. */
   const resetSaw: boolean[] = [];
   let sessions = 0;
   let deliveries = 0;
@@ -280,7 +245,6 @@ export function fakeEve(
         if (options.reachable === false) {
           return Effect.fail(
             new EveUnreachable({
-              // SAFETY: the client's own error shape, built by the fake at the transport it stands for.
               cause: {
                 _tag: "RequestError",
                 reason: { _tag: "TransportError" },
@@ -290,7 +254,6 @@ export function fakeEve(
           );
         }
         sessions += 1;
-        // A Claude Code session's id, as every agent here runs on its harness, so a Stop or a retire reaches the harness too.
         const sessionId = `${NATIVE_SESSION_PREFIX.claude_code}${String(sessions).padStart(22, "0")}`;
         opened.push({ authorization, message, sessionId });
         return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId });
@@ -339,7 +302,6 @@ export function fakeEve(
   return { eve, opened, sent, canceled, canceledAs, reset, resetAs, resetSaw };
 }
 
-/** The deployment's environment with no key of its own, which a test gives the one it reads, and the suite's key ring, which a sandbox's firewall record is sealed under. */
 const NO_KEYS: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -352,30 +314,20 @@ const NO_KEYS: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** What the endpoints counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** How many of one event the account was counted for. */
 export const countedFor = (userId: string, name: string) => countedWith(userId, name).length;
 
-/** The properties of each of one event the account was counted for, in order. */
 export const countedWith = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** The properties of each event of one name the account was counted for, in the order they were counted. */
 export const countedProperties = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/**
- * The public path of each route the hosted oRPC router answers, by the
- * flattened key a test names it with: the rewrite carries this path to the
- * router in `route-path`, and keeps the agent's id in the `id` query beside
- * it, as a request here does.
- */
 const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/plans/agents", (id: string) => `/api/plans/${id}/agents`],
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
@@ -395,7 +347,6 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/overview-conversation", (id: string) => `/api/agents/${id}/overview/conversation`],
 ]);
 
-/** The request at its public path, for a route the hosted oRPC router answers; none for any other route. */
 function publicRequest(request: Request): Request | undefined {
   const url = new URL(request.url);
   const publicPath = ORPC_PUBLIC_PATH.get(url.pathname);
@@ -404,12 +355,6 @@ function publicRequest(request: Request): Request | undefined {
   return new Request(url, request);
 }
 
-/**
- * The group over the test's own database, GitHub, and eve, stood once and
- * answering every request of the test, so what it keeps between two
- * requests, the published answers, is kept as one function instance keeps
- * it; let go with the test's scope.
- */
 export const standing = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
@@ -429,19 +374,16 @@ export const standing = (
       Layer.succeed(HostedEnvironment, NO_KEYS),
       scriptedHarnessLayer((account) => eve.eve(harnessFor(account))),
       github.layer,
-      // A sandbox's calls reach the same fake as GitHub's, through the `fetch` `@vercel/sandbox` sends on.
       sandboxFetchOver(github.respond),
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       Layer.succeed(SentryApp, sentryAppService(undefined, [])),
       ANALYTICS.layer,
     );
-    // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
     const sessions = new Map(
       [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
     );
     const seams = {
-      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
       resolveUserId: (incoming: Request) =>
         requestUserId(
           incoming,
@@ -453,8 +395,6 @@ export const standing = (
             Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
-      // The deployment acting for an account, an agent's starter for another agent's message or the
-      // account a cookie named, which the fake writes down apart from any bearer.
       eveAs: (account: string) => eve.eve(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
@@ -466,11 +406,9 @@ export const standing = (
       agentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
-    // One cache of the kept published answers for both resources that read them, as the hosted router hands it.
     const shared = { ...seams, published: instancePublishedCache() };
     const routed = hostedFetch({
       agentPullRequests: agentPullRequestProcedures(shared),
@@ -488,7 +426,6 @@ export const standing = (
       { disableLogger: true },
     );
     yield* Effect.addFinalizer(() => Effect.promise(() => memberMcp.dispose()));
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, a task's Stop, an agent's transcript, its Pull request tab, and the inbox land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const procedure = publicRequest(request);
@@ -523,21 +460,16 @@ export const standing = (
       Effect.gen(function* () {
         const response = yield* fetch(request);
         const text = yield* Effect.promise(() => response.text());
-        // SAFETY: the group answers JSON; the test compares it as the wire value it is, and an answer
-        // with no body is compared as its text so a failure names what came back.
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
-    /** The member MCP server as an outside MCP client's `fetch` reaches it, its token a bearer's. */
     const mcpFetch = (input: string | URL | Request, init?: RequestInit) =>
       memberMcp.handler(new Request(input, init));
     return { ask, fetch, mcpFetch };
   });
 
-/** The OAuth client the member MCP server's tokens here name, which nothing else reads. */
 const MEMBER_MCP_CLIENT_ID = "member-mcp-test";
 
-/** The member MCP server's admission over the bearers alone: a bearer's account is its token's subject, minted to the test's client; any other is refused. */
 function memberMcpBearers(bearers: ReadonlyMap<string, string>): MemberMcpAuth {
   return {
     verify: (incoming) => {
@@ -550,7 +482,6 @@ function memberMcpBearers(bearers: ReadonlyMap<string, string>): MemberMcpAuth {
   };
 }
 
-/** Where a path the hosted oRPC router answers names its id. */
 const ID_SEGMENT = "{id}";
 
 export function request(
@@ -570,11 +501,9 @@ export function request(
     picture?: string;
     src?: string;
     number?: string;
-    /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
     cookie?: string;
   } = {},
 ): Request {
-  // A path the hosted oRPC router answers names its id as a segment; an old group's reads it from the query.
   const named = path.includes(ID_SEGMENT);
   const url = new URL(
     named && init.id !== undefined ? path.replace(ID_SEGMENT, encodeURIComponent(init.id)) : path,
@@ -593,7 +522,6 @@ export function request(
   if (init.number !== undefined) url.searchParams.set("number", init.number);
   const headers = new Headers();
   if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
-  // Every client of the service names its JSON body so, which the hosted oRPC router reads a body by.
   if (init.body !== undefined) headers.set("content-type", "application/json");
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
   return new Request(url, {
@@ -603,7 +531,6 @@ export function request(
   });
 }
 
-/** An answer read as the wire declares it, failing the test where it is not one. */
 export function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   status: number,
@@ -618,24 +545,12 @@ export function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 
 export const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/** The steps a read held while its agent starts is driven by: past its hold, and under the grace an agent with no turn reads as starting within. */
 const STARTING_READ_STEPS =
   Math.floor(
     (Duration.toMillis(CODER.STARTING_GRACE) - Duration.toMillis(CODER.MESSAGES_HOLD)) /
       Duration.toMillis(CODER.MESSAGES_POLL),
   ) - 1;
 
-/**
- * A held read of a starting agent driven to its answer, each step taken
- * only after a round trip to the test's database. Note that the steps are
- * paced by the database rather than by the loop, because the read reaches
- * its hold only after queries of its own: steps the loop races ahead with
- * either pass the hold before the read waits on it, leaving its join
- * waiting on a clock nothing moves, or, unbounded, carry the clock past the
- * grace so the page reads the agent failed. A round trip queued behind the
- * read's own keeps the two in step, and the bound keeps the clock inside
- * the grace whatever the database's pace.
- */
 export const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   Effect.gen(function* () {
     for (let attempt = 0; attempt < STARTING_READ_STEPS; attempt += 1) {
@@ -649,33 +564,21 @@ export const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
     return yield* Fiber.join(fiber);
   });
 
-/**
- * An owner who holds one task on the repository, its workspace connected to
- * an installation reaching it, another account beside them, and the group
- * over that GitHub and the eve given.
- */
 export const openTask = (
   options: {
     readonly repository?: string | null;
     readonly eve?: ReturnType<typeof fakeEve>;
-    /** What the repository answers on its own paths, for a test of what an agent published. */
     readonly github?: RepositoryScript;
-    /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
     readonly otherToken?: string | null;
-    /** The model a replay's summary is written on; none unless a test names one. */
     readonly summaryModel?: SummaryModelOf;
-    /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
     readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
-    /** The model an untitled inbox thread's title is generated on; none unless a test names one. */
     readonly titleModel?: InboxTitleModelOf;
-    /** Where a request's after-response work goes; run inline, before the answer is read, unless a test keeps it (`keptAfterResponse`). */
     readonly afterResponse?: Layer.Layer<AfterResponse>;
   } = {},
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* otherAccount(options.otherToken);
-    // Our key pays for no coding agent, so both accounts start and message theirs on their own keys.
     yield* connectAgentApiKeys(owner);
     yield* connectAgentApiKeys(other);
     const task = yield* startTask(owner, {
@@ -683,7 +586,6 @@ export const openTask = (
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
     yield* saveDescriptionText(owner, task.id, SAVED);
-    // Both accounts have Descriptions on, so an agent started on the task is handed its description.
     for (const account of [owner, other]) {
       yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
     }
@@ -710,7 +612,6 @@ export const openTask = (
     return { owner, other, task, installation, eve, github, ask, fetch, mcpFetch };
   });
 
-/** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */
 const otherAccount = (token: string | null | undefined) =>
   Effect.gen(function* () {
     if (token === undefined) return yield* openGithubUser();
@@ -726,22 +627,18 @@ const otherAccount = (token: string | null | undefined) =>
     return userId;
   });
 
-/** The pull request an agent published from its branch, as GitHub holds it. */
 export const PUBLISHED = {
   branch: "luke/teammate-invitations",
   number: 12,
   headSha: "c0ffee1",
 } as const;
 
-/** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
-/** The same, the pull request a draft while `draft` says it is, its head the commit given, GitHub's short fixture one unless told. */
 export const publishedPullRequestDrafted =
   (draft: () => boolean, headSha: string = PUBLISHED.headSha): RepositoryScript =>
   (sent) => {
     const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
     const pull = `${repository}/pulls/${PUBLISHED.number}`;
     const commit = `${repository}/commits/${PUBLISHED.headSha}`;
-    // The overview's checks name the head by the ref GitHub keeps on the pull request.
     const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
     switch (new URL(sent.url).pathname) {
       case `${repository}/pulls`:
@@ -783,7 +680,6 @@ export const publishedPullRequestDrafted =
 
 export const publishedPullRequest = publishedPullRequestDrafted(() => false);
 
-/** What GitHub was asked on the way to a repository token: the installation read, its listing and the token minted for it, and the repository's own token. */
 export function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
   const app = `https://api.github.com/app/installations/${installationId}`;
   const mints = sent.filter((one) => one.url === `${app}/access_tokens`);
@@ -800,26 +696,17 @@ export function reachRequests(sent: readonly SentToGitHub[], installationId: num
 export const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
 export const AGENT_PULL_REQUEST_VIEWED = "/api/agents/pull-request-viewed";
 export const AGENT_PULL_REQUEST = "/api/agents/pull-request";
-/** The agent's changes, the files Files changed draws. */
 export const AGENT_CHANGES = "/api/agents/changes";
 export const AGENT_OVERVIEW_PULL_REQUEST = AGENT_OVERVIEW[0];
 
-/** The GraphQL id GitHub gives the published pull request. */
 export const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
 
-/** One GraphQL call as GitHub saw it: the bearer it came under, and its document's words. */
 export interface GraphqlCall {
   readonly authorization: string | null;
   readonly query: string;
   readonly variables: Readonly<Record<string, string | number>>;
 }
 
-/**
- * The repository answering the published pull request's reads as
- * `publishedPullRequest` does, and GitHub's GraphQL endpoint answering each
- * call as `answer` says, every call written down: by default the pull
- * request's id for its read and an empty answer for any mutation.
- */
 export function graphqlAnswering(
   calls: GraphqlCall[],
   answer: (call: GraphqlCall) => Response = (call) =>
@@ -833,7 +720,6 @@ export function graphqlAnswering(
   return (sent) => {
     if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
     const { query, variables } = JSON.parse(sent.body);
-    // The published read's merge-queue ask rides with its REST reads on the App's token, as they do, and is no call the member made.
     if (query.includes(PULL_REQUEST_QUEUED_OPERATION)) {
       return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry: null } } } });
     }
@@ -843,12 +729,10 @@ export function graphqlAnswering(
   };
 }
 
-/** The mutation a GraphQL call made, by the field it named; none for a read. */
 export function mutationOf(call: GraphqlCall): string | undefined {
   return /mutation[^{]*\{\s*(\w+)/u.exec(call.query)?.[1];
 }
 
-/** A message to the agent as the bearer given, with the body given. */
 export function messageAs(
   bearer: string | undefined,
   agentId: string,
@@ -857,7 +741,6 @@ export function messageAs(
   return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });
 }
 
-/** The words of each user row of a transcript page, in order. */
 export function userTexts(page: {
   readonly messages: readonly AgentTranscriptMessage[];
 }): readonly (string | undefined)[] {
@@ -869,7 +752,6 @@ export function userTexts(page: {
     });
 }
 
-/** An agent started on the task, with its conversation as the writer targets it. */
 export const startedAgent = (
   owner: string,
   taskId: string,
@@ -886,7 +768,6 @@ export const startedAgent = (
     return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
   });
 
-/** The same, under a name a suite with a `startedAgent` of its own still reaches. */
 export const startedAgentOf = startedAgent;
 
 export function startAs(
@@ -906,20 +787,16 @@ export const INBOX_ITEM_READ = "/api/inbox/{id}/read";
 export const INBOX_CLOSE = "/api/inbox/{id}/close";
 export const INBOX_READ = "/api/inbox/read";
 
-/** A post as the agent's inbox tool hands the store one. */
 export type ThreadPost = Parameters<typeof postInboxThread>[1];
 
-/** The id of the message whose ask the item's thread holds open, which an answer names. */
 export const openAskOf = (item: InboxItem): string => {
   const asking = item.thread?.find((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
   assert.ok(asking, "the item holds an ask open");
   return asking.id;
 };
 
-/** The first bytes of a PNG, as a screenshot's file starts. */
 export const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
-/** A PNG whose header states its size, 2 by 1, as a conversation keeps a picture. */
 export const SIZED_PNG = Uint8Array.from([
   ...PNG,
   ...[0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0],
@@ -927,7 +804,6 @@ export const SIZED_PNG = Uint8Array.from([
 
 export const AGENT_PICTURE = "/api/agents/picture";
 
-/** A picture a tool answered: its bytes, the type they were sniffed to be, and its size; synthetic, as the store keeps what it is handed. */
 export const picture = (mark: number) => ({
   bytes: Uint8Array.from([...PNG, mark]),
   contentType: INBOX_IMAGE_TYPE.PNG,
@@ -935,7 +811,6 @@ export const picture = (mark: number) => ({
   height: 720,
 });
 
-/** A row of an agent's transcript as the relay leaves it, written straight to the store at the sequence given, answering its id. */
 export const transcriptRow = (
   agent: { readonly userId: string; readonly conversationId: string },
   seq: number,
@@ -952,7 +827,6 @@ export const transcriptRow = (
           seq,
           clientId: randomUUID(),
           role,
-          // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
           parts: parts as never,
           metadata:
             role === MESSAGE_ROLE.USER
@@ -967,7 +841,6 @@ export const transcriptRow = (
 
 export const text = (words: string) => ({ type: "text", text: words });
 
-/** A message as eve's receipt lists it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
 export function receiptOf(handed: EveMessage["message"] | undefined): MessageReceivedPart[] {
   assert.ok(Array.isArray(handed), "the message carried parts");
   return handed.flatMap((part): MessageReceivedPart[] => {
@@ -978,7 +851,6 @@ export function receiptOf(handed: EveMessage["message"] | undefined): MessageRec
   });
 }
 
-/** The first message the newest session opened on, read back into its brief, its replay, and its note. */
 export function openedParts(eve: ReturnType<typeof fakeEve>) {
   const message = eve.opened.at(-1)?.message.message;
   if (message === undefined || Array.isArray(message)) {
@@ -987,7 +859,6 @@ export function openedParts(eve: ReturnType<typeof fakeEve>) {
   return { text: message, parts: firstMessageParts(message) };
 }
 
-/** An agent started on the owner's task, its session claimed, and its first turn where asked. */
 export const messagedAgent = (
   eve: ReturnType<typeof fakeEve>,
   turn: { readonly running: boolean } | undefined,
@@ -1003,7 +874,6 @@ export const messagedAgent = (
     (opened) => agentStartedOn(opened, eve, turn),
   );
 
-/** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `messagedAgent` starts the first. */
 export const agentStartedOn = (
   opened: Effect.Success<ReturnType<typeof openTask>>,
   eve: ReturnType<typeof fakeEve>,
@@ -1037,7 +907,6 @@ export const agentStartedOn = (
         trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
-      // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
       const taken = yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
       assert.equal(Result.getOrUndefined(taken)?.length, 1);
       if (!turn.running) {
@@ -1052,7 +921,6 @@ export const agentStartedOn = (
         });
       }
     }
-    /** The transcript as the owner reads it now: the developer's lines, and the status. */
     const transcript = () =>
       Effect.map(
         opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
@@ -1061,7 +929,6 @@ export const agentStartedOn = (
           return { lines: userTexts(page), status: page.status };
         },
       );
-    /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
     const sent = (text: string, clientKey = randomUUID()) =>
       Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
         readAnswer(agentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
@@ -1069,5 +936,4 @@ export const agentStartedOn = (
     return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
   });
 
-/** Where an agent's Stop lands. */
 export const AGENT_STOP = "/api/agents/stop";

@@ -13,12 +13,9 @@ import {
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
-/** What the sweep over the queued sessions' sandboxes answers. */
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
-/** What the sweep over the running native sandboxes answers. */
 const NATIVE: NativeSandboxSweepOutcome = { lost: 1 };
 
-/** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
   authorization: string | null = `Bearer ${Redacted.value(CRON_SECRET)}`,
   method = "GET",
@@ -29,7 +26,6 @@ function sweepRequest(
   });
 }
 
-/** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
   purged: number[];
   abandoned: number[];
@@ -151,7 +147,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   return { options, recorded };
 }
 
-/** The sweep over a client that refuses every statement — the fakes above stand in for every query. */
 function sweep(options: MaintenanceSweepOptions) {
   return Effect.flatMap(Effect.provide(handleMaintenanceSweep(options), noDatabase), (response) =>
     Effect.promise(async () => ({ status: response.status, body: await response.json() })),
@@ -278,7 +273,6 @@ it.effect(
       const { options, recorded } = sweepOptions({
         sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
         sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
-        // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
           run: (run) =>
             run.pipe(

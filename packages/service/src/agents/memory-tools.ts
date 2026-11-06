@@ -17,32 +17,6 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { type AgentCall, callerAgent, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
-/**
- * memory-tools.ts -- a coding agent's `save_memory` and `search_memory`: the workspace's shared memory of settled facts, kept and searched as the agent works.
- *
- * The agent decides what is worth keeping and when to look, and nothing asks
- * first; Settings › Memory is where members read and forget what was kept.
- * Both tools act in the workspace the agent reaches agents and tasks in, and
- * keep a memory as the words of the member who started it, both read from
- * the service's own record of the agent (`runAgentRemember`,
- * `runAgentRecall`); the model names neither, so no input carries a
- * workspace or an account. Every member's agents in the workspace share the
- * one, and no agent of another workspace reads it. Only a root coding
- * agent is offered them, never a worker handed one job, since what the
- * workspace keeps is the judgment of an agent that heard its developer. A
- * memory is prior context, not a rule: the developer's words now win, and a
- * memory they contradict is corrected in place through `replaces`. A keep
- * and a search are the ones every surface makes
- * (`../accounts/workspace-memories.ts`), so words that look like a
- * credential are refused before the store is reached, and no key, token, or
- * password is ever kept; and a turn an automation opened
- * or one that read the web keeps nothing (`memory-provenance.ts`), since
- * neither's words are a member's. Every outcome, a store that
- * cannot be reached included, is a result the model reads, so a memory that
- * fails never fails the turn.
- */
-
-/** What a memory call acts in: the agent's workspace, and the member whose words it keeps. */
 export interface MemoryCall {
   readonly workspaceId: string;
   readonly userId: string;
@@ -75,7 +49,6 @@ const RECALL_INPUT = Schema.Struct({
 const readRemember = Schema.decodeUnknownResult(REMEMBER_INPUT);
 const readRecall = Schema.decodeUnknownResult(RECALL_INPUT);
 
-/** Why a memory call did nothing, in words the model can act on. */
 const MEMORY_REFUSAL = {
   UNREADABLE_REMEMBER: `Not remembered: give the memory as text of at most ${MEMORY_BOUNDS.MAX_CHARS} characters.`,
   UNREADABLE_RECALL: `Not recalled: give the query as text of at most ${MEMORY_BOUNDS.MAX_QUERY_CHARS} characters.`,
@@ -92,7 +65,6 @@ const MEMORY_REFUSAL = {
   OFF: "Memory is off for this agent's developer; carry on without it.",
 } as const;
 
-/** The tools as a coding agent is offered them: each its name, its words, and its input schema. */
 export const SAVE_MEMORY_TOOL = {
   name: AGENT_TOOL.SAVE_MEMORY,
   description:
@@ -123,11 +95,6 @@ export const SEARCH_MEMORY_TOOL = {
   inputSchema: RECALL_INPUT,
 } as const;
 
-/**
- * Whether the member turned Memory on (`EXPERIMENT.MEMORY`): what decides
- * whether their agents are offered `save_memory` and `search_memory` and told of the
- * memory. Where it cannot be read, it is off, logged for the operator.
- */
 export function memoryOnFor(userId: string): Effect.Effect<boolean, never, DatabaseServices> {
   return accountExperimentOn(userId, EXPERIMENT.MEMORY).pipe(
     Effect.tapError(logStoreFailure),
@@ -139,7 +106,6 @@ function rejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** A memory as the model reads it. */
 function memoryRecord(memory: MemorySummary): WireRecord {
   return {
     id: memory.id,
@@ -148,7 +114,6 @@ function memoryRecord(memory: MemorySummary): WireRecord {
   };
 }
 
-/** A store that could not be reached is the one refusal, logged for the operator and said to the model, so the turn carries on. */
 const orUnavailable = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
 ): Effect.Effect<WireRecord, never, R> =>
@@ -156,7 +121,6 @@ const orUnavailable = <R>(
     Effect.as(logStoreFailure(failure), rejected(MEMORY_REFUSAL.UNAVAILABLE)),
   );
 
-/** Each refusal of a keep in the model's words; an account no member of the workspace is none a caller that read its workspace meets, so the store is said to be down. */
 const SAVE_REFUSAL_WORDS = {
   [WORKSPACE_MEMORY_SAVE.NOT_MEMBER]: MEMORY_REFUSAL.UNAVAILABLE,
   [WORKSPACE_MEMORY_SAVE.CREDENTIAL]: MEMORY_REFUSAL.CREDENTIAL,
@@ -164,7 +128,6 @@ const SAVE_REFUSAL_WORDS = {
   [WORKSPACE_MEMORY_SAVE.FULL]: MEMORY_REFUSAL.FULL,
 } as const;
 
-/** One call of `save_memory` in the call's workspace, as the member's words, kept by the one keep every surface makes (`saveWorkspaceMemory`): the memory kept or corrected, or why nothing was. */
 export function runRemember(
   call: MemoryCall,
   input: UnparsedWireValue,
@@ -187,7 +150,6 @@ export function runRemember(
   );
 }
 
-/** One call of `search_memory` in the call's workspace, by the one search every surface makes (`searchWorkspaceMemories`): its memories the query finds, and how many it holds. */
 export function runRecall(
   call: MemoryCall,
   input: UnparsedWireValue,
@@ -209,16 +171,6 @@ export function runRecall(
   );
 }
 
-/**
- * A coding agent's memory call: the workspace the agent reaches tasks in and
- * its starter, read from the service's record of the agent as every agent
- * tool reads them (`callerWorkspace`), then the call itself. An agent whose
- * workspace cannot be read for its starter now keeps and recalls nothing, and
- * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
- * and our MCP server (`workspace-mcp/tools.ts`) list neither tool to such an
- * agent, but a harness may still call a tool it was not listed, or Memory
- * may go off mid-run, so the refusal stands here as well.
- */
 function agentMemory(
   call: AgentCall,
   run: (memory: MemoryCall) => Effect.Effect<WireRecord, never, DatabaseServices>,
@@ -228,7 +180,6 @@ function agentMemory(
     Effect.gen(function* () {
       const userId = callerUserId(call.caller);
       if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
-      // A refusal reads the calling agent's turn; a member's call is their own words, and has none.
       const agent = callerAgent(call.caller);
       const refused =
         refusal === undefined || agent === undefined ? undefined : yield* refusal(agent);
@@ -240,7 +191,6 @@ function agentMemory(
   );
 }
 
-/** One call of `save_memory` from a coding agent, refused on a turn whose words are no member's (`rememberRefusal`). */
 export function runAgentRemember(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -248,7 +198,6 @@ export function runAgentRemember(
   return agentMemory(call, (memory) => runRemember(memory, input), rememberRefusal);
 }
 
-/** One call of `search_memory` from a coding agent. */
 export function runAgentRecall(
   call: AgentCall,
   input: UnparsedWireValue,

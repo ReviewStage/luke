@@ -1,41 +1,3 @@
-/**
- * pull-requests.ts -- what a coding agent published, as GitHub holds it: a pull request by number or by its branch, a branch, the checks on a head, and a pull request's changed files.
- *
- * Every read runs on an installation token the App minted for the agent's
- * one repository on its workspace's installation (`github-app.ts`'s
- * `repositoryPullRequestToken`), the same reach that admits the agent's
- * checkout: the installation's own permissions bound it. A link to a pull
- * request reads it by number on the same mint, for a repository its
- * workspace's installation reaches (`github-procedures.ts`). The requests
- * compose over the App module's own kit (`githubRead`, `send`, `readBody`)
- * so a token leaves this module no more than it leaves that one. The checks are read as one word for a dot: GitHub's
- * check runs and its older commit statuses together, since a workflow
- * reports as the one and a deployment may report as the other, and a
- * repository where the App may read neither reads as having none, with a
- * warning, rather than failing the whole answer. A pull request's files
- * are read a hundred to a page up to the changes bound, each with its
- * patch where GitHub sends one; GitHub sends none for a file that is not
- * text, which it counts as changing no line, or for one whose patch is too
- * large to send, and the file says which rather than reading as unchanged.
- * Who a pull request names is read beside its files: who opened it, its
- * reviewers and where each stands, who authored its commits, and its
- * reviews that said something, each the first page GitHub answers. And a
- * review's inline comments are read, by file and line, for the message
- * that tells the agent on the pull request of that review (`agent-wakes.ts`).
- * A pull request's overview, which its Pull request tab draws, is read in
- * three reads that each land on their own, so the tab draws each part as it
- * lands rather than waiting on the slowest: the pull request whole, its
- * description and its mergeability among it; every check on its head, one
- * by one, read by the pull request's own head ref so it waits on no read of
- * the head's commit, and beside them its head's deployments in one GraphQL
- * read; and its comments, its reviews, and its review threads, made one
- * conversation in time order. The pull request's read carries its labels
- * as GitHub answers them, and, for one still open, the stack it stands in
- * (`pull-request-stack.ts`), worked out from GraphQL reads of the
- * repository's open pull requests asked beside it, so the stack costs no
- * wait.
- */
-
 import { githubAppAvatarUrl, githubAvatarUrl } from "@repo/features/account-picture";
 import {
   type AgentChangedFile,
@@ -84,7 +46,6 @@ import {
 import { rateLimited } from "./github-rate-gate.js";
 import { type StackCandidate, type StackEntry, stackOf } from "./pull-request-stack.js";
 
-/** A pull request as much as the agent's pill and its summary row draw: where it stands, its head, and its size. */
 export interface GitHubPullRequest {
   readonly number: number;
   readonly title: string;
@@ -95,86 +56,66 @@ export interface GitHubPullRequest {
   readonly additions: number;
   readonly deletions: number;
   readonly changedFiles: number;
-  /** The login of who opened it, where GitHub named one, their avatar where GitHub's avatar host serves it, and whether they are an App's bot. */
   readonly author?: string;
   readonly authorAvatarUrl?: string;
   readonly authorBot?: boolean;
-  /** When it was opened, and when it was merged or closed where it was, as epoch milliseconds, where GitHub named them. */
   readonly openedAt?: number;
   readonly mergedAt?: number;
   readonly closedAt?: number;
-  /** The branch it merges into, and that branch's head as GitHub last counted it, where GitHub named them. */
   readonly baseRef?: string;
   readonly baseSha?: string;
-  /** Its labels, each by its name and its color as GitHub's six hex digits. */
   readonly labels?: readonly GitHubLabel[];
-  /** How many comments it holds, on its conversation and its diff together, where GitHub counted them. */
   readonly comments?: number;
-  /** How many commits it holds, where GitHub counted them. */
   readonly commits?: number;
-  /** Its description as its author wrote it, in Markdown, where it has one. */
   readonly body?: string;
 }
 
-/** A label as GitHub names it: its name and its color, six hex digits with no `#`. */
 interface GitHubLabel {
   readonly name: string;
   readonly color: string;
 }
 
-/** What a read fails with: GitHub unreachable or answering off its shape. */
 export type PullRequestReadFailure = GitHubUnavailable;
 
 type Read<A> = Effect.Effect<A, PullRequestReadFailure, HttpClient.HttpClient>;
 
-/** GitHub's own two words for an open or closed pull request. */
 const GITHUB_PULL_STATE = { OPEN: "open", CLOSED: "closed" } as const;
 
-/** How many pull requests of a branch are asked for: the newest alone, since a branch has at most one open and the newest is the one that stands for it. */
 const NEWEST_ONE = "1";
 const SORT = { CREATED: "created", DESCENDING: "desc" } as const;
 const ANY_STATE = "all";
 
-/** GitHub pages check runs and statuses a hundred to a page; a head with more is read as its first hundred. */
 const CHECKS_PER_PAGE = "100";
 
-/** A commit status's state that reads as failing. */
 const FAILING_STATUS_STATES: ReadonlySet<string> = new Set(["failure", "error"]);
 
-/** The one check-run status that has ended; the others are queued or in progress. */
 const COMPLETED = "completed";
 const PENDING_STATUS_STATE = "pending";
 
-/** A check run's conclusion as a head's check names it, by GitHub's own word (`GITHUB_CHECK_CONCLUSION`). */
 const RUN_CONCLUSION: ReadonlyMap<string, GitHubCheckConclusion> = new Map(
   Object.values(GITHUB_CHECK_CONCLUSION).map((conclusion) => [conclusion, conclusion]),
 );
 
-/** How a commit status that has ended reads as a check run's conclusion; one still pending has none. */
 const STATUS_CONCLUSION: ReadonlyMap<string, GitHubCheckConclusion> = new Map([
   ["success", GITHUB_CHECK_CONCLUSION.SUCCESS],
   ["failure", GITHUB_CHECK_CONCLUSION.FAILURE],
   ["error", GITHUB_CHECK_CONCLUSION.FAILURE],
 ]);
 
-/** What GitHub names a commit status set with no context (https://docs.github.com/en/rest/commits/statuses#create-a-commit-status). */
 const DEFAULT_STATUS_CONTEXT = "default";
 
-/** Who opened a pull request or an issue, as GitHub names them on it: their login, and, where it sends them, their kind and their avatar. */
 export const GitHubOpenerSchema = Schema.Struct({
   login: Schema.String,
   type: Schema.optional(Schema.String),
   avatar_url: Schema.optional(Schema.String),
 });
 
-/** Who opened a pull request or an issue, as its read names them: their login, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; none of them where GitHub named no one. */
 interface OpenerFields {
   readonly author?: string;
   readonly authorAvatarUrl?: string;
   readonly authorBot?: boolean;
 }
 
-/** Who opened a pull request or an issue, as its link's card names them; nothing where GitHub named no one. */
 export function openerFieldsOf(
   user: typeof GitHubOpenerSchema.Type | null | undefined,
 ): OpenerFields {
@@ -198,9 +139,7 @@ const PullRequestSchema = Schema.Struct({
   deletions: Schema.Number,
   changed_files: Schema.Number,
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
-  /** Who opened it; null where their account is gone. */
   user: Schema.optional(Schema.NullOr(GitHubOpenerSchema)),
-  // Note that what follows is read where GitHub sends it, which its one pull request's read always does, and left out where it does not.
   created_at: Schema.optional(Schema.String),
   merged_at: Schema.optional(Schema.NullOr(Schema.String)),
   closed_at: Schema.optional(Schema.NullOr(Schema.String)),
@@ -214,7 +153,6 @@ const PullRequestSchema = Schema.Struct({
   body: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
-/** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
 const ListedPullRequestSchema = Schema.Struct({ number: Schema.Number });
 const ListedPullRequestsSchema = Schema.Array(ListedPullRequestSchema);
 
@@ -231,13 +169,10 @@ const CheckRunsSchema = Schema.Struct({
   ),
 });
 
-/** GitHub pages a pull request's files a hundred to a page. */
 const FILES_PER_PAGE = 100;
 
-/** A git object's name, as GitHub spells one: forty lowercase hex digits. */
 const GIT_OBJECT = /^[0-9a-f]{40}$/u;
 
-/** GitHub's own words for what became of a file; any it adds reads as changed in place. */
 const GITHUB_FILE_STATUS = new Map<string, ChangedFileStatus>([
   ["added", CHANGED_FILE_STATUS.ADDED],
   ["removed", CHANGED_FILE_STATUS.DELETED],
@@ -268,7 +203,6 @@ const CombinedStatusSchema = Schema.Struct({
   ),
 });
 
-/** A GitHub account as a pull request, a review, or a commit names it. */
 const GitHubAccountSchema = Schema.Struct({
   login: Schema.String,
   id: Schema.Number,
@@ -276,13 +210,11 @@ const GitHubAccountSchema = Schema.Struct({
   avatar_url: Schema.optionalKey(Schema.String),
 });
 
-/** A pull request read for who it names: who opened it, and who it still asks for a review. */
 const PullRequestPeopleSchema = Schema.Struct({
   user: Schema.NullOr(GitHubAccountSchema),
   requested_reviewers: Schema.optionalKey(Schema.Array(GitHubAccountSchema)),
 });
 
-/** A pull request's reviews, oldest first, as GitHub lists them. */
 const ReviewsSchema = Schema.Array(
   Schema.Struct({
     id: Schema.optionalKey(Schema.Number),
@@ -296,7 +228,6 @@ const ReviewsSchema = Schema.Array(
   }),
 );
 
-/** GitHub's own words for a review's standing; a pending review is its author's draft, which nobody else sees. */
 const GITHUB_REVIEW_STATE = new Map<string, ReviewState>([
   ["APPROVED", REVIEW_STATE.APPROVED],
   ["CHANGES_REQUESTED", REVIEW_STATE.CHANGES_REQUESTED],
@@ -304,36 +235,23 @@ const GITHUB_REVIEW_STATE = new Map<string, ReviewState>([
   ["COMMENTED", REVIEW_STATE.COMMENTED],
 ]);
 
-/** The kind GitHub gives an App's own bot account. */
 const GITHUB_BOT_TYPE = "Bot";
 
-/** The suffix GitHub gives an App's bot's login. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
-/** How many reviews a page asks for: GitHub's most. */
 const PEOPLE_PER_PAGE = 100;
 
-/**
- * The most pages each listing is read to. GitHub lists a pull request's
- * reviews oldest first, and a reviewer stands by their newest, so its
- * reviews are read to their end, bounded only where no pull request goes,
- * three thousand reviews, rather than holding the changes on a history that
- * does not end.
- */
 const PEOPLE_MAX_PAGES = { REVIEWS: 30 } as const;
 
-/** A path segment as GitHub takes it, so a branch spelled with a slash stays one branch. */
 function segment(value: string): string {
   return encodeURIComponent(value);
 }
 
-/** The repository's own path under the API, each half a segment of its own. */
 export function repositoryPath(fullName: string): string {
   const [owner = "", name = ""] = fullName.split("/");
   return `/repos/${segment(owner)}/${segment(name)}`;
 }
 
-/** One read sent on the token, its answer read and closed; not found is none, and any other status the status it is. */
 function readOptional<A>(
   request: HttpClientRequest.HttpClientRequest,
   schema: Schema.Codec<A, unknown>,
@@ -349,14 +267,12 @@ function readOptional<A>(
   );
 }
 
-/** A moment GitHub spells as ISO 8601, as epoch milliseconds; none where it spells none or one that does not parse. */
 function momentOf(spelled: string | null | undefined): number | undefined {
   if (spelled == null) return undefined;
   const at = Date.parse(spelled);
   return Number.isNaN(at) ? undefined : at;
 }
 
-/** How many comments a pull request holds, on its conversation and its diff together; none where GitHub counted neither. */
 function commentCountOf(record: typeof PullRequestSchema.Type): number | undefined {
   if (record.comments === undefined && record.review_comments === undefined) return undefined;
   return (record.comments ?? 0) + (record.review_comments ?? 0);
@@ -397,7 +313,6 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
   };
 }
 
-/** One pull request of the repository by number, whole; none where the repository has no such one. */
 export function pullRequestByNumber(
   token: Redacted.Redacted,
   fullName: string,
@@ -412,11 +327,6 @@ export function pullRequestByNumber(
   );
 }
 
-/**
- * The newest pull request whose head is the branch, open or not, read
- * whole; none where the branch has had none. The listing names the number
- * and the number names the rest, since the sizes travel only on the one.
- */
 export function pullRequestOfBranch(
   token: Redacted.Redacted,
   fullName: string,
@@ -440,7 +350,6 @@ export function pullRequestOfBranch(
   });
 }
 
-/** Whether the repository holds the branch now. */
 export function branchStands(
   token: Redacted.Redacted,
   fullName: string,
@@ -455,12 +364,6 @@ export function branchStands(
   );
 }
 
-/**
- * What a head's check is: a check run, which only an App makes
- * (https://docs.github.com/en/rest/checks/runs#create-a-check-run), or a
- * commit status, which anyone who may push to the repository may set with
- * any context and page, and whose combined read does not say who set it.
- */
 export const HEAD_CHECK_KIND = {
   RUN: "run",
   STATUS: "status",
@@ -468,13 +371,6 @@ export const HEAD_CHECK_KIND = {
 
 type HeadCheckKind = (typeof HEAD_CHECK_KIND)[keyof typeof HEAD_CHECK_KIND];
 
-/**
- * One check on a head: what it is, its check run's name or its status's
- * context, how it ended, none while it is still to finish, and its page,
- * where GitHub names one. Note that it carries no output the check wrote,
- * because a check's title, summary, and annotations are words its line never
- * carries.
- */
 export interface HeadCheck {
   readonly kind: HeadCheckKind;
   readonly name: string;
@@ -482,14 +378,6 @@ export interface HeadCheck {
   readonly url: string | null;
 }
 
-/**
- * The checks on one head, read together: whether any failed, whether any is
- * still to finish, whether there are any at all, each one's outcome as it
- * stands, by GitHub's id of the check run (a run again is a run of its own
- * id) or the status's context and when it was set, sorted so the same checks
- * always read the same, and each check, its check runs first, as GitHub
- * lists them.
- */
 export interface HeadChecks {
   readonly failing: boolean;
   readonly pending: boolean;
@@ -498,23 +386,16 @@ export interface HeadChecks {
   readonly checks: readonly HeadCheck[];
 }
 
-/** Whether a head's check failed: it ended with a conclusion that reads as failing, as a commit status that failed or errored does. */
 export function headCheckFailed(check: HeadCheck): boolean {
   return check.conclusion !== null && isFailingConclusion(check.conclusion);
 }
 
-/** What one set of outcomes says: failing beats pending beats passing, and nothing at all is none. */
 function summaryOf(checks: HeadChecks): CheckSummary {
   if (checks.failing) return CHECK_SUMMARY.FAILING;
   if (checks.pending) return CHECK_SUMMARY.PENDING;
   return checks.any ? CHECK_SUMMARY.PASSING : CHECK_SUMMARY.NONE;
 }
 
-/**
- * Whether a 403 is the App not being given what the read needs, rather than
- * GitHub's rate limit, which answers 403 too: a limit is a read GitHub did
- * not answer, never a head with no checks.
- */
 function forbiddenNotLimited(
   response: HttpClientResponse.HttpClientResponse,
 ): Effect.Effect<boolean> {
@@ -523,13 +404,11 @@ function forbiddenNotLimited(
     : Effect.succeed(false);
 }
 
-/** How a check run ended, where it has; none while it runs, or for a conclusion GitHub adds that the wire does not name. */
 function runConclusionOf(status: string, conclusion: string | null): GitHubCheckConclusion | null {
   if (status !== COMPLETED || conclusion === null) return null;
   return RUN_CONCLUSION.get(conclusion) ?? null;
 }
 
-/** A head's checks read as one answer, or as none where the App may not read them, said once in the log. */
 function readChecks<A>(
   what: string,
   request: HttpClientRequest.HttpClientRequest,
@@ -560,14 +439,6 @@ function readChecks<A>(
   );
 }
 
-/**
- * The checks on one head: its check runs, the latest of each as GitHub lists
- * them by default
- * (https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference),
- * and its commit statuses, the latest of each context
- * (https://docs.github.com/en/rest/commits/statuses#get-the-combined-status-for-a-specific-reference),
- * together: the set the pull request's checks count.
- */
 export function headChecksOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -624,7 +495,6 @@ export function headChecksOf(
   }));
 }
 
-/** The checks on one head as one word: its check runs and its commit statuses together. */
 export function checkSummaryOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -633,14 +503,6 @@ export function checkSummaryOf(
   return Effect.map(headChecksOf(token, fullName, sha), summaryOf);
 }
 
-/**
- * One file as GitHub lists it, as the wire carries it, with the git object
- * its contents after are. A file GitHub sent
- * no patch for changed no line where it is not text, and was too large to
- * send otherwise; a patch past the bound is left out on the same terms. A
- * file moved and left as it was has no patch either, and changed no line,
- * so it carries an empty one rather than reading as binary.
- */
 function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): AgentChangedFile {
   const status = GITHUB_FILE_STATUS.get(file.status) ?? CHANGED_FILE_STATUS.MODIFIED;
   const movedOnly = status === CHANGED_FILE_STATUS.RENAMED && file.changes === 0;
@@ -661,26 +523,17 @@ function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): Agen
     deletions: file.deletions,
     patch: omitted === null ? patch : null,
     omitted,
-    // Note that a removed file names no contents after, and a value not shaped as an object's name is left out.
     ...(status === CHANGED_FILE_STATUS.DELETED || file.sha == null || !GIT_OBJECT.test(file.sha)
       ? undefined
       : { blobSha: file.sha }),
   };
 }
 
-/** A pull request's files as GitHub lists them, up to the changes bound, and whether there were more. */
 export interface PullRequestFiles {
   readonly files: readonly AgentChangedFile[];
   readonly truncated: boolean;
 }
 
-/**
- * The pull request's changed files, a page at a time until a page comes
- * back short or the bound is reached, cut short where the pull request
- * counts more files than were read; none where the repository has no such
- * pull request. `changedFiles` is the count the pull request's own read
- * answered.
- */
 export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -700,20 +553,12 @@ export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles"
   return { files: kept, truncated: pullRequest.changedFiles > kept.length };
 });
 
-/** A pull request's commits as GitHub lists them, read for their messages alone. */
 const PullRequestCommitsSchema = Schema.Array(
   Schema.Struct({ commit: Schema.Struct({ message: Schema.String }) }),
 );
 
-/** The most commits a pull request's messages are read for: GitHub's one page. */
 const MAX_COMMIT_MESSAGES = 100;
 
-/**
- * The messages of a pull request's commits, oldest first, as far as its
- * first page of them; none where the repository has no such pull request.
- * Note that one page is read and no more, because a pull request's own
- * words and its diff tell most of its story, and the messages only help.
- */
 export function pullRequestCommitMessages(
   token: Redacted.Redacted,
   fullName: string,
@@ -727,21 +572,13 @@ export function pullRequestCommitMessages(
   );
 }
 
-/** Two commits compared, as far as where they part. */
 const CompareSchema = Schema.Struct({ merge_base_commit: Schema.Struct({ sha: Schema.String }) });
 
-/** The commits a pull request's changed files are read whole at: its head, and where it parts from its base branch, each where it was read. */
 export interface ReadCommits {
   readonly headSha?: string;
   readonly baseSha?: string;
 }
 
-/**
- * Whether a changed file is read whole at the base: one that stood before
- * the pull request, changed in place, moved, or removed, and is an image,
- * drawn as its pictures, or text whose patch was too large to send, drawn
- * from its texts on both sides once asked.
- */
 function readAtBase(file: AgentChangedFile): boolean {
   if (file.status === CHANGED_FILE_STATUS.ADDED) return false;
   return (
@@ -750,17 +587,6 @@ function readAtBase(file: AgentChangedFile): boolean {
   );
 }
 
-/**
- * The commits the files are read whole at: the pull request's head, and,
- * only where a file is read at the base (`readAtBase`), where its head and
- * its base branch part, the merge base GitHub counts the files' changes
- * from, read off one compare of the two asking for a single commit and
- * file, since GitHub pages the rest. Note that the base branch's head is
- * never answered in the merge base's place, because a base branch that
- * changed the same file since would draw a before the pull request never
- * had; a compare that does not land answers no merge base, and the window
- * draws the after alone.
- */
 export const readCommits = /* @__PURE__ */ Effect.fn("web/readCommits")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -788,7 +614,6 @@ export const readCommits = /* @__PURE__ */ Effect.fn("web/readCommits")(function
   });
 });
 
-/** A GitHub account as the people a pull request names hold it: GitHub's id, its login, whether it is an App's bot, and its avatar where GitHub's avatar host serves it. */
 export interface GitHubAccount {
   readonly id: number;
   readonly login: string;
@@ -796,13 +621,11 @@ export interface GitHubAccount {
   readonly avatarUrl: string | undefined;
 }
 
-/** A reviewer and where they stand. */
 export interface GitHubReviewer {
   readonly account: GitHubAccount;
   readonly state: ReviewState;
 }
 
-/** A review that said something: who, where it left them, the start of its words, and when. */
 export interface GitHubReviewComment {
   readonly account: GitHubAccount;
   readonly state: ReviewState;
@@ -810,14 +633,12 @@ export interface GitHubReviewComment {
   readonly at: number;
 }
 
-/** Who a pull request names: who opened it, its reviewers, and its reviews that said something, each up to the bound. */
 export interface PullRequestPeople {
   readonly author: GitHubAccount | undefined;
   readonly reviewers: readonly GitHubReviewer[];
   readonly comments: readonly GitHubReviewComment[];
 }
 
-/** An account as GitHub records it, as the people hold it: a bot by its kind or its login's suffix. */
 function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
   return {
     id: record.id,
@@ -827,23 +648,16 @@ function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
   };
 }
 
-/** Each account once, the first time it stands, up to the bound. */
 function distinctAccounts(accounts: readonly GitHubAccount[]): readonly GitHubAccount[] {
   const seen = new Map<number, GitHubAccount>();
   for (const account of accounts) if (!seen.has(account.id)) seen.set(account.id, account);
   return [...seen.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** The start of a review's words, its runs of space one space, cut at the bound; the window fades what it cuts. */
 function excerptOf(body: string): string {
   return body.replace(/\s+/gu, " ").trim().slice(0, CHANGES_BOUNDS.MAX_EXCERPT_CHARS).trimEnd();
 }
 
-/**
- * Where each reviewer stands, by their newest review that decides, else as
- * having commented; one the pull request still asks for a review stands
- * asked, as GitHub shows a re-requested reviewer, whatever they said before.
- */
 function reviewersOf(
   reviews: typeof ReviewsSchema.Type,
   requested: readonly GitHubAccount[],
@@ -854,7 +668,6 @@ function reviewersOf(
     if (review.user === null || state === undefined) continue;
     const account = accountOf(review.user);
     const held = standing.get(account.id);
-    // Note that a comment after a decision leaves the decision standing, as GitHub reads it.
     if (state === REVIEW_STATE.COMMENTED && held !== undefined) continue;
     standing.set(account.id, { account, state });
   }
@@ -863,7 +676,6 @@ function reviewersOf(
   return [...standing.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** The newest reviews that said something, up to the bound, oldest first; a draft review and one by nobody GitHub names are left out. */
 function commentsOf(reviews: typeof ReviewsSchema.Type): readonly GitHubReviewComment[] {
   return reviews
     .flatMap((review) => {
@@ -883,14 +695,12 @@ function commentsOf(reviews: typeof ReviewsSchema.Type): readonly GitHubReviewCo
     .slice(-CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** No one: what a pull request the repository no longer holds names. */
 const NOBODY: PullRequestPeople = {
   author: undefined,
   reviewers: [],
   comments: [],
 };
 
-/** Every page of a listing, oldest first, until one comes back short or the bound is reached; none where the pull request is not found. */
 const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   token: Redacted.Redacted,
   path: string,
@@ -911,13 +721,6 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   return listed;
 });
 
-/**
- * Who the pull request names, read on the token in two asks at once: the
- * pull request itself, for who opened it and who it still asks for a
- * review; and every page of its reviews, since a reviewer stands by their
- * newest. Each list is cut at the bound only once read whole. Nobody where
- * the repository holds no such pull request.
- */
 export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -940,7 +743,6 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   };
 });
 
-/** One inline comment of a review: the file and the line it is on, where GitHub still places it, its words, and its page. */
 export interface GitHubReviewLineComment {
   readonly path: string;
   readonly line: number | undefined;
@@ -948,7 +750,6 @@ export interface GitHubReviewLineComment {
   readonly url: string;
 }
 
-/** A review's inline comments, as GitHub lists them; a comment on a line since changed away keeps the line it was made on. */
 const ReviewLineCommentsSchema = Schema.Array(
   Schema.Struct({
     path: Schema.String,
@@ -959,18 +760,8 @@ const ReviewLineCommentsSchema = Schema.Array(
   }),
 );
 
-/**
- * The most pages of a review's inline comments read, a hundred to a page:
- * three hundred comments outrun any message they are told in, so a review
- * longer still is cut there with the note that sends the agent to `gh`.
- */
 const REVIEW_COMMENTS_MAX_PAGES = 3;
 
-/**
- * The inline comments of one review of a pull request, in the order GitHub
- * lists them, each by its file and line, read page by page up to the bound;
- * none where the repository holds no such review.
- */
 export const reviewLineComments = /* @__PURE__ */ Effect.fn("web/reviewLineComments")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -995,35 +786,25 @@ export const reviewLineComments = /* @__PURE__ */ Effect.fn("web/reviewLineComme
   }));
 });
 
-/**
- * GitHub's media type that answers a body beside its own rendering of it
- * (`body_html`): the markdown rendered as github.com renders it, mentions,
- * references, and emoji included, its uploads named by their assets.
- */
 const FULL_MEDIA_TYPE = "application/vnd.github.full+json";
 
-/** A read asking for GitHub's rendering of every body it answers, beside the body. */
 function withRendering(
   request: HttpClientRequest.HttpClientRequest,
 ): HttpClientRequest.HttpClientRequest {
   return HttpClientRequest.setHeader(request, "accept", FULL_MEDIA_TYPE);
 }
 
-/** A team as GitHub names one: its slug, which a review request names it by, and its name. */
 const TeamSchema = Schema.Struct({ slug: Schema.String, name: Schema.String });
 
-/** A team as the overview and the pickers hold one. */
 interface GitHubTeam {
   readonly slug: string;
   readonly name: string;
 }
 
-/** A pull request read whole for its overview: what its pill says, and its description, branches, times, mergeability, and people. */
 const OverviewPullSchema = Schema.Struct({
   ...PullRequestSchema.fields,
   body: Schema.NullOr(Schema.String),
   body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  // Note that a head's repository is null where its fork was deleted, which no pull request here stands on.
   head: Schema.Struct({
     ref: Schema.String,
     sha: Schema.String,
@@ -1048,7 +829,6 @@ const OverviewPullSchema = Schema.Struct({
   requested_teams: Schema.optionalKey(Schema.Array(TeamSchema)),
 });
 
-/** A head's check runs, each read for its row. */
 const ListedCheckRunsSchema = Schema.Struct({
   check_runs: Schema.Array(
     Schema.Struct({
@@ -1064,7 +844,6 @@ const ListedCheckRunsSchema = Schema.Struct({
   ),
 });
 
-/** A head's commit statuses, the newest of each context, each read for its row. */
 const ListedStatusesSchema = Schema.Struct({
   statuses: Schema.Array(
     Schema.Struct({
@@ -1078,10 +857,6 @@ const ListedStatusesSchema = Schema.Struct({
   ),
 });
 
-/**
- * How many gave each reaction, as a REST listing of an issue's comments
- * rolls them up beside each comment, by the key it counts each under.
- */
 const ReactionRollupSchema = Schema.Struct({
   "+1": Schema.optionalKey(Schema.Number),
   "-1": Schema.optionalKey(Schema.Number),
@@ -1095,7 +870,6 @@ const ReactionRollupSchema = Schema.Struct({
 
 type ReactionRollup = typeof ReactionRollupSchema.Type;
 
-/** The key a REST rollup counts each reaction under. */
 const ROLLUP_KEY = {
   [REACTION.THUMBS_UP]: "+1",
   [REACTION.THUMBS_DOWN]: "-1",
@@ -1107,7 +881,6 @@ const ROLLUP_KEY = {
   [REACTION.EYES]: "eyes",
 } as const satisfies Record<Reaction, keyof ReactionRollup>;
 
-/** A pull request's comments, oldest first, as GitHub lists an issue's. */
 const IssueCommentsSchema = Schema.Array(
   Schema.Struct({
     id: Schema.optionalKey(Schema.Number),
@@ -1121,14 +894,8 @@ const IssueCommentsSchema = Schema.Array(
   }),
 );
 
-/**
- * The most pages of a pull request's comments read. GitHub lists them
- * oldest first, so the newest are read by reading to the end, bounded where
- * no pull request goes, a thousand comments.
- */
 const COMMENTS_MAX_PAGES = 10;
 
-/** GitHub's own words for whether a pull request would merge; any it adds, and `unknown` itself, read as not yet worked out. */
 const GITHUB_MERGE_STATE = new Map<string, MergeState>([
   ["clean", MERGE_STATE.CLEAN],
   ["has_hooks", MERGE_STATE.CLEAN],
@@ -1139,53 +906,35 @@ const GITHUB_MERGE_STATE = new Map<string, MergeState>([
   ["draft", MERGE_STATE.DRAFT],
 ]);
 
-/** A check run's conclusions that pass nothing and fail nothing. */
 const SKIPPED_CONCLUSIONS: ReadonlySet<string> = new Set(["skipped", "neutral", "stale"]);
 
 const SUCCESS = "success";
 
-/** A pull request itself as its overview holds it, every account as GitHub names it. */
 export interface GitHubOverviewPullRequest {
   readonly pullRequest: GitHubPullRequest;
-  /** Its description as written, Markdown, empty where it has none. */
   readonly body: string;
   readonly html: string;
   readonly base: string;
   readonly head: string;
-  /** The account whose fork its head stands on; absent where it is the repository's own. */
   readonly headOwner?: string;
   readonly createdAt: number;
   readonly mergedAt: number | null;
   readonly merge: MergeState;
   readonly author: GitHubAccount | undefined;
-  /** Who it still asks for a review, up to the bound. */
   readonly requested: readonly GitHubAccount[];
-  /** The teams it still asks for a review, up to the bound. */
   readonly requestedTeams: readonly GitHubTeam[];
-  /** Its labels, up to the bound. */
   readonly labels: readonly GitHubLabel[];
-  /** The stack it stands in, base first and itself among it; empty where it stands in none, or is not open. */
   readonly stack: readonly StackEntry[];
 }
 
-/** A pull request's conversation as its overview holds it, every account as GitHub names it. */
 export interface GitHubOverviewConversation {
-  /** Where each reviewer stands by their reviews alone; who the pull request still asks is its own read's. */
   readonly reviewers: readonly GitHubReviewer[];
   readonly conversation: readonly GitHubConversationEntry[];
-  /** How many earlier entries the bounds left on GitHub. */
   readonly earlier: number;
-  /** The reactions the pull request's description wears. */
   readonly descriptionReactions: readonly GitHubReaction[];
-  /** GitHub's GraphQL id of the pull request, which a reaction on its description is added to; none where the read named none. */
   readonly descriptionSubject: string | undefined;
 }
 
-/**
- * One reaction a comment wears: which, how many gave it, the first of them
- * up to the bound where the read names them, and whether the member reading
- * gave it, where their own token was read.
- */
 export interface GitHubReaction {
   readonly content: Reaction;
   readonly count: number;
@@ -1193,10 +942,8 @@ export interface GitHubReaction {
   readonly mine: boolean | undefined;
 }
 
-/** The reactions the member reading gave, by GitHub's GraphQL id of what wears them, as their own token reads them. */
 export type ViewerReactions = ReadonlyMap<string, ReadonlySet<Reaction>>;
 
-/** One entry of a pull request's conversation, its author as GitHub names them. */
 interface GitHubConversationEntry {
   readonly kind: (typeof CONVERSATION_ENTRY)[keyof typeof CONVERSATION_ENTRY];
   readonly account: GitHubAccount;
@@ -1205,14 +952,11 @@ interface GitHubConversationEntry {
   readonly body: string;
   readonly at: number;
   readonly url: string;
-  /** The review threads a review started, oldest first; none on a comment. */
   readonly threads: readonly GitHubReviewThread[];
   readonly reactions: readonly GitHubReaction[];
-  /** GitHub's GraphQL id of the entry, which a reaction is added to; none where GitHub named none. */
   readonly subject: string | undefined;
 }
 
-/** One comment of a review thread, its author as GitHub names them. */
 interface GitHubThreadComment {
   readonly account: GitHubAccount;
   readonly html: string | null;
@@ -1220,15 +964,11 @@ interface GitHubThreadComment {
   readonly at: number;
   readonly url: string;
   readonly reactions: readonly GitHubReaction[];
-  /** GitHub's GraphQL id of the entry, which a reaction is added to; none where GitHub named none. */
   readonly subject: string | undefined;
 }
 
-/** One review thread as GitHub holds it: where it is, the hunk it was made on, where it stands, and its comments. */
 interface GitHubReviewThread {
-  /** GitHub's id for the review its first comment was made in; none where GitHub names none. */
   readonly reviewId: number | null;
-  /** GitHub's GraphQL id for the thread, which a reply or a resolve names it by. */
   readonly id: string;
   readonly path: string;
   readonly line: number | null;
@@ -1244,46 +984,35 @@ interface GitHubReviewThread {
   readonly more: number;
 }
 
-/** A time GitHub spells, in epoch milliseconds; none where it spells none or nothing a date reads. */
 function timeOf(spelled: string | null | undefined): number | null {
   const at = Date.parse(spelled ?? "");
   return Number.isNaN(at) ? null : at;
 }
 
-/** A name cut to the bound a read carries. */
 function nameOf(name: string): string {
   return name.slice(0, OVERVIEW_BOUNDS.MAX_NAME_CHARS);
 }
 
-/** Where a check run stands: running until it completes, then by its conclusion, a conclusion GitHub adds reading as failed. */
 function runStateOf(status: string, conclusion: string | null): CheckState {
   if (status !== COMPLETED || conclusion === null) return CHECK_STATE.PENDING;
   if (conclusion === SUCCESS) return CHECK_STATE.PASSED;
   return SKIPPED_CONCLUSIONS.has(conclusion) ? CHECK_STATE.SKIPPED : CHECK_STATE.FAILED;
 }
 
-/** Where a commit status stands. */
 function statusStateOf(state: string): CheckState {
   if (state === SUCCESS) return CHECK_STATE.PASSED;
   return FAILING_STATUS_STATES.has(state) ? CHECK_STATE.FAILED : CHECK_STATE.PENDING;
 }
 
-/**
- * A check's avatar as the wire carries it: an address on GitHub's own
- * avatar host, drawn as it is, or one the window reads through the
- * service's image proxy (`githubImageOf`); absent for anything else.
- */
 function checkAvatarOf(spelled: string | null | undefined): string | undefined {
   if (spelled === null || spelled === undefined) return undefined;
   return githubAvatarUrl(spelled) ?? (githubImageOf(spelled) === undefined ? undefined : spelled);
 }
 
-/** A check wearing its avatar, where it has one. */
 function withAvatar(check: PullRequestCheck, avatarUrl: string | undefined): PullRequestCheck {
   return avatarUrl === undefined ? check : { ...check, avatarUrl };
 }
 
-/** Where a check stands in the order the bound keeps them by: what asks for a look first. */
 const CHECK_RANK = {
   [CHECK_STATE.FAILED]: 0,
   [CHECK_STATE.PENDING]: 1,
@@ -1291,23 +1020,10 @@ const CHECK_RANK = {
   [CHECK_STATE.SKIPPED]: 3,
 } as const satisfies Record<CheckState, number>;
 
-/** The ref GitHub keeps on a pull request's head, which names its head commit wherever the head branch lives. */
 function pullHeadRef(number: number): string {
   return `refs/pull/${number}/head`;
 }
 
-/**
- * A pull request's checks one by one: its head's check runs and its commit
- * statuses, those that failed first, then those still running, up to the
- * bound. The head is named by the ref GitHub keeps on the pull request, so
- * the checks wait on no read of the pull request for its head's commit; a
- * pull request the repository does not hold lists none. Note that they are
- * ordered before they are cut, because a head with a hundred passing runs
- * would otherwise leave out the one status that failed. Each wears its
- * avatar: a check run its App's logo, by the App's id its run names, and a
- * status the picture GitHub names on it, so the avatars cost no request of
- * their own.
- */
 export function pullRequestChecks(
   token: Redacted.Redacted,
   fullName: string,
@@ -1359,7 +1075,6 @@ export function pullRequestChecks(
   );
 }
 
-/** A head's checks of one kind, or none where the App may not read them, said once in the log. */
 function readListed<A>(
   what: string,
   request: HttpClientRequest.HttpClientRequest,
@@ -1381,15 +1096,12 @@ function readListed<A>(
   );
 }
 
-/** An entry's words as a read carries them, whole: GitHub's rendering, or the markdown where GitHub sent none. */
 interface EntryWords {
   readonly html: string | null;
   readonly body: string;
-  /** Whether the entry said anything at all. */
   readonly said: boolean;
 }
 
-/** An entry's words, whole: GitHub's rendering where it sent one, else the markdown. */
 function wordsOf(body: string | null | undefined, html: string | null | undefined): EntryWords {
   const words = body?.trim() ?? "";
   const rendered = html?.trim() ?? "";
@@ -1398,24 +1110,6 @@ function wordsOf(body: string | null | undefined, html: string | null | undefine
     : { html: rendered, body: "", said: words !== "" };
 }
 
-/**
- * What the REST listings do not say of a conversation, in one GraphQL read:
- * the review threads of a pull request, newest kept up to the bound, each
- * with its first comments up to the bound and how many GitHub holds, since
- * the REST listing names neither whether a thread was resolved nor whether
- * a push outdated it; and the reactions its description, its comments, its
- * reviews, and its thread comments wear, which no REST listing of a review
- * carries. The newest comments and reviews are read up to the bound on the
- * conversation's entries; GraphQL counts the empty ones the conversation
- * leaves out, so a comment kept past those is counted by the rollup its
- * REST listing carries instead, naming nobody, and a review kept past a
- * hundred newer ones, most of them a reply's wrapper, wears none.
- * Each reaction names the first who gave it up to the bound, but a thread
- * comment's only counts them: GitHub prices a read by the lists it may
- * answer, and naming them under every thread comment costs fifty times the
- * rest of the read. A bot's GraphQL login lacks the suffix its REST login
- * wears, so the suffix is put back.
- */
 const CONVERSATION_QUERY = `query Conversation($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -1475,23 +1169,17 @@ fragment Reaction on ReactionGroup {
 
 const GRAPHQL_PATH = "/graphql";
 
-/** How many of the repository's open pull requests one page of a stack's read lists: GitHub's most. */
 const STACK_CANDIDATES = 100;
 
-/** The most pages of open pull requests a stack is read to; a repository holding more stands in no stack. */
 const STACK_PAGES = 5;
 
-/** GitHub's GraphQL word for an App's bot, and for the left side of a diff. */
 const GRAPHQL_BOT = "Bot";
 const GRAPHQL_LEFT = "LEFT";
 
-/** The review state of an author's draft, which nobody else sees. */
 const GRAPHQL_PENDING = "PENDING";
 
-/** The account GitHub names a deleted account's comments by. */
 const GHOST: GitHubAccount = { id: 10_137, login: "ghost", bot: false, avatarUrl: undefined };
 
-/** GitHub's GraphQL words for each reaction (`ReactionContent`). */
 const GRAPHQL_REACTION_CONTENT = {
   THUMBS_UP: "THUMBS_UP",
   THUMBS_DOWN: "THUMBS_DOWN",
@@ -1506,7 +1194,6 @@ const GRAPHQL_REACTION_CONTENT = {
 type GraphqlReactionContent =
   (typeof GRAPHQL_REACTION_CONTENT)[keyof typeof GRAPHQL_REACTION_CONTENT];
 
-/** Each reaction in GitHub's GraphQL words, which a mutation names it by. */
 export const GRAPHQL_REACTION_OF = {
   [REACTION.THUMBS_UP]: GRAPHQL_REACTION_CONTENT.THUMBS_UP,
   [REACTION.THUMBS_DOWN]: GRAPHQL_REACTION_CONTENT.THUMBS_DOWN,
@@ -1522,10 +1209,8 @@ const GRAPHQL_REACTION = new Map<string, Reaction>(
   Object.values(REACTION).map((reaction) => [GRAPHQL_REACTION_OF[reaction], reaction]),
 );
 
-/** The order GitHub draws reactions in. */
 const REACTION_ORDER: readonly Reaction[] = Object.values(REACTION);
 
-/** An account as GitHub's GraphQL names one: an author, or someone who reacted. */
 const GraphActorSchema = Schema.Struct({
   __typename: Schema.String,
   login: Schema.String,
@@ -1533,7 +1218,6 @@ const GraphActorSchema = Schema.Struct({
   databaseId: Schema.optionalKey(Schema.NullOr(Schema.Number)),
 });
 
-/** One reaction as GitHub's GraphQL answers it: which, how many, and, where asked, the first who gave it. */
 const ReactionGroupSchema = Schema.Struct({
   content: Schema.String,
   reactors: Schema.Struct({
@@ -1544,7 +1228,6 @@ const ReactionGroupSchema = Schema.Struct({
 
 const ReactionGroupsSchema = Schema.optionalKey(Schema.NullOr(Schema.Array(ReactionGroupSchema)));
 
-/** A comment or a review read for the reactions it wears, by GitHub's id for it. */
 const ReactedSchema = Schema.Struct({
   databaseId: Schema.NullOr(Schema.Number),
   reactionGroups: ReactionGroupsSchema,
@@ -1587,7 +1270,6 @@ const ThreadSchema = Schema.Struct({
   }),
 });
 
-/** GitHub's GraphQL answer: its data where it read any, and its errors where it met some. */
 const ConversationAnswerSchema = Schema.Struct({
   data: Schema.optionalKey(
     Schema.NullOr(
@@ -1614,15 +1296,8 @@ const ConversationAnswerSchema = Schema.Struct({
   errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
 });
 
-/** The reactions a read names, by GitHub's id for what wears them. */
 type ReactionsById = ReadonlyMap<number, readonly GitHubReaction[]>;
 
-/**
- * What the GraphQL read says of a conversation: its review threads, and how
- * many past the bound were left on GitHub; and the reactions its
- * description, comments, and reviews wear, the comments and reviews by
- * GitHub's id for them.
- */
 interface ReadGraph {
   readonly threads: readonly GitHubReviewThread[];
   readonly left: number;
@@ -1641,7 +1316,6 @@ const NO_GRAPH: ReadGraph = {
   reviewReactions: new Map(),
 };
 
-/** An account as GitHub's GraphQL names one, as the people hold them; a deleted account as GitHub's ghost. */
 function threadAccountOf(author: typeof GraphActorSchema.Type | null): GitHubAccount {
   if (author === null) return GHOST;
   const bot = author.__typename === GRAPHQL_BOT;
@@ -1656,11 +1330,6 @@ function threadAccountOf(author: typeof GraphActorSchema.Type | null): GitHubAcc
   };
 }
 
-/**
- * The reactions something wears, in GitHub's order: those given, each with
- * who GitHub named of those who gave it where the read asked; a reaction
- * this service does not know of is left out.
- */
 function reactionsOf(
   groups: readonly (typeof ReactionGroupSchema.Type)[] | null | undefined,
 ): readonly GitHubReaction[] {
@@ -1676,7 +1345,6 @@ function reactionsOf(
   );
 }
 
-/** The reactions each of a list wears, by GitHub's id for it. */
 function reactionsById(
   list: { readonly nodes: readonly (typeof ReactedSchema.Type | null)[] } | undefined,
 ): ReactionsById {
@@ -1687,12 +1355,10 @@ function reactionsById(
   return byId;
 }
 
-/** The reactions GitHub's id names, none where it names nothing the read reached. */
 function reactionsAt(byId: ReactionsById, id: number | undefined): readonly GitHubReaction[] {
   return (id === undefined ? undefined : byId.get(id)) ?? [];
 }
 
-/** The reactions a REST rollup counts, in GitHub's order, those given, naming nobody. */
 function rolledUpReactions(rollup: ReactionRollup | undefined): readonly GitHubReaction[] {
   if (rollup === undefined) return [];
   return REACTION_ORDER.flatMap((content): GitHubReaction[] => {
@@ -1705,7 +1371,6 @@ function sideOf(side: string): DiffSide {
   return side === GRAPHQL_LEFT ? DIFF_SIDE.LEFT : DIFF_SIDE.RIGHT;
 }
 
-/** One thread as the overview holds it, a draft's comments left out; none where nothing but a draft is left. */
 function threadOf(node: typeof ThreadSchema.Type): GitHubReviewThread | undefined {
   const read = node.comments.nodes.flatMap((comment) => (comment === null ? [] : [comment]));
   const published = read.filter((comment) => comment.pullRequestReview?.state !== GRAPHQL_PENDING);
@@ -1739,12 +1404,6 @@ function threadOf(node: typeof ThreadSchema.Type): GitHubReviewThread | undefine
   };
 }
 
-/**
- * The pull request's review threads and reactions, read over GraphQL on the
- * token. Note that a read that fails, or that GitHub answers only with
- * errors, leaves the threads and the reactions out, said once in the log,
- * because the rest of the overview stands without them.
- */
 function conversationGraphOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -1790,16 +1449,10 @@ function conversationGraphOf(
   );
 }
 
-/** When a thread was started: its first comment's time. */
 function threadAt(thread: GitHubReviewThread): number {
   return thread.comments[0]?.at ?? 0;
 }
 
-/**
- * A thread whose review is no entry, a deleted account's or one the review
- * listing never reached, standing at its own time as the review GitHub
- * would draw around it.
- */
 function threadEntryOf(thread: GitHubReviewThread, pageUrl: string): GitHubConversationEntry {
   const first = thread.comments[0];
   return {
@@ -1816,22 +1469,11 @@ function threadEntryOf(thread: GitHubReviewThread, pageUrl: string): GitHubConve
   };
 }
 
-/** The conversation as a read carries it: its newest entries, oldest first, and how many earlier ones were left. */
 interface KeptConversation {
   readonly conversation: readonly GitHubConversationEntry[];
   readonly earlier: number;
 }
 
-/**
- * The conversation: every comment that says something and every review
- * that decides, says something, or started a review thread, each thread
- * under the review its first comment was made in, in time order, the newest
- * kept up to the bound and the earlier ones counted with the threads left
- * on GitHub. A review that only commented, said nothing, and started no
- * thread is GitHub's wrapper for a reply in a thread drawn under its own
- * review, and a draft review is its author's alone, so neither is an
- * entry; a thread whose review is no entry stands at its own time.
- */
 function conversationOf(
   comments: typeof IssueCommentsSchema.Type,
   reviews: typeof ReviewsSchema.Type,
@@ -1856,7 +1498,6 @@ function conversationOf(
         at: timeOf(comment.created_at) ?? 0,
         url: comment.html_url,
         threads: [],
-        // Note that a comment past the GraphQL read's newest hundred, which counts the empty ones the conversation leaves out, is counted by its REST rollup instead.
         reactions:
           comment.id !== undefined && read.commentReactions.has(comment.id)
             ? reactionsAt(read.commentReactions, comment.id)
@@ -1894,11 +1535,6 @@ function conversationOf(
   return { conversation, earlier: entries.length - conversation.length + read.left };
 }
 
-/**
- * The repository's open pull requests a stack is worked out from, a page
- * at a time in GraphQL reads: each by its number, words, and branches, and
- * whether its head is a fork's, and where the next page starts.
- */
 const OPEN_PULL_REQUESTS_QUERY = `query OpenPullRequests($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequests(states: OPEN, first: ${STACK_CANDIDATES}, after: $after) {
@@ -1948,7 +1584,6 @@ type OpenPullRequestNodes = NonNullable<
   NonNullable<NonNullable<typeof OpenPullRequestsAnswerSchema.Type.data>["repository"]>
 >["pullRequests"]["nodes"];
 
-/** The open pull requests a page lists, as a stack is worked out from them. */
 function candidatesOf(nodes: OpenPullRequestNodes): readonly StackCandidate[] {
   return nodes.flatMap((node) =>
     node === null
@@ -1968,15 +1603,6 @@ function candidatesOf(nodes: OpenPullRequestNodes): readonly StackCandidate[] {
   );
 }
 
-/**
- * The repository's every open pull request, page after page up to the
- * bound, as a stack is worked out from them; none where they could not all
- * be read. Note that a listing cut short is none rather than what it got
- * to, because a pull request it left out could be the second on a branch,
- * which unmakes an edge the rest would make; and that a read that fails, or
- * that GitHub answers only with errors, is none too, said once in the log,
- * because the header stands without its stack.
- */
 function openPullRequestsOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -2031,15 +1657,6 @@ function openPullRequestsOf(
   );
 }
 
-/**
- * A pull request itself as its overview draws it, read on the token in one
- * ask with GitHub's rendering of its description: its branches, its times,
- * its mergeability, who opened it, who it still asks for a review, and its
- * labels. Where `stacked` says it was open as last read, the repository's
- * open pull requests are read beside it for the stack it stands in, which
- * one no longer open stands in none of. None where the repository holds no
- * such pull request.
- */
 export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOverview")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -2069,7 +1686,6 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     head: pull.head.ref,
     base: pull.base.ref,
     crossRepository: pull.head.repo?.id !== pull.base.repo?.id,
-    // Note that the REST read says nothing of the merge queue, so the pull request's own place in it is the listing's.
     ...(open?.some((each) => each.number === pullRequest.number && each.queued === true)
       ? { queued: true }
       : undefined),
@@ -2097,16 +1713,6 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
   });
 });
 
-/**
- * A pull request's conversation, read on the token: at once every page of
- * its comments, every page of its reviews, which both name where each
- * reviewer stands and join its comments as its conversation, and its review
- * threads, each under its review, with the reactions its description and
- * every entry wear, read in the threads' one ask rather than one per
- * comment. `pageUrl` is the pull request's own page,
- * which an entry GitHub names no page of opens. A pull request the
- * repository does not hold reads as nobody having said anything.
- */
 export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullRequestConversation")(
   function* <R = never>(
     token: Redacted.Redacted,
@@ -2119,7 +1725,6 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
     HttpClient.HttpClient | R
   > {
     const { number } = pullRequest;
-    // The member's own read runs beside the App's and is waited on only briefly once they land, so it never holds the conversation.
     const viewing = yield* Effect.forkChild(viewer);
     const [comments, reviews, graph] = yield* Effect.all(
       [
@@ -2168,18 +1773,8 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
   },
 );
 
-/**
- * How long the conversation waits, once the App's reads land, on the
- * member's own read of which reactions they gave; past it the conversation
- * is answered without them.
- */
 const VIEWER_GRACE = Duration.millis(750);
 
-/**
- * The reactions marked with whether the member gave each, by what their own
- * read says of the subject wearing them; left unmarked where their read was
- * not made or did not reach that subject.
- */
 function viewerMarks(
   viewer: ViewerReactions | undefined,
 ): (
@@ -2193,26 +1788,18 @@ function viewerMarks(
   };
 }
 
-/** GitHub's word, on the member's own token, for whether they gave each reaction something wears. */
 const ViewerGroupsSchema = Schema.optionalKey(
   Schema.NullOr(
     Schema.Array(Schema.Struct({ content: Schema.String, viewerHasReacted: Schema.Boolean })),
   ),
 );
 
-/** Something read for which reactions the member gave it, by its GraphQL id. */
 const ViewedSchema = Schema.Struct({ id: Schema.String, reactionGroups: ViewerGroupsSchema });
 
 const ViewedListSchema = Schema.optionalKey(
   Schema.Struct({ nodes: Schema.Array(Schema.NullOr(ViewedSchema)) }),
 );
 
-/**
- * Which reactions the member reading gave, read on their own GitHub token,
- * since a read on the App's token answers for the App's bot: the
- * description, the newest comments and reviews, and every thread comment,
- * each by its GraphQL id, as the conversation's own read bounds them.
- */
 const VIEWER_REACTIONS_QUERY = `query ViewerReactions($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -2263,7 +1850,6 @@ const ViewerAnswerSchema = Schema.Struct({
   ),
 });
 
-/** The reactions GitHub says the viewer gave, among those this service knows. */
 function givenOf(groups: (typeof ViewedSchema.Type)["reactionGroups"]): ReadonlySet<Reaction> {
   return new Set(
     (groups ?? []).flatMap((group) => {
@@ -2273,11 +1859,6 @@ function givenOf(groups: (typeof ViewedSchema.Type)["reactionGroups"]): Readonly
   );
 }
 
-/**
- * Which reactions the member gave, read on their own token; none where
- * GitHub would not answer them, which leaves the conversation unmarked
- * rather than failing it, said once in the log.
- */
 export function viewerReactionsOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -2319,23 +1900,8 @@ export function viewerReactionsOf(
   );
 }
 
-/**
- * How many deployments of the head one read asks GitHub for, the newest
- * first: a whole page, GitHub's most, so an environment deployed again and
- * again on the same commit leaves room for the others once each keeps its
- * newest. Note that it is one page and never more, because paging until
- * ten environments stood would make the checks read's requests grow with
- * how often one environment redeployed; a head with more than a hundred
- * deployments lists the environments of its newest hundred.
- */
 const DEPLOYMENTS_ASKED = 100;
 
-/**
- * The deployments of a pull request's head, in one GraphQL read whatever
- * their number: the head is the pull request's last commit, so no read of
- * its commit comes first, and each deployment carries its newest status,
- * where REST would ask once for the list and once more for each status.
- */
 const DEPLOYMENTS_QUERY = `query Deployments($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -2366,7 +1932,6 @@ const DeploymentSchema = Schema.Struct({
   ),
 });
 
-/** GitHub's GraphQL answer to the deployments read: its data where it read any, and its errors where it met some. */
 const DeploymentsAnswerSchema = Schema.Struct({
   data: Schema.optionalKey(
     Schema.NullOr(
@@ -2398,7 +1963,6 @@ const DeploymentsAnswerSchema = Schema.Struct({
   errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
 });
 
-/** GitHub's words for where a deployment or its newest status stands, as the wire says each; any it adds reads as still deploying. */
 const GITHUB_DEPLOYMENT_STATE = new Map<string, DeploymentState>([
   ["SUCCESS", DEPLOYMENT_STATE.READY],
   ["ACTIVE", DEPLOYMENT_STATE.READY],
@@ -2409,7 +1973,6 @@ const GITHUB_DEPLOYMENT_STATE = new Map<string, DeploymentState>([
   ["ABANDONED", DEPLOYMENT_STATE.INACTIVE],
 ]);
 
-/** The address a deployment serves, only where it is https, since the window opens it in the browser. */
 function deploymentUrlOf(spelled: string | null | undefined): string | null {
   if (spelled === null || spelled === undefined) return null;
   try {
@@ -2419,7 +1982,6 @@ function deploymentUrlOf(spelled: string | null | undefined): string | null {
   }
 }
 
-/** One deployment as the wire carries it; none for one GitHub names no environment of. */
 function deploymentOf(node: typeof DeploymentSchema.Type): PullRequestDeployment | undefined {
   if (node.environment === null || node.environment === "") return undefined;
   const spelled = node.latestStatus?.state ?? node.state ?? "";
@@ -2432,7 +1994,6 @@ function deploymentOf(node: typeof DeploymentSchema.Type): PullRequestDeployment
   return avatarUrl === undefined ? deployment : { ...deployment, avatarUrl };
 }
 
-/** The newest deployment of each environment, newest first, up to the bound. */
 function newestOfEach(
   deployments: readonly PullRequestDeployment[],
 ): readonly PullRequestDeployment[] {
@@ -2446,15 +2007,6 @@ function newestOfEach(
     .slice(0, OVERVIEW_BOUNDS.MAX_DEPLOYMENTS);
 }
 
-/**
- * A pull request's head's deployments, such as its Vercel Previews: the
- * newest of each environment, newest first, up to the bound, each with
- * where its newest status left it and the https address it serves. It is
- * one request whatever their number (`DEPLOYMENTS_QUERY`). A pull request
- * the repository does not hold, or a repository where the App may not read
- * deployments, lists none, said once in the log, rather than failing the
- * checks read it stands beside.
- */
 export function pullRequestDeployments(
   token: Redacted.Redacted,
   fullName: string,
@@ -2495,7 +2047,6 @@ export function pullRequestDeployments(
   );
 }
 
-/** One comment of the member's own pending review, as GitHub holds it: where it stands, the published thread it replies on where it does, its words, and who, as an account. */
 interface GitHubPendingComment {
   readonly id: string;
   readonly threadId: string | undefined;
@@ -2510,23 +2061,13 @@ interface GitHubPendingComment {
   readonly at: number;
 }
 
-/** The member's own pending review on a pull request, as the conversation's read carries it: how many comments it holds, and those comments, up to the bound. */
 export interface ViewerPendingReview {
   readonly comments: number;
   readonly drafts: readonly GitHubPendingComment[];
 }
 
-/** At most this many pending reviews are read to find the member's own; GitHub shows a member only theirs, so one is the most ever answered. */
 const VIEWER_PENDING_READ = 10;
 
-/**
- * Note that a pending comment's lines are read off its thread: GitHub keeps
- * the side a comment counts on on the thread alone, and its REST reads of a
- * pending comment answer no line at all; the member's own pending threads
- * stand among the pull request's threads on their own token, the newest
- * last; each thread's first comment is read beside its last ones, which
- * says whether it was published before the member's pending replies.
- */
 const VIEWER_PENDING_QUERY = `query ViewerPendingReview($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -2550,7 +2091,6 @@ const VIEWER_PENDING_QUERY = `query ViewerPendingReview($owner: String!, $name: 
   }
 }`;
 
-/** A side as GitHub's GraphQL spells it. */
 const GraphQLSideSchema = Schema.Literals(["LEFT", "RIGHT"]);
 
 const ViewerPendingAnswerSchema = Schema.Struct({
@@ -2632,29 +2172,19 @@ type PendingAnswerPull = NonNullable<
   NonNullable<NonNullable<typeof ViewerPendingAnswerSchema.Type.data>["repository"]>["pullRequest"]
 >;
 
-/** GitHub's GraphQL word for a side, as the wire spells it. */
 const SIDE_OF_GRAPHQL = { LEFT: DIFF_SIDE.LEFT, RIGHT: DIFF_SIDE.RIGHT } as const satisfies Record<
   "LEFT" | "RIGHT",
   DiffSide
 >;
 
-/** The pending review's state, as GitHub's GraphQL spells a comment's. */
 const PENDING_STATE = "PENDING";
 
-/**
- * The comments of the review `reviewId` on the pull request's threads that
- * are still pending, oldest first, up to the bound, each placed by its
- * thread; a range of one line is named by its line alone, as a thread made
- * on one line is. One on a thread a comment already published on is a reply
- * there, and names that thread, which the window draws it in.
- */
 function pendingCommentsOf(pull: PendingAnswerPull, reviewId: string): GitHubPendingComment[] {
   const drafts = (pull.reviewThreads?.nodes ?? []).flatMap((thread) => {
     if (thread === null) return [];
     const side = SIDE_OF_GRAPHQL[thread.diffSide];
     const startSide = thread.startDiffSide === null ? null : SIDE_OF_GRAPHQL[thread.startDiffSide];
     const oneLine = thread.startLine === thread.line && (startSide === null || startSide === side);
-    // Note that the thread's first comment is read beside its last ones, since a long run of pending replies can push every published one out of that window.
     const published = [...(thread.opening?.nodes ?? []), ...thread.comments.nodes].some(
       (each) => each !== null && each.state !== PENDING_STATE,
     );
@@ -2687,13 +2217,6 @@ function pendingCommentsOf(pull: PendingAnswerPull, reviewId: string): GitHubPen
   return drafts.toSorted((a, b) => a.at - b.at).slice(0, OVERVIEW_BOUNDS.MAX_PENDING_COMMENTS);
 }
 
-/**
- * The review the member holds pending on the pull request, read on their
- * own token, since nobody else sees it: how many comments it holds, and
- * those comments where its threads name them; none where they hold none,
- * and none where GitHub would not answer them, which leaves the
- * conversation without it rather than failing it, said once in the log.
- */
 export function viewerPendingReviewOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -2724,7 +2247,6 @@ export function viewerPendingReviewOf(
   );
 }
 
-/** Whether the member reading may edit the pull request, as GitHub answers on their own token. */
 const VIEWER_CAN_UPDATE_QUERY = `query ViewerCanUpdate($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) { viewerCanUpdate } }
 }`;
@@ -2743,12 +2265,6 @@ const ViewerCanUpdateAnswerSchema = Schema.Struct({
   ),
 });
 
-/**
- * Whether the member may edit the pull request's description, read on
- * their own token, since a read on the App's token answers for the App's
- * bot; not where GitHub would not answer them, which leaves the description
- * unedited rather than failing the read, said once in the log.
- */
 export function viewerCanUpdateOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -2774,39 +2290,20 @@ export function viewerCanUpdateOf(
   );
 }
 
-/** The repository's labels, as its pickers list them. */
 const LabelsSchema = Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String }));
 
-/**
- * The users who may be assigned in the repository, each an account: who the
- * reviewer picker offers. Note that they are read rather than its
- * collaborators, because GitHub lists an installation token no collaborator
- * whose access comes through the organization, which leaves an
- * organization's repository with nobody to ask.
- */
 const AssigneesSchema = Schema.Array(GitHubAccountSchema);
 
-/** The teams that reach the repository. */
 const TeamsSchema = Schema.Array(TeamSchema);
 
-/** The most pages of each of the pickers' listings read: their bound, a hundred to a page. */
 const OPTIONS_MAX_PAGES = Math.ceil(OVERVIEW_BOUNDS.MAX_OPTIONS / PEOPLE_PER_PAGE);
 
-/** What the reviewer and label pickers offer, read of the repository: its labels, its assignable users, and its teams, each up to the bound. */
 export interface GitHubReviewOptions {
   readonly labels: readonly GitHubLabel[];
   readonly users: readonly GitHubAccount[];
   readonly teams: readonly GitHubTeam[];
 }
 
-/**
- * One of the pickers' listings, every page up to the bound. Note that one
- * the App may not read, as the teams of a repository a person owns or of an
- * installation that never granted the read, lists none, said once in the
- * log, because the others stand without it; and that any other failure, a
- * GitHub that did not answer, fails the read, so the pickers read it again
- * rather than hold an empty list that is no answer at all.
- */
 function optionsListing<A>(
   token: Redacted.Redacted,
   path: string,
@@ -2823,11 +2320,6 @@ function optionsListing<A>(
   );
 }
 
-/**
- * What the reviewer and label pickers offer, read on the token of the
- * agent's repository in three asks at once: its labels, its assignable
- * users, who may be asked for a review, and the teams that reach it.
- */
 export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullRequestReviewOptions")(
   function* (
     token: Redacted.Redacted,

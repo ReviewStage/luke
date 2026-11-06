@@ -1,30 +1,3 @@
-/**
- * github-token-procedures.ts -- the member's own classic GitHub personal access token: read what it is, save one, remove it.
- *
- * `GET /api/github/token` answers the member's token as its login, hint,
- * status, and expiry; `PUT` saves one, first asking GitHub whose it is with
- * one `GET /user` on it, and keeps it sealed
- * (`@repo/database/models/provider-key-seal`) only where GitHub accepts it
- * and it carries the `repo` scope, with the GitHub user GitHub named it as;
- * `DELETE` removes it. The token stands on its own: it need not match a
- * GitHub account linked to the member's, since holding it is what grants
- * what it reaches. A fine-grained token is refused before it
- * is sent anywhere. Every answer is the token as it then stands and none
- * carries it: the one body that holds a token is the `PUT`'s own, it is
- * sealed the moment it is checked, and neither it nor what GitHub said of it
- * is logged. A save whose body its schema refuses is answered as the bare
- * `invalid-request` slug (`orpc/errors.ts`), so what the schema said of the
- * token never leaves the function.
- *
- * A deployment holding no ring, or one it cannot parse, answers every
- * request unavailable. The caller, the ring, and the save's
- * body bound are each checked on the resource's implementer, in that order,
- * so they run before oRPC reads the save's body, as the old group checked
- * them before it read one. A save is braked per member, ten an hour, as the
- * provider keys' is, so the endpoint is no oracle for tokens that are not
- * the caller's.
- */
-
 import {
   type GitHubTokenRow,
   readGitHubTokenRow,
@@ -57,27 +30,12 @@ const SAVE_BRAKE = {
   maxTrackedUsers: 10_000,
 } as const;
 
-/** How long GitHub is given to answer before the save is answered unreachable. */
 const CHECK_TIMEOUT = Duration.seconds(10);
 
-/**
- * The prefixes GitHub documents for a personal access token, classic and
- * fine-grained: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#githubs-token-formats
- */
 const TOKEN_PREFIX = { CLASSIC: "ghp_", FINE_GRAINED: "github_pat_" } as const;
 
-/** The scope a token is not kept without. */
 const REQUIRED_SCOPE = "repo";
 
-/**
- * The headers GitHub answers a classic token's read with. `X-OAuth-Scopes`
- * lists the scopes the token grants, comma-separated:
- * https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps
- * `GitHub-Authentication-Token-Expiration` is the token's expiry, sent only
- * for a token that has one:
- * https://github.blog/changelog/2021-07-26-expiration-options-for-personal-access-tokens/
- * Headers are read by their lowercase names, as the HTTP client keys them.
- */
 const GITHUB_TOKEN_HEADER = {
   SCOPES: "x-oauth-scopes",
   EXPIRATION: "github-authentication-token-expiration",
@@ -91,39 +49,23 @@ export interface GitHubTokenProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** What GitHub said of a token it accepted. */
 interface CheckedToken {
   readonly githubUserId: string;
   readonly githubLogin: string;
   readonly expiresAt: Date | null;
 }
 
-/** The hint a member is shown of a token: the classic prefix where it has it and its last four characters, as `ghp_…abcd`. */
 function tokenHint(token: Redacted.Redacted<string>): string {
   const revealed = Redacted.value(token);
   const prefix = revealed.startsWith(TOKEN_PREFIX.CLASSIC) ? TOKEN_PREFIX.CLASSIC : "";
   return `${prefix}…${revealed.slice(-HINT_TAIL_CHARS)}`;
 }
 
-/** GitHub's expiry header as an instant, as `2021-03-31 21:46:14 UTC`, or null where it sent none or one that spells no instant. */
 function expiryOf(header: string | undefined): Date | null {
   const parsed = header === undefined ? Number.NaN : Date.parse(header);
   return Number.isNaN(parsed) ? null : new Date(parsed);
 }
 
-/**
- * Asks GitHub whose the token is, over the ambient client: what it said of
- * a token it accepted, or why it is not kept. Never fails, since every
- * outcome is an answer; the body is read only on a 200, and nothing of the
- * exchange is logged.
- *
- * The one read is GitHub's "Get the authenticated user", `GET /user` under
- * `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`,
- * and `X-GitHub-Api-Version: 2022-11-28` (`githubRead`), which answers 401
- * for a token GitHub does not accept:
- * https://docs.github.com/en/rest/users/users#get-the-authenticated-user
- * https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api
- */
 const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   token: Redacted.Redacted<string>,
 ): Effect.fn.Return<
@@ -169,7 +111,6 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/** The token as the member is shown it, answered unreadable where the ring cannot open it. */
 function summaryOf(userId: string, ring: KeyRing, row: GitHubTokenRow): GitHubTokenSummary {
   const readable = Result.isSuccess(openGitHubToken(ring, userId, row));
   return {
@@ -194,7 +135,6 @@ const tokenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   } satisfies GitHubTokenAnswer;
 });
 
-/** The token's three procedures, braked per instance, each to a signed-in member, on a deployment that holds a ring. */
 export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
   const brake = makeRateBrake(SAVE_BRAKE);
   const held = hosted.githubToken
@@ -205,7 +145,6 @@ export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
       return yield* tokenAnswer(context.userId, context.ring);
     }),
 
-    /** A save: braked, checked with GitHub, and kept sealed only where GitHub accepts it. */
     save: held.save.effect(function* ({ context, input }) {
       const { userId, ring } = context;
       const token = Redacted.make(input.token);

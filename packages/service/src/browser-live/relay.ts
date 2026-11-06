@@ -1,65 +1,3 @@
-/**
- * relay.ts -- one live view of one Browser tab: the agent's browser's frames of the tab out to a member's panel, and, while that member holds the takeover, their mouse and keys back into it.
- *
- * The tab was read under the member's reach before the socket stood
- * (`service.ts`); the relay reaches the browser of the agent whose
- * conversation holds it through `AgentBrowser`, which resumes a stopped
- * sandbox and starts the browser where it is not running, and which in
- * production reopens the agent's kept tabs where it started afresh
- * (`connectRestoring`), so the tab is read again for the target it now
- * stands on; then it attaches to that target and runs the page's screencast. Each frame goes to the
- * panel as it came, the page's size beside it, and is acknowledged no
- * sooner than `FRAME_EVERY` after the last, so Chromium sends no faster
- * than that; a frame the panel's socket has not drained the last of is
- * skipped rather than queued. The tab's address, title, and loading state
- * go as they change. None of it is read, kept, logged, traced, or counted
- * here: it reaches the panel alone (root `AGENTS.md`'s cloud browser line).
- *
- * Takeover goes over this same socket, on the tabs contract's store and
- * terms (`agent-browser-tabs-procedures.ts`): a member who controls the
- * agent takes the tab for `BROWSER_TAKEOVER_HOLD_MS`, and their input moves
- * the takeover on, written at most every `RENEW_EVERY`, so the takeover
- * always stands well past their last input. A takeover is the member's
- * rather than a socket's, so any of their sockets drives while it stands,
- * one that reconnected or another window among them, and its first input
- * moves it on in the store before it reaches the page. Input from a member
- * whose takeover does not stand is refused and goes nowhere. A step from the
- * tab's bar, an address opened or a step back, forward, or a reload, takes a
- * tab nobody drives over for the member first, as Take over would, and is
- * refused where another member holds it. Each move of the tab's page the
- * view sees is kept on the tab's row too (`notePage`), on the target it
- * watches alone, so a browser that starts afresh reopens the page the member
- * moved it to rather than where the agent last left it. Every point is in
- * the panel's own pixels at the viewport it last sent, and is mapped onto
- * the page's CSS pixels. Mouse moves that queue behind a slower browser are
- * folded into the last of each run, so the pointer never lags behind the
- * member's hand. The tab is read again every `TAB_CHECK_EVERY`, so a
- * driver change another window made reaches this one, and a tab that closed
- * or that the member no longer reaches closes the socket; as the socket
- * closes, however it closes, a takeover it took or moved on is handed back, unless
- * another window of the same member moved it on since, and a hand-back the
- * store did not take is tried again. Input still queued when a takeover
- * ends goes nowhere, a renewal the store could not answer keeps input going
- * only until the last write lapses, and the tab's screencast is stopped as
- * the view ends.
- *
- * A coding agent's sandbox stops at its turn's end, so while its tab is
- * watched the socket holds the sandbox through the lease every terminal of
- * it shares (`sandbox-terminal-lease.ts`), on the terminal's terms: the
- * connection holds it, and each message the panel sends moves it on,
- * written at most once a minute: the panel says it is watching while it is
- * shown, and a viewport moves it on only where it resizes the view, since
- * an older panel sends the same size again whether shown or not. The
- * socket closes as idle once the panel has sent nothing that counts for the
- * idle bound, or nothing but that it is watching for `INPUT_IDLE`, since a
- * pane left shown on a window nobody uses says it is watching for good;
- * the sweep stops the sandbox once the lease lapses. While
- * the browser is reached, the connection also keeps the sandbox alive past
- * its short timeout every keep-alive interval
- * (`CODER.SANDBOX_KEEP_ALIVE_EVERY`, `agents/sandbox-keep-alive.ts`), so a
- * member watching after the agent's turn ended is never cut off by it.
- */
-
 import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { browserTabDriver } from "@repo/database/models/agent-browser-tabs";
 import type { BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
@@ -108,47 +46,35 @@ import { jsonOf } from "../http/http-effect.js";
 import type { RelaySocket } from "../terminal/relay.js";
 import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 
-/** The panel's socket: a relay side, and how many bytes it has yet to send, which paces the frames. */
 export interface BrowserLiveViewer extends RelaySocket {
   readonly buffered: Effect.Effect<number>;
 }
 
-/** What a socket asks for: whose it is, the agent it names (or, from a desktop built before, the task), and the tab. */
 export interface BrowserLiveAsk {
   readonly userId: string;
   readonly place: BrowserTabsPlace;
   readonly tabId: string;
 }
 
-/** What the relay stands on: the deployment's in production, a script's in a test. */
 export interface BrowserLiveDependencies {
-  /** The tab, where the member reaches it; none otherwise, and a failure where the store could not say. */
   readonly readTab: (
     userId: string,
     place: BrowserTabsPlace,
     tabId: string,
   ) => Effect.Effect<Option.Option<ReachedBrowserTab>, unknown>;
-  /** The eve session the agent's sandbox is tagged with; none before the agent first ran. */
   readonly sessionOf: (conversationId: string) => Effect.Effect<Option.Option<string>, unknown>;
-  /**
-   * Connects to the browser in the sandbox the session names, for the
-   * caller's scope; in production through `connectRestoring`, which first
-   * reopens the conversation's kept tabs where the browser started afresh.
-   */
   readonly browser: {
     readonly connect: (
       sessionId: string,
       conversationId: string,
     ) => Effect.Effect<CdpSession, BrowserUnreachable, Scope.Scope>;
   };
-  /** Makes the member the tab's driver until the instant given, answering whether they now drive it. */
   readonly takeOver: (
     tabId: string,
     userId: string,
     heldUntil: Date,
     now: Date,
   ) => Effect.Effect<boolean, unknown>;
-  /** Moves the member's own standing takeover on, answering whether it stood. */
   readonly renew: (
     tabId: string,
     userId: string,
@@ -156,31 +82,25 @@ export interface BrowserLiveDependencies {
     now: Date,
   ) => Effect.Effect<boolean, unknown>;
   readonly handBack: (tabId: string, userId: string) => Effect.Effect<boolean, unknown>;
-  /** Counts a takeover or hand-back the member made, in the agent's workspace, once the request that made it has answered; never fails. */
   readonly counted: (userId: string, agentId: string, tool: ServerAgentTool) => Effect.Effect<void>;
-  /** Keeps the tab's page as the view saw it move, on the target named alone, so a browser that starts afresh reopens it there; a write the store did not take is logged, for the next move to try again. */
   readonly notePage: (
     tabId: string,
     targetId: string,
     page: { readonly address: string; readonly title: string },
   ) => Effect.Effect<void>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
-  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
 }
 
-/** The panel left: it is sent no close. */
 const VIEWER_LEFT = "viewer-left";
 
 type LiveEnd = BrowserLiveCloseReason | typeof VIEWER_LEFT;
 
-/** The tab's target, attached: the CDP session and the target session its commands go to. */
 interface LiveTarget {
   readonly cdp: CdpSession;
   readonly sessionId: string;
 }
 
-/** One input command, and whether it is a bare move, which a later move replaces; or a step through the page's history, which reads the history first. */
 type QueuedInput =
   | { readonly command: CdpCommand; readonly move: boolean }
   | { readonly step: -1 | 1; readonly move: false };
@@ -237,7 +157,6 @@ const readHistory = read(
 );
 const readClientMessage = readEither(browserLiveClientMessageSchema);
 
-/** The instant the lease reaches to from a write at the instant given: the idle bound, and the minute until the next write. */
 function heldFrom(instant: Date): Date {
   const reach = Duration.sum(BROWSER_LIVE_BOUNDS.IDLE, BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
   return new Date(instant.getTime() + Duration.toMillis(reach));
@@ -249,12 +168,10 @@ function sendMessage(viewer: RelaySocket, message: BrowserLiveServerMessage): Ef
   return viewer.send({ text: JSON.stringify(message) });
 }
 
-/** Each run of bare moves folded into its last, every other input kept in order. */
 function foldMoves(batch: readonly QueuedInput[]): readonly QueuedInput[] {
   return batch.filter((input, at) => !(input.move && batch[at + 1]?.move === true));
 }
 
-/** The text a key down types, where it types one: a printable key with no Control or Meta held, and Enter. */
 function typedText(key: string, modifiers: number): string | undefined {
   if (key === "Enter") return "\r";
   if ((modifiers & (BROWSER_LIVE_MODIFIER.CONTROL | BROWSER_LIVE_MODIFIER.META)) !== 0)
@@ -262,7 +179,6 @@ function typedText(key: string, modifiers: number): string | undefined {
   return [...key].length === 1 ? key : undefined;
 }
 
-/** A message that acts in the page, which only the member holding the takeover may send. */
 type InputMessage = Exclude<
   BrowserLiveClientMessage,
   {
@@ -276,13 +192,11 @@ type InputMessage = Exclude<
   }
 >;
 
-/** A step from the tab's bar: an address opened, or a step through its history. */
 type SteerMessage = Extract<
   BrowserLiveClientMessage,
   { readonly type: typeof BROWSER_LIVE_CLIENT.NAVIGATE | typeof BROWSER_LIVE_CLIENT.HISTORY }
 >;
 
-/** What a step from the bar queues for the tab. */
 function steeringOf(message: SteerMessage): QueuedInput {
   if (message.type === BROWSER_LIVE_CLIENT.NAVIGATE) {
     return {
@@ -296,7 +210,6 @@ function steeringOf(message: SteerMessage): QueuedInput {
   return { step: message.step === BROWSER_LIVE_HISTORY.BACK ? -1 : 1, move: false };
 }
 
-/** The DevTools command an input message is, its point mapped from the panel's viewport onto the page; none where either size is not known yet. */
 function commandOf(
   message: InputMessage,
   viewport: { readonly width: number; readonly height: number } | undefined,
@@ -350,7 +263,6 @@ function commandOf(
   return { command: { method: CDP_METHOD.MOUSE, params }, move };
 }
 
-/** Ends once the panel has sent nothing that counts as watching for the idle bound, or no input for the input bound. */
 function idleWatch(view: LiveView): Effect.Effect<LiveEnd> {
   const activeLately = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -370,36 +282,27 @@ function idleWatch(view: LiveView): Effect.Effect<LiveEnd> {
   );
 }
 
-/** One live view's standing: what it was opened for, and what it has learned since. */
 interface LiveView {
   readonly viewer: BrowserLiveViewer;
   readonly ask: BrowserLiveAsk;
   readonly reached: ReachedBrowserTab;
   readonly deps: BrowserLiveDependencies;
-  /** Whether the member may drive the tab: one who controls the coding agent whose browser holds it. */
   readonly drivable: boolean;
-  /** The instant this socket last took or moved on the member's takeover; none while it has written none that stands. */
   readonly driving: Ref.Ref<number | undefined>;
-  /** Whether a hand-back the member asked for has yet to reach the store, which the close tries again. */
   readonly releasePending: Ref.Ref<boolean>;
-  /** The driver last sent to the panel; none before the first. */
   readonly lastDriver: Ref.Ref<
     { readonly userId: string; readonly heldUntil: number } | null | undefined
   >;
-  /** The size the panel draws the frames at, and the page's own, which every point is mapped between. */
   readonly viewport: Ref.Ref<PixelSize | undefined>;
   readonly page: Ref.Ref<PixelSize | undefined>;
   readonly pageState: Ref.Ref<PageState>;
   readonly live: Ref.Ref<LiveTarget | undefined>;
-  /** The browser's target for the tab, read again once the browser is reached, since a fresh start reopens the tab on a new one. */
   readonly targetId: Ref.Ref<string>;
   readonly lastActive: Ref.Ref<number>;
-  /** The instant the member last acted on the view: anything that counts as watching but the panel saying it is. */
   readonly lastInput: Ref.Ref<number>;
   readonly lastHeld: Ref.Ref<number>;
   readonly lastFrame: Ref.Ref<number | undefined>;
   readonly inputs: Queue.Queue<QueuedInput, Cause.Done>;
-  /** How the browser's side ended, where an event ended it. */
   readonly browserEnded: Deferred.Deferred<LiveEnd>;
 }
 
@@ -456,12 +359,10 @@ function openView(
 const send = (view: LiveView, message: BrowserLiveServerMessage) =>
   sendMessage(view.viewer, message);
 
-/** Whether the driver given is this socket's member, who may drive the tab: what the panel is told as `yours`, and what lets a socket drive a takeover it did not write. */
 function isYours(view: LiveView, driver: { readonly userId: string } | null | undefined): boolean {
   return view.drivable && driver?.userId === view.ask.userId;
 }
 
-/** The driver as the tab now stands, sent where it changed; a takeover that is no longer this member's is no longer this socket's. */
 function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<void> {
   return Effect.gen(function* () {
     const found = browserTabDriver(row.tab, yield* DateTime.nowAsDate);
@@ -483,7 +384,6 @@ function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<vo
   });
 }
 
-/** The tab read again under the member's reach: its driver published, and whether it still stands; a store that could not say counts as standing. */
 function checkTab(view: LiveView): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const { ask, deps } = view;
@@ -495,7 +395,6 @@ function checkTab(view: LiveView): Effect.Effect<boolean> {
   });
 }
 
-/** Ends as gone once the tab no longer stands for the member, read every `TAB_CHECK_EVERY`. */
 function watchTab(view: LiveView): Effect.Effect<LiveEnd> {
   return Effect.as(
     Effect.repeat(checkTab(view), {
@@ -506,7 +405,6 @@ function watchTab(view: LiveView): Effect.Effect<LiveEnd> {
   );
 }
 
-/** The panel's message noted as someone watching, moving a coding agent's lease on at most once a minute. */
 function noteActive(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
     yield* Ref.set(view.lastActive, at.getTime());
@@ -517,7 +415,6 @@ function noteActive(view: LiveView, at: Date): Effect.Effect<void> {
   });
 }
 
-/** The member takes the tab over for the hold, where they control its agent; a tab another member drives answers them as its driver. */
 function takeOver(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
     if (!view.drivable) {
@@ -530,11 +427,9 @@ function takeOver(view: LiveView, at: Date): Effect.Effect<void> {
     const taken = yield* Effect.result(
       view.deps.takeOver(view.reached.tab.id, view.ask.userId, heldUntil, at),
     );
-    // Note that the member's takeover another window of theirs holds stands too, as the tab was last read, since a takeover is theirs rather than a socket's.
     const standing = (yield* Ref.get(view.driving)) !== undefined || (yield* adoptable(view, at));
     const took = Result.isSuccess(taken) && taken.success;
     yield* Ref.set(view.driving, took ? at.getTime() : undefined);
-    // Note that a takeover the member already held, moved on, is no new one, so it is not counted again.
     if (took && !standing) {
       yield* view.deps.counted(
         view.ask.userId,
@@ -546,10 +441,8 @@ function takeOver(view: LiveView, at: Date): Effect.Effect<void> {
   });
 }
 
-/** The instant a takeover written at the instant given lapses at. */
 const lapsesAt = (writtenAt: number) => writtenAt + BROWSER_TAKEOVER_HOLD_MS;
 
-/** Whether this socket's takeover stands at the instant given, by its last write alone. */
 function standsAt(view: LiveView, at: number): Effect.Effect<boolean> {
   return Effect.map(
     Ref.get(view.driving),
@@ -557,7 +450,6 @@ function standsAt(view: LiveView, at: number): Effect.Effect<boolean> {
   );
 }
 
-/** The member hands back the takeover this socket holds or stands on, one it reconnected to among them: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
 function handBack(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
     const wrote = (yield* Ref.get(view.driving)) !== undefined;
@@ -566,7 +458,6 @@ function handBack(view: LiveView, at: Date): Effect.Effect<void> {
     yield* Ref.set(view.driving, undefined);
     const released = yield* Effect.result(view.deps.handBack(view.reached.tab.id, view.ask.userId));
     yield* Ref.set(view.releasePending, Result.isFailure(released));
-    // Counted only where the store gave the tab back, as the member's own hand-back; the close's release is not.
     if (Result.isSuccess(released) && released.success) {
       yield* view.deps.counted(
         view.ask.userId,
@@ -578,13 +469,6 @@ function handBack(view: LiveView, at: Date): Effect.Effect<void> {
   });
 }
 
-/**
- * The close's release: a hand-back the member asked for that the store did
- * not take, tried again; and a takeover this socket still holds, handed
- * back unless another window of the same member moved it on past this
- * socket's own last write, since a takeover is the member's rather than a
- * socket's and that window still drives.
- */
 function releaseOnClose(view: LiveView): Effect.Effect<void> {
   return Effect.gen(function* () {
     const { ask, deps, reached } = view;
@@ -601,7 +485,6 @@ function releaseOnClose(view: LiveView): Effect.Effect<void> {
   });
 }
 
-/** Whether the member's takeover stood as the tab was last read, where this socket has no write of its own and no hand-back waits. */
 function adoptable(view: LiveView, at: Date): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     if (yield* Ref.get(view.releasePending)) return false;
@@ -610,13 +493,6 @@ function adoptable(view: LiveView, at: Date): Effect.Effect<boolean> {
   });
 }
 
-/**
- * Whether the member's takeover stands, moved on where this socket's last
- * write is `RENEW_EVERY` old. A socket with no write of its own, one that
- * reconnected or another window of the member, drives the takeover the tab
- * was last read with, once the store moves it on for this socket's first
- * input, so a hand-back or another member's take since is never driven past.
- */
 function holding(view: LiveView, at: Date): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const renewedAt = yield* Ref.get(view.driving);
@@ -627,8 +503,6 @@ function holding(view: LiveView, at: Date): Effect.Effect<boolean> {
     const renewed = yield* Effect.result(
       view.deps.renew(view.reached.tab.id, view.ask.userId, heldUntil, at),
     );
-    // Note that a store that could not say leaves the takeover standing only until its last write lapses,
-    // since no other member can take the row before then.
     if (Result.isFailure(renewed))
       return renewedAt !== undefined && at.getTime() < lapsesAt(renewedAt);
     if (renewed.success) {
@@ -641,7 +515,6 @@ function holding(view: LiveView, at: Date): Effect.Effect<boolean> {
   });
 }
 
-/** An input queued for the tab where the member holds it, and refused where they do not. */
 function drive(view: LiveView, message: InputMessage, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
     if (!(yield* holding(view, at))) {
@@ -655,15 +528,9 @@ function drive(view: LiveView, message: InputMessage, at: Date): Effect.Effect<v
   });
 }
 
-/**
- * A step from the tab's bar, queued where the member holds the tab, and
- * taken over for them first where nobody else does; refused where they may
- * not drive the tab, or another member holds it.
- */
 function steer(view: LiveView, message: SteerMessage, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
     if (!(yield* holding(view, at))) {
-      // Note that a refused takeover says why itself, so nothing more is sent.
       if (!view.drivable) return yield* takeOver(view, at);
       yield* takeOver(view, at);
       if (!(yield* standsAt(view, at.getTime()))) {
@@ -677,7 +544,6 @@ function steer(view: LiveView, message: SteerMessage, at: Date): Effect.Effect<v
   });
 }
 
-/** Whether a viewport the panel sent is a size it was not already drawing at: a resize, rather than the same size sent again. */
 function resizes(view: LiveView, size: PixelSize): Effect.Effect<boolean> {
   return Effect.map(
     Ref.get(view.viewport),
@@ -685,14 +551,6 @@ function resizes(view: LiveView, size: PixelSize): Effect.Effect<boolean> {
   );
 }
 
-/**
- * Note that a viewport counts as someone watching only where it resizes the
- * view, because an older panel sends the same size again every minute to keep
- * the socket open, shown or not, and a pane nobody looks at would hold its
- * sandbox for good; a panel that is shown says so with its own message,
- * which alone is no input, since a shown pane says it whether or not anyone
- * is at the window.
- */
 function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Effect<void> {
   return Effect.gen(function* () {
     const at = yield* DateTime.nowAsDate;
@@ -719,7 +577,6 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
   });
 }
 
-/** The panel's messages, each read as the wire has it and anything else passed over, until the panel goes. */
 function readViewer(view: LiveView): Effect.Effect<LiveEnd> {
   return Effect.as(
     Stream.runForEach(view.viewer.frames, (frame) => {
@@ -731,12 +588,6 @@ function readViewer(view: LiveView): Effect.Effect<LiveEnd> {
   );
 }
 
-/**
- * The queued input sent to the tab in order, each run of bare moves folded
- * into its last; a command the browser refused goes nowhere. Each is sent
- * only while the takeover still stands, so input queued behind a slow
- * browser never lands after a hand-back or a lapse.
- */
 function dispatchInput(view: LiveView, target: LiveTarget): Effect.Effect<void, Cause.Done> {
   return Effect.forever(
     Effect.gen(function* () {
@@ -751,7 +602,6 @@ function dispatchInput(view: LiveView, target: LiveTarget): Effect.Effect<void, 
   );
 }
 
-/** Steps the tab's page back or forward by one, where its history holds a page there; a page with none there stays. */
 function stepHistory(target: LiveTarget, by: -1 | 1): Effect.Effect<void> {
   const { cdp, sessionId } = target;
   return Effect.gen(function* () {
@@ -778,7 +628,6 @@ function publishPage(view: LiveView, next: PageState): Effect.Effect<void> {
   });
 }
 
-/** One frame to the panel, unless its socket is still sending the last ones, then acknowledged no sooner than `FRAME_EVERY` after the last. */
 function relayFrame(
   view: LiveView,
   target: LiveTarget,
@@ -819,7 +668,6 @@ function relayFrame(
   });
 }
 
-/** One event of the agent's browser: the tab's frames, its page's changes, and its end; any other tab's are passed over. */
 function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
   return Effect.gen(function* () {
     const targetId = yield* Ref.get(view.targetId);
@@ -836,8 +684,6 @@ function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
         if (Result.isFailure(info) || info.success.targetInfo.targetId !== targetId) return;
         const { url, title } = info.success.targetInfo;
         const last = yield* Ref.get(view.pageState);
-        // Note that a page the member moved, from the bar or by driving it, is kept for a restart to
-        // reopen; one no Browser tab loads, a blank or an error page, is not.
         if ((url !== last.address || title !== last.title) && isBrowserAddress(url)) {
           yield* view.deps.notePage(view.reached.tab.id, targetId, { address: url, title });
         }
@@ -845,7 +691,6 @@ function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
       }
       case CDP_METHOD.STARTED_LOADING:
       case CDP_METHOD.STOPPED_LOADING: {
-        // A page's main frame has the id of its target.
         const frame = readFrameId(event.params);
         if (Result.isFailure(frame) || frame.success.frameId !== targetId) return;
         const last = yield* Ref.get(view.pageState);
@@ -871,7 +716,6 @@ function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
   });
 }
 
-/** The tab's screencast stopped and its target let go, each tried once and briefly, since the connection's close ends both anyway. */
 function endCast(target: LiveTarget): Effect.Effect<void> {
   const settle = (command: CdpCommand) =>
     Effect.ignore(Effect.timeout(target.cdp.send(command), BROWSER_LIVE_BOUNDS.CAST_END_TIMEOUT));
@@ -881,7 +725,6 @@ function endCast(target: LiveTarget): Effect.Effect<void> {
   );
 }
 
-/** The tab's target attached and its screencast started; none where the browser holds no such target. */
 function castTab(
   view: LiveView,
   cdp: CdpSession,
@@ -901,7 +744,6 @@ function castTab(
     const answer = readSessionId(yield* cdp.send(attach));
     if (Result.isFailure(answer)) return undefined;
     const target = { cdp, sessionId: answer.success.sessionId };
-    // The cast ends with the view, ahead of the connection's own close, so no frame is made for nobody.
     yield* Effect.addFinalizer(() => endCast(target));
     yield* Ref.set(view.live, target);
     yield* cdp.send({ method: "Page.enable", sessionId: target.sessionId });
@@ -915,7 +757,6 @@ function castTab(
   });
 }
 
-/** The agent's browser reached, the tab's target attached and cast, and how the browser's side ended. */
 function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope> {
   return Effect.gen(function* () {
     const { deps } = view;
@@ -931,22 +772,17 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
         : BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
     }
     const cdp = connected.success;
-    // The connect resumed the sandbox where it was stopped, so it is kept alive from here for as long as the view stands.
     yield* Effect.forkScoped(
       Effect.repeat(deps.keepAlive(session.success.value), {
         schedule: Schedule.spaced(CODER.SANDBOX_KEEP_ALIVE_EVERY),
       }),
     );
-    // The tab is read again, since a browser that started afresh reopened it on a new target.
     const current = yield* Effect.result(
       deps.readTab(view.ask.userId, view.ask.place, view.ask.tabId),
     );
-    // A store that could not say is unavailable, and a tab the member no longer reaches, or that closed, is gone.
     if (Result.isFailure(current)) return BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
     if (Option.isNone(current.success)) return BROWSER_LIVE_CLOSE_REASON.GONE;
     yield* Ref.set(view.targetId, current.success.value.tab.targetId);
-    // Note that the events are read from before the first command, so the screencast's first frame, after
-    // which Chromium sends none until it is acknowledged, is never missed.
     yield* Effect.forkScoped(
       Effect.andThen(
         Stream.runForEach(cdp.events, (event) => onEvent(view, event)),
@@ -956,14 +792,12 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
     yield* Effect.yieldNow;
     const cast = yield* Effect.result(castTab(view, cdp));
     if (Result.isFailure(cast)) return BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
-    // The browser holds no such target: the tab closed, or a resume began the browser afresh.
     if (cast.success === undefined) return BROWSER_LIVE_CLOSE_REASON.GONE;
     yield* Effect.forkScoped(Effect.ignore(dispatchInput(view, cast.success)));
     return yield* Deferred.await(view.browserEnded);
   });
 }
 
-/** One live view, from its tab read to its close, everything it opens belonging to the scope it runs in. */
 export function relayBrowserTab(
   viewer: BrowserLiveViewer,
   ask: BrowserLiveAsk,
@@ -973,9 +807,7 @@ export function relayBrowserTab(
   return Effect.gen(function* () {
     const startedAt = yield* DateTime.nowAsDate;
     const view = yield* openView(viewer, ask, reached, deps, startedAt);
-    // A takeover this socket took is handed back as it closes, however it closes.
     yield* Effect.addFinalizer(() => releaseOnClose(view));
-    // A watched coding agent's sandbox is held from the start, so the resume a connection makes is held too.
     yield* deps.hold(reached.tab.conversationId, heldFrom(startedAt));
     const end = yield* Effect.raceAll([
       readViewer(view),

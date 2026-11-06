@@ -14,14 +14,6 @@ import {
   startRecording,
 } from "./sandbox-recorder.js";
 
-/**
- * sandbox-recorder.test.ts -- the recording's commands as the sandbox runs
- * them and their runs as the service reads them: a start that started, one
- * left running, and one that failed; a stop's video, its known failures, and
- * anything else read as an encoder that failed. The scripts themselves run
- * only in a sandbox, beside the browser and the encoder.
- */
-
 const run = (stdout: string, exitCode = 0) => ({ exitCode, stdout, stderr: "" });
 
 test("a start runs with the recorder's source, and its run says whether it started one", () => {

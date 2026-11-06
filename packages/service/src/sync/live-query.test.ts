@@ -19,20 +19,8 @@ import { LIVE_QUERIES } from "./live-queries.js";
 import { defineLiveQuery, LIVE_MODE, type LiveQuery, type SyncMoved } from "./live-query.js";
 import { Sync } from "./watch.js";
 
-/**
- * Live reads Sync wakes, on tables only these tests create: the
- * registry check holds a definition's statements, as Postgres plans them,
- * to the synced tables it declares and to no column they ignore; and a
- * held read on the hub answers within a coalesce window of a write to its
- * rows, carrying the write's txid, or unchanged at the hold's end. The
- * hub's waits run on a clock that announces each one, as the hub's own
- * tests do, so a write the database is still delivering is never outrun.
- */
-
-/** The hub's coalesce window: how long a woken watch gathers before it answers. */
 const COALESCE = Duration.millis(100);
 
-/** How long a live read is held before it answers unchanged. */
 const HOLD = Duration.seconds(25);
 
 const PROBE = pgTable("live_query_probe", {
@@ -47,7 +35,6 @@ const probeSync = defineSyncTable(PROBE, {
   ignore: [PROBE.hot],
 });
 
-/** The probe and a table beside it that no declaration captures, created as a migration would, with the probe's capture. */
 const probeDB = Layer.provideMerge(
   Layer.effectDiscard(
     Effect.gen(function* () {
@@ -62,7 +49,6 @@ const probeDB = Layer.provideMerge(
   getTestDB(),
 );
 
-/** A toy read of one task's probe rows, standing in for a view's own; `sql` reads them, its one placeholder the task. */
 const probeQuery = (sql: string) =>
   defineLiveQuery({
     name: "taskHistory",
@@ -77,25 +63,20 @@ const PROBE_READ = probeQuery(
   "select p.id, p.note from live_query_probe p where p.task_id = $1 order by p.id",
 );
 
-/** One node of an explained plan, as its JSON writes it, the nodes under it among its `Plans`. */
 type PlanNode = Readonly<Record<string, unknown>>;
 
-/** A node of the plan, and whether it is a root: the statement's top node, or a subquery's. */
 interface PlannedNode {
   readonly node: PlanNode;
   readonly root: boolean;
 }
 
-/** A relation a plan scans, by its alias, with the node that scans it. */
 interface Scan extends PlannedNode {
   readonly table: string;
   readonly alias: string;
 }
 
-/** How a plan names the place of a subquery's top node, whose output is the subquery's own. */
 const SUBQUERY_ROOT: ReadonlySet<unknown> = new Set(["SubPlan", "InitPlan"]);
 
-/** Every node under the explained plan, each once, the roots marked. */
 function nodesOf(explained: unknown, root = false): readonly PlannedNode[] {
   if (Array.isArray(explained)) return explained.flatMap((each) => nodesOf(each, root));
   if (typeof explained !== "object" || explained === null) return [];
@@ -105,7 +86,6 @@ function nodesOf(explained: unknown, root = false): readonly PlannedNode[] {
   return [own, ...nodesOf(fields.Plans)];
 }
 
-/** The node's scan of a relation, where it is one. */
 function scanOf(planned: PlannedNode): readonly Scan[] {
   const table = planned.node["Relation Name"];
   const alias = planned.node.Alias;
@@ -114,7 +94,6 @@ function scanOf(planned: PlannedNode): readonly Scan[] {
     : [];
 }
 
-/** The text the node writes itself, every node under it left out, and its output too where it is `withoutOutput`. */
 function ownExpressions(node: PlanNode, withoutOutput: boolean): readonly string[] {
   return Object.entries(node).flatMap(([key, value]) => {
     if (key === "Plans" || (withoutOutput && key === "Output")) return [];
@@ -123,12 +102,6 @@ function ownExpressions(node: PlanNode, withoutOutput: boolean): readonly string
   });
 }
 
-/**
- * Whether an expression names the relation's column, or its whole row.
- * Note that a verbose plan qualifies a column by its alias wherever the
- * statement reads more than one relation, and writes it bare where it reads
- * one, so a bare name in its text is that relation's.
- */
 function namesColumn(alias: string, column: string): (expression: string) => boolean {
   const escaped = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const qualifier = `"?${escaped(alias)}"?\\.`;
@@ -138,12 +111,6 @@ function namesColumn(alias: string, column: string): (expression: string) => boo
   return (expression) => reference.test(expression);
 }
 
-/**
- * Whether a scan below its root emits every column of its table. Note that
- * Postgres has a scan feeding a join emit its table's whole row, its
- * physical tlist, to save a projection, so that output says nothing of what
- * the statement reads: the node above names what it takes of it.
- */
 function emitsWholeRow(scan: Scan, table: SyncTable): boolean {
   const output = scan.node.Output;
   if (scan.root || !Array.isArray(output)) return false;
@@ -153,19 +120,10 @@ function emitsWholeRow(scan: Scan, table: SyncTable): boolean {
   );
 }
 
-/** What moved for a delta read's plan: one key of every table, column, and topic kind, so every way it narrows is planned. */
 const MOVED_EVERYTHING: SyncMoved = { keys: () => [randomUUID()], topics: () => [randomUUID()] };
 
-/** The name a statement is prepared under while it is explained. */
 const PLANNED = "live_query_planned";
 
-/**
- * The statement's generic plan, as JSON: prepared under a name and
- * explained executing it, each value a null a generic plan never reads, as
- * `planOf` (`@repo/database/testing`) explains one. Note that an explain's
- * own `generic_plan` would do, but the driver binds every placeholder it is
- * handed, and an explain prepared with placeholders reads them as its own.
- */
 const genericPlanOf = (statement: string) =>
   Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -188,18 +146,6 @@ const genericPlanOf = (statement: string) =>
     ),
   );
 
-/**
- * The registry check: every way the query's statements, as Postgres plans
- * them generically, read past what it declares, a table its `reads` leaves
- * out or a column one of them ignores, each once; none where it reads only
- * what it declares. Note that the plan is read rather than the SQL, so a
- * column two tables share is told apart by the relation it is read from,
- * and that a column is read wherever any node of the plan names it, bar a
- * scan's whole row emitted for the node above to pick from (`emitsWholeRow`).
- * A read in cursor mode is planned past a cursor too, as a reader that names
- * one is answered, and a read in delta mode narrowed to a key of every kind
- * it narrows by, as a reader past a sync id is.
- */
 const faultsOf = (query: LiveQuery) =>
   Effect.gen(function* () {
     const params = Object.fromEntries(query.params.map((param) => [param, randomUUID()]));
@@ -238,7 +184,6 @@ const faultsOf = (query: LiveQuery) =>
     return [...faults];
   });
 
-/** Commits a probe row on the task, answering its transaction's id. */
 const written = (taskId: string) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql<{ readonly txid: string }>`
@@ -247,11 +192,6 @@ const written = (taskId: string) =>
     `.pipe(Effect.map(([inserted]) => inserted?.txid)),
   );
 
-/**
- * Runs the test on the hub, on a clock that announces each wait, with each
- * `next` a watch begins announced on `looking`, so the test writes only
- * once a held read's first look found nothing moved.
- */
 const onHub = <A, E, R>(
   test: (probe: {
     readonly asleep: Queue.Dequeue<void>;
@@ -353,7 +293,6 @@ it.layer(probeDB)("live reads Vespin Sync wakes", (it) => {
             startImmediately: true,
           });
           yield* Queue.take(looking);
-          // Note that the waits announced while the read was held count for nothing now.
           yield* Queue.clear(asleep);
 
           const from = yield* Clock.currentTimeMillis;

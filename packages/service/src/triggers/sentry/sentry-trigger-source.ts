@@ -20,36 +20,14 @@ import {
 } from "../trigger-source.js";
 import { SentryApp } from "./sentry-app-config.js";
 
-/**
- * sentry-trigger-source.ts -- our Sentry integration's webhook as a trigger source: a delivery verified under the client secret, an uninstall marked, and an alert or a new issue read as the catalog's event.
- *
- * Sentry signs every delivery with the integration's client secret, the
- * HMAC-SHA256 of the body's own bytes in hex under `Sentry-Hook-Signature`,
- * names what it is about in `Sentry-Hook-Resource` beside the body's
- * `action`, and names the delivery itself in `Request-ID`, which a run is
- * recorded under. An issue alert whose action is our integration
- * (`event_alert`, `triggered`) is `alert-triggered`, and a new issue
- * (`issue`, `created`) is `issue-created`; every other resource and action
- * is read as nothing. An uninstall (`installation`, `deleted`) marks the
- * installation deleted so nothing it sends fires again; an install is the
- * install flow's to link and is ignored here. Of an event only what the
- * run's history and the agent's summary name is read: the issue, its title
- * and address, the project, environment, and level its trigger filters on,
- * and the few lines a summary is made of. The field names are those of
- * Sentry's integration platform webhooks (issue alerts and issues).
- */
-
-/** The path Sentry delivers to, as the integration's settings name it under the deployment's origin. */
 const SENTRY_TRIGGER_PATH = "/api/triggers/sentry";
 
-/** The headers a delivery carries that are read here, lower case. */
 const SENTRY_HEADER = {
   SIGNATURE: "sentry-hook-signature",
   RESOURCE: "sentry-hook-resource",
   REQUEST_ID: "request-id",
 } as const;
 
-/** The resources a delivery may be about, as Sentry names them. */
 const SENTRY_RESOURCE = {
   INSTALLATION: "installation",
   EVENT_ALERT: "event_alert",
@@ -62,16 +40,12 @@ const SENTRY_ACTION = {
   DELETED: "deleted",
 } as const;
 
-/** The most a summary spells, in UTF-8 bytes. */
 const SUMMARY_MAX_BYTES = 4096;
 
-/** The longest one value a summary line spells, so one long title leaves room for the rest. */
 const SUMMARY_VALUE_CHARS = 512;
 
-/** The most in-app stack frames a summary names, innermost first. */
 const SUMMARY_FRAMES = 5;
 
-/** What a summary cut to its bound ends with. */
 const SUMMARY_CUT = "\n…";
 
 const verifySignature = hmacVerifier({ header: SENTRY_HEADER.SIGNATURE, encoding: "hex" });
@@ -83,7 +57,6 @@ const OptionalCount = Schema.optionalKey(
 
 const InstallationSchema = Schema.Struct({ uuid: Schema.String });
 
-/** A delivery as far as its installation is read. */
 const EnvelopeSchema = Schema.Struct({
   action: Schema.String,
   installation: InstallationSchema,
@@ -111,7 +84,6 @@ const ExceptionSchema = Schema.Struct({
   ),
 });
 
-/** An issue alert as far as it is read. */
 const EventAlertSchema = Schema.Struct({
   data: Schema.Struct({
     event: Schema.Struct({
@@ -133,7 +105,6 @@ const EventAlertSchema = Schema.Struct({
   }),
 });
 
-/** A new issue as far as it is read. */
 const IssueSchema = Schema.Struct({
   data: Schema.Struct({
     issue: Schema.Struct({
@@ -157,7 +128,6 @@ type EventAlert = typeof EventAlertSchema.Type;
 type Issue = typeof IssueSchema.Type;
 type Frame = typeof FrameSchema.Type;
 
-/** A delivery read against the few fields it is read for; every other key Sentry sends is dropped unread. */
 function readDelivery<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   payload: UnparsedWireValue,
@@ -165,18 +135,12 @@ function readDelivery<S extends Schema.ConstraintDecoder<unknown>>(
   return readEither(schema, { excess: EXCESS_KEYS.DROP })(payload);
 }
 
-/** A value present and not blank, or nothing. */
 function present(value: string | number | null | undefined): string | undefined {
   if (value === null || value === undefined) return undefined;
   const text = String(value).trim();
   return text.length === 0 ? undefined : text;
 }
 
-/**
- * The key a delivery's run is recorded under: Sentry's `Request-ID`, the
- * same on its redelivery, as its SHA-256 so a key of any length fits; the
- * body's own digest where it sends none, so the same bytes are one run.
- */
 function dedupeKeyOf(delivery: TriggerDelivery): string {
   const requestId = present(delivery.headers[SENTRY_HEADER.REQUEST_ID]);
   return requestId === undefined
@@ -184,26 +148,22 @@ function dedupeKeyOf(delivery: TriggerDelivery): string {
     : createHash("sha256").update(requestId).digest("hex");
 }
 
-/** The project's slug an event's API address names (`/projects/<org>/<project>/events/`). */
 function projectOfEventUrl(url: string | undefined): string | undefined {
   if (url === undefined) return undefined;
   return /\/projects\/[^/]+\/([^/]+)\/events\//u.exec(url)?.[1];
 }
 
-/** The issue's own page an event's page sits under (`…/issues/<id>/events/<event>/` to `…/issues/<id>/`). */
 function issueUrlOfEventUrl(url: string | undefined): string | undefined {
   if (url === undefined) return undefined;
   const issue = /^(.*\/issues\/[^/]+\/)events\//u.exec(url)?.[1];
   return issue ?? url;
 }
 
-/** A tag's value among an event's tags. */
 function tagOf(tags: EventAlert["data"]["event"]["tags"], name: string): string | undefined {
   const found = (tags ?? []).find((tag) => tag[0] === name);
   return present(found?.[1]);
 }
 
-/** One frame as a summary names it: `function (file:line)`. */
 function frameLine(frame: Frame): string {
   const where = present(frame.filename) ?? present(frame.module) ?? "?";
   const line = frame.lineno == null ? where : `${where}:${frame.lineno}`;
@@ -211,7 +171,6 @@ function frameLine(frame: Frame): string {
   return name === undefined ? line : `${name} (${line})`;
 }
 
-/** The in-app frames of the event's primary exception, innermost first, at most a few. */
 function topFrames(exception: EventAlert["data"]["event"]["exception"]): readonly string[] {
   const values = exception?.values ?? [];
   const primary = values[values.length - 1];
@@ -223,13 +182,11 @@ function topFrames(exception: EventAlert["data"]["event"]["exception"]): readonl
     .map(frameLine);
 }
 
-/** One summary line where its value is present, the value cut to its bound. */
 function field(label: string, value: string | number | null | undefined): readonly string[] {
   const text = present(value);
   return text === undefined ? [] : [`${label}: ${text.slice(0, SUMMARY_VALUE_CHARS)}`];
 }
 
-/** The lines joined, cut on a character to fit the summary's bound in UTF-8 bytes. */
 function boundedSummary(lines: readonly string[]): string {
   const joined = lines.join("\n");
   const encoder = new TextEncoder();
@@ -245,7 +202,6 @@ function boundedSummary(lines: readonly string[]): string {
   return `${joined.slice(0, end)}${SUMMARY_CUT}`;
 }
 
-/** An issue alert as the catalog's `alert-triggered`. */
 function alertEvent(alert: EventAlert, dedupeKey: string): NormalizedEvent {
   const { event, triggered_rule } = alert.data;
   const issueId = String(event.issue_id);
@@ -288,7 +244,6 @@ function alertEvent(alert: EventAlert, dedupeKey: string): NormalizedEvent {
   };
 }
 
-/** A new issue as the catalog's `issue-created`. */
 function issueEvent(read: Issue, dedupeKey: string): NormalizedEvent {
   const { issue } = read.data;
   const issueId = String(issue.id);
@@ -323,7 +278,6 @@ function issueEvent(read: Issue, dedupeKey: string): NormalizedEvent {
   };
 }
 
-/** The resource and action a delivery names, and the installation it came through. */
 function envelopeOf(delivery: TriggerDelivery) {
   const read = readDelivery(EnvelopeSchema, delivery.payload);
   if (Result.isFailure(read)) return undefined;
@@ -334,7 +288,6 @@ function envelopeOf(delivery: TriggerDelivery) {
   };
 }
 
-/** The Sentry integration's deliveries, as the trigger ingress reads them. */
 export const sentryTriggerSource: TriggerSource<SentryApp> = {
   provider: TRIGGER_PROVIDER.SENTRY,
   path: SENTRY_TRIGGER_PATH,
@@ -350,7 +303,6 @@ export const sentryTriggerSource: TriggerSource<SentryApp> = {
     Effect.gen(function* () {
       const envelope = envelopeOf(delivery);
       if (envelope?.resource !== SENTRY_RESOURCE.INSTALLATION) return false;
-      // An install is linked by the install flow, which holds the workspace it was asked for; only an uninstall is read here.
       if (envelope.action === SENTRY_ACTION.DELETED) {
         yield* markIntegrationInstallationDeleted(TRIGGER_PROVIDER.SENTRY, envelope.installation);
       }

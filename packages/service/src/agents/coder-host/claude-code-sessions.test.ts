@@ -116,26 +116,12 @@ import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
-/**
- * A coding agent's sessions on Claude Code, against a fake of Vercel
- * Sandbox's REST API that keeps every sandbox, command, stdin, and upload
- * it was asked for, over a real store: the image's runner started as the
- * SDK's own `agent` user with its secrets in its environment, the CLI's
- * credential a placeholder there that its firewall swaps, its config
- * and messages written to its stdin, a stop, a relaunch on the CLI's session
- * after the sandbox stopped, a launch's end stopping the sandbox unless a
- * Terminal holds it, and a reset deleting the sandbox and retiring the
- * runner's bearer. Synthetic accounts, tokens, and snapshot ids throughout.
- */
-
 const IMAGE = "agent-image:fixture";
 const EVENTS_URL = "https://app.test/api/agents/runner/events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
 const MCP_URL = "https://app.test/api/agents/mcp";
-/** The host every address above names, which the firewall swaps the runner's bearer in on. */
 const SERVICE_HOST = "app.test";
 
-/** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
 const INSTRUCTIONS = "You are a Vespin coding agent.";
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
@@ -162,7 +148,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
 function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
   return vercelMachineLayer({
     readToken: deploymentOidcToken,
@@ -170,15 +155,12 @@ function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
   }).pipe(Layer.provide(http));
 }
 
-/** The script root readied the sandbox with before the runner started, as `sudo -n bash -c` ran it. */
 function readyingScript(api: ReturnType<typeof runnerSandboxApi>): string {
   return api.runs.find((run) => run.args[0] === "-n" && run.args[2] === "-c")?.args[3] ?? "";
 }
 
-/** The agents' image as a deploy names it, the fixture's. */
 const FIXTURE_IMAGE = Layer.succeed(AgentImage, { reference: Effect.succeed(IMAGE) });
 
-/** Everything but the store, around the fake Vercel given. */
 function services(api: ReturnType<typeof runnerSandboxApi>, http = api.layer) {
   return Layer.mergeAll(
     http,
@@ -189,7 +171,6 @@ function services(api: ReturnType<typeof runnerSandboxApi>, http = api.layer) {
   );
 }
 
-/** An account with one agent on a task with no repository, and no Claude plan. */
 const openAgentWithoutPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
@@ -210,7 +191,6 @@ const openAgentWithoutPlan = Effect.gen(function* () {
   return { userId, agent: started.value.agent };
 });
 
-/** The account's Claude plan: its setup-token, sealed as Settings saves it. */
 const savePlan = (userId: string) =>
   Effect.gen(function* () {
     const ring = parseKeyRing(Redacted.make(RING));
@@ -231,10 +211,8 @@ const savePlan = (userId: string) =>
     );
   });
 
-/** An account with one agent on a task with no repository, on its Claude plan. */
 const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(userId));
 
-/** The sessions for the account, the next event number read from the counter given. */
 function sessionsFor(userId: string, sequence: { next: number }) {
   const options: RunnerSessionsOptions = {
     userId,
@@ -248,7 +226,6 @@ function sessionsFor(userId: string, sequence: { next: number }) {
   return claudeCodeSessions(options);
 }
 
-/** The first launch's runner as a row leaves it before the next message: as launched, or exited. */
 const asLaunched = (_api: ReturnType<typeof runnerSandboxApi>) => undefined;
 const runnerExited = (api: ReturnType<typeof runnerSandboxApi>) => {
   const first = api.commands[0];
@@ -262,11 +239,9 @@ const message = (agent: Agent, text: string, lineId?: string) => ({
   ...(lineId === undefined ? undefined : { lineId }),
 });
 
-/** The developer's words of a message line: what follows the turn's own words, which lead every message (`turn-message.ts`). */
 const developerContent = (line: InputLine | undefined) =>
   line?.type === INPUT_LINE.MESSAGE ? line.content.slice(1) : [];
 
-/** Each message line of the launch as its text blocks, the turn's own words first. */
 const textsOf = (command: Parameters<typeof launchLines>[0]) =>
   Effect.map(launchLines(command), (lines) =>
     (lines as InputLine[]).flatMap((each) =>
@@ -276,7 +251,6 @@ const textsOf = (command: Parameters<typeof launchLines>[0]) =>
     ),
   );
 
-/** What the launch reads past its config: its own lines, and the messages no earlier launch took, as its runner is handed them. */
 const handedLines = (userId: string, command: Parameters<typeof launchLines>[0]) =>
   Effect.gen(function* () {
     const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
@@ -290,7 +264,6 @@ const handedLines = (userId: string, command: Parameters<typeof launchLines>[0])
     return read.map((line) => JSON.parse(line.text) as InputLine);
   });
 
-/** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
 const turnUnderWay = (userId: string, agent: Agent) =>
   Effect.gen(function* () {
     const turnId = randomUUID();
@@ -302,7 +275,6 @@ const turnUnderWay = (userId: string, agent: Agent) =>
     return turnId;
   });
 
-/** A point a fake call stops at until the test opens it: `arrived` settles once a call reached it. */
 function gate() {
   let arrive = () => {};
   let open = () => {};
@@ -322,7 +294,6 @@ function gate() {
   };
 }
 
-/** Every turn of the event loop a call not held behind the lease would need to race the one held, then the held one let through, its waiter woken, until both settle. */
 const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fiber<A, E>[]) =>
   Effect.gen(function* () {
     const turns = () =>
@@ -340,12 +311,6 @@ const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fi
     return yield* Effect.forEach(fibers, Fiber.join);
   });
 
-/**
- * The work run, the clock moved on by `step` a time at a time, `times`
- * times, each after the event loop turned enough for a wait the work armed
- * to stand, and the work joined.
- */
-/** Real turns of the event loop enough for a forked fiber to reach whatever it waits on next. */
 const turnsPass = Effect.promise(async () => {
   for (let turn = 0; turn < 50; turn += 1) {
     await new Promise<void>((settle) => setImmediate(settle));
@@ -362,14 +327,12 @@ const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times:
     return yield* Fiber.join(fiber);
   });
 
-/** The agent's newest turn, as its status reads it, and the word its failure is read as. */
 const newestTurn = (agent: Agent) =>
   Effect.map(latestTurnsOfReached([agent.conversationId]), (turns) => {
     const turn = turns.get(agent.conversationId);
     return { status: turn?.status, failure: agentFailureOf(turn) };
   });
 
-/** Why the agent's newest turn failed, as its record keeps it. */
 const newestFailureDetail = (agent: Agent) =>
   Effect.map(
     latestTurnsOfReached([agent.conversationId]),
@@ -380,12 +343,10 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** What a repository agent's sessions are composed with beside the fake Vercel: what a test does as each request reaches GitHub. */
 interface RepositoryAgentSeams {
   readonly onGitHub?: (sent: SentToGitHub) => void;
 }
 
-/** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
 const repositoryAgent = (
   api: ReturnType<typeof runnerSandboxApi>,
   installation: InstallationFixture = RELAY_INSTALLATION,
@@ -422,7 +383,6 @@ const repositoryAgent = (
       seams.onGitHub?.(sent);
       return undefined;
     });
-    // The SDK's calls of Vercel reach the same fake as the client's, through its own `fetch`.
     const http = Layer.merge(github.layer, sandboxFetchOver(api.respond));
     const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
       Effect.provide(
@@ -438,11 +398,9 @@ const repositoryAgent = (
     return { userId, agent, sessions };
   });
 
-/** The contents access a repository token is cut to: a checkout's reads, the firewall's writes. */
 const TOKEN_ACCESS = { READ: "read", WRITE: "write" } as const;
 type TokenAccess = (typeof TOKEN_ACCESS)[keyof typeof TOKEN_ACCESS];
 
-/** Whether a request to GitHub mints a repository token cut to the access given. */
 const mintsRepositoryToken = (each: SentToGitHub, access: TokenAccess) => {
   if (!new URL(each.url).pathname.endsWith("/access_tokens")) return false;
   const asked: { repositories?: unknown; permissions?: { contents?: string } } = JSON.parse(
@@ -451,7 +409,6 @@ const mintsRepositoryToken = (each: SentToGitHub, access: TokenAccess) => {
   return asked.repositories !== undefined && asked.permissions?.contents === access;
 };
 
-/** A request a test waits to see reach GitHub: `seen` settles once one the predicate takes arrived. */
 function sighting(wanted: (sent: SentToGitHub) => boolean) {
   let settle = () => {};
   const seen = new Promise<void>((resolve) => {
@@ -465,7 +422,6 @@ function sighting(wanted: (sent: SentToGitHub) => boolean) {
   };
 }
 
-/** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
 const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
   Effect.gen(function* () {
     assert.ok(agent.taskId !== null);
@@ -483,39 +439,27 @@ const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
     return Option.getOrThrow(started).agent;
   });
 
-/**
- * An installation of its own reaching the Relay repository, since the tests
- * share one store, in which an installation stays linked to the first
- * workspace that connected it.
- */
 function ownInstallation(): InstallationFixture {
   return { ...RELAY_INSTALLATION, id: 1_000 + Math.floor(Math.random() * 1_000_000) };
 }
 
-/** How much of the sandbox delete queue a test reads, the store's other sessions among it. */
 const QUEUE_READ = 1_000;
 
-/** Whether a run in the sandbox was the clone, by the variable only the clone is handed. */
 const isClone = (run: { readonly env: Readonly<Record<string, string>> }) =>
   Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.URL);
 
-/** Whether a run in the sandbox was a forked checkout's refresh. */
 const isRefresh = (run: { readonly env: Readonly<Record<string, string>> }) =>
   Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.REFRESH);
 
-/** Whether a run in the sandbox was the install. */
 const isInstall = (run: { readonly args: readonly string[] }) =>
   run.args.some((arg) => arg.includes("pnpm install"));
 
-/** The base drives standing, by name. */
 const baseDrives = (api: ReturnType<typeof runnerSandboxApi>) =>
   [...api.drives].filter((name) => name.startsWith(BASE_DRIVE.NAME_PREFIX));
 
-/** The agent's own sandbox still standing, by the agent's tag. */
 const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: Agent) =>
   api.sandboxes.find((each) => !each.deleted && each.tags[AGENT_TAG] === agent.id);
 
-/** A host's rule in a policy the fake took, as far as a swap reads it. */
 interface SentRule {
   readonly match?: {
     readonly headers?: readonly {
@@ -526,7 +470,6 @@ interface SentRule {
   readonly transform?: readonly { readonly headers: Readonly<Record<string, string>> }[];
 }
 
-/** The swaps on Anthropic's API in the last policy sent to the sandbox session given: the header each matches, the value it matches at, and what it sets there. */
 const anthropicSwaps = (api: ReturnType<typeof runnerSandboxApi>, session: string | undefined) => {
   const sent = api.policies.filter((each) => each.session === session).at(-1)?.policy as
     | { readonly allow?: Readonly<Record<string, readonly SentRule[]>> }
@@ -561,13 +504,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(sandbox !== undefined);
         assert.equal(sandbox.image, IMAGE);
         assert.equal(sandbox.tags.sessionId, opened.sessionId);
-        // The working folder an agent with no repository works in.
         assert.ok(
           api.runs.some((run) => run.args.join(" ").includes("mkdir -p /workspace/repository")),
         );
 
-        // The sandbox made the agent's user as it opened, its home closed to every other user, and
-        // root shared the checkout with it before the image's runner started as that user.
         assert.ok(api.runs.some((run) => run.args.join(" ") === "-m -s /bin/bash agent"));
         assert.ok(api.runs.some((run) => run.args.slice(-2).join(" ") === "700 /home/agent"));
         assert.ok(
@@ -581,7 +521,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(command.command, "node");
         assert.deepEqual(command.args, ["/opt/agent/agent-runner/agent-runner.mjs"]);
 
-        // The CLI reads a placeholder where the plan's token would stand, which the firewall swaps for the token on Anthropic's API.
         const placeholder = command.env[RUNNER_ENV.CLAUDE_TOKEN];
         assert.ok(
           placeholder !== undefined && placeholder.length > 20 && placeholder !== PLAN_TOKEN,
@@ -589,8 +528,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(anthropicSwaps(api, sandbox.currentSessionId), [
           { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
         ]);
-        // The runner holds a placeholder for its bearer too, which the firewall standing as it
-        // started swaps on our host for the bearer whose digest the agent's row records.
         const bearerPlaceholder = command.env[RUNNER_ENV.BEARER];
         const bearer = launchBearer(api, command, SERVICE_HOST);
         assert.ok(bearerPlaceholder !== undefined && bearer !== undefined && bearer.length > 20);
@@ -617,7 +554,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);
         assert.deepEqual(developerContent(first), [{ type: "text", text: "Fix the invitations." }]);
-        // No secret in the runner's own argv, the config, a tag, or anything uploaded, and neither the plan's token nor the bearer in any command's environment.
         const visible = JSON.stringify([
           command.args,
           yield* launchLines(command),
@@ -646,7 +582,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         yield* sessions.open(message(agent, "Fix the invitations."));
-        // The launch's step that shares the checkout with the group, run by a real bash on a real checkout.
         const step = readyingScript(api)
           .split("\n")
           .find((each) => each.includes("core.sharedRepository"));
@@ -681,7 +616,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
-        // An installed skill is handed only to a member with the Skills experiment on.
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
         const skillFile =
           "---\nname: sentry-triage\ndescription: Triage a Sentry issue.\nallowed-tools: Bash\n---\nRun `scripts/triage.sh`.\n";
@@ -696,7 +630,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             { path: "scripts/triage.sh", bytes: new TextEncoder().encode("echo triage\n") },
           ],
         });
-        // A file that names no skill and describes it in words its stored description has since replaced.
         yield* installSkill(userId, {
           owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
           name: "incident-notes",
@@ -723,7 +656,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
         );
         assert.ok(skills !== undefined);
-        // A Claude Code local plugin named luke, each skill a whole folder.
         assert.deepEqual([...skills.keys()].sort(), [
           "/tmp/agent-installed-skills/.claude-plugin/plugin.json",
           "/tmp/agent-installed-skills/skills/incident-notes/SKILL.md",
@@ -735,7 +667,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             .name,
           "workspace",
         );
-        // Every other key and the body as installed, under the name and description we keep.
         assert.equal(
           skills.get("/tmp/agent-installed-skills/skills/sentry-triage/SKILL.md"),
           '---\nname: sentry-triage\ndescription: "Triage a Sentry issue."\nallowed-tools: Bash\n---\n\nRun `scripts/triage.sh`.\n',
@@ -744,7 +675,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           skills.get("/tmp/agent-installed-skills/skills/incident-notes/SKILL.md"),
           '---\nname: incident-notes\ndescription: "Write incident notes."\nuser-invocable: false\n---\n\nWrite them.\n',
         );
-        // Nothing lands in the checkout, so nothing can be committed.
         assert.ok(![...skills.keys()].some((path) => path.startsWith(CODER.CHECKOUT_PATH)));
 
         const [command] = api.commands;
@@ -756,7 +686,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
         assert.equal(config.installedSkills, "/opt/agent/installed-skills");
 
-        // An account with no installed skills uploads none, and the launch installs nothing.
         const bare = runnerSandboxApi();
         const other = yield* openAgent;
         const otherSessions = yield* sessionsFor(other.userId, { next: 0 }).pipe(
@@ -819,7 +748,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [`Bearer ${PLAN_TOKEN}`],
         );
 
-        // Another agent's turn finds the plan refused: a message to this live runner is refused too, and nothing is written to it.
         yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
         const written = (yield* launchLines(reset.commands[0])).length;
         assert.deepEqual(yield* live.send(reopened.sessionId, message(agent, "Also the emails.")), {
@@ -876,7 +804,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal("planRefusal" in refused && refused.planRefusal, PLAN_REFUSAL.SIGNED_OUT);
         assert.deepEqual(signedOut.commands, []);
 
-        // A plan Settings keeps from agents stands aside for the account's own key, as Start would choose.
         yield* savePlan(userId);
         yield* setProviderKeyForAgents(
           userId,
@@ -903,7 +830,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const onKey = runnerSandboxApi();
         const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(onKey)));
         assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        // A Mac has no firewall of ours, so its CLI is handed the key itself, and no swap is set.
         assert.equal(onKey.commands[0]?.env[RUNNER_ENV.API_KEY], API_KEY);
         assert.equal(onKey.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.deepEqual(onKey.policies, []);
@@ -933,7 +859,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
         assert.ok(Option.isSome(started));
         const agent = started.value.agent;
-        // The account keeps a plan too, refused: an agent on its key never asks it.
         yield* savePlan(userId);
         const now = yield* DateTime.nowAsDate;
         yield* setPlanStatus(
@@ -970,7 +895,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [command] = api.commands;
         assert.ok(command !== undefined);
-        // The CLI reads a placeholder where the key would stand, which the firewall swaps for the key in Anthropic's own header.
         const placeholder = command.env[RUNNER_ENV.API_KEY];
         assert.ok(placeholder !== undefined && placeholder !== API_KEY);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
@@ -1028,7 +952,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           payer: AGENT_PAYER.API_KEY,
         });
         assert.ok(Option.isSome(started));
-        // The key was sealed under another deployment's ring, as a Preview's database holds production's.
         const elsewhere = parseKeyRing(
           Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
         );
@@ -1158,7 +1081,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
       const [model, line, stop] = ((yield* launchLines(api.commands[0])) as InputLine[]).slice(2);
-      // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
       assert.deepEqual(model, {
         type: INPUT_LINE.MODEL,
         model: "claude-sonnet-5-5",
@@ -1168,7 +1090,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.ok(line?.type === INPUT_LINE.MESSAGE);
       assert.equal(line.uuid, lineId);
       assert.deepEqual(developerContent(line), [{ type: "text", text: "Also the emails." }]);
-      // The stop names the launch running the turn, by its first event number.
       assert.deepEqual(stop, { type: INPUT_LINE.STOP, launch: 0 });
     }),
   );
@@ -1222,7 +1143,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const canceled = yield* sessions
           .cancel(opened.sessionId, turnId)
           .pipe(Effect.provide(kept.layer));
-        // The Stop's stamp, as `stop.ts` writes it once the cancel is taken.
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         yield* writer.requestTurnCancel(
           { userId, conversationId: agent.conversationId },
@@ -1252,7 +1172,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
       assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-      // The turn a Stop was pressed on, then a newer one the Stop arrives during.
       const stopped = yield* turnUnderWay(userId, agent);
       yield* TestClock.adjust("1 second");
       yield* turnUnderWay(userId, agent);
@@ -1280,7 +1199,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
-        // The events route records the CLI's session from the runner's init, and the run ends.
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         const firstBearer = launchBearer(api, api.commands[0], SERVICE_HOST);
         sequence.next = 42;
@@ -1311,19 +1229,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.firstSequence, 42);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
-        // A fresh bearer for the new launch at the resumed session's firewall, recorded in place of the last.
         const bearer = launchBearer(api, relaunch, SERVICE_HOST);
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
-        // A fresh placeholder too, swapped for the plan's token at the resumed session's firewall.
         const placeholder = relaunch?.env[RUNNER_ENV.CLAUDE_TOKEN];
         assert.ok(placeholder !== api.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN]);
         assert.deepEqual(anthropicSwaps(api, relaunch?.sandboxSessionId), [
           { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
         ]);
 
-        // The first launch's END, arriving late, stops nothing of the second's.
         yield* runnerTook(agent.id);
         const late = yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
           Effect.provide(api.layer),
@@ -1352,7 +1267,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           sessionId: opened.sessionId,
           sequence: 41,
         }).pipe(Effect.provide(api.layer));
-        // The stop's snapshot is still being taken as the message arrives, past more than one try.
         api.snapshotting.remaining = 3;
         const kept = keptAfterResponse();
 
@@ -1428,7 +1342,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
-        // The runner took its first message, and a message queued as it ended was never read.
         yield* runnerTook(agent.id);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
@@ -1445,7 +1358,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
         const first = api.commands[0];
         assert.ok(first !== undefined);
-        // The ended runner's bearer is off the firewall until the launch that hands the line on sets its own.
         const firstBearer = launchBearer(api, first, SERVICE_HOST);
         assert.ok(firstBearer !== undefined);
         const standing = api.policies.findLast((each) => each.session === first.sandboxSessionId);
@@ -1516,7 +1428,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        // The runner took its message, and its events were applied.
         yield* runnerTook(agent.id);
         sequence.next = 1;
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
@@ -1533,9 +1444,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
 
         const halted = yield* sessions.halt(opened.sessionId, agent.conversationId);
-        // Note that the session's record no longer names the ended runner, so no message is written to it.
         const recordAfterHalt = yield* readAgentRunnerRecord(userId, opened.sessionId);
-        // Read before the relaunch, which drops what the ended launch was written but its untaken messages.
         const haltedWith = (yield* launchLines(api.commands[0])).at(-1);
         yield* rewindConversation(target, lineId);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Fix only the emails."));
@@ -1556,7 +1465,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.rewindBefore, "dropped-line");
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Fix only the emails." }]);
-        // The cut is handed over once.
         assert.deepEqual(yield* readNativeRewind(target), Option.none());
       }),
   );
@@ -1605,7 +1513,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(fresh !== undefined);
         assert.equal(fresh.status, "running");
         assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
-        // The drive outlives the expired sandbox, so what the agent left on it is there again.
         assert.deepEqual(fresh.mounts, expired.mounts);
         assert.deepEqual([...api.drives], [agentDriveName(opened.sessionId)]);
         const relaunch = api.commands[1];
@@ -1614,7 +1521,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.resume, undefined);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
-        // The session is found again by its tag, in the new sandbox alone.
         const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
         assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 2);
@@ -1642,7 +1548,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
         expired.snapshotExpired = true;
-        // The fresh sandbox's readying fails once, so its runner never starts.
         api.hooks.runExit = (args) => (args[0] === "-n" ? 1 : 0);
 
         const refused = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
@@ -1690,7 +1595,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes.length, 2);
         const fresh = api.sandboxes[1];
         assert.ok(fresh !== undefined);
-        // The later message went to the running replacement's runner, not to a third sandbox.
         assert.equal(api.commands.length, 2);
         const [, relaunch] = api.commands;
         assert.ok((yield* launchLines(relaunch)).length >= 3);
@@ -1722,10 +1626,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         first.exitCode = 0;
         sequence.next = 42;
         const lateEnds: Promise<string>[] = [];
-        // The test's own database, which the END's lease is taken in beside the relaunch's.
         const context = yield* Effect.context<DatabaseServices>();
-        // The first launch's END lands just as the relaunch's command has started, before its answer,
-        // and waits out the relaunch's lease.
         api.hooks.onStart = async () => {
           lateEnds.push(
             Effect.runPromiseWith(context)(
@@ -1805,7 +1706,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
-        // The runner took its message, its events were applied, and it exited.
         yield* runnerTook(agent.id);
         sequence.next = 4;
         first.exitCode = 0;
@@ -1832,11 +1732,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
-        // The runner took its message, its events were applied, and it exited.
         yield* runnerTook(agent.id);
         sequence.next = 4;
         first.exitCode = 0;
-        // The first message's relaunch is held as its command starts, the widest the race stands open.
         const held = gate();
         api.hooks.onStart = () => {
           api.hooks.onStart = undefined;
@@ -1873,7 +1771,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
-        // The first message's read of the runner's exit is held, inside its lease.
         const held = gate();
         let holding = false;
         const holdingRespond = async (url: string, init: RequestInit) => {
@@ -1942,7 +1839,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Again."));
-        // The fake refuses the read with a 400, a status `@vercel/sandbox` never tries again.
         assert.deepEqual(canceled, { outcome: "failed", status: 400 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
@@ -1962,7 +1858,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        // A read that waits for the running command's exit is held until its reader gives up.
         api.waits.hold = true;
 
         const sending = yield* Effect.forkChild(
@@ -2001,7 +1896,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
-        // Another instance's call holds the lease, as a launch elsewhere does.
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
@@ -2019,7 +1913,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* Fiber.interrupt(waiting);
 
         assert.equal(api.commands.length, 1);
-        // The lease is still the other call's alone, and free once it lets go.
         assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), false);
         yield* releaseAgentRunnerLease(agent.id, elsewhere);
         assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), true);
@@ -2038,7 +1931,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        // Another instance's call holds the lease, as a launch elsewhere does.
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
@@ -2063,8 +1955,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           since: new Date(0),
           limit: 10,
         });
-        // The developer's words close each message, the turn's own words ahead of them on the first
-        // alone, and the agent's model as it stands now goes ahead of each message queued behind.
         const model = {
           type: INPUT_LINE.MODEL,
           model: "claude-sonnet-5-5",
@@ -2100,7 +1990,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         yield* runnerTook(agent.id);
-        // The session's place is gone, as a reset leaves it.
         yield* sessions.reset(opened.sessionId);
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
@@ -2158,7 +2047,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
-        // A repository agent, whose write token stands at the firewall beside its runner's swaps.
         const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
         const opened = yield* sessions.open(message(agent, "Push a branch."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
@@ -2171,10 +2059,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 5,
-        }).pipe(
-          // The events route's services, the deployment's key ring among them, which the withdraw seals its record under.
-          Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))),
-        );
+        }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
 
         assert.equal(ended, RUNNER_ENDED.HELD);
         assert.equal(api.sandboxes[0]?.status, "running");
@@ -2199,7 +2084,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [sandbox] = api.sandboxes;
         assert.ok(sandbox !== undefined);
-        // A send elsewhere holds the lease, as it does while it relaunches the runner.
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
@@ -2220,7 +2104,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
         yield* TestClock.adjust("5 seconds");
         assert.equal(sandbox.status, "running");
-        // The send's relaunch records its launch, past the END's sequence, and lets go.
         const recorded = Option.getOrThrow(yield* readAgentRunnerRecord(userId, opened.sessionId));
         yield* writeAgentRunnerRecord(userId, opened.sessionId, { ...recorded, firstSequence: 42 });
         yield* releaseAgentRunnerLease(agent.id, elsewhere);
@@ -2251,7 +2134,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        // The runner took its message, and its events were applied.
         yield* runnerTook(agent.id);
         sequence.next = 1;
         handed.servers = [LINEAR_SERVER, { name: "notion", url: `${MCP_URL}/integrations/notion` }];
@@ -2268,7 +2150,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(config.integrations, handed.servers);
         assert.ok(JSON.stringify(yield* launchLines(second)).includes("Use Notion now."));
 
-        // A turn under way keeps its runner, which goes on with the servers it has.
         handed.servers = [LINEAR_SERVER];
         yield* turnUnderWay(userId, agent);
         yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
@@ -2323,7 +2204,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       );
 
       const sent = yield* mySessions.send(opened.sessionId, message(mine.agent, "Not yours."));
-      // A send queued behind another call's lease is told the same, and queues nothing.
       const now = new Date(yield* Clock.currentTimeMillis);
       const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
       assert.equal(yield* claimAgentRunnerLease(mine.agent.id, randomUUID(), now, until), true);
@@ -2419,7 +2299,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 1);
         const [typed, typedAfter] = yield* textsOf(api.commands[0]);
-        // A typed first turn opens with the time alone: the plan is its first message already.
         assert.ok(typed?.[0]?.startsWith("The time as this turn opens"), typed?.[0] ?? "");
         assert.deepEqual(typed?.slice(1), ["Fix the invitations."]);
         assert.ok(
@@ -2485,7 +2364,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
-        // The checkout's own commands, which run through bash, after the SDK made the agent's user.
         api.hooks.onRun = (_env, command) =>
           command === "bash" ? Promise.reject(new Error("socket hang up")) : Promise.resolve();
 
@@ -2519,8 +2397,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* diedSessions.open(message(died.agent, "Go.")).pipe(Effect.provide(diedKept.layer));
         yield* diedKept.run;
 
-        // Each launch is held at a call it never gets past, and interrupted there: the clone, before
-        // its sandbox opened, and the runner's start, once it had.
         const interruptedAt = (
           sessions: Effect.Success<ReturnType<typeof sessionsFor>>,
           agent: Agent,
@@ -2580,8 +2456,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Push a branch."));
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        // The repository is cloned whole, in one fetch, before the runner starts, so no fetch runs
-        // beside the agent's own git and none deepens it after.
         const clone = api.runs.findIndex(isClone);
         assert.ok(clone >= 0 && clone < (runsAtStart[0] ?? -1));
         assert.equal(
@@ -2627,7 +2501,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [base] = baseDrives(api);
         assert.ok(base !== undefined);
         assert.ok(api.sandboxes.some((each) => each.name === base && each.deleted));
-        // The base drive holds no credential: the token stood at its firewall for the clone alone.
         const visible = JSON.stringify([api.commands, api.runs, api.sandboxes]);
         assert.equal(visible.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
       }),
@@ -2777,7 +2650,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Now the emails."));
         assert.equal(api.commands.length, 1);
-        // The refused renewal set nothing; the next message's renewal set the credential afresh.
         assert.equal(api.policies.length, policiesBefore + 1);
       }),
   );
@@ -2824,13 +2696,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
 
         yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
-        // The runner exited, its sandbox still up.
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
         sequence.next = 10;
         yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
-        // The launch ended, and its END stopped the sandbox.
         sequence.next = 20;
         yield* runnerTook(agent.id);
         yield* runnerEnded({

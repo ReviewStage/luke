@@ -58,37 +58,8 @@ import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
 
-/**
- * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's description and where it stands, and make one.
- *
- * Every coding agent is offered the same `read_task`,
- * one implementation, beside `list_tasks` (`agent-tools.ts`), which
- * names the tasks it reads by id. It reads any task of the caller's
- * workspace, a teammate's included, as the member the
- * caller acts for could open it in the sidebar, read on that member's
- * standing now; a task of another workspace is none of the caller's, even
- * where the member is also in it. It answers the task as its row stands, the
- * brief the developer started it with, the tasks it is blocked by and blocks
- * that the member reaches, and its description's saved text cut on a
- * line to a bound, so an agent reads another task's description without its being
- * mentioned.
- *
- * `create_task` makes a task as the member the caller acts for makes one from
- * the sidebar, through the one make every door shares
- * (`tasks/task-create-relation.ts`): in the caller's workspace, on the
- * repository named, the one the caller works in where none is, or none, and
- * with a description to start from where one is given. Only a pilot may make a task
- * in pilot mode, and only as a child, which is how it gives a part too big
- * for one pull request a pilot of its own. It is made under an id drawn from
- * eve's key for the call (`called-id.ts`), so a call run again answers the
- * task it made and makes no second.
- * Every answer is data the model reads, never a credential.
- */
-
-/** The most characters of a description a read answers, about ten thousand tokens: the rest is counted, never sent. */
 export const DESCRIPTION_TEXT_READ_CHARS = 40_000;
 
-/** Why a read answered nothing, in words the model can act on. */
 export const READ_TASK_REFUSAL = {
   UNREADABLE: `Not read: name the task by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_TASK: `Not read: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
@@ -117,12 +88,10 @@ export const READ_TASK_TOOL = {
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** Whether the caller reaches tasks' descriptions: the coding agent's starter's Task descriptions, or a pilot's Pilot, or the member's own Task descriptions (`descriptionsOnFor`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
   return descriptionsOnFor(callerUserId(caller), callerAgent(caller)?.kind);
 }
 
-/** One call of `read_task`: a task of the caller's workspace, its description cut to the bound, or why there is none; no description where the caller has Task descriptions off. */
 export function runReadTask(
   call: AgentReadCall,
   input: UnparsedWireValue,
@@ -140,7 +109,6 @@ export function runReadTask(
       }
       const userId = callerUserId(call.caller);
       const stored = yield* readTask(userId, taskId);
-      // A task of another workspace, even one the member is also in, is none of the caller's.
       if (Option.isNone(stored) || stored.value.task.workspaceId !== workspace.value) {
         return agentToolRejected(READ_TASK_REFUSAL.NO_TASK);
       }
@@ -176,7 +144,6 @@ export function runReadTask(
   );
 }
 
-/** Why a make made nothing, in words the model can act on. */
 export const CREATE_TASK_REFUSAL = {
   UNREADABLE:
     `Not made: give a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a repository as ` +
@@ -211,7 +178,6 @@ export const CREATE_TASK_REFUSAL = {
   NOT_PILOT:
     "Not made: only a pilot makes a task in pilot mode; leave mode out to make one its agents " +
     "work, or tell your pilot the task is too big for one pull request.",
-  // Note that the field was `plan` before the task's document was its description, and an agent whose session listed the tool then may still send it, which the schema would otherwise drop and make the task empty.
   RENAMED_DESCRIPTION:
     "Not made: the task's starting text is now named description, not plan; call again with the " +
     "same text as description.",
@@ -296,7 +262,6 @@ const CREATE_TASK_INPUT = Schema.Struct({
 
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
 
-/** A make that names the starting text by the field's name before the rename. */
 const namesRetiredPlan = Schema.is(Schema.Struct({ plan: Schema.Unknown }));
 
 export const CREATE_TASK_TOOL = {
@@ -317,15 +282,12 @@ export const CREATE_TASK_TOOL = {
   inputSchema: CREATE_TASK_INPUT,
 } as const;
 
-/** A # title at a description's head, as Markdown spells one: at most three spaces in, and a space, a tab, or the line's end after the #, so `#define` or a code line is no title. */
 const TITLE_HEADING = /^(?:[ \t]*\r?\n)*[ ]{0,3}#(?:[ \t][^\r\n]*)?\r?(?:\n|$)/u;
 
-/** A description's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
 function descriptionTextOf(description: string): string {
   return description.replace(TITLE_HEADING, "").trim();
 }
 
-/** Who a task's first description is written by, as its history names them: the calling coding agent, or the member calling, as the developer. */
 function revisionWriterOf(call: AgentCall): NonNullable<TaskCreateAsked["writer"]> {
   const agent = callerAgent(call.caller);
   return agent === undefined
@@ -333,7 +295,6 @@ function revisionWriterOf(call: AgentCall): NonNullable<TaskCreateAsked["writer"
     : { actor: DESCRIPTION_ACTOR.AGENT, agentId: agent.id };
 }
 
-/** Who made a task for the caller's member: the coding agent by its id; none for the member calling, as for one they make by hand. */
 function originOf(call: AgentCall): { readonly origin?: TaskOrigin } {
   const agent = callerAgent(call.caller);
   return agent === undefined
@@ -341,12 +302,6 @@ function originOf(call: AgentCall): { readonly origin?: TaskOrigin } {
     : { origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: agent.id } };
 }
 
-/**
- * Why the make made nothing (`createTaskAsked`), in words the model can act
- * on; a store failure is left to `orStoreRefusal`. Note that a call naming a
- * parent names no other relation, so the parent's refusals are told apart
- * from a relation's by whether the call named one.
- */
 const madeRefusal =
   (parentNamed: boolean) =>
   (
@@ -376,12 +331,10 @@ const madeRefusal =
         return Effect.succeed(
           parentNamed ? CREATE_TASK_REFUSAL.NO_PARENT : CREATE_TASK_REFUSAL.NO_RELATED,
         );
-      // The other task gone out of reach since it was read, and the store's own holds, read as none to relate to.
       case "TaskRelationUnreached":
       case "TaskBlockSelf":
       case "TaskBlockAcrossWorkspaces":
         return Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED);
-      // The id is drawn from the member's own key, so a task another holds under it is the store breaking.
       case "TaskIdTaken":
         return Effect.succeed(AGENT_TOOL_REFUSAL.STORE);
       default:
@@ -389,7 +342,6 @@ const madeRefusal =
     }
   };
 
-/** One call of `create_task`: a task made in the caller's workspace for its member, once under the call's key. */
 export function runCreateTask(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -405,12 +357,10 @@ export function runCreateTask(
   if (asked.success.parentTaskId !== undefined && relation !== undefined) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.PARENT_AND_RELATION));
   }
-  // A sub-task of another is a child of it, which parentTaskId names as well.
   const parentTaskId =
     relation?.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF
       ? relation.taskId
       : asked.success.parentTaskId;
-  // Note that a pilot task is only a pilot's to make, as a child, since its first agent is a pilot of its own.
   if (mode === TASK_MODE.PILOT && callerAgent(call.caller)?.kind !== AGENT_KIND.PILOT) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.NOT_PILOT));
   }
@@ -431,16 +381,13 @@ export function runCreateTask(
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       const naming = yield* workspaceNamingOf(userId, workspace.value);
-      // Left out, the repository is the one the caller works in, unless the task joins a tree, whose it takes.
       const inTree =
         parentTaskId !== undefined || relation?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF;
       const repository =
         asked.success.repository !== undefined || inTree
           ? asked.success.repository
           : yield* workedRepository(call.caller);
-      // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
-      // Note that a description is written only for a caller with Task descriptions on; the schema takes one alike, so the tool's words stay the same.
       const descriptionsOn = yield* callerDescriptionsOn(call.caller);
       const made = Option.isSome(before)
         ? before.value.task

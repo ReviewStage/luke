@@ -6,13 +6,6 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { sentryCronCheckIns, sentryLogger, sentryReportedFetch, standReported } from "./sentry.js";
 
-/**
- * The deployment's Sentry at its own boundary, its transport
- * (`testing/sentry-transport.ts`): nothing reaches the network, and each test
- * asserts the envelope items Sentry would have received.
- */
-
-/** The exception values of every error event sent, by type. */
 function exceptionTypes(sent: ReturnType<typeof recordingSentry>["sent"]): string[] {
   return sentOfType(sent, "event").flatMap((item) =>
     (item.payload.exception?.values ?? []).map((value) => value.type ?? ""),
@@ -62,7 +55,6 @@ it.effect(
     Effect.gen(function* () {
       const sentry = recordingSentry();
       const failure = Object.assign(new TypeError("refused"), {
-        // Note that a BigInt is among them, which no JSON serializes, as a report's attributes may hold anything.
         [ErrorReporter.attributes]: { agentId: "a", turnId: "t", route: "/api/agents", rows: 2n },
       });
       yield* Effect.exit(Effect.withErrorReporting(Effect.fail(failure))).pipe(
@@ -119,11 +111,9 @@ it.effect(
           Effect.runPromiseWith(context)(service);
         yield* Effect.promise(() => standReported(run, Effect.fail(new TypeError("refused"))));
         yield* Effect.promise(() => standReported(run, Effect.interrupt));
-        // Note that this runner rejects as one whose runtime could not be built does, running nothing.
         const unbuilt = () => Promise.reject(new RangeError("no runtime"));
         yield* Effect.promise(() => standReported(unbuilt, Effect.never));
       }).pipe(Effect.provide(sentry.layer));
-      // Note that the two are compared unordered, because the SDK sends each event when its processing settles.
       assert.deepEqual(exceptionTypes(sentry.sent).sort(), ["RangeError", "TypeError"]);
     }),
 );
@@ -168,7 +158,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const sentry = recordingSentry();
-      // Note that the span is written as eve writes its own agent spans, by its trace policy rather than Sentry's.
       yield* Effect.void.pipe(
         Effect.withSpan("chat claude", {
           attributes: {
@@ -194,7 +183,6 @@ it.effect("a database statement's span leaves named by its statement, not by its
   Effect.gen(function* () {
     const sentry = recordingSentry();
     const statement = 'select "id" from "task" where "task"."id" = $1';
-    // Note that the span is opened as Effect's SQL client opens a statement's: named for the database, its text an attribute.
     yield* Effect.void.pipe(
       Effect.withSpan("postgres", {
         kind: "client",
@@ -211,7 +199,6 @@ it.effect("a database statement's span leaves named by its statement, not by its
 
 it.effect("a monitored run returns only once its closing check-in has left", () =>
   Effect.gen(function* () {
-    // Note that the network is held by hand, because a function frozen once it answers drops whatever is still in flight.
     let release = () => {};
     const network = new Promise<void>((resolve) => {
       release = resolve;
@@ -245,7 +232,6 @@ it.effect("an exception and a rejection nothing in the process caught are each c
       sentry.throwUncaught(new RangeError("thrown on a timer"));
       sentry.rejectUnhandled(new TypeError("rejected unawaited"));
     }).pipe(Effect.provide(sentry.layer));
-    // Note that the two reports are processed concurrently, so they may leave in either order.
     assert.deepEqual(exceptionTypes(sentry.sent).toSorted(), ["RangeError", "TypeError"]);
   }),
 );
@@ -269,7 +255,6 @@ it.effect("a web function that throws is captured, and throws the same failure o
 
 it.effect("a web function answers before its report has left, and keeps awake until it has", () =>
   Effect.gen(function* () {
-    // Note that the network is held by hand, because a function frozen once it answers drops whatever is still in flight.
     let release = () => {};
     const network = new Promise<void>((resolve) => {
       release = resolve;
@@ -297,11 +282,7 @@ it.effect("a web function answers before its report has left, and keeps awake un
       release();
       yield* Effect.promise(() => keptAwake);
       yield* Effect.promise(() => dispose());
-    }).pipe(
-      // Note that the network is let go on a failed assertion too, or closing Sentry would wait on it for good.
-      Effect.ensuring(Effect.sync(() => release())),
-      Effect.provide(sentry.layer),
-    );
+    }).pipe(Effect.ensuring(Effect.sync(() => release())), Effect.provide(sentry.layer));
     assert.deepEqual(exceptionTypes(sentry.sent), ["RangeError"]);
   }),
 );
@@ -351,7 +332,6 @@ it.effect(
       const sentry = recordingSentry();
       const callback = "https://app.test/api/auth/callback/github?code=fixture-oauth-code";
       yield* Effect.gen(function* () {
-        // Note that the request is attached as Sentry's HTTP and request-data integrations attach the one an eve root answers.
         yield* Effect.sync(() => {
           Sentry.addIntegration(Sentry.requestDataIntegration());
           Sentry.getIsolationScope().setSDKProcessingMetadata({
@@ -361,16 +341,12 @@ it.effect(
         });
         yield* Effect.exit(Effect.withErrorReporting(Effect.fail(new TypeError("refused"))));
       }).pipe(Effect.provide(sentry.layer));
-      // Note that the request and the breadcrumbs are read apart, because the event's context lines quote this file.
       const [event] = sentOfType(sentry.sent, "event").map((item) => item.text);
       const { request, breadcrumbs } = JSON.parse(event ?? "{}");
       assert.deepEqual(
         { request: [request.url, request.query_string], breadcrumb: breadcrumbs[0].data.url },
         {
-          request: [
-            "https://app.test/api/auth/callback/github?code=[redacted]",
-            "code=[redacted]",
-          ],
+          request: ["https://app.test/api/auth/callback/github?code=[redacted]", "code=[redacted]"],
           breadcrumb: "https://app.test/api/auth/callback/github?code=[redacted]",
         },
       );

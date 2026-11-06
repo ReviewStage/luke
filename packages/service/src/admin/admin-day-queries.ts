@@ -1,16 +1,3 @@
-/**
- * admin-day-queries.ts -- one UTC day's live activity: each feature's count,
- * and the accounts active that day with what each did.
- *
- * Both reads go through the Overview's own definitions bounded to the day,
- * `dailyCountRows` for what was done and `meaningfulActions` for who was
- * active, so each tile equals the segment of the bar that opened the page.
- * Neither timestamp a union arm is bounded by leads an index, so each arm
- * scans its table as the Overview's chart read does; the day bound only
- * narrows what is grouped. The retired hosted tier's day, read in
- * `admin-queries.ts`, rides beside them.
- */
-
 import { Database, type DatabaseServices, queryBuilder } from "@repo/database/core/query";
 import { user } from "@repo/database/schemas/auth";
 import type { AdminDayActivity } from "@repo/features/admin-answer-wire";
@@ -48,15 +35,6 @@ const DayBoundSchema = Schema.Struct({
   scope: AdminMetricsScopeSchema,
 });
 
-/**
- * Each day's account with its count of every kind, busiest first by all of
- * them together, the account id breaking ties so equally busy accounts keep
- * one order across refreshes. An account is listed only when it took a
- * meaningful action that day, and every such action is itself one of the
- * rows counted here (a task, the developer's own description revision, an agent),
- * so the window count over the groups, taken before the bound cuts them, is
- * the day's active developers.
- */
 const findDayActiveAccounts = SqlSchema.findAll({
   Request: DayBoundSchema,
   Result: Schema.Struct({
@@ -102,10 +80,6 @@ const findDayActiveAccounts = SqlSchema.findAll({
   },
 });
 
-/**
- * The day's live activity: the chart's daily counts for the day, which hold
- * one row per count since the day is the bound, and its active accounts.
- */
 const readDayActivity = /* @__PURE__ */ Effect.fn("web/readAdminDayActivity")(function* (
   since: Date,
   scope: AdminMetricsScope,
@@ -144,11 +118,6 @@ const readDayActivity = /* @__PURE__ */ Effect.fn("web/readAdminDayActivity")(fu
   };
 });
 
-/**
- * Reads one UTC day: its live activity and the hosted tier's beside it, at
- * once. Like the account detail, this has no probe and no empty fallback: a
- * database that does not answer throws into the handler's 503.
- */
 export function readAdminDaySource(input: {
   day: string;
   scope: AdminMetricsScope;

@@ -22,14 +22,12 @@ const PREVIEW = {
   BETTER_AUTH_URL: PRODUCTION_ORIGIN,
 } as const;
 
-/** The Vite dev server, which stands in for the deployment only where nothing names one. */
 const DEV_SERVER_ORIGIN = "http://localhost:5173";
 
 const FOREIGN_ORIGIN = "https://evil.example";
 
 const SESSION_COOKIE = "__Secure-better-auth.session_token=session-cookie-value";
 
-/** A route that takes the browser's session today: a workspace renamed by an owner or an admin. */
 const COOKIE_ROUTE = HOSTED_SERVICE_PATH.WORKSPACES_RENAME;
 
 const REFUSED = {
@@ -37,10 +35,8 @@ const REFUSED = {
   body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
 } as const;
 
-/** A JSON string literal as a log line quotes a value. */
 const QUOTED_VALUE = /"(?:[^"\\]|\\.)*"/g;
 
-// The guard says what it refused at warn; the suite keeps those lines off its own output.
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
@@ -59,12 +55,10 @@ function request(
   });
 }
 
-/** A POST carrying the browser's session cookie, with whatever else the case names. */
 function cookiePost(path: string, headers: Record<string, string> = {}): Request {
   return request(path, { headers: { cookie: SESSION_COOKIE, ...headers } });
 }
 
-/** What the guard answered: nothing where the request goes on to its route, the refusal's status and body otherwise. */
 async function verdict(guard: CookieOriginGuard, sent: Request) {
   const refusal = guard(sent);
   if (refusal === undefined) return undefined;

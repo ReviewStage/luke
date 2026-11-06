@@ -25,23 +25,6 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { TURN_ORIGIN } from "../core.js";
 import { tasksLive } from "./live-queries.js";
 
-/**
- * The task list's live read (`tasksLive`) on the migrated capture: each
- * write that moves an account's task list, through its real writer,
- * notifies a topic the read is woken on, as the read looks its topics up
- * when it is asked for, so a window holding the list hears it within a
- * coalesce window rather than at the hold's end. That holds for the
- * account's own pins, which notify the account under the transaction the
- * pin's answer names, which is what the desktop confirms the pin on; for a
- * teammate's task and its agent's turn in a workspace the account shares,
- * which notify that workspace; for a teammate's Mac renamed, which notifies
- * every workspace its owner is in, while its beat notifies nothing; and for
- * a membership made or ended, which notifies the account, after which the
- * read looks up the workspaces it stands in now.
- *
- * Synthetic accounts, workspaces, tasks, agents, and turns throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -49,15 +32,9 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Whether a read on `woken` is woken by a write that notifies `topics`. */
 const wokenBy = (topics: readonly SyncTopic[], woken: readonly SyncTopic[]) =>
   topics.some(([kind, id]) => woken.some((topic) => topic[0] === kind && topic[1] === id));
 
-/**
- * Runs the write, held to the topics it notifies, and fails unless one of
- * them wakes the account's task list, as the held read looked its topics
- * up before the write.
- */
 const wakesTheTaskList = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],

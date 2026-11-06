@@ -1,24 +1,3 @@
-/**
- * tools.ts -- every tool we offer any of our agents, and the roles each one serves.
- *
- * The one registry of the agent runtime's tools:
- * each tool, named once by the name a model calls it by
- * (`@repo/features/agent-tools`, which the desktop reads its calls by too),
- * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
- * twice is derived from it: what each coding agent's authored tools are
- * (`../coder-host/tool-set.ts`), and every set the store writer holds a
- * role's rows to, the calls of tools only eve's agents were offered among them. A tool
- * a role is not listed for is never offered to it, so adding a tool to a
- * role is one entry here and its implementation where the role's root
- * reaches it. The tools eve injects of its own beside a task or a connection
- * (`task_wait`, `task_cancel`, `connection_search`, `connection_execute`)
- * and a declared subagent's own tool are eve's, not ours, and are not
- * listed.
- *
- * This module is a leaf: a tool's module takes its name from here, so the
- * registry imports no tool and no host, and every module may import it.
- */
-
 import { AGENT_TOOL, type AgentTool } from "@repo/features/agent-tools";
 import { AGENT_ROLE, type AgentRole } from "./role.js";
 
@@ -26,14 +5,6 @@ export { AGENT_TOOL, type AgentTool };
 
 const { CODER, CODER_WORKER } = AGENT_ROLE;
 
-/**
- * The roles each tool serves. Note that a coding agent's worker is offered
- * only reads, never an edit, so workers run in parallel
- * without colliding and the agent alone edits: not `run_on_mac`, which runs
- * on the developer's own Mac, not `browser`, which drives the agent's own
- * tabs, and not `show_image`, since a worker never speaks to the developer
- * and answers the agent in words.
- */
 const TOOL_ROLES = {
   [AGENT_TOOL.LOOK_AT_PICTURE]: [CODER],
   [AGENT_TOOL.LIST_AGENTS]: [CODER],
@@ -83,7 +54,6 @@ const TOOL_ROLES = {
   [AGENT_TOOL.SLEEP]: [CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
 
-/** The tools a role is offered, in the registry's order. */
 export function toolsOf(role: AgentRole): ReadonlySet<AgentTool> {
   return new Set(
     Object.values(AGENT_TOOL).filter((tool) => {

@@ -9,16 +9,6 @@ import { Effect, Option, Redacted } from "effect";
 import { githubReaching, type SentToGitHub } from "../testing/github-app-fake.js";
 import { readCommits } from "./pull-requests.js";
 
-/**
- * read-commits.test.ts -- the commits a pull request's changed files are
- * read whole at, off a scripted GitHub: its head always, and where an image
- * or a text file whose patch was too large to send stood before the pull
- * request, the merge base one compare of its base and head answers, asked
- * for a single commit and file; no compare at all where no such file stood
- * before, and no merge base where the compare does not land, never the base
- * branch's head in its place.
- */
-
 const REPOSITORY = "acme/relay";
 const TOKEN = Redacted.make("ghs_fixture_installation_token");
 const HEAD = "a".repeat(40);
@@ -26,7 +16,6 @@ const BASE = "b".repeat(40);
 const MERGE_BASE = "c".repeat(40);
 const COMPARE = `/repos/acme/relay/compare/${BASE}...${HEAD}`;
 
-/** A changed file, modified unless told otherwise. */
 function changed(
   path: string,
   status: AgentChangedFile["status"] = CHANGED_FILE_STATUS.MODIFIED,
@@ -42,7 +31,6 @@ function changed(
   };
 }
 
-/** The read commits for `files`, GitHub's compare answering as `compare` says, and every request it was sent. */
 const commitsOf = (files: readonly AgentChangedFile[], compare: () => Response) =>
   Effect.gen(function* () {
     const sent: SentToGitHub[] = [];

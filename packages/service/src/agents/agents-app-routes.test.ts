@@ -1,7 +1,3 @@
-/**
- * agents-app-routes.test.ts -- the coding-agent routes' Start, list, transcript, and Stop, a blank agent, and an agent's pictures, over a fake eve and a real dialect.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -155,7 +151,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: task.repository })}.`;
         const idempotencyKey = randomUUID();
         const sql = yield* SqlClient.SqlClient;
-        // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
         const answered = yield* Effect.ensuring(
           Effect.andThen(
             sql.unsafe("ALTER TABLE task_page_version RENAME TO task_page_version_aside"),
@@ -264,7 +259,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openTask();
         const bound = AGENT_BOUNDS.MAX_WORKSPACE_AGENTS;
-        // One past the bound of agents is written through the store, which takes about two seconds.
         const made = new Set<string>();
         for (let each = 0; each <= bound; each += 1) {
           const started = yield* createAgent(owner, {
@@ -377,7 +371,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           },
         ]);
         assert.equal(yield* sentLineStands(owner, stored.value.conversationId, lineId), true);
-        // The default stands: no agent was chosen.
         assert.equal((yield* readAccountPreferences(owner))?.agent, undefined);
       }),
   );
@@ -563,7 +556,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
         assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
-        // The Start that failed is counted under the member as a failure of its own, and not as a start.
         assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START_FAIL), [
           { failure: "unreachable", started_by: "member", agent_kind: "coder" },
         ]);
@@ -862,7 +854,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         assert.deepEqual(
           listed.agents.map((agent) => [agent.id, agent.status]),
-          // The first has no turn yet, but its Start's line awaits the one eve opens on it.
           [
             [first.id, AGENT_STATUS.RUNNING],
             [second.id, AGENT_STATUS.RUNNING],
@@ -881,7 +872,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const now = yield* DateTime.nowAsDate;
-        // A revision a later build wrote, by a kind of writer this build has no name for.
         yield* Database.use((db) =>
           db.insert(descriptionRevision).values({
             taskId: task.id,
@@ -893,7 +883,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             at: now,
           }),
         );
-        // The whole read, which reads who wrote each section, cannot answer the plan.
         assert.equal(
           (yield* ask(request(TASK(task.id), owner))).status,
           HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
@@ -926,8 +915,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const target = { userId: owner, conversationId: stored.value.conversationId };
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const turnId = randomUUID();
-        // Before any turn the Start's line awaits it: a read past the line is held rather than
-        // spinning, and lets go at the hold with the status the page was read at.
         const opening = readAnswer(
           agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -961,7 +948,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
-        // eve's receipt takes the Start's line into the turn, as the relay does.
         yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
 
         const page = readAnswer(
@@ -1003,7 +989,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         };
         const thought = "Weigh the build again. ".repeat(500);
         const thinking = { type: "reasoning", text: thought, state: "done" };
-        // An answer the window reads for what it means is carried whole, however long.
         const read = {
           type: "tool-read_agent",
           toolCallId: "call-2",
@@ -1022,7 +1007,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           request(AGENT_MESSAGES, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
         );
         assert.ok(JSON.stringify(answered.body).length < 20_000);
-        // The Start's line stands ahead of the journal.
         const [, cutJournal] = readAnswer(
           agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1047,7 +1031,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { output: _output, ...withoutOutput } = command;
         const { text: _text, ...withoutText } = thinking;
         assert.deepEqual(cutJournal?.parts, [text("Building."), withoutOutput, withoutText, read]);
-        // A reader that asks no cut, as a released desktop, is answered the part whole.
         const [, wholeJournal] = readAnswer(
           agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1055,7 +1038,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         ).messages;
         assert.deepEqual(wholeJournal?.parts, [text("Building."), command, thinking, read]);
         assert.equal(wholeJournal?.cutParts, undefined);
-        // The read back from the end cuts the same parts where it is asked to.
         const [, newestJournal] = readAnswer(
           agentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1090,7 +1072,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         });
         const { agent } = yield* startedAgent(owner, task.id, ask);
         yield* updateAgentBranch(owner, agent.id, PUBLISHED.branch);
-        // Note that the Start reached the repository itself, so the reads begin past every kept answer.
         yield* TestClock.adjust(Duration.hours(2));
         const asked = github.sent.length;
         const overview = () =>
@@ -1191,7 +1172,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
-        // No other site's page may embed it, since its <img> would load it with the viewer's cookie.
         assert.equal(served.headers.get("cross-origin-resource-policy"), "same-origin");
         assert.deepEqual(
           new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
@@ -1202,7 +1182,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 });
 
 it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
-  /** A call an earlier version took into the agent: one line by each speaker, as its voice wrote them into the agent's conversation, each placed at the instant its words began; answers the call's id and its start. */
   const callInto = (
     agent: { readonly id: string; readonly conversationId: string },
     starter: string,
@@ -1295,10 +1274,8 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
             },
           ],
         );
-        // A line the voice answered itself opened no turn and waits on none.
         assert.equal(page.status, AGENT_STATUS.COMPLETED);
 
-        // The store names the turn the agent's words were read aloud from; the line still carries no turn's record.
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const turnId = randomUUID();
         const target = { userId: owner, conversationId: agent.conversationId };
@@ -1416,8 +1393,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
         );
         assert.equal(opening.messages.length, 1);
-        // Nothing stands past the Start's line, which awaits the turn eve opens on it, so the held read
-        // would hold on it; this answers at once.
         const own = readAnswer(
           transcriptNowAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1464,7 +1439,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         ).agent;
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
         const PAGE = AGENT_BOUNDS.MESSAGES_PAGE;
-        // Two pages and some, so the oldest page is the short one that ends the read.
         const total = 2 * PAGE + 37;
         const said = Array.from({ length: total }, (_, at) => `Step ${at}.`);
         yield* Database.use((db) =>
@@ -1475,7 +1449,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
               seq: at + 2,
               clientId: randomUUID(),
               role: MESSAGE_ROLE.ASSISTANT,
-              // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
               parts: [text(words)] as never,
               metadata: { author: MESSAGE_AUTHOR.MODEL },
               placedAt: new Date(),
@@ -1495,7 +1468,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
         );
         assert.deepEqual(wordsOf(newest), said.slice(-PAGE), "the newest page, oldest first");
-        // The Start's line awaits the first turn.
         assert.equal(newest.status, AGENT_STATUS.RUNNING);
         assert.notEqual(newest.before, undefined, "a full page says more stands below it");
 
@@ -1519,7 +1491,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         );
         assert.equal(pages, 3);
 
-        // A row written after the newest page was read is heard by the follow from its cursor, and nothing before it.
         yield* transcriptRow(stored, total + 2, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
         const followed = readAnswer(
           transcriptNowAnswerSchema,
@@ -1553,7 +1524,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        // The Start's own line is the transcript's one row.
         const newest = readAnswer(
           agentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1605,7 +1575,6 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.equal(before.rewound, undefined);
         assert.equal(after.messages.length, 3);
         assert.notEqual(after.rewound, undefined);
-        // Note that the read past the stale cursor asked to be held, and was answered at once all the same.
         assert.equal(past.rewound, after.rewound);
       }),
   );

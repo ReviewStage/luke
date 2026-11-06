@@ -27,28 +27,6 @@ import {
 } from "./agent-tools.js";
 import { calledId } from "./called-id.js";
 
-/**
- * task-section-tools.ts -- the tools every agent keeps the developer's sidebar sections by: make one, and delete one.
- *
- * Every coding agent is offered the same
- * `create_section` and `delete_section`, one implementation each, beside
- * `list_tasks`, which names each task's section and the sections themselves,
- * and `update_task`, whose `sectionId` moves a task into one or out of them
- * (`agent-tools.ts`). A section is its maker's
- * own, as the sidebar's are (`@repo/features/task-section-wire`), so each
- * call acts on the sections of the member the caller acts for (the coding
- * agent's starter), in the caller's own
- * workspace, read on that member's standing now; a section of another
- * workspace is none of the caller's, even where the member is also in it. Every write is the one the sidebar's own drag or
- * menu makes (`PUT /api/task-sections`, `task-section-store.ts`), under the
- * same lock and bound, so the Mac reads the agent's change as it reads its
- * own. A section is made under an id drawn from eve's key for the call, so
- * a call eve runs again makes the one section; and deleting a section puts its tasks back
- * under Tasks and deletes none of them. Every answer is data the model
- * reads, never a credential.
- */
-
-/** Why a call changed nothing, in words the model can act on. */
 export const TASK_SECTION_TOOL_REFUSAL = {
   UNREADABLE_CREATE:
     `Not made: give a title of at most ${TASK_SECTION_BOUNDS.MAX_TITLE_CHARS} characters, ` +
@@ -84,7 +62,6 @@ const DELETE_SECTION_INPUT = Schema.Struct({ sectionId: SECTION_ID });
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_SECTION_INPUT);
 const readDeleteAsked = Schema.decodeUnknownResult(DELETE_SECTION_INPUT);
 
-/** The tools as every coding agent is offered them: each its name, its words, and its input schema. */
 export const CREATE_SECTION_TOOL = {
   name: AGENT_TOOL.CREATE_SECTION,
   description:
@@ -109,12 +86,10 @@ export const DELETE_SECTION_TOOL = {
   inputSchema: DELETE_SECTION_INPUT,
 } as const;
 
-/** A section as an answer names it. */
 function sectionReading(section: Pick<TaskSection, "id" | "title">) {
   return { id: section.id, title: section.title };
 }
 
-/** One call of `create_section`: a section made for the caller's member in the caller's workspace, once under the call's key. */
 export function runCreateSection(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -141,9 +116,7 @@ export function runCreateSection(
           ? undefined
           : { icon: { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji } }),
       });
-      // Note that the member was just read in the workspace, so a create refused is the bound's.
       if (Option.isNone(written)) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.FULL);
-      // A call run again finds the section it made first, which keeps the title it was made with.
       const made = written.value.sections.find((section) => section.id === id);
       if (made === undefined) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.UNAVAILABLE);
       return { status: ACTION_RESULT_STATUS.ACCEPTED, section: sectionReading(made) };
@@ -151,14 +124,12 @@ export function runCreateSection(
   );
 }
 
-/** What a delete answers where no such section stands: deleted as nothing, as one already deleted is. */
 export const NO_SECTION_DELETED = {
   status: ACTION_RESULT_STATUS.ACCEPTED,
   section: null,
   tasksBackUnderTasks: 0,
 } as const;
 
-/** One call of `delete_section`: one of the member's sections of the caller's workspace deleted, its tasks back under Tasks. */
 export function runDeleteSection(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -175,9 +146,7 @@ export function runDeleteSection(
         return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
-      // Note that the read, the count, and the delete are one write under the account's lock, so the answer is what this call took.
       const deleted = yield* deleteTaskSectionIn(userId, workspace.value, sectionId);
-      // A section already gone, or none of this workspace, is deleted as nothing, as the sidebar's delete is.
       if (Option.isNone(deleted)) return { ...NO_SECTION_DELETED };
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,

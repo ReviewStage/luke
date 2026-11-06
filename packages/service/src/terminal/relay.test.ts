@@ -30,18 +30,6 @@ import {
   relayTerminal,
 } from "./relay.js";
 
-/**
- * One attached shell as the relay pipes it, over sockets and a sandbox that
- * answer from a script, on the test clock: an agent the account does not
- * reach is gone, one with no sandbox yet is starting, a stopped sandbox is
- * never woken, and a running one is attached through tmux, typing and
- * resizes reaching the PTY and its output reaching the desktop; the shell's
- * exit ends the connection as exited; nobody typing for the idle bound ends
- * it as idle, and typing keeps it; and the GitHub token at the firewall is
- * set when due, once between two connections, or, where it is a member's
- * own, at every check and taken off at the close.
- */
-
 const AGENT = "agent-1";
 const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const CONVERSATION = "conversation-1";
@@ -54,7 +42,6 @@ const CREDENTIAL = {
   access: { kind: GITHUB_ACCESS.APP },
 } as const;
 
-/** One side of the relay as a test drives it: frames pushed in, and what the relay sent and how it closed, kept. */
 const scriptedSocket = Effect.gen(function* () {
   const inbound = yield* Queue.make<RelayFrame, Cause.Done>();
   const sent: RelayFrame[] = [];
@@ -79,20 +66,14 @@ const scriptedSocket = Effect.gen(function* () {
 
 type Scripted = Effect.Success<typeof scriptedSocket>;
 
-/** The relay's world as the scenario has it: the agent reached or not, its sandbox standing as given, and one lease every connection shares. */
 function world(options: {
   readonly agent?: Option.Option<RelayAgent>;
   readonly sandbox?: SandboxState;
   readonly pty: Scripted;
-  /** Whether tmux holds no such shell. */
   readonly shellGone?: boolean;
-  /** How many of the first mints GitHub refuses. */
   readonly tokensRefused?: number;
-  /** What GitHub answers a mint only after; never, where it is never done. */
   readonly tokensWait?: Deferred.Deferred<void>;
-  /** Whether the agent's credential is its starter's own token. */
   readonly memberToken?: boolean;
-  /** Whether a turn of the agent is under way. */
   readonly turnUnderWay?: boolean;
 }) {
   let heldUntil = 0;
@@ -186,7 +167,6 @@ function world(options: {
   return { deps, asked, heldUntil: () => heldUntil };
 }
 
-/** Lets every fiber the last step woke, the relay's own renewals among them, run to its next wait. */
 const settle = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, {
   discard: true,
 });
@@ -350,7 +330,6 @@ it.effect(
         Effect.scoped(relayTerminal(device.socket, ASK, typing.deps)),
       );
       yield* Effect.yieldNow;
-      // Typing every four minutes, inside the idle bound, for two keep-alive intervals.
       for (let typed = 0; typed < 2 * every; typed += Duration.toMillis(Duration.minutes(4))) {
         yield* TestClock.adjust(Duration.minutes(4));
         yield* device.push({ bytes: encode("x") });

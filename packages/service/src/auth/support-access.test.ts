@@ -24,25 +24,11 @@ import {
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 import { SUPPORT_ACCESS_ERROR, supportAccess } from "./support-access.js";
 
-/**
- * Support access end to end, on one Better Auth configured as `auth.ts`
- * configures the doors it reaches, over a migrated PGlite. A maintainer is an
- * account a maintainer's own write made an admin; a member grants support
- * access, and the maintainer's browser then signs in as the member for an
- * hour and back out again. The sign-in is refused without the member's
- * grant, after it runs out, from anything but a browser's cookie session,
- * and of an admin; it passes none of Better Auth's doors that would turn it
- * into lasting access; and a revoke ends it. Every other admin endpoint is
- * shut. Email and password sign-up is on in this instance alone, standing
- * in for the social sign-in the deployment offers. Synthetic accounts.
- */
-
 const SERVICE_URL = "http://127.0.0.1";
 const NOW = new Date("2026-11-05T12:00:00.000Z");
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-/** Every admin endpoint but the two a maintainer's browser starts and stops a support sign-in with, by the method it answers. */
 const SHUT_ADMIN_ENDPOINTS: ReadonlyArray<{ readonly path: string; readonly method: string }> = [
   { path: "/admin/set-role", method: "POST" },
   { path: "/admin/get-user", method: "GET" },
@@ -59,7 +45,6 @@ const SHUT_ADMIN_ENDPOINTS: ReadonlyArray<{ readonly path: string; readonly meth
   { path: "/admin/has-permission", method: "POST" },
 ];
 
-/** Better Auth's doors that mint from the session, each as a browser would reach it. */
 const MINTING_DOORS: ReadonlyArray<{
   readonly path: string;
   readonly method: string;
@@ -109,7 +94,6 @@ const decodeCode = Schema.decodeUnknownSync(Schema.Struct({ code: Schema.String 
 const decodeGrant = Schema.decodeUnknownSync(
   Schema.Struct({ supportAccessUntil: Schema.NullOr(Schema.Date) }),
 );
-/** What `auth.api` throws when a call is refused: its status, and its code on the body. */
 const decodeThrown = Schema.decodeUnknownSync(
   Schema.Struct({ statusCode: Schema.Number, body: Schema.Struct({ code: Schema.String }) }),
 );
@@ -124,7 +108,6 @@ function supportAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
     session: SESSION_COOKIE_CACHE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     socialProviders: { github: { clientId: "vespin-github", clientSecret: "github-secret" } },
-    // The plugins `auth.ts` installs that hold a door a support sign-in could reach, in its order.
     plugins: [
       jwt(JWT_KEY_STORAGE),
       oauthProvider({
@@ -143,10 +126,8 @@ function supportAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
 
 type SupportAuth = ReturnType<typeof supportAuth>;
 
-/** A browser's cookies, kept across answers as a browser keeps them: each one set replaces its name, and one expired is dropped. */
 type Browser = Map<string, string>;
 
-/** An account, the browser its sign-up signed in, and the signed bearer the bearer plugin handed it. */
 interface SignedUp {
   readonly id: string;
   readonly browser: Browser;
@@ -190,7 +171,6 @@ async function signUp(auth: SupportAuth, name: string): Promise<SignedUp> {
   return { id: response.user.id, browser, bearer: signed };
 }
 
-/** An account made an admin by a maintainer's own write, as `admin-access.ts` says one is. */
 async function signUpAdmin(auth: SupportAuth, name: string): Promise<SignedUp> {
   const account = await signUp(auth, name);
   await (await auth.$context).internalAdapter.updateUser(account.id, { role: USER_ROLE.ADMIN });
@@ -217,7 +197,6 @@ function impersonate(auth: SupportAuth, credential: Record<string, string>, user
   return send(auth, "/admin/impersonate-user", "POST", credential, { userId });
 }
 
-/** The maintainer's browser signed in as the member, its cookies now the support sign-in's. */
 async function signedInAs(auth: SupportAuth, maintainer: SignedUp, member: SignedUp) {
   const started = await impersonate(auth, cookieOf(maintainer.browser), member.id);
   assert.equal(started.status, 200);
@@ -248,7 +227,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// Catches the admin plugin, its columns, or its options coming apart: a sign-in that fails, names the wrong account, or outlasts its hour.
 test("an admin's browser signs in as a member who granted support access, for an hour, and stopping signs the admin back in", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -273,7 +251,6 @@ test("an admin's browser signs in as a member who granted support access, for an
   });
 });
 
-// Catches an `adminUserIds`, a widened `adminRoles`, or a default role that lets a member, or lets someone sign in as an admin.
 test("a member who is no admin signs in as nobody, and nobody signs in as an admin", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -293,7 +270,6 @@ test("a member who is no admin signs in as nobody, and nobody signs in as an adm
   });
 });
 
-// Catches an admin path dropped from `DISABLED_AUTH_PATHS`, which would let a browser set a role, ban, or delete an account.
 test("every other admin endpoint is shut to an admin's browser", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -313,7 +289,6 @@ test("every other admin endpoint is shut to an admin's browser", async () => {
   });
 });
 
-// Catches a door's path drifting from the hook's matcher, or the hook gone: the sign-in would mint the member a lasting session, token, or link.
 test("a support sign-in passes none of the doors that mint from a session, and no bearer does", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -340,7 +315,6 @@ test("a support sign-in passes none of the doors that mint from a session, and n
   });
 });
 
-// Catches the `Authorization` refusal gone: a bearer's sign-in has no `dont_remember` cookie, so its first read would slide it to seven days.
 test("a support sign-in starts only from a browser's own session, never a bearer", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -357,7 +331,6 @@ test("a support sign-in starts only from a browser's own session, never a bearer
   });
 });
 
-// Catches the consent check gone, or one that reads a grant without its end.
 test("a support sign-in needs the member's grant, and is refused once the grant runs out", async () => {
   await withSupportAuth(async (auth) => {
     const member = await signUp(auth, "member");
@@ -368,7 +341,6 @@ test("a support sign-in needs the member's grant, and is refused once the grant 
 
     await grant(auth, member);
     vi.setSystemTime(NOW.getTime() + 7 * DAY_MS + 1);
-    // A maintainer signed in after the grant ran out, so their own session still stands.
     const late = await signUpAdmin(auth, "late");
     const ranOut = await impersonate(auth, cookieOf(late.browser), member.id);
     assert.equal(ranOut.status, 403);
@@ -376,14 +348,12 @@ test("a support sign-in needs the member's grant, and is refused once the grant 
   });
 });
 
-// Catches a support sign-in that outlives the member's grant: one started in the grant's last hour would run on past it.
 test("a support sign-in started in the grant's last hour ends when the grant does", async () => {
   await withSupportAuth(async (auth) => {
     const member = await signUp(auth, "member");
     const { supportAccessUntil } = await grant(auth, member);
     assert.ok(supportAccessUntil);
     vi.setSystemTime(supportAccessUntil.getTime() - HOUR_MS / 2);
-    // A maintainer signed in late in the grant, so their own session still stands.
     const maintainer = await signUpAdmin(auth, "maintainer");
 
     const started = await impersonate(auth, cookieOf(maintainer.browser), member.id);
@@ -395,7 +365,6 @@ test("a support sign-in started in the grant's last hour ends when the grant doe
   });
 });
 
-// Catches a grant of another length, a grant a support sign-in can extend, or an endpoint that can set the grant.
 test("the member grants seven days, which the account's session answers; nothing else sets it, nor can a support sign-in", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -424,7 +393,6 @@ test("the member grants seven days, which the account's session answers; nothing
   });
 });
 
-// Catches a revoke that leaves the grant, or leaves a support sign-in under way standing until its hour ends.
 test("the member's revoke clears the grant and ends the support sign-in under way, and the member's own session stands", async () => {
   await withSupportAuth(async (auth) => {
     const maintainer = await signUpAdmin(auth, "maintainer");
@@ -437,7 +405,6 @@ test("the member's revoke clears the grant and ends the support sign-in under wa
     );
     assert.equal(revoked.supportAccessUntil, null);
 
-    // A browser's cookie cache may answer for up to its minute, so the sign-in is read from the store.
     assert.equal(await sessionOf(auth, maintainer.browser, "?disableCookieCache=true"), null);
     const own = await sessionOf(auth, member.browser, "?disableCookieCache=true");
     assert.equal(own?.user.id, member.id);

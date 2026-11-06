@@ -11,55 +11,28 @@ import {
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type WireRecord, type WireValue } from "@repo/wire";
 
-/**
- * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their descriptions, the comments on them, its agents' transcripts, and the threads they and its members posted.
- *
- * The world is the changelog screenshots' (`.claude/skills/changelog-screenshots/WORLD.md`):
- * acme builds Relay, and Dean Stratakos owns its workspace beside seven
- * teammates. Its last two weeks are here: Teammate invitations and the
- * Postmark work around it, Usage-based billing broken into sub-tasks by a
- * pilot, webhook secret rotation, and a crash fixed this morning. Nothing
- * here is read from an account; every name and address is invented. Every
- * id is fixed, so two seeds of two fresh databases write the same rows, and
- * every time is a distance back from the seed's start, so the world always
- * reads as minutes, hours, and days old. The tasks name no repository,
- * since the demo reaches no GitHub, and the people have no photo, since an
- * app draws a picture from Google's or GitHub's hosts alone
- * (`account-picture.ts`), so each is drawn by their initial.
- */
-
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** What each kind of fixed id begins with, so an id says what it names. */
 export const DEMO_ID_KIND = {
   USER: "de300001",
   ORGANIZATION: "de300002",
   MEMBER: "de300003",
   TASK: "de300004",
-  /** An agent's turn, and the key its opening line is sent under. */
   TURN: "de300006",
-  /** A tool call of a turn. */
   TOOL_CALL: "de300008",
-  /** The key a member's write is taken under, so it is taken once. */
   CLIENT_KEY: "de300009",
-  /** The host the run starts on this Mac for Dean's agents. */
   DEVICE: "de30000a",
-  /** Anything else Better Auth writes for the seed. */
   AUTH_ROW: "de300007",
 } as const;
 
 export type DemoIdKind = (typeof DEMO_ID_KIND)[keyof typeof DEMO_ID_KIND];
 
-/** The demo's id of the kind, numbered: shaped as a version 4 UUID, as the wire reads one. */
 export function demoId(kind: DemoIdKind, n: number): string {
   return `${kind}-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 }
 
-/* ----- The people ----- */
-
-/** One person of acme: their account and their role in its workspace. */
 export interface DemoPerson {
   readonly id: string;
   readonly name: string;
@@ -67,7 +40,6 @@ export interface DemoPerson {
   readonly role: WorkspaceRole;
 }
 
-/** The persona the demo signs in as, who owns acme. */
 export const DEMO_DEAN: DemoPerson = {
   id: demoId(DEMO_ID_KIND.USER, 1),
   name: "Dean Stratakos",
@@ -103,7 +75,6 @@ const THEO: DemoPerson = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 
-/** acme's engineering lead, who keeps Relay's webhooks and mail running. */
 const NOOR: DemoPerson = {
   id: demoId(DEMO_ID_KIND.USER, 6),
   name: "Noor Haddad",
@@ -111,7 +82,6 @@ const NOOR: DemoPerson = {
   role: WORKSPACE_ROLE.ADMIN,
 };
 
-/** acme's designer. */
 const MAYA: DemoPerson = {
   id: demoId(DEMO_ID_KIND.USER, 7),
   name: "Maya Chen",
@@ -119,7 +89,6 @@ const MAYA: DemoPerson = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 
-/** acme's support engineer, who hears about every crash first. */
 const LUIS: DemoPerson = {
   id: demoId(DEMO_ID_KIND.USER, 8),
   name: "Luis Ortega",
@@ -127,7 +96,6 @@ const LUIS: DemoPerson = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 
-/** Everyone in acme, its owner first. */
 export const DEMO_PEOPLE: readonly DemoPerson[] = [
   DEMO_DEAN,
   DANA,
@@ -139,16 +107,8 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
   LUIS,
 ];
 
-/** The workspace everything happens in, which Dean owns. */
 export const DEMO_WORKSPACE_NAME = "acme";
 
-/* ----- The host ----- */
-
-/**
- * The host `run.sh --demo` starts on this Mac for the length of a run, as
- * Dean's own, on which every agent he starts runs. Its name stands only
- * until the host's first register renames it for the Mac's Computer Name.
- */
 export const DEMO_HOST = {
   id: demoId(DEMO_ID_KIND.DEVICE, 1),
   name: "This Mac",
@@ -156,21 +116,12 @@ export const DEMO_HOST = {
   arch: DEVICE_ARCH.ARM64,
 } as const;
 
-/* ----- The tasks ----- */
-
-/** A comment of a description's thread after its first: who wrote it, and what. */
 export interface DemoCommentReply {
   readonly by: DemoPerson;
   readonly words: string;
 }
 
-/**
- * One description's comment thread: on which words of the description, what its first
- * comment said, who answered, and who resolved it, where it stands
- * resolved. The replies follow a minute apart.
- */
 export interface DemoCommentWords {
-  /** The description's words the thread is on, which must stand in its text once. */
   readonly quote: string;
   readonly words: string;
   readonly replies: readonly DemoCommentReply[];
@@ -178,12 +129,10 @@ export interface DemoCommentWords {
   readonly resolved?: { readonly by: DemoPerson; readonly ago: number };
 }
 
-/** A comment thread a member started on a description. */
 export interface DemoComment extends DemoCommentWords {
   readonly by: DemoPerson;
 }
 
-/** One task of acme's: who made it, where it stands, the task it is a child of, its description, and the comments on it. */
 export interface DemoTask {
   readonly id: string;
   readonly name: string;
@@ -191,18 +140,14 @@ export interface DemoTask {
   readonly assignee: DemoPerson;
   readonly status: TaskStatus;
   readonly priority: TaskPriority;
-  /** The task it is a child of, which comes before it; none for a task at the top. */
   readonly parent?: DemoTask;
-  /** How long before the seed's start it was made, and its description last saved. */
   readonly createdAgo: number;
   readonly savedAgo: number;
-  /** How long before the seed's start it was moved to its status, for one that is done or canceled; it stands to do until then. */
   readonly settledAgo?: number;
   readonly description: string;
   readonly comments: readonly DemoComment[];
 }
 
-/** A description's text from its sections, each under its heading, in the order given. */
 function descriptionText(sections: Readonly<Record<string, string>>): string {
   return `${Object.entries(sections)
     .map(([heading, text]) => `## ${heading}\n\n${text}`)
@@ -480,7 +425,6 @@ const EXPIRE_DESCRIPTION = descriptionText({
   "Open questions": "- 7 days with Resend, or 14? (Dean, in the Inbox.)",
 });
 
-/** The task everything is about, whose agent finished minutes ago and whose asks wait in Dean's Inbox. */
 export const DEMO_INVITATIONS_TASK: DemoTask = {
   id: demoId(DEMO_ID_KIND.TASK, 1),
   name: "Teammate invitations",
@@ -516,7 +460,6 @@ export const DEMO_INVITATIONS_TASK: DemoTask = {
   ],
 };
 
-/** Dana's task, which Dean's pilot broke into four sub-tasks. */
 export const DEMO_BILLING_TASK: DemoTask = {
   id: demoId(DEMO_ID_KIND.TASK, 2),
   name: "Usage-based billing",
@@ -637,7 +580,6 @@ const SSO_TASK: DemoTask = {
   comments: [],
 };
 
-/** The pilot's first sub-task of Usage-based billing, finished and merged. */
 const USAGE_EVENTS_TASK: DemoTask = {
   id: demoId(DEMO_ID_KIND.TASK, 8),
   name: "Record usage events per workspace",
@@ -865,11 +807,6 @@ const EXPIRE_TASK: DemoTask = {
   comments: [],
 };
 
-/**
- * acme's tasks, oldest first, so the list reads newest first as the service
- * orders it. The pilot's four sub-tasks are among them, made as its
- * transcript makes them (`DemoCall`'s `creates`).
- */
 export const DEMO_TASKS: readonly DemoTask[] = [
   SSO_TASK,
   EMPTY_STATE_TASK,
@@ -894,7 +831,6 @@ export const DEMO_TASKS: readonly DemoTask[] = [
   RESEND_TASK,
 ];
 
-/** One task waiting on another: the blocker, the task it blocks, who said so, and when. */
 export interface DemoBlock {
   readonly blocker: DemoTask;
   readonly blocked: DemoTask;
@@ -902,7 +838,6 @@ export interface DemoBlock {
   readonly ago: number;
 }
 
-/** The blocks between acme's tasks, as WORLD.md has them, and the rollup holding up the two sub-tasks after it. */
 export const DEMO_BLOCKS: readonly DemoBlock[] = [
   {
     blocker: DEMO_ROLLUP_TASK,
@@ -926,23 +861,18 @@ export const DEMO_BLOCKS: readonly DemoBlock[] = [
   { blocker: DEMO_INVITATIONS_TASK, blocked: RESEND_TASK, by: PRIYA, ago: 27 * MINUTE },
 ];
 
-/* ----- The agents ----- */
-
-/** One tool call of a step, as a Claude Code transcript stores it: by the CLI's own name, or our tool's for a call to our MCP server (`claudeCodeWorkspaceTool`); what it was handed, and what it answered. */
 export interface DemoToolCall {
   readonly name: string;
   readonly input: WireRecord;
   readonly output: WireValue;
 }
 
-/** A page an agent showed on its task: its title, the file it was read from, and its HTML. */
 export interface DemoPage {
   readonly title: string;
   readonly path: string;
   readonly html: string;
 }
 
-/** What one thread's first post says: its key, title, words, ask, and the member it is addressed to, if any. */
 export interface DemoPost {
   readonly key: string;
   readonly title: string;
@@ -951,12 +881,6 @@ export interface DemoPost {
   readonly addressee: DemoPerson | undefined;
 }
 
-/**
- * The call a step made: a tool call as it was answered, or one of our
- * workspace tools that writes what the world holds elsewhere, whose call the
- * seed draws from what it wrote: a sub-task it made, an agent it started, a
- * page it showed, or a thread it posted.
- */
 export type DemoCall =
   | DemoToolCall
   | { readonly creates: DemoTask }
@@ -964,17 +888,11 @@ export type DemoCall =
   | { readonly page: DemoPage }
   | { readonly posts: DemoPost };
 
-/** One step of a turn: what the agent said, if anything, then the call it made, if any. */
 export interface DemoStep {
   readonly text: string;
   readonly call?: DemoCall;
 }
 
-/**
- * One turn: the line that opened it and the member who sent it, when it
- * started and how long it ran, and its steps. The first line of an agent
- * another started is sent by its starter, for the member named.
- */
 export interface DemoTurn {
   readonly id: string;
   readonly from: DemoPerson;
@@ -985,15 +903,7 @@ export interface DemoTurn {
   readonly tokens: { readonly input: number; readonly output: number; readonly cached: number };
 }
 
-/**
- * One finished coding agent: the task it worked on, its kind, who started
- * it, on what, its turns, oldest first, and the comment threads it started
- * on its task's description. An agent another started with `start_agent` names
- * its starter alone in that agent's steps (`DemoCall`'s `starts`), its
- * first line sent by it.
- */
 export interface DemoAgent {
-  /** The key its Start is taken under, so a second seed of the same database starts no second agent. */
   readonly key: string;
   readonly task: DemoTask;
   readonly kind?: AgentKind;
@@ -1007,7 +917,6 @@ export interface DemoAgent {
 const OPUS = "anthropic/claude-opus-5.5";
 const SONNET = "anthropic/claude-sonnet-5.5";
 
-/** A page in acme's own palette (WORLD.md): a warm canvas, white cards, and teal as its one accent. */
 function relayPage(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -1050,7 +959,6 @@ const CHECKLIST_PLACEMENTS_PAGE: DemoPage = {
   ),
 };
 
-/** The days of acme's own usage the rollup page draws, oldest first: deliveries in thousands. */
 const USAGE_BY_DAY = [18, 21, 20, 9, 7, 23, 26, 25, 27, 24, 11, 8, 29, 31];
 
 const USAGE_BY_DAY_PAGE: DemoPage = {
@@ -1069,8 +977,6 @@ ${USAGE_BY_DAY.map(
 </svg></div>`,
   ),
 };
-
-/* ----- What the agents posted ----- */
 
 const CHECKLIST_PLACEMENT_POST: DemoPost = {
   key: "checklist-placement",
@@ -1412,9 +1318,6 @@ const HOTFIX_POST: DemoPost = {
   addressee: DEMO_DEAN,
 };
 
-/* ----- The agents' transcripts ----- */
-
-/** Dean's agent on Teammate invitations, which built the invites and asked him what the description left open. */
 export const DEMO_INVITATIONS_AGENT: DemoAgent = {
   key: "demo-agent-invitations",
   task: DEMO_INVITATIONS_TASK,
@@ -1543,7 +1446,6 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
   ],
 };
 
-/** Dean's agent on Dana's Webhook retries, finished and merged. */
 export const DEMO_WEBHOOKS_AGENT: DemoAgent = {
   key: "demo-agent-webhooks",
   task: DEMO_WEBHOOKS_TASK,
@@ -1623,7 +1525,6 @@ export const DEMO_WEBHOOKS_AGENT: DemoAgent = {
   ],
 };
 
-/** Dean's agent on Jordan's Onboarding checklist, which asked Jordan where the checklist should sit. */
 export const DEMO_ONBOARDING_AGENT: DemoAgent = {
   key: "demo-agent-onboarding",
   task: DEMO_ONBOARDING_TASK,
@@ -1672,7 +1573,6 @@ export const DEMO_ONBOARDING_AGENT: DemoAgent = {
   ],
 };
 
-/** The pilot's agent on Record usage events per workspace, started by it, finished and merged. */
 const METER_AGENT: DemoAgent = {
   key: "demo-agent-meter",
   task: USAGE_EVENTS_TASK,
@@ -1781,7 +1681,6 @@ const METER_AGENT: DemoAgent = {
   ],
 };
 
-/** The pilot's agent on Daily usage rollup, which asked Jordan where a day ends and Dean how far back to fill. */
 const ROLLUP_AGENT: DemoAgent = {
   key: "demo-agent-rollup",
   task: DEMO_ROLLUP_TASK,
@@ -1863,11 +1762,6 @@ const ROLLUP_AGENT: DemoAgent = {
   ],
 };
 
-/**
- * Dean's pilot on Dana's Usage-based billing: it broke the task into four
- * sub-tasks, started an agent on each one that was ready, and kept him
- * told. Its sub-tasks and agents are made and started as its steps say.
- */
 const DEMO_PILOT_AGENT: DemoAgent = {
   key: "demo-agent-billing-pilot",
   task: DEMO_BILLING_TASK,
@@ -2016,7 +1910,6 @@ const DEMO_PILOT_AGENT: DemoAgent = {
   ],
 };
 
-/** Dean's agent on Priya's Rotate webhook signing secrets, which asked Priya how long the old secret signs. */
 const ROTATION_AGENT: DemoAgent = {
   key: "demo-agent-rotation",
   task: ROTATE_TASK,
@@ -2157,7 +2050,6 @@ const ROTATION_AGENT: DemoAgent = {
   ],
 };
 
-/** Dean's agent on the usage chart crash Luis filed this morning. */
 const CHART_CRASH_AGENT: DemoAgent = {
   key: "demo-agent-chart-crash",
   task: CHART_CRASH_TASK,
@@ -2213,14 +2105,6 @@ const CHART_CRASH_AGENT: DemoAgent = {
   ],
 };
 
-/**
- * The finished agents, each started on its task in the order given, every
- * one by Dean: they run on his host (`DEMO_HOST`), which runs its owner's
- * agents alone, so he can follow up on any of them, those his pilot
- * started among them. A pilot comes before the agents it starts and the
- * sub-tasks it makes. His teammates stand in the tasks they made and are
- * assigned, the comments, and the threads.
- */
 export const DEMO_AGENTS: readonly DemoAgent[] = [
   DEMO_PILOT_AGENT,
   METER_AGENT,
@@ -2232,9 +2116,6 @@ export const DEMO_AGENTS: readonly DemoAgent[] = [
   CHART_CRASH_AGENT,
 ];
 
-/* ----- The threads ----- */
-
-/** One answer a member gave an ask: the options picked, or nothing for a reply in words alone. */
 export interface DemoAnswer {
   readonly by: DemoPerson;
   readonly choices: readonly string[];
@@ -2242,29 +2123,19 @@ export interface DemoAnswer {
   readonly ago: number;
 }
 
-/** One thread an agent posted: its first post, when, and what came after. */
 export interface DemoThread extends DemoPost {
   readonly agent: DemoAgent;
   readonly ago: number;
-  /** The member's answer to its ask, where the ask stands answered. */
   readonly answer?: DemoAnswer;
-  /** The agent's word after the answer. */
   readonly followUp?: { readonly text: string; readonly ago: number };
-  /** Members' replies on it, oldest first. */
   readonly replies: readonly {
     readonly by: DemoPerson;
     readonly text: string;
     readonly ago: number;
   }[];
-  /** The member who nodded a notice away with Got it, after every reply, where it stands settled. */
   readonly acknowledged?: { readonly by: DemoPerson; readonly ago: number };
 }
 
-/**
- * The threads the agents posted, oldest first, so the Inbox lists the
- * newest on top. Ten wait on Dean, others on the teammate whose task they
- * are on or who was asked, and some stand settled.
- */
 export const DEMO_THREADS: readonly DemoThread[] = [
   {
     ...USAGE_BREAKDOWN_POST,
@@ -2503,7 +2374,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   },
 ];
 
-/** A thread a member opened with an agent, rather than one it posted. */
 export interface DemoMemberThread {
   readonly by: DemoPerson;
   readonly agent: DemoAgent;
@@ -2512,7 +2382,6 @@ export interface DemoMemberThread {
   readonly ago: number;
 }
 
-/** The threads members opened with Dean's agents, oldest first. */
 export const DEMO_MEMBER_THREADS: readonly DemoMemberThread[] = [
   {
     by: JORDAN,
@@ -2551,7 +2420,6 @@ export const DEMO_MEMBER_THREADS: readonly DemoMemberThread[] = [
   },
 ];
 
-/** How long before the seed's start the people joined. */
 export const DEMO_JOINED_AGO = 45 * DAY;
 
 export { DAY as DEMO_DAY, HOUR as DEMO_HOUR, MINUTE as DEMO_MINUTE };

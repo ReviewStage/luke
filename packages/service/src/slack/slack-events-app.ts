@@ -1,40 +1,3 @@
-/**
- * slack-events-app.ts -- our Slack bot's one inbound route: a press of an ask's button in a member's DM answers the ask, as the member would in the app.
- *
- * Vercel Connect holds the bot's Slack app and forwards every request Slack
- * sends it, events and interactivity alike, to this one path, with a Vercel
- * OIDC token as its bearer in place of Slack's own signature, so the
- * deployment keeps no Slack signing secret. Nothing of a request is read
- * past its bounded bytes before that token holds
- * (`createConnectWebhookVerifier`, which fails closed off Vercel).
- * Interactivity arrives form-encoded, its JSON under `payload`; an event
- * arrives as JSON: Slack's URL check is answered, and a message a member
- * addressed to the bot, a mention or a direct message, is acknowledged and
- * acted on once the answer has left (`slack-agent-starts.ts`); every other
- * event is acknowledged unread.
- *
- * A press (`block_actions`) is acknowledged at once with an empty answer,
- * as Slack asks within its three seconds, and acted on once the answer has
- * left, a failure logged by its kind alone. It is read for the option
- * button's value, which
- * names the item, the message whose ask it answers, and the option
- * (`SlackChoice`, `thread-dms.ts`), or a do ask's answer, Mark done ticking
- * every step, or for a Submit's, which names no option
- * and is answered with the checkboxes the press's state holds ticked, each
- * found back by its place among the ask's options; a press with none, the
- * Open button's and a tick of a checkbox among them, is acknowledged and
- * nothing else. The presser is found back as
- * the workspace member the bot's lookups kept under that Slack user, or
- * one whose own Slack account is that user, in the team the item's
- * workspace connected (`SlackBot.memberOf`), and the ask is
- * answered as that member (`answerAsMember`) under the button's action id,
- * so a press Slack sends again is the answer already taken. The answer
- * taken is handed to the agent as its "Thread answer", and the DM is
- * rewritten to say the option chosen; a press on an ask already settled
- * rewrites the DM to say where it stands. Of a request nothing is logged
- * but a fixed line: its kind as it is heard, and a refused bearer.
- */
-
 import { storeWriter } from "@repo/database/models/writer";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY, knownAsk } from "@repo/features/inbox-wire";
 import { causeKind } from "@repo/runtime/effect";
@@ -71,31 +34,23 @@ import {
   settledLine,
 } from "./thread-dms.js";
 
-/** The path Connect's trigger forwards Slack's requests to, under the deployment's origin. */
 const SLACK_EVENTS_PATH = "/api/slack/events";
 
-/** Slack caps an interaction's payload far below this; bounded all the same before anything is read. */
 const MAXIMUM_REQUEST_BYTES = 1024 * 1024;
 
-/** The form field interactivity carries its JSON under. */
 const INTERACTION_FIELD = "payload";
 
-/** The content type interactivity arrives as. */
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
-/** The kinds of request read: a press of a button, and Slack's check of the URL. */
 const SLACK_REQUEST_TYPE = {
   BLOCK_ACTIONS: "block_actions",
   URL_VERIFICATION: "url_verification",
 } as const;
 
-/** The header Slack marks its retry of an event with, which is dropped, since the first delivery was acted on. */
 const SLACK_RETRY_HEADER = "x-slack-retry-num";
 
-/** Where a verifier is told the request came, which it reads only for its headers. */
 const VERIFIED_ORIGIN = "https://slack.connect.invalid";
 
-/** A press as far as it is read: who pressed, in which team, the DM it was in, the buttons' action ids and values, and the checkboxes ticked in that DM. */
 const BlockActionsSchema = Schema.Struct({
   type: Schema.Literal(SLACK_REQUEST_TYPE.BLOCK_ACTIONS),
   user: Schema.Struct({ id: Schema.String, team_id: Schema.optionalKey(Schema.String) }),
@@ -128,13 +83,11 @@ const BlockActionsSchema = Schema.Struct({
 
 type BlockActions = typeof BlockActionsSchema.Type;
 
-/** Slack's check of the URL as far as it is read: the words it wants back. */
 const UrlVerificationSchema = Schema.Struct({
   type: Schema.Literal(SLACK_REQUEST_TYPE.URL_VERIFICATION),
   challenge: Schema.String,
 });
 
-/** A request read against the few fields it is read for; every other key Slack sends is dropped unread. */
 function readRequest<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   payload: UnparsedWireValue,
@@ -142,7 +95,6 @@ function readRequest<S extends Schema.ConstraintDecoder<unknown>>(
   return readEither(schema, { excess: EXCESS_KEYS.DROP })(payload);
 }
 
-/** Whether Connect's bearer on the request holds, as the verifier says; one that throws or answers nothing holds not. */
 function verified(
   verify: ConnectWebhookVerifier,
   authorization: string | undefined,
@@ -158,7 +110,6 @@ function verified(
   );
 }
 
-/** The request's JSON: interactivity's under its form field, an event's as the body is. */
 function requestPayload(
   contentType: string | undefined,
   body: Uint8Array,
@@ -169,7 +120,6 @@ function requestPayload(
   return parseJsonBytes(new TextEncoder().encode(field));
 }
 
-/** The first option a press names, with the action id it was pressed under; nothing for a press of any other button. */
 function pressedChoice(
   press: BlockActions,
 ): { readonly choice: SlackChoice; readonly actionId: string } | undefined {
@@ -181,7 +131,6 @@ function pressedChoice(
   return undefined;
 }
 
-/** The places among the ask's options of the checkboxes ticked when the press was made; none where the DM holds none. */
 function tickedPlaces(press: BlockActions): readonly number[] {
   for (const block of Object.values(press.state?.values ?? {})) {
     const ticked = block[SLACK_PICKS_ACTION]?.selected_options;
@@ -190,7 +139,6 @@ function tickedPlaces(press: BlockActions): readonly number[] {
   return [];
 }
 
-/** The ask a press answers, as the member reads it; none where the item, the message, or its ask is not found. */
 const pressedAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
   member: string,
   choice: SlackChoice,
@@ -201,13 +149,6 @@ const pressedAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
   return message?.ask === undefined ? undefined : knownAsk(message.ask);
 });
 
-/**
- * The answer a press gives, with the line its DM says once taken: a do
- * ask's Mark done, every step ticked, or Couldn't do it, none ticked; the
- * option its button names; or for a Submit, the ticked checkboxes' options
- * as the member reads the ask, none where the ask is not found or takes no
- * options, which the ask's own check refuses.
- */
 const pressedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   member: string,
   choice: SlackChoice,
@@ -237,21 +178,12 @@ const pressedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** The DM a press was made in, where Slack named it. */
 function pressedDm(press: BlockActions): SlackMessage | undefined {
   const channel = press.container?.channel_id;
   const ts = press.container?.message_ts;
   return channel === undefined || ts === undefined ? undefined : { channel, ts };
 }
 
-/**
- * A press of an option, a do ask's button, or a Submit of the options
- * ticked, answered as the member who pressed it, and the DM
- * rewritten past the answer: the answer taken says what was answered
- * through the hand-off's own settling of the item's DMs, and one already
- * taken, or an ask no longer open, is said here. Nothing where the item,
- * the member, or the option is not found.
- */
 const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockActions) {
   const pressed = pressedChoice(press);
   if (pressed === undefined) return;
@@ -289,7 +221,6 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
   if (outcome === INBOX_ASK_ANSWER.TAKEN) return;
   const message = (item.thread ?? []).find((each) => each.id === choice.ask);
   const status = message?.ask?.status;
-  // A refused answer to an ask still open leaves the DM's buttons standing.
   if (outcome === INBOX_ASK_ANSWER.REFUSED && status === INBOX_ASK_STATUS.OPEN) return;
   const said = outcome === INBOX_ASK_ANSWER.REPEATED ? line : settledLine(status);
   yield* rewriteThreadDm(
@@ -300,7 +231,6 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
   );
 });
 
-/** POST: one request Connect forwarded, its bearer confirmed before anything of it is read. */
 const eventsEndpoint = (verify: ConnectWebhookVerifier) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
@@ -325,7 +255,6 @@ const eventsEndpoint = (verify: ConnectWebhookVerifier) =>
       yield* Effect.logInfo("A Slack request was heard", {
         kind: SLACK_REQUEST_TYPE.BLOCK_ACTIONS,
       });
-      // Slack is answered before the press is acted on, so the press never waits on the agent or on Slack.
       yield* afterResponse(
         "a Slack press",
         answerPress(press.success).pipe(
@@ -338,11 +267,6 @@ const eventsEndpoint = (verify: ConnectWebhookVerifier) =>
     return hostedJsonResponse(200, {});
   });
 
-/**
- * The group: the one path Connect forwards to, and the hosted vocabulary's
- * own refusal for any other. The verifier is Connect's own unless a caller
- * hands another, as a test does in place of Vercel's keys.
- */
 export function slackEventsApp(verify: ConnectWebhookVerifier = createConnectWebhookVerifier()) {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, SLACK_EVENTS_PATH, hostedRefusing(eventsEndpoint(verify))),

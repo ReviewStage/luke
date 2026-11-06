@@ -1,15 +1,5 @@
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, type AdminError } from "@repo/features/admin-wire";
 
-/**
- * The admin refusals as the dashboard's procedures fail with them, and the
- * status each is answered with. They stay the admin's own rather than the
- * hosted tier's for the reason `@repo/features/admin-wire` gives: these slugs
- * are a browser's, not the desktop wire contract's. The hosted oRPC handler
- * answers each one as `{ error: slug }` under its status
- * (`packages/service/src/orpc/errors.ts`), as the old group's responses did.
- */
-
-/** The status each admin refusal is answered with, which is a function of the refusal alone. */
 export const ADMIN_REFUSAL_STATUS = {
   [ADMIN_ERROR.METHOD_NOT_ALLOWED]: ADMIN_HTTP_STATUS.METHOD_NOT_ALLOWED,
   [ADMIN_ERROR.UNAVAILABLE]: ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE,
@@ -27,9 +17,7 @@ export const ADMIN_REFUSAL_STATUS = {
 
 export type AdminRefusal = { readonly error: AdminError };
 
-/** The refusal values themselves, since not one of them carries a field. */
 export const ADMIN_REFUSAL = {
-  /** A seam — the auth service or the database — did not answer, which is an outage and never a sign-out. */
   UNAVAILABLE: { error: ADMIN_ERROR.UNAVAILABLE },
   NOT_SIGNED_IN: { error: ADMIN_ERROR.NOT_SIGNED_IN },
   NOT_AUTHORIZED: { error: ADMIN_ERROR.NOT_AUTHORIZED },

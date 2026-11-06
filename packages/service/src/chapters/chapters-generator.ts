@@ -41,76 +41,24 @@ import {
   repairPrompt,
 } from "./chapters-prompt.js";
 
-/**
- * chapters-generator.ts -- a pull request's changed files and words told as chapters, in one structured model call on the presser's own API key, held to the diff in code.
- *
- * The changed files are split into the hunks a model is shown and those it
- * never sees: the files a reader reads past (`ignoredForChapters`) and every
- * file with no hunk to read, a pure rename, a binary file, or one whose
- * patch was left out. Note that the shown hunks are sent whatever their
- * size, because every chapters model reads far more than any pull request
- * a reviewer would read; one past the model's own window fails as its call
- * does.
- *
- * One call asks for the chapters through the AI SDK's structured output
- * (`Output.object`), the first structured call in the repository: the JSON
- * Schema the provider decodes against is emitted from the Effect Schema
- * below (`emitJsonSchema`), and the answer is decoded by that same Schema,
- * never trusted. The answer schema is looser than the wire's chapter on
- * what code holds anyway, a line number or a hunk's start, so one stray
- * reference drops itself (`validLineRefs`, `coverHunks`) rather than the
- * whole answer.
- *
- * The answer is held to the hunks the model was shown (`coverHunks`): an
- * unknown reference is dropped and a repeated one stays in its first
- * chapter. Hunks no chapter holds are put to the model once more, in one
- * repair call asking where each belongs, an existing chapter by its number
- * or a new chapter read after them, a hunk placed in a chapter raising its
- * risk where the hunk earns more; whatever is still outside, with every
- * hunk the model never saw, closes the story as "Other changes". A repair
- * that fails is passed over, since the first answer already stands. Each
- * key change keeps only line references inside its own chapter's hunks, and
- * the literal `\n` a model escapes twice is read as the newline it meant.
- *
- * The model is a seam (`ChaptersModel`), as an agent's title model is:
- * production reaches the provider on the API key the member who pressed
- * Generate saved, never ours: on the Claude model the route names, Haiku
- * (`chaptersModelOf`, `@repo/features/chapters-model-choice`), where they
- * saved an Anthropic key, and on OpenAI's model of the same tier where they saved only an
- * OpenAI key; a test hands in a scripted model. The whole generation is bounded in time
- * (`CHAPTERS_BOUNDS.TIMEOUT`), and every way it fails is one of the store's
- * four kinds (`PULL_REQUEST_CHAPTERS_FAILURE`). A failure is logged by its
- * kind alone: neither the diff nor the answer leaves here but to the model
- * and the caller.
- */
-
-/** A generation that answered no chapters, and why, in the store's words (`PULL_REQUEST_CHAPTERS_FAILURE`). */
 export class ChaptersFailure extends Data.TaggedError("ChaptersFailure")<{
   readonly kind: PullRequestChaptersFailure;
 }> {}
 
-/** The bounds a generation keeps to. */
 export const CHAPTERS_BOUNDS = {
-  /** How long the whole generation may take, the repair included; a route that runs it is given longer. */
   TIMEOUT: Duration.seconds(180),
-  /** The most tokens the chapters call may write. */
   MAX_OUTPUT_TOKENS: 32_000,
-  /** The most tokens the repair call may write, which places a few hunks. */
   REPAIR_MAX_OUTPUT_TOKENS: 8_000,
-  /** How hard the model is asked to think: grouping and judging risk earn more than a title's least. */
   EFFORT: "medium",
 } as const;
 
-/** The AI SDK's word for a call the provider stopped on its own policy, as Anthropic's refusal reads. */
 const FINISH_REFUSED = "content-filter";
 
-/** The model a generation runs on, and its id, which the answer names. */
 export interface ChaptersModel {
   readonly id: string;
   readonly model: LanguageModel;
 }
 
-/** What a generation reads: the pull request's changed files, its title and body, and its commit messages where the caller has them. */
 export interface ChaptersInput {
   readonly files: readonly AgentChangedFile[];
   readonly title: string;
@@ -118,19 +66,16 @@ export interface ChaptersInput {
   readonly commitMessages?: readonly string[];
 }
 
-/** The chapters told, in reading order with "Other changes" last where it holds anything, and the model that told them. */
 export interface GeneratedChapters {
   readonly model: string;
   readonly chapters: readonly Chapter[];
 }
 
-/** A hunk as an answer cites it; its start is held to the diff by `coverHunks`, not here. */
 const answerHunkRefSchema = Schema.Struct({
   path: describeWire(Schema.String, "The exact path a hunk header names."),
   oldStart: describeWire(Schema.Int, "The oldStart that same hunk header names."),
 });
 
-/** Lines a key change points at as an answer writes them; `validLineRefs` drops a range outside the chapter's hunks. */
 const answerLineRefSchema = Schema.Struct({
   path: Schema.String,
   side: describeWire(
@@ -141,7 +86,6 @@ const answerLineRefSchema = Schema.Struct({
   endLine: Schema.Int,
 });
 
-/** One chapter as the model tells it, every field a story chapter's but its kind. */
 const answerChapterSchema = Schema.Struct({
   title: describeWire(Schema.String, "An action-oriented verb phrase of at most 8 words."),
   summary: describeWire(Schema.String, "2 to 3 sentences in Markdown, leading with impact."),
@@ -164,12 +108,10 @@ const answerChapterSchema = Schema.Struct({
 
 type AnswerChapter = typeof answerChapterSchema.Type;
 
-/** The one-pass answer: the chapters in reading order. */
 export const chaptersAnswerSchema = Schema.Struct({
   chapters: Schema.Array(answerChapterSchema),
 });
 
-/** The repair's answer: where each left-out hunk goes, an existing chapter by its number with the risk it earns, or a new chapter. */
 export const repairAnswerSchema = Schema.Struct({
   placements: describeWire(
     Schema.Array(
@@ -195,7 +137,6 @@ export const repairAnswerSchema = Schema.Struct({
   ),
 });
 
-/** What one structured call asks: its instructions, its prompt, the schema its answer is held to, and how much it may write. */
 interface StructuredAsk<A> {
   readonly system: string;
   readonly prompt: string;
@@ -203,11 +144,6 @@ interface StructuredAsk<A> {
   readonly maxOutputTokens: number;
 }
 
-/**
- * The kind of a call's failure: an answer the SDK could not read as the
- * schema's JSON is invalid, unless the provider stopped it on its policy,
- * which is a refusal, as every other failure of the call is.
- */
 function callFailureOf(cause: unknown): PullRequestChaptersFailure {
   if (NoObjectGeneratedError.isInstance(cause)) {
     return cause.finishReason === FINISH_REFUSED
@@ -218,7 +154,6 @@ function callFailureOf(cause: unknown): PullRequestChaptersFailure {
   return PULL_REQUEST_CHAPTERS_FAILURE.MODEL_REFUSED;
 }
 
-/** A failure of its kind, logged by that kind and the cause's own name alone. */
 function failedAs(
   kind: PullRequestChaptersFailure,
   cause?: unknown,
@@ -230,12 +165,6 @@ function failedAs(
   );
 }
 
-/**
- * One structured call: the schema emitted as JSON Schema for the provider
- * to decode against, the answer decoded by the same Schema. Note that the
- * SDK is handed the JSON Schema alone, with no validation of its own,
- * because the Effect decode is the one that counts.
- */
 function askStructured<A>(
   model: ChaptersModel,
   ask: StructuredAsk<A>,
@@ -272,7 +201,6 @@ function askStructured<A>(
   });
 }
 
-/** A chapter the model told, as a story chapter, its words read with the newlines it meant. */
 function storyChapter(told: AnswerChapter): Chapter {
   return {
     kind: CHAPTER_KIND.STORY,
@@ -288,11 +216,6 @@ function storyChapter(told: AnswerChapter): Chapter {
   };
 }
 
-/**
- * The chapter with a hunk placed where it reads: before its file's first
- * hunk that starts after it, after its file's last hunk otherwise, and at
- * the end where the chapter holds none of its file.
- */
 function withHunkPlaced(chapter: Chapter, ref: HunkRef): Chapter {
   const refs = chapter.hunkRefs;
   const later = refs.findIndex((each) => each.path === ref.path && each.oldStart > ref.oldStart);
@@ -302,7 +225,6 @@ function withHunkPlaced(chapter: Chapter, ref: HunkRef): Chapter {
   return { ...chapter, hunkRefs: [...refs.slice(0, at), ref, ...refs.slice(at)] };
 }
 
-/** How risky each level is against the others; a chapter with no level is below them all. */
 const RISK_RANK = new Map<Chapter["risk"], number>([
   [null, -1],
   [CHAPTER_RISK.LOW, 0],
@@ -310,18 +232,11 @@ const RISK_RANK = new Map<Chapter["risk"], number>([
   [CHAPTER_RISK.HIGH, 2],
 ]);
 
-/**
- * The chapter at the risk a hunk placed in it earns where that is higher,
- * with the hunk's reason beside its own. Note that a placed hunk raises a
- * chapter's risk and never lowers it, because the chapter was judged
- * without it and a risk told too low is the one a reviewer cannot see.
- */
 function withRiskOf(chapter: Chapter, risk: Chapter["risk"], reason: string): Chapter {
   if ((RISK_RANK.get(risk) ?? -1) <= (RISK_RANK.get(chapter.risk) ?? -1)) return chapter;
   return { ...chapter, risk, riskReasons: [...chapter.riskReasons, reason] };
 }
 
-/** The chapters with the repair applied: each placement in the chapter it names, where one stands at that number, raising its risk where the hunk earns more, and the new chapters after them. */
 function repairedChapters(
   chapters: readonly Chapter[],
   repair: typeof repairAnswerSchema.Type,
@@ -337,12 +252,6 @@ function repairedChapters(
   return [...placed, ...repair.newChapters.map(storyChapter)];
 }
 
-/**
- * The chapters with the hunks no chapter holds placed by one repair call
- * and held to the shown hunks again. Note that a repair that fails leaves
- * the chapters as they stood, because the first answer is still good and
- * what stays outside closes the story as "Other changes".
- */
 function repairCoverage(
   model: ChaptersModel,
   input: ChaptersInput,
@@ -370,29 +279,20 @@ function repairCoverage(
   );
 }
 
-/** The status a file's hunks are headed with. */
 function statusesOf(files: readonly AgentChangedFile[]): (path: string) => string {
   const byPath = new Map(files.map((file) => [file.path, file.status]));
   return (path) => byPath.get(path) ?? "modified";
 }
 
-/** Whether a hunk is one a model never sees: a file a reader reads past, or a file with no hunk to read. */
 function unseen(each: ChapterHunk): boolean {
   return each.hunk === null || ignoredForChapters(each.ref.path);
 }
 
-/**
- * The model chapters are told on, on the presser's own API key (`ownKeyOf`):
- * the Claude model named on an Anthropic key, and OpenAI's of the same
- * tier on an OpenAI key (`chaptersModelOn`). Its id
- * is the provider's own, which the chapters' row names.
- */
 export function chaptersModelOf(
   own: OwnKey,
   modelId: ChaptersModelId,
   fetch?: typeof globalThis.fetch,
 ): ChaptersModel {
-  // The key is revealed here alone, into the SDK client that puts it on its requests.
   const settings = {
     apiKey: Redacted.value(own.key),
     ...(fetch === undefined ? undefined : { fetch }),
@@ -404,13 +304,6 @@ export function chaptersModelOf(
   return { id, model: createOpenAI(settings).responses(id) };
 }
 
-/**
- * A pull request told as chapters on the model given: the shown hunks
- * grouped, ordered, and told in one call, held to the diff, repaired once
- * where hunks were left out, and closed by "Other changes" where anything
- * stands outside. A pull request with nothing to show the model asks it
- * nothing. Fails as a timeout where the whole takes longer than its bound.
- */
 export function generateChapters(
   model: ChaptersModel,
   input: ChaptersInput,

@@ -31,55 +31,11 @@ import { heldUntil } from "../http/held-read.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
-/**
- * mac-command.ts -- a command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.
- *
- * Any agent may call it, the brain, a coding agent, and either's
- * workers. Settings › This Mac sets what the Mac does with a command: Ask
- * every time (the default) asks the developer first and runs it only once
- * they allow it, Always allow runs it at once, and Never stops the Mac
- * listening. The call refuses at once where no
- * Mac of the account listened lately, since nothing would take the command.
- * Otherwise it queues the command, looks for its result until the
- * command's own timeout and a grace for the Mac to answer have passed, and
- * withdraws the row whichever way it ends, so a row stands only while its
- * call does. A Mac may take a command only within the claim window of its
- * queueing, so one it takes always ends inside the call's wait, and a row
- * a call that died left behind is never run later. An ask the Mac's read
- * would refuse is refused before it is queued. The Mac's side is `GET /api/mac-commands`, held open while
- * nothing waits and answered with every waiting command claimed for it,
- * and `POST`, its result (`mac-commands-procedures.ts`).
- *
- * A command is of a kind (`MAC_COMMAND_KIND`), and a Mac is handed only
- * the kinds its read named: shell, which every Mac runs, an older one's
- * read naming nothing, and each other kind a newer one names. So a call of
- * another kind is refused at once where no Mac that runs it listened
- * lately, rather than left for a Mac that would never take it, and a Mac
- * that took a command it would not run answers why, which the call
- * answers as not run.
- *
- * An agent's call runs on the Mac of the member its task is assigned to,
- * or its starter's where it works on no task or one assigned to no one
- * (`macOwnerOf`), so a task handed to another member hands its agents'
- * commands to their Mac. Note that who has written to the agent decides
- * nothing: the Mac's own setting (Ask every time by default) is the one
- * guard.
- */
-
 const MAC_COMMAND_SERVICE = {
-  /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
-  /** How often a held read, and a call waiting on its result, looks again where the sync hub cannot wake it. */
   POLL: Duration.millis(500),
-  /** How lately a Mac must have read for a call to count it listening: one hold, and room for the next read to arrive. */
   LISTENER_FRESH: Duration.seconds(45),
-  /**
-   * How long a command may wait for a Mac to take it; one not taken by then
-   * is never run. A listening Mac takes one within a poll, and a command
-   * taken inside this window ends inside the call's wait.
-   */
   CLAIM_WINDOW: Duration.seconds(30),
-  /** How long past the command's own timeout a call waits for the Mac to say what it did: the claim window, and room for the answer to travel. */
   ANSWER_GRACE: Duration.seconds(35),
 } as const;
 
@@ -88,7 +44,6 @@ export const MAC_COMMAND_STATUS = {
   NOT_RUN: "not-run",
 } as const;
 
-/** Why a call ran nothing, or never heard back, in words the model can act on. */
 const MAC_COMMAND_REFUSAL = {
   NO_MAC:
     `Not run: ${PRODUCT_NAME} is not running on the developer's Mac, or they switched off ` +
@@ -102,7 +57,6 @@ const MAC_COMMAND_REFUSAL = {
     `number from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
 } as const;
 
-/** Why a call ran nothing by its kind: no Mac that runs that kind listening, or an ask the Mac's read would refuse. */
 const MAC_COMMAND_KIND_REFUSAL = {
   [MAC_COMMAND_KIND.SHELL]: {
     NO_MAC: MAC_COMMAND_REFUSAL.NO_MAC,
@@ -113,16 +67,10 @@ const MAC_COMMAND_KIND_REFUSAL = {
   { readonly NO_MAC: string; readonly UNREADABLE: string }
 >;
 
-/** What a call answers: what a shell command did, or why nothing ran. */
-// A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type MacCommandAnswer =
   | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacShellResult)
   | { readonly status: typeof MAC_COMMAND_STATUS.NOT_RUN; readonly reason: string };
 
-/**
- * What a call asks of the Mac: a command of one kind, what that kind
- * carries, and how long it may run, the default where unsaid.
- */
 export type MacCommandAsk = {
   readonly kind: typeof MAC_COMMAND_KIND.SHELL;
   readonly command: string;
@@ -152,10 +100,6 @@ const RUN_ON_MAC_INPUT = Schema.Struct({
 
 const readInput = readEither(RUN_ON_MAC_INPUT);
 
-/**
- * The tool as every agent is offered it, the brain, a coding agent,
- * and either's workers alike: its name, its words, and its input schema.
- */
 export const RUN_ON_MAC_TOOL = {
   name: AGENT_TOOL.RUN_ON_MAC,
   description:
@@ -175,7 +119,6 @@ function notRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
 }
 
-/** Whether a Mac of the account read for its commands within the freshness window. */
 export function macListening(userId: string): TaskStoreEffect<boolean> {
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     macListeningSince(
@@ -185,18 +128,15 @@ export function macListening(userId: string): TaskStoreEffect<boolean> {
   );
 }
 
-/** What a call answers for what the Mac said: what a shell command did, or why the Mac ran nothing. */
 function answered(result: MacCommandResult): MacCommandAnswer {
   if ("refused" in result) return notRun(result.refused);
   return { status: MAC_COMMAND_STATUS.RAN, ...result };
 }
 
-/** The account's topic, which every write to its commands notifies (`macCommandSync`): a command queued, claimed, settled, or withdrawn. */
 function commandTopics(userId: string): readonly SyncTopic[] {
   return [[TOPIC.ACCOUNT, userId]];
 }
 
-/** The command's result once a Mac settles it, looked for again as each write to the account's commands lands, until the deadline; nothing past it. */
 function awaitedResult(
   userId: string,
   queued: MacCommand,
@@ -217,11 +157,6 @@ function awaitedResult(
   );
 }
 
-/**
- * Runs one command on the account's Mac and answers what it came to:
- * refused at once where no Mac that runs its kind listens, and the row
- * withdrawn however the wait ends, an interrupted call's included.
- */
 export function askMac(
   userId: string,
   ask: MacCommandAsk,
@@ -232,7 +167,6 @@ export function askMac(
     id: randomUUID(),
     timeoutSeconds: ask.timeoutSeconds ?? MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS,
   });
-  // A command the Mac's read would refuse is refused here, before it is queued where it would spoil that read.
   if (Result.isFailure(asked)) return Effect.succeed(notRun(refusal.UNREADABLE));
   const queued = asked.success;
   const run = Effect.gen(function* () {
@@ -247,12 +181,6 @@ export function askMac(
   return Effect.catch(run, () => Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
 }
 
-/**
- * One `run_on_mac` call made in the conversation, whichever agent made it:
- * its input read against the tool's schema, then run on the Mac of its
- * task's assignee (`macOwnerOf`) as `askMac` runs it. The one door every agent's tool goes through, so each
- * root's tool is a line.
- */
 export function runOnMacTool(
   target: ConversationTarget,
   input: UnparsedWireValue,
@@ -267,20 +195,11 @@ export function runOnMacTool(
       : { kind, command, timeoutSeconds: timeout_seconds };
   return Effect.gen(function* () {
     const owner = yield* Effect.result(macOwnerOf(target));
-    // Note that a read that fails refuses, because a command run on a guess could land on the wrong Mac.
     if (Result.isFailure(owner)) return notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE);
     return yield* askMac(owner.success, ask);
   });
 }
 
-/**
- * One command a Mac heard of live, claimed for it by its id where it still
- * waits inside the claim window; none where another Mac took it, its call
- * withdrew it, or it waited too long. The window is kept here, on the
- * service's clock, because the live statement can measure nothing from
- * one. Note that any kind is claimed, because the Mac hears only of the
- * kinds it named.
- */
 export function claimedMacCommand(
   userId: string,
   id: string,
@@ -295,15 +214,6 @@ export function claimedMacCommand(
   );
 }
 
-/**
- * The Mac's held read, naming the kinds it runs: it is counted listening
- * for them as the read arrives, and answered with every waiting command of
- * those kinds claimed for it as soon as one waits, looked for again as each
- * write to the account's commands lands, or with none once the hold ends. A
- * command of any other kind is left waiting for a Mac that runs it, or for
- * its call to give up on it. Note that a command aging out of the claim
- * window wakes nothing, because it only leaves what the read waits for.
- */
 export function macCommandsFor(
   userId: string,
   kinds: readonly MacCommandKind[],

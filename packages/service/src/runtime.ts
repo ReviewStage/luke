@@ -1,12 +1,3 @@
-/**
- * runtime.ts -- the services the deployment's effects run against, as a layer.
- *
- * This module builds nothing and runs nothing: each edge that runs an effect
- * against the deployment's services (`apps/web/server/runtime.ts` for the web
- * functions, each eve root's own `runtime.ts` for its agent) builds its one
- * `ManagedRuntime` over this layer.
- */
-
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { invitationMailFromEnvironment } from "./accounts/invitation-mail.js";
@@ -27,106 +18,20 @@ import { slackBotFromEnvironment } from "./slack/slack-bot.js";
 import { syncFromEnvironment } from "./sync/hub.js";
 import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
-/**
- * The deployment's own environment, read as these services are built rather
- * than once for the process. The default `ConfigProvider` is a
- * `Context.Reference` whose default value is computed once and then kept on
- * the reference itself, so the record `ConfigProvider.fromEnv()` copies out of
- * `process.env` would be the record every later instance still read. An
- * instance builds its services from the environment it was started with, and
- * a test that sets one and disposes the runtime gets the environment it set.
- */
 const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv()));
 
-/**
- * Where an `Effect.log*` on this runtime goes: one JSON object per line on the
- * console, which Vercel's log drain parses into a structured entry, with the
- * level, the annotations, the enclosing spans, and the cause a log line was
- * handed rendered as fields rather than folded into the message. v4 states the
- * whole active set of loggers rather than swapping one out of it, so the
- * tracer's logger is named beside the JSON one: it is what puts a line on the
- * span it was written under. The third sends every line to Sentry's logs
- * with its annotations (`observability/sentry.ts`), which the runtime's edge
- * starts. An eve root's runtime is built over these services too, so its lines
- * reach Sentry through the same logger.
- */
 const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 
-/** The one gated GitHub client of the instance, named once so every layer that reaches GitHub shares its gate. */
 const gatedGitHubClient = githubRateGate.pipe(
   Layer.provide(Layer.merge(FetchHttpClient.layer, webSqlClient)),
 );
 
-/** Our GitHub App as the environment names it, named once so every layer that reaches it shares one. */
 const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
 
-/** Our Slack bot as the environment names it, named once so every layer that reaches it shares one. */
 const slackBot = slackBotFromEnvironment.pipe(
   Layer.provide(Layer.merge(FetchHttpClient.layer, integrationConnectFromEnvironment)),
 );
 
-/**
- * The services every web function's and every agent's effects run against. A
- * function reaches this layer only through its edge's runtime, so a service
- * added here is built once per instance rather than once per invocation.
- *
- * What the deployment's environment says about the hosted tier is read here
- * too, once per instance rather than at each invocation: `HostedEnvironment`
- * is the one place the brain model override, the accounts' key ring, and the
- * analytics processor's own deletion key and project are read, and
- * `GitHubApp` the one place our GitHub App's id, slug, client, and
- * private key are.
- *
- * `IntegrationConnect` is the one place each integration's connector UID and
- * allowlist are read, for the account routes that connect and disconnect an account and
- * the agents that read its tokens alike. `SlackBot` is the one place the
- * bot's own connector is read (`slack/slack-bot.ts`).
- *
- * `SettledTurnListener` is here because the store writer tells it of every
- * coding agent turn it settles, on whichever function the settle ran: it
- * counts the turn, hands the agent's final message to the agent that
- * started it, and sends an automation run's result on Slack
- * (`agents/coder-host/settled-turns.ts`).
- *
- * `ModelCatalog` is here for the same reason: its read of AI Gateway's
- * public catalog is cached on the service, so one instance reads the catalog
- * once an hour for every route that offers or checks a model.
- * `PullRequestLinks` is here on the same terms: one instance reads a pull
- * request a link draws once a minute, however many links ask for it.
- *
- * The client every route and agent reaches GitHub through is wrapped in
- * `githubRateGate` (`github/github-rate-gate.ts`), so one instance sends
- * GitHub's API a few requests at a time, a second apart where they write,
- * and none while GitHub says it is rate limited to any instance. The gate
- * keeps its holds in the database over `webSqlClient`, the very layer below,
- * which a build of this layer builds once however many name it, so the gate
- * holds no pool of its own.
- *
- * `Sync` is here for the same reason: Sync's hub holds one `LISTEN`
- * per instance, shared by every held read and wait on it (`sync/hub.ts`),
- * over `DATABASE_URL_UNPOOLED`, and its heartbeat notifies over that same
- * connection. Without that URL its listener stays down, and every wait
- * polls on its own clock.
- *
- * `InvitationMail` is the one place the Resend key and the sender a
- * workspace invitation is emailed from are read (`accounts/invitation-mail.ts`).
- *
- * `BearerCallers` keeps the caller each bearer resolved to for a minute
- * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
- * auth service once a minute per bearer rather than on every request.
- *
- * `PageLinks` is the one place the sandbox agents' pages are drawn from on
- * the web is read, with the key their links are signed with
- * (`pages/page-links.ts`), for the frame that mints a link and the page
- * route that reads it back alike.
- *
- * `@effect/platform-node` has no entry: a Vercel function's platform is the
- * Web `fetch` its runtime already carries, and a Node-reaching companion
- * behind this door would have to be traced into every bundle. `@effect/sql-pg`
- * does have one: a web function's database is the platform Vercel gives it, and
- * `repository-checks.sh` keeps that specifier out of `api/`, where the stubs
- * that re-export a bundle stand, rather than out of the bundle itself.
- */
 export const webServices = Layer.mergeAll(
   gatedGitHubClient,
   webSqlClient,
@@ -151,13 +56,6 @@ export const webServices = Layer.mergeAll(
   welcomeMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
-/** What an effect run on a runtime over these services may require. */
 export type WebServices = Layer.Success<typeof webServices>;
 
-/**
- * How building those services can fail, which is a missing `DATABASE_URL`: the
- * layer names the database every deployed function reaches, so an invocation
- * on an instance configured without one is refused at the edge rather than at
- * whichever query ran first.
- */
 export type WebServicesError = Layer.Error<typeof webServices>;

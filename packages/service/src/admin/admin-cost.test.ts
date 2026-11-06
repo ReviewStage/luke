@@ -14,23 +14,10 @@ import {
   priceCostUsage,
 } from "./admin-cost.js";
 
-/**
- * admin-cost.test.ts -- the Cost screen's pricing and shaping: tokens are
- * priced at the catalog by the coding agent's own pricer, a refused fast
- * share at its base model, a model the catalog does not price is told as
- * unpriced tokens and never as dollars, seconds at their list price, and
- * every figure is folded from the same zero-filled days the chart draws.
- *
- * Synthetic models, prices, and accounts throughout.
- */
-
-/** Noon on the window's last day. */
 const NOW = Date.UTC(2026, 9, 17, 12);
 const TODAY = "2026-10-17";
 const YESTERDAY = "2026-10-16";
-/** Inside the 7-day window before this one. */
 const LAST_WEEK = "2026-10-08";
-/** Before even that. */
 const LONG_AGO = "2026-09-01";
 
 const WEEK = ADMIN_METRICS_WINDOW.WEEK;
@@ -42,7 +29,6 @@ const MODEL = {
   CHEAP: "openai/cheap-test",
 } as const;
 
-/** A dollar per million input tokens and two per million output, the fast version twice that. */
 const OFFERED: readonly OfferedModel[] = [
   {
     id: MODEL.BASE,
@@ -122,7 +108,6 @@ test("a refused fast share is priced at its base model, and an unlisted model's 
     ],
   });
 
-  // Two dollars at the fast price, one at the base price the refused share ran at.
   assert.equal(cost.totals.spendUsd, 3);
   assert.equal(cost.totals.unpricedTokens, 500);
   assert.deepEqual(cost.byModel, [
@@ -148,7 +133,6 @@ test("a catalog that could not be read leaves every model token unpriced, and se
 
   assert.equal(cost.catalogAvailable, false);
   assert.equal(cost.totals.unpricedTokens, MILLION);
-  // Ten minutes of gpt-transcribe at $0.0045 a minute.
   assert.equal(cost.totals.spendUsd.toFixed(3), "0.045");
 });
 
@@ -159,7 +143,6 @@ test("many groups too small to round to a millionth of a dollar still add up", (
     ),
   });
 
-  // A thousand single tokens at forty cents per million, each under a millionth of a dollar.
   assert.equal(cost.totals.spendUsd.toFixed(6), "0.000400");
 });
 
@@ -191,7 +174,6 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
   assert.equal(cost.daily.at(-2)?.[COST_SOURCE.APP], 2);
   assert.ok(cost.daily.slice(0, -2).every((day) => day[COST_SOURCE.APP] === 0));
   assert.equal(cost.totals.spendUsd.toFixed(3), "3.045");
-  // The prior window holds last week's day and not the one before it.
   assert.deepEqual(cost.totals.trend, { days: WEEK, recent: cost.totals.spendUsd, prior: 4 });
 });
 
@@ -201,7 +183,6 @@ test("spend per account and per merged pull request read the window's own accoun
       tokens({ day: TODAY, userId: "a", model: MODEL.BASE, inputTokens: MILLION }),
       tokens({ day: TODAY, userId: "b", model: MODEL.BASE, inputTokens: 2 * MILLION }),
       tokens({ day: TODAY, userId: "c", model: MODEL.BASE, inputTokens: 9 * MILLION }),
-      // Only unpriced tokens: an account with no dollars to take a mean of.
       tokens({ day: TODAY, userId: "d", model: MODEL.UNLISTED, inputTokens: 5 }),
     ],
     merged: [

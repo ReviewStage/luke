@@ -62,21 +62,9 @@ import { INTEGRATION_GRANT_HOLDER, integrationUnavailable } from "./integration-
 import { storeTools } from "./integration-tool-store.js";
 import { INTEGRATION } from "./integrations.js";
 
-/**
- * A native agent's integration servers, listed and called through their
- * door over the real store on PGlite, against Linear's MCP server as a
- * fake standing at its own address (`../testing/integration-mcp-fake.ts`),
- * which admits only the bearer Connect issued the member. Linear and Notion
- * are set up on this deployment, the rest are not, and GitHub is offered as
- * the App is.
- * The member connected Linear and not Notion. Every line the door logs is
- * kept, so a test can say no token was written anywhere it should not be.
- */
-
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
-/** A Claude Code agent on a task of a member who connected Linear, admitted on its runner's bearer. */
 const memberWithLinear = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -102,7 +90,6 @@ const memberWithLinear = Effect.gen(function* () {
   return { userId, agentId: agent.id, admitted, bearer };
 });
 
-/** The door's services: the store, the fake Connect, GitHub as the App, and Linear's server; every line logged is kept. */
 function doorServices(bearer: string, heard: Heard, logged: string[]) {
   return Layer.mergeAll(
     NO_GITHUB,
@@ -112,7 +99,6 @@ function doorServices(bearer: string, heard: Heard, logged: string[]) {
   );
 }
 
-/** The runner's events posted under its bearer to the events route, as a function answers them. */
 const postEvents = (bearer: string, events: readonly RunnerEvent[]) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -141,18 +127,11 @@ function hearing(): Heard {
   return { calls: [], bearers: [] };
 }
 
-/** What a Connect below was asked: each token read's subject, and each eviction's. */
 interface ConnectAsked {
   readonly reads: string[];
   readonly evicted: string[];
 }
 
-/**
- * Connect as its SDK answers Linear and Notion: a token read is served from
- * the in-process cache, which holds `cached` until it is evicted, and asks
- * Connect afterwards, which issues `issued`. Every read and eviction is
- * recorded.
- */
 function cachingConnect(cached: string, issued: string, asked: ConnectAsked) {
   let held: string | undefined = cached;
   const connector: ConnectorService = {
@@ -176,7 +155,6 @@ function cachingConnect(cached: string, issued: string, asked: ConnectAsked) {
   );
 }
 
-/** Every integration server a native launch is handed, initialized and listed as the harness does at its start. */
 const launch = (admitted: Parameters<typeof nativeAgentConnections>[0]) =>
   Effect.gen(function* () {
     const listed: Record<string, readonly string[]> = {};
@@ -187,10 +165,8 @@ const launch = (admitted: Parameters<typeof nativeAgentConnections>[0]) =>
     return listed;
   });
 
-/** Linear's server as one that never answers, so only a bound ends a read of it. */
 const SILENT_LINEAR = fakeHttpClientLayer(() => new Promise<Response>(() => {}));
 
-/** The text of a forwarded MCP result's first block. */
 function firstText(result: Result.Result<WireRecord, unknown>): unknown {
   if (Result.isFailure(result)) return undefined;
   const content = result.success.content;
@@ -390,7 +366,6 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           team: "ENG",
         }).pipe(Effect.provide(services));
         yield* updateAgentServers(member.userId, member.agentId, [LINEAR]);
-        // The developer's message mentions @Linear, which its hand-over writes on the agent's row.
         yield* dispatchMentioningServers(
           member.userId,
           member.agentId,
@@ -408,7 +383,6 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           { sequence: 2, message: { type: RUNNER_EVENT.ACCEPTED, uuid: randomUUID() } },
         ]);
         const inTheNextTurn = yield* listIssues;
-        // A turn that starts and ends within one batch takes its own mentions, never the next turn's.
         yield* dispatchMentioningServers(
           member.userId,
           member.agentId,
@@ -464,7 +438,6 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         const member = yield* memberWithLinear;
         const token = linearTokenOf(member.userId);
         const logged: string[] = [];
-        // Linear's server here admits another bearer, so it refuses the member's, echoing it.
         const services = doorServices("another-bearer", hearing(), logged);
 
         const listed = yield* listConnectionTools(member.admitted, LINEAR).pipe(

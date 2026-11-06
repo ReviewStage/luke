@@ -1,7 +1,3 @@
-/**
- * agents-app-messages.test.ts -- messaging a coding agent through the hosted router: what a message reaches, queues, refuses, and writes to the transcript, over a fake eve.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -200,7 +196,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.equal(picture.contentType, AGENT_ATTACHMENT_TYPE.PNG);
         assert.deepEqual(new Uint8Array(picture.bytes), SIZED_PNG);
-        // eve's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
         const taken = yield* writer.takeAwaitingLine(target, {
           text: receivedMessage({ message: "", parts: handed }).text,
           turnId,
@@ -375,7 +370,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const services = yield* Effect.context<DatabaseServices>();
-        // Two statements in a row share a transaction's id where one stands open around them.
         const alone = Effect.flatMap(SqlClient.SqlClient, (sql) =>
           Effect.gen(function* () {
             const xid = sql<{ readonly xid: string }>`select txid_current()::text as xid`;
@@ -429,10 +423,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a teammate's session cookie messages the owner's agent through its harness acting for the owner, and stops it and deletes its task through the harness acting for the teammate and never for the owner the rows name",
     () =>
       Effect.gen(function* () {
-        // An idle agent of the owner's, which the teammate messages.
         const messaged = yield* messagedAgent(fakeEve(), { running: false });
         yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
-        // A running agent of the owner's, which the teammate stops, and then deletes its task.
         const stopped = yield* messagedAgent(fakeEve(), { running: true });
         yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
         const teammate = sessionCookieOf(stopped.other);
@@ -524,7 +516,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
-        // An agent with no task, so it holds a pin of its own.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -635,7 +626,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(eve.canceled, [], "no agent's turn was stopped");
         const standing = Option.getOrUndefined(yield* readTask(owner, task.id))?.task;
-        // The agent's Start by hand assigned its starter, which the refused change leaves standing.
         assert.equal(standing?.assignee?.userId, owner);
       }),
   );
@@ -677,7 +667,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [taken.model, taken.effort, taken.runtime],
           [SMALL_WINDOW.model, "low", "claude_code"],
         );
-        // Each setting a change moved is counted under the member, and one it left as it was is not, nor a change refused.
         yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "high" });
         yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "high" });
         assert.deepEqual(countedWith(onClaudeCode.owner, SERVER_EVENT.AGENT_SETTINGS_CHANGE), [
@@ -760,7 +749,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         });
         assert.equal(yield* marked({ archived: true }), HOSTED_HTTP_STATUS.OK);
         assert.equal((yield* standing()).status, TASK_STATUS.DONE);
-        // A status named beside the archive is the one written.
         assert.equal(
           yield* marked({ archived: true, status: TASK_STATUS.BACKLOG }),
           HOSTED_HTTP_STATUS.OK,
@@ -804,7 +792,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           },
         );
         const turn = { conversationId: sessionKey(target.conversationId), turnId };
-        /** The turn's step begun, as the relay tells the step's start. */
         const stepBegun = (step: number) =>
           writer.consume(target, {
             ...turn,
@@ -834,7 +821,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const journal = page.messages.find((each) => each.role === MESSAGE_ROLE.ASSISTANT);
         assert.ok(journal);
-        // The closed journal stands behind the line it took, so the order alone would draw the line ahead of the turn.
         assert.deepEqual(
           page.messages.map((each) => [each.role, each.arrivedIn]),
           [
@@ -874,7 +860,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           listed.agents.map((each) => [each.id, each.status]),
           [[agent.id, AGENT_STATUS.COMPLETED]],
         );
-        // The teammate reads whose agent it is, which the window says as "Started by".
         assert.deepEqual(
           listed.agents.map((each) => each.startedBy?.userId),
           [owner],
@@ -911,7 +896,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, task, agent, ask, transcript, sent } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
-        // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
         yield* TestClock.adjust(Duration.seconds(1));
         assert.equal(
           (yield* sent("Rename the subject line too.")).agent.status,
@@ -1027,7 +1011,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
           running: false,
         });
-        // An automation's run leaves an agent so: in its workspace, on no task.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1212,7 +1195,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { activityAt, readThrough, markedUnread, ...read } = only;
         assert.deepEqual([read, rest], [page, []]);
         assert.ok(activityAt >= page.createdAt);
-        // Note that an agent no one has marked reads through its start for the member listing it.
         assert.deepEqual([readThrough, markedUnread], [page.createdAt, false]);
         assert.equal(standing.plans.find((each) => each.id === task.id)?.agents, undefined);
         assert.deepEqual(outside.planlessAgents, []);
@@ -1347,7 +1329,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const eve = fakeEve();
         const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* joinWorkspace(task.workspaceId, other);
-        // The task is seen on its starter's own token, which the teammate holds none of, while the agent is seen through the App.
         yield* Database.use((db) =>
           db
             .update(taskTable)
@@ -1445,7 +1426,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* steer(),
         );
-        // The send that wrote the line answers the transaction that wrote it.
         assert.match(first.txid ?? "", /^\d+$/u);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
@@ -1465,7 +1445,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* steer(),
         );
-        // A repeat wrote nothing, so there is no transaction to wait for.
         assert.equal(again.txid, undefined);
         assert.equal(eve.sent.length, 1);
       }),
@@ -1486,17 +1465,14 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* Database.use((db) =>
           db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other)),
         );
-        // A line from before senders were kept, standing after the Start's own.
         yield* transcriptRow(target, 2, MESSAGE_ROLE.USER, [text("Sweep the flaky tests.")]);
         yield* sent("Use seven days.");
-        // Charles answers a minute later, which the time each line names says.
         yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
           agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
-        // Our line from a call, an automation's run's, and another coding agent's, written as their sends write them.
         const automationId = randomUUID();
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.APP }],
@@ -1520,7 +1496,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             Effect.succeed(true),
           );
         }
-        /** Each of the developer's lines as a member reads the page, beside what sent it. */
         const sendersAs = (reader: string) =>
           Effect.map(ask(request(AGENT_MESSAGES, reader, { id: agent.id })), (answered) =>
             readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
@@ -1529,19 +1504,15 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           );
 
         const named = [
-          // The task the Start wrote names its starter.
           [SNAPSHOT, { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
-          // A line from before senders were kept names nobody.
           ["Sweep the flaky tests.", undefined],
           ["Use seven days.", { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
           ["Not five.", { userId: other, name: "Charles Pan", kind: AGENT_SENDER.MEMBER }],
-          // The app and an automation are named by kind, so the window draws each as itself, an automation by its id too, which its card and page are read by.
           ["Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.APP }],
           [
             "Triage the failures.",
             { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION, automationId },
           ],
-          // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
             "Take the split view.",
             { name: "Add PR overview tab", agent: true, model: agent.model, agentId: agent.id },
@@ -1550,7 +1521,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
 
-        // Every line names when it was sent, a minute apart where they were.
         const sentAts = readAnswer(
           agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1681,7 +1651,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const onBilling = yield* startedAgentOf(owner, billing.id, ask);
         const oneOff = yield* startedAgentOf(owner, task.id, ask);
         const foreign = yield* startedAgentOf(owner, task.id, ask);
-        // The sender is a member of a second workspace, which holds the foreign agent.
         const elsewhere = yield* openWorkspace(other);
         yield* joinWorkspace(elsewhere, owner);
         const moved = (agentId: string, organizationId: string) =>
@@ -1727,7 +1696,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, other, task, sent } = yield* messagedAgent(eve, { running: true });
-        // The sender and the other account share a second workspace, which is not the agent's.
         const elsewhere = yield* openWorkspace(other);
         yield* joinWorkspace(elsewhere, owner);
         const place = { workspace: "acme", repository: task.repository };
@@ -1867,7 +1835,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(eve.sent, []);
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
-        // The bounds themselves are taken.
         readAnswer(
           agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,

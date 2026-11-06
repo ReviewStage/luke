@@ -9,23 +9,6 @@ import { Effect, Option } from "effect";
 import { taskWorkspace } from "../github/workspace-repository.js";
 import type { StoreFailure } from "../http/store-failure.js";
 
-/**
- * written-mentions.ts -- the mentions a tool hands an agent ready to write: a task's, a page's, on a task or on an agent with no task, or another agent's, each `[@name](target)` under its workspace.
- *
- * An agent names a thing of ours in its messages, its Inbox items, its
- * description notes, and its pages as a mention (`@repo/features/mention-link`),
- * which the desktop draws as the thing's chip and the description keeps through
- * every correction. A tool that makes or lists such a thing answers its
- * mention whole, so the agent copies it rather than spelling an address.
- * The workspace is written by the slug its member reads it under, or by
- * its id where the member reads it no longer, as the desktop writes its
- * own links: a slug is never trusted, and the id alone finds the thing. A
- * task, and a page on one, is written by its number in the workspace
- * (`taskLinkStep`), which a reader finds by the slug and the window draws
- * as the task's chip once it finds the task among its own.
- */
-
-/** The step a workspace's links are written under: its slug as the member reads it, or its id. */
 export const workspaceStepOf = (
   userId: string,
   workspaceId: string,
@@ -35,11 +18,6 @@ export const workspaceStepOf = (
     (found) => Option.getOrUndefined(found)?.slug ?? workspaceId,
   );
 
-/**
- * The step a workspace's links are written under, as `workspaceStepOf` reads
- * it, and its name, which its tasks' keys are drawn from (`workspace-key.ts`);
- * no name where the member reads the workspace no longer.
- */
 export const workspaceNamingOf = (
   userId: string,
   workspaceId: string,
@@ -53,7 +31,6 @@ export const workspaceNamingOf = (
     return { step: workspace?.slug ?? workspaceId, name: workspace?.name ?? "" };
   });
 
-/** The step a task's links are written under, its workspace's as the member reads the task; nothing for a task the member cannot read. */
 const taskStepOf = (
   userId: string,
   taskId: string,
@@ -65,7 +42,6 @@ const taskStepOf = (
     }),
   );
 
-/** The step a page's links are written under: its task's, or, for a page of a coding agent on no task, that agent's workspace's; nothing where the member reads neither. */
 export const pageStepOf = (
   userId: string,
   owner: PageOwner,
@@ -80,11 +56,6 @@ export const pageStepOf = (
   );
 };
 
-/**
- * A page's mention as an agent writes it, its title as its name: under its
- * task, by the task's number (`taskLinkStep`), or under the coding agent on
- * no task that showed it; nothing where the member reads neither.
- */
 export const writtenPageMention = (
   userId: string,
   owner: PageOwner,
@@ -112,13 +83,11 @@ export const writtenPageMention = (
   );
 };
 
-/** A task as its link names it: its id, and its number in its workspace where one is known. */
 interface LinkedTask {
   readonly id: string;
   readonly number?: number | undefined;
 }
 
-/** A task's mention as an agent writes it, named and by its link under the workspace's step, which names it by its number (`taskLinkStep`). */
 export function writtenTaskMention(task: LinkedTask, name: string, workspace: string): string {
   return mentionMarkdownLink(
     name,
@@ -126,7 +95,6 @@ export function writtenTaskMention(task: LinkedTask, name: string, workspace: st
   );
 }
 
-/** The mention as an agent writes it, named and under the workspace's step; a thing of ours names no repository. */
 export function writtenMention(mention: Mention, name: string, workspace: string): string {
   return mentionMarkdown(mention, name, { workspace, repository: null });
 }

@@ -21,17 +21,6 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { agentPagesProcedures } from "./agent-pages-procedures.js";
 
-/**
- * The pages a coding agent on no task showed on itself, answered by the
- * hosted oRPC router the way the web route answers them, over a real
- * dialect: a member of the agent's workspace lists them and reads a version's
- * HTML, while an account of another workspace lists none and reads no
- * version, exactly as for an agent that does not exist, and a version the
- * page never had, or a path that names no UUID, is refused.
- *
- * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
- */
-
 const ORIGIN = "https://app.test";
 
 interface Answer {
@@ -49,7 +38,6 @@ const openAccount = Effect.gen(function* () {
 
 const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
   Effect.gen(function* () {
-    // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
     const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
     const handle = hostedFetch({
       agentPages: agentPagesProcedures({
@@ -60,7 +48,6 @@ const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });

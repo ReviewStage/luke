@@ -21,19 +21,6 @@ import {
   readPageLink,
 } from "./page-links.js";
 
-/**
- * A page's link on the sandbox's own site: a link whose claims were changed,
- * that another key signed, or that was minted for another sandbox admits
- * nothing; a link's address reaches Sentry with its token redacted; and the
- * deployment's environment names a sandbox only on production, where it
- * names both variables, a key of its own of 32 characters or more, and the
- * one origin the routing locks, its build saying why by the variables' names
- * where it does not. A link's lifetime and its reach, and that it answers a
- * frame's load alone, are `page-sandbox.test.ts`'s.
- *
- * Synthetic keys, accounts, and pages throughout.
- */
-
 const KEY = "synthetic-page-link-key-for-tests-only-0000";
 
 const SANDBOX: PageSandbox = {
@@ -51,20 +38,17 @@ const PAGE = {
 
 const MINTED_AT = Date.parse("2026-11-02T03:00:00Z");
 
-/** A production deployment, by its own address, which its app is served from. */
 const PRODUCTION = {
   [AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT]: DEPLOYMENT_ENVIRONMENT.PRODUCTION,
   [AUTH_DEPLOYMENT_ENVIRONMENT.PRODUCTION_URL]: "https://tryluke.dev",
 } as const;
 
-/** A sandbox as production's environment names it: the key and the routing's own origin. */
 const NAMED = {
   ...PRODUCTION,
   [AGENT_PAGES_ENVIRONMENT.SECRET]: KEY,
   [AGENT_PAGES_ENVIRONMENT.ORIGIN]: PAGE_SANDBOX_ORIGIN,
 } as const;
 
-/** Every variable a sandbox is read from or held apart from, each set or unset by a read below alone. */
 const READ = [
   AGENT_PAGES_ENVIRONMENT.SECRET,
   AGENT_PAGES_ENVIRONMENT.ORIGIN,
@@ -77,7 +61,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The deployment's page links as its environment names them, every variable `READ` names unset but the ones given, and the lines its build logged. */
 const linksOver = (variables: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
     yield* Effect.sync(() => {
@@ -93,7 +76,6 @@ const linksOver = (variables: Readonly<Record<string, string>>) =>
     return { sandbox, logged };
   });
 
-/** A link's token, as the sandbox's routing hands it to the page route. */
 const tokenOf = (link: string) => new URL(link).pathname.slice(`/${PAGE_LINK_ROUTE.STEP}/`.length);
 
 it("a link whose claims were changed, that another key signed, or that was minted for another sandbox admits nothing", () => {
@@ -182,7 +164,6 @@ it.effect.each([
 
     assert.equal(sandbox, undefined);
     assert.equal(logged.length, said ? 1 : 0);
-    // A warning names the variables, never a value.
     assert.ok(logged.every((line) => !line.includes(KEY.slice(0, 31))));
   }),
 );

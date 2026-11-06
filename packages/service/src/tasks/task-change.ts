@@ -1,11 +1,3 @@
-/**
- * task-change.ts -- a change to a task, as every door changes one: confirmed before anything is written, written, then followed through.
- *
- * The app's change (`plans.update`) and an agent's or a member's
- * `update_task` go through the same three steps, so one rule holds for
- * each; each door reads its own input and answers in its own words.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { listAgents } from "@repo/database/models/agent-store";
 import {
@@ -39,16 +31,12 @@ import {
 } from "../http/http-effect.js";
 import { archiveAskedStatus } from "./archive-settle.js";
 
-/** Who stops the agents an archive stops: the service with every coder tool, as the window's Stop does. */
 const STOPPER = storeWriter({ tools: CODER_TOOL_SET });
 
-/** A change as a door asks for it: the app's own, bar the place a released desktop still names, which goes nowhere. */
 export type TaskChangeRequest = Omit<TaskUpdateRequest, "runsOn">;
 
-/** A move the workspace's GitHub refused under the task's lock, carried out of the store's change as the refusal. */
 class MoveRefused extends Data.TaggedError("MoveRefused")<{ readonly refusal: HostedRefusal }> {}
 
-/** The move's guard: the workspace's GitHub reaches the repository the task names under its lock, so a move never strands one. */
 const movedRepositoryReached =
   (workspaceId: string, member: string) =>
   (
@@ -61,24 +49,11 @@ const movedRepositoryReached =
           Effect.mapError((refusal) => new MoveRefused({ refusal })),
         );
 
-/** A change confirmed: what the store writes, and the guard a move holds under the task's lock. */
 export interface TaskChangeConfirmed {
   readonly changes: TaskChanges;
   readonly moveGuard: ReturnType<typeof movedRepositoryReached> | undefined;
 }
 
-/**
- * The change `userId` asked of the task, confirmed before the row is
- * touched, so a refused one leaves the rest unchanged too: a move is the
- * owner's alone, into a workspace they are a member of; a repository is
- * reached in the workspace the task ends up in, a teammate's on the App
- * alone, since a task on a token is its owner's, and held to the task's
- * tree; an assignee is a member. Both are held again under the row's lock.
- * An archive an older caller asks for stops every agent of the task but
- * `caller`, the calling agent, which never stops itself, then settles the
- * task, or puts it back to work for an unarchive (`archive-settle.ts`); an
- * agent no Stop can name yet refuses it as not ready, every agent standing.
- */
 export const taskChangeAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
@@ -117,7 +92,6 @@ export const taskChangeAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(assigneeId, workspaceId));
     if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  // Note that the name GitHub resolved is asked, not the one typed, so a renamed repository's old name is the one held.
   if (reached !== undefined) {
     yield* checkTreeRepository(userId, taskId, reached.repository).pipe(
       Effect.catch((failure) =>
@@ -130,13 +104,11 @@ export const taskChangeAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (asked.archived === true) {
     const listed = yield* hostedStoreOrUnavailable(listAgents(userId, taskId));
     const agents = listed.filter((agent) => agent.id !== caller);
-    // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
     if (!(yield* everyStopsForGood(agents))) {
       return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
     }
     yield* everyStoppedForGood(STOPPER, userId, agents);
   }
-  // Note that the archive stamp is never written, because a task is archived no longer.
   const status =
     asked.status !== undefined || asked.archived === undefined
       ? asked.status
@@ -160,12 +132,6 @@ export const taskChangeAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/**
- * The change confirmed, written (`updateTaskCommitted`), a move to Done
- * archiving the task's idle agents by `archivedBy`; none where the member
- * reaches the task no more. Its refusals under the row's lock are answered
- * by name, as `taskChangeAsked` answers them.
- */
 export const taskChangeWritten = (
   userId: string,
   taskId: string,
@@ -190,7 +156,6 @@ export const taskChangeWritten = (
     }),
   );
 
-/** The change followed through once it commits: the agents its move to Done archived let go of as an archive by hand does, and a move to Done or Canceled counted. */
 export const taskChangeSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: SandboxStopReach,
   userId: string,

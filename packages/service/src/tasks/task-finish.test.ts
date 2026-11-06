@@ -24,20 +24,6 @@ import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
 import { reopenTaskForWork, settleTaskAfterTurn, settleTaskIfFinished } from "./task-finish.js";
 
-/**
- * A task's status following its agents' work, through the one check the
- * turn's end, the merge read, and the inbox answer ask, against a real
- * dialect: an agent still at work, a turn running or a line awaiting one,
- * keeps the task in progress; its turn settled, with its pull request
- * merged, finishes it; a question an agent posted to the inbox holds it
- * until the developer answers; a task a Slack message or `start_agent` made
- * finishes once its agent's turn settles, with no merge asked; and an agent's turn
- * starting on a task done takes it up again.
- *
- * Synthetic accounts, tasks, and words throughout.
- */
-
-/** What the finishes counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 const countedFor = (userId: string) =>
@@ -50,7 +36,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The pull request from the agent's branch, as its row keeps it, standing where `state` says. */
 const pullRequestIn = (
   state: typeof PULL_REQUEST_STATE.OPEN | typeof PULL_REQUEST_STATE.MERGED,
 ) => ({
@@ -64,7 +49,6 @@ const pullRequestIn = (
   changedFiles: 2,
 });
 
-/** An agent the account started on the task an hour ago, past the starting grace. */
 const openAgent = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const started = yield* createAgent(userId, {
@@ -87,7 +71,6 @@ const openAgent = (userId: string, taskId: string) =>
     return agent;
   });
 
-/** A turn of the agent's conversation queued ten minutes ago, running or settled as `status` says. */
 const turnOf = (
   agent: { readonly userId: string; readonly conversationId: string },
   status: TurnStatus,
@@ -110,7 +93,6 @@ const turnOf = (
     return row?.id ?? assert.fail("the turn was not written");
   });
 
-/** The turn settled, as its end leaves it. */
 const settle = (turnId: string) =>
   Effect.flatMap(Clock.currentTimeMillis, (now) =>
     Database.use((db) =>
@@ -121,7 +103,6 @@ const settle = (turnId: string) =>
     ),
   );
 
-/** A line of the developer's to the agent, written now, awaiting the turn it opens. */
 const awaitingLine = (agent: { readonly userId: string; readonly conversationId: string }) =>
   Effect.flatMap(Clock.currentTimeMillis, (now) =>
     Database.use((db) =>
@@ -142,7 +123,6 @@ const awaitingLine = (agent: { readonly userId: string; readonly conversationId:
 const statusOf = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (read) => Option.getOrThrow(read).task.status);
 
-/** Whether the agent stands archived. */
 const archived = (userId: string, agentId: string) =>
   Effect.map(readAgent(userId, agentId), (read) => Option.getOrThrow(read).archivedAt !== null);
 
@@ -163,13 +143,11 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
 
-        // The worker's turn ended, but it messaged the orchestrator, whose turn is on its way.
         yield* settle(running);
         yield* awaitingLine(orchestrator);
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
 
-        // The orchestrator's turn took the line and ended: everyone is idle.
         const next = yield* turnOf(orchestrator, TURN_STATUS.SETTLED);
         yield* Database.use((db) =>
           db
@@ -179,7 +157,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         );
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
-        // Only the check that moved the task counted, and as the merge's own finish.
         assert.deepEqual(countedFor(userId), [
           {
             name: SERVER_EVENT.TASK_FINISH,
@@ -189,7 +166,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
           },
         ]);
 
-        // A turn starting on the task takes it up again.
         yield* reopenTaskForWork(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
       }).pipe(Effect.provide(ANALYTICS.layer)),
@@ -241,7 +217,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
           userId,
           origin: SLACK_THREAD_ORIGIN.START,
         });
-        // A same-agent automation's result DM, kept for an agent no run started.
         yield* recordSlackAgentThread({
           organizationId: other.workspaceId,
           channelId: "D0001",
@@ -351,14 +326,10 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* recordAgentPublished(userId, agent.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         yield* turnOf(agent, TURN_STATUS.SETTLED);
 
-        // Its pull request merged and its turn ended: the service finishes the task and leaves the
-        // agent standing.
         yield* settleTaskAfterTurn(userId, task.id, agent.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
         assert.equal(yield* archived(userId, agent.id), false);
 
-        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end the
-        // service finishes it again.
         yield* reopenTaskForWork(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
         yield* turnOf(agent, TURN_STATUS.SETTLED);
@@ -379,7 +350,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* turnOf(teammate, TURN_STATUS.SETTLED);
         const answering = yield* turnOf(pilot, TURN_STATUS.RUNNING);
 
-        // The pilot's update_task moves the task to Done as the pilot, for its member.
         yield* updateTask(userId, task.id, { status: TASK_STATUS.DONE }, undefined, {
           archivedBy: { by: AGENT_ARCHIVER.AGENT, userId, agentId: pilot.id, agentName: "Pilot" },
           idle: idleStandingAgents,

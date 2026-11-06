@@ -45,81 +45,22 @@ import type { StoreFailure } from "../../http/store-failure.js";
 import { settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { CODER } from "./bounds.js";
 
-/**
- * published.ts -- what a coding agent published: the branch its sandbox stands on and the pull request from it, confirmed on GitHub.
- *
- * The agent pushes through `git` in its shell, and the service opens its
- * pull request and writes the branch it was opened from on the agent's row
- * (`pull-request.ts`'s `recordOpened`), and this module reads the row.
- * A row with no branch, as before the agent opens its pull request,
- * published nothing, and GitHub is not
- * asked. GitHub then says what stands, once the installation of the task's
- * workspace is confirmed to reach the repository as a Start confirms it,
- * on a token minted for that one repository with pull requests read: a row
- * still on the repository's default branch, as an agent that only read
- * leaves it, published nothing either; otherwise the newest pull request
- * from the branch, else whether the branch was pushed at all, with the
- * pull request's head's checks and, for an open one, whether GitHub's merge
- * queue holds it (`pull-request-merging.ts`'s `pullRequestQueued`), which the
- * REST pull request does not say. Every answer read is written on the
- * agent's row as well, the pull request or none, which is what the task
- * list reads, so the sidebar says what the last read found without asking
- * GitHub itself. The row keeps beside it the head it was read at and when
- * it merged. The answer is kept per
- * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
- * a held transcript asks GitHub a few times a minute at most, under a key
- * that says whether the agent had ended, so the first read after a turn
- * ends is a fresh one rather than the running turn's kept answer; a read
- * that failed is kept for no time, so the next ask tries again. A read
- * that first finds the pull request merged, the row having kept it
- * unmerged or not at all, is one of the moments that may finish the
- * agent's task, so the task is asked to settle once the row is written
- * (`tasks/task-finish.ts`).
- *
- * The row also keeps when that read was and of which branch, so the kept
- * answers answer from the row rather than GitHub where it will not have
- * moved or was just read: an archived agent's, an ended agent's whose pull
- * request merged, or closed within `CODER.PUBLISHED_CLOSED_FRESH` of the
- * read, since a closed one may reopen and no sweep reads a closed one again,
- * and any read within `CODER.PUBLISHED_ROW_FRESH` of the last, on whichever
- * instance; and where GitHub refuses for its rate
- * limit, the row answers rather than a failure. The row answers only while
- * it stands on the branch read, and a change to the pull request lets the
- * read go (`forgetPublished`). Opening a task of a hundred agents once asked
- * GitHub some four hundred times at once and was refused for twenty minutes;
- * the webhook, the token sweep, the brain, and an opening still read GitHub.
- *
- * An agent that works in other repositories beside its own
- * (`readAgentRepositories`) has each pull request it opened in one read
- * again with every read of its own, on a token for that repository, and
- * written on that repository's row (`recordAgentRepositoryPublished`), a
- * merge first seen there counted and its task asked to settle as its own
- * would be; what a read answers stays the agent's own pull request, which
- * the Changes tab and the sidebar show. A read of an extra that fails is
- * logged and fails nothing else.
- */
-
-/** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
 class RepositoryNotReachable extends Data.TaggedError("RepositoryNotReachable")<{
   readonly repository: string;
 }> {}
 
-/** What a read of what an agent published may fail with: the store, GitHub, or a repository out of reach. */
 type PublishedReadFailure = StoreFailure | GitHubWorkspaceReadFailure | RepositoryNotReachable;
 
 type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** How a pull request ended: merged, or closed unmerged. */
 type PullRequestEnd = typeof PULL_REQUEST_STATE.MERGED | typeof PULL_REQUEST_STATE.CLOSED;
 
-/** What one read found: the answer the wire carries, the pull request as the agent's row keeps it, null where none was found, and how it ended where the read is the first to find it so. */
 interface Published {
   readonly answer: AgentPullRequestAnswer;
   readonly stored: StoredPullRequest | null;
   readonly ended: PullRequestEnd | undefined;
 }
 
-/** The wire's pull request from GitHub's, with its head's checks as read and whether the merge queue holds it. */
 function wirePullRequestOf(
   found: GitHubPullRequest,
   checks: AgentPullRequest["checks"],
@@ -139,13 +80,6 @@ function wirePullRequestOf(
   };
 }
 
-/**
- * Whether GitHub's merge queue holds the pull request, asked only of an open
- * one, since a draft, a merged, and a closed one stand in no queue. Note
- * that a read that fails keeps what the row kept of that same pull request,
- * so a queue read GitHub could not answer neither fails the read it rides
- * with nor drops a queued mark the last read saw.
- */
 function queuedOf(
   token: Redacted.Redacted,
   repository: string,
@@ -159,7 +93,6 @@ function queuedOf(
   );
 }
 
-/** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its head and when it merged beside that. */
 function withChecks(
   token: Redacted.Redacted,
   repository: string,
@@ -185,7 +118,6 @@ function withChecks(
   });
 }
 
-/** How the pull request ended, where the read is the first to find it so: GitHub says merged or closed, and the row kept it otherwise, or kept none. */
 function firstSeenEnd(
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
@@ -197,7 +129,6 @@ function firstSeenEnd(
   return seen ? undefined : found.state;
 }
 
-/** Nothing published: neither a branch GitHub holds nor a pull request. */
 function nothing(agent: Agent): Published {
   return {
     answer: { repository: agent.repository, branch: null, pullRequest: null },
@@ -206,12 +137,6 @@ function nothing(agent: Agent): Published {
   };
 }
 
-/**
- * A token that reads the agent's pull requests, minted for its one
- * repository, or the one named of those it works in beside it, on the
- * installation of its workspace, as the account asking is a member of it;
- * refused as out of reach where either no longer stands.
- */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: WithRepository<Agent>,
@@ -228,20 +153,13 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
   return reached.value;
 });
 
-/**
- * What the agent published as GitHub holds it now: the newest pull request
- * from the branch its row holds, else the branch alone where GitHub holds
- * it, else nothing.
- */
 const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: Agent,
 ): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
-  // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
   if (!hasRepository(agent)) return nothing(agent);
   const reached = yield* agentPullRequestReach(userId, agent);
-  // The default branch is the checkout's own, not a branch the agent cut: nothing published from it.
   if (agent.branch === reached.repository.defaultBranch) return nothing(agent);
   const { token } = reached;
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, agent.branch);
@@ -259,12 +177,6 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
     : nothing(agent);
 });
 
-/**
- * What the agent published as GitHub holds it now, written on its row as
- * read. The routes read it through the cache below; an agent tool's read
- * of one agent (`agents/agent-tools.ts`) reads it afresh, once per
- * ask.
- */
 export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
   userId: string,
   agent: Agent,
@@ -278,7 +190,6 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   return answer;
 });
 
-/** What a pull request's write leaves to do: a merge counted by the one write that first kept it, and the task asked to settle where the read first saw it merged. */
 const afterRecorded = (
   userId: string,
   agent: Agent,
@@ -286,24 +197,16 @@ const afterRecorded = (
   ended: PullRequestEnd | undefined,
 ) =>
   Effect.gen(function* () {
-    // Counted once per pull request, by the one write that first kept it merged, under the agent's starter.
     if (firstMerged)
       yield* recordServerEvent(
         SERVER_EVENT.PULL_REQUEST_MERGE,
         { userId: agent.userId, workspaceId: agent.organizationId },
         {},
       );
-    // A merge first seen may have finished the task's work; the task is asked once the row says merged.
     const merged = ended === PULL_REQUEST_STATE.MERGED;
     if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
   });
 
-/**
- * What the agent published in one repository it works in beside its own,
- * as GitHub holds it now: the newest pull request from the head branch its
- * row holds, else none, as `publishedOnGitHub` reads its own; nothing read
- * for one with no head branch yet, or still on its default branch.
- */
 const extraPublishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: WithRepository<Agent>,
@@ -321,15 +224,6 @@ const extraPublishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* withChecks(reached.token, extra.repository, ofBranch.value, extra.pullRequest);
 });
 
-/**
- * Each pull request the agent opened in a repository it works in beside its
- * own (`readAgentRepositories`), read again from GitHub and written on that
- * repository's row as the agent's own is on its row, a merge first seen
- * counted and its task asked to settle; nothing for an agent in one
- * repository, nor for an extra that opened none. Each read that fails is
- * logged by its kind and leaves its row as it stood, since the agent's own
- * pull request is still read and answered.
- */
 const extrasPublished = (userId: string, agent: Agent) =>
   Effect.gen(function* () {
     if (!hasRepository(agent)) return;
@@ -356,24 +250,16 @@ const extrasPublished = (userId: string, agent: Agent) =>
           yield* afterRecorded(userId, agent, firstMerged, ended);
         }).pipe(Effect.catch(extraUnread));
       },
-      // Note that an agent's extras are bounded at its Start, so they are read together.
       { concurrency: "unbounded", discard: true },
     );
   }).pipe(Effect.catch(extraUnread));
 
-/** A read of an extra repository's pull request that failed, logged by its kind alone. */
 function extraUnread(failure: unknown): Effect.Effect<void> {
   return Effect.logWarning(
     `an extra repository's pull request could not be read again: ${failureKind(failure)}`,
   );
 }
 
-/**
- * A pull request of a repository by its number, as GitHub holds it now, on
- * a token already minted for the repository, with its head's checks and
- * whether the merge queue holds it; none where the repository holds no
- * such one. Note that it is read afresh on each ask and written nowhere.
- */
 export const pullRequestOfNumber = /* @__PURE__ */ Effect.fnUntraced(function* (
   token: Redacted.Redacted,
   repository: string,
@@ -393,14 +279,6 @@ export const pullRequestOfNumber = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/**
- * Another pull request of the agent's repository by its number
- * (`pullRequestOfNumber`): one the agent opened from a branch it has since
- * left, or one no agent opened, which a Pull request tab shows by its
- * number; none where the repository holds no such one. Note that it is
- * never written on the agent's row, which keeps the pull request of the
- * branch the agent stands on.
- */
 export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPullRequestOfNumber")(
   function* (
     userId: string,
@@ -415,14 +293,12 @@ export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPull
   },
 );
 
-/** One agent of one account, as the kept answers are keyed, and whether it had ended as asked: the first ask after a turn ends is its own key, so it reads afresh. */
 export class PublishedKey extends Data.Class<{
   readonly userId: string;
   readonly agentId: string;
   readonly ended: boolean;
 }> {}
 
-/** The kept answers of one function instance: an agent's answer for the TTL, a failure for no time. */
 export type PublishedCache = Cache.Cache<
   PublishedKey,
   AgentPullRequestAnswer,
@@ -430,13 +306,10 @@ export type PublishedCache = Cache.Cache<
   PublishedServices
 >;
 
-/** The key names an agent the account does not hold, which an ownership check before the ask already refused. */
 class NoSuchAgent extends Data.TaggedError("NoSuchAgent")<{ readonly agentId: string }> {}
 
-/** The most agents one instance keeps answers for at once. */
 const KEPT_AGENTS = 1_024;
 
-/** The answer the row keeps, as the read that wrote it answered: its pull request as the wire carries it, else the branch where GitHub held it. */
 function keptAnswer(agent: Agent, kept: KeptPublished): AgentPullRequestAnswer {
   if (kept.published === null) {
     const branch = kept.read.pushed ? kept.read.branch : null;
@@ -446,7 +319,6 @@ function keptAnswer(agent: Agent, kept: KeptPublished): AgentPullRequestAnswer {
   return { repository: agent.repository, branch: kept.read.branch, pullRequest };
 }
 
-/** Whether the row answers in GitHub's place: the agent archived, or ended on a pull request that merged or closed a while ago at most, or the row read a moment ago. */
 function keptStands(agent: Agent, ended: boolean, kept: KeptPublished, now: number): boolean {
   if (agent.archivedAt !== null) return true;
   const state = kept.published?.state;
@@ -458,7 +330,6 @@ function keptStands(agent: Agent, ended: boolean, kept: KeptPublished, now: numb
   return age < Duration.toMillis(CODER.PUBLISHED_ROW_FRESH);
 }
 
-/** Whether GitHub refused the read for its rate limit: a 429, the instance's own held answer among them, or a 403 it may answer one with. */
 function rateLimited(failure: PublishedReadFailure): boolean {
   if (failure._tag !== "GitHubUnavailable") return false;
   return (
@@ -467,12 +338,6 @@ function rateLimited(failure: PublishedReadFailure): boolean {
   );
 }
 
-/**
- * One agent's answer looked up afresh: the row, then what it keeps where
- * that answers in GitHub's place, else what GitHub holds now, the row again
- * where GitHub refused for its rate limit. A row that stands on another
- * branch than the one read keeps nothing of it.
- */
 const lookupPublished = (
   key: PublishedKey,
 ): Effect.Effect<AgentPullRequestAnswer, PublishedReadFailure | NoSuchAgent, PublishedServices> =>
@@ -493,22 +358,12 @@ const lookupPublished = (
     );
   });
 
-/** The cache, made once per instance by `instancePublishedCache`. */
 const publishedCache: Effect.Effect<PublishedCache> = Cache.makeWith(lookupPublished, {
   capacity: KEPT_AGENTS,
   requireServicesAt: "lookup",
   timeToLive: (exit) => (Exit.isSuccess(exit) ? CODER.PUBLISHED_TTL : Duration.zero),
 });
 
-/**
- * A cache of its own for procedures that are built with no Effect to build
- * one in: made on the first ask and kept for the instance's life, as a
- * route group's is. Note that two first asks at once each make one and the
- * first to land is the one kept, so every later ask shares it. The hosted
- * router makes one and hands it to every resource that reads the kept
- * answers or lets them go (`PublishedReach`), so a change to a pull request
- * lets go of what each of them read.
- */
 export function instancePublishedCache(): Effect.Effect<PublishedCache> {
   let kept: PublishedCache | undefined;
   return Effect.suspend(() =>
@@ -518,7 +373,6 @@ export function instancePublishedCache(): Effect.Effect<PublishedCache> {
   );
 }
 
-/** The kept published answers a resource's procedures read and let go of: the instance's one cache where the router hands it, one of their own otherwise. */
 export interface PublishedReach {
   readonly published?: Effect.Effect<PublishedCache>;
 }

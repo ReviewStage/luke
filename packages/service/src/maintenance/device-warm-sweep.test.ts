@@ -1,9 +1,3 @@
-/**
- * device-warm-sweep.test.ts -- the sweep's retire of a local agent's runner left warm, over a real store and the Mac's machine: a runner warm past its device's window retired under its lease, its retire line and then a stop queued for its Mac; one at work, one a line of the developer's waits for, and one whose lease another call holds left warm; one within the window left warm but on a host waiting to switch release; and a message sent as the window closes reaching a launch whichever goes first, it or the sweep's retire.
- *
- * Synthetic accounts, agents, Macs, and keys throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -35,10 +29,8 @@ import {
 } from "../testing/local-agent.js";
 import { DEVICE_WARM_SWEEP, sweepDeviceWarmRunners } from "./device-warm-sweep.js";
 
-/** The line a retire writes to a warm runner, as its Mac takes it. */
 const RETIRE_LINE = '{"type":"retire"}\n';
 
-/** The clock moved by the span given past the agents' turns, every Mac given having beaten since, saying it waits to update where asked. */
 const passed = (
   span: Duration.Duration,
   agents: readonly WarmLocalAgent[],
@@ -52,22 +44,14 @@ const passed = (
     }
   });
 
-/** The clock moved past the device's warm window, which outlasts the sweep's grace. */
 const pastWindow = (agents: readonly WarmLocalAgent[]) =>
   passed(Duration.max(CODER.RUNNER_WARM[AGENT_MACHINE.DEVICE], DEVICE_WARM_SWEEP.GRACE), agents);
 
-/** One sweep at the clock's reading, driven to its end through each wait on a runner's exit. */
 const swept = Effect.gen(function* () {
   const now = yield* DateTime.nowAsDate;
   return yield* driven(yield* forkClockDriven(sweepDeviceWarmRunners(now)), MAC_MACHINE.POLL);
 });
 
-/**
- * The clock's own watches, signaling once a wait opens one on the
- * account's topic, as a read of its agent's runner's exit does
- * (`device-machine.ts`'s `runnerExit`): the retire then holds the agent's
- * lease and has read that its runner took nothing since its turn ended.
- */
 const signaledOn = (userId: string, opened: Deferred.Deferred<void>): SyncShape => ({
   watch: (topics, fallback) =>
     Effect.as(
@@ -92,7 +76,6 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           yield* pastWindow([retired, atWork, awaited, held]);
           const db = yield* Database;
           const now = yield* DateTime.nowAsDate;
-          // The runner took a message into a turn still under way.
           yield* db.insert(turns).values({
             userId: atWork.userId,
             conversationId: atWork.agent.conversationId,
@@ -101,7 +84,6 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
             queuedAt: now,
           });
           yield* lineWritten(awaited, "Now the emails.");
-          // Another call holds the agent's runner lease, as a send relaunching it does.
           const holder = randomUUID();
           const until = new Date(now.getTime() + Duration.toMillis(Duration.minutes(5)));
           assert.ok(yield* claimAgentRunnerLease(held.agent.id, holder, now, until));
@@ -152,7 +134,6 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           yield* swept;
 
           assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-          // The runner that may end itself at its idle cap is written nothing but its end.
           assert.deepEqual(yield* linesWaiting(late), [
             DEVICE_AGENT_LINE_KIND.STOP,
             DEVICE_AGENT_LINE_KIND.LAUNCH,

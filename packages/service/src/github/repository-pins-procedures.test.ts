@@ -15,19 +15,9 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { repositoryPinsProcedures } from "./repository-pins-procedures.js";
 
-/**
- * The sidebar's repository pins, answered by the hosted oRPC router the way the web route
- * answers them, over a real dialect: the bearer names the account and
- * nothing else does, a pin keeps the instant it was first made, and every
- * write answers the pins as they then stand.
- *
- * Synthetic accounts, bearers, and repositories throughout.
- */
-
 const ORIGIN = "https://app.test";
 const PINS = "/api/repository-pins";
 
-/** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 interface Answer {
@@ -35,7 +25,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Two accounts, each behind its own bearer, and the resource answering one request. */
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -52,8 +41,6 @@ const openAccounts = Effect.gen(function* () {
 
 const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
   Effect.gen(function* () {
-    // The procedure runs on the services handed to it, the test's clock among them: a pin's instant is read from it.
-    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
     const services = (yield* Effect.context<never>().pipe(
       Effect.provide(ANALYTICS.layer),
     )) as Context.Context<WebServices>;
@@ -66,7 +53,6 @@ const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -85,7 +71,6 @@ function request(
   });
 }
 
-/** An answer read as the wire's, a pin's answer with the transaction it wrote in; failing the test where it is not. */
 function readAnswer(answered: Answer) {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(repositoryPinsWrittenSchema)(unparsedWire(answered.body));
@@ -93,12 +78,10 @@ function readAnswer(answered: Answer) {
   return read.success;
 }
 
-/** The pins an answer carries, as `[repository, pinnedAt]`, failing the test where it is not the wire's. */
 function pinsOf(answered: Answer): [string, number][] {
   return readAnswer(answered).pins.map(({ repository, pinnedAt }) => [repository, pinnedAt]);
 }
 
-/** Whether a pin's answer names the transaction it wrote in. */
 const wroteRow = (answered: Answer) => readAnswer(answered).txid !== undefined;
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -125,7 +108,6 @@ it.layer(getTestDB())("the repository pins route", (it) => {
         const unpinnedTwiceAnswer = yield* pin("acme/ledger", false);
         const unpinnedTwice = pinsOf(unpinnedTwiceAnswer);
 
-        // A pin that wrote a row names its transaction, for the sidebar's follower to wait on; one that moved nothing names none.
         assert.deepEqual([pinned, pinnedAgain, unpinnedAnswer, unpinnedTwiceAnswer].map(wroteRow), [
           true,
           false,

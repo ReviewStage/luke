@@ -85,22 +85,10 @@ import { setInstallationStatus } from "./github-installations.js";
 import { githubProcedures } from "./github-procedures.js";
 import { KEPT_LINK, type PullRequestLinks, pullRequestLinksLayer } from "./pull-request-links.js";
 
-/**
- * The repositories route over the real `GitHubApp`, a GitHub the test
- * scripts, and the account and workspace rows on a real dialect: the bearer
- * names the account, the workspace named (or the account's personal one) is
- * whose installation is listed, with where to install the App, and a
- * workspace the account is not in is refused by name.
- *
- * Synthetic accounts, bearers, tokens, and repositories throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** A pull request of `acme/relay` as GitHub's API names it by number. */
 const PULL_PATH = /^\/repos\/acme\/relay\/pulls\/(\d+)$/u;
 
-/** One pull request of `acme/relay` as GitHub records it, whole: more than a link draws. */
 function pullRecord(
   number: number,
   title: string,
@@ -122,7 +110,6 @@ function pullRecord(
   };
 }
 
-/** What GitHub's read of one pull request carries past the fields every read names: when it was opened, its base, its labels, and its counts. */
 const WHOLE_PULL = {
   created_at: "2026-10-01T09:30:00Z",
   merged_at: null,
@@ -139,7 +126,6 @@ const WHOLE_PULL = {
   },
 };
 
-/** The pull requests `acme/relay` holds: one open, read whole, and one merged, read as a listing names it. */
 const RELAY_PULLS = new Map([
   [
     42,
@@ -148,14 +134,11 @@ const RELAY_PULLS = new Map([
       ...WHOLE_PULL,
     },
   ],
-  // Its author's account is gone, which GitHub answers as no user.
   [43, pullRecord(43, "Retry a bounced invitation", { merged: true, draft: false }, null)],
 ]);
 
-/** An issue of `acme/relay` as GitHub's API names it by number. */
 const ISSUE_PATH = /^\/repos\/acme\/relay\/issues\/(\d+)$/u;
 
-/** One issue of `acme/relay` as GitHub records it, whole: more than a link draws. */
 function issueRecord(number: number, title: string, state: string, reason: string | null) {
   return {
     number,
@@ -172,7 +155,6 @@ function issueRecord(number: number, title: string, state: string, reason: strin
   };
 }
 
-/** The issues `acme/relay` answers on its issues path: one open, one done, one not planned, one a duplicate, and pull request 42, which GitHub answers there too. */
 const RELAY_ISSUES = new Map<number, object>([
   [7, issueRecord(7, "Invitations expire too soon", "open", null)],
   [8, issueRecord(8, "Batch the invitation emails", "closed", "completed")],
@@ -181,7 +163,6 @@ const RELAY_ISSUES = new Map<number, object>([
   [42, { ...issueRecord(42, "Send invitations in batches", "open", null), pull_request: {} }],
 ]);
 
-/** An installation of the App granting what it asks today: issues write beside the rest. */
 const GRANTING_ISSUES = {
   contents: "write",
   metadata: "read",
@@ -194,7 +175,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The route over the test's own database and the GitHub given: one request in, its response out. */
 const routeOver = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
@@ -202,7 +182,6 @@ const routeOver = (
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The handler runs on oRPC's own fiber, so it is handed the test's clock: the account rows hang off it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -224,26 +203,21 @@ const routeOver = (
         unlinkGitHub: () => Effect.void,
       }),
     });
-    // SAFETY: the repositories procedures yield the database, the GitHub App, its HTTP client, and the kept links alone, which is all a test provides of the web runtime's services.
     const webServices = handled as Context.Context<WebServices>;
     return (request: Request) => handle(request, webServices);
   });
 
-/** One request answered on a route already standing. */
 const answerOn = (route: (request: Request) => Promise<Response>, request: Request) =>
   Effect.gen(function* () {
     const response = yield* Effect.promise(() => route(request));
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
 
-/** The route over the test's own database and the GitHub given, answering one request. */
 const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
   Effect.flatMap(routeOver(bearers, github), (route) => answerOn(route, request));
 
-/** What one route answers `acme/relay`'s pull request 42 with, to the member given, on the route standing for the instance's life. */
 const keptPullRequest = (
   route: (request: Request) => Promise<Response>,
   member: string,
@@ -258,10 +232,8 @@ const keptPullRequest = (
   );
 };
 
-/** Pull request 42 of `acme/relay` as GitHub answers it, under the title given. */
 const relayPull42 = (title: string) => Response.json({ ...RELAY_PULLS.get(42), title });
 
-/** The owner signed in with GitHub through the App, which reaches nothing on its own; the other signed in with Google alone. */
 const openAccounts = (github: FakeGitHub) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -284,7 +256,6 @@ const openAccounts = (github: FakeGitHub) =>
         }),
       );
     };
-    /** A read of one repository at the path given (its tree or its skills), with the queries given in order. */
     const read = (
       userId: string,
       path: string,
@@ -303,7 +274,6 @@ const openAccounts = (github: FakeGitHub) =>
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/** The `SKILL.md` of each skill `acme/relay` keeps in `.agents/skills`: `release`, and `review`, which the model alone loads. */
 const RELAY_SKILL_FILES = new Map([
   ["release", "---\nname: release\ndescription: Cut a release.\n---\n# Release\n"],
   [
@@ -312,7 +282,6 @@ const RELAY_SKILL_FILES = new Map([
   ],
 ]);
 
-/** `acme/relay`'s skills folder and each skill's `SKILL.md` as GitHub answers them; nothing for any other read. */
 function releaseSkillRead(sent: { readonly url: string }): Response | undefined {
   const path = new URL(sent.url).pathname;
   if (path === "/repos/acme/relay/git/trees/main%3A.agents%2Fskills") {
@@ -334,7 +303,6 @@ function releaseSkillRead(sent: { readonly url: string }): Response | undefined 
   });
 }
 
-/** One repository's read answered, as the wire declares it, failing the test where it is not one. */
 function readOf<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   answered: Answer,
@@ -345,7 +313,6 @@ function readOf<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** The answer read as the wire declares it, failing the test where it is not one. */
 function listed(answered: Answer) {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(githubRepositoriesAnswerSchema)(unparsedWire(answered.body));
@@ -412,7 +379,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
           ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
         });
-        // Note that neither the account's own token nor the App's are in the answer.
         assert.equal(JSON.stringify(reached).includes("ghu_"), false);
         assert.equal(JSON.stringify(reached).includes("ghs_"), false);
       }),
@@ -509,7 +475,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
     "a workspace of an installation lists that installation's alone, and a workspace with nothing connected, the personal one named or by default, lists none, uninstalled, as does a first read ahead of the personal workspace",
     () =>
       Effect.gen(function* () {
-        // Note that the account's own GitHub sign-in reaches both installations: none of it is listed but the workspace's.
         const github = githubReaching([
           { id: 7201, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
           { id: 7202, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
@@ -581,7 +546,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
           listed(answered).repositories.map((repository) => repository.fullName);
 
         const before = names(yield* ask(owner, "GET", [workspace]));
-        // Note that this is GitHub's side alone: an `installation_repositories` delivery stores nothing.
         repositories.pop();
         const after = names(yield* ask(owner, "GET", [workspace]));
 
@@ -813,7 +777,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
             },
           ],
         });
-        // The answer as a desktop through 0.19.0 declares it: a repository, a branch, and each skill's file.
         const olderSkillsAnswer = Schema.Union([
           Schema.Struct({
             skills: Schema.Struct({
@@ -839,7 +802,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
           [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
         ]);
 
-        // Note that a desktop drops a key a newer service added, as every wire read of an answer does.
         const asOlder = (answered: Answer) => {
           assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
           const decoded = readEither(olderSkillsAnswer, { excess: EXCESS_KEYS.DROP })(
@@ -1279,7 +1241,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
         const pullRequest = keptPullRequest(route, owner, workspace);
 
         const kept = yield* pullRequest;
-        // GitHub removes the installation, and its webhook tells the store so.
         installations.length = 0;
         yield* setInstallationStatus(7807, GITHUB_INSTALLATION_STATUS.DELETED);
         const removed = yield* pullRequest;
@@ -1394,7 +1355,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
         for (const answered of none) {
           assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { issue: null } });
         }
-        // The listing that finds the repository mints its own token; every token the issue is read on is cut to issues read on the one repository.
         const mints = github.sent
           .filter((sent) => sent.url.endsWith("/access_tokens"))
           .map((sent) => JSON.parse(sent.body))
@@ -1446,7 +1406,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
           ]);
 
         const notGranted = yield* issue(ungranted, "acme/relay");
-        // The listing that looks for the repository mints its own token; none is minted for the repository, and no issue is asked.
         const forTheIssue = github.sent
           .filter(
             (sent) =>
@@ -1708,10 +1667,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 });
 
-/** `octo-member`'s repositories as the member's own token reads them: `side` it may push to, `fork` it may not. */
 const MEMBER_REPOSITORY = /^\/repos\/octo-member\/(side|fork)$/u;
 
-/** A GitHub where the workspace's App is on `acme` alone, plus any installation given, and the member's token reads `octo-member`'s two repositories. */
 const tokenGitHub = (installationId: number, also: readonly InstallationFixture[] = []) =>
   githubReaching(
     [
@@ -1739,7 +1696,6 @@ const tokenGitHub = (installationId: number, also: readonly InstallationFixture[
     },
   );
 
-/** The owner's `acme` workspace, with the member who saved a token and the Google-only account both members of it. */
 const openTokenWorkspace = (github: FakeGitHub, installationId: number) =>
   Effect.gen(function* () {
     const accounts = yield* openAccounts(github);
@@ -1755,7 +1711,6 @@ const openTokenWorkspace = (github: FakeGitHub, installationId: number) =>
     return { ...accounts, member, workspace };
   });
 
-/** The token repositories route asked as the account given: a read, or an add or removal. */
 const askTokenRepositories = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,

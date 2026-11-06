@@ -44,21 +44,6 @@ import {
 import { type ChaptersModel, chaptersModelOf } from "./chapters-generator.js";
 import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedures.js";
 
-/**
- * pull-request-chapters-procedures.test.ts -- a pull request's chapters read and generated through the hosted oRPC router, over a real dialect.
- *
- * The caller is resolved before anything is read; an agent of a workspace
- * the caller is not in is not found, and GitHub is never asked; a read
- * answers the workspace's newest chapters for the number it names, asking
- * GitHub for no pull request; a Generate claims the head, tells the chapters on a scripted
- * model, lands them or the kind they failed with, and counts the outcome by
- * counts alone, on Haiku whatever model an earlier build stored for the
- * member who pressed it; a claim another request holds answers as generating without
- * asking the model; and a deployment with no model key answers unavailable.
- * GitHub is a script, the model a mock, the store PGlite. Synthetic
- * accounts, repositories, and words throughout.
- */
-
 const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -67,7 +52,6 @@ const NUMBER = 7;
 const HEAD = "c0ffee1";
 const BASE = "ba5e000";
 
-/** One installation per test's workspace, since one installation connects to one workspace and the tests share a database. */
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 20 }, (_, index) => ({
   id: 9_000 + index,
   login: RELAY.owner,
@@ -97,7 +81,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The one file the pull request changes, one hunk starting at old line 1. */
 const FILE = {
   filename: "src/invitations.ts",
   status: "modified",
@@ -108,7 +91,6 @@ const FILE = {
   sha: "b".repeat(40),
 };
 
-/** The one chapter the scripted model tells, holding the one hunk. */
 const TOLD = {
   chapters: [
     {
@@ -127,7 +109,6 @@ const USAGE = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-/** A model that answers the chapters above, or refuses, and counts how often it was asked. */
 function scriptedModel(refuses = false) {
   let asked = 0;
   const model = new MockLanguageModelV4({
@@ -147,7 +128,6 @@ function scriptedModel(refuses = false) {
   return { chaptersModel, asked: () => asked };
 }
 
-/** The repository answering the pull request's reads, its head the one `head` names now. */
 const pullRequestOf =
   (head: () => string, filesRead: () => void = () => undefined): RepositoryScript =>
   (sent) => {
@@ -190,18 +170,10 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/**
- * An owner's agent on a task of the repository, a teammate in its workspace
- * and a stranger outside it, and the chapters procedures over the test's own
- * database, GitHub, and model, the owner and the teammate each holding API
- * keys of their own, Anthropic's and OpenAI's unless told which, or none.
- */
 const standing = (
   options: {
     readonly refuses?: boolean;
-    /** The providers the owner and the teammate saved an API key for; both where none are named, and none at all for an account on a subscription alone. */
     readonly keys?: readonly ProviderKeyProvider[];
-    /** A head pushed while the files are read, as a developer pushing mid-Generate would. */
     readonly pushedDuringFiles?: string;
   } = {},
 ) =>
@@ -260,7 +232,6 @@ const standing = (
         ),
       ),
     );
-    // SAFETY: the chapters procedures yield the database, the clock, the environment, GitHub, its HTTP client, the catalog, and the analytics alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     const bearers = new Map([owner, teammate, stranger].map((id) => [`Bearer ${id}`, id]));
     const handle = hostedFetch({
@@ -274,7 +245,6 @@ const standing = (
             },
             () => Effect.succeed(Option.none()),
           ),
-        // The scripted model answers under the provider's id production would reach on the member's key, as the store then names it.
         chaptersModel: (own, modelId) => ({
           ...model.chaptersModel,
           id: chaptersModelOf(own, modelId).id,
@@ -286,7 +256,6 @@ const standing = (
       init: {
         readonly method?: string;
         readonly number?: number;
-        /** Each `number` the query names, repeated as a client might send them. */
         readonly numbers?: readonly string[];
         readonly body?: string;
       } = {},
@@ -308,7 +277,6 @@ const standing = (
           ),
         );
         const text = yield* Effect.promise(() => response.text());
-        // SAFETY: the router answers JSON; the test reads it as the wire value it is.
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
@@ -327,7 +295,6 @@ const standing = (
     };
   });
 
-/** The answer read through the wire schema, failing the test where the status or the body is not one. */
 function chaptersOf(answer: Answer): PullRequestChaptersAnswer {
   assert.equal(answer.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answer.body));
   const read = readEither(pullRequestChaptersAnswerSchema)(unparsedWire(answer.body));

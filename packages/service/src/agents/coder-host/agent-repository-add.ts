@@ -1,40 +1,3 @@
-/**
- * agent-repository-add.ts -- a repository added to a running agent beside the ones it works in: checked, written, checked out, and told.
- *
- * `update_agent`'s `addRepository` and the agent's ⋯ menu's Add repository…
- * both add through here, so a model and a member are held to one rule. The
- * repository is appended after the agent's extras (`appendAgentRepository`),
- * never replacing one, and nothing removes one yet. It is refused, before
- * anything is written:
- *
- * - to anyone but the agent's starter or one of their agents, since the
- *   token the set is minted on is minted for the starter;
- * - to an agent caller that has heard words from another account
- *   (`heardFromAnotherAccount`), so words from a
- *   review comment on a public repository never widen what an agent's
- *   token reaches, its own or another agent's it would then message;
- * - for an agent that works in no repository of its own, or runs on a
- *   device, as a Start naming extras is (`start.ts`'s `extraRepositoriesOf`);
- * - for one already among the agent's, in any case, or past the bound a
- *   Start holds its extras to (`AGENT_BOUNDS.MAX_ALSO_REPOSITORIES`);
- * - and unless the workspace's one installation of the App that reaches the
- *   agent's own repository reaches the whole set with it
- *   (`repositorySetReach`), each refused by name where it is reached only on
- *   the starter's own token or through another installation, in the same
- *   refusals a Start's extras answer.
- *
- * Once written, the running place is handed it (`runnerCheckedOut`): the
- * credential renewed for the whole set (`renewCredential`, which mints
- * through `agentRepositoryToken`) and the repository cloned on the path a
- * launch clones extras on (`agentExtraReads`, `cloneAgentExtras`); where no
- * place runs, the next launch clones it. Where the running place took it,
- * the agent is then told in one line of its conversation, a new message
- * rather than a change to its instructions, so the prompt cache they open
- * stands; an agent that added it to itself reads the line as the call's own
- * answer instead. Where none ran, it is told nothing, so an idle agent is
- * not woken: its next launch clones it and its instructions name it then.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
   APPEND_REFUSAL,
@@ -70,28 +33,23 @@ import { RUNNER_CHECKOUT, runnerCheckedOut } from "./runtime-sessions.js";
 import { confirmedBranch } from "./start.js";
 import { agentLineSender, steerAgent } from "./steer.js";
 
-/** Who adds the repository: the member acting, and the agent acting for them where an agent calls. */
 export interface RepositoryAdder {
   readonly userId: string;
   readonly agent?: Pick<Agent, "id" | "userId" | "conversationId"> | undefined;
 }
 
-/** How the agent is told: the sessions and the writer its line goes through, and the key it is sent under, which a repeat carries again. */
 export interface RepositoryTelling {
   readonly eve: AgentSessions;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly clientKey: string;
 }
 
-/** A repository added: as GitHub spells it, where it is checked out, and whether the running place holds it now or only its next launch will. */
 export interface AddedRepository {
   readonly repository: string;
   readonly path: string;
-  /** Now, in the place the agent runs, where it is told; at its next turn where no place ran or the checkout there failed, as its next launch clones it and its instructions name it, and it is told nothing. */
   readonly checkout: AddedRepositoryCheckout;
 }
 
-/** A refusal the append answered under the agent's lock, as two adds at once can meet one: the repository already among the agent's, the bound reached, or the agent out of reach since the checks. */
 const APPEND_REFUSED = {
   [APPEND_REFUSAL.ALREADY]: (repository: string) =>
     extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.ALREADY, repository),
@@ -99,12 +57,10 @@ const APPEND_REFUSED = {
   [APPEND_REFUSAL.UNREACHED]: () => HOSTED_REFUSAL.NOT_FOUND,
 } as const satisfies Record<AppendRefusal, (repository: string) => HostedRefusal>;
 
-/** The line the agent is told, or reads as its own call's answer: where the repository stands and that its credential reaches it. */
 export function addedRepositoryLine(added: Pick<AddedRepository, "repository" | "path">): string {
   return `${added.repository} is now checked out at ${added.path}; your token reaches it.`;
 }
 
-/** The repository named checked against the agent and GitHub as above, before anything is written: as GitHub spells it, or why not. */
 const checkedRepository = Effect.fnUntraced(function* (
   adder: RepositoryAdder,
   agent: Agent,
@@ -159,12 +115,6 @@ const checkedRepository = Effect.fnUntraced(function* (
   return repository;
 });
 
-/**
- * Adds the repository to the agent as the header says: checked, appended,
- * handed to the running place, and told, through `telling` unless the agent
- * added it to itself. A write that finds the repository already there, as
- * two adds of it at once do, is refused as already among the agent's.
- */
 export const addAgentRepository = /* @__PURE__ */ Effect.fn("web/addAgentRepository")(function* (
   adder: RepositoryAdder,
   agent: Agent,
@@ -193,8 +143,6 @@ export const addAgentRepository = /* @__PURE__ */ Effect.fn("web/addAgentReposit
   const live = (yield* runnerCheckedOut(agent)) === RUNNER_CHECKOUT.CHECKED_OUT;
   const checkout = live ? ADDED_REPOSITORY_CHECKOUT.NOW : ADDED_REPOSITORY_CHECKOUT.NEXT_TURN;
   const added: AddedRepository = { repository, path, checkout };
-  // Note that only a checkout that landed in a running place is told, so an idle agent is never woken by a
-  // line saying something not yet true, and an agent adding to itself reads the line as its call's answer.
   if (live && adder.agent?.id !== agent.id) {
     yield* steerAgent(telling.eve, telling.writer, agent.userId, agent, {
       text: addedRepositoryLine(added),

@@ -8,16 +8,6 @@ import { it } from "vitest";
 import { WebSocketServer } from "ws";
 import { BRIDGE_SOURCE } from "./sandbox-browser.js";
 
-/**
- * The bridge the agent's sandbox runs, as its own Node process in front of a
- * local stand-in for Chromium's DevTools: it finds the browser's WebSocket
- * through `/json/version`, says it is ready, sends each line it reads as one
- * message, writes each message as one line however the browser spaced it,
- * and exits when the browser goes. A bridge with no browser to reach says
- * so and exits.
- */
-
-/** A local DevTools stand-in: `/json/version` naming its socket, and a socket that answers each command with its id and method. */
 async function devtools() {
   const server = http.createServer();
   const sockets = new WebSocketServer({ server, path: "/devtools/browser/fixture" });
@@ -27,7 +17,6 @@ async function devtools() {
       const text = String(data);
       received.push(text);
       const { id, method } = JSON.parse(text);
-      // Spaced over lines, as a browser may write JSON, so the bridge must keep it one line.
       socket.send(JSON.stringify({ id, result: { method, note: "a\nb" } }, null, 2));
       if (method === "Browser.close") socket.close();
     });
@@ -42,7 +31,6 @@ async function devtools() {
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
-  // SAFETY: a listening TCP server answers its bound address as AddressInfo, never a pipe path.
   const { port } = server.address() as AddressInfo;
   return {
     port,
@@ -55,7 +43,6 @@ async function devtools() {
   };
 }
 
-/** The bridge on the port given, its lines read one at a time. */
 function bridge(port: number) {
   const child = spawn(process.execPath, ["--no-warnings", "-e", BRIDGE_SOURCE, String(port)], {
     stdio: ["pipe", "pipe", "inherit"],

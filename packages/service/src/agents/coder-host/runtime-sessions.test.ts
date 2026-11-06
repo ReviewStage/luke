@@ -96,29 +96,6 @@ import { STEER_OUTCOME, steerAgent } from "./steer.js";
 import { stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
-/**
- * runtime-sessions.test.ts -- every way the service reaches a coding agent's session answers it by the runtime its conversation runs on.
- *
- * Two agents stand side by side in one workspace: one on eve, as every
- * agent ran before native harnesses, and one on Claude Code, paid for by its
- * starter's Claude plan. eve and the native harness are each a fake that
- * writes down every call, so a test reads which of the two each call
- * reached and what it was handed. The eve agent is refused as ended, since
- * eve runs no agent any more: a launch or a message reaches nothing, and a
- * Stop or a retire of its session is answered as nothing running; the
- * Claude Code agent's calls reach the harness,
- * acting for its starter, and eve hears nothing of them. That holds for the
- * router itself, for every composition a route, the deployment, the agent
- * doors, and the planner's tools wrap their eve in, and for the paths that
- * run through them: a Start, a message from the composer or an Inbox answer,
- * and a Stop. A Codex agent, paid for by its starter's ChatGPT plan, is
- * answered by Codex alike, and neither eve nor Claude Code hears it. Where no
- * harness is provided, nor a relay to one, a native agent is refused by name
- * and nothing reaches eve. Synthetic accounts and words throughout; the
- * store is PGlite.
- */
-
-/** The sessions of one runtime, writing down every call it takes. */
 function recording(sessionPrefix: string) {
   const calls: string[] = [];
   const messages: EveMessage[] = [];
@@ -189,7 +166,6 @@ function recording(sessionPrefix: string) {
 
 type Recording = ReturnType<typeof recording>;
 
-/** The three runtimes: eve, and Claude Code and Codex behind `NativeAgentSessions`, which writes down whom it acts for. */
 function runtimes() {
   const eve = recording("wrun_");
   const claudeCode = recording(`${NATIVE_SESSION_PREFIX.claude_code}000000000001-`);
@@ -207,7 +183,6 @@ function runtimes() {
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-/** Where a synthetic Mac keeps the Codex it checked. */
 const CODEX_EXECUTABLE =
   "/Users/fixture/Library/Application Support/Vespin/agent-tools/codex/bin/codex";
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 64 }, (_, index) => ({
@@ -218,12 +193,10 @@ const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 64 },
 }));
 let installationsConnected = 0;
 
-/** GitHub, reaching the repository through each workspace's installation. */
 const GITHUB = githubReaching(INSTALLATIONS).layer;
 
 const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 
-/** The deployment's environment: its eve secret and the key ring. */
 function environment(): Layer.Layer<HostedEnvironment> {
   const values: HostedEnvironmentValues = {
     posthogPersonalApiKey: undefined,
@@ -239,11 +212,9 @@ function environment(): Layer.Layer<HostedEnvironment> {
   return Layer.succeed(HostedEnvironment, values);
 }
 
-/** A workspace with its owner and a teammate, and a task of the owner's on no repository. */
 const openTeam = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const teammate = yield* openGithubUser();
-  // The owner's agents on eve run on its own keys, since ours pays for no coding agent.
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
   const workspaceId = yield* openWorkspace(owner);
@@ -252,7 +223,6 @@ const openTeam = Effect.gen(function* () {
   return { owner, teammate, workspaceId, taskId: task.id };
 });
 
-/** An agent of the owner's on the task, on the runtime and payer given. */
 const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" | "codex") =>
   Effect.gen(function* () {
     const started = yield* createAgent(owner, {
@@ -281,7 +251,6 @@ const messageTo = (agent: Agent, text = "Expire invitations after a week.") => (
   message: text,
 });
 
-/** Every call of the session interface on the agent's conversation, through the sessions given. */
 const everyCall = (sessions: AgentSessions, agent: Agent) =>
   Effect.gen(function* () {
     const opened = yield* sessions.open(messageTo(agent));
@@ -292,7 +261,6 @@ const everyCall = (sessions: AgentSessions, agent: Agent) =>
     return opened.sessionId;
   });
 
-/** Which calls each runtime heard, by kind. */
 const heard = (each: Recording) => each.calls.map((call) => call.split(":")[0]);
 
 it.layer(Layer.merge(getTestDB(), GITHUB))(
@@ -320,7 +288,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onClaudeCodeApplied = yield* runnerChoiceApplied(onClaudeCode).pipe(
             Effect.provide(native),
           );
-          // Where this function reaches no harness, the next message carries the change instead.
           const unreached = yield* runnerChoiceApplied(onClaudeCode);
 
           assert.deepEqual(
@@ -367,9 +334,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const nativeSession = yield* everyCall(sessions, onClaudeCode);
           assert.deepEqual(heard(claudeCode), ["open", "send", "cancel", "reset"]);
           assert.deepEqual(eve.calls, []);
-          // A launch and a message act for the agent's starter, whose plan pays; a cancel or reset for the caller, as eve's does.
           assert.deepEqual(actingFor, [owner, owner, teammate, teammate]);
-          // The session the harness opened is the conversation's record, as eve's door records eve's.
           const recorded = yield* recordedRuntimeSession({
             userId: owner,
             conversationId: onClaudeCode.conversationId,
@@ -566,7 +531,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               (rows) => rows.length,
             );
 
-          // A rewind to a line that is not there is refused before anything is stopped.
           const missing = yield* rewoundAgent(owner, onClaudeCode, randomUUID()).pipe(
             Effect.provide(native),
             Effect.result,
@@ -582,7 +546,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.ok(Result.isSuccess(eveRewound));
           assert.ok(Result.isSuccess(nativeRewound));
           assert.deepEqual(refused, Result.fail(HOSTED_REFUSAL.UNAVAILABLE));
-          // Each is stopped before the cut and again after it, and a runner that could not be ended is not cut.
           assert.deepEqual(eve.calls, []);
           assert.deepEqual(claudeCode.calls, [
             `halt:${nativeSession}:${onClaudeCode.conversationId}`,
@@ -657,14 +620,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: teammate } as const,
           };
 
-          // A teammate's words reach the harness, acting for the starter whose plan pays.
           assert.equal(
             yield* steerAgent(sessions, writer, teammate, onClaudeCode, line),
             STEER_OUTCOME.SENT,
           );
           assert.deepEqual(heard(claudeCode), ["send"]);
           assert.deepEqual(actingFor, [owner]);
-          // And a teammate's Stop is admitted: the agent runs no turn, so it stops nothing.
           yield* stoppedTurn(writer, teammate, onClaudeCode).pipe(Effect.provide(native));
 
           assert.equal(
@@ -675,7 +636,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             }),
             STEER_OUTCOME.SENT,
           );
-          // The model reads a teammate's line behind the label naming them by their link, and the starter's as it is.
           const texts = claudeCode.messages.map((sent) =>
             Array.isArray(sent.message)
               ? sent.message.flatMap((part) => (part.type === "text" ? [part.text] : []))
@@ -690,7 +650,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           assert.deepEqual(texts[0]?.slice(1), ["Also the emails."]);
           assert.equal(claudeCode.messages[1]?.message, "Also the emails.");
-          // The row keeps the teammate's words as they typed them, its sender in its own column.
           const [kept] = yield* (yield* Database)
             .select({ parts: messages.parts })
             .from(messages)
@@ -735,12 +694,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             session,
           );
 
-          // The agent doors' and the planner's router.
           const route = yield* sessionsRouter.pipe(Effect.provide(native));
           yield* route(owner).open(messageTo(onCodex));
           assert.deepEqual(heard(codex), ["open", "send", "cancel", "reset", "open"]);
 
-          // A message from the composer, under its line's own id.
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           assert.equal(
             yield* steerAgent(sessions, writer, teammate, onCodex, {
@@ -752,7 +709,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           assert.equal(codex.messages.at(-1)?.lineId, sentLineId("key-codex"));
 
-          // A Stop names the turn under way by its own id.
           const turnId = randomUUID();
           const write = yield* writer;
           yield* write.enqueueTurn(
@@ -943,7 +899,6 @@ const CATALOG = modelCatalogOf([
   },
 ]);
 
-/** The catalog with a GPT model it lists no fast version of, as AI Gateway lists every GPT model. */
 const PLAN_CATALOG = modelCatalogOf([
   {
     id: "anthropic/claude-opus-5.5",
@@ -977,10 +932,8 @@ const PLAN_CATALOG = modelCatalogOf([
   },
 ]);
 
-/** How the owner's ChatGPT sign-in stands: none, one Codex launches on, one OpenAI signed out, or one sealed under a key the ring no longer holds. */
 type SignIn = "none" | "signed_in" | "signed_out" | "rotated_out";
 
-/** A workspace connected to GitHub, its owner keeping a Claude setup-token and a ChatGPT sign-in where asked. */
 const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -1047,8 +1000,6 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
     return { owner, workspaceId };
   });
 
-/** The account's own Anthropic API key, saved as Settings saves one. */
-/** An API key of the provider's saved for the owner, which eve's steps on its models run on. */
 const saveApiKey = (
   owner: string,
   provider: typeof PROVIDER_KEY_PROVIDER.ANTHROPIC | typeof PROVIDER_KEY_PROVIDER.OPENAI,
@@ -1068,11 +1019,9 @@ const saveApiKey = (
     );
   });
 
-/** The provider of a case's model, by its catalog id's prefix. */
 const providerOfCase = (model: string): ModelProvider =>
   model.startsWith(`${MODEL_PROVIDER.OPENAI}/`) ? MODEL_PROVIDER.OPENAI : MODEL_PROVIDER.ANTHROPIC;
 
-/** A Start refused because no credential of the account's pays for the provider named, which the refusal carries. */
 function assertCredentialMissing(
   started: Result.Result<unknown, HostedRefusal | ModelChoiceRefused>,
   provider: ModelProvider,
@@ -1082,7 +1031,6 @@ function assertCredentialMissing(
   assert.deepEqual(started.failure, credentialMissing(provider), name);
 }
 
-/** A Start on the task, on the model given at high effort. */
 const startOn = (taskId: string, model: string, key = randomUUID()) => ({
   taskId,
   prompt: "Fix the flaky test.",
@@ -1268,7 +1216,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             if ("away" in each)
               yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
             const { native } = runtimes();
-            // Note that a repository reached on the starter's own token is handed as the task's own start reached it, so no GitHub read decides its access.
             const ask = {
               ...startOn(task.id, each.model),
               runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId },
@@ -1396,7 +1343,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               Option.map(agent, (each) => [each.machine, each.deviceId ?? null]),
             );
 
-          // Its owner's agent runs on the owner's device it names.
           const ownedAsk = { ...startOn(task.id, "anthropic/claude-opus-5.5"), runsOn: onDevice };
           const owned = yield* start(owner, ownedAsk);
           assert.ok(Result.isSuccess(owned));
@@ -1405,7 +1351,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Option.some([AGENT_MACHINE.DEVICE, deviceId]),
           );
 
-          // A continue runs where its source runs, though its starter's pick is the cloud now.
           yield* keepRunsOnPick(owner, { machine: AGENT_MACHINE.VERCEL });
           const continued = yield* start(owner, {
             taskId: task.id,
@@ -1420,7 +1365,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Option.some([AGENT_MACHINE.DEVICE, deviceId]),
           );
 
-          // A teammate's continue from the owner's agent on the device is refused by name too, as an agent on its starter's own Mac is theirs alone to start from, so it never reaches the cloud.
           const theirContinue = {
             taskId: task.id,
             prompt: undefined,
@@ -1433,7 +1377,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(theirContinued.failure, HOSTED_REFUSAL.NOT_PERMITTED);
           assert.ok(Option.isNone(yield* readAgentByKey(teammate, theirContinue.idempotencyKey)));
 
-          // A Start with no task runs in the cloud.
           const planless = yield* start(owner, startIn(workspaceId, "anthropic/claude-opus-5.5"));
           assert.ok(Result.isSuccess(planless));
           assert.deepEqual(
@@ -1441,7 +1384,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Option.some([AGENT_MACHINE.VERCEL, null]),
           );
 
-          // A device away is refused by name, and no agent is made.
           yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
           const away = { ...startOn(task.id, "anthropic/claude-opus-5.5"), runsOn: onDevice };
           const refused = yield* start(owner, away);
@@ -1449,12 +1391,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(refused.failure, localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY));
           assert.ok(Option.isNone(yield* readAgentByKey(owner, away.idempotencyKey)));
 
-          // A retry of a Start already made is answered with its agent, though its device is away now.
           const retried = yield* start(owner, ownedAsk);
           assert.ok(Result.isSuccess(retried));
           assert.equal(retried.success.agent.id, owned.success.agent.id);
 
-          // A continue from an agent on a host its starter removed is refused by name, not as away, and no agent is made.
           yield* enrollOwnDevice(owner, {
             id: deviceId,
             version: "0.1.0",
@@ -1516,22 +1456,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const model = "anthropic/claude-opus-5.5";
           const task = yield* taskIn();
 
-          // Named, it runs there, and the place is kept as the pick.
           const named = { ...startOn(task.id, model), runsOn: onStudio };
           assert.deepEqual(yield* runsAt(owner, named), [AGENT_MACHINE.DEVICE, studio]);
           assert.deepEqual(yield* readRunsOnPick(owner), Option.some(onStudio));
-          // A teammate's Start naming none is not decided by the owner's agent: with no pick of their own, it runs in the cloud.
           assert.deepEqual(yield* runsAt(teammate, startOn(task.id, model)), [
             AGENT_MACHINE.VERCEL,
             null,
           ]);
-          // The owner's runs where the owner's newest agent there runs, not the teammate's newer one.
           assert.deepEqual(yield* runsAt(owner, startOn(task.id, model)), [
             AGENT_MACHINE.DEVICE,
             studio,
           ]);
-          // An automation's run runs in the cloud over the owner's pick, and is no agent of the owner's
-          // there: on a task where only it stands, the pick decides.
           const other = yield* taskIn();
           const automated = {
             ...startOn(other.id, model),
@@ -1546,7 +1481,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             AGENT_MACHINE.DEVICE,
             studio,
           ]);
-          // A continue naming the cloud moves its source's work there, and the pick follows.
           const moved = {
             taskId: task.id,
             prompt: undefined,
@@ -1560,7 +1494,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(yield* runsAt(owner, moved), [AGENT_MACHINE.VERCEL, null]);
           assert.deepEqual(yield* readRunsOnPick(owner), Option.some(inCloud));
 
-          // A teammate's device named is refused with its name and owner, an unknown one as away; neither makes an agent or a pick.
           for (const [deviceId, refusal] of [
             [
               den,
@@ -1689,7 +1622,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
           }
 
-          // An automation's run says its prompt as the automation, never as its creator.
           const automated = yield* openStarter(true);
           const byAutomation = runtimes();
           const run = yield* startAgent(routedSessions(automated.owner), automated.owner, {
@@ -1713,12 +1645,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(said, {
             sender: MESSAGE_SENDER.AUTOMATION,
             senderName: "Nightly checks",
-            // A schedule's run carries its owner's prompt alone.
             metadata: { channel: "automation", outside_words: false },
           });
           assert.ok(run.agent.conversationId !== "");
 
-          // A member's Start sends its prompt as the member; another agent's start_agent, as that agent.
           const byAgent = yield* openStarter(true);
           const agentRuns = runtimes();
           const starting = yield* startAgent(
@@ -1799,7 +1729,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const eveRouting = Option.getOrThrow(
             yield* readAgentRouting(keyed.owner, onEve.agent.id),
           );
-          // An API key pays a Claude model's agent on Claude Code too, as any Start on one does.
           assert.deepEqual(
             [eveRouting.runtime, eveRouting.payer],
             ["claude_code", AGENT_PAYER.API_KEY],
@@ -1820,7 +1749,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
       "a blank Start routes by credential as any Start does: an account whose Claude plan pays records Claude Code and opens no session until its first words, and one with no credential is refused by name",
       () =>
         Effect.gen(function* () {
-          // A blank Start lands on a task, here one naming no repository, so GitHub is never asked.
           const blankIn = (owner: string, workspaceId: string) =>
             Effect.map(
               createTask(owner, { organizationId: workspaceId, name: "Invitations" }),
@@ -2182,7 +2110,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 PROVIDER_KEY_KIND.CHATGPT_OAUTH,
                 false,
               );
-              // API key selected is a key saved, which pays now that ours never does.
               yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
             }
             const { eve, codex, native } = runtimes();

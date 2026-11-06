@@ -33,26 +33,10 @@ import { titleNativeAgent } from "../native-events/native-title.js";
 import { titleAgent } from "./title.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
-/**
- * title.test.ts -- an automation's run is named from the automation's prompt
- * alone, without the lines we add of the firing, and the subject of the
- * GitHub event that fired it; an agent started from another is named from
- * its brief and note, never the replay between them; the model's answer is
- * the agent's title, and the name of its task where that still stands
- * untitled; a message to the Slack bot is named from its member's words
- * alone; and an account with no API key is titled on our own key, or
- * from its opening's first words, with no model, where the deployment holds
- * none. The model is a script that keeps what it was asked, or Anthropic
- * faked at the global fetch; the store is PGlite. Synthetic throughout.
- */
-
-/** The automation's prompt, long enough to fill the title model's excerpt by itself. */
 const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every failed run. ".repeat(120)}`;
 
-/** What the agent was handed: the prompt, then what we add of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
 
-/** The deployment's environment, which holds no key of ours for a title to spend unless a test gives it one. */
 const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -69,10 +53,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The key a deployment holds for titles, our own; synthetic. */
 const VESPIN_TITLE_KEY = "sk-ant-vespin-title-key-1111";
 
-/** What a native agent is titled as, and what Anthropic is asked, on a deployment holding our title key and on one holding none. */
 const NATIVE_TITLE_CASES = [
   {
     named: "is titled by Anthropic's small model on Vespin's own key",
@@ -95,7 +77,6 @@ const NATIVE_TITLE_CASES = [
   },
 ] as const;
 
-/** What a request asked Anthropic for: the model its body names, and its thinking where it set any. */
 const readRequestBody = Schema.decodeUnknownSync(
   Schema.fromJsonString(
     Schema.Struct({
@@ -105,7 +86,6 @@ const readRequestBody = Schema.decodeUnknownSync(
   ),
 );
 
-/** Anthropic's API faked at the global fetch, answering every message with `title` and keeping the key, host, model, and thinking each request carried. */
 function anthropicAnswering(title: string) {
   const asked: {
     readonly key: string | null;
@@ -135,7 +115,6 @@ function anthropicAnswering(title: string) {
   return { asked };
 }
 
-/** A model answering every call with `title`, keeping each prompt it was asked. */
 function scriptedTitleModel(title: string) {
   const asked: string[] = [];
   const model = new MockLanguageModelV4({
@@ -155,7 +134,6 @@ function scriptedTitleModel(title: string) {
   return { model, asked };
 }
 
-/** The agent's session opened on `prompt`, as eve records it. */
 const openedOn = (owner: string, agent: Agent, prompt: string) =>
   Effect.gen(function* () {
     const placedAt = new Date(yield* Clock.currentTimeMillis);
@@ -174,7 +152,6 @@ const openedOn = (owner: string, agent: Agent, prompt: string) =>
     return agent;
   });
 
-/** An agent started on the task with `prompt`, its session opened on the prompt as eve records it. */
 const startOnTask = (owner: string, taskId: string, prompt: string) =>
   Effect.gen(function* () {
     const started = Option.getOrThrow(
@@ -192,7 +169,6 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
     return yield* openedOn(owner, started.agent, prompt);
   });
 
-/** The agent titled by a model answering `title`. */
 const titledAs = (owner: string, agent: Agent, title: string) =>
   titleAgent(
     scriptedTitleModel(title).model,
@@ -200,7 +176,6 @@ const titledAs = (owner: string, agent: Agent, title: string) =>
     agent,
   );
 
-/** The task's name as the account reads it. */
 const taskName = (owner: string, taskId: string) =>
   Effect.map(readTask(owner, taskId), (read) => Option.getOrThrow(read).task.name);
 
@@ -259,7 +234,6 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       yield* renameAgent(owner, agent.id, "My invitations agent");
 
-      // The agent as the host read it before the developer's title landed.
       yield* titledAs(owner, agent, "Expire teammate invitations");
 
       assert.equal(yield* taskName(owner, task.id), "Untitled");
@@ -367,7 +341,6 @@ it.layer(getTestDB())("an agent's title", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
-        // The session opened on the handed prompt, as eve records an agent's first message.
         yield* Database.use((db) =>
           db.insert(messages).values({
             userId: owner,
@@ -415,7 +388,6 @@ it.layer(getTestDB())("an agent's title", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
-        // The opening carries the Slack line the bot wrote, as a Start from Slack does.
         yield* Database.use((db) =>
           db.insert(messages).values({
             userId: owner,
@@ -501,14 +473,11 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 });
 
-/** The developer's description, which an agent's first turn opens on. */
 const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
-/** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
 const AGENT_MESSAGE =
   "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
 
-/** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
 const MESSAGE_SENDING_AGENT = {
   kind: MESSAGE_SENDER.AGENT,
   agentId: "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
@@ -516,12 +485,6 @@ const MESSAGE_SENDING_AGENT = {
   model: "anthropic/claude-opus-5.5",
 } as const;
 
-/**
- * An agent of the owner's on Claude Code, and its conversation journaled as
- * the store writer journals a native harness's turns: lines written
- * awaiting their turn, taken by the turn that opens on them or one under
- * way, the agent's answers, and each turn's end.
- */
 const journaledAgent = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const organizationId = yield* openWorkspace(owner);
@@ -547,7 +510,6 @@ const journaledAgent = Effect.gen(function* () {
     sequences.set(turnId, sequence);
     return { conversationId: sessionKey(target.conversationId), turnId, sequence };
   };
-  /** A line written awaiting its turn, the developer's or another agent's message: its id. */
   const line = (sender: "developer" | "agent") =>
     Effect.gen(function* () {
       lines += 1;
@@ -571,7 +533,6 @@ const journaledAgent = Effect.gen(function* () {
       assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
       return sentLineId(clientKey);
     });
-  /** A turn opened, taking the line given first, which opens it. */
   const opened = (turnId: string, lineId: string) =>
     Effect.gen(function* () {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
@@ -584,12 +545,10 @@ const journaledAgent = Effect.gen(function* () {
       });
       yield* taken(turnId, lineId);
     });
-  /** A line taken by the turn under way. */
   const taken = (turnId: string, lineId: string) =>
     Effect.map(writer.takeAwaitingLine(target, { clientId: lineId, turnId }), (took) =>
       assert.equal(Result.getOrUndefined(took)?.length, 1),
     );
-  /** The turn's answer, a step for each of the words given, and its end. */
   const answered = (turnId: string, words: readonly string[]) =>
     Effect.gen(function* () {
       const answer = new AssistantMessageBuilder();
@@ -610,7 +569,6 @@ const journaledAgent = Effect.gen(function* () {
         at: 0,
       });
     });
-  /** The agent's first turn: the developer's description, read and answered. */
   const firstTurn = Effect.gen(function* () {
     const turnId = randomUUID();
     yield* opened(turnId, yield* line("developer"));
@@ -619,7 +577,6 @@ const journaledAgent = Effect.gen(function* () {
       "The guide is read; the plan fits the code.",
     ]);
   });
-  /** What a title model was asked when it named the agent. */
   const askedTitling = Effect.gen(function* () {
     const { model, asked } = scriptedTitleModel("Teammate invitations by email");
     yield* titleAgent(model, target, agent);
@@ -673,7 +630,6 @@ it.layer(getTestDB())("a title named from the recent exchange", (it) => {
         const journal = yield* journaledAgent;
         const turnId = randomUUID();
         yield* journal.opened(turnId, yield* journal.line("developer"));
-        // Eight messages steered in leave the developer's line before the recent window of eight.
         for (let at = 0; at < 8; at += 1) {
           yield* journal.taken(turnId, yield* journal.line("agent"));
         }
@@ -691,7 +647,6 @@ it.layer(getTestDB())("a title named from the recent exchange", (it) => {
       Effect.gen(function* () {
         const journal = yield* journaledAgent;
         yield* journal.firstTurn;
-        // The second turn takes five messages in, the third one more, so the recent window of eight opens on a message.
         const second = randomUUID();
         yield* journal.opened(second, yield* journal.line("agent"));
         for (let at = 0; at < 4; at += 1) {
@@ -715,7 +670,6 @@ it.layer(getTestDB())("a title named from the recent exchange", (it) => {
       Effect.gen(function* () {
         const journal = yield* journaledAgent;
         yield* journal.firstTurn;
-        // A message opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
         const second = randomUUID();
         yield* journal.opened(second, yield* journal.line("agent"));
         for (let at = 0; at < 8; at += 1) {

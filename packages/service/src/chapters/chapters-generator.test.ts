@@ -32,11 +32,6 @@ import {
   repairAnswerSchema,
 } from "./chapters-generator.js";
 
-/**
- * chapters-generator.test.ts -- a pull request told as chapters on a scripted model: the answer held to the diff, the hunks it left out repaired once and the rest closed as "Other changes", ignored files kept from the model, and each way a generation fails named by its kind; and the model chapters are told on, reached on the member's own key at a provider faked at its fetch. Synthetic throughout; no real provider is reached.
- */
-
-/** One answer the scripted model gives, in the order it is asked. */
 type Step =
   | { readonly answer: unknown }
   | { readonly text: string }
@@ -49,7 +44,6 @@ const USAGE = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-/** What the model answers for a step that answers words. */
 function answered(text: string, refused = false) {
   return {
     content: refused ? [] : [{ type: "text" as const, text }],
@@ -61,13 +55,11 @@ function answered(text: string, refused = false) {
   };
 }
 
-/** A scripted model, and every prompt it was asked, its instructions with it. */
 interface ScriptedModel {
   readonly model: ChaptersModel;
   readonly asked: readonly string[];
 }
 
-/** A model that answers the steps in order and keeps every prompt it was asked. */
 function scriptedModel(steps: readonly Step[]): ScriptedModel {
   const asked: string[] = [];
   const model = new MockLanguageModelV4({
@@ -87,7 +79,6 @@ function scriptedModel(steps: readonly Step[]): ScriptedModel {
   return { model: { id: "scripted", model }, asked };
 }
 
-/** A changed file with its patch. */
 function changed(
   path: string,
   patch: string | null,
@@ -104,7 +95,6 @@ function changed(
   };
 }
 
-/** A file of two hunks: one adding line 2, starting at old line 1; one changing old line 21, starting at old line 20. */
 const TWO_HUNKS = changed(
   "src/app.ts",
   [
@@ -121,7 +111,6 @@ const TWO_HUNKS = changed(
   ].join("\n"),
 );
 
-/** A file added whole, its one hunk starting at old line 0. */
 const ADDED = changed(
   "src/util.ts",
   ["@@ -0,0 +1,2 @@", "+export const util = 1;", "+export const more = 2;"].join("\n"),
@@ -132,12 +121,10 @@ const APP_FIRST = { path: "src/app.ts", oldStart: 1 };
 const APP_SECOND = { path: "src/app.ts", oldStart: 20 };
 const UTIL = { path: "src/util.ts", oldStart: 0 };
 
-/** The pull request's words around its files. */
 function pullRequest(files: readonly AgentChangedFile[]): ChaptersInput {
   return { files, title: "Tidy the app", body: "Small changes." };
 }
 
-/** A chapter as the model tells one, holding the hunks named. */
 function told(title: string, hunkRefs: readonly unknown[], keyChanges: readonly unknown[] = []) {
   return {
     title,
@@ -149,7 +136,6 @@ function told(title: string, hunkRefs: readonly unknown[], keyChanges: readonly 
   };
 }
 
-/** The titles and hunks of chapters, which is what most of these tests read. */
 function shapeOf(chapters: readonly Chapter[]) {
   return chapters.map((chapter) => ({
     kind: chapter.kind,
@@ -459,7 +445,6 @@ it.effect(
     }),
 );
 
-/** The service's recorded JSON Schemas. */
 const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../fixtures/json-schema");
 
 it("shows the provider the chapters and repair answers as recorded", async () => {
@@ -473,7 +458,6 @@ it("tells chapters on the member's own key: the Claude model they chose on an An
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const headers = new Headers(init?.headers);
     const url = new URL(input instanceof Request ? input.url : String(input));
-    // SAFETY: the SDK sends its request body as JSON text; the test reads back the model it named.
     const body = JSON.parse(String(init?.body)) as { readonly model?: unknown };
     reached.push({
       host: url.host,

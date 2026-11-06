@@ -38,58 +38,10 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { agentRepositoryToken, type CheckoutServices } from "./checkout.js";
 import { agentPublished } from "./published.js";
 
-/**
- * pull-request.ts -- the coding agent's `open_pull_request` tool: its pull request opened by the service, as the developer it writes as, or as the App.
- *
- * An agent that writes as its developer (`checkout.ts`) has its pull request
- * opened by the service on the developer's own GitHub App token, read from
- * their sign-in where it is sealed, in one call to GitHub (`POST
- * /repos/{owner}/{name}/pulls`) on the agent's own repository and nowhere
- * else. The token never reaches the sandbox, whose firewall carries the
- * App's token alone, because the sandbox is the workspace's: any member may
- * steer the agent or open a terminal in it, and a developer's token reaches
- * every repository they and the App reach. So the most a teammate can do
- * through the agent as the developer is open a pull request on its one
- * repository. An agent that writes as the App has its pull request opened
- * on the App's token for that repository, as every push already goes. An
- * agent on its starter's own GitHub token, which no installation reaches
- * the repository for, has it opened on that token alone, as them, and a
- * refusal of the token opens nothing.
- *
- * Where GitHub refuses the developer's token, or their sign-in no longer
- * yields one, the pull request is opened as the App instead and the agent's
- * row records why (`recordAgentAuthor`), so the Changes tab says it and
- * the agent's later pull requests go out as the App without asking again;
- * the agent is told, so it can tell the developer. A refusal of the pull
- * request itself, such as one already open from the branch, is the agent's
- * to read and opens nothing. The description is the agent's own, with no
- * line of ours added: where its author is a person, the trailer on its
- * commits (`checkout.ts`) names our bot as co-author, which GitHub shows
- * on the pull request, as it does for Claude Code. It merges into the
- * repository's default branch unless the agent names another base, such as
- * the branch of the pull request it stacks on; a base GitHub does not know
- * is refused like any other. Once GitHub opens it, its branch and the pull
- * request are written on the agent's row at once rather than only as the
- * turn ends, so a comment on it finds the agent (`github/agent-wakes.ts`);
- * a refused call moves nothing.
- *
- * An agent that works in other repositories beside its own
- * (`readAgentRepositories`) names the one each call opens in, refused with
- * their names where it names none or one it does not work in; an agent in
- * one repository may leave it out, and opens as it always did. A pull
- * request in an extra repository opens on the one token minted for the
- * agent's set, against the branch that repository's checkout was cloned at
- * unless it names another base, and its head is written on that
- * repository's row rather than the agent's (`recordAgentRepositoryHead`),
- * so GitHub's deliveries about it find the agent as they find its own.
- */
-
-/** GitHub's own bounds on what a pull request carries. */
 const PULL_REQUEST_BOUNDS = {
   MAX_TITLE_CHARS: 256,
   MAX_BODY_CHARS: 65_536,
   MAX_BRANCH_CHARS: 255,
-  /** The most of GitHub's own words on a refusal the agent is told. */
   MAX_REFUSAL_CHARS: 500,
 } as const;
 
@@ -120,7 +72,6 @@ const openPullRequestInputSchema = Schema.Struct({
 
 type OpenPullRequestInput = typeof openPullRequestInputSchema.Type;
 
-/** A pull request as GitHub's API takes one to open: the branch, the branch it merges into, and its words. */
 interface PullRequestAsked {
   readonly head: string;
   readonly base: string;
@@ -129,7 +80,6 @@ interface PullRequestAsked {
   readonly draft: boolean;
 }
 
-/** The tool as a coding agent is offered it: its name, its words, and its input. */
 export const OPEN_PULL_REQUEST_TOOL = {
   name: AGENT_TOOL.OPEN_PULL_REQUEST,
   description:
@@ -143,7 +93,6 @@ export const OPEN_PULL_REQUEST_TOOL = {
   inputSchema: openPullRequestInputSchema,
 } as const;
 
-/** Why a call opened nothing, in the words the model reads. */
 const PULL_REQUEST_REFUSAL = {
   UNREADABLE: `Not opened: the call needs head, title, and body, the title at most ${PULL_REQUEST_BOUNDS.MAX_TITLE_CHARS} characters.`,
   UNAVAILABLE: "Not opened: GitHub could not be reached. The call may be made again.",
@@ -153,7 +102,6 @@ const PULL_REQUEST_REFUSAL = {
     "Not opened: GitHub refused the developer's own GitHub token on this repository. Tell them.",
 } as const;
 
-/** Why a call naming no repository, or one the agent does not work in, opened nothing, listing those it works in. */
 function repositoryRefusal(repositories: readonly AgentRepositoryEntry[]): string {
   const listed = repositories.map((each) => `\`${each.repository}\``).join(", ");
   return repositories.length > 1
@@ -161,16 +109,13 @@ function repositoryRefusal(repositories: readonly AgentRepositoryEntry[]): strin
     : `Not opened: you work in ${listed} alone; name it as repository, or leave repository out.`;
 }
 
-/** The headers GitHub marks a rate limit with, which it may answer 403 rather than 429. */
 const RATE_LIMIT_HEADER = {
   REMAINING: "x-ratelimit-remaining",
   RETRY_AFTER: "retry-after",
 } as const;
 
-/** Why a call opened nothing where the service could not reach GitHub or its store. */
 export const PULL_REQUEST_UNAVAILABLE = PULL_REQUEST_REFUSAL.UNAVAILABLE;
 
-/** Who a pull request the service opened is by. */
 const OPENED_AS = {
   DEVELOPER: "developer",
   APP: "app",
@@ -178,7 +123,6 @@ const OPENED_AS = {
 
 type OpenedAs = (typeof OPENED_AS)[keyof typeof OPENED_AS];
 
-/** What a call answers, as the model reads it: the pull request opened and as whom, or why none was. */
 export type PullRequestToolResult =
   | {
       readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED;
@@ -193,7 +137,6 @@ export function pullRequestRejected(reason: string): PullRequestToolResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** What the agent is told where the App opened its pull request in the developer's place, by why. */
 const FALLBACK_NOTE = {
   [AGENT_AUTHOR.APP_UNLINKED]:
     `Opened as ${PRODUCT_NAME}'s GitHub App: the developer's GitHub sign-in was refused. Tell them; signing in with GitHub again ` +
@@ -205,10 +148,8 @@ type FallbackReason = keyof typeof FALLBACK_NOTE;
 
 const readInput = readEither(openPullRequestInputSchema, { excess: EXCESS_KEYS.DROP });
 
-/** GitHub's answer to an opened pull request, read for its address and number. */
 const OpenedSchema = Schema.Struct({ number: Schema.Int, html_url: Schema.String });
 
-/** GitHub's words on a request it refused, as far as the agent is told them. */
 const RefusalSchema = Schema.Struct({
   message: Schema.String,
   errors: Schema.optional(
@@ -222,12 +163,9 @@ const RefusalSchema = Schema.Struct({
   ),
 });
 
-/** How one attempt to open the pull request ended. */
 const ATTEMPT = {
   OPENED: "opened",
-  /** GitHub refused the token it went on, or the account behind it. */
   TOKEN_REFUSED: "token-refused",
-  /** GitHub refused the pull request itself, or could not be reached. */
   REFUSED: "refused",
 } as const;
 
@@ -236,14 +174,8 @@ type Attempt =
   | { readonly kind: typeof ATTEMPT.TOKEN_REFUSED; readonly reason: FallbackReason }
   | { readonly kind: typeof ATTEMPT.REFUSED; readonly reason: string };
 
-/** An attempt that ended other than with its token refused. */
 type Settled = Exclude<Attempt, { readonly kind: typeof ATTEMPT.TOKEN_REFUSED }>;
 
-/**
- * GitHub's refusal of the pull request in its own words, cut to the bound.
- * An error GitHub gives no message for, such as a base it does not know,
- * is said by the field it names and its code (`base invalid`).
- */
 function refusalWords(refusal: typeof RefusalSchema.Type): string {
   const details = (refusal.errors ?? []).flatMap((error) => {
     if (error.message !== undefined) return [error.message];
@@ -254,11 +186,6 @@ function refusalWords(refusal: typeof RefusalSchema.Type): string {
   return `Not opened: GitHub said: ${words.slice(0, PULL_REQUEST_BOUNDS.MAX_REFUSAL_CHARS)}`;
 }
 
-/**
- * Whether GitHub's 403 is a rate limit rather than a refusal of the
- * account's access: GitHub marks a primary limit with no requests
- * remaining, and a secondary one with a wait to retry after.
- */
 function rateLimited(headers: Readonly<Record<string, string | undefined>>): boolean {
   return (
     headers[RATE_LIMIT_HEADER.REMAINING] === "0" ||
@@ -266,13 +193,6 @@ function rateLimited(headers: Readonly<Record<string, string | undefined>>): boo
   );
 }
 
-/**
- * One attempt to open the pull request on the token given. A token GitHub
- * will not take (401), or whose account may not write the repository (403,
- * or 404 for a repository it cannot see), is told apart from a refusal of
- * the pull request itself, which GitHub answers 422 with its reason, and
- * from a rate limit, which GitHub may answer 403 too and which passes.
- */
 const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -309,17 +229,6 @@ const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function
   );
 });
 
-/**
- * The attempt as the developer, where the agent writes as them, on their
- * own token; nothing for an agent that writes as the App. A sign-in that
- * yields no token is one GitHub no longer honors, and is refused as their
- * token would be; any other failure to read it, the store or GitHub's
- * refresh not answering, refuses the call to be made again, so a passing
- * outage never writes the developer out of their agent. Note that the
- * author is read off the row and never settled here, because an agent from
- * before the column, whose standing session and checkout are the App's,
- * must open as the App too.
- */
 const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDeveloper")(function* (
   target: ConversationTarget,
   agent: Agent,
@@ -347,7 +256,6 @@ const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDevel
   );
 });
 
-/** The pull request GitHub is asked to open: the agent's branch against the base it named, else the branch given, its description as the agent wrote it. */
 function pullRequestOf(input: OpenPullRequestInput, base: string): PullRequestAsked {
   return {
     head: input.head,
@@ -358,7 +266,6 @@ function pullRequestOf(input: OpenPullRequestInput, base: string): PullRequestAs
   };
 }
 
-/** The answer for an attempt that ended other than with a token refused. */
 function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullRequestToolResult {
   if (ended.kind === ATTEMPT.REFUSED) return pullRequestRejected(ended.reason);
   return {
@@ -370,14 +277,6 @@ function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullReques
   };
 }
 
-/**
- * One call's opening: the pull request opened on the developer's own token
- * where that is the agent's credential, with nothing in its place; as the
- * developer where the agent writes as them and GitHub takes their sign-in's
- * token, and as the App otherwise, the App's opening in the developer's
- * place recorded on the agent's row with why; or GitHub's reason it opened
- * none.
- */
 const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening")(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,
@@ -387,9 +286,7 @@ const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening"
   const minted = yield* Effect.result(agentRepositoryToken(target, agent, extra?.repository));
   if (Result.isFailure(minted)) return pullRequestRejected(`Not opened: ${minted.failure.reason}`);
   const { token, fullName, defaultBranch, access } = minted.success;
-  // Note that an extra's pull request opens against the branch its checkout was cloned at, as it was named at the Start.
   const pullRequest = pullRequestOf(input, extra?.baseBranch ?? defaultBranch);
-  // Note that an agent on its starter's own token opens on it alone, since no installation reaches the repository.
   if (access.kind === GITHUB_ACCESS.TOKEN) {
     const asMember = yield* attempt(token, fullName, pullRequest);
     return asMember.kind === ATTEMPT.TOKEN_REFUSED
@@ -417,13 +314,6 @@ const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening"
   return answerOf(asApp, OPENED_AS.APP, FALLBACK_NOTE[asDeveloper.reason]);
 });
 
-/**
- * What an opening GitHub took leaves on the agent's row: the branch it was
- * opened from, and the pull request read back from GitHub onto the row, as
- * a turn's end and a delivery about the branch would, so a comment on it
- * finds the agent at once. Either failing is logged by its kind and the
- * call still answers as opened.
- */
 const recordOpened = (
   target: ConversationTarget,
   agent: Agent,
@@ -436,7 +326,6 @@ const recordOpened = (
       yield* agentPublished(target.userId, { ...agent, branch: head });
       return;
     }
-    // An extra's head is written on its own row, and its pull request read back with the agent's.
     yield* recordAgentRepositoryHead(target.userId, agent.id, extra.repository, head);
     yield* agentPublished(target.userId, agent);
   }).pipe(
@@ -447,13 +336,6 @@ const recordOpened = (
     ),
   );
 
-/**
- * Which of the agent's repositories (`readAgentRepositories`) the call opens
- * its pull request in: its own, where it names none or names that one,
- * answered as undefined; one it works in beside it, where it names that one;
- * else why it opened nothing, listing them, where it works in several and
- * names none, or names one it does not work in.
- */
 function chosenExtra(
   named: string | undefined,
   repositories: readonly AgentRepositoryEntry[],
@@ -471,13 +353,6 @@ function chosenExtra(
   return extra === undefined ? Result.fail(repositoryRefusal(repositories)) : Result.succeed(extra);
 }
 
-/**
- * Runs one call: the opening above in the repository it names, and where
- * GitHub opened it, its branch and pull request recorded on the agent's row
- * for its own repository, or on that repository's row for one it works in
- * beside it. A refused call leaves the rows as they stood, the branch and
- * pull request the agent already had among them.
- */
 export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,

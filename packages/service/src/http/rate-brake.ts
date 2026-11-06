@@ -1,29 +1,8 @@
 import { Clock, Effect } from "effect";
 
-/**
- * Per-user brake, keyed on the resolved account rather than the network
- * address: the token already names who is asking, so rotating IPs cannot
- * route around it. The map lives in the function instance, which makes it a
- * per-instance brake rather than a cluster-wide guarantee — platform-level
- * rules are the real backstop — but it turns a hammering client into a
- * trickle and limits amplification against provider quotas.
- *
- * Effect's own `RateLimiter` is built for throttling a queue of work, not
- * for admission control: its only way to ask "is a permit free right now"
- * is racing its blocking `take` against a zero-duration timeout, and that
- * race is genuinely nondeterministic — a busy event loop can lose it even
- * when a permit stands free, which turned "past the brake" into a flaky
- * false refusal under this repository's own test suite. What this keeps of
- * Effect instead is `Clock`: the same window-and-count check the hand-rolled
- * brake made, over the same bounded map, but read through the ambient Clock
- * so it is `TestClock`-testable without a route threading its own `now`
- * through it, and written inside one synchronous step so two checks for the
- * same user never interleave.
- */
 export interface RateBrakeConfig {
   windowMs: number;
   maxRequestsPerWindow: number;
-  /** The map is bounded; past this it forgets every tracked user rather than growing. */
   maxTrackedUsers: number;
 }
 
@@ -36,12 +15,6 @@ interface TrackedWindow {
   readonly count: number;
 }
 
-/**
- * A per-user brake built once: whether an ask puts its user over the
- * window, `weight` being what the ask costs — one request by default, or
- * the events a batch carries — so a single oversized batch is braked on
- * arrival rather than on the one after it.
- */
 export function makeRateBrake(config: RateBrakeConfig): RateBrake {
   const tracked = new Map<string, TrackedWindow>();
 

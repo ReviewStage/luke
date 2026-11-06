@@ -23,21 +23,6 @@ import { readAdminAccountSource } from "./admin-account-queries.js";
 import { readAdminUserSource, readAdminUsersSource } from "./admin-queries.js";
 import { buildAdminUserDetail } from "./admin-user.js";
 
-/**
- * admin-queries.test.ts -- the Users read carries the sign-in methods the
- * Overview used to: every account the scope keeps, by each method it linked,
- * whatever the search narrowed the rows to, and an admin's own left out
- * while admins are hidden; and it ranks and counts accounts by meaningful
- * actions, never by hosted calls, as one account's page reads its activity.
- * Synthetic accounts throughout.
- *
- * The file has its database to itself (`getTestDB` opens a fresh PGlite, or
- * clones the migrated Postgres, per file), so a user id needs no random part
- * to stay unique, and must carry none: the search matches a substring of the
- * email, which is built from the id, and a random hex UUID holds "ada" often
- * enough to make a second account match it.
- */
-
 const NOW = Date.UTC(2026, 9, 21, 12);
 
 const openAccount = (name: string, providers: readonly string[], role: string = USER_ROLE.USER) =>
@@ -57,7 +42,6 @@ const openAccount = (name: string, providers: readonly string[], role: string = 
     return id;
   });
 
-/** The numbers the tasks below take, each its own whatever its workspace. */
 let taskNumbers = 0;
 
 const createTask = (userId: string, organizationId: string, createdAt: string) =>
@@ -77,7 +61,6 @@ const createTask = (userId: string, organizationId: string, createdAt: string) =
     return id;
   });
 
-/** A description revision of `taskId`, numbered `seq`, written by `actor` as `userId`. */
 const reviseDescription = (
   taskId: string,
   seq: number,
@@ -158,15 +141,11 @@ it.layer(getTestDB())("the Users read", (it) => {
       const lapsed = yield* openAccount("rank-lapsed", []);
       const dictating = yield* openAccount("rank-dictating", []);
       const workspace = yield* openWorkspace(builder);
-      // Two days inside the 30-day window, and one action before it that the
-      // window's count leaves out.
       yield* createTask(builder, workspace, "2026-10-20T09:00:00Z");
       yield* startAgent(builder, workspace, "2026-10-20T10:00:00Z");
       yield* startAgent(builder, workspace, "2026-10-21T08:00:00Z");
       yield* createTask(builder, workspace, "2026-08-01T09:00:00Z");
-      // Quiet for the window, active months before it.
       yield* createTask(lapsed, workspace, "2026-05-04T09:00:00Z");
-      // Hosted calls every day of the window, and nothing else.
       yield* db.insert(hostedUsage).values([
         { userId: dictating, day: "2026-10-20", calls: 40 },
         { userId: dictating, day: "2026-10-21", calls: 60 },
@@ -197,8 +176,6 @@ it.layer(getTestDB())("the Users read", (it) => {
       const builder = yield* openAccount("page-builder", []);
       const neighbor = yield* openAccount("page-neighbor", []);
       const workspace = yield* openWorkspace(builder);
-      // A task on the 18th, a quiet 19th, then a revision of that task and an
-      // agent yesterday, and a task and an agent today.
       const planned = yield* createTask(builder, workspace, "2026-10-18T09:00:00Z");
       yield* reviseDescription(
         planned,
@@ -210,7 +187,6 @@ it.layer(getTestDB())("the Users read", (it) => {
       yield* startAgent(builder, workspace, "2026-10-20T08:00:00Z");
       yield* createTask(builder, workspace, "2026-10-21T09:00:00Z");
       yield* startAgent(builder, workspace, "2026-10-21T10:00:00Z");
-      // An agent's revision is the agent's, and a year and more ago is past the read.
       yield* reviseDescription(
         planned,
         2,
@@ -219,7 +195,6 @@ it.layer(getTestDB())("the Users read", (it) => {
         "2026-10-19T09:00:00Z",
       );
       yield* createTask(builder, workspace, "2025-09-01T09:00:00Z");
-      // A neighbor's task on the quiet day, and hosted calls of the neighbor's alone.
       yield* createTask(neighbor, workspace, "2026-10-19T09:00:00Z");
       yield* db.insert(hostedUsage).values({ userId: neighbor, day: "2026-10-19", calls: 40 });
 

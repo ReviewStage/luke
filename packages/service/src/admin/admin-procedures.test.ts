@@ -1,16 +1,3 @@
-/**
- * admin-procedures.test.ts -- the admin dashboard's routes, byte for byte, through the hosted oRPC handler.
- *
- * The admin resource answered as the web route answers it: the gate's 503,
- * 401, and 403 before any read runs or any input is read, a method an
- * address does not answer refused, each read's own refusals before its seam
- * is touched, a failed seam a 503 logged by its kind alone, and every answer,
- * refusals included, marked `no-store`. The seams are fakes; nothing here
- * reads a database.
- *
- * Synthetic accounts throughout.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -39,15 +26,9 @@ const MEMBER: AdminViewer = { userId: "user-1", role: "user" };
 const JSON_TYPE = "application/json";
 const NO_STORE = "no-store";
 
-/** Words an outage's error may carry that no log line may: a credential and an account's own. */
 const SECRET = "sk-admin-leaked-0123456789abcdef and the developer said ship it";
 
-/**
- * A read's answer as the seam hands it over: the route writes it as it came,
- * so a marker object stands in for the whole answer.
- */
 function answerOf<Answer>(marker: { readonly generatedAt: number }): Answer {
-  // SAFETY: the route never reads the answer's fields; it writes the object it was handed.
   return marker as Answer;
 }
 
@@ -58,10 +39,8 @@ const WORKSPACES = answerOf<AdminWorkspaceList>({ generatedAt: 4 });
 const USER = answerOf<AdminUserDetail>({ generatedAt: 5 });
 const WORKSPACE = answerOf<AdminWorkspaceDetail>({ generatedAt: 6 });
 
-/** No signed-in browser session. */
 const SIGNED_OUT = null;
 
-/** Every seam answering, each read recording what it was asked in `asked`. */
 function seams(asked: string[], viewer: AdminViewer | null = ADMIN): AdminProcedureSeams {
   const record = <Answer>(line: string, answer: Answer) =>
     Effect.sync(() => {
@@ -119,7 +98,6 @@ function seams(asked: string[], viewer: AdminViewer | null = ADMIN): AdminProced
   };
 }
 
-/** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
 interface Bytes {
   readonly status: number;
   readonly contentType: string | null;
@@ -127,7 +105,6 @@ interface Bytes {
   readonly text: string;
 }
 
-/** One request through the admin resource over the seams handed in, every line it logs kept in `logged`. */
 const send = (handed: AdminProcedureSeams, request: Request, logged: string[] = []) =>
   Effect.gen(function* () {
     const capture = Logger.make((options) => {
@@ -136,7 +113,6 @@ const send = (handed: AdminProcedureSeams, request: Request, logged: string[] = 
     const services = yield* Effect.context<DatabaseServices>().pipe(
       Effect.provide(Layer.merge(noDatabase, Logger.layer([capture]))),
     );
-    // SAFETY: the admin procedures yield the database alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     const response = yield* Effect.promise(() =>
       hostedFetch({ admin: adminProcedures(handed) })(request, webServices),
@@ -153,12 +129,10 @@ function request(path: string, method = "GET"): Request {
   return new Request(new URL(path, ORIGIN), { method });
 }
 
-/** A refusal's bytes, as the old group answered it. */
 function refused(status: number, error: string): Bytes {
   return { status, contentType: JSON_TYPE, cacheControl: NO_STORE, text: `{"error":"${error}"}` };
 }
 
-/** A read's bytes, as the old group answered it. */
 function read<Body>(body: Body): Bytes {
   return {
     status: 200,

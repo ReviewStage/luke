@@ -13,22 +13,10 @@ import {
   snapshotRecordOf,
 } from "./repository-shell.js";
 
-/**
- * The checkout's scripts as a sandbox's shell runs them, in a real bash over
- * a real git: GitHub's address is pointed at bare repositories in the test's
- * own folder and the sandbox's workspace at another, so nothing leaves the
- * machine. A repository with no commits yet is cloned empty onto its default
- * branch, and its snapshot's checkout refreshes while it stays empty and
- * once its first commit lands; a branch missing from a repository with
- * commits still fails the clone in git's own words. Synthetic repositories
- * throughout.
- */
-
 const REPOSITORY = "acme/fresh";
 const TOKEN = Redacted.make("fixture-token");
 const { PATH } = REPOSITORY_SANDBOX_CONTRACT;
 
-/** Git with no configuration of the machine's own, and an identity for the commits a test makes. */
 const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
@@ -38,7 +26,6 @@ const GIT_ENV = {
   GIT_COMMITTER_EMAIL: "fixture@app.test",
 } as const;
 
-/** One git run in the folder given; what it printed, or a throw where it failed. */
 function git(cwd: string, ...args: string[]): string {
   const ran = spawnSync("git", args, {
     cwd,
@@ -50,18 +37,10 @@ function git(cwd: string, ...args: string[]): string {
   return ran.stdout.trim();
 }
 
-/** Whether the git run in the folder given succeeds. */
 function gitSucceeds(cwd: string, ...args: string[]): boolean {
   return spawnSync("git", args, { cwd, env: { PATH: process.env.PATH, ...GIT_ENV } }).status === 0;
 }
 
-/**
- * The test's world: a folder of its own holding GitHub's bare repository of
- * `acme/fresh` with no commits, on `main`, and the sandbox's workspace, and
- * the sandbox over them, whose runs are a real bash with GitHub's address
- * rewritten to the bare repositories; the folder is removed as the test's
- * scope closes.
- */
 const world = Effect.acquireRelease(
   Effect.sync(() => {
     const root = mkdtempSync(join(tmpdir(), "repository-shell-"));
@@ -94,7 +73,6 @@ const world = Effect.acquireRelease(
   ({ root }) => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
 );
 
-/** The first commit pushed to the bare repository's `main`, from a clone of the test's own; answers its sha. */
 function pushFirstCommit(root: string, remote: string): string {
   const seed = join(root, "seed");
   git(root, "init", "--quiet", "--initial-branch=main", seed);

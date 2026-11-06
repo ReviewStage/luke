@@ -1,22 +1,3 @@
-/**
- * agent-reach.ts -- the one rule for which coding agent a request reaches: the bearer's account, and an agent of a workspace it belongs to.
- *
- * Every route that names an agent by its id reads it through here, its
- * transcript, its controls, and its terminals alike, so who may reach an
- * agent is decided once. An id that is no UUID names no row, and another
- * workspace's agent reads as none at all.
- *
- * An agent that runs on its starter's own GitHub token is reached by the
- * members who see it (`@repo/database/models/workspace-store`), but steered,
- * given a shell, or started from by its starter alone (`controlsAgent`),
- * since all of that acts on GitHub as them.
- *
- * An agent its starter's Claude or ChatGPT plan pays for is read and forked
- * by every member who reaches it, a fork running on the forker's own payer,
- * but written to (messaged, steered, continued, or stopped) by those
- * `PLAN_AGENT_WRITER_POLICY` admits (`admitsPlanWriter`).
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { type Agent, readAgentRouting, readVisibleAgent } from "@repo/database/models/agent-store";
 import { readAccountNames } from "@repo/database/models/workspace-store";
@@ -35,30 +16,20 @@ import {
 } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 
-/** What resolves a request's bearer to the account it answers for. */
 export interface AccountResolving {
   readonly resolveUserId: UserIdResolver;
 }
 
-/** The query name a rewrite moves the path's agent id into. */
 const AGENT_ID_QUERY = "id";
 
-/** Who an owner-only refusal names where the starter's account is gone. */
 const UNNAMED_STARTER = "the member who started it";
 
-/** An agent reached, the account that reached it, and its conversation targeted under the member who started it, whom it belongs to. */
 export interface ReachedAgent {
   readonly userId: string;
   readonly agent: Agent;
   readonly target: ConversationTarget;
 }
 
-/**
- * The agent the path names, on a task or with none, where the account may
- * read it (`readVisibleAgent`), its task included, or not found; its
- * conversation is targeted under the member who started it, which is whom
- * the conversation belongs to.
- */
 export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountResolving,
   request: Request,
@@ -68,11 +39,6 @@ export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* reachedAgentById(userId, agentId);
 });
 
-/**
- * The agent an id names for an account already resolved, as `reachedAgent`
- * reads it, for a procedure whose path carries the id: an id that is no
- * UUID names no row, and is not found.
- */
 export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
@@ -86,12 +52,6 @@ export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/**
- * Whether the account may message the agent, open or use a shell in its
- * sandbox, or start an agent from it: any member who reaches it, but only
- * its starter for one that runs on the starter's own GitHub token, or on
- * the starter's own Mac, whose machine is theirs alone to drive.
- */
 export function controlsAgent(
   userId: string,
   agent: Pick<Agent, "userId" | "githubAccess" | "machine">,
@@ -100,7 +60,6 @@ export function controlsAgent(
   return agent.githubAccess !== GITHUB_ACCESS.TOKEN && agent.machine !== AGENT_MACHINE.DEVICE;
 }
 
-/** The name of the member who alone controls the agent, as a refusal says it: their name now, or who they were where their account is gone. */
 export function agentStarterName(
   agent: Pick<Agent, "userId">,
 ): Effect.Effect<string, StoreFailure, DatabaseServices> {
@@ -110,15 +69,6 @@ export function agentStarterName(
   );
 }
 
-/**
- * Who may write to an agent its starter's plan pays for: message it, steer
- * it, continue it, or stop it. Everyone who reaches it still reads it and
- * forks it onto their own payer.
- *
- * - `STARTER`: its starter alone, and the agents its starter started, which
- *   act as the starter.
- * - `WORKSPACE`: any member who reaches it, as for an agent on any other payer.
- */
 export const PLAN_AGENT_WRITERS = {
   STARTER: "starter",
   WORKSPACE: "workspace",
@@ -126,25 +76,13 @@ export const PLAN_AGENT_WRITERS = {
 
 export type PlanAgentWriters = (typeof PLAN_AGENT_WRITERS)[keyof typeof PLAN_AGENT_WRITERS];
 
-/**
- * The switch: who writes to a plan-funded agent. The developer decided "same
- * as today": any member who reaches it messages, steers, continues, or stops
- * it, billed to its starter's plan, as with an agent on any other payer.
- * Changing it is this one line.
- */
 const PLAN_AGENT_WRITER_POLICY: PlanAgentWriters = PLAN_AGENT_WRITERS.WORKSPACE;
 
-/** The payers that are a member's own plan, which the policy above holds writers to. */
 const PLAN_PAYERS: ReadonlySet<AgentPayer> = new Set([
   AGENT_PAYER.CLAUDE_SUBSCRIPTION,
   AGENT_PAYER.CHATGPT_SUBSCRIPTION,
 ]);
 
-/**
- * Whether the account may write to the agent, which its payer funds: any
- * member who reaches an agent on any other payer, or none recorded; and for
- * one a plan pays for, those the policy admits.
- */
 export function writesToAgent(
   userId: string,
   agent: Pick<Agent, "userId">,
@@ -155,11 +93,6 @@ export function writesToAgent(
   return policy === PLAN_AGENT_WRITERS.WORKSPACE || agent.userId === userId;
 }
 
-/**
- * The account admitted to write to the agent (`writesToAgent`), its payer
- * read now, or refused as not permitted; an agent the account no longer
- * reaches is not found.
- */
 export const admitsPlanWriter = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: Pick<Agent, "id" | "userId">,

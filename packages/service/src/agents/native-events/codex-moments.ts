@@ -18,37 +18,6 @@ import {
   toolAnswerSettlement,
 } from "./runner-moments.js";
 
-/**
- * codex-moments.ts -- Codex's app-server notifications, as its runner posts them, read as the moments of a native run.
- *
- * Each notification the pinned `codex app-server` sends (the runner's
- * `CodexNotification`, `@repo/agent-runner/protocol`) and each of the
- * runner's own (`runner-moments.ts`) is read here for what the transcript
- * keeps. Codex names no model call, so its items stand in: an agent message
- * is a step, its deltas drafting the step's words and its completion
- * telling them whole; a command, a file change, an MCP call, a web search,
- * a picture looked at, and a subagent call each start a call as their item starts and settle it
- * as it completes; a reasoning item's summary is the step's reasoning; the
- * turn's plan is its todo list, one call for each time Codex sets it.
- * `turn/completed` ends one model turn, failed where Codex says so, with
- * the plan's refusals named by OpenAI's own codes, and says how it found
- * the plan: it ran, or which of its refusals it met; a limit reached says
- * when it resets where Codex heard it; the thread's running
- * token total meters the turn; a compaction stamps the agent; and a new
- * thread is the session a relaunch resumes. Codex sends a subagent's work
- * on a thread of its own, which its subagent call stands for, so anything
- * of a thread other than the session's is passed over but the end of its
- * turn, which settles the spawn that started it: the spawn answers the
- * moment the thread starts, so it is kept open until then. A call to our own
- * MCP server is named as our tool and its answer read as the JSON that
- * tool answers, a picture in it standing in for its bytes; a call to an
- * integration's own server is stored as eve's call of that integration's
- * tool is, so it draws with the service's mark and the tool's own name. Each shape is
- * read with a schema of the fields this reads alone, so a field Codex adds
- * changes nothing here, and a notification no schema fits is no moment.
- */
-
-/** The notifications read here, as app-server spells them. */
 const NOTIFICATION = {
   THREAD_STARTED: "thread/started",
   TURN_STARTED: "turn/started",
@@ -62,7 +31,6 @@ const NOTIFICATION = {
   RATE_LIMITS: "account/rateLimits/updated",
 } as const;
 
-/** The item types read here, as app-server's `ThreadItem` spells them. */
 const ITEM = {
   AGENT_MESSAGE: "agentMessage",
   REASONING: "reasoning",
@@ -75,51 +43,28 @@ const ITEM = {
   COMPACTION: "contextCompaction",
 } as const;
 
-/** The statuses that say a call did not do its work, across the items' own status words: a subagent's call may be interrupted. */
 const FAILED_STATUSES: ReadonlySet<string> = new Set(["failed", "declined", "interrupted"]);
 
-/** A turn's status that says it failed, as `TurnStatus` spells it. */
 const TURN_FAILED = "failed";
 
-/** A turn's status that says it ran to its end, as `TurnStatus` spells it: the plan answered. */
 const TURN_COMPLETED = "completed";
 
-/**
- * The plan's refusals in the order a failure says them: an account not
- * eligible before a sign-in refused, and that before a limit, so where a
- * failure names two, the graver is its status.
- */
 const PLAN_REFUSAL_ORDER: readonly PlanStatus[] = [
   PLAN_STATUS.INELIGIBLE,
   PLAN_STATUS.INVALID,
   PLAN_STATUS.LIMIT_REACHED,
 ];
 
-/**
- * The codes OpenAI answers a ChatGPT plan's refusal with, such as
- * `subscription_sharing_usage_limit_exceeded`: a prefix and a reason, which
- * a turn's failure quotes in its message. Codex names no word of its own
- * for an account not eligible (P22 recorded `codexErrorInfo: null`), so
- * that refusal is read from OpenAI's reason alone.
- */
 const PLAN_REFUSAL_CODE = /\b(subscription_sharing|chatpass_v2)_([a-z_]+)\b/g;
 
-/** OpenAI's reasons that say how it found the plan, as P22 records them, each with its status. */
 const PLAN_REASON_STATUS: ReadonlyMap<string, PlanStatus> = new Map([
   ["user_not_eligible", PLAN_STATUS.INELIGIBLE],
   ["invalid_user", PLAN_STATUS.INVALID],
   ["usage_limit_exceeded", PLAN_STATUS.LIMIT_REACHED],
 ]);
 
-/**
- * What Codex 0.163.0 says of a plan its ChatGPT backend answers
- * `usage_not_included` for (`CodexErr::UsageNotIncluded`), a plan that
- * does not include it: an account not eligible, though Codex files it under
- * `usageLimitExceeded`, which would otherwise read as a limit that resets.
- */
 const PLAN_NOT_INCLUDED = "To use Codex with your ChatGPT plan, upgrade";
 
-/** The status OpenAI refuses a credential with, which a failed connection carries in its `codexErrorInfo`. */
 const HTTP_UNAUTHORIZED = 401;
 
 const readEnvelope = Schema.decodeUnknownOption(
@@ -136,7 +81,6 @@ const readItemKind = Schema.decodeUnknownOption(
   Schema.Struct({ type: Schema.String, id: Schema.String }),
 );
 
-/** The item a notification carries, whole, with its type and id. */
 function itemOf(
   params: unknown,
 ): Option.Option<{ readonly type: string; readonly id: string; readonly whole: unknown }> {
@@ -254,27 +198,19 @@ const readRateLimits = Schema.decodeUnknownOption(
   }),
 );
 
-/** The share of a window's usage that is all of it. */
 const WINDOW_SPENT_PERCENT = 100;
 
-/** One call as it starts: its id, the name the transcript stores it under, and what it was asked. */
 interface Call {
   readonly callId: string;
   readonly name: string;
   readonly input: UnparsedWireValue;
 }
 
-/** One call as it completes: the call, and its answer as the transcript settles it. */
 interface Answered extends Call {
   readonly answer: Parameters<typeof toolAnswerSettlement>[0];
   readonly failed: boolean;
 }
 
-/**
- * An MCP result's text blocks joined. A picture in our own tool's answer is
- * left out, so the JSON the tool answered reads whole; in any other server's
- * a stand-in takes the place of its bytes.
- */
 function mcpAnswerText(content: readonly WireValue[], workspaceTool: boolean): string {
   return content
     .flatMap((block) =>
@@ -286,12 +222,6 @@ function mcpAnswerText(content: readonly WireValue[], workspaceTool: boolean): s
     .join("\n");
 }
 
-/**
- * The name and input a call to an MCP server is stored under: our tool's own
- * for our own server; for an integration's own server, its integration's
- * fixed name and envelope, as eve's nested call of the tool is stored
- * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
- */
 function storedMcpCall(
   call: typeof McpToolCallSchema.Type,
   args: WireValue,
@@ -305,7 +235,6 @@ function storedMcpCall(
   );
 }
 
-/** A call to an MCP server, stored as `storedMcpCall` names it. */
 function mcpCall(item: unknown): Option.Option<Answered> {
   return Option.map(readMcpToolCall(item), (call) => {
     const workspaceTool = WORKSPACE_MCP_SERVER_NAMES.has(call.server);
@@ -327,7 +256,6 @@ function mcpCall(item: unknown): Option.Option<Answered> {
   });
 }
 
-/** An item that does Codex's work, as the call it stands for; nothing for any other item. */
 function callOf(type: string, item: unknown): Option.Option<Answered> {
   switch (type) {
     case ITEM.COMMAND:
@@ -389,7 +317,6 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
         },
         failed: FAILED_STATUSES.has(call.status),
       }));
-    // Note that Codex reports no status for a picture it looked at, and the model read the picture itself, which stands in as a CLI tool's does.
     case ITEM.IMAGE_VIEW:
       return Option.map(readImageView(item), (view) => ({
         callId: view.id,
@@ -419,21 +346,14 @@ function settled(call: Answered): readonly NativeMoment[] {
       kind: NATIVE_MOMENT.TOOL_SETTLED,
       callId: call.callId,
       settlement: toolAnswerSettlement(call.answer, call.failed),
-      // Note that an item's input can fill in between its start and its completion (a file change's changes), so the completed one is told with the answer.
       input: call.input,
     },
     { kind: NATIVE_MOMENT.STEP_CLOSED },
   ];
 }
 
-/** The collab tool that starts a subagent on a thread of its own, as `CollabAgentTool` spells it. */
 const SPAWN_AGENT = "spawnAgent";
 
-/**
- * The child threads a completed collab call started a subagent on, which
- * run on after the call answers; none for any other collab call, or one
- * that did not do its work.
- */
 function spawnedThreads(type: string, whole: unknown): readonly string[] {
   if (type !== ITEM.SUBAGENT) return [];
   return Option.match(readSubagent(whole), {
@@ -445,17 +365,10 @@ function spawnedThreads(type: string, whole: unknown): readonly string[] {
   });
 }
 
-/**
- * A subagent's spawn completed: the call stands, and stays open while its
- * subagent runs, as a delegation's row does, until its thread's turn
- * completes (`childTurnMoments`). Note that the spawn answers the moment
- * the thread starts, so its own answer says nothing of the subagent's work.
- */
 function spawnMoments(call: Call, threads: readonly string[]): readonly NativeMoment[] {
   return [started(call), ...running(call, threads), { kind: NATIVE_MOMENT.STEP_CLOSED }];
 }
 
-/** A spawn's subagents running, each by its thread, the call to settle with the input it stood with. */
 function running(call: Call, threads: readonly string[]): readonly NativeMoment[] {
   const { callId, input } = call;
   return threads.map(
@@ -468,7 +381,6 @@ function running(call: Call, threads: readonly string[]): readonly NativeMoment[
   );
 }
 
-/** A subagent's thread finished its turn: the spawn it runs under settles, failed where the turn did not complete. */
 function childTurnMoments(threadId: string, params: unknown): readonly NativeMoment[] {
   const read = readTurnCompleted(params);
   if (Option.isNone(read)) return [];
@@ -491,7 +403,6 @@ function itemStartedMoments(params: unknown): readonly NativeMoment[] {
   if (Option.isNone(item)) return [];
   const { type, id, whole } = item.value;
   if (type === ITEM.AGENT_MESSAGE) return [{ kind: NATIVE_MOMENT.STEP, key: id }];
-  // Note that a spawn naming its thread as it starts is waited on from then, so a subagent that ends before the spawn completes still settles it.
   return Option.match(callOf(type, whole), {
     onSome: (call): readonly NativeMoment[] => [
       started(call),
@@ -501,12 +412,6 @@ function itemStartedMoments(params: unknown): readonly NativeMoment[] {
   });
 }
 
-/**
- * An item completed: an agent message's words whole, a reasoning summary, a
- * compaction, or a call settled. Note that a call is started here too,
- * which the projection passes over where the item's start already did,
- * because a call can complete with no start reported.
- */
 function itemCompletedMoments(params: unknown): readonly NativeMoment[] {
   const item = itemOf(params);
   if (Option.isNone(item)) return [];
@@ -541,7 +446,6 @@ function itemCompletedMoments(params: unknown): readonly NativeMoment[] {
   }
 }
 
-/** The turn's plan set again: a todo list call, started and settled at once, under the event's own number. */
 function planMoments(params: unknown, sequence: number): readonly NativeMoment[] {
   return Option.match(readPlan(params), {
     onSome: ({ explanation, plan }): readonly NativeMoment[] => {
@@ -558,12 +462,6 @@ function planMoments(params: unknown, sequence: number): readonly NativeMoment[]
   });
 }
 
-/**
- * The thread's running total, as the meter reads one, and its last request,
- * as the context ring reads one. Note that OpenAI counts the cache's reads
- * within the input and the reasoning within the output, as the record
- * counts them.
- */
 function usageMoments(params: unknown): readonly NativeMoment[] {
   return Option.match(readTokenUsage(params), {
     onSome: ({ tokenUsage: { total, last } }): readonly NativeMoment[] => [
@@ -595,7 +493,6 @@ function usageMoments(params: unknown): readonly NativeMoment[] {
   });
 }
 
-/** The HTTP status one kind of a `codexErrorInfo` object carries, such as `httpConnectionFailed`'s 401. */
 function httpStatusOf(value: unknown): number | undefined {
   return Predicate.isObject(value) &&
     "httpStatusCode" in value &&
@@ -604,13 +501,6 @@ function httpStatusOf(value: unknown): number | undefined {
     : undefined;
 }
 
-/**
- * How a turn's `codexErrorInfo` found the plan: a usage limit, or a sign-in
- * or key not accepted; every other kind says nothing of the plan. A kind this
- * pin does not name says nothing either. Note that Codex says an API key
- * OpenAI refused, an expired one among them, as a connection that failed
- * with a 401 rather than as `unauthorized`.
- */
 function planStatusOfInfo(info: unknown): PlanStatus | undefined {
   const kind = codexErrorKind(info);
   if (kind === undefined) return undefined;
@@ -646,7 +536,6 @@ function planStatusOfInfo(info: unknown): PlanStatus | undefined {
   }
 }
 
-/** Codex's own word for why a turn failed: `usageLimitExceeded`, or `httpConnectionFailed 401`. */
 function errorInfoWords(info: unknown): readonly string[] {
   if (Predicate.isString(info)) return [info];
   if (!Predicate.isObject(info)) return [];
@@ -656,12 +545,6 @@ function errorInfoWords(info: unknown): readonly string[] {
   });
 }
 
-/**
- * A model turn's end: failed where Codex says it failed, said in Codex's own
- * word for it and the codes OpenAI refused the plan with, which name a usage
- * limit, an account not eligible, and a sign-in not accepted alike. The
- * failure's whole message is the launch's end's to say.
- */
 function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   const read = readTurnCompleted(params);
   if (Option.isNone(read) || read.value.turn.status !== TURN_FAILED) {
@@ -675,7 +558,6 @@ function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   const said = [error?.message ?? "", error?.additionalDetails ?? ""].join(" ");
   const quoted = [...said.matchAll(PLAN_REFUSAL_CODE)];
   const codes = [...new Set(quoted.map(([code]) => code))];
-  // Note that OpenAI's codes are its own words, never a secret, though a credential's redaction would take one for it.
   const info = errorInfoWords(error?.codexErrorInfo).map((word) => redactCredentials(word));
   const words = [...info, ...codes];
   const failure = words.length === 0 ? "turn_failed" : words.join(" ");
@@ -691,12 +573,6 @@ function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   ];
 }
 
-/**
- * The plan's limits as Codex last heard them, read only where one is
- * reached, with the latest reset among the windows spent. Note that a
- * rolling update may leave out what it does not know, so one that names no
- * reached limit lifts nothing: the turn's end clears the limit instead.
- */
 function rateLimitMoments(params: unknown): readonly NativeMoment[] {
   const read = readRateLimits(params);
   if (Option.isNone(read)) return [];
@@ -706,7 +582,6 @@ function rateLimitMoments(params: unknown): readonly NativeMoment[] {
   );
   const reached = rateLimitReachedType ?? (spent.length > 0 ? "rate_limit_reached" : undefined);
   if (reached === undefined) return [];
-  // Note that Codex counts a window's reset in seconds since the epoch.
   const resets = spent.flatMap((window) =>
     window?.resetsAt == null ? [] : [window.resetsAt * 1000],
   );
@@ -723,7 +598,6 @@ function rateLimitMoments(params: unknown): readonly NativeMoment[] {
   ];
 }
 
-/** Whether a notification is of a thread other than the session's: a subagent's, which its call stands for. */
 function elsewhere(params: unknown, held: NativeHeld): boolean {
   if (held.session === undefined) return false;
   return Option.match(readThreadOf(params), {
@@ -740,12 +614,6 @@ function threadStartedMoments(params: unknown): readonly NativeMoment[] {
   });
 }
 
-/**
- * One message the runner posted, as the moments of the run: nothing for a
- * notification of a subagent's thread, or of a kind the transcript keeps
- * nothing of. `held` names the session's thread, and the event's number,
- * which names a todo list Codex names nothing for.
- */
 export function codexMoments(message: WireValue, held: NativeHeld): readonly NativeMoment[] {
   const own = runnerMoments(message);
   if (Option.isSome(own)) return own.value;
@@ -754,7 +622,6 @@ export function codexMoments(message: WireValue, held: NativeHeld): readonly Nat
   const { method, params } = envelope.value;
   if (method === NOTIFICATION.THREAD_STARTED) return threadStartedMoments(params);
   if (elsewhere(params, held)) {
-    // A subagent's thread is passed over but for its turn's end, which settles the spawn it runs under.
     if (method !== NOTIFICATION.TURN_COMPLETED) return [];
     return Option.match(readThreadOf(params), {
       onSome: ({ threadId }) => childTurnMoments(threadId, params),

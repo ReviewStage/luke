@@ -94,29 +94,13 @@ import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
 import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
 
-/**
- * Our MCP server, answered by its group the way a function answers it,
- * over a real dialect, and driven by the MCP SDK's own client, the one a
- * harness speaks: a runner's bearer admits its agent's conversation, the
- * server lists `read_threads` and runs it through the coder host's inbox door
- * as the agent's starter, the door eve's tool reaches through the coder host, and a wrong bearer, a missing one, and a retired
- * one are each refused before anything is read. Synthetic accounts and
- * words throughout.
- *
- * The SDK is pinned at the version the pinned Agent SDK resolves its MCP
- * peer to (`@anthropic-ai/claude-agent-sdk@0.3.304`'s `^1.29.0`), so a
- * client upgrade that stops speaking to this server fails here.
- */
-
 const ORIGIN = "https://app.test";
 
-/** A picture's bytes: a PNG's signature and a few more, which is all the store reads of them. */
 const PICTURE: Picture = {
   contentType: PICTURE_TYPE.PNG,
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]),
 };
 
-/** A deployment that names nothing of its environment: no eve to reach, no keys. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -129,13 +113,11 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
 const NO_INTEGRATIONS = integrationConnectOf(() => ({
   ...CONNECTOR_ASKED_NOTHING,
   configured: false,
 }));
 
-/** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
 const doorServices = Effect.gen(function* () {
   return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -149,7 +131,6 @@ const doorServices = Effect.gen(function* () {
   );
 });
 
-/** A sandbox holding the files given by absolute path, each read as one stream; the paths asked for are kept. */
 function sandboxWith(files: Readonly<Record<string, string>>) {
   const asked: string[] = [];
   const door: InboxSandboxDoor = () =>
@@ -171,10 +152,8 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
   return { door, asked };
 }
 
-/** A sandbox no call opens: a tool that reads no file never asks for it. */
 const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-/** The server's group over the test's database, the sandbox door and the browser given, and any services that stand in for the ones given, as a fetch a client is handed. */
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
   instead?: Layer.Layer<IntegrationConnect | HttpClient.HttpClient>,
@@ -196,7 +175,6 @@ const standingOver = (
 
 const standing = standingOver();
 
-/** A Claude Code agent started on a task, with a runner's bearer recorded for its conversation. */
 const agentWithBearer = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -225,7 +203,6 @@ const agentWithBearer = Effect.gen(function* () {
   };
 });
 
-/** A Codex agent on no task and in no repository, as an automation's run starts one, with a runner's bearer recorded for its conversation. */
 const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -249,7 +226,6 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
   return { userId, agentId: agent.id, bearer };
 });
 
-/** What a fake Chromium's page answers beside its targets, as Chrome does for a screenshot of it. */
 const PAGE_ANSWERS: Readonly<Record<string, { readonly result: unknown }>> = {
   "Target.attachToTarget": { result: { sessionId: "session-tab-1" } },
   "Target.detachFromTarget": { result: {} },
@@ -264,10 +240,8 @@ const PAGE_ANSWERS: Readonly<Record<string, { readonly result: unknown }>> = {
   "Page.captureScreenshot": { result: { data: "/9j/AAAA" } },
 };
 
-/** The session a native agent's sandbox is tagged with, as its conversation records it. */
 const SESSION = "runner_session_fixture";
 
-/** An agent with a bearer whose conversation records its runner's session, as one whose runner started does; its conversation's id beside. */
 const agentInSandbox = Effect.gen(function* () {
   const agent = yield* agentWithBearer;
   const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
@@ -281,7 +255,6 @@ const agentInSandbox = Effect.gen(function* () {
   return { ...agent, conversationId };
 });
 
-/** An SDK client connected under the bearer to the server at the path given, our own unless another is named. */
 function connected(
   fetch: typeof globalThis.fetch,
   bearer: string,
@@ -293,13 +266,11 @@ function connected(
       fetch,
       requestInit: { headers: { authorization: `Bearer ${bearer}` } },
     });
-    // SAFETY: the SDK's transport is its own `Transport`; its optional members are typed without `undefined`, which this repository's `exactOptionalPropertyTypes` reads strictly.
     await client.connect(transport as Transport);
     return client;
   });
 }
 
-/** One raw JSON-RPC POST, as a client that is no SDK's sends it. */
 function post(
   fetch: typeof globalThis.fetch,
   bearer: string | undefined,
@@ -321,11 +292,9 @@ function post(
   });
 }
 
-/** Turns Task descriptions on for an agent's starter, whose agents are offered the description's tools only then. */
 const descriptionsOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
 
-/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
 const SERVED_TOOLS = [
   "post_thread",
   "read_threads",
@@ -365,7 +334,6 @@ const SERVED_TOOLS = [
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
 
-/** A call of a door made directly, as eve's tool for it makes one through the coder host. */
 type DirectCall = (
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -382,11 +350,6 @@ const commentTool =
   (admitted, input) =>
     runAgentComment(admitted, name, input);
 
-/**
- * Each tool's own door, called as eve's tool calls it: the server's answer to
- * a tool is to be this one's, so a tool routed to any other door, or to
- * none, answers otherwise.
- */
 const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
   post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
@@ -423,7 +386,6 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   update_comment: commentTool("update_comment"),
 };
 
-/** The eve tools a harness has its own of, which the server never serves. */
 const HARNESS_TOOLS = [
   "bash",
   "read_file",
@@ -441,9 +403,7 @@ const HARNESS_TOOLS = [
   "read_web_page",
 ] as const;
 
-/** A tool's result as the server answers it, its first block's JSON. */
 function firstJson(called: object) {
-  // SAFETY: every result but a picture's is one text block (`app.ts`'s `toolResult`).
   const [content] = (called as { content: readonly { type: string; text: string }[] }).content;
   return JSON.parse(content?.text ?? "null");
 }
@@ -481,7 +441,6 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
 
         assert.ok(listed.tools.some((tool) => tool.name === INBOX_TOOL.READ));
         assert.equal(called.isError, false);
-        // SAFETY: the server answers every tool call with text blocks alone (`app.ts`'s `toolResult`).
         const [content] = called.content as readonly { type: string; text: string }[];
         const result = JSON.parse(content?.text ?? "null");
         assert.equal(result.status, "accepted");
@@ -626,7 +585,6 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
 
   it.effect.each([
     {
-      // An agent on no task is listed the description's tools all the same.
       why: "in no repository, the checkout's",
       agent: agentOnNoTaskWithBearer,
       withheld: ["open_pull_request"],
@@ -785,7 +743,6 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const client = yield* connected(fetch, agent.bearer);
-        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
         const create = (input: Readonly<Record<string, string | null>>) =>
           Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
         const name = "Expire stale invitations";
@@ -1025,14 +982,12 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         assert.equal(called.isError, false);
-        // SAFETY: the server answers a browser call with text and image blocks (`tools.ts`'s `browserContent`).
         const content = called.content as readonly {
           type: string;
           text?: string;
           data?: string;
           mimeType?: string;
         }[];
-        // One JSON block, which the native transcript reads whole, then the picture.
         assert.deepEqual(
           content.map((block) => block.type),
           ["text", "image"],

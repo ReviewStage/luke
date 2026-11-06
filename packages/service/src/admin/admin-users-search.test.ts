@@ -8,12 +8,6 @@ import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminUsersSource } from "./admin-queries.js";
 
-/**
- * admin-users-search.test.ts -- the Users read's search keeps the accounts
- * that hold every word of it, each in the name or the email, as the panel's
- * word search does for the rows it already holds. Synthetic accounts.
- */
-
 const NOW = Date.UTC(2026, 9, 21, 12);
 
 it.layer(getTestDB())("the Users read's search", (it) => {

@@ -1,15 +1,3 @@
-/**
- * production.ts -- the terminal relay's dependencies as the deployment stands them: the agent read by the one rule, its sandbox through Vercel's SDK, the PTY reached by WebSocket (`sandbox-pty.ts`), and the lease in the store.
- *
- * Each dependency answers over the services the function's runtime holds,
- * captured once as the relay stands, so the relay itself requires none. A
- * store that cannot take a keystroke's renewal is logged, since the next
- * keystroke tries again; one that cannot claim the credential's renewal is
- * read as not claimed, and one that cannot give a claim back is logged, so
- * the claim lapses on the agent's own rule. A keep-alive of the sandbox
- * Vercel did not confirm is logged, since the next one tries again.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { hasRepository, readVisibleAgent } from "@repo/database/models/agent-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
@@ -30,10 +18,8 @@ import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbo
 import type { GitHubApp } from "../github/github-app.js";
 import type { RelayDependencies } from "./relay.js";
 
-/** What the relay's dependencies answer over. */
 export type RelayServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** The relay's dependencies over the services the runtime holds now. */
 export const relayDependencies: Effect.Effect<RelayDependencies, never, RelayServices> = Effect.gen(
   function* () {
     const context = yield* Effect.context<RelayServices>();
@@ -53,9 +39,7 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
             const found = yield* readVisibleAgent(userId, agentId);
             if (Option.isNone(found) || found.value.archivedAt !== null) return Option.none();
             const agent = found.value;
-            // Note that a shell in an agent on its starter's own GitHub token is its starter's alone.
             if (!controlsAgent(userId, agent)) return Option.none();
-            // An agent with no repository opens no sandbox for a shell to reach.
             if (!hasRepository(agent)) return Option.none();
             const target = { userId: agent.userId, conversationId: agent.conversationId };
             const [session] = yield* standingSessionsOf(agent.userId, [agent.conversationId]);

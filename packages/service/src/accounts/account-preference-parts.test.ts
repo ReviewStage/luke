@@ -34,26 +34,6 @@ import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { accountProcedures } from "./account-procedures.js";
 
-/**
- * The parts of the account's preferences snapshot that stand beside the
- * shared one, answered by the account procedures the way the hosted oRPC route answers
- * it, over a real dialect. The experiments: none until the account chooses,
- * a write that merges its keys over what stood and leaves the other parts as
- * they were, a key this deployment does not list passed over rather than
- * refused, and only a value that is not a record of choices refused. The
- * link choice: none until the account chooses, written on its own without
- * moving the instant a Mac reads as a snapshot to take, left standing by the
- * shared part a build that predates it writes back whole, and refused where
- * it names no choice. The chapters model: Haiku until the account chooses,
- * written on its own and read back, and refused where it names no model the
- * set offers. The agent default: GPT-6.1 Sol at high effort for an account
- * only an OpenAI key pays for until it stores one, an Effort kept on a model
- * no credential of the account's pays for, and a move to another such model
- * refused, keeping what stood. The bearer names the account and nothing else does.
- *
- * Synthetic accounts and bearers throughout.
- */
-
 const ORIGIN = "https://app.test";
 const PREFERENCES_PATH = "/api/account/preferences";
 
@@ -90,7 +70,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Two accounts behind their own bearers, and the procedures answering on the test's database and clock. */
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -106,7 +85,6 @@ const openAccounts = Effect.gen(function* () {
       Effect.succeed(
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
       ),
-    // This suite deletes nothing, so it retires no session and reaches no eve.
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
@@ -120,7 +98,6 @@ const openAccounts = Effect.gen(function* () {
 const answer = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -128,12 +105,10 @@ const answer = (procedures: ReturnType<typeof accountProcedures>, request: Reque
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
       noNetwork,
       modelCatalogOf([OPUS, OPUS_FAST, SOL]),
-      // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -149,7 +124,6 @@ function request(userId: string, body?: WireBoundaryInput) {
   });
 }
 
-/** One part of an answered snapshot, failing the test where the answer is not one. */
 function partOf(answered: Answer, part: string): UnparsedWireValue {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
   const body = unparsedWire(answered.body);
@@ -166,7 +140,6 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
       const turnedOn = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: true } }));
       assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.MEMORY]: true });
 
-      // The shared part's own write leaves the experiments standing.
       const shared = yield* ask(request(owner, { preferences: {} }));
       assert.deepEqual(partOf(shared, "experiments"), { [EXPERIMENT.MEMORY]: true });
       const turnedOff = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: false } }));
@@ -211,7 +184,6 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
       const chosen = yield* ask(request(owner, { linkOpen: LINK_OPEN.MAC_APP }));
       assert.equal(partOf(chosen, "linkOpen"), LINK_OPEN.MAC_APP);
       assert.deepEqual(partOf(chosen, "preferences"), {});
-      // Note that a Mac reads the instant as a snapshot to take over its own shared part, which this write carried none of.
       assert.equal(partOf(chosen, "updatedAt"), undefined);
       assert.equal(partOf(yield* ask(request(other)), "linkOpen"), undefined);
     }),
@@ -222,7 +194,6 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
       const { owner, ask } = yield* openAccounts;
       yield* ask(request(owner, { preferences: {}, linkOpen: LINK_OPEN.MAC_APP }));
 
-      // Note that the voice an older build still writes is a preference this deployment no longer keeps.
       const olderBuild = yield* ask(request(owner, { preferences: { voice: "marin" } }));
       assert.deepEqual(partOf(olderBuild, "preferences"), {});
       assert.equal(partOf(olderBuild, "linkOpen"), LINK_OPEN.MAC_APP);
@@ -291,7 +262,6 @@ it.layer(getTestDB())("the preferences snapshot's agent part", (it) => {
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts;
         yield* connectAgentApiKeys(owner, { providers: [PROVIDER_KEY_PROVIDER.OPENAI] });
-        // Note that the Claude default stands from before, as one saved while a Claude credential paid for it.
         yield* writeAccountPreferences(owner, { agent: { model: OPUS.id, effort: "high" } });
         const lowEffort = { model: OPUS.id, effort: "low" };
         assert.deepEqual(
@@ -299,7 +269,6 @@ it.layer(getTestDB())("the preferences snapshot's agent part", (it) => {
           lowEffort,
         );
 
-        // Note that an account with no Anthropic key of its own is offered every fast version, so only the payer refuses this one.
         const opusFast = yield* ask(
           request(owner, { agent: { model: OPUS_FAST.id, effort: "high" } }),
         );

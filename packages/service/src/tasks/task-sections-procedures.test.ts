@@ -19,16 +19,6 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { taskSectionsProcedures } from "./task-sections-procedures.js";
 
-/**
- * The sidebar's task sections, answered by the hosted oRPC router the way the web route
- * answers them, over a real dialect: the bearer names the account and
- * nothing else does, every write answers the sections as they then stand,
- * and a write that is not one, or that names what the account does not
- * hold, is refused with nothing written.
- *
- * Synthetic accounts, bearers, workspaces, and sections throughout.
- */
-
 const ORIGIN = "https://app.test";
 const SECTIONS = "/api/task-sections";
 
@@ -37,7 +27,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Two accounts, each behind its own bearer, and the resource answering one request. */
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -54,8 +43,6 @@ const openAccounts = Effect.gen(function* () {
 
 const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
   Effect.gen(function* () {
-    // The procedure runs on the services handed to it, the test's clock among them: a section's instant is read from it.
-    // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
     const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
     const handle = hostedFetch({
       taskSections: taskSectionsProcedures({
@@ -66,7 +53,6 @@ const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -88,7 +74,6 @@ function request(
   });
 }
 
-/** An answer read as the wire's, a write's with the transaction it wrote in; failing the test where it is not. */
 function readAnswer(answered: Answer) {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(taskSectionsWrittenSchema)(unparsedWire(answered.body));
@@ -96,7 +81,6 @@ function readAnswer(answered: Answer) {
   return read.success;
 }
 
-/** The sections an answer carries, failing the test where it is not the wire's. */
 function sectionsOf(answered: Answer): TaskSections {
   const { txid: _txid, ...sections } = readAnswer(answered);
   return sections;
@@ -127,7 +111,6 @@ it.layer(getTestDB())("the task sections route", (it) => {
         );
       const answered = yield* createIt();
       const made = sectionsOf(answered);
-      // The write names the transaction it wrote in, for the sidebar's follower to wait on; made again, it wrote nothing and names none.
       assert.match(readAnswer(answered).txid ?? "", /^\d+$/u);
       assert.equal(readAnswer(yield* createIt()).txid, undefined);
 

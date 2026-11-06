@@ -26,19 +26,6 @@ import { type ClientConsentDelete, clientConsentDelete } from "./client-consents
 import { mcpClientsProcedures } from "./clients-procedures.js";
 import { MEMBER_MCP_SCOPE } from "./resource.js";
 
-/**
- * The outside MCP clients a member allowed, end to end over the auth
- * service as `auth.ts` configures what a client reaches, on the test's own
- * PGlite the resource reads too (`../testing/member-mcp-auth.ts`). A client
- * registers dynamically and a member signs it in through consent; the
- * resource lists it to that member alone on their bearer, and revokes it
- * under their browser's session through the provider's own consent
- * endpoints, after which its refresh is refused and its next sign-in asks
- * again, while another member's grant of the same client stands. A revoke
- * whose consent delete fails answers a failure and leaves the client
- * listed, so the member is offered it again. Synthetic accounts.
- */
-
 const MCP_SCOPES = [MEMBER_MCP_SCOPE.MCP, MEMBER_MCP_SCOPE.OFFLINE_ACCESS] as const;
 
 const decodeRegistered = Schema.decodeUnknownSync(Schema.Struct({ client_id: Schema.String }));
@@ -60,11 +47,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A consent delete that the provider refuses, as one whose session lapsed between the two writes would be. */
 const lapsedSession: ClientConsentDelete = () =>
   Effect.fail(new OrganizationRefused({ status: HOSTED_HTTP_STATUS.UNAUTHORIZED }));
 
-/** The resource over the standing's database and auth service: a member's bearer names them, and their cookie is their session. */
 function resource(
   auth: MemberMcpTestAuth,
   services: Context.Context<DatabaseServices>,
@@ -85,7 +70,6 @@ function resource(
       memberMcpServerUrl: RESOURCE,
     }),
   });
-  // SAFETY: the resource yields the database alone, which is all a test provides of the web runtime's services.
   const webServices = services as Context.Context<WebServices>;
   const ask = (path: string, init: RequestInit) =>
     Effect.promise(async () => {
@@ -93,7 +77,6 @@ function resource(
         new Request(`${MEMBER_MCP_TEST.ORIGIN}${path}`, init),
         webServices,
       );
-      // SAFETY: the route answers JSON; the test reads it as the wire value it is.
       const body = (await response.json()) as WireBoundaryInput;
       return { status: response.status, body };
     });
@@ -110,14 +93,12 @@ function resource(
   };
 }
 
-/** A client registered dynamically, as Claude Code and its kind register. */
 const registered = (auth: MemberMcpTestAuth) =>
   Effect.promise(async () => {
     const answer = await register(auth, registration(MCP_SCOPES));
     return decodeRegistered(await answer.json()).client_id;
   });
 
-/** A member's sign-in of the client through consent; answers its refresh token. */
 const signedIn = (auth: MemberMcpTestAuth, cookie: string, clientId: string) =>
   Effect.promise(async () => {
     const grant = { clientId, scope: MCP_SCOPES, resource: RESOURCE };
@@ -129,7 +110,6 @@ const signedIn = (auth: MemberMcpTestAuth, cookie: string, clientId: string) =>
     return refresh_token;
   });
 
-/** The client's refresh as it sends one: its status, and the error where it was refused. */
 const refreshed = (auth: MemberMcpTestAuth, clientId: string, refreshToken: string) =>
   Effect.promise(async () => {
     const answer = await auth.handler(
@@ -148,7 +128,6 @@ const refreshed = (auth: MemberMcpTestAuth, clientId: string, refreshToken: stri
     return answer.ok ? "refreshed" : decodeRefusal(body).error;
   });
 
-/** The client ids a member's list names. */
 const listedIds = (answer: { readonly body: WireBoundaryInput }) =>
   decodeListed(answer.body).clients.map((client) => client.clientId);
 

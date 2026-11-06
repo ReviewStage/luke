@@ -1,16 +1,3 @@
-/**
- * admin-cost-queries.ts -- the usage the Cost screen prices, read as day-and-account aggregates of the service's own tables.
- *
- * Turns are summed by UTC day, account, source, and the model each share of
- * their tokens ran on, so the read answers a few rows per active account per
- * day rather than every turn. Dictation's seconds are summed the same way
- * from the ledger that meters them, and merged pull requests counted by the day
- * GitHub said each merged. Every read is held to the window and the one
- * before it, keeps the dashboard's scope through the account's user row,
- * and may be narrowed to one account, which is how an account's own page
- * reads its spend.
- */
-
 import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -55,7 +42,6 @@ const UsageFilterSchema = Schema.Struct({
 
 type UsageFilter = typeof UsageFilterSchema.Type;
 
-/** The scope, and the one account where a read names one, on the user row every read joins; `and` drops the absent half. */
 function keptAccounts(filter: UsageFilter) {
   return and(
     keptByScope(filter.scope),
@@ -63,35 +49,20 @@ function keptAccounts(filter: UsageFilter) {
   );
 }
 
-/** A UTC day key of an instant column, which the builder has no operator for. */
 function utcDayOf(instant: SQLWrapper) {
   return sql<string>`to_char(${instant} at time zone 'UTC', 'YYYY-MM-DD')`;
 }
 
-/** A UTC day key of an epoch-milliseconds expression. */
 function utcDayOfEpochMs(epochMs: SQLWrapper) {
   return sql<string>`to_char(to_timestamp(${epochMs} / 1000.0) at time zone 'UTC', 'YYYY-MM-DD')`;
 }
 
 const parentConversation = alias(conversations, "parent_conversation");
 
-/** When a turn's usage landed: its settle, or its queue where a row never settled. */
 const TURN_INSTANT = sql`coalesce(${turns.settledAt}, ${turns.queuedAt})`;
 
-/**
- * A coding agent's turns are its own conversation's and its workers', which
- * are its conversation's children, as `turnUsagesOf` sums an agent's; every
- * other turn is the app's own.
- */
 const TURN_SOURCE = sql<string>`case when ${conversations.kind} = ${CONVERSATION_KIND.AGENT} or ${parentConversation.kind} = ${CONVERSATION_KIND.AGENT} then ${COST_SOURCE.AGENTS} else ${COST_SOURCE.APP} end`;
 
-/**
- * One element per share a turn's tokens were priced in: its by-model
- * breakdown where the row keeps one, and otherwise its whole counts at the
- * row's model, which is none where the row names none. This is the split
- * `usage.ts`'s `sharesOf` reads, spelled in SQL so the shares are summed
- * before they leave the database; the pricing itself stays `usageOfTurns`'s.
- */
 const TURN_SHARES = sql`jsonb_array_elements(case when jsonb_typeof(${turns.usage}->'byModel') = 'array' and jsonb_array_length(${turns.usage}->'byModel') > 0 then ${turns.usage}->'byModel' else jsonb_build_array(${turns.usage} || jsonb_build_object('model', ${turns.model}::text)) end)`;
 
 const TokenRowSchema = Schema.Struct({
@@ -179,15 +150,10 @@ const findDictationSeconds = SqlSchema.findAll({
     ),
 });
 
-/** When GitHub said the agent's pull request merged, in epoch milliseconds, as its row keeps it. */
 const MERGED_AT = sql<number>`(${agentTable.published}->>'mergedAt')::bigint`;
 
 const MERGED_DAY = utcDayOfEpochMs(MERGED_AT);
 
-/**
- * Pull requests merged, by the account that started the agent. An agent
- * goes with its task, so a deleted task's merges leave the count with it.
- */
 const findMergedPullRequests = SqlSchema.findAll({
   Request: UsageFilterSchema,
   Result: Schema.Struct({
@@ -213,10 +179,6 @@ function secondsRows(
   return rows.map((row) => ({ ...row, source, seconds: row.seconds ?? 0 }));
 }
 
-/**
- * Every usage the Cost screen prices, over the window and the one before
- * it, for the accounts the scope keeps, or for the one account named.
- */
 export function readAdminCostUsage(input: {
   now: number;
   windowDays: AdminMetricsWindow;
@@ -250,12 +212,6 @@ export function readAdminCostUsage(input: {
   });
 }
 
-/**
- * The Cost screen's whole read: the usage, priced at the catalog as the
- * instance holds it, and the most expensive accounts' own rows. A catalog
- * that cannot be read prices no token rather than failing the page, and the
- * answer says so, so every model token stands as unpriced and never as $0.
- */
 export function readAdminCost(input: {
   now: number;
   windowDays: AdminMetricsWindow;

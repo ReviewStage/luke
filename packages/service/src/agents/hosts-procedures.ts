@@ -1,37 +1,3 @@
-/**
- * hosts-procedures.ts -- the account's enrolled machines as Settings › Hosts reads and changes them: listed, removed, and a box's pairing read, approved, or denied by its code.
- *
- * A machine is any device of the account's that holds a device secret, a
- * box its approved pairing keyed and a Mac its desktop enrolled alike
- * (`@repo/database/models/host-store`), so each is listed, judged against
- * the floor, and removed the same way; a desktop that never enrolled is not
- * listed.
- *
- * Every procedure is the account's own, on its bearer or its browser's
- * session (`accountMiddleware`), so the Hosts list works in a browser and on
- * a phone as in the desktop. A host removed is refused at once on its
- * secret (`auth/device-secret.ts`), its box cleans itself up as it hears
- * so, and its agents' running turns are settled lost with it; a host may
- * leave on its own secret the same way (`removeAccountHost`). Each host is
- * listed with whether its daemon is below the floor, where its setup
- * stands, where its update to a newer release stands, whether its program
- * has called in since it joined, and, for a Mac, the user it runs as, and
- * every answer names the install script on the service's own origin, which the
- * install and upgrade commands name (`@repo/features/host-wire`).
- *
- * A box's pairing is read, approved, or denied by its user code, whatever
- * its case and dash, and only while it is pending and its code has not
- * lapsed (`@repo/database/models/host-pairing-store`). The read answers
- * what the approve screen shows: the box as it named itself and the
- * address its start came from, so a member sees whose box they would let
- * run their agents. An approve makes the account's host under an id minted
- * here, never one the box named, listed from that moment and keyed with a
- * secret on its box's next poll. Each of the three is a guess: one that
- * finds no pending pairing is answered not found and counts against the
- * account, and an account past the limit is refused as held, with when its
- * window ends, until it does.
- */
-
 import { randomUUID } from "node:crypto";
 import { runningTurnIds } from "@repo/database/models/abandoned-turns";
 import { devicesSeenSince } from "@repo/database/models/device-store";
@@ -61,27 +27,15 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface HostsProcedureSeams {
-  /** The account behind a request: its bearer, or a browser's session cookie (`accountMiddleware`). */
   resolveUserId: UserIdResolver;
 }
 
 const DONE = { done: true } as const;
 
-/** The install script's address on the origin the request reached, so a Preview's command names its own. */
 export function installScriptUrlOf(request: Request): string {
   return new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, new URL(request.url).origin).href;
 }
 
-/**
- * Settles every turn still running of the agents pinned to a host just
- * removed as lost (`settleLostHostTurns`). Note that every agent's running
- * turns are read once, before any is settled, and only those are settled,
- * because a removed host may enroll again under its id and begin a turn
- * while this runs, and that turn is the new enrollment's. A failure here is
- * logged and the remove still answers done, because the host is already
- * removed and a retry would find no host to remove; the sweep's bound
- * settles whatever was left.
- */
 const endedHostAgents = (userId: string, deviceId: string) =>
   Effect.gen(function* () {
     const conversations = yield* hostAgentConversations(userId, deviceId);
@@ -98,14 +52,6 @@ const endedHostAgents = (userId: string, deviceId: string) =>
     ),
   );
 
-/**
- * Removes the account's host of the id given, as Settings › Hosts' Remove
- * and the host's own leave (`device-agents-procedures.ts`) both do: stamped
- * removed, so its secret is refused at once and its box cleans itself up as
- * it hears so, its agents' running turns settled lost, and the change
- * counted. Answers the transaction it removed in, or none where no host of
- * that id stood.
- */
 export const removeAccountHost = (userId: string, id: string) =>
   Effect.gen(function* () {
     const removed = yield* hostedStoreOrUnavailable(removeHost(userId, id));
@@ -119,17 +65,14 @@ export const removeAccountHost = (userId: string, id: string) =>
     return removed;
   });
 
-/** A remove answered with the transaction it removed in, or refused as not found where none was removed. */
 const removedOrNotFound = (txid: string | undefined) =>
   txid === undefined ? Effect.fail(HOSTED_REFUSAL.NOT_FOUND) : Effect.succeed({ ...DONE, txid });
 
-/** A code's eight letters, or the request refused as invalid where it is none, which its schema already refused. */
 const codeOf = (typed: string) => {
   const code = hostUserCodeOf(typed);
   return code === undefined ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST) : Effect.succeed(code);
 };
 
-/** What a guess found, or its refusal: not found where it found no pending pairing, held, with until when, where the account is past the limit. */
 const foundOrRefused = <A>(guessed: HostPairingGuessed<A>) => {
   switch (guessed.guess) {
     case HOST_PAIRING_GUESS.FOUND:
@@ -141,7 +84,6 @@ const foundOrRefused = <A>(guessed: HostPairingGuessed<A>) => {
   }
 };
 
-/** The hosts resource, on the account's bearer or session. */
 export function hostsProcedures(seams: HostsProcedureSeams) {
   const hosts = hosted.hosts.use(accountMiddleware(seams.resolveUserId));
   return {
@@ -161,7 +103,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
           ...(row.updateFailure === null ? undefined : { updateFailure: row.updateFailure }),
           ...(row.machineId === null ? undefined : { machineId: row.machineId }),
           ...(row.model === null ? undefined : { model: row.model }),
-          // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
           calledIn: row.home !== null,
         })),
         installScriptUrl: installScriptUrlOf(context.request),
@@ -173,7 +114,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       return {
         devices: owned.map((row) => ({
           deviceId: row.id,
-          // Note that the age is taken on this clock, which wrote the beat, so a reader's clock never enters it.
           ageMs: Math.max(0, now - row.lastSeenAt.getTime()),
         })),
       };
@@ -190,7 +130,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
     }),
     approvePairing: hosts.approvePairing.effect(function* ({ context, input }) {
       const code = yield* codeOf(input.code);
-      // Note that the host's id is minted here, so a pairing never names a device that stands.
       const deviceId = yield* foundOrRefused(
         yield* hostedStoreOrUnavailable(approveHostPairing(context.userId, code, randomUUID())),
       );

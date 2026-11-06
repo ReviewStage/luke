@@ -47,22 +47,6 @@ import {
   setInstallationStatus,
 } from "./github-installations.js";
 
-/**
- * Our GitHub App's server client with GitHub a fake behind the
- * `HttpClient` and the rows on a real Postgres dialect. What is held here:
- * the App speaks as itself with a JWT its own key signed; an installation is
- * confirmed as the App's own or not at all; a workspace's repositories are
- * those of every installation connected to it, combined, and none where
- * nothing is connected; a repository outside that installation is unreachable, and only
- * one inside it admits the one token the App mints, for that repository
- * alone with contents read; a connect's one-time code is exchanged with its
- * PKCE verifier, read for the installations it sees, and revoked; and a
- * signed-in user's token stays sealed on its row. Every failure carries a
- * kind or a status and never a token.
- *
- * Synthetic keys, secrets, and tokens throughout (`../testing/github-app-fake.ts`).
- */
-
 const { APP_ID } = GITHUB_FIXTURE;
 const NOW = Date.parse("2026-10-09T12:00:00.000Z");
 const INSTALLATION_ID = 777;
@@ -76,7 +60,6 @@ function installationJson(id: number): Response {
   });
 }
 
-/** A JWT's three parts, the signature checked against the App's public key. */
 function readJwt(jwt: string) {
   const [header, payload, signature] = jwt.split(".");
   assert.ok(header && payload && signature);
@@ -144,7 +127,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The octo-org installation under the id given, since one installation connects to one workspace and the suite's tests share a database. */
 const relayInstallation = (id: number): InstallationFixture => ({
   id,
   login: "octo-org",
@@ -154,7 +136,6 @@ const relayInstallation = (id: number): InstallationFixture => ({
   ],
 });
 
-/** The permissions of every token GitHub was asked to mint for a repository, in the order asked. */
 function repositoryMints(sent: readonly SentToGitHub[]): readonly unknown[] {
   return sent
     .filter((one) => one.url.endsWith("/access_tokens") && "repositories" in JSON.parse(one.body))
@@ -223,7 +204,6 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
         assert.equal(String(minted.value.token).includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
         assert.ok(Option.isNone(missing));
         assert.ok(Option.isNone(elsewhere));
-        // The repository's mint is the App's own request, under its JWT, naming the one repository and contents read.
         const mints = fake.sent.filter(
           (sent) => sent.url.endsWith("/access_tokens") && "repositories" in JSON.parse(sent.body),
         );
@@ -512,7 +492,6 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           repositories: [{ owner: "team", name }],
         };
         const formerly = `octo-org/${name}`;
-        // Note that only the new owner's installation reads the repository GitHub redirects the old name to.
         const fake = githubReaching([relay, team], undefined, undefined, (sent) =>
           new URL(sent.url).pathname === `/repos/${formerly}`
             ? sent.headers.get("authorization") === `Bearer ${listingTokenOf(team.id)}`
@@ -588,7 +567,6 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           login: "octocat",
           repositories: [
             { owner: "octocat", name: "dotfiles", updatedAt: "2026-10-06T00:00:00Z" },
-            // A transfer GitHub has not settled both installations on yet lists one repository twice.
             { owner: "Octo-Org", name: "Relay", updatedAt: "2026-10-04T00:00:00Z" },
           ],
         };
@@ -757,7 +735,6 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           { contents: "write", pull_requests: "write" },
           { contents: "write", pull_requests: "write" },
         ]);
-        // The installation is read and its repositories listed once, for every mint after the first.
         assert.equal(fake.sent.filter((sent) => sent.url.endsWith("/installations/200")).length, 1);
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
@@ -815,7 +792,6 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           (yield* installationsOfWorkspace(workspace)).map((one) => one.status),
           [GITHUB_INSTALLATION_STATUS.ACTIVE],
         );
-        // What GitHub is asked is the behavior here: the mended reach is kept rather than read again.
         assert.equal(fake.sent.filter((one) => one.url.endsWith("/installations/212")).length, 1);
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
@@ -864,23 +840,19 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
   );
 });
 
-/** A repository the member's own token reads, and whether it may push there. */
 const MEMBER_REPOSITORIES = new Map([
   ["/repos/octo-member/side", { fixture: { owner: "octo-member", name: "side" }, push: true }],
   ["/repos/octo-org/relay", { fixture: { owner: "octo-org", name: "relay" }, push: true }],
   ["/repos/octo-member/fork", { fixture: { owner: "octo-member", name: "fork" }, push: false }],
 ]);
 
-/** GitHub's SAML SSO page for the fixture's organization, as an `X-GitHub-SSO` header names it. */
 const SSO_AUTHORIZE_URL = "https://github.com/orgs/octo-sso/sso?authorization_request=fixture";
 
-/** The repositories GitHub answers the member's own token 403 on, with the headers of each answer. */
 const MEMBER_FORBIDDEN = new Map<string, Record<string, string>>([
   ["/repos/octo-sso/vault", { "X-GitHub-SSO": `required; url=${SSO_AUTHORIZE_URL}` }],
   ["/repos/octo-locked/vault", {}],
 ]);
 
-/** GitHub answering the member's own token, the fixture's, on the repositories above, and refusing it 401 where `refused` says so. */
 const memberToken =
   (refused: () => boolean = () => false) =>
   (sent: SentToGitHub): Response | undefined => {
@@ -894,14 +866,12 @@ const memberToken =
     if (forbidden !== undefined) {
       return Response.json({ message: "Forbidden" }, { status: 403, headers: forbidden });
     }
-    // GitHub folds case in a repository's path, as it does in its name.
     const known = MEMBER_REPOSITORIES.get(new URL(sent.url).pathname.toLowerCase());
     return known === undefined
       ? Response.json({ message: "Not Found" }, { status: 404 })
       : Response.json(memberRepositoryJson(known.fixture, known.push));
   };
 
-/** Whether GitHub was asked anything on the member's own token. */
 const askedOnToken = (sent: readonly SentToGitHub[]) =>
   sent.some((one) => one.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`);
 

@@ -50,25 +50,10 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-/**
- * agent-doors.test.ts -- the doors a coding agent's description, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
- *
- * Each call runs as the agent's conversation, admitted as the MCP door
- * admits a runner's bearer, over the real migrations on PGlite: notes are
- * taken into the description of a task of the agent's workspace together or not at
- * all, named by its id, and refused for no task or one of another
- * workspace; a picture of another workspace's description is not looked at; a
- * comment is written under the agent on a task of its workspace, and
- * refused elsewhere; and an agent in no repository opens no pull request.
- * Synthetic accounts, tasks, and words throughout.
- */
-
-/** A sandbox door no call of notes alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
 const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
-/** The agent's conversation as the MCP door admits it: the agent's starter, on its own conversation. */
 function admittedOf(agent: Agent): AdmittedConversation {
   return {
     caller: agent.userId,
@@ -78,7 +63,6 @@ function admittedOf(agent: Agent): AdmittedConversation {
   };
 }
 
-/** What every agent here starts on: Claude Code, on its starter's Claude plan. */
 const ON_CLAUDE_CODE = {
   model: "anthropic/claude-opus-5.5",
   effort: "high",
@@ -86,11 +70,9 @@ const ON_CLAUDE_CODE = {
   payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 } as const;
 
-/** The member's Descriptions turned on or off, which their agents' description tools stand on. */
 const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
-/** An agent of the member's on the task named, with the brief given, its member's Descriptions on. */
 const agentOn = (
   userId: string,
   taskId: string,
@@ -110,7 +92,6 @@ const agentOn = (
     (started) => Option.getOrThrow(started).agent,
   );
 
-/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Descriptions on. */
 const tasklessAgentOn = (userId: string, workspaceId: string) =>
   Effect.map(
     Effect.andThen(
@@ -128,7 +109,6 @@ const tasklessAgentOn = (userId: string, workspaceId: string) =>
     (started) => Option.getOrThrow(started).agent,
   );
 
-/** An account with one agent on a task of its workspace, with the brief given. */
 const openAgent = (brief?: AgentBriefText) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -140,7 +120,6 @@ const openAgent = (brief?: AgentBriefText) =>
     return { userId, agent, admitted: admittedOf(agent) };
   });
 
-/** A thread the member started on the task's description, over words of its own. */
 const openThread = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     yield* saveDescriptionText(userId, taskId, DESCRIPTION_TEXT);
@@ -247,7 +226,6 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         );
         assert.ok(sectionText("Approach").endsWith("\n\n- Invites expire after 7 days."));
         assert.equal(stored.task.document.body, stored.text);
-        // The save is journaled as the agent's, with the notes that were taken and the agent named as its tab names it.
         const at = yield* Clock.currentTimeMillis;
         assert.deepEqual(stored.task.agentEdits, [
           { agentId: agent.id, label: agent.title ?? "Opus 5.5", at },
@@ -322,7 +300,6 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const after = Option.getOrThrow(yield* readTask(userId, other.id));
         assert.equal(after.text, before.text);
 
-        // Note that a harness may call a tool it was not listed, so the door refuses it on its own.
         yield* descriptionsFor(userId, false);
         const off = yield* runAgentEditDescription(
           admitted,

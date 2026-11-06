@@ -23,24 +23,6 @@ import {
   setInstallationStatus,
 } from "./github-installations.js";
 
-/**
- * The installations connected to a workspace, as the store writes and reads
- * them on a real dialect: a workspace holds several, linked at once or one
- * after another, and is listed once with all of them; a link is keyed on the installation's GitHub
- * account, so a retry of the same installation changes nothing but its
- * names, a reinstall on the account moves the account's own row onto the new
- * installation within its workspace, and an account that stands for one
- * workspace is never taken by another, however the two race, until our App is
- * uninstalled from it, when another workspace's install takes it; the callback's
- * link reads the account's role again before it writes; a webhook's status
- * reaches its own installation alone; and a workspace's GitHub accounts are
- * read by its members and nobody else.
- *
- * The suite's tests share a database, so every installation and account is
- * one of its own. Synthetic ids and logins throughout.
- */
-
-/** An installation on a GitHub account of its own, running. */
 function freshInstallation(login = "octo-org"): ConnectedInstallation {
   return {
     installationId: randomInt(1, 2 ** 40),
@@ -51,7 +33,6 @@ function freshInstallation(login = "octo-org"): ConnectedInstallation {
   };
 }
 
-/** The rows standing for the installations given, as the table holds them. */
 const rowsOf = (...installationIds: readonly number[]) =>
   Database.use((db) =>
     db
@@ -67,7 +48,6 @@ const rowsOf = (...installationIds: readonly number[]) =>
       .orderBy(asc(githubInstallation.installationId)),
   );
 
-/** The rows standing for one GitHub account, however many installations it moved through. */
 const rowsOfAccount = (accountId: number) =>
   Database.use((db) =>
     db

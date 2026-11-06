@@ -12,13 +12,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/**
- * A server that speaks just enough of Postgres's wire protocol to accept a
- * connection and hold every query unanswered until `held` queries are waiting
- * at once, each on its own connection. It is the database at the process
- * boundary: a pool that serializes its callers never gets `held` queries in
- * flight, so this never answers and the test times out.
- */
 function holdingServer(held: number): Promise<{ server: Server; port: number }> {
   const waiting: Socket[] = [];
   const completion = Buffer.concat([
@@ -32,7 +25,6 @@ function holdingServer(held: number): Promise<{ server: Server; port: number }> 
     socket.on("error", () => {});
     socket.on("data", (chunk) => {
       if (!started) {
-        // The startup packet carries no type byte: answer it with AuthenticationOk and ReadyForQuery.
         started = true;
         socket.write(
           Buffer.concat([
@@ -56,7 +48,6 @@ function holdingServer(held: number): Promise<{ server: Server; port: number }> 
 
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      // SAFETY: a server listening on a port answers an `AddressInfo`; only a pipe answers a string.
       resolve({ server, port: (server.address() as AddressInfo).port });
     });
   });
@@ -75,7 +66,6 @@ test("one instance runs several queries at once on the pool Better Auth queries"
   }
 });
 
-/** A server that answers every query at once and keeps each socket, so a test can end a connection the pool holds idle. */
 function answeringServer(): Promise<{ server: Server; port: number; sockets: Socket[] }> {
   const sockets: Socket[] = [];
   const server = createServer((socket) => {
@@ -102,7 +92,6 @@ function answeringServer(): Promise<{ server: Server; port: number; sockets: Soc
 
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      // SAFETY: a server listening on a port answers an `AddressInfo`; only a pipe answers a string.
       resolve({ server, port: (server.address() as AddressInfo).port, sockets });
     });
   });
@@ -112,7 +101,6 @@ test("an idle client whose connection ends is dropped, and the next query opens 
   const { server, port, sockets } = await answeringServer();
   vi.stubEnv("DATABASE_URL", `postgres://user:pass@127.0.0.1:${port}/luke?sslmode=disable`);
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  // Note that the module is loaded afresh, because the pool is the module's own and the test above ended it.
   vi.resetModules();
   const { getPool: getFreshPool } = await import("./index.js");
 

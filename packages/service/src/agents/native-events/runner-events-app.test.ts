@@ -71,25 +71,12 @@ import {
   runnerEventsApp,
 } from "./runner-events-app.js";
 
-/**
- * The events route, answered by its group the way a function answers it,
- * over a real dialect: a runner's batches of Claude Code's SDK messages,
- * posted under its bearer, land in the agent's transcript as the eve relay
- * would write them, a batch posted again changes nothing, and a wrong or
- * retired bearer is refused before anything is read. The stream is P00's
- * hermetic one, as the runner's own tests replay it
- * (`packages/agent-runner/src/testing/recorded-stream.ts`), numbered as the
- * runner posts it. Synthetic accounts, words, and ids throughout.
- */
-
 const ORIGIN = "https://app.test";
 const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
-/** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The route's group over the test's database, as a fetch. */
 const standingWith = (
   options: RunnerEventsOptions,
   after:
@@ -128,7 +115,6 @@ const standingWith = (
 
 const standing = standingWith({});
 
-/** What each harness's agent is started on. */
 const HARNESS = {
   CLAUDE_CODE: {
     model: "anthropic/claude-opus-5.5",
@@ -142,7 +128,6 @@ const HARNESS = {
   },
 } as const;
 
-/** A coding agent on the harness given, a runner's bearer recorded for it, and the developer's lines awaiting their turns. */
 const agentOn = (
   harness: {
     readonly model: string;
@@ -186,13 +171,11 @@ const agentOn = (
     return { userId, agentId: agent.id, taskId: task.id, target, bearer, lineId, lineIds };
   });
 
-/** The task's status as the account reads it. */
 const taskStatusOf = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (read) => Option.getOrThrow(read).task.status);
 
 const agentWithBearer = agentOn(HARNESS.CLAUDE_CODE, ["Run the probe."]);
 
-/** The agent's pull request as its row keeps it once merged. */
 const MERGED = {
   number: 42,
   title: "Fix the refresh",
@@ -204,7 +187,6 @@ const MERGED = {
   changedFiles: 2,
 };
 
-/** The SDK messages of P00's workflow turn, in the pinned SDK's shapes, as the runner numbers and posts them. */
 function workflowTurn(lineId: string): readonly RunnerEvent[] {
   const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
   const toolUse = (id: string, name: string, input: WireRecord) => ({
@@ -261,11 +243,9 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
     result(3, 2),
     { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
   ];
-  // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
   return messagesOfTurn.map((message, sequence) => ({ sequence, message }) as RunnerEvent);
 }
 
-/** The conversation's rows as a reader of the transcript sees them: each message's role and parts, and each turn's end. */
 const transcriptOf = (conversationId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -286,7 +266,6 @@ const transcriptOf = (conversationId: string) =>
     return { rows, turns: turnRows };
   });
 
-/** What the record settles a call with that its turn ended, or was canceled, before it answered. */
 const UNANSWERED = {
   ENDED: {
     reason: "The turn ended before the call answered; it may have run.",
@@ -298,7 +277,6 @@ const UNANSWERED = {
   },
 } as const;
 
-/** A part as the transcript draws it: its type, and its words, state, and output where it has them. */
 function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
   const fields: WireValue[] = [part.type];
   if ("text" in part) fields.push(part.text);
@@ -317,8 +295,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
         const events = workflowTurn(agent.lineId);
-        // The task was marked done, and the agent's pull request merged: its turn takes the task
-        // up again, and the turn's end, everyone then idle, finishes it (`tasks/task-finish.ts`).
         yield* updateTask(agent.userId, agent.taskId, { status: TASK_STATUS.DONE });
         yield* recordAgentPublished(agent.userId, agent.agentId, MERGED);
 
@@ -332,8 +308,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         assert.deepEqual(last.body, { applied: 4, sequence: 14 });
         assert.equal(reopened, TASK_STATUS.IN_PROGRESS);
         assert.equal(yield* taskStatusOf(agent.userId, agent.taskId), TASK_STATUS.DONE);
-        // A model turn that ends with work still in flight leaves the agent's turn running,
-        // and the words forming after it are told through their last finished sentence.
         assert.deepEqual(
           midway.turns.map((turn) => turn.status),
           [TURN_STATUS.RUNNING],
@@ -349,7 +323,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           ["step-start"],
           ["tool-read_inbox", "output-available", { status: "accepted", inbox: [] }],
           ["step-start"],
-          // P00's stream never answers these two, so the turn's end settles them as unanswered.
           ["tool-Bash", "output-available", UNANSWERED.ENDED],
           ["tool-ScheduleWakeup", "output-available", UNANSWERED.ENDED],
           ["step-start"],
@@ -414,7 +387,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const withinInterval = told.length;
         yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
         yield* post(agent.bearer, events.slice(6, 11));
-        // The batch carrying the launch's END, past another interval, is the stop's to settle.
         yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
         yield* post(agent.bearer, events.slice(11));
 
@@ -440,13 +412,11 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const early = yield* post(agent.bearer, []);
         yield* post(agent.bearer, events.slice(0, 9));
         const silence = [];
-        // An hour and more of a background command, the harness saying nothing, and the runner beating.
         for (const _beat of [1, 2, 3, 4, 5, 6, 7]) {
           yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
           silence.push(yield* post(agent.bearer, []));
         }
         const midway = yield* transcriptOf(agent.target.conversationId);
-        // The END, a moment after the last heartbeat, is the stop's to settle.
         yield* post(agent.bearer, events.slice(9));
 
         assert.deepEqual(early.body, { applied: 0, sequence: null });
@@ -484,7 +454,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
         const row = Option.getOrThrow(yield* readAgent(agent.userId, agent.agentId));
-        // Before any turn settles, the page already names who pays.
         const first = yield* transcriptPast(
           agent.target,
           CODER_TOOL_SET,
@@ -533,7 +502,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
         ],
       );
-      // The awaiting line alone stands: nothing of the batch was applied.
       assert.deepEqual(
         rows.map((row) => row.turnId),
         [null],
@@ -606,7 +574,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           { type: "result", subtype: "error_during_execution", is_error: true, ...top },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.STOPPED },
         ];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -655,7 +622,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           { type: RUNNER_EVENT.IDLE },
         ];
         const retired = [{ type: RUNNER_EVENT.END, reason: RUNNER_END.IDLED }];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = [...turn, ...retired].map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -694,7 +660,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const post = yield* standingWith({}, listener);
         const agent = yield* agentWithBearer;
         const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
-        // SAFETY: each message below is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = [
           { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
           { type: "system", subtype: "init", ...envelope },
@@ -772,7 +737,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           { type: "result", subtype: "success", is_error: false, ...top },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
         ];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = [...first, ...second].map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -823,18 +787,15 @@ it.layer(getTestDB())("the runner events route", (it) => {
           { type: "result", subtype: "error_during_execution", is_error: true, ...top },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
         ];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
 
-        // The next launch fails on its own, the limit having lifted: it says nothing of the old one.
         const relaunch = [
           { type: "system", subtype: "init", ...top },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.INPUT_CLOSED },
         ].map((message, index) => ({ sequence: events.length + index, message }) as RunnerEvent);
 
-        // What the turns' messages handed, which the summary may have dropped.
         yield* recordNativeTurnHanded(agent.target, {
           task: "task-key",
           spoken: true,
@@ -853,7 +814,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           [TURN_STATUS.FAILED, "input_closed"],
         ]);
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
-        // Only the last turn's kind stands, so the next message says the call's words no longer hold and hands the task again.
         assert.deepEqual(yield* readNativeTurnHanded(agent.target), { spoken: true });
       }),
   );
@@ -875,7 +835,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         },
         { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
       ];
-      // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
       yield* post(
         agent.bearer,
         messagesOfTurn.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
@@ -923,7 +882,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
           },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.RELEASED, wakeups: [{ at: dueAt, prompt }] },
         ];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -941,7 +899,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         assert.deepEqual(yield* due(new Date("2026-10-21T12:16:59Z")), [], "not yet due");
         assert.deepEqual(yield* due(new Date(dueAt)), [prompt]);
 
-        // A launch since, which the developer stopped: its wakeups end with it.
         yield* post(agent.bearer, events);
         const stopped = [{ type: RUNNER_EVENT.END, reason: RUNNER_END.STOPPED }].map(
           (message, index) => ({ sequence: events.length + index, message }) as RunnerEvent,
@@ -973,7 +930,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
                 {
                   type: "tool_use",
                   id: "toolu_look",
-                  // The server's name before its rename, which a stored transcript still holds, read as ours.
                   name: "mcp__luke__look_at_picture",
                   input: {},
                 },
@@ -1000,7 +956,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
             ...top,
           },
         ];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -1054,7 +1009,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
             ...top,
           },
         ];
-        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -1094,30 +1048,19 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 });
 
-/** P16's hermetic recording of app-server's stdio, as the runner's own tests play it. */
 const CODEX_RECORDING = new URL(
   "../../../../../packages/agent-runner/src/testing/app-server.jsonl",
   import.meta.url,
 );
 const THREAD = "00000000-0000-4000-8000-000000000002";
 
-/** One line of the recording: which phase of the probe, which way it went, and what it said. */
 interface RecordedLine {
   readonly phase: string;
   readonly direction: "client" | "server";
   readonly message: WireRecord;
 }
 
-/**
- * P16's recording cut into the launches P20's runner makes of it, each as
- * the events it posts: the notifications app-server sent, an ACCEPTED for
- * each of our lines where the runner's `turn/start` or `turn/steer` hands
- * one over, and the launch's END. The first launch runs the workflow turn
- * (steered once), the second the `sleep 600` turn it stops, and the third,
- * after a restart, the resumed thread's turn.
- */
 function codexLaunches(lineIds: readonly string[]): readonly (readonly RunnerEvent[])[] {
-  // SAFETY: each line of P16's recording is one object of this shape (the runner's `fake-app-server.ts` decodes it so).
   const recorded = readFileSync(CODEX_RECORDING, "utf8")
     .split("\n")
     .filter((line) => line.length > 0)
@@ -1149,13 +1092,11 @@ function codexLaunches(lineIds: readonly string[]): readonly (readonly RunnerEve
   let sequence = 0;
   return launches.map((messagesOfLaunch, index) =>
     [...messagesOfLaunch, { type: RUNNER_EVENT.END, reason: ends[index] ?? RUNNER_END.FAILED }].map(
-      // SAFETY: each message is one app-server or the runner emits, as P16 recorded it.
       (message) => ({ sequence: sequence++, message }) as RunnerEvent,
     ),
   );
 }
 
-/** The usage the record keeps of a Codex turn: its counts, on the model the agent ran on. */
 function codexUsage(inputTokens: number, outputTokens: number) {
   const counts = {
     inputTokens,
@@ -1167,7 +1108,6 @@ function codexUsage(inputTokens: number, outputTokens: number) {
   return { ...counts, byModel: [{ model: HARNESS.CODEX.model, ...counts }] };
 }
 
-/** One notification app-server sends on the session's thread, as the runner posts it. */
 function notification(method: string, params: WireRecord): WireRecord {
   return { method, params: { threadId: THREAD, turnId: "turn-1", ...params } };
 }
@@ -1186,7 +1126,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         ]);
         const launches = codexLaunches(agent.lineIds);
         for (const events of launches) {
-          // Each launch is posted in two batches, as the runner may split it.
           const half = Math.floor(events.length / 2);
           yield* post(agent.bearer, events.slice(0, half));
           yield* post(agent.bearer, events.slice(half));
@@ -1197,7 +1136,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           rows.map((row) => row.role),
           ["user", "user", "user", "user", "assistant", "assistant", "assistant"],
         );
-        // Each line joins the turn that took it, the steered one beside the line that opened the first.
         const turnOf = rows.map((row) => row.turnId);
         assert.deepEqual(turnOf.slice(0, 4), [turnOf[4], turnOf[4], turnOf[5], turnOf[6]]);
         assert.equal(new Set(turnOf).size, 3);
@@ -1242,7 +1180,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ["step-start"],
           ["text", "agent-probe-hermetic"],
         ]);
-        // The resumed thread reports its total again before its turn: that meters nothing.
         assert.deepEqual(
           settled
             .map((turn) => [turn.status, turn.usage, turn.failureDetail])
@@ -1296,7 +1233,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
           { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
         ];
-        // SAFETY: each message above is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.
         const events = (turn: readonly WireValue[]) =>
           turn.map((message, sequence) => ({ sequence, message }) as RunnerEvent);
         yield* post(claude.bearer, events(claudeTurn));
@@ -1330,7 +1266,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
         { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
       ];
-      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
       const events = messagesOfTurn.map(
         (message, sequence) => ({ sequence, message }) as RunnerEvent,
       );
@@ -1446,7 +1381,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           }),
           { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED, detail: "the plan's limit" },
         ];
-        // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -1465,11 +1399,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             { explanation: null, plan: [{ step: "Read the inbox", status: "completed" }] },
           ],
           ["step-start"],
-          [
-            "tool-collabAgentToolCall",
-            // An interrupted subagent did not do its work: its call settles as an error.
-            "output-error",
-          ],
+          ["tool-collabAgentToolCall", "output-error"],
         ]);
         assert.ok(!JSON.stringify(rows).includes("iVBORw0K"));
         assert.deepEqual(
@@ -1525,7 +1455,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           }),
           { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
         ];
-        // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
         const events = messagesOfTurn.map(
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
@@ -1589,7 +1518,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
         { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
       ];
-      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
       const events = [...first, ...second].map(
         (message, sequence) => ({ sequence, message }) as RunnerEvent,
       );
@@ -1607,7 +1535,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         ["step-start"],
         ["tool-collabAgentToolCall", "output-available", { status: "completed" }],
       ]);
-      // The spawn settles with the task and the pair it completed with, which its start left out.
       const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
       assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
         tool: "spawnAgent",
@@ -1652,7 +1579,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
         { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
       ];
-      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
       const events = messagesOfTurn.map(
         (message, sequence) => ({ sequence, message }) as RunnerEvent,
       );
@@ -1668,7 +1594,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
     }),
   );
 
-  /** The account's ChatGPT sign-in, kept as connecting keeps it: sealed, and not yet answered. */
   const signedIn = (userId: string, at = new Date(0)) =>
     saveProviderKey(
       userId,
@@ -1680,14 +1605,12 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       at,
     );
 
-  /** The ChatGPT row as it stands: its status, and when a reached limit resets. */
   const planRow = (userId: string) =>
     Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) => {
       const row: ProviderKeyRow | undefined = rows[0];
       return [row?.status, row?.limitResetsAt?.toISOString() ?? null] as const;
     });
 
-  /** One launch whose one turn OpenAI refused as said, numbered from `from`, with what Codex heard first. */
   const refusedLaunch = (
     lineId: string,
     from: number,
@@ -1702,17 +1625,13 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         notification("turn/completed", { turn: { id: "turn-1", status: "failed", error } }),
         { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED },
       ] satisfies readonly WireValue[]
-    ).map(
-      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
-      (message, index) => ({ sequence: from + index, message }) as RunnerEvent,
-    );
+    ).map((message, index) => ({ sequence: from + index, message }) as RunnerEvent);
 
   it.effect("a launch Codex failed before its first turn fails a turn saying why", () =>
     Effect.gen(function* () {
       const post = yield* standing;
       const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
       yield* post(agent.bearer, [
-        // SAFETY: the runner's END, written in its JSON shape.
         {
           sequence: 0,
           message: {
@@ -1793,7 +1712,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         yield* post(agent.bearer, signedOut);
         statuses.push(yield* planRow(agent.userId));
 
-        // A turn that ran after the refusal leaves the refusal standing: only a new sign-in mends it.
         const ranAgain = resumed.map((event, index) => ({
           ...event,
           sequence: (signedOut.at(-1)?.sequence ?? 0) + 1 + index,
@@ -1827,7 +1745,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           }),
         );
 
-        // As Codex says a plan its ChatGPT backend answers `usage_not_included` for: under a limit's word, though none resets.
         const notIncluded = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
         yield* signedIn(notIncluded.userId);
         yield* post(
@@ -1895,7 +1812,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           {},
           Layer.merge(Layer.empty as Layer.Layer<AfterResponse>, reporting),
         );
-        // As Codex said the expired key of LUKE-WEB-2R: a connection failed, its 401 in its info.
         const expired = {
           message:
             "unexpected status 401 Unauthorized: Your API key has expired. Create a new API key to continue.",
@@ -1931,7 +1847,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           reported.map((attributes) => attributes.agentId),
           [onApp.agentId],
         );
-        // The starter's own key reads as a key to replace; Fullspin's own key refused is no key of theirs.
         const db = yield* Database;
         const failureOf = (conversationId: string) =>
           Effect.map(
@@ -1968,7 +1883,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
         yield* signedIn(agent.userId);
-        // As OpenAI refused VESPIN-WEB-2R's turns: its JSON error, which Codex hands on as the turn's message and the runner as its end's.
         const message = JSON.stringify(
           {
             error: {
@@ -1987,7 +1901,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           codexErrorInfo: "other",
           additionalDetails: null,
         });
-        // SAFETY: the runner's END, written in its JSON shape.
         const end = {
           sequence: refused.length - 1,
           message: { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED, detail: message },
@@ -2019,7 +1932,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       }),
   );
 
-  /** The account's Claude setup-token, kept as pasting keeps it: sealed, and not yet answered. */
   const pasted = (userId: string, at = new Date(0)) =>
     saveProviderKey(
       userId,
@@ -2031,19 +1943,15 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       at,
     );
 
-  /** The setup-token's row as it stands: its status, and when a reached limit resets. */
   const setupTokenRow = (userId: string) =>
     Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN), (rows) => {
       const row: ProviderKeyRow | undefined = rows[0];
       return [row?.status, row?.limitResetsAt?.toISOString() ?? null] as const;
     });
 
-  /** Events numbered on from where the last batch left off. */
   const numberedFrom = (from: number, messagesOfLaunch: readonly unknown[]) =>
-    // SAFETY: each message is one the pinned SDK or the runner emits, written in its JSON shape.
     messagesOfLaunch.map((message, index) => ({ sequence: from + index, message }) as RunnerEvent);
 
-  /** One launch whose one turn Claude Code ended in error, with what it said first. */
   const failedClaudeLaunch = (lineId: string, said: readonly WireValue[]): readonly unknown[] => {
     const top = { parent_tool_use_id: null, session_id: SESSION };
     return [
@@ -2117,7 +2025,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ]),
         );
 
-        // A turn that ran after the refusal leaves it standing: only a new setup-token mends it.
         yield* launch(ran(agent.lineIds[4] ?? ""));
 
         assert.deepEqual(statuses, [
@@ -2199,7 +2106,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 });
 
-/** A title model answering every call with `title`, counting the calls. */
 function scriptedTitleModel(title: string) {
   const asked = { calls: 0 };
   const model = new MockLanguageModelV4({
@@ -2222,9 +2128,7 @@ function scriptedTitleModel(title: string) {
 it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", (it) => {
   const top = { parent_tool_use_id: null, session_id: SESSION };
   const numbered = (messagesOfLaunch: readonly unknown[], from = 0) =>
-    // SAFETY: each message is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.
     messagesOfLaunch.map((message, index) => ({ sequence: from + index, message }) as RunnerEvent);
-  /** A model call's answer carrying the usage the Messages API counts for it. */
   const answered = (
     id: string,
     text: string,
@@ -2275,7 +2179,6 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
           cacheWriteTokens: 10,
           systemPromptTokens: 0,
           toolDefinitionTokens: 0,
-          // The brief, "# Teammate invitations\n", is 26 bytes of JSON: seven tokens.
           briefTokens: 7,
           at: 0,
         });
@@ -2333,7 +2236,6 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
         yield* post(agent.bearer, numbered(turn));
         const named = Option.getOrThrow(yield* readAgent(agent.userId, agent.agentId));
         const task = Option.getOrThrow(yield* readTask(agent.userId, agent.taskId)).task;
-        // The turn's end asks again, and the title now standing is kept.
         yield* post(
           agent.bearer,
           numbered([{ type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED }], turn.length),

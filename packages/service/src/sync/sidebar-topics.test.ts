@@ -23,20 +23,6 @@ import { Clock, Effect, Option } from "effect";
 import { openTokenMember } from "../testing/github-app-fake.js";
 import { sidebarLive } from "./live-queries.js";
 
-/**
- * The sidebar's live read (`sidebarLive`) on the migrated capture: each
- * write that moves an account's sidebar, through its real writer, notifies
- * the account's topic, which the read is woken on, so a window holding the
- * sidebar hears it within a coalesce window rather than at the hold's end.
- * That holds for the account's own sections, entries, and pins, for a task
- * deleted from under another member's section, and for what admits the
- * account to a workspace or a repository. A section's write is notified
- * under the transaction its answer names, which is what the desktop
- * confirms the write on.
- *
- * Synthetic accounts, workspaces, sections, and tasks throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -44,13 +30,11 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A section write the test expects taken, answering the transaction it wrote in. */
 const sectionWrite = (userId: string, write: TaskSectionWrite) =>
   Effect.map(writeTaskSections(userId, write), (answer) =>
     Option.getOrElse(answer, () => assert.fail("the write was refused")),
   );
 
-/** Runs the write, held to the topics it notifies, and fails unless one of them wakes the account's sidebar. */
 const wakesTheSidebar = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],

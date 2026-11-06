@@ -1,29 +1,3 @@
-/**
- * sentry-install-procedures.ts -- a workspace's installations of our Sentry integration begun, read, and disconnected.
- *
- * Three procedures the signed-in desktop calls with its bearer:
- *
- * - `POST /api/workspaces/sentry/install` takes an owner or admin of the
- *   workspace, opens an install intent bound to the account and the
- *   workspace (`integration-installation-store.ts`), and answers Sentry's
- *   external install address for the integration with the intent's state on
- *   it, which Sentry hands back on the Redirect URL
- *   (`sentry-install-app.ts`).
- * - `GET /api/workspaces/sentry/installations` takes any member, and answers
- *   whether this deployment holds the integration and the workspace's
- *   active installations.
- * - `POST /api/workspaces/sentry/disconnect` takes an owner or admin, and
- *   marks one of the workspace's installations deleted, so its deliveries
- *   fire nothing; the integration stays installed on Sentry until the
- *   organization uninstalls it there. It answers the transaction it was
- *   marked in beside the installations, which a desktop holding the
- *   workspace's integrations live waits for (`workspaceIntegrationsLive`).
- *
- * A workspace the account is not in is not found, whatever it asked. The
- * bearer is resolved before the body is read, by the middleware on the
- * resource.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { INTEGRATION_INSTALLATION_STATUS } from "@repo/database/integration-vocabulary";
 import {
@@ -46,14 +20,12 @@ import { accountMiddleware, hosted } from "../../orpc/base.js";
 import { SentryApp, type SentryAppSettings } from "./sentry-app-config.js";
 import { SENTRY_ORIGIN } from "./sentry-install-app.js";
 
-/** The query the install address carries to Sentry, which Sentry hands back. */
 const INSTALL_STATE_QUERY = "state";
 
 export interface SentryInstallProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The workspace named, as the account sees it; one it is not in is not found. */
 const memberWorkspace = Effect.fn("web/sentryInstallWorkspace")(function* (
   userId: string,
   workspaceId: string,
@@ -63,7 +35,6 @@ const memberWorkspace = Effect.fn("web/sentryInstallWorkspace")(function* (
   return workspace.value;
 });
 
-/** The workspace named, where the account is an owner or admin of it. */
 const administeredWorkspace = Effect.fn("web/sentryInstallAdministered")(function* (
   userId: string,
   workspaceId: string,
@@ -73,12 +44,10 @@ const administeredWorkspace = Effect.fn("web/sentryInstallAdministered")(functio
   return workspace;
 });
 
-/** The integration's settings, or the unavailable refusal where this deployment holds none. */
 const settingsOrUnavailable = Effect.flatMap(SentryApp, (app) =>
   app.settings.pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE)),
 );
 
-/** The workspace's Sentry as the wire carries it: its active installations, the first linked first. */
 const workspaceSentry = Effect.fn("web/workspaceSentry")(function* (
   workspaceId: string,
 ): Effect.fn.Return<WorkspaceSentry, HostedRefusal, DatabaseServices | SentryApp> {
@@ -99,7 +68,6 @@ const workspaceSentry = Effect.fn("web/workspaceSentry")(function* (
   return { configured, installations };
 });
 
-/** Sentry's external install address for the integration, carrying the intent's state. */
 function installUrl(settings: SentryAppSettings, state: string): string {
   const url = new URL(
     `/sentry-apps/${encodeURIComponent(settings.slug)}/external-install/`,
@@ -109,11 +77,9 @@ function installUrl(settings: SentryAppSettings, state: string): string {
   return url.toString();
 }
 
-/** The workspace Sentry resource: install and disconnect to an owner or admin, and the installations to any member. */
 export function sentryInstallProcedures(seams: SentryInstallProcedureSeams) {
   const resource = hosted.workspaceSentry.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** An intent opened for the workspace, answered as Sentry's install address. */
     install: resource.install.effect(function* ({ input, context }) {
       const workspace = yield* administeredWorkspace(context.userId, input.workspaceId);
       const settings = yield* settingsOrUnavailable;
@@ -122,16 +88,10 @@ export function sentryInstallProcedures(seams: SentryInstallProcedureSeams) {
       );
       return { url: installUrl(settings, state) };
     }),
-    /** The workspace's Sentry, to any member of it. */
     installations: resource.installations.effect(function* ({ input, context }) {
       const workspace = yield* memberWorkspace(context.userId, input.workspaceId);
       return yield* workspaceSentry(workspace.id);
     }),
-    /**
-     * One of the workspace's installations disconnected; one that is not the
-     * workspace's is not found, and the write itself names the workspace, so
-     * an installation another workspace linked since the read is left alone.
-     */
     disconnect: resource.disconnect.effect(function* ({ input, context }) {
       const workspace = yield* administeredWorkspace(context.userId, input.workspaceId);
       const before = yield* workspaceSentry(workspace.id);

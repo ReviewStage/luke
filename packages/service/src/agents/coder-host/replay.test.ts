@@ -1,9 +1,3 @@
-/**
- * replay.test.ts -- the preamble a replay hands on, told from the steps it kept, the summary of
- * the ones before them, and how many there were, and where it sends the new agent for a source
- * that only carried another agent's work. Synthetic agent and steps; nothing reaches a database.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Agent } from "@repo/database/models/agent-store";
@@ -20,14 +14,12 @@ import { it } from "vitest";
 import { callEntry, replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
 
-/** A step of the agent's own words. */
 const said = (at: number): ReplayStep => ({
   kind: REPLAY_STEP_KIND.SAID,
   summary: `Said: Step ${at}.`,
   words: `Step ${at}.`,
 });
 
-/** A source agent that stopped with nothing published. */
 const source: Agent = {
   id: randomUUID(),
   userId: randomUUID(),
@@ -57,7 +49,6 @@ const source: Agent = {
   createdAt: new Date(0),
 };
 
-/** A continue of the source with `total` steps, none copied, with the repositories it works in beside its own. */
 const startFrom = (total: number, extras: StartFrom["told"]["extras"] = []): StartFrom => ({
   source,
   lineage: [source],

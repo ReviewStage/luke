@@ -10,20 +10,11 @@ import { Schema } from "effect";
 import { it, type TestContext } from "vitest";
 import { MIRROR_BRIDGE_SOURCE } from "./mirror-bridge.js";
 
-/**
- * The mirror bridge the agent's sandbox runs, as its own Node process at a
- * checkout of the test's own: the open sends the files git lists, ignored
- * files and symlinks left out, and answers a request in order; then each
- * change to the checkout, in a folder new since the open as in an old one,
- * crosses as a file, a delete, or a skip.
- */
-
 const CHANNEL = 3;
 const readMessage = Schema.decodeUnknownSync(mirrorFrameSchema);
 
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
-/** A one-branch clone of a repository with one commit, as the sandbox clones it: a tracked file, then an untracked executable, an ignored log, and a symlink. */
 async function checkout(t: TestContext) {
   const upstream = await temporaryDirectory(t, "mirror-upstream-");
   const root = await temporaryDirectory(t, "mirror-");
@@ -41,7 +32,6 @@ async function checkout(t: TestContext) {
   return { root, head: git(root, "rev-parse", "HEAD").toString().trim() };
 }
 
-/** The bridge at the root given, its channel open, each mirror message it sends read in turn. */
 function bridge(t: TestContext, root: string) {
   const child = spawn(process.execPath, ["--no-warnings", "-e", MIRROR_BRIDGE_SOURCE, root], {
     stdio: ["pipe", "pipe", "inherit"],
@@ -63,14 +53,12 @@ function bridge(t: TestContext, root: string) {
   return { frame, next, send, ask };
 }
 
-/** A file message as the test compares it: its bytes as text. */
 function shown(message: Awaited<ReturnType<ReturnType<typeof bridge>["next"]>>) {
   return message.type === "file"
     ? { ...message, bytes: Buffer.from(message.bytes).toString("utf8") }
     : message;
 }
 
-/** The path a message names, for putting messages that arrive in no set order in one. */
 const pathOf = (message: object) => ("path" in message ? String(message.path) : "");
 
 it("the open sends git's files without ignored ones or symlinks, and a request is answered in order", async (t) => {

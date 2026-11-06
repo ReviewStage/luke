@@ -32,22 +32,12 @@ import { SlackBot, SlackBotFailure, type SlackWebApi, slackBotOver } from "../sl
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { endedAt } from "../testing/agent-turns.js";
 
-/**
- * An automation run's result sent to its owner on Slack as the store writer
- * settles its agent's turn, and the DM's thread kept as the agent's, over a
- * real store and Slack a fake at the bot's Web API, the writer told to hand
- * each settled turn to the Slack poster as the deployment's listener does.
- * Synthetic accounts, workspaces, and Slack ids.
- */
-
 const T0 = new Date("2026-11-03T09:00:00Z").getTime();
 
 const SLACK_USER = "U0001";
 
-/** The DM conversation the bot writes the member in. */
 const DM_CHANNEL = "D0001";
 
-/** A Slack that knows every member by their email and writes down each message posted, by its arguments, each under a timestamp of its own. */
 function recordingSlack() {
   const posted: Readonly<Record<string, string>>[] = [];
   const api: SlackWebApi = (method, args) => {
@@ -68,7 +58,6 @@ function recordingSlack() {
   return { api, posted };
 }
 
-/** A started run of the automation, fired at the time given, sent to the agent. */
 const runOn = (automation: Pick<Automation, "id" | "userId">, agentId: string, firedAt: number) =>
   Effect.gen(function* () {
     const run = Option.getOrThrow(
@@ -81,7 +70,6 @@ const runOn = (automation: Pick<Automation, "id" | "userId">, agentId: string, f
     assert.ok(yield* attachRunAgent(run.id, agentId));
   });
 
-/** A member of a fresh workspace whose Slack bot is connected, an automation of theirs that delivers to Slack, and the agent one run of it started. */
 const openDeliveringRun = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -164,7 +152,6 @@ it.layer(getTestDB())("an automation run's result sent on Slack", (it) => {
         });
         assert.ok(JSON.stringify(blocks).includes(`/agent/${agent.id}|Open in Vespin>`));
 
-        // The settle heard again, as a retried batch would, sends nothing twice.
         yield* postTurnToSlack({
           userId: agent.userId,
           conversationId: agent.conversationId,
@@ -191,10 +178,8 @@ it.layer(getTestDB())("an automation run's result sent on Slack", (it) => {
         yield* endedAt(agent, RUN_STATUS.SUCCEEDED, T0, "Nothing needs you today.").pipe(
           Effect.provide(posting),
         );
-        // The fake Slack answers the first message posted under this timestamp.
         const digest = "1700000000.000001";
         const kept = yield* slackAgentThreadAt(organizationId, DM_CHANNEL, digest);
-        // The member's reply in the DM's thread starts a turn that is no run's.
         yield* endedAt(
           agent,
           RUN_STATUS.SUCCEEDED,

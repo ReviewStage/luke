@@ -16,18 +16,10 @@ import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { agentFailureOf, agentStatusOf, agentSummary } from "./status.js";
 
-/**
- * status.test.ts -- how long a line of the developer's awaiting its turn
- * reads it running; why a failed turn failed, a prompt past the model's
- * window told apart; and the Mac a local agent's summary names, and when it
- * last beat.
- */
-
 const LINE_GRACE_MS = Duration.toMillis(CODER.LINE_GRACE);
 
 const STARTED = new Date(1_000);
 
-/** A turn of the agent's, queued at `queuedAt`, begun at `startedAt`, and settled at `settledAt` where it has. */
 function turn(times: {
   queuedAt: number;
   startedAt?: number;
@@ -100,7 +92,6 @@ test("a line sent while the newest turn was queued, and never taken, reads the a
   expect(at(9_001 + LINE_GRACE_MS)).toBe(AGENT_STATUS.FAILED);
 });
 
-/** A turn the model call failed, eve's detail as given. */
 const failedOnModel = (failureDetail: string) => ({
   status: TURN_STATUS.FAILED,
   failure: TURN_FAILURE.MODEL,
@@ -108,7 +99,6 @@ const failedOnModel = (failureDetail: string) => ({
 });
 
 test("a prompt the provider refused as longer than the window reads as a context overflow, any other model failure as the model's", () => {
-  // The words of the continue Anthropic refused in production, as eve keeps them.
   const refused = failedOnModel(
     "MODEL_CALL_FAILED [statusCode] prompt is too long: 1368155 tokens > 1000000 maximum",
   );

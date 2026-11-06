@@ -37,20 +37,6 @@ import {
   sealCodexDeviceCredentials,
 } from "./chatgpt-credentials.js";
 
-/**
- * An account's ChatGPT plan renewed and revoked against a fake of OpenAI's
- * authorization server, over a real dialect: a renewal rotates the refresh
- * token and replaces the access token and its expiry together; two renewals
- * at once run one after the other, so the rotating refresh token is never
- * presented twice; a refresh token OpenAI refuses for good marks the plan
- * invalid; removing the plan revokes its session first, whether or not
- * OpenAI confirms it; and a plan the retired third-party sign-in sealed
- * reads as not connected.
- *
- * Synthetic accounts and tokens throughout; the key-encryption key is fixed
- * bytes written for this file.
- */
-
 const KEK = `1:${Buffer.alloc(32, 5).toString("base64")}`;
 
 function ring(): KeyRing {
@@ -61,38 +47,27 @@ function ring(): KeyRing {
 
 const REVOCATION_URL = "https://auth.openai.com/oauth/revoke";
 
-/** A renewal's JSON body, as Codex sends it. */
 const RenewalBodySchema = Schema.Struct({
   grant_type: Schema.String,
   client_id: Schema.String,
   refresh_token: Schema.String,
 });
 
-/** The form a recorded request carried, however the client encoded it. */
 async function formOf(request: RecordedRequest): Promise<URLSearchParams> {
   return new URLSearchParams(await new Response(request.init.body).text());
 }
 
-/** What the fake answers, as a test sets it: the revocation's status, and a status every renewal is answered with. */
 interface FakeServerState {
   revocationStatus: number;
   tokenStatus: number | undefined;
-  /** Where the discovery document says to revoke. */
   revocationEndpoint: string;
 }
 
-/** A gate renewals wait at until it is opened, which a second renewal arriving opens too. */
 interface RenewalGate {
   readonly arrived: Promise<void>;
   open(): void;
 }
 
-/**
- * OpenAI's authorization server as far as the service reaches it: Codex's
- * token endpoint, which rotates the refresh token on every renewal and
- * refuses one already used, a discovery document naming the revocation
- * endpoint, and that endpoint, which answers what the test sets.
- */
 function fakeAuthorizationServer(initialRefresh: string) {
   let current = initialRefresh;
   let issued = 0;
@@ -103,7 +78,6 @@ function fakeAuthorizationServer(initialRefresh: string) {
     tokenStatus: undefined,
     revocationEndpoint: REVOCATION_URL,
   };
-  /** Holds every renewal at a gate from here on, until the test opens it or a second renewal arrives. */
   const holdRenewals = (): RenewalGate => {
     const opening = Promise.withResolvers<void>();
     const arriving = Promise.withResolvers<void>();
@@ -122,7 +96,6 @@ function fakeAuthorizationServer(initialRefresh: string) {
     }
     renewals += 1;
     if (gate !== undefined) {
-      // A second renewal let through while the first is held is the race the lock exists to prevent: both are let go at once.
       if (renewals === 1) gate.reached();
       else gate.open();
       await gate.opened;
@@ -156,7 +129,6 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-/** The account's plan connected through a device-code login, its access token lapsing an hour on. */
 const signIn = (userId: string, overrides: { refreshToken?: string } = {}) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -214,7 +186,6 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
         );
         assert.equal(server.current(), "refresh-1");
 
-        // The renewal was stored: a second renewal an hour on presents the rotated refresh token.
         yield* TestClock.adjust("1 hour");
         assert.equal(tokenOf(yield* refreshChatGptAccess(owner, ring())), "access-2");
         const row = yield* rowOf(owner);
@@ -236,7 +207,6 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
         const gate = server.holdRenewals();
         const first = yield* Effect.forkChild(refreshChatGptAccess(owner, ring()));
         const second = yield* Effect.forkChild(refreshChatGptAccess(owner, ring()));
-        // The first renewal is held at OpenAI; the second is given every turn of the event loop it needs to read the row too, were it not held behind the lock.
         yield* Effect.promise(() => gate.arrived);
         for (let turn = 0; turn < 50; turn += 1) {
           yield* Effect.promise(() => new Promise<void>((settle) => setImmediate(settle)));
@@ -275,7 +245,6 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
         );
         assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
 
-        // An invalid plan stays signed out, even where OpenAI would now take its refresh token.
         yield* signIn(owner, { refreshToken: "refresh-stale" });
         yield* Database.use((db) =>
           db
@@ -415,7 +384,6 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
             refresh_token: "codex-refresh-0",
           },
         ]);
-        // No scope is granted this flow, and none is asked of it.
         assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.UNVERIFIED);
 
         yield* TestClock.adjust("2 hours");
@@ -425,7 +393,6 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
           CHATGPT_ACCESS.SIGNED_OUT,
         );
         assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
-        // The refresh token the answer did not rotate is the one kept, so the refused renewal presented it again.
         assert.deepEqual(renewals.at(-1), {
           grant_type: "refresh_token",
           client_id: CODEX_DEVICE_OAUTH.CLIENT_ID,
@@ -442,7 +409,6 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
       return Effect.gen(function* () {
         const { owner } = yield* openAccounts;
         const now = yield* DateTime.nowAsDate;
-        // The seal as the third-party sign-in wrote it, before and after it named its flow.
         const thirdParty = {
           clientId: "oaiapp_test_client",
           accountId: "chatgpt-subject",

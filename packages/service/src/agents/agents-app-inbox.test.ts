@@ -1,7 +1,3 @@
-/**
- * agents-app-inbox.test.ts -- the developer's inbox through the hosted router, over a fake eve.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -110,7 +106,6 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
-  /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve(), titleModel?: InboxTitleModelOf) =>
     Effect.gen(function* () {
       const opened = yield* openTask({
@@ -121,10 +116,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       const sessionId = eve.opened[0]?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
       const owned = { userId: opened.owner, taskId: opened.task.id, agentId: agent.id };
-      /** A thread posted for the agent, as its tool posts one, with the pictures its words name read. */
       const post = (value: ThreadPost, pictures?: Parameters<typeof postInboxThread>[2]) =>
         postInboxThread(owned, value, pictures);
-      /** The task's inbox as the owner reads it past the cursor. */
       const read = (after?: string) =>
         Effect.map(
           opened.ask(
@@ -135,22 +128,17 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ),
           (answered) => readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
-      /** The owner's nod on a notice, Got it, as the route answers it. */
       const answer = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
         opened.ask(request(INBOX_ITEM, bearer, { method: "POST", id: itemId, body }));
-      /** A member's close of an item without an answer, as the route answers it. */
       const close = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
         opened.ask(request(INBOX_CLOSE, bearer, { method: "POST", id: itemId, body }));
-      /** What waits across the account, as the bearer reads it past the cursor. */
       const waiting = (after?: string, bearer = opened.owner) =>
         Effect.map(
           opened.ask(request(ACCOUNT_INBOX, bearer, after === undefined ? undefined : { after })),
           (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
-      /** A member's message on an item's thread, as the route answers it. */
       const message = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
         opened.ask(request(INBOX_MESSAGES, bearer, { method: "POST", id: itemId, body }));
-      /** The agent's transcript as the owner reads it: the developer's lines, and where it stands. */
       const transcript = () =>
         Effect.map(
           opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
@@ -181,7 +169,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     ask: { type: INBOX_ASK.ANSWER },
   } as const;
 
-  /** A to-do the agent does not wait to hear done: a `do` of no steps, as a version 4 to-do reads. */
   const TODO = (key: string) =>
     ({
       key,
@@ -289,7 +276,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             ["CSV or JSON?", second.id, secondAgent.id, secondAgent.model],
           ].sort(),
         );
-        // Each item names its agent as the agent goes by, its title.
         assert.deepEqual(
           all.items.map((item) => [item.title, item.agentTitle]).sort(),
           [
@@ -298,7 +284,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ].sort(),
         );
 
-        // Done, the plan settles its open item; one its agent asks on it after waits like any other.
         yield* updateTask(owner, second.id, { status: TASK_STATUS.DONE });
         assert.deepEqual(
           (yield* waiting()).items.map((item) => item.title),
@@ -459,7 +444,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const standing = (yield* read()).items.find((each) => each.id === asked.success.id);
         assert.equal(standing?.status, INBOX_STATUS.OPEN);
 
-        // A notice posted before threads may wait to hear the nod, which no post from version 5 writes.
         const waited = yield* notice("preview-waited");
         yield* Database.use((db) =>
           db.update(inboxItem).set({ needsReply: true }).where(eq(inboxItem.id, waited.id)),
@@ -551,7 +535,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     }),
   );
 
-  /** The agent's one turn run to its end, as the relay writes a turn that settled: the agent stopped, and waits on nothing. */
   const turnEnded = (target: { readonly userId: string; readonly conversationId: string }) =>
     Effect.gen(function* () {
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -592,7 +575,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const asked = yield* post(TODO("flag-thread"));
         assert.ok(Result.isSuccess(asked));
         const { id, key, title } = asked.success;
-        // A bare Done on an ask the agent does not wait to hear reaches nobody, so the turn below is the agent's last.
         const answered = readAnswer(
           inboxMessagedSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -602,7 +584,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             answers: { ask: openAskOf(asked.success), reply: INBOX_REPLY.DONE, steps: [] },
           }),
         ).item;
-        /** The members' own messages on a thread, those that answer no ask. */
         const replies = (item: InboxItem | undefined) =>
           (item?.thread ?? []).filter(
             (each) => each.author === INBOX_MESSAGE_AUTHOR.MEMBER && each.answers === undefined,
@@ -1127,7 +1108,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       }),
   );
 
-  /** A thread that ends with an ask to decide, as the tool from version 5 posts one, waiting to hear the answer back. */
   const DEPLOY = {
     key: "deploy-window",
     title: "Ship the billing fix tonight?",
@@ -1135,7 +1115,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     ask: { type: INBOX_ASK.DECIDE, options: [{ label: "Ship it" }, { label: "Wait" }] },
   } as const;
 
-  /** The thread posted for the inbox's agent under the key given, and the message whose ask stands open on it. */
   const postAsk = (
     inbox: {
       readonly owner: string;
@@ -1154,12 +1133,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         (each) => each.ask?.status === INBOX_ASK_STATUS.OPEN,
       );
       assert.ok(asking);
-      // A message on the thread comes a moment after the post, so the thread reads in the order written.
       yield* TestClock.adjust(Duration.seconds(1));
       return { item: posted.success, askId: asking.id };
     });
 
-  /** The thread's messages as the reader sees them: who wrote each, its words, where its ask stands, and the answer it carries. */
   const threadOf = (item: InboxItem | undefined) =>
     (item?.thread ?? []).map((each) => [each.author, each.text, each.ask?.status, each.answers]);
 
@@ -1400,7 +1377,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [[id, true]],
         );
 
-        // Each mark answers the transaction it was written in, which a window following the inbox waits for.
         const { txid: readIn, ...markedRead } = readAnswer(
           inboxReadStateSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1453,13 +1429,6 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       }),
   );
 
-  /**
-   * Held reads driven to their answers a poll at a time, each step taken
-   * only after a round trip to the test's database (`drivenWhileStarting`
-   * says why), with how long each was held on the test's clock when it was
-   * first seen answered. The bound is past any hold, so a read that never
-   * lets go fails the test rather than hanging it.
-   */
   const drivenToAnswers = (fibers: readonly Fiber.Fiber<unknown, unknown>[]) =>
     Effect.gen(function* () {
       const startedAt = yield* Clock.currentTimeMillis;

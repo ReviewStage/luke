@@ -1,25 +1,9 @@
-/**
- * vercel-sandbox-fake.ts -- what Vercel Sandbox's REST API refuses of a list, a stop, or a sandbox's tags before it answers one, how each call is answered to `@vercel/sandbox`, and the `fetch` the SDK sends through, for the suites that stand a fake of it.
- *
- * A fake that answers any query would have answered the `limit=100` every
- * real list was refused for, and a fake that answers any POST would have
- * answered the bodiless stop every real one was refused for with 415, so each
- * fake's list and stop asks this first and answers what it returns where it
- * returns anything.
- */
-
 import { Layer } from "effect";
 import { SandboxFetch } from "../agents/vercel-sandbox-api.js";
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 
-/**
- * An unsigned token naming the fixture's project and team, with no expiry.
- * Note that it names none, because `@vercel/sandbox` reads the deployment's
- * token again before each request and refreshes one past its expiry, which
- * a fixed date would one day make it ask the network for.
- */
 export function fixtureToken(): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify({ project_id: PROJECT, owner_id: TEAM })).toString(
@@ -28,21 +12,16 @@ export function fixtureToken(): string {
   return `${header}.${payload}.`;
 }
 
-/** `GET /v2/sandboxes`'s bounds on `limit`, as Vercel's REST reference states them. */
 const LIST_LIMIT = { MIN: 1, MAX: 50 } as const;
 
-/** How many tags Vercel takes on a sandbox, as its create and its update answer past it. */
 const TAG_LIMIT = 5;
 
-/** Vercel's answer to a query value or a body it does not take. */
 const INVALID_QUERY_STATUS = 400;
 
-/** Vercel's answer to a POST that is not JSON. */
 const UNSUPPORTED_MEDIA_TYPE_STATUS = 415;
 
 const JSON_MEDIA_TYPE = "application/json";
 
-/** The 400 Vercel answers a list whose query it refuses, or nothing where it would answer the list. */
 export function sandboxListRefusal(url: URL): Response | undefined {
   const limit = url.searchParams.get("limit");
   if (limit === null) return undefined;
@@ -56,7 +35,6 @@ export function sandboxListRefusal(url: URL): Response | undefined {
   );
 }
 
-/** The 415 Vercel answers a stop not sent as JSON, or nothing where it would answer the stop. */
 export function sandboxStopRefusal(init: RequestInit): Response | undefined {
   const type = new Headers(init.headers).get("content-type") ?? "";
   if (type.split(";")[0]?.trim().toLowerCase() === JSON_MEDIA_TYPE) return undefined;
@@ -66,7 +44,6 @@ export function sandboxStopRefusal(init: RequestInit): Response | undefined {
   );
 }
 
-/** The 400 Vercel answers a create or an update asking more tags than a sandbox takes, or nothing where it would take them. */
 export function sandboxTagsRefusal(
   tags: Readonly<Record<string, string>> | undefined,
 ): Response | undefined {
@@ -82,7 +59,6 @@ export function sandboxTagsRefusal(
   );
 }
 
-/** The size, place, and working directory every faked session reports, which nothing reads beyond `@vercel/sandbox`'s check of its answers. */
 const SESSION_SIZE = {
   MEMORY_MB: 4096,
   VCPUS: 2,
@@ -90,7 +66,6 @@ const SESSION_SIZE = {
   CWD: "/vercel/sandbox",
 } as const;
 
-/** A sandbox as a fake's list names it: what a lookup's and a delete's answers are built from. */
 interface ListedFake {
   readonly name: string;
   readonly status: string;
@@ -99,12 +74,10 @@ interface ListedFake {
   readonly timeout?: number;
 }
 
-/** A sandbox as a delete answers it, with the fields `@vercel/sandbox` checks beside those a list names. */
 export function sandboxDeleted<Listed extends ListedFake>(listed: Listed) {
   return { sandbox: { ...listed, persistent: true, updatedAt: listed.createdAt } };
 }
 
-/** A sandbox and its current session as a lookup answers them, with the fields `@vercel/sandbox` checks. */
 export function sandboxFound<Listed extends ListedFake>(listed: Listed) {
   return {
     ...sandboxDeleted(listed),
@@ -124,7 +97,6 @@ export function sandboxFound<Listed extends ListedFake>(listed: Listed) {
   };
 }
 
-/** A page of sandboxes as a list answers it, with the fields `@vercel/sandbox` checks. */
 export function sandboxesListed<Listed extends ListedFake>(
   sandboxes: readonly Listed[],
   next: string | null = null,
@@ -135,7 +107,6 @@ export function sandboxesListed<Listed extends ListedFake>(
   };
 }
 
-/** A session as a stop, a policy write, an extension, or a snapshot answers it, with the fields `@vercel/sandbox` checks. */
 export function sessionAnswered(session: {
   readonly id: string;
   readonly status: string;
@@ -153,7 +124,6 @@ export function sessionAnswered(session: {
   };
 }
 
-/** A command as Vercel names it, with the fields `@vercel/sandbox` checks. */
 function commandOf(command: {
   readonly id: string;
   readonly sessionId: string;
@@ -170,7 +140,6 @@ function commandOf(command: {
   };
 }
 
-/** A command as a start, a read, a kill, or a stdin write answers it. */
 export function commandAnswered(command: Parameters<typeof commandOf>[0], bytesWritten?: number) {
   return {
     command: commandOf(command),
@@ -178,20 +147,17 @@ export function commandAnswered(command: Parameters<typeof commandOf>[0], bytesW
   };
 }
 
-/** One line of a command's output as its stream carries it. */
 interface OutputLine {
   readonly stream: "stdout" | "stderr";
   readonly data: string;
 }
 
-/** Lines of JSON as Vercel streams them, which `@vercel/sandbox` reads only under their own content type. */
 function streamed(lines: readonly object[]): Response {
   return new Response(lines.map((line) => `${JSON.stringify(line)}\n`).join(""), {
     headers: { "content-type": "application/x-ndjson" },
   });
 }
 
-/** A command run to its end as a waiting run streams it: the command, what it printed, and the command again with its exit. */
 export function commandRunStreamed(
   command: { readonly id: string; readonly sessionId: string },
   run: { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
@@ -207,13 +173,11 @@ export function commandRunStreamed(
   ]);
 }
 
-/** What a command printed on stderr, as its logs stream it. */
 export function commandLogsStreamed(stderr: string): Response {
   const printed: OutputLine[] = [{ stream: "stderr", data: stderr }];
   return streamed(printed.filter((line) => line.data !== ""));
 }
 
-/** A snapshot as a lookup, a list, or a session's snapshot answers it, with the fields `@vercel/sandbox` checks. */
 export function snapshotOf(snapshot: {
   readonly id: string;
   readonly status: string;
@@ -230,10 +194,8 @@ export function snapshotOf(snapshot: {
   };
 }
 
-/** A fake's responder as `fetch`. */
 type Responder = (url: string, init: RequestInit) => Response | Promise<Response>;
 
-/** `@vercel/sandbox`'s `fetch` over a fake's responder, which the `HttpClient` the fake stands behind answers through too. */
 export function sandboxFetchOver(respond: Responder): Layer.Layer<never> {
   const send: typeof globalThis.fetch = (input, init) =>
     Promise.resolve(respond(input instanceof Request ? input.url : String(input), init ?? {}));

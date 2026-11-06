@@ -1,17 +1,6 @@
-/**
- * The one re-export surface server code reaches the workspace packages through.
- *
- * It is the package's own door, not a subpath a consumer builds on: nothing
- * outside the package imports it, and a consumer names the defining package.
- */
-
 export * from "@repo/features";
 export * from "@repo/features/analytics";
-// The task vocabulary stands behind doors of its own, which the barrel
-// above re-exports nothing of.
 export * from "@repo/features/task-wire";
-// The brain is named rather than starred: what is listed is what the server
-// imports through this door and nothing more.
 export {
   AssistantMessageBuilder,
   addModelUsage,

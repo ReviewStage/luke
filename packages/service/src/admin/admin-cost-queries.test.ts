@@ -21,23 +21,11 @@ import { modelCatalogOf } from "../providers/model-catalog.js";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminCost, readAdminCostUsage } from "./admin-cost-queries.js";
 
-/**
- * admin-cost-queries.test.ts -- the Cost screen's reads over a real dialect:
- * a turn's tokens land under its UTC day, its account, its source, and each
- * model its by-model breakdown names, a coding agent's workers counted as
- * the agent's; seconds and merged pull requests land by day and account;
- * the scope leaves admins out and a read naming one account reads no other's.
- *
- * Synthetic accounts, models, and instants throughout.
- */
-
-/** Noon on the window's last day; every instant below is placed against it. */
 const NOW = Date.UTC(2026, 9, 17, 12);
 const TODAY = "2026-10-17";
 const YESTERDAY = "2026-10-16";
 const AT_TODAY = new Date(Date.UTC(2026, 9, 17, 9));
 const AT_YESTERDAY = new Date(Date.UTC(2026, 9, 16, 9));
-/** Before the 7-day window's prior week began, so nothing read reaches it. */
 const AT_LONG_AGO = new Date(Date.UTC(2026, 8, 1, 9));
 
 const MODEL = { OPUS: "anthropic/claude-opus-test", MINI: "openai/gpt-mini-test" } as const;
@@ -99,7 +87,6 @@ const settleTurn = (
     });
   });
 
-/** The rows a read answered, without the zeros nothing here sets, in an order a comparison can hold. */
 function tokenRows(usage: Effect.Success<ReturnType<typeof readAdminCostUsage>>) {
   return usage.tokens
     .map((row) => ({
@@ -128,7 +115,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         const agent = yield* openConversation(owner, CONVERSATION_KIND.AGENT);
         const agentWorker = yield* openConversation(owner, CONVERSATION_KIND.CHILD, agent);
 
-        // The app's own turn ran on two models, which its breakdown names apart.
         yield* settleTurn(owner, main, {
           model: MODEL.MINI,
           usage: {
@@ -145,7 +131,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           usage: counts(7, 1),
           settledAt: AT_TODAY,
         });
-        // A row from before the breakdown ran every step on the model it names.
         yield* settleTurn(owner, agent, {
           model: MODEL.OPUS,
           usage: counts(200, 20),
@@ -157,7 +142,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           usage: counts(30, 3),
           settledAt: AT_TODAY,
         });
-        // No usage recorded, and a turn settled before the read reaches back: neither is read.
         yield* settleTurn(owner, agent, { model: MODEL.OPUS, usage: null, settledAt: AT_TODAY });
         yield* settleTurn(owner, main, {
           model: MODEL.OPUS,
@@ -240,7 +224,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
       yield* db.insert(agentTable).values([
         {
           ...agentRow,
-          // Each agent on a conversation of its own, as every Start makes one.
           conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, mergedAt: AT_YESTERDAY.getTime() },
@@ -251,7 +234,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, mergedAt: AT_YESTERDAY.getTime() },
         },
-        // Open, never merged.
         {
           ...agentRow,
           conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
@@ -267,7 +249,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         userId: owner,
       });
 
-      // A day with no dictation leaves no row.
       assert.deepEqual(usage.seconds, [
         { day: YESTERDAY, source: COST_SOURCE.DICTATION, userId: owner, seconds: 42 },
       ]);
@@ -319,7 +300,6 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
     "price the read at the catalog, naming the most expensive accounts and leaving an unlisted model unpriced",
     () =>
       Effect.gen(function* () {
-        // A fresh window far from the other tests' instants, so only these rows fall in it.
         const now = Date.UTC(2027, 0, 10, 12);
         const at = new Date(Date.UTC(2027, 0, 10, 9));
         const spender = yield* openAccount();

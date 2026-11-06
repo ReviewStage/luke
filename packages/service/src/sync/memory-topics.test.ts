@@ -9,17 +9,6 @@ import { expectTopicsFire, getTestDB, openWorkspace } from "@repo/database/testi
 import { Effect } from "effect";
 import { forgetWorkspaceMemory, WORKSPACE_MEMORY } from "../accounts/workspace-memories.js";
 
-/**
- * A workspace's memories on the migrated capture: a memory kept, corrected,
- * and forgotten, each through its real writer, notifies the workspace's
- * memory topic alone, which the memories' live read is woken on, and never
- * the workspace's own, which would wake every member's task list on each
- * agent's `save_memory`; and a forget answers the very transaction its
- * notification carries, which a reader holding the memories waits for.
- *
- * Synthetic accounts and words throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

@@ -57,19 +57,6 @@ import {
 } from "./integrations-app.js";
 import { integrationsProcedures } from "./integrations-procedures.js";
 
-/**
- * The integrations an account is offered, as the integrations group answers
- * them: where every provider stands, a sign-in begun, and a sign-in the
- * browser returns from. A provider's allowlist variable names the accounts
- * it is offered to, and every other account is answered as though the
- * deployment never set the provider up. The store is the real one over the
- * migrations on PGlite; the connectors are the production read of the
- * test's variables, asking a Connect that grants everything, or one that
- * holds no grant, as a sign-in declined or never finished leaves it. GitHub has no
- * connector: it stands where the account's own GitHub sign-in does, read
- * through the real GitHub App over the account rows a sign-in leaves.
- */
-
 const ORIGIN = "https://app.test";
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const SLACK = INTEGRATION_PROVIDER.SLACK;
@@ -78,44 +65,36 @@ const NOTION = INTEGRATION_PROVIDER.NOTION;
 const NOTION_CONNECTOR = { NOTION_CONNECTOR_UID: "oauth/notion" } as const;
 const GMAIL = INTEGRATION_PROVIDER.GMAIL;
 
-/** The deployment the origin guard reads its own origins from. */
 const DEPLOYMENT = { VERCEL_ENV: "production", BETTER_AUTH_URL: ORIGIN } as const;
 const FOREIGN_ORIGIN = "https://evil.example";
 
-/** The name of the session cookie a browser signed in to an account sends, as the suite's resolver reads it. */
 const SESSION_COOKIE = "better-auth.session_token";
 
 function sessionCookieOf(userId: string): string {
   return `${SESSION_COOKIE}=${userId}`;
 }
 
-/** A request to the group: the account its bearer names, or the account a browser's session cookie names, and the page it came from. */
 interface Sent {
   readonly method?: string;
   readonly userId?: string;
   readonly cookieOf?: string;
   readonly origin?: string;
   readonly body?: string;
-  /** The length the request states for its body, where it states one. */
   readonly contentLength?: number;
 }
 
-/** The accounts a statuses answer names, as the wire spells them. */
 function accountsIn(body: WireBoundaryInput): readonly IntegrationAccount[] {
   return Schema.decodeUnknownSync(integrationStatusesAnswerSchema)(body).accounts ?? [];
 }
 
-/** The providers a statuses answer says the account may add another account at. */
 function addableIn(body: WireBoundaryInput): readonly string[] {
   return Schema.decodeUnknownSync(integrationStatusesAnswerSchema)(body).addable ?? [];
 }
 
-/** One provider's word in a statuses answer. */
 function statusIn(body: WireBoundaryInput, provider: IntegrationProvider): string {
   return Schema.decodeUnknownSync(integrationStatusesAnswerSchema)(body).integrations[provider];
 }
 
-/** An account whose user row holds this email; its id. */
 const openAccount = (email: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -124,14 +103,11 @@ const openAccount = (email: string) =>
     return userId;
   });
 
-/** GitHub's MCP server, offering at each ask the tools `listed` names then, and every bearer it was asked with. */
 function githubServer(listed: () => readonly string[]) {
   const bearers: string[] = [];
   const layer = fakeHttpClientLayer(async (_url, init) => {
     bearers.push(new Headers(init.headers).get("authorization") ?? "");
-    // The session's end, and a notification, answer nothing.
     if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
-    // SAFETY: the client sends one JSON-RPC message per request.
     const message = JSON.parse(await new Response(init.body).text()) as {
       id?: number;
       method: string;
@@ -146,15 +122,12 @@ function githubServer(listed: () => readonly string[]) {
   return { layer, bearers };
 }
 
-/** A provider's MCP server that answers `tool` with `text` only to the bearer `token`, and refuses everything else. */
 function accountNameServer(token: string, tool: string, text: string) {
   return fakeHttpClientLayer(async (_url, init) => {
     if (new Headers(init.headers).get("authorization") !== `Bearer ${token}`) {
       return new Response(null, { status: 401 });
     }
-    // The session's end, and a notification, answer nothing.
     if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
-    // SAFETY: the client sends one JSON-RPC message per request.
     const message = JSON.parse(await new Response(init.body).text()) as {
       id?: number;
       method: string;
@@ -176,12 +149,6 @@ function accountNameServer(token: string, tool: string, text: string) {
   });
 }
 
-/**
- * The group over the test's database and a deployment with these variables
- * and this GitHub App, none unless given, each bearer the account it names,
- * over a Connect that grants everything unless it `declines`, and over the
- * real store unless `seams` stands in for part of it.
- */
 const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
@@ -195,7 +162,6 @@ const standing = (
 ) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
-    // Each account added is handed the next of these as its subject at Connect, unique to this group, since the suite's tests share one database.
     const minted = randomUUID();
     let subjects = 0;
     const services = Layer.mergeAll(
@@ -207,7 +173,6 @@ const standing = (
       network,
     );
     const groupSeams: IntegrationsAppSeams = {
-      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
       resolveUserId: (incoming) =>
         Effect.succeed(
           incoming.headers.has("authorization")
@@ -229,16 +194,13 @@ const standing = (
         subjects += 1;
         return `subject-${minted}-${subjects}`;
       },
-      // The test's own clock, which also stamps a sign-in begun.
       now: () => clock.currentTimeMillisUnsafe(),
       ...seams,
     };
-    // Connect's return to the browser stays on its route group; every other path is a hosted procedure.
     const app = HttpRouter.toWebHandler(
       integrationsApp(groupSeams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    // SAFETY: the integrations procedures yield the database, Connect, the GitHub App, the clock, and the network alone, which is all a test provides of the web runtime's services.
     const procedureServices = (yield* Effect.context<Layer.Success<typeof services>>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
@@ -248,7 +210,6 @@ const standing = (
         ? app.handler(request)
         : procedures(request, procedureServices);
     yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
-    // Every request meets the deployment's origin guard first, as the web routes hand it on.
     const refuseCrossSite = cookieOriginGuard(DEPLOYMENT);
     const fetch = (path: string, init: Sent = {}) =>
       Effect.promise(() => {
@@ -256,7 +217,6 @@ const standing = (
         if (init.userId !== undefined) headers.set("authorization", `Bearer ${init.userId}`);
         if (init.cookieOf !== undefined) headers.set("cookie", sessionCookieOf(init.cookieOf));
         if (init.origin !== undefined) headers.set("origin", init.origin);
-        // Every client of the service names its body JSON, which is how a procedure is told to read it.
         if (init.body !== undefined) headers.set("content-type", "application/json");
         if (init.contentLength !== undefined) {
           headers.set("content-length", String(init.contentLength));
@@ -271,14 +231,11 @@ const standing = (
     const ask = (path: string, init: Sent) =>
       Effect.gen(function* () {
         const response = yield* fetch(path, init);
-        // SAFETY: the group answers JSON; the test compares it as the wire value it is.
         const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
         return { status: response.status, body };
       });
     return {
-      /** Any of the group's paths, answered as status and body. */
       ask,
-      /** Any of the group's paths, answered as its status, the two headers a caller reads, and its bytes. */
       bytes: (path: string, init: Sent) =>
         Effect.gen(function* () {
           const response = yield* fetch(path, init);
@@ -289,39 +246,29 @@ const standing = (
             text: yield* Effect.promise(() => response.text()),
           };
         }),
-      /** Where Slack stands for the account. */
       slackStatus: (userId: string) =>
         Effect.map(
           ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
-          // SAFETY: a statuses answer is a record of every provider's word.
           ({ body }) => (body as { integrations: Record<string, string> }).integrations[SLACK],
         ),
-      /** Where GitHub stands for the account. */
       githubStatus: (userId: string) =>
         Effect.map(
           ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
-          // SAFETY: a statuses answer is a record of every provider's word.
           ({ body }) => (body as { integrations: Record<string, string> }).integrations[GITHUB],
         ),
       disconnectGithub: (userId: string) =>
         ask(`/api/account/integrations/${GITHUB}/disconnect`, { method: "POST", userId }),
-      /** The names of the tools GitHub's server offers the account. */
       githubTools: (userId: string) =>
-        Effect.map(
-          ask(`/api/account/integrations/${GITHUB}/tools`, { userId }),
-          // SAFETY: a tools answer is a list of named tools.
-          ({ body }) => (body as { tools: { name: string }[] }).tools.map((tool) => tool.name),
+        Effect.map(ask(`/api/account/integrations/${GITHUB}/tools`, { userId }), ({ body }) =>
+          (body as { tools: { name: string }[] }).tools.map((tool) => tool.name),
         ),
-      /** A Cancel of the account's Slack sign-in, answering where Slack then stands. */
       cancelSlack: (userId: string) =>
         Effect.map(
           ask(`/api/account/integrations/${SLACK}/cancel`, { method: "POST", userId }),
-          // SAFETY: a cancel answers the one provider's word.
           ({ body }) => (body as { status: string }).status,
         ),
       connectSlack: (userId: string) =>
         ask(`/api/account/integrations/${SLACK}/connect`, { method: "POST", userId }),
-      /** Where the browser returning from a Slack sign-in under way for the account lands. */
       slackLanding: (userId: string) =>
         Effect.gen(function* () {
           const state = mintIntegrationState();
@@ -334,7 +281,6 @@ const standing = (
     };
   });
 
-/** The origin guard says at warn what it refused; the suite keeps those lines off its own output. */
 const quietGuard = Effect.acquireRelease(
   Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => undefined)),
   () => Effect.sync(() => vi.restoreAllMocks()),
@@ -345,7 +291,6 @@ const UNAVAILABLE_REFUSAL = {
   body: { error: HOSTED_API_ERROR.UNAVAILABLE },
 };
 
-/** A write's answer as the service sent it, the transaction it wrote in, which every write answers, taken off. */
 function written(body: WireBoundaryInput): WireBoundaryInput {
   const read = unparsedWire(body);
   assert.ok(isRecord(read) && typeof read.txid === "string", "the write answers its transaction");
@@ -487,7 +432,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const account = yield* openAccount("ola@cookie-landing.example");
         assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
 
-        // The dispatcher hands a request the path its `route-path` names, whatever key the platform landed it on (`apps/web/server/function-dispatch.ts`).
         assert.deepEqual(
           yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE, {
             cookieOf: account,
@@ -552,7 +496,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           undefined,
           { declines: true },
           {
-            // A Reopen's Connect lands between the Cancel's read and its ending of the state it read.
             endSignIn: (userId, connectionName, state) =>
               Effect.andThen(
                 beginIntegrationSignIn(
@@ -670,7 +613,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           connection: "notion-2",
         });
 
-        // The read settles both sign-ins: a Connect that grants every subject holds a grant for each.
         const settled = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
         assert.deepEqual(accountsIn(settled.body), [
           { provider: NOTION, connection: NOTION, status: INTEGRATION_STATUS.CONNECTED },
@@ -697,7 +639,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           userId,
         });
         const after = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
-        // The first account stands alone.
         assert.deepEqual(
           accountsIn(after.body).map((account) => account.connection),
           [NOTION],
@@ -771,7 +712,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
 
         assert.equal(accountsIn(read.body).length, 0);
         assert.ok(addableIn(read.body).includes(NOTION));
-        // The sign-ins left behind are let go, so the account added takes the provider's own name and stands first.
         assert.deepEqual(written((yield* add("?add=true")).body), {
           url: GRANTING_SIGN_IN_URL,
           connection: NOTION,
@@ -784,7 +724,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("restarted@notion.example");
-        // Note that the first account's sign-in is restarted where the add would end it, as a reconnect landing between the two would.
         const group = yield* standing(
           NOTION_CONNECTOR,
           undefined,
@@ -825,7 +764,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("raced@five-notions.example");
-        // Note that the fifth place is taken where this add would let its old sign-in go, as another add landing between the two would.
         const group = yield* standing(
           NOTION_CONNECTOR,
           undefined,
@@ -855,7 +793,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           yield* connect("?add=true");
         }
         yield* TestClock.adjust("16 minutes");
-        // Every account but the fifth signs in again, so only the fifth's sign-in is left behind.
         for (let place = 1; place < INTEGRATION_ACCOUNTS_MAX; place += 1) {
           yield* connect(place === 1 ? "" : `?connection=${NOTION}-${place}`);
         }
@@ -876,7 +813,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           );
         yield* first(`state-read-${userId}`);
         const read = yield* readIntegrationConnections(userId);
-        // Another window disconnects it and connects Notion again, under the same name and subject, after this disconnect read it.
         yield* deleteIntegrationConnection(userId, NOTION);
         yield* first(`state-replacing-${userId}`);
         const replacing = yield* readIntegrationConnections(userId);
@@ -905,7 +841,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("dean@before-labels.example");
-        // The account's one Notion, connected as the upgrade's migration left it: under its user id, with no label.
         yield* beginIntegrationSignIn(
           userId,
           firstIntegrationAccount(userId, NOTION),
@@ -921,7 +856,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         });
 
         assert.deepEqual(yield* labelsOf(upgraded), ["Acme"]);
-        // The name is kept: a Connect that no longer names the workspace still answers it.
         const silent = yield* standing(NOTION_CONNECTOR);
         assert.deepEqual(yield* labelsOf(silent), ["Acme"]);
       }),
@@ -951,7 +885,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           userId,
         });
 
-        // The read lands while the browser is still at the provider, choosing another workspace.
         assert.deepEqual(yield* labels, [undefined]);
         const [reconnecting] = yield* readIntegrationConnections(userId);
         named = "Personal";
@@ -977,7 +910,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           accountsIn(read.body).map((account) => account.label),
           [undefined],
         );
-        // Asked once: a grant that names the workspace later is not asked again for it.
         const naming = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
           names: () => "Acme",
         });
@@ -1000,11 +932,9 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           `state-gmail-${userId}`,
         );
         yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-${userId}`);
-        // As a read before Google was asked for the email left it: read once, and named nothing.
         const [connected] = yield* readIntegrationConnections(userId);
         yield* fillIntegrationLabel(connected ?? assert.fail("Gmail has a row"), "");
         let down = false;
-        // Gmail's profile, answered only to the account's own token.
         const google = fakeHttpClientLayer((url, init) =>
           !down &&
           url === "https://gmail.googleapis.com/gmail/v1/users/me/profile" &&
@@ -1019,13 +949,11 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         );
 
         assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
-        // The name is kept: a Google that no longer answers still leaves it.
         down = true;
         assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
       }),
   );
 
-  // Each provider's answer is shaped as its MCP server answered it when checked, over made-up values.
   it.effect.each([
     [
       INTEGRATION_PROVIDER.GRANOLA,
@@ -1078,7 +1006,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       JSON.stringify({ organizations: [{ id: "o-1", slug: "o-1", name: "Acme" }] }),
       "Acme",
     ],
-    // An account in several organizations, with no email to call it by, stays unnamed rather than take one of them.
     [
       INTEGRATION_PROVIDER.SUPABASE,
       "list_organizations",
@@ -1154,14 +1081,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         );
 
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
-        // Google answers again, but the account is not asked until its hold lapses.
         down = false;
         yield* TestClock.adjust("4 minutes");
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
         yield* TestClock.adjust("2 minutes");
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, "dee@gmail.example"]]);
 
-        // A hold is its grant's: an account connected again within it is asked at once.
         const other = yield* openAccount("dom@google-reconnects.example");
         const connectOther = (state: string) =>
           Effect.gen(function* () {
@@ -1219,7 +1144,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           yield* group.bytes(`/api/account/integrations/${SLACK}/connect`, { method: "POST" }),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
-        // An unsigned caller with a body its schema refuses is still told it is unsigned.
         assert.deepEqual(
           yield* group.bytes(`/api/account/integrations/${SLACK}/rename?connection=slack`, {
             method: "POST",

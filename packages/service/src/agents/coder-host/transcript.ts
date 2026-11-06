@@ -88,57 +88,8 @@ import {
 } from "./status.js";
 import { usageOfTurns } from "./usage.js";
 
-/**
- * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
- *
- * The transcript is the conversation's own `messages` rows: the description the
- * agent was handed, each turn's journal as the relay writes it, which
- * grows in place while the turn runs and is replaced by the finished answer
- * when it ends, and the lines said on calls into the agent before calls were
- * removed, each carrying when its words began. A reader holds a cursor of two numbers, the highest message
- * sequence it has and the journal revision it last read at, so a row added
- * past the first or amended past the second is new to it. A read with
- * nothing new is held open while the agent is starting or its newest turn
- * still runs, looked at again as each write to the conversation lands
- * (`transcriptTopics`), every `MESSAGES_POLL` where the sync hub cannot wake
- * it, and let go at `MESSAGES_HOLD`, so a tab hears each message as it
- * lands without asking every half second and a tab on an agent whose
- * first turn has not landed costs one held read per hold rather than a
- * spin; an agent that has ended
- * answers at once, unless a message of the developer's awaits the turn it
- * will open, which reads as running and is held for. Every page carries the agent's status as it stood when
- * the page was read, and why where the newest turn failed, so the reader
- * learns the agent ended from the page that ends the hold and asks nothing
- * else, and what the agent has cost, its workers' turns included, and its
- * newest turn, each read once with the page that is answered rather than
- * on every look inside the hold, and on the agent's own transcript what
- * its model's context holds as its newest step left it (`context.ts`),
- * when each worker its newest turn still waits on began, and, for an
- * agent on a device, where the launch it waits on stands until that
- * launch's turn opens, or where one its host settled unstarted stopped
- * (`launchOf`). A line that
- * steered a turn under way carries the turn's journal and the steps it had
- * begun before the line, since the journal closes behind every line its
- * turn took and the order alone would draw the line ahead of the turn's
- * work. A turn's journal
- * carries when the turn began, by the rule the working line counts from,
- * and when the journal closed: the close is written with the journal's
- * last parts, so the page that carries them carries it too, where the
- * turn row's own settling may land a look later.
- * Note that a step's end is written a moment before the next step starts
- * and lands its parts in the journal, so the page that wakes on a step
- * carries the step before it. The wire spells the cursor as the two
- * numbers joined by a colon.
- *
- * A reader that opens a long transcript reads it back from its end instead
- * (`transcriptNewest`): the newest page with all a page carries and the
- * cursor to follow on from, then each older page below the oldest row it
- * holds (`transcriptBefore`), which carries the rows alone.
- */
-
 const CURSOR_SEPARATOR = ":";
 
-/** The cursor the wire carries, as the store reads it; the start for the start's own spelling. */
 export function cursorOfWire(after: string): MessageCursor {
   const [seq, revision] = after.split(CURSOR_SEPARATOR);
   return { seq: Number(seq ?? 0), revision: Number(revision ?? 0) };
@@ -148,10 +99,8 @@ export function cursorToWire(cursor: MessageCursor): string {
   return `${cursor.seq}${CURSOR_SEPARATOR}${cursor.revision}`;
 }
 
-/** The cursor before every message, as the store reads it. */
 export const CURSOR_START: MessageCursor = cursorOfWire(AGENT_CURSOR_START);
 
-/** One row of the transcript as the route answers it: its message as the store holds it, for a turn's journal when the turn began and closed and what it ran on and spent, and for a developer's line what sent it, which is the wire's `AgentTranscriptMessage` once serialized. */
 type TranscriptMessage = StoredUIMessage &
   TurnRecord & {
     readonly startedAt?: number;
@@ -162,33 +111,21 @@ type TranscriptMessage = StoredUIMessage &
     readonly arrivedIn?: LinePlace;
   };
 
-/** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
 export interface TranscriptPage {
   readonly messages: readonly TranscriptMessage[];
   readonly cursor: MessageCursor;
   readonly status: AgentStatus;
-  /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
   readonly runStartedAt?: number;
   readonly failureReason?: AgentFailure;
-  /** The host a failed agent's run was lost with, by its name, where it stopped beating while the turn ran; absent for every other failure. */
   readonly hostLost?: { readonly host: string };
-  /** What the agent has cost over every turn it and its workers settled; absent before one has. */
   readonly usage?: AgentUsage;
-  /** Who pays for the agent, on its own transcript where its row records one; absent on a worker's. */
   readonly payer?: AgentPayer;
-  /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
   readonly context?: AgentContext;
-  /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
   readonly delegations?: readonly AgentDelegationStart[];
-  /** Every one of its workers titled so far, by the call that delegated it, on its own transcript; absent while none is and on a worker's. */
   readonly subagentTitles?: readonly AgentSubagentTitle[];
-  /** Where every one of its workers stands, read from the worker's own session, on its own transcript; absent while it has delegated nothing and on a worker's. */
   readonly subagents?: readonly AgentSubagentStanding[];
-  /** The messages queued behind its turn and the queue's pause, on its own transcript; absent while none is queued and on a worker's. */
   readonly queue?: AgentQueue;
-  /** Where the launch it waits on stands, on its own transcript while it runs on a device and that launch's turn has not opened; absent otherwise and on a worker's. */
   readonly launch?: AgentLaunch;
-  /** Why a failed launch never started, where its host said a reason beside the step in `launch`; absent otherwise. */
   readonly launchUnstarted?: DeviceLaunchUnstarted;
 }
 
@@ -198,22 +135,17 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
   DatabaseServices | R
 >;
 
-/** The newest turn as a page reads it: which it is, and what it ran under and cost; nothing before the first. */
 type NewestTurn = LatestTurn | undefined;
 
-/** The agent whose own transcript a page is, as its context and its launch are read: its row. */
 type OwnAgent = Pick<Agent, "id" | "machine">;
 
-/** The statuses a read waits through: more may still land. */
 const WAITING_STATUSES: ReadonlySet<AgentStatus> = new Set([
   AGENT_STATUS.STARTING,
   AGENT_STATUS.RUNNING,
 ]);
 
-/** When an agent was started, and whether blank, which is what its status is read by beside its turns (`AgentStanding`). */
 type AgentStart = Pick<AgentStanding, "createdAt" | "blank">;
 
-/** The agent's status now, read from its newest turn and when the newest line awaiting one was written, when that run began, why where that turn failed, and the instant the clock alone would move it, where one stands. */
 const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart) =>
   Effect.gen(function* () {
     const { turns, awaiting } = yield* Effect.all(
@@ -235,20 +167,6 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     return { status, runStartedAt, failureReason, hostLost, turn, graceEdge };
   });
 
-/**
- * Where the launch the agent waits on stands (`AGENT_LAUNCH`), on its own
- * transcript while it runs on a device and is at work: its newest launch
- * line, while that stands unsettled with no stop queued after it and no
- * turn was queued since it was written. A native turn is queued by its
- * harness's first event, so a turn queued after the line is that launch's
- * own opening, and a line a former run's turn opened, as a warm runner's
- * that a new message reaches, is never read as the one waited on. Waiting
- * while no host has claimed it, then the step its host reported. Once
- * the agent failed, the step a launch its host settled unstarted stopped
- * at, as its failed turn records it (`launchStoppedOf`). None where the
- * host reported no step this build knows, and on a worker's or a cloud
- * agent's transcript, which no launch line stands for.
- */
 const launchOf = (
   target: ConversationTarget,
   own: OwnAgent | undefined,
@@ -271,7 +189,6 @@ const launchOf = (
   });
 };
 
-/** The agent's context as its row holds it, on its own transcript; nothing on a worker's. */
 const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
     ? Effect.succeed(Option.none<HeldContext>())
@@ -279,21 +196,11 @@ const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
 
 type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readAgentContext>>>;
 
-/** Whether the catalog lists a window for the model, one or two. */
 const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
   const model = offered.find((each) => each.id === modelId);
   return model?.contextWindow !== undefined || model?.contextWindows !== undefined;
 };
 
-/**
- * The agent's context as its row holds it, against the window the catalog
- * lists for the model and window the same read says it runs on now, and
- * the line its runtime compacts at; nothing before its first step, or where the catalog lists no window for
- * the model, since a fallback window would tell a share of a window the
- * model may not have. Note that the choice is read with the page rather than taken from
- * the agent the request read, because a change of model or window during
- * the hold is what the step this page carries ran on.
- */
 const contextOf = (
   held: Option.Option<HeldContext>,
   routing: Option.Option<AgentRouting>,
@@ -307,18 +214,11 @@ const contextOf = (
         routing.value.runtime,
       );
 
-/** What a turn whose journal is on a page says of itself: when it began, and what it ran on and spent. */
 interface JournalTurn {
   readonly startedAt: number;
   readonly record: TurnRecord;
 }
 
-/**
- * Each turn whose journal is among the rows, by the turn: when it began,
- * its start or its queueing before eve started it, which is what the
- * working line counted from while it ran (`agentRunStartedAt`), and
- * what it ran on and spent as its row recorded them (`turn-record.ts`).
- */
 const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
   const journals = records.filter(
     (record) => record.message.role === MESSAGE_ROLE.ASSISTANT && !spokenOnCall(record.message),
@@ -336,21 +236,11 @@ const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[])
   );
 };
 
-/** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
   APP: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
 } as const;
 
-/**
- * What sent a line, as the page names it and by its kind, so the window
- * draws the app, an automation, and GitHub's login as themselves. Another agent
- * is named with no kind and marked `agent`, because the window's schema reads
- * the kind as one of the words it knows, so a kind it was built before would
- * refuse the whole page, while a key it does not know is dropped: an older
- * build draws it as a sender it cannot place, under its name, and a newer
- * one as an agent.
- */
 function senderOf(sent: LineSent): AgentSender {
   switch (sent.kind) {
     case MESSAGE_SENDER.MEMBER:
@@ -383,27 +273,17 @@ function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[
     .map((record) => record.id);
 }
 
-/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in. */
 interface LinesRead {
   readonly senders: ReadonlyMap<string, LineSent>;
   readonly places: ReadonlyMap<string, LinePlace>;
 }
 
-/** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
 function spokenOnCall(message: StoredUIMessage): boolean {
   if (message.role === MESSAGE_ROLE.SYSTEM) return false;
   const { metadata } = message;
   return "channel" in metadata && metadata.channel === MESSAGE_CHANNEL.VOICE;
 }
 
-/**
- * A row as the page carries it: its message, for a developer's line when
- * and what sent it and where in a turn under way it arrived, for a line
- * said on a call when its words began, and for a turn's journal when the
- * turn began and what it ran on and, once the journal closed, when it did
- * and what it spent. Note that a spoken line carries no turn's record,
- * because the line is what was said and the turn's journal is its own row.
- */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
@@ -433,13 +313,6 @@ function transcriptMessageOf(
   };
 }
 
-/**
- * The delegations the agent's newest turn still waits on, each with when
- * its worker began: the delegation calls its journal holds unanswered, by
- * the child conversation each recorded. Note that a worker runs only inside
- * the turn that called it, so no older journal is read, and a call whose
- * record has not landed yet is left out until a later page finds it.
- */
 const delegationsUnderWay = (
   target: ConversationTarget,
   tools: ToolSet,
@@ -470,14 +343,6 @@ const delegationsUnderWay = (
     });
   });
 
-/**
- * Where every worker of the agent's stands: the status its own session's
- * newest turn reads as, as an agent's own does (`status.ts`), with a worker
- * whose session has opened no turn yet starting within the grace and failed
- * past it, the pair its delegation recorded, and when it began. Note that
- * the worker's session is read rather than the call that started it, because
- * a call may settle the moment its worker is under way.
- */
 const subagentStandingsOf = (
   target: ConversationTarget,
 ): TranscriptEffect<readonly AgentSubagentStanding[]> =>
@@ -501,24 +366,11 @@ const subagentStandingsOf = (
     }));
   });
 
-/** How the agent whose own transcript a page is runs, as its row records it: what answers it and who pays for it; nothing on a worker's. */
 const routingOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
     ? Effect.succeed(Option.none<AgentRouting>())
     : readAgentRouting(target.userId, own.id);
 
-/**
- * The page with what the agent has cost: every settled turn of its
- * conversation and its workers', summed and priced at the catalog as the
- * instance holds it now; a catalog it cannot read prices nothing, so the
- * tokens are told alone. Note that no one turn is priced apart, because a
- * price the window draws means the whole run's. On the agent's own transcript, with what
- * its model's context holds, against the window the same catalog lists,
- * and every title its workers have so far, which land beside their starts
- * and so on no page of their own, and where the launch it waits on stands.
- * The usage names the agent's payer where its
- * row records one, so a plan's is drawn as the plan's rather than in dollars.
- */
 const withUsage = (
   target: ConversationTarget,
   tools: ToolSet,
@@ -547,23 +399,19 @@ const withUsage = (
             own === undefined
               ? Effect.succeed<readonly AgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
-          // Note that the queue is read after the page's messages, so a message the page lists as sent has left it.
           queue: own === undefined ? Effect.succeed(undefined) : queueOnPage(own.id),
           launch: launchOf(target, own, turn, page.status),
         },
         { concurrency: CODER.READ_CONCURRENCY },
       );
-    // Note that why a launch never started is said only beside the step it stopped at, as its failed turn records both.
     const launchUnstarted =
       launch !== undefined &&
       own?.machine === AGENT_MACHINE.DEVICE &&
       page.status === AGENT_STATUS.FAILED
         ? launchUnstartedOf(turn)
         : undefined;
-    // Note that an agent from before payers were recorded has none.
     const payer = Option.isNone(routing) ? null : routing.value.payer;
     const priced = usageOfTurns(rows, offered);
-    // Note that the payer rides on the usage, because the one line that draws a price is the one that says who paid.
     const usage = priced === undefined || payer === null ? priced : { ...priced, payer };
     const context = contextOf(held, routing, offered);
     return {
@@ -580,7 +428,6 @@ const withUsage = (
     };
   });
 
-/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines and where it arrived. */
 const transcriptMessagesOf = (
   target: ConversationTarget,
   records: readonly StoredMessageRecord[],
@@ -598,7 +445,6 @@ const transcriptMessagesOf = (
     return records.map((record) => transcriptMessageOf(record, journalTurns, linesRead));
   });
 
-/** One read of the page past the cursor with the status beside it; a page the vocabulary refuses answers no messages, since nothing readable stands past the cursor. */
 function pagePast(
   target: ConversationTarget,
   tools: ToolSet,
@@ -640,18 +486,15 @@ function pagePast(
   });
 }
 
-/** What a wait for a delegation's record answers: the record, or none, with whether the agent it was asked of still runs. */
 export type DelegationPast =
   | { readonly delegation: AgentDelegation }
   | { readonly delegation: undefined; readonly agentRuns: boolean };
 
-/** A delegation as it stands, and, where none does while the agent runs, the instant the clock alone may end its run, past its grace. */
 interface DelegationStanding {
   readonly read: DelegationPast;
   readonly graceEdge: number | undefined;
 }
 
-/** The delegation a call recorded as it stands now, with the instant the clock alone may end the agent's run where none stands. */
 function delegationStanding(
   parent: ConversationTarget,
   childConversationId: string,
@@ -665,7 +508,6 @@ function delegationStanding(
   });
 }
 
-/** The delegation a call recorded as it stands now: the record, or none with whether the agent it was asked of still runs, which is when it may still land. */
 export function delegationNow(
   parent: ConversationTarget,
   childConversationId: string,
@@ -674,16 +516,6 @@ export function delegationNow(
   return Effect.map(delegationStanding(parent, childConversationId, agent), ({ read }) => read);
 }
 
-/**
- * The delegation a call recorded, waited for. A worker's tab opens from
- * the moment its call is requested, which is a step ahead of the record the
- * call's own step writes, so a read that finds none while the agent still
- * runs holds as a transcript read does, on the same topics, poll, and bound,
- * and answers the record once it lands; none past the hold says the agent
- * still runs, and none once the agent has ended is none for good. Note that
- * the record notifies the parent's conversation, through the worker's own
- * (`agentDelegationSync`), as the agent's turns and lines do.
- */
 export function delegationPast(
   parent: ConversationTarget,
   childConversationId: string,
@@ -706,13 +538,10 @@ export function delegationPast(
   );
 }
 
-/** Whether a held read waits on a title, the agent's own or a worker's, asked at each look inside the hold. */
 export type TitleAwaited = TranscriptEffect<boolean>;
 
-/** A read that waits on no title: one whose deployment generates none. */
 export const NO_TITLE_AWAITED: TitleAwaited = Effect.succeed(false);
 
-/** When the turn the agent's own title may still land after completed: the agent untitled, its newest turn one of the turns it is titled in, and that turn completed inside the title call's bound, which is when that call is made; none where it may not land. */
 function ownTitleWindow(
   target: ConversationTarget,
   since: Date,
@@ -737,13 +566,6 @@ function ownTitleWindow(
   });
 }
 
-/**
- * Whether a title may still land: the one worker named, or, where none is,
- * any of the parent's or the agent's own, each still untitled and its call
- * made inside the call's own bound, past which the call that would fill it
- * has given up. A worker's call is made as it is delegated, the agent's as
- * a turn of its completes.
- */
 export function titleMayLand(
   parent: ConversationTarget,
   childConversationId?: string,
@@ -757,19 +579,10 @@ export function titleMayLand(
   });
 }
 
-/** When the window of every title a read waits on has closed, in epoch milliseconds; none where it waits on none. */
 export type TitleEdge = TranscriptEffect<number | undefined>;
 
-/** A read that waits on no title, so no window closes: one whose deployment generates none. */
 export const NO_TITLE_EDGE: TitleEdge = Effect.succeed(undefined);
 
-/**
- * The instant past which no title `titleMayLand` waits on can land any
- * more, the clock alone having closed each one's window: the latest of a
- * worker's start or the agent's completed turn, past the title call's own
- * bound. A reader that holds on a title reads again then rather than on a
- * clock of its own.
- */
 export function titleWindowEdge(
   parent: ConversationTarget,
   childConversationId?: string,
@@ -793,14 +606,12 @@ export function titleWindowEdge(
   });
 }
 
-/** Whether a held read keeps waiting on a page: nothing new on it while the agent may still write, or while a title may still land. */
 const holdsFor = (page: TranscriptPage, titleAwaited: TitleAwaited): TranscriptEffect<boolean> => {
   if (page.messages.length > 0) return Effect.succeed(false);
   if (WAITING_STATUSES.has(page.status)) return Effect.succeed(true);
   return titleAwaited;
 };
 
-/** The instant the clock alone may end a hold on a page: the agent passing the grace its turn had to land in while it waits, or else the window of a title it waits on closing. */
 const holdEdgeOf = (
   page: TranscriptPage,
   graceEdge: number | undefined,
@@ -808,34 +619,11 @@ const holdEdgeOf = (
 ): TranscriptEffect<number | undefined> =>
   WAITING_STATUSES.has(page.status) ? Effect.succeed(graceEdge) : titleEdge;
 
-/**
- * The topics a held read of a transcript wakes on: its conversation's,
- * which its messages, its turns, and its workers' conversations and
- * delegations notify, a worker's title among them, and, on the agent's own
- * transcript, the agent's, which its own title landing notifies.
- */
 function transcriptTopics(target: ConversationTarget, own?: OwnAgent): readonly SyncTopic[] {
   const conversation: SyncTopic = [TOPIC.CONVERSATION, target.conversationId];
   return own === undefined ? [conversation] : [conversation, [TOPIC.AGENT, own.id]];
 }
 
-/**
- * The transcript past the cursor: the page as it stands, or, while the
- * agent is starting or runs and nothing new stands yet, the first page with
- * something on it inside the hold, or the empty page and the cursor to
- * read on from once the hold is out. Note that the status on a page that
- * ends the hold is read with that page, so a hold that ran out on an agent
- * that ended meanwhile still says so. The agent's own transcript names the
- * agent as `own`, whose context its pages carry; a worker's names none.
- * An ended agent's empty page is held too while `titleAwaited` says a
- * title may still land, because a reader stops at that page and the
- * agent's own title, or a short worker's, lands after its turn ended; the
- * page that ends that hold carries the title. Each look comes as a write
- * to the transcript lands (`transcriptTopics`), and no later than the
- * instant the clock alone may end the hold, the agent passing its grace or
- * a title's window closing (`titleEdge`), so a hold the sync hub wakes ends
- * when a polled one would.
- */
 export function transcriptPast(
   target: ConversationTarget,
   tools: ToolSet,
@@ -868,20 +656,12 @@ export function transcriptPast(
   );
 }
 
-/** A page read at once, whether the held read would have held on it for more, and, where it would, how soon the clock alone may change that. */
 export interface TranscriptNow {
   readonly page: TranscriptPage;
   readonly holds: boolean;
-  /** Milliseconds from now until an agent past its grace or a title's window closing may end the hold, which no row changing says; absent where nothing but a row may. */
   readonly wakeIn?: number;
 }
 
-/**
- * The transcript past the cursor as it stands, never held, with whether
- * `transcriptPast` would have held on it and, where it would, how soon the
- * clock alone may end that: for a reader that follows the transcript's live
- * statements (`transcript-live.ts`) and reads again once they move.
- */
 export function transcriptNow(
   target: ConversationTarget,
   tools: ToolSet,
@@ -903,26 +683,16 @@ export function transcriptNow(
   });
 }
 
-/** A page of the transcript read back from its end: its messages, oldest first, and where the page older still is read below; none where nothing older stands. */
 export interface TranscriptOlder {
   readonly messages: readonly TranscriptMessage[];
   readonly before?: number;
 }
 
-/** The transcript's newest page, with all a page past a cursor carries, its cursor the one to follow on from, and where the page older still is read below; none where nothing older stands. */
 export interface TranscriptNewest {
   readonly page: TranscriptPage;
   readonly before?: number;
 }
 
-/**
- * A page read below a sequence as a reader back from the end takes it: a
- * full page names its oldest row as where the next is read below, and a
- * shorter one is the transcript's start. A page the vocabulary refuses
- * answers no messages and is read on below the row it refused, so one row
- * this build cannot read costs the reader the rows above it on that page
- * rather than everything older.
- */
 const olderPageOf = (
   target: ConversationTarget,
   read: MessageListRead,
@@ -937,15 +707,6 @@ const olderPageOf = (
       : { messages, before: oldest.seq };
   });
 
-/**
- * The transcript's newest page, read at once: the newest rows, oldest
- * first, with the agent's status and everything a page past a cursor
- * carries, read once for the whole answer. Its cursor is where a reader
- * who has every row as it now stands is (`messageCursorNow`), read before
- * the rows, which are read up to and including it, so a row written or
- * amended after the cursor is heard by the follow from it, and one amended
- * between the two reads is heard twice rather than missed.
- */
 export function transcriptNewest(
   target: ConversationTarget,
   tools: ToolSet,
@@ -984,7 +745,6 @@ export function transcriptNewest(
   });
 }
 
-/** The page of the transcript below a sequence, read at once, carrying nothing of the agent as a whole, which its newest page told. */
 export function transcriptBefore(
   target: ConversationTarget,
   tools: ToolSet,

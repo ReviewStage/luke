@@ -9,15 +9,6 @@ import { openGithubUser } from "../testing/github-app-fake.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { memberIdOf } from "./workspace-members.js";
 
-/**
- * The member writes as Better Auth's organization plugin answers them, under
- * a real session over PGlite: a write the plugin refuses comes back as its
- * refusal, by the status it carried, so a route can tell a session the
- * plugin did not take from a write it would not make, and a rename or a
- * photo it makes moves the name or the logo alone. Synthetic accounts.
- */
-
-/** The failure an effect ended on, failing the test where it succeeded. */
 const failureOf = <E>(exit: Exit.Exit<void, E>): E => {
   if (Exit.isSuccess(exit)) return assert.fail("the plugin made a write it should have refused");
   const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
@@ -60,7 +51,6 @@ it.effect(
           ),
         );
 
-        // The plugin's own word on it, whichever client error it chose: not the session's refusal.
         assert.ok(refused instanceof OrganizationRefused);
         assert.ok(refused.status >= 400 && refused.status < 500 && refused.status !== 401);
         assert.ok(unsigned instanceof OrganizationRefused);

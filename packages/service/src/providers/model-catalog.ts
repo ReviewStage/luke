@@ -18,88 +18,28 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
-/**
- * model-catalog.ts -- the models a coding agent may run on, read from AI Gateway's public catalog.
- *
- * AI Gateway publishes its catalog at one unauthenticated URL. We keep
- * the Anthropic and OpenAI models tagged for both tool use and reasoning,
- * and for each the efforts its `reasoning_options` list under the `effort`
- * entry; a model that lists no effort can satisfy no Start, so it is left
- * out rather than offered. A model offers two context windows where its
- * provider prices the tokens past a boundary inside its window apart, as
- * OpenAI does past 272K and Anthropic past 100K or 200K for some models:
- * the boundary is its standard window, which a choice opts into, and the
- * whole window is the long one, which every choice runs on unless it names
- * the other. A model priced the same across its whole window has that one
- * window, since a smaller one would buy nothing the provider names. The read is cached per instance for
- * `MODEL_CATALOG_TTL`, a failed read for no time at all, so an outage at the
- * catalog is retried on the next request rather than remembered; while it
- * lasts, a read answers the last catalog this instance read, if any.
- *
- * Model calls themselves go straight to each provider on the account's own
- * keys, never through AI Gateway, so `providerModelOf` is the one translation
- * from a catalog id to the id the provider's own API takes. A fast slug is
- * AI Gateway's own name and no provider's: the provider is asked for the
- * base model with its fast option on. The catalog lists no slug for
- * OpenAI's Ultrafast tier, and prices it on the base model's entry instead
- * (`pricing.service_tiers.ultrafast`), so where an OpenAI entry does, an
- * Ultrafast version is offered beside it under an id of our own, the base's
- * with `-ultrafast` (`MODEL_SPEED_SUFFIX`), priced at that tier; Codex runs
- * it as the base model on the `ultrafast` service tier. Nothing here
- * knows which account asked: the catalog is public and the same for every
- * caller. What an account is offered of the catalog is `offeredToAccount`,
- * by whether the key its steps run on may run fast mode.
- */
-
 const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
 
-/** Every tag a model must carry to be offered. */
 const REQUIRED_TAGS: readonly string[] = ["tool-use", "reasoning"];
 
-/** The `reasoning_options` entry whose `values` are the model's efforts. */
 const EFFORT_OPTION = "effort";
 
 const CATALOG_ID_SEPARATOR = "/";
 
-/**
- * What a price tier's boundary is read to: the catalog spells one as the
- * first token past it (`200001`) or as the boundary itself (`272000`), so it
- * is read to the thousand at or below.
- */
 const TIER_BOUNDARY_TOKENS = 1_000;
 
-/** Anthropic spells a version's point as a dash in its own ids; the catalog keeps the point. */
 const CATALOG_VERSION_POINT = ".";
 const ANTHROPIC_VERSION_POINT = "-";
 
-/**
- * The providers whose own API is confirmed to run what a fast slug stands
- * for: Anthropic's fast mode, the base model asked for `speed: "fast"`, and
- * OpenAI's priority processing, the base model on Codex's documented `fast`
- * service tier, which it sends as the API's `priority` and which the catalog
- * prices a GPT fast slug at (its base model's `service_tiers.priority`).
- */
 export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([
   MODEL_PROVIDER.ANTHROPIC,
   MODEL_PROVIDER.OPENAI,
 ]);
 
-/**
- * The suffix AI Gateway gives a model's batch version (`openai/gpt-5.5-batch`),
- * which stands for the provider's asynchronous Batch API: no provider's own
- * id, and nothing an agent's turn can wait on, so it is never offered.
- */
 const BATCH_SLUG_SUFFIX = "-batch";
 
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 
-/**
- * What a model's tokens cost, in dollars per token as the catalog lists
- * them: the input the model read, the output it wrote, the input its
- * prefix cache answered, and the input written to that cache, the last two
- * of which the catalog prices for a model that caches and leaves unsaid for
- * one that does not.
- */
 export interface ModelPricing {
   readonly inputUsd: number;
   readonly outputUsd: number;
@@ -107,7 +47,6 @@ export interface ModelPricing {
   readonly cacheWriteUsd?: number;
 }
 
-/** The counts a price is put on: a turn's, an agent's, as the brain keeps them, the cache's writes only where a provider said them. */
 export interface PricedTokens {
   readonly inputTokens: number;
   readonly outputTokens: number;
@@ -115,48 +54,33 @@ export interface PricedTokens {
   readonly cacheWriteTokens?: number;
 }
 
-/**
- * One model as the service offers it: the wire's model (`@repo/features/models-wire`),
- * which `/api/models` answers and a Start is checked against, and beside it
- * what the catalog lists and the wire does not carry: the model's whole
- * context window, which a session on a model with one window is told, and
- * the prices its usage is costed at; each absent where the catalog says
- * nothing.
- */
 export interface OfferedModel extends CatalogModel {
   readonly contextWindow?: number;
   readonly pricing?: ModelPricing;
 }
 
-/** A model as its provider's own API names it, and the speed the catalog id asked it to run at. */
 export interface ProviderModel {
   readonly provider: ModelProvider;
   readonly modelId: string;
   readonly speed: ModelSpeed;
 }
 
-/** The catalog could not be read as the catalog: the request failed, or the answer is not its shape. */
 export class ModelCatalogUnavailable extends Data.TaggedError("ModelCatalogUnavailable")<{
   readonly cause: unknown;
 }> {}
 
-/** Why a model choice is refused. */
 export const MODEL_CHOICE_REFUSAL = {
-  /** No offered model carries this id. */
   UNKNOWN_MODEL: "unknown-model",
-  /** The model is offered, and does not list this effort. */
   UNKNOWN_EFFORT: "unknown-effort",
 } as const;
 
 export type ModelChoiceRefusal = (typeof MODEL_CHOICE_REFUSAL)[keyof typeof MODEL_CHOICE_REFUSAL];
 
-/** The catalog refused the choice, for the reason named, beside the models it was checked against, which a refusal lists as the choices there are. */
 export class ModelChoiceRefused extends Data.TaggedError("ModelChoiceRefused")<{
   readonly reason: ModelChoiceRefusal;
   readonly offered: readonly OfferedModel[];
 }> {}
 
-/** The catalog the instance read, offered as a service so one read serves every route that checks against it. */
 export class ModelCatalog extends Context.Service<
   ModelCatalog,
   {
@@ -164,19 +88,11 @@ export class ModelCatalog extends Context.Service<
   }
 >()("ModelCatalog") {}
 
-// ------------------------------------------------------------- the boundary
-
-/**
- * What this module reads of a catalog entry, and nothing else: an entry
- * carries far more, and a field this module does not read is not a field a
- * change to can refuse the whole catalog.
- */
 const ReasoningOptionSchema = Schema.Struct({
   type: Schema.String,
   values: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-/** A price as the catalog spells it: dollars per token, as a decimal string. */
 const PriceSchema = Schema.optionalKey(Schema.NullOr(Schema.FiniteFromString));
 
 const PricingSchema = Schema.Struct({
@@ -186,7 +102,6 @@ const PricingSchema = Schema.Struct({
   input_cache_write: PriceSchema,
 });
 
-/** One price tier: the price per token from `min` tokens on, as the catalog spells it; a tier with no `min` starts at none. */
 const PriceTierSchema = Schema.Struct({
   cost: Schema.FiniteFromString,
   min: Schema.optionalKey(Schema.Number),
@@ -194,14 +109,8 @@ const PriceTierSchema = Schema.Struct({
 
 const PriceTiersSchema = Schema.optionalKey(Schema.NullOr(Schema.Array(PriceTierSchema)));
 
-/** A price a service tier lists, as the catalog spells one: dollars per token, as a decimal string. */
 const TierPriceSchema = Schema.FiniteFromString;
 
-/**
- * What one of OpenAI's service tiers costs, as the catalog lists it on its
- * base model's entry: the input, output, and cached input prices, and past
- * `long_context.threshold` tokens of input, the same three again.
- */
 const ServiceTierPricingSchema = Schema.Struct({
   input: TierPriceSchema,
   output: TierPriceSchema,
@@ -215,12 +124,10 @@ const ServiceTierPricingSchema = Schema.Struct({
   ),
 });
 
-/** The entry's Ultrafast tier, where its pricing lists one. */
 const UltrafastPricingSchema = Schema.Struct({
   service_tiers: Schema.Struct({ ultrafast: ServiceTierPricingSchema }),
 });
 
-/** The entry's Ultrafast tier read apart from its prices, so a tier spelled in a way this module does not read costs the model its Ultrafast version and nothing else. */
 const readUltrafast = Schema.decodeUnknownOption(UltrafastPricingSchema);
 
 const TieredPricingSchema = Schema.Struct({
@@ -228,15 +135,8 @@ const TieredPricingSchema = Schema.Struct({
   output_tiers: PriceTiersSchema,
 });
 
-/** The entry's price tiers, read apart from its prices, so a tier spelled in a way this module does not read costs the model its long window and not its price. */
 const readTiers = Schema.decodeUnknownOption(TieredPricingSchema);
 
-/**
- * The entry's prices are read on their own, after the entry: a price the
- * catalog spells in a way this module does not read costs that model its
- * price and nothing else, where a field of the entry's own would refuse
- * the whole catalog.
- */
 const readPricing = Schema.decodeUnknownOption(PricingSchema);
 
 const CatalogEntrySchema = Schema.Struct({
@@ -254,7 +154,6 @@ const CatalogAnswerSchema = Schema.Struct({
 
 type CatalogEntry = typeof CatalogEntrySchema.Type;
 
-/** The provider and the provider's own name, split at the catalog id's one separator; nothing for an id with none. */
 function splitCatalogId(
   catalogId: string,
 ): { readonly provider: string; readonly name: string } | undefined {
@@ -265,11 +164,9 @@ function splitCatalogId(
 
 function providerOf(name: string): ModelProvider | undefined {
   if (!PROVIDER_SET.has(name)) return undefined;
-  // SAFETY: membership in the set built from MODEL_PROVIDER's values is what the union names.
   return name as ModelProvider;
 }
 
-/** The entry's prices where it lists both an input and an output price as this module reads them; nothing where it lists either not, or not readably. */
 function pricingOf(entry: CatalogEntry): ModelPricing | undefined {
   const pricing = Option.getOrUndefined(readPricing(entry.pricing));
   const inputUsd = pricing?.input ?? undefined;
@@ -287,12 +184,10 @@ function pricingOf(entry: CatalogEntry): ModelPricing | undefined {
 
 type PriceTier = typeof PriceTierSchema.Type;
 
-/** The cost of the tier starting at `min`, starting at none where `min` is 0. */
 function tierCost(tiers: readonly PriceTier[], min: number): number | undefined {
   return tiers.find((tier) => (tier.min ?? 0) === min)?.cost;
 }
 
-/** What the tier past the boundary costs as a multiple of the first tier; nothing where the catalog prices either not. */
 function priceFactor(tiers: readonly PriceTier[], boundary: number): number | undefined {
   const standard = tierCost(tiers, 0);
   const long = tierCost(tiers, boundary);
@@ -300,14 +195,6 @@ function priceFactor(tiers: readonly PriceTier[], boundary: number): number | un
   return long / standard;
 }
 
-/**
- * The entry's two windows, where its input is priced apart past a boundary
- * inside its window: the boundary as its standard window and the whole
- * window as its long one, with what the tokens past the boundary cost
- * beside the first tier's; nothing for a model priced the same across its
- * whole window, a tier at the first tier's own price included, or one whose
- * window the catalog does not say.
- */
 function contextWindowsOf(
   entry: CatalogEntry,
   contextWindow: number | undefined,
@@ -316,7 +203,6 @@ function contextWindowsOf(
   const tiers = Option.getOrUndefined(readTiers(entry.pricing));
   const input = tiers?.input_tiers ?? [];
   const first = tierCost(input, 0);
-  // A tier at the first tier's price is no boundary: nothing past it costs more.
   const boundaries = input
     .filter((tier) => tier.cost !== first)
     .map((tier) => tier.min ?? 0)
@@ -335,7 +221,6 @@ function contextWindowsOf(
   };
 }
 
-/** The entry as an offered model, or nothing for one we do not offer: a batch slug, a fast slug where its provider's fast option is not confirmed, and an Ultrafast id, which is ours alone (`ultrafastModelOf`). */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const named = providerModelOf(entry.id);
   if (named === undefined || entry.id.endsWith(BATCH_SLUG_SUFFIX)) return undefined;
@@ -361,7 +246,6 @@ function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   };
 }
 
-/** The Ultrafast tier's window boundary as the catalog spells it read to a standard window, as a price tier's is (`TIER_BOUNDARY_TOKENS`); nothing where it falls outside the model's window. */
 function ultrafastWindows(
   tier: typeof ServiceTierPricingSchema.Type,
   contextWindow: number | undefined,
@@ -378,13 +262,6 @@ function ultrafastWindows(
   };
 }
 
-/**
- * The Ultrafast version of an offered OpenAI model whose entry prices
- * OpenAI's Ultrafast tier, or nothing for one whose entry does not: the
- * base model's efforts and window, named `<Name> (Ultrafast)` under the
- * base's id with `-ultrafast`, and priced at that tier, its long-context
- * prices read as its two windows as a price tier's are (`contextWindowsOf`).
- */
 function ultrafastModelOf(entry: CatalogEntry, base: OfferedModel): OfferedModel | undefined {
   if (base.provider !== MODEL_PROVIDER.OPENAI || modelSpeedOf(base.id) !== MODEL_SPEED.STANDARD) {
     return undefined;
@@ -409,14 +286,6 @@ function ultrafastModelOf(entry: CatalogEntry, base: OfferedModel): OfferedModel
   };
 }
 
-/**
- * What the tokens cost at the prices: the input read from the prefix cache
- * at the cache's read price and the input written to it at its write price,
- * each at the input price for a model that lists none, the rest of the
- * input at the input price, and the output, reasoning included since the
- * provider counts it there, at the output price. The input counts both of
- * the cache's shares, so neither is priced twice.
- */
 export function tokensCostUsd(pricing: ModelPricing, tokens: PricedTokens): number {
   const cached = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
   const written = Math.min(tokens.cacheWriteTokens ?? 0, tokens.inputTokens - cached);
@@ -428,7 +297,6 @@ export function tokensCostUsd(pricing: ModelPricing, tokens: PricedTokens): numb
   );
 }
 
-/** The catalog's answer filtered to what we offer, in the catalog's own order, each model's Ultrafast version right after it. */
 function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly OfferedModel[] {
   const offered: OfferedModel[] = [];
   for (const entry of answer.data) {
@@ -441,7 +309,6 @@ function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly Offere
   return offered;
 }
 
-/** One read of the catalog over the client, answered as the offered models or as unavailable. */
 const fetchOfferedModels = /* @__PURE__ */ Effect.fnUntraced(function* (
   client: HttpClient.HttpClient,
 ): Effect.fn.Return<readonly OfferedModel[], ModelCatalogUnavailable> {
@@ -455,12 +322,6 @@ const fetchOfferedModels = /* @__PURE__ */ Effect.fnUntraced(function* (
   return offeredModels(answer);
 });
 
-/**
- * The catalog as this instance's one cached read over the ambient client. A
- * success stands for the TTL; a failure stands for no time, so the next
- * request asks again rather than answering the outage for an hour, and
- * answers the last success meanwhile where there was one.
- */
 export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.HttpClient> =
   Layer.effect(
     ModelCatalog,
@@ -470,8 +331,6 @@ export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.Http
       const cached = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
         Exit.isSuccess(exit) ? MODEL_CATALOG_TTL : Duration.zero,
       );
-      // Note that a failed refetch answers the last read, because a caller told no models
-      // guesses instead: a 200K window for every agent, and no prices.
       const read = cached.pipe(
         Effect.tap((offered) => Ref.set(lastRead, offered)),
         Effect.catch((unavailable) =>
@@ -484,33 +343,15 @@ export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.Http
     }),
   );
 
-/** A catalog of exactly these models, for a test or a caller that already holds one. */
 export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<ModelCatalog> {
   return Layer.succeed(ModelCatalog, { read: Effect.succeed(models) });
 }
 
-// ------------------------------------------------------------- the checks
-
-/** What decides which fast and Ultrafast versions an account is offered: whether the Anthropic key its steps run on may run fast mode, and whether its ChatGPT plan pays for its GPT agents. */
 export interface AccountFastOffer {
   readonly anthropic: FastAccess | undefined;
-  /** Whether its ChatGPT plan pays for its GPT agents, on which OpenAI limits Ultrafast to plans this one may not be. */
   readonly chatGptPlan: boolean;
 }
 
-/**
- * The catalog as one account is offered it. Where Anthropic said the
- * organization of the Anthropic key its steps run on may not run fast mode,
- * Anthropic's fast versions are withheld and each base model says so
- * (`fastNotEnabled`). Where its ChatGPT plan pays for its GPT agents,
- * OpenAI's Ultrafast versions are withheld, since OpenAI limits Ultrafast to
- * a few plans and Codex runs it on an API key alone. Everything else as the
- * catalog lists it, OpenAI's fast versions among them, which Codex runs on
- * the ChatGPT plan and an API key alike. Note that a key no fast
- * request has answered is offered its fast versions, because a fast step
- * Anthropic refuses runs at standard speed anyway (`coder-host/model.ts`)
- * and the refusal is the answer the key is then offered by.
- */
 export function offeredToAccount(
   offered: readonly OfferedModel[],
   fast: AccountFastOffer,
@@ -536,13 +377,6 @@ export function offeredToAccount(
   }));
 }
 
-/**
- * The choice as the catalog accepts it, or why it refuses: a model it does
- * not offer, or an effort that model does not list. The standard window is
- * kept only for a model that offers two; a model with one runs every choice
- * on its whole window, so it is accepted and dropped rather than refused,
- * as the long window, which a choice runs on by naming none, always is.
- */
 export function validateModelChoice(
   catalog: readonly OfferedModel[],
   choice: ModelChoice,
@@ -560,7 +394,6 @@ export function validateModelChoice(
   });
 }
 
-/** The choice checked against the instance's catalog as the account is offered it (`offeredToAccount`): accepted, refused, or the catalog unavailable. */
 export function acceptedModelChoice(
   choice: ModelChoice,
   fast: AccountFastOffer,
@@ -574,17 +407,6 @@ export function acceptedModelChoice(
   });
 }
 
-/**
- * The model as its provider's own API names it: Anthropic spells the
- * version's point as a dash (`anthropic/claude-opus-5.5` is
- * `claude-opus-5-5`), and OpenAI's ids are the catalog's after the prefix.
- * Note that a fast slug or an Ultrafast id names the base model at that
- * speed, because the id is the gateway's or ours rather than the
- * provider's: Anthropic answers `claude-opus-5-5-fast` with a refusal at
- * the step's first call, and runs fast mode as `claude-opus-5-5` asked for
- * its fast speed, and OpenAI runs Ultrafast as `gpt-6.1-sol` on the
- * `ultrafast` service tier. Nothing for an id outside the two providers.
- */
 export function providerModelOf(catalogId: string): ProviderModel | undefined {
   const split = splitCatalogId(catalogId);
   const provider = providerOf(split?.provider ?? "");

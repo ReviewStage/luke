@@ -1,14 +1,3 @@
-/**
- * asked-pull-request.ts -- which pull request a read or a change of an agent's Pull request tab is about.
- *
- * The agent's own, from the instance's kept published answers, or the pull
- * request of its repository the request names by its number, read afresh,
- * as a tab showing a pull request other than the agent's own asks. Shared
- * by the agent's changes read (`agents-procedures.ts`) and the tab's
- * procedures (`agent-pull-request-procedures.ts`), each failure answered as
- * the refusal a route answers.
- */
-
 import { type Agent, forgetAgentPublishedRead } from "@repo/database/models/agent-store";
 import { AGENT_STATUS, type AgentAuthor, type AgentPullRequest } from "@repo/features/agent-wire";
 import { githubPullRequestNumberSchema } from "@repo/features/github-repositories-wire";
@@ -30,26 +19,14 @@ import {
 } from "./coder-host/published.js";
 import { statusOf } from "./coder-host/stop.js";
 
-/**
- * What a read of a pull request names it against: the repository it is
- * of, the workspace whose members its people are named as, and who it says
- * it writes as, none where no agent stands behind the read. An agent with
- * a repository is one.
- */
 export interface PullRequestSubject {
   readonly organizationId: string;
   readonly repository: string;
   readonly author: AgentAuthor | null;
 }
 
-/** How a read of GitHub for an agent's repository fails: the store, GitHub, or the repository out of the workspace's reach. */
 type GitHubAskFailure = GitHubWorkspaceReadFailure | { readonly _tag: "RepositoryNotReachable" };
 
-/**
- * A read of GitHub for an agent's repository as the refusal a route
- * answers: the repository out of reach, the store, or GitHub's own
- * refusal.
- */
 export function githubReadRefusal<A, R>(
   effect: Effect.Effect<A, GitHubAskFailure, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
@@ -67,17 +44,14 @@ export function githubReadRefusal<A, R>(
   });
 }
 
-/** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
 const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: PublishedCache,
   userId: string,
   agent: Agent,
 ) {
-  // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
   const status = yield* statusOf(agent);
   const ended = status !== AGENT_STATUS.STARTING && status !== AGENT_STATUS.RUNNING;
   return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
-    // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
     Effect.catch((failure) =>
       failure._tag === "NoSuchAgent"
         ? Effect.fail(HOSTED_REFUSAL.NOT_FOUND)
@@ -86,7 +60,6 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** The pull request number a request names under `number`, each value as the query spelled it: none where it names none; refused where it names one off the wire's shape or more than one. */
 export const pullRequestNumberOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   named: readonly string[],
 ): Effect.fn.Return<number | undefined, HostedRefusal> {
@@ -101,12 +74,6 @@ export const pullRequestNumberOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/**
- * What a read of the agent's Pull request tab is about: the pull request of
- * the agent's repository the request names by its number, read afresh, as a
- * tab showing a pull request other than the agent's own asks; else what the
- * agent published, from the instance's kept answers.
- */
 export const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: PublishedCache,
   userId: string,
@@ -117,7 +84,6 @@ export const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* agentPullRequestOfNumber(userId, agent, number).pipe(githubReadRefusal);
 });
 
-/** The pull request a read or a change of the agent's Pull request tab is about (`askedPublished`), null where there is none. */
 export const askedPullRequest = (
   published: PublishedCache,
   userId: string,
@@ -129,14 +95,6 @@ export const askedPullRequest = (
     (answer): AgentPullRequest | null => answer.pullRequest,
   );
 
-/**
- * The instance's kept answers for the agent let go, every member's and on
- * either side of its end, and the read its row keeps with them, so the next
- * ask reads GitHub afresh whoever asks. Note that another instance keeps its
- * own for at most `CODER.PUBLISHED_TTL`, as it keeps one past a change made
- * on GitHub itself; and that a row the store would not let go of is logged
- * and answers for at most `CODER.PUBLISHED_ROW_FRESH`, as the change stands.
- */
 export const forgetPublished = (published: PublishedCache, userId: string, agentId: string) =>
   Effect.flatMap(Cache.keys(published), (keys) =>
     Effect.forEach(

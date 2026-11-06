@@ -35,20 +35,6 @@ import { type SandboxStopReach, SessionSandboxes } from "./session-sandboxes.js"
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
-/**
- * A coding agent's terminals as its tab reaches them, through the hosted
- * oRPC router as the web route answers it, over a real dialect and
- * a sandbox that answers from a script: the agent is reached by the one rule
- * every agent route keeps, so another account reads it as none, an archived
- * agent is gone, and a list answers the sandbox's shells and where it
- * stands; a shell is refused in a stopped sandbox, and only the resume path
- * wakes one; and a sandbox that did not answer is the upstream's
- * failure, apart from the service's own. An agent on its starter's own
- * GitHub token gives its sandbox to its starter alone: a teammate who sees it
- * is refused, and one who does not reads it as none. Synthetic accounts,
- * tasks, and sessions throughout.
- */
-
 const ORIGIN = "https://app.test";
 const SHELL: TerminalSummary = {
   id: "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d",
@@ -58,10 +44,8 @@ const SHELL: TerminalSummary = {
   running: false,
 };
 
-/** The ports a running sandbox listens on. */
 const PORTS = [3000, 5173];
 
-/** A sandbox standing as given, keeping what it was asked: lists, starts, and resumes, by session. */
 function scriptedSandbox(state: SandboxState) {
   const asked: { readonly what: string; readonly sessionId: string }[] = [];
   const shells = state === SANDBOX_STATE.RUNNING ? [SHELL] : [];
@@ -99,7 +83,6 @@ function scriptedSandbox(state: SandboxState) {
   return { layer: Layer.succeed(AgentSandbox, service), service, asked };
 }
 
-/** An account with an agent on a task, its session claimed unless it says none, as a started agent stands. */
 const openAgentWith = (options: { readonly claimed: boolean }) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -109,7 +92,6 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
       idempotencyKey: `start-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      // Started blank, so no first turn is on its way and the agent can be archived at once.
       descriptionSnapshot: null,
       prompt: null,
       repository: "acme/relay",
@@ -130,11 +112,6 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
 
 const openAgent = openAgentWith({ claimed: true });
 
-/**
- * An agent on its starter's own GitHub token, its session claimed, in a
- * workspace with a teammate whose own verified token reads its repository
- * and one who keeps no token.
- */
 const openTokenAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
   const reader = yield* openTokenMember({ token: "fixture-reader-token" });
@@ -171,16 +148,13 @@ const openTokenAgent = Effect.gen(function* () {
   return { userId, reader, tokenless, agent };
 });
 
-/** What the routes counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The tools the account was counted as opening, each with the workspace it was counted in, in order. */
 const toolsCounted = (userId: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === SERVER_EVENT.AGENT_TOOL_OPEN)
     .map((event) => ({ workspaceId: event.workspaceId, ...event.properties }));
 
-/** The agents procedures over the test's store and the sandbox given, each bearer answering for the account it maps to. */
 const standing = (
   bearers: ReadonlyMap<string, string>,
   sandbox: Layer.Layer<AgentSandbox>,
@@ -218,9 +192,7 @@ const standing = (
         keepAwake,
       }),
     });
-    // SAFETY: the terminal procedures yield the store and the network alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
-    /** One request's answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
     const bytes = (
       path: string,
       bearer: string | undefined,
@@ -252,7 +224,6 @@ const standing = (
           ...(init.method === undefined ? undefined : { method: init.method }),
           ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
         }),
-        // SAFETY: the router answers JSON; the test compares it as the wire value it is.
         (answered) => ({ status: answered.status, body: JSON.parse(answered.text) }),
       );
     return Object.assign(call, { bytes });
@@ -434,7 +405,6 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
       Effect.gen(function* () {
         const { userId, agent } = yield* openAgent;
         const gone = new SandboxUnavailable({ status: 410, code: "snapshot_not_found" });
-        // Vercel answers 410 for a call to a sandbox that stopped under it too, which a resume mends.
         const stopped = new SandboxUnavailable({ status: 410, code: "sandbox_stopped" });
         const sandbox = Layer.succeed(AgentSandbox, {
           ...scriptedSandbox(SANDBOX_STATE.STOPPED).service,
@@ -533,7 +503,6 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
       const call = yield* standing(
         new Map([["Bearer owner", userId]]),
         scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
-        // The stop is kept back, as a function slow to reach Vercel runs it, until the agent is back.
         sandboxes.layer,
         (work) => Effect.sync(() => void held.push(work as Effect.Effect<void, never, never>)),
       );

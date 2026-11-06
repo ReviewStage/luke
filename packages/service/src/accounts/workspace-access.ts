@@ -1,11 +1,3 @@
-/**
- * workspace-access.ts -- a workspace as an account may act on it, and a write through the organization plugin answered as a refusal.
- *
- * Shared by the workspace procedures: the workspace as the account sees it,
- * one it manages as an owner or an admin, and a plugin call made under the
- * Mac's session, its failure read as the refusal the Mac draws.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import type { OrganizationRefused } from "@repo/database/models/workspace-seams";
 import { type Workspace, workspaceOf } from "@repo/database/models/workspace-store";
@@ -18,22 +10,13 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 
-/** The plugin's codes for an address it will not invite because it already is, or already was. */
 const ALREADY_INVITED_CODES: ReadonlySet<string> = new Set([
   "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION",
   "USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION",
 ]);
 
-/** The roles that rename the workspace, set its photo, or invite people to it. */
 const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
-/**
- * A plugin call under the session: its refusal of the session as
- * unauthenticated, an address already in or invited as such, any other
- * refusal as not permitted, since our own rules already passed, and a
- * failure that is not a refusal as the outage the Mac may retry, logged by
- * its kind alone.
- */
 export function pluginCallOrRefused<A, R>(
   write: Effect.Effect<A, OrganizationRefused | Cause.UnknownError, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
@@ -55,7 +38,6 @@ export function pluginCallOrRefused<A, R>(
   });
 }
 
-/** The workspace as the account now sees it; one it is not in, or one that vanished between a write and this read, is not found. */
 export const answeredWorkspace = Effect.fn("web/answeredWorkspace")(function* (
   userId: string,
   organizationId: string,
@@ -65,7 +47,6 @@ export const answeredWorkspace = Effect.fn("web/answeredWorkspace")(function* (
   return workspace.value;
 });
 
-/** A workspace the account is an owner or an admin of; the one whose invitations it manages, that it renames, or whose photo it sets. */
 export const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
   userId: string,
   organizationId: string,

@@ -8,13 +8,6 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { SENTRY_ENVIRONMENT } from "./sentry.js";
 import { sentryTunnelApp } from "./sentry-tunnel-app.js";
 
-/**
- * The tunnel, answered by its group the way a function answers it, over a
- * fake of Sentry's ingest: an envelope for another project is refused and
- * nothing is sent, while one for the deployment's own is passed on as it
- * came. Synthetic DSNs throughout.
- */
-
 const ORIGIN = "https://app.test";
 const OWN_DSN = "https://publickey@o1.ingest.us.sentry.invalid/42";
 const FOREIGN_DSN = "https://otherkey@o9.ingest.us.sentry.invalid/77";

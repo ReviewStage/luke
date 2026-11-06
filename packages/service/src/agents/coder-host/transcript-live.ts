@@ -35,45 +35,11 @@ import { Option } from "effect";
 import { CUT_END_CHARS, CUT_TOOLS, REASONING_PART_TYPE } from "./part-cut.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
-/**
- * transcript-live.ts -- what a coding agent's transcript is read from, written for Neon Realtime, so a reader hears the moment a page past its cursor would say something new.
- *
- * A page of the transcript (`transcript.ts`) is assembled from many reads,
- * some priced against the model catalog, which lives outside Postgres, so
- * the page itself is not followed: these statements are the rows a held
- * read looks at for something new, and a reader that follows them reads the
- * page once they move rather than on a clock. Each moves where the held
- * read would wake: a message added to the conversation (`messages`) or
- * amended in place, which counts its journal revision up (`conversation`),
- * a turn opened, started, settled, or stopped (`turns`, counted by its
- * status, so a turn moving from one to another moves them), which is where the
- * status is read from and a line stops awaiting its turn, and a title
- * landing, the agent's own (`agent`) or a worker's, or a worker's
- * delegation being recorded (`workers`), and, for an agent on a device, its
- * newest launch line being claimed, stepping, or settling (`launch`), which
- * is where the page reads what the agent's start waits on. Each reads only the rows of the
- * account that started the agent, as the held read does, and only while
- * the reader is a member of the agent's workspace: the membership is joined
- * in the statement, so a member taken out of the workspace stops hearing
- * anything at once, as Neon's guide asks, rather than at the next seal.
- * The newest messages themselves are followed too, as rows (`window`): the
- * last `TRANSCRIPT_WINDOW` by sequence, one row a message keyed by its id,
- * each with what the page carries beside it joined in rather than read
- * after (`@repo/features/transcript-window`), so a reader draws them from
- * the rows that arrive (`transcriptWindowLiveStatements`), and their parts
- * keyed apart, the heavy ones cut as a page asked cut cuts them.
- * Every row that is one of many carries its key. Nothing in them reads the clock: a status
- * that changes with time alone, such as an agent past its grace, is the
- * reader's to ask for at the end of its hold.
- */
-
-/** The statements a transcript's newest messages are drawn from: the messages, and their parts keyed apart. */
 export interface TranscriptWindowStatements {
   readonly window: LiveStatement;
   readonly windowParts: LiveStatement;
 }
 
-/** The statements a transcript is followed by, each a part of the one read. */
 export interface TranscriptLiveStatements extends TranscriptWindowStatements {
   readonly messages: LiveStatement;
   readonly turns: LiveStatement;
@@ -84,10 +50,8 @@ export interface TranscriptLiveStatements extends TranscriptWindowStatements {
   readonly launch: LiveStatement;
 }
 
-/** A number Postgres holds as `bigint`, as a number rather than the text Realtime would carry. */
 const asNumber = (value: SQL): SQL<number> => sql<number>`(${value})::float8`;
 
-/** When a turn last changed: the latest of the stamps its opening, start, settling, and Stop write. */
 const TURN_CHANGED = sql`greatest(
   ${turns.queuedAt},
   coalesce(${turns.startedAt}, ${turns.queuedAt}),
@@ -95,56 +59,27 @@ const TURN_CHANGED = sql`greatest(
   coalesce(${turns.cancelRequestedAt}, ${turns.queuedAt})
 )`;
 
-/** The journal of the turn that took a developer's line in, which shares the turn's id as its client id. */
 const takingJournal = alias(messages, "taking_journal");
-/** The coding agent that sent a line, apart from the agent the statement's membership reads. */
 const sendingAgent = alias(agentTable, "sending_agent");
 
-/** The newest messages' own rows, by id, which the parts statement reads the parts of. */
 const windowMessage = alias(messages, "window_message");
 
-/**
- * Whether the message row is past the cursor, where one is named: numbered
- * after its sequence, or amended in place after its revision, as a page past
- * a cursor reads (`listMessagesPast`). A row moved to a fresh sequence is
- * past it by that sequence.
- */
 const pastCursor = (
   row: { readonly seq: AnyPgColumn; readonly revision: AnyPgColumn },
   past: MessageCursor | undefined,
 ): SQL | undefined =>
   past === undefined ? undefined : or(gt(row.seq, past.seq), gt(row.revision, past.revision));
 
-/** The part types whose heavy field a page may cut: reasoning's words, and the outputs of the tools that answer as words (`part-cut.ts`). */
 const CUT_TOOL_TYPES = sql.join(
   [...CUT_TOOLS].map((tool) => sql`${`tool-${tool}`}`),
   sql`, `,
 );
 
-/** The tools a transcript's reads hold, as one text a statement splits on spaces, which no tool's name holds. */
 const HELD_TOOLS = Object.keys(CODER_TOOL_SET).join(" ");
 
-/**
- * Whether the part `element` is a tool part the transcript's reads no longer
- * hold, which they leave out (`withoutRetiredToolParts`), so the window
- * leaves it out too and every part after it stands at the index a page and a
- * whole part's read give it.
- */
 const retired = (element: SQL) => sql`(${element}->>'type' like 'tool-%'
   and substr(${element}->>'type', 6) <> all(string_to_array(${HELD_TOOLS}, ' ')))`;
 
-/**
- * The parts of the window's messages, one row a part keyed by its message's
- * id and its index, each cut as a page asked cut cuts it (`part-cut.ts`): a
- * reasoning's words or a word-answering tool's output past `MAX_PART_CHARS`
- * is left out of the part and carried as its two ends and its size in
- * bytes. A journal growing in place then moves only the rows of the parts it
- * added or settled, rather than the whole journal. Note that the words are
- * measured in characters, as the page measures them in UTF-16 units, and a
- * tool output that is no string as Postgres spells its JSON, so a part at
- * the very bound may be cut on one and not the other; only the ends drawn
- * differ.
- */
 function windowPartsOf(target: ConversationTarget, reached: SQL, past: MessageCursor | undefined) {
   const element = queryBuilder
     .select({
@@ -218,17 +153,6 @@ function windowPartsOf(target: ConversationTarget, reached: SQL, past: MessageCu
     );
 }
 
-/**
- * The newest `TRANSCRIPT_WINDOW` messages of `target`'s conversation, each
- * with what sent it, where a turn under way took it in, and the turn it
- * was written in, each join
- * naming one row at most, so a message is one row keyed by its id, with how
- * many parts it holds, which `windowParts` carries one row each; read
- * only while `reached` holds, as the other statements are. Past a cursor,
- * where one is named, only the newest of the messages written or amended
- * past it, and their parts. None where it names a value Realtime cannot
- * carry.
- */
 export function transcriptWindowLiveStatements(
   target: ConversationTarget,
   reached: SQL,
@@ -253,7 +177,6 @@ export function transcriptWindowLiveStatements(
           automationId: messages.senderAutomationId,
           journalId: takingJournal.id,
           afterStep: messages.takenAfterStep,
-          // No line the voice said is folded under a turn any more; a released desktop still decodes the keys.
           askTurnId: sql<string | null>`null::text`,
           askAfterStep: sql<number | null>`null::integer`,
           turnStatus: turns.status,
@@ -295,7 +218,6 @@ export function transcriptWindowLiveStatements(
       and(
         eq(messages.conversationId, target.conversationId),
         eq(messages.userId, target.userId),
-        // A line its hand-over withdrew reads nowhere until a turn takes it (`message-reads.ts`).
         standingLine(messages),
         pastCursor(messages, past),
         reached,
@@ -309,12 +231,6 @@ export function transcriptWindowLiveStatements(
   });
 }
 
-/**
- * The condition that `readerId` may follow the transcripts under the coding
- * agent whose conversation is `parentConversationId`, which `ownerId`
- * started: it is a member of the agent's workspace. Joined in each statement,
- * so it stays live.
- */
 export function agentFollowedBy(
   ownerId: string,
   parentConversationId: string,
@@ -334,15 +250,6 @@ export function agentFollowedBy(
   );
 }
 
-/**
- * The statements the transcript of `target`'s conversation is followed by,
- * under the conversation `parentConversationId`: an agent's own, where the
- * two are the same, or one of its workers', while `reached` holds, the
- * reader's membership of the workspace the transcript belongs to
- * (`agentFollowedBy`); its newest messages past `past`, where a cursor is
- * named (`transcriptWindowLiveStatements`). None where a statement names a
- * value Realtime cannot carry.
- */
 export function transcriptLiveStatements(
   target: ConversationTarget,
   parentConversationId: string,
@@ -416,8 +323,6 @@ export function transcriptLiveStatements(
         reached,
       ),
     );
-  // The agent's queue as its revision, which every write to the queue or its pause moves on in the same
-  // transaction (`agent-queue-store.ts`), so one number wakes the read for all of them.
   const queueRevision = queryBuilder
     .select({ revision: agentQueue.revision })
     .from(agentQueue)
@@ -429,8 +334,6 @@ export function transcriptLiveStatements(
         reached,
       ),
     );
-  // The agent's newest launch line, on a device, as its claim, its step, and its settling stand,
-  // read on the agent's own transcript alone, since a worker's conversation is no agent's.
   const launch = queryBuilder
     .select(
       liveSelection({

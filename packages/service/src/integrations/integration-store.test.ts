@@ -23,16 +23,6 @@ import {
 import { INTEGRATION_GRANT_HOLDER } from "./integration-token.js";
 import { readStoredTools, storeTools } from "./integration-tool-store.js";
 
-/**
- * An account's integration rows over the real migration on PGlite: a
- * sign-in is found by its state alone and by no other account's, it settles
- * once, whether with a grant or without one, an account reads only its own
- * rows, and the rows go with the account that owns them. Each write that
- * moves what the account's integrations read draws notifies that account's
- * integrations topic alone, and a tools listing, which every native launch
- * writes, notifies nothing.
- */
-
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
@@ -56,7 +46,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         theirRows.map((row) => [row.userId, row.status]),
         [[theirs, INTEGRATION_ROW_STATUS.PENDING]],
       );
-      // Only a connected row expires; a sign-in under way stands as it was.
       yield* expireIntegrationConnection(mine, LINEAR);
       yield* expireIntegrationConnection(theirs, LINEAR);
       assert.equal(
@@ -125,7 +114,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
           "state-acme-notion",
         );
         yield* beginIntegrationSignIn(userId, second, "state-personal-notion");
-        // Another account's first Notion takes the same name as this one's, which names no row of this one's.
         yield* beginIntegrationSignIn(
           other,
           firstIntegrationAccount(other, NOTION),
@@ -242,7 +230,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         yield* under("subject-old", `state-old-${userId}`);
         const old = yield* readIntegrationConnection(userId, "notion-2");
         assert.ok(old !== undefined);
-        // Disconnected and replaced by another account under the same name while the old grant's name was read.
         yield* deleteIntegrationConnection(userId, "notion-2");
         yield* under("subject-new", `state-new-${userId}`);
         yield* fillIntegrationLabel(old, "Acme");
@@ -267,7 +254,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         yield* under("subject-read", `state-read-${userId}`);
         const read = yield* readIntegrationConnection(userId, "notion-2");
         assert.ok(read !== undefined);
-        // Disconnected and replaced by another account under the same name after it was read.
         yield* deleteIntegrationConnection(userId, "notion-2");
         yield* under("subject-replacing", `state-replacing-${userId}`);
 

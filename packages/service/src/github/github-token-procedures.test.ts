@@ -24,19 +24,6 @@ import { hostedAnswer } from "../testing/hosted-route.js";
 import { GITHUB_TOKEN_ABSENCE, memberGitHubToken } from "./github-token.js";
 import { githubTokenProcedures } from "./github-token-procedures.js";
 
-/**
- * The member's own GitHub token, answered by the procedures the way the
- * hosted oRPC route answers them, over a real dialect and GitHub faked at
- * its HTTP door: a token is kept only where GitHub accepts it with `repo` as
- * the member's own linked account, kept sealed, answered only as a summary,
- * and opened again by the service-side read until a use marks it invalid;
- * a save past the brake keeps nothing, and no answer, refusal, or logged
- * line carries the token.
- *
- * Synthetic accounts and tokens, built at run time so no literal is shaped
- * like a real one; the key-encryption key is fixed bytes written for this file.
- */
-
 const ORIGIN = "https://app.test";
 const TOKEN_PATH = "/api/github/token";
 const RING = `1:${Buffer.alloc(32, 1).toString("base64")}`;
@@ -64,7 +51,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** What the fake GitHub answers `GET /user` with, per token; a token it does not know is refused. */
 function github(token: string): Response {
   const user = (id: number, scopes: string) =>
     new Response(JSON.stringify({ id, login: `login-${id}` }), {
@@ -86,7 +72,6 @@ function github(token: string): Response {
   }
 }
 
-/** A request to the token's path, as `userId`'s bearer where one is named, carrying the body given as JSON. */
 function tokenRequest(
   userId: string | undefined,
   method: string,
@@ -102,7 +87,6 @@ function tokenRequest(
   });
 }
 
-/** A member with GitHub linked and the group answering both. */
 const openMembers = Effect.gen(function* () {
   const db = yield* Database;
   const owner = `user-${randomUUID()}`;
@@ -128,13 +112,11 @@ const openMembers = Effect.gen(function* () {
       ),
   });
   const logged: string[] = [];
-  // Every line the procedures log is kept, so a test can read what they say.
   const recorder = Logger.make(({ message, cause }) => {
     logged.push(`${JSON.stringify(message)} ${Cause.pretty(cause)}`);
   });
   const send = (request: Request, environment: HostedEnvironmentValues = ENVIRONMENT) =>
     Effect.gen(function* () {
-      // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
       const services = Layer.mergeAll(
         Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
         Layer.succeed(Database, db),
@@ -146,7 +128,6 @@ const openMembers = Effect.gen(function* () {
       );
       const response = yield* hostedAnswer({ githubToken: procedures }, services, request);
       const text = yield* Effect.promise(() => response.text());
-      // SAFETY: the route answers JSON; the test compares it as the wire value it is.
       return {
         status: response.status,
         body: JSON.parse(text) as WireBoundaryInput,
@@ -160,7 +141,6 @@ const openMembers = Effect.gen(function* () {
   return { owner, ask, send, checks: fake.requests, logged };
 });
 
-/** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 const countedFor = (userId: string) =>
@@ -409,7 +389,6 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
     "a save whose body is not sent as JSON is refused as an invalid request, keeps nothing, and asks GitHub nothing",
     () =>
       Effect.gen(function* () {
-        // Note that the old group read any body as JSON; oRPC reads one only under a JSON content type.
         const { owner, ask, send, checks } = yield* openMembers;
         const untyped = new Request(new URL(TOKEN_PATH, ORIGIN), {
           method: "PUT",

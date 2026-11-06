@@ -1,56 +1,3 @@
-/**
- * connection-door.ts -- a native agent's integrations, each its own MCP server: which it is handed, and the tools each lists and calls, on the member's own grants, with no eve.
- *
- * A native harness's agent is handed each connection as an MCP server of
- * its own at the service (`../agents/workspace-mcp/app.ts`), the way Claude Code and
- * Codex take any remote server: its launch names one server per connection
- * (`nativeAgentConnections`), and each server lists the provider's own tools
- * and forwards a call of one, which is this door.
- *
- * The connections are the ones a coding agent's turn is handed
- * (`turnServers`): every integration this deployment offers the caller but
- * those switched off for the agent, and those the native turn under way
- * took as mentions. Every request reads them afresh, so a switch turned off
- * after the launch lists no tools and refuses a call from the next request.
- * Each request reads the connection's grant afresh for the member acting in
- * the conversation from the store (`integrationGrant`), so a Disconnect
- * takes effect at the next request.
- *
- * A token is asked of Vercel Connect only when it is used, as Connect's docs
- * say: the harness lists every server's tools at each launch, for tools the
- * agent may never call, so a server's list is answered from the one kept on
- * its grant (`integration-tool-store.ts`), and only a grant that keeps none,
- * or one listed more than `TOOLS_KEPT` ago, is listed live on its token and
- * kept. A call reads the token and opens one MCP session to the provider's
- * own server (`mcp-tools.ts`), which lists the tools before calling one, so
- * every call keeps its grant's list current at no further ask. A token the
- * provider refuses is dropped from Connect's in-process cache and read once
- * more (`evictGrantToken`), never forced fresh on every read. A grant
- * revoked at the provider that we have not yet seen lists its kept tools,
- * and its first call answers why.
- *
- * The app's account settings are where an integration is connected, so
- * nothing here starts a sign-in: a connection the member has not
- * connected, or whose grant expired, lists no tools, and a call of it is
- * refused with `requiresSignIn` and the sentence that says how to connect it.
- *
- * Every upstream read is bounded: the token's read, and the provider's
- * session (`mcp-tools.ts`'s own bounds), so a slow provider costs its own
- * server its tools and never holds the agent's start; a list that fails
- * lists no tools and logs one line naming the connection and the failure's
- * kind.
- *
- * The bearer goes to the provider's server and nowhere else: no answer, no
- * refusal, and no log line here carries it, and a server's own error
- * message is kept only where nothing in it is shaped like a credential
- * (`mcp-tools.ts`). What a provider's tool answers reaches the agent
- * whole, as `AGENTS.md`'s carve-out for integrations allows.
- *
- * The door does not check a call's input against the tool's schema before
- * calling it: the provider's server checks it, and its refusal is the
- * call's error.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readNativeProjection } from "@repo/database/models/native-projection-store";
 import type { IntegrationProvider } from "@repo/features/integration-wire";
@@ -83,37 +30,18 @@ import {
   type McpToolsFailure,
 } from "./mcp-tools.js";
 
-/** What the door runs against, every one of which a web function's runtime provides. */
 export type ConnectionDoorServices =
   | DatabaseServices
   | IntegrationConnect
   | GitHubApp
   | HttpClient.HttpClient;
 
-/**
- * How long reading a connection's token may take, past which the
- * connection is taken as unreachable: the token is read from Vercel Connect,
- * an upstream of its own.
- */
 const GRANT_TIMEOUT = Duration.seconds(10);
 
-/**
- * How long a grant's kept list answers its server's listing before it is
- * listed live again: long enough that a launch almost never asks Connect for
- * a token, short enough that a tool a provider adds reaches an agent that
- * never calls that integration within the week.
- */
 const TOOLS_KEPT = Duration.days(7);
 
-/**
- * How long listing one connection's tools may take whole, its grant's read
- * included: under the time Codex gives a server to start
- * (`agent-runner/src/codex.ts`), so a slow provider's server answers no
- * tools rather than being failed by the harness.
- */
 const LIST_TIMEOUT = Duration.seconds(10);
 
-/** A refusal: the words the call is failed with, and, for a connection the member must connect, which and that it must. */
 export interface ConnectionRefusal {
   readonly status: typeof ACTION_RESULT_STATUS.REJECTED;
   readonly error: string;
@@ -121,7 +49,6 @@ export interface ConnectionRefusal {
   readonly requiresSignIn?: true;
 }
 
-/** One connection handed to the agent: which account at which provider, and, where the member holds more than one there, the note naming which account it is. */
 interface HandedConnection {
   readonly provider: IntegrationProvider;
   readonly connectionName: string;
@@ -129,25 +56,16 @@ interface HandedConnection {
   readonly accountNote?: string;
 }
 
-/** What a call of a connection's tool answered: the provider's own MCP result, as it sent it, or why there is none. */
 type ConnectionCall = Result.Result<WireRecord, ConnectionRefusal>;
 
 function refused(error: string, extra: Partial<ConnectionRefusal> = {}): ConnectionRefusal {
   return { status: ACTION_RESULT_STATUS.REJECTED, error, ...extra };
 }
 
-/** The admission the reads run under: the conversation the runner's bearer admitted. */
 function admissionOf(admitted: AdmittedConversation): IntegrationAdmission {
   return Effect.succeed(Result.succeed(admitted));
 }
 
-/**
- * The servers the native turn under way took as it started, mentioned to
- * the agent since its last turn (`native-events/runner-events-app.ts`),
- * which its calls are handed whatever the switches say, as an eve turn's
- * are; none where none was taken, or where the projection cannot be read,
- * so a passing store failure costs the call a mention, never a switch.
- */
 function turnMentionsOf(
   admitted: AdmittedConversation,
 ): Effect.Effect<readonly string[], never, DatabaseServices> {
@@ -167,7 +85,6 @@ function turnMentionsOf(
   );
 }
 
-/** The connections a coding agent's turn is handed. */
 function handedConnections(
   admitted: AdmittedConversation,
 ): Effect.Effect<readonly HandedConnection[], never, ConnectionDoorServices> {
@@ -179,7 +96,6 @@ function handedConnections(
   );
 }
 
-/** The one connection named, where the agent is handed it. */
 function handedConnection(
   admitted: AdmittedConversation,
   name: string,
@@ -189,13 +105,11 @@ function handedConnection(
   );
 }
 
-/** Whether a token read's sentence is one the member answers by connecting the integration again in settings. */
 function asksSignIn(provider: IntegrationProvider, sentence: string): boolean {
   const sentences = integrationUnavailable(provider);
   return [sentences.NOT_CONNECTED, sentences.EXPIRED].includes(sentence);
 }
 
-/** A refusal of the connection for a grant or token read's sentence, saying the member must connect it where the sentence asks that. */
 function refusedFor(connection: HandedConnection, sentence: string): ConnectionRefusal {
   return refused(sentence, {
     connection: connection.connectionName,
@@ -203,22 +117,15 @@ function refusedFor(connection: HandedConnection, sentence: string): ConnectionR
   });
 }
 
-/**
- * The line a listing refused its grant or token logs: a warning, but where
- * the member must only connect the integration (again), which is their
- * account's state and would be repeated by every launch, at debug.
- */
 function noToolsLogged(name: string, refusal: ConnectionRefusal): Effect.Effect<void> {
   const line = `integration server ${name} lists no tools: ${refusal.error}`;
   return refusal.requiresSignIn ? Effect.logDebug(line) : Effect.logWarning(line);
 }
 
-/** The account the connection names, as the token reads take it. */
 function accountOf({ provider, connectionName, instanceKey }: HandedConnection) {
   return { provider, connectionName, connectSubject: instanceKey };
 }
 
-/** The grant the connection's token is read on for the member acting in the conversation, or why there is none, read from the store alone. */
 function connectionGrant(
   admitted: AdmittedConversation,
   connection: HandedConnection,
@@ -233,7 +140,6 @@ function connectionGrant(
   );
 }
 
-/** The bearer on the grant (`grantAccessToken`), or why there is none, read within its bound. */
 function grantToken(
   connection: HandedConnection,
   grant: IntegrationGrantRef,
@@ -259,13 +165,6 @@ function grantToken(
   );
 }
 
-/**
- * One session's work with the provider on the grant's token: where the
- * provider refuses the token, it is dropped from Connect's cache and the
- * work runs once more on the token read next, as Connect's docs say, and a
- * second refusal is the answer. Answers why no token could be read, or the
- * work's own answer.
- */
 function onGrantToken<A>(
   connection: HandedConnection,
   grant: IntegrationGrantRef,
@@ -291,7 +190,6 @@ function onGrantToken<A>(
   });
 }
 
-/** Keeps the tools a read begun at `from` listed on the grant (`storeTools`); a store that cannot be written costs the next listing a live read, never this request. */
 function keepTools(
   name: string,
   grant: IntegrationGrantRef,
@@ -305,7 +203,6 @@ function keepTools(
   );
 }
 
-/** Why a session with a provider's server failed, in words that name nothing of its bearer. */
 function sessionFailed(connectionName: string, doing: string, failure: McpToolsFailure): string {
   if (failure.reason === MCP_TOOLS_FAILURE.REFUSED) {
     return `Authorization failed for "${connectionName}": the service refused the connection's credential.`;
@@ -314,15 +211,6 @@ function sessionFailed(connectionName: string, doing: string, failure: McpToolsF
   return `Failed to ${doing} "${connectionName}": the service was ${failure.reason}${said}.`;
 }
 
-/**
- * What the model is told of one connection the agent is handed, as eve
- * tells it: the integration's description and, where the member holds more
- * than one account there, the note naming which account this one is, so the
- * agent can pick the account the developer named; nothing for a connection
- * it is not handed. Its server answers it as its `initialize`'s
- * `instructions`, which the harness shows the model beside the server's
- * tools.
- */
 export function connectionInstructions(
   admitted: AdmittedConversation,
   name: string,
@@ -333,11 +221,6 @@ export function connectionInstructions(
   );
 }
 
-/**
- * The names of the connections a native agent is handed as its launch
- * starts, one MCP server each; none where they cannot be read, so a passing
- * failure costs the launch its integrations, never the launch.
- */
 export function nativeAgentConnections(
   admitted: AdmittedConversation,
 ): Effect.Effect<readonly string[], never, ConnectionDoorServices> {
@@ -346,16 +229,6 @@ export function nativeAgentConnections(
   );
 }
 
-/**
- * The tools one connection's provider lists for the member, as it listed
- * them, within `LIST_TIMEOUT`: the list kept on the connection's grant
- * while it is younger than `TOOLS_KEPT`, so listing asks Connect for no
- * token, and otherwise the provider's own list on the grant's token, kept
- * for the next listing. A connection the agent is not handed lists none,
- * and so does one whose grant or list failed, with one log line naming the
- * connection and why in words that carry no credential, a warning but for
- * a connection the member must connect (`noToolsLogged`).
- */
 export function listConnectionTools(
   admitted: AdmittedConversation,
   name: string,
@@ -409,14 +282,6 @@ export function listConnectionTools(
   );
 }
 
-/**
- * One call of a connection's tool with its input, on the member's own
- * grant: the provider's MCP result as it sent it, its own error among them.
- * A connection the agent is not handed, one the member has not connected,
- * a tool the server lists none of, and a session that failed are each
- * refused. The tools the session listed are kept on the grant, so the next
- * launch's listing shows what the provider lists now.
- */
 export function callConnectionTool(
   admitted: AdmittedConversation,
   name: string,

@@ -1,15 +1,3 @@
-/**
- * admin-account-queries.ts -- the rows one account's support sections are folded from.
- *
- * Every read names the account by its id, as the account page's other reads
- * do, so the overview's admin scope has nothing to narrow here. No read
- * selects a column the page may not show: a task's name or document, an
- * agent's title, prompt, description, or pull request beyond its state, a turn's
- * detail beyond what `coder-host/status.ts` reads it for, a key's sealed
- * parts or hint, or a connection's label. A workspace's name and an
- * agent's repository are read, which the developer allowed the admin pages. `admin-account.ts` folds what they answer.
- */
-
 import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
 import { awaitingLinesOfReached, latestTurnsOfReached } from "@repo/database/models/agent-store";
@@ -66,10 +54,8 @@ import { AggregateColumnSchema } from "./admin-queries.js";
 
 type AdminQueryFailure = QueryError | Schema.SchemaError;
 
-/** The account, and the instant the window opens: its first UTC day's midnight. */
 const WindowRequestSchema = Schema.Struct({ userId: Schema.String, windowStart: Schema.Date });
 
-/** The state of an agent's pull request alone, out of the row GitHub's answer was kept in. */
 const PULL_REQUEST_STATE_OF = sql<string | null>`${agentTable.published} ->> 'state'`;
 
 const findSessionSeen = SqlSchema.findOneOption({
@@ -96,11 +82,6 @@ const findTasksCreated = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The window's agents counted whole, with the pull requests opened from
- * them and the ones of those merged, each a count of rows rather than of
- * the bounded read the statuses come from.
- */
 const findAgentTotals = SqlSchema.findOneOption({
   Request: WindowRequestSchema,
   Result: Schema.Struct({
@@ -150,13 +131,6 @@ const AGENT_COLUMNS = {
   pullRequestState: PULL_REQUEST_STATE_OF,
 };
 
-/**
- * The account's newest agents at work in the window, at most `limit`, the id
- * breaking a tie in their start: started since `windowStart`, or older with a
- * turn that ended since, so an old agent that failed today is read too. The
- * ones started inside the window are the newest, so the bound cuts the older
- * ones first. Without a `windowStart`, the account's newest whenever.
- */
 const findAgents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -195,13 +169,8 @@ const findAgents = SqlSchema.findAll({
     ),
 });
 
-/** Every member of a workspace the account is in, joined back to count them. */
 const fellow = alias(member, "fellow");
 
-/**
- * The account's memberships with each workspace's name and member count,
- * oldest joined first, and whether it is the account's personal workspace.
- */
 const findMemberships = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -239,7 +208,6 @@ const findMemberships = SqlSchema.findAll({
   },
 });
 
-/** The GitHub installations of every workspace the account is in, by workspace. */
 const findInstallations = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -264,7 +232,6 @@ const findInstallations = SqlSchema.findAll({
     ),
 });
 
-/** The account's provider keys: which provider, how it last answered, and fast access; never the key, sealed or hinted. */
 const findProviderKeys = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -286,7 +253,6 @@ const findProviderKeys = SqlSchema.findAll({
         .where(
           and(
             eq(accountProviderKey.userId, userId),
-            // Its API keys alone; a subscription credential is no key the account's steps spend on.
             eq(accountProviderKey.kind, PROVIDER_KEY_KIND.API_KEY),
           ),
         )
@@ -294,7 +260,6 @@ const findProviderKeys = SqlSchema.findAll({
     ),
 });
 
-/** The account's integration connections: which provider, its status, and when that last moved; never its label. */
 const findConnections = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -338,7 +303,6 @@ const findDefaults = SqlSchema.findOneOption({
     ),
 });
 
-/** The window's failed runs of automations the account made, newest first, with the enumerated reason alone. */
 const findFailedRuns = SqlSchema.findAll({
   Request: WindowRequestSchema,
   Result: Schema.Struct({
@@ -365,13 +329,10 @@ const findFailedRuns = SqlSchema.findAll({
   },
 });
 
-/** Each agent read, with the newest turn and the awaiting line its status is read from. */
 const withStandings = Effect.fnUntraced(function* (
   windowRows: readonly AgentRow[],
   recentRows: readonly AgentRow[],
 ) {
-  // Note that the conversations are the agents' own, read above by the account's id, so
-  // the reads that need no owner take them as already reached.
   const conversations = [
     ...new Set([...windowRows, ...recentRows].map((row) => row.conversationId)),
   ];
@@ -393,13 +354,6 @@ const withStandings = Effect.fnUntraced(function* (
   return { windowAgents: windowRows.map(standing), recentAgents: recentRows.map(standing) };
 });
 
-/**
- * Reads every row one account's support sections are folded from, over the
- * window ending at `now`. Like the rest of the account page, a database
- * that does not answer throws into the handler's 503. An account with no
- * user row reads as an empty source; the page's own account read is what
- * answers it missing.
- */
 export function readAdminAccountSource(input: {
   userId: string;
   now: number;

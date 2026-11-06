@@ -5,18 +5,6 @@ import { Effect, Option, Redacted } from "effect";
 import { fakeGitHub, type SentToGitHub } from "../testing/github-app-fake.js";
 import { githubImage } from "./github-images.js";
 
-/**
- * github-images.test.ts -- an image GitHub's rendering of a pull request
- * names is read for the window as ReviewStage/stage's proxy reads it: an
- * upload re-signed by its asset's id in the agent's repository on the App's
- * token, then read from the signed address with no credential; a file of
- * the agent's own repository read through its contents on the token, and
- * one of any other repository never asked for; a public image on GitHub's
- * image proxy read as it stands; and an answer naming
- * another asset, of a type the window does not draw, or past the bound,
- * read as none. A scripted GitHub; synthetic ids.
- */
-
 const REPOSITORY = "acme/relay";
 const TOKEN = Redacted.make("ghs_fixture_installation_token");
 const ASSET = "4f2c1a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
@@ -25,7 +13,6 @@ const SIGNED = `https://private-user-images.githubusercontent.com/90001/418-${AS
 const CAMO = "https://camo.githubusercontent.com/abc123/68747470733a2f2f";
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
-/** GitHub's rendering of a one-line image, its address spelled with entities as GitHub spells it. */
 function rendered(address: string): Response {
   const spelled = address.replaceAll("&", "&amp;");
   return new Response(`<p><a href="${spelled}"><img src="${spelled}" alt=""></a></p>`, {
@@ -33,14 +20,12 @@ function rendered(address: string): Response {
   });
 }
 
-/** An image answer of the type and size given. */
 function image(type: string, bytes: Uint8Array<ArrayBuffer> = PNG): Response {
   return new Response(bytes, {
     headers: { "content-type": type, "content-length": String(bytes.byteLength) },
   });
 }
 
-/** The image the address names, read off the GitHub given, and every request it sent. */
 const read = (address: string, answer: (sent: SentToGitHub) => Response) =>
   Effect.gen(function* () {
     const named = githubImageOf(address);
@@ -121,10 +106,8 @@ it.effect(
     }),
 );
 
-/** A whole PNG file's signature, as a repository's file must open to be read as one. */
 const PNG_FILE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
-/** A repository's file as the contents API answers its raw bytes, under GitHub's own type. */
 function raw(bytes: Uint8Array<ArrayBuffer> = PNG_FILE): Response {
   return new Response(bytes, {
     headers: {

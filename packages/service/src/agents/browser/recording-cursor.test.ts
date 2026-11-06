@@ -4,21 +4,10 @@ import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
 import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./recording-cursor.js";
 
-/**
- * recording-cursor.test.ts -- the agent's pointer as the recorder draws it into
- * a page: one host on the document's root, hidden from the accessibility
- * tree and taking no pointer events, drawn once however often it is added,
- * and gone with its listeners once the recording stops. What it draws stands
- * in a closed shadow root, which the frames show and the page cannot reach,
- * so these read what the page can: the host, and whether input brings it
- * back.
- */
-
 const hosts = () =>
   document.documentElement.querySelectorAll(":scope > [data-ui-recording-cursor]");
 
 const run = (source: string) => {
-  // The page runs the source as the recorder hands it over, as a script of its own.
   // biome-ignore lint/security/noGlobalEval: the source is the recorder's own constant, run as the browser runs it.
   window.eval(source);
 };
@@ -73,7 +62,6 @@ test("typing into a field by ref, which focuses it with no mouse, draws the poin
   run(RECORDING_CURSOR_SOURCE);
   const field = document.createElement("input");
   document.body.append(field);
-  // jsdom lays nothing out, so the field stands where a page would draw it.
   vi.spyOn(field, "getBoundingClientRect").mockReturnValue(new DOMRect(40, 120, 300, 32));
   const [host] = [...hosts()];
   assert.ok(host);
@@ -86,7 +74,6 @@ test("typing into a field by ref, which focuses it with no mouse, draws the poin
 });
 
 test("a key a viewer could not see shows as key caps, and a key that only types text never does", () => {
-  // The caps stand in the pointer's closed shadow root, which the frames show and the page cannot reach, so the test keeps the root as it is made.
   const attach = vi.spyOn(Element.prototype, "attachShadow");
   run(RECORDING_CURSOR_SOURCE);
   const shadow = attach.mock.results[0]?.value;
@@ -103,7 +90,6 @@ test("a key a viewer could not see shows as key caps, and a key that only types 
   press({ key: "Enter", code: "Enter" });
   press({ key: "k", code: "KeyK", metaKey: true });
 
-  // Enter is its icon alone and ⌘K the command icon beside its letter, so only the K is text.
   const caps = [...shadow.querySelectorAll(".k span")].map((cap) => cap.textContent);
   assert.deepEqual(caps, ["", "K"]);
   field.remove();

@@ -13,14 +13,6 @@ import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { supportAccessCalls } from "./support-access-calls.js";
 import { supportAccessProcedures } from "./support-access-procedures.js";
 
-/**
- * The member's grant of support access, granted and revoked through the
- * hosted route as the Mac reaches it, under its own signed session, on the
- * auth service's support-access plugin over PGlite: a grant answers when it
- * runs out, seven days on, and a revoke answers none; a request carrying no
- * session is refused. Synthetic accounts.
- */
-
 const ORIGIN = "https://app.test";
 const NOW = new Date("2026-11-05T12:00:00.000Z");
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -62,7 +54,6 @@ it.effect(
             ),
             (response) =>
               Effect.promise(async () => {
-                // SAFETY: the route answers JSON; the test compares it as the wire value it is.
                 const body = (await response.json()) as WireBoundaryInput;
                 return { status: response.status, body };
               }),

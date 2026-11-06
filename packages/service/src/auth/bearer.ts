@@ -15,53 +15,28 @@ import { BearerCallers } from "./bearer-callers.js";
 import { resolveBrowserSessionUserId } from "./browser-session.js";
 import { CREDENTIAL_HEADER, sessionCredential } from "./session-credential.js";
 
-/** The address a relay page's headers are read against as a request: only the headers are read. */
 const RELAY_PAGE_BASE = "http://localhost/";
 
-/** What every `jose` error's code begins with, and the one of them that is a key set not reached rather than a token refused. */
 const JOSE_CODE = { PREFIX: "ERR_J", KEY_SET_TIMEOUT: "ERR_JWKS_TIMEOUT" } as const;
 
-/** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {
   sub: string;
 }
 
-/**
- * The auth service's own userinfo endpoint, called in process. It is the same
- * validation the desktop's identity request goes through over HTTP: expiry,
- * revocation, and scope are all the OAuth provider's answer, never a second
- * implementation here. The call itself is the auth service's promise, so an
- * endpoint is built by wrapping that promise once where it is constructed,
- * and the failure it can answer with is whatever the auth service threw.
- */
 export type UserInfoEndpoint = (input: {
   headers: Headers;
 }) => Effect.Effect<OAuthUserInfo | undefined, Cause.UnknownError>;
 
-/**
- * The auth service's own session read, called in process: the account the
- * Better Auth session cookie among `headers` names, or none where it names
- * none. As with `UserInfoEndpoint`, the failure it can answer with is
- * whatever the auth service threw.
- */
 export type SessionEndpoint = (input: {
   headers: Headers;
 }) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
-/** Parses the auth service's raw userinfo answer at the hosted API boundary. */
 export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUserInfo | undefined {
   if (!isRecord(value)) return undefined;
   const sub = text(value.sub);
   return sub ? { sub } : undefined;
 }
 
-/**
- * Whether the auth service refused the token itself rather than failing to
- * answer: Better Auth's own refusal, a 4xx `APIError` other than its 429,
- * which asks for a retry, or a token whose signature or claims `jose` would
- * not verify, which Better Auth rethrows unchanged. Anything else, a
- * database it could not reach among it, is an outage.
- */
 function refusedToken(failure: Cause.UnknownError): boolean {
   const thrown = failure.cause;
   if (isAPIError(thrown)) {
@@ -76,7 +51,6 @@ function refusedToken(failure: Cause.UnknownError): boolean {
   return thrown.code.startsWith(JOSE_CODE.PREFIX) && thrown.code !== JOSE_CODE.KEY_SET_TIMEOUT;
 }
 
-/** Resolves the signed-in user behind a request's bearer token, on `UserIdResolver`'s terms. */
 export function hostedUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
@@ -84,14 +58,6 @@ export function hostedUserId(
   return userIdForAuthorization(request.headers.get(CREDENTIAL_HEADER.AUTHORIZATION), userInfo);
 }
 
-/**
- * The same resolution for an `Authorization` value that arrived somewhere
- * other than on its own request: the voice service forwards the header the
- * desktop opened its socket with, and it is read as if it had been sent here.
- * A token the auth service refused resolves nobody; an auth service that
- * could not answer fails, so the caller is told to retry rather than to sign
- * in again.
- */
 export function userIdForAuthorization(
   value: string | null | undefined,
   userInfo: UserInfoEndpoint,
@@ -104,20 +70,6 @@ export function userIdForAuthorization(
   );
 }
 
-/**
- * Resolves the account a request names, on `UserIdResolver`'s terms: its
- * bearer where it carries an `Authorization` header at all, and the
- * browser's Better Auth session cookie only where it carries none.
- *
- * Note that an `Authorization` that does not verify resolves nobody rather
- * than falling to a cookie beside it, because Better Auth's bearer plugin
- * leaves the cookie in place under any `Authorization` it did not sign, so
- * a junk header would otherwise pass for the caller's own while the cookie's
- * session answered for it. The session is read from the cookie alone
- * (`session-credential.ts`, the rule every session read follows), so
- * nothing else the request carries names an account on that path, and a
- * failure of the auth service fails, as a bearer's does.
- */
 export function requestUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
@@ -129,12 +81,6 @@ export function requestUserId(
   return session({ headers: cookie });
 }
 
-/**
- * The account a relay's upgrade names (`http/relay-upgrade.ts`): the
- * desktop's bearer, as every hosted route reads one, or a page's session
- * cookie, as every route reads a browser's, its headers holding the cookie
- * alone.
- */
 export function relayUserId(
   credential: RelayCredential,
   userInfo: UserInfoEndpoint,
@@ -145,53 +91,29 @@ export function relayUserId(
   return requestUserId(page, userInfo, session);
 }
 
-/** The auth service's own answer, asked afresh. */
 const askedUserInfo: UserInfoEndpoint = (input) =>
   Effect.tryPromise(async () => {
-    // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
     const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
     return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
   });
 
-/**
- * The auth service's own userinfo endpoint, read at the hosted API boundary.
- * The call is the auth service's promise, wrapped once here so the
- * resolution below is an effect a route yields rather than a promise each
- * route rewraps. Where the instance keeps its callers (`bearer-callers.ts`), a
- * subject it resolved within the last minute is answered from there.
- */
 export const hostedUserInfo: UserInfoEndpoint = (input) =>
   Effect.flatMap(Effect.serviceOption(BearerCallers), (kept) =>
     Option.isSome(kept) ? kept.value.through(askedUserInfo)(input) : askedUserInfo(input),
   );
 
-/**
- * The account a request names against the deployment's own account store,
- * the same for every hosted route that reads it on its own fiber: its
- * bearer, or with no `Authorization` at all, the browser's session cookie
- * (`requestUserId`). A state-changing request that carries a cookie is held
- * to the deployment's own pages before any route reads it
- * (`http/origin-guard.ts`).
- */
 export function resolveHostedUserId(
   request: Request,
 ): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   return requestUserId(request, hostedUserInfo, resolveBrowserSessionUserId);
 }
 
-/**
- * The bearer alone, against the same store, for a route that acts for the
- * one device that asks rather than for the account, where a browser's
- * session must never stand in: the Mac's held read claims every command its
- * account's agents queued for itself (`agents/mac-commands-procedures.ts`).
- */
 export function resolveHostedBearerUserId(
   request: Request,
 ): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   return hostedUserId(request, hostedUserInfo);
 }
 
-/** The account a relay's upgrade names against the same store: the terminal relay's and the Browser tab's live view's alike. */
 export function resolveRelayUserId(
   credential: RelayCredential,
 ): Effect.Effect<Option.Option<string>, Cause.UnknownError> {

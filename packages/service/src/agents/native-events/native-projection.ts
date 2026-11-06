@@ -27,41 +27,13 @@ import {
   type PlanStatus,
 } from "./native-moments.js";
 
-/**
- * native-projection.ts -- a native harness's moments folded into the store writer's events, as eve's relay folds eve's stream.
- *
- * A coding agent on a native harness runs one turn per launch of its runner:
- * the turn opens at the first sign of work (the line we handed it, the
- * harness's start, or its first words) and ends with the launch, so a model
- * turn that ends with background work or a wakeup still to come leaves the
- * agent's turn running, as eve's parked turn does. Inside it each model call
- * is a step; its words are told the writer a finished sentence at a time
- * while they form, and whole once the step is over; each call stands in the
- * record before its answer and settles with it; reasoning joins under an id
- * minted from the step. The turn's journal is the record of its work, and
- * the writer closes it with the turn's end, keeping a coding agent's words,
- * so no answer is rebuilt from what the projection held. The usage of each
- * model turn is summed onto the turn and settled with it, on the model the
- * agent ran on. What the projection holds between the runner's batches is
- * this file's `NativeProjection`, small whatever the run's length: the turn,
- * its step, the step's words so far, and the calls it holds by name.
- *
- * The projection is pure: it answers the state it moved to and the writes,
- * in order, that the route makes under the conversation's lock
- * (`runner-events-app.ts`), so a test reads what a stream amounts to
- * without a database.
- */
-
-/** The harness's own tools a call of which the record leaves out without reporting it. */
 const UNRECORDED_TOOLS: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_UNRECORDED_TOOL));
 
-/** How a turn may find the credential that paid refused: a key or sign-in not accepted, or a plan not eligible. */
 const REFUSED_STATUSES: ReadonlySet<PlanStatus> = new Set([
   PLAN_STATUS.INVALID,
   PLAN_STATUS.INELIGIBLE,
 ]);
 
-/** A step's words: those it completed, those still forming, and how much of them the writer was told. */
 const DraftSchema = Schema.Struct({
   completed: Schema.String,
   forming: Schema.String,
@@ -72,12 +44,9 @@ type Draft = typeof DraftSchema.Type;
 const EMPTY_DRAFT: Draft = { completed: "", forming: "", told: 0 };
 
 const StepSchema = Schema.Struct({
-  /** The harness's own id for the model call's answer, where it named one. */
   key: Schema.optionalKey(Schema.String),
-  /** Whether the step takes more of its call's answer; a closed step's next words open another. */
   open: Schema.Boolean,
   draft: DraftSchema,
-  /** How many reasoning summaries the step told, which numbers the next one's id. */
   reasoning: Schema.Number,
 });
 type Step = typeof StepSchema.Type;
@@ -90,54 +59,35 @@ const UsageSchema = Schema.Struct({
   cacheWriteTokens: Schema.optionalKey(Schema.Number),
 });
 
-/** A call whose subagent runs on in the background, and its input as it stood when it answered, which it settles with. */
 const SubagentSchema = Schema.Struct({
   callId: Schema.String,
   input: Schema.optionalKey(WireValueSchema),
-  /** Whether its call has settled, so a later word of the same subagent settles nothing twice. */
   settled: Schema.optionalKey(Schema.Boolean),
 });
 
 const TurnSchema = Schema.Struct({
-  /** The store's id for the turn. */
   id: Schema.String,
-  /** When the turn opened, in epoch milliseconds; absent on a turn kept from before it was recorded. */
   openedAt: Schema.optionalKey(Schema.Number),
-  /** The number of the last event told the writer for the turn, which numbers its next. */
   told: Schema.Number,
-  /** How many steps the turn has opened. */
   steps: Schema.Number,
   step: Schema.optionalKey(StepSchema),
-  /** The calls the turn holds, by id, under the name each is stored under. */
   calls: Schema.Record(Schema.String, Schema.String),
-  /** The calls whose subagents run on in the background, by the key their end is named by (`NATIVE_MOMENT.SUBAGENT_RUNNING`). */
   subagents: Schema.optionalKey(Schema.Record(Schema.String, SubagentSchema)),
   usage: Schema.optionalKey(UsageSchema),
-  /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
-  /** Whether the plan's limit refused the turn, a failure its user expects. */
   limited: Schema.optionalKey(Schema.Boolean),
-  /** Whether the provider refused the credential that paid, such as a key expired or a plan signed out. */
   refused: Schema.optionalKey(Schema.Boolean),
-  /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
   servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 type Turn = typeof TurnSchema.Type;
 
-/** What the projection keeps between batches. */
 const NativeProjectionSchema = Schema.Struct({
   turn: Schema.optionalKey(TurnSchema),
-  /** The harness's own session id as last recorded. */
   session: Schema.optionalKey(Schema.String),
-  /** The plan's limit as it last refused the harness, kept until it lifts. */
   rateLimit: Schema.optionalKey(Schema.String),
-  /** When that limit resets, in epoch milliseconds, where the harness said. */
   rateLimitResetsAt: Schema.optionalKey(Schema.Number),
-  /** The running total a harness that reports one (Codex) last reported, which the next report is metered against. */
   metered: Schema.optionalKey(UsageSchema),
-  /** When a batch last kept the runner's sandbox alive (`../sandbox-keep-alive.ts`), in epoch milliseconds. */
   keptAliveAt: Schema.optionalKey(Schema.Number),
-  /** Whether the launch went warm at its turn's IDLE with no turn since, so a failure it ends on is no turn's. */
   warm: Schema.optionalKey(Schema.Boolean),
 });
 export type NativeProjection = typeof NativeProjectionSchema.Type;
@@ -146,12 +96,10 @@ const EMPTY_PROJECTION: NativeProjection = {};
 
 const readProjection = Schema.decodeUnknownOption(NativeProjectionSchema);
 
-/** The projection a conversation kept, or the empty one before its first save or for state no longer read. */
 export function heldProjection(saved: WireValue | null): NativeProjection {
   return Option.getOrElse(readProjection(saved), () => EMPTY_PROJECTION);
 }
 
-/** The projection with the servers the turn under way took as it started, where that turn is the one named. */
 export function withTurnServers(
   state: NativeProjection,
   turnId: string,
@@ -162,30 +110,19 @@ export function withTurnServers(
   return { ...state, turn: { ...turn, servers: [...servers] } };
 }
 
-/** The servers the turn under way took as it started; none where no turn is under way. */
 export function turnServersOf(state: NativeProjection): readonly string[] {
   return state.turn?.servers ?? [];
 }
 
-/** A write the projection asks of the store, in the order it must land. */
 export const NATIVE_WRITE = {
-  /** Queue the turn's row, ahead of its start. */
   ENQUEUE: "enqueue",
-  /** Hand the writer one event of the turn. */
   EVENT: "event",
-  /** Take the awaiting line written under the client id into the turn. */
   TAKE_LINE: "take_line",
-  /** Record the harness's session id on the conversation. */
   SESSION: "session",
-  /** Record that the harness folded its context. */
   COMPACTED: "compacted",
-  /** Record how a turn found the plan that pays for the agent, on its row. */
   PLAN_STATUS: "plan_status",
-  /** Replace the wakeups we deliver to the agent once due (`agent-wakeups.ts`). */
   WAKEUPS: "wakeups",
-  /** Record what the newest model call read on the agent's row, which its context ring reads. */
   CONTEXT: "context",
-  /** Say a turn's failure in the log, and as an issue where its user did not expect it. */
   FAILED: "failed",
 } as const;
 
@@ -206,53 +143,41 @@ export type NativeWrite =
       readonly turnId: string;
       readonly failure: TurnFailure;
       readonly detail: string;
-      /** Whether the turn failed as its user expects, on the plan's limit, which opens no issue. */
       readonly expected: boolean;
-      /** Whether the provider refused the credential that paid, which opens no issue where the credential is the starter's own. */
       readonly refused: boolean;
     }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
       readonly status: PlanStatus;
-      /** When a reached limit resets, in epoch milliseconds, where the harness said. */
       readonly resetsAt?: number;
-      /** When the turn that found it opened, so a credential saved since is not judged by it. */
       readonly turnOpenedAt?: number;
     };
 
-/** What one event is projected under: its conversation and number, the instant, the model the agent runs on, and which tools the record holds. */
 export interface NativeProjectionContext {
   readonly conversationId: string;
   readonly sequence: number;
   readonly now: number;
   readonly model: string | undefined;
-  /** Whether the starter's own API key pays for the agent, so a refusal of it is theirs to replace in Settings. */
   readonly ownKey: boolean;
-  /** Whether the stored tool set holds a call of this name; a call of any other is left out, its answer with it. */
   readonly registered: (name: string) => boolean;
-  /** Where a moment the record leaves out is said. */
   readonly report: (message: string) => void;
 }
 
-/** The projection as one event moves it, and the writes it asks for. */
 export interface Projected {
   readonly state: NativeProjection;
   readonly writes: readonly NativeWrite[];
 }
 
-/** Two runs of words as a reply reads them: on lines of their own. */
 function joinedWords(head: string, tail: string): string {
   return head.length === 0 ? tail : `${head}\n${tail}`;
 }
 
-/** A draft's words a listener may be told while it still forms: through its last finished sentence, or whole where nothing forms. */
 function tellable(draft: Draft): string {
   return draft.forming.length === 0
     ? draft.completed
     : finishedSentencesOf(joinedWords(draft.completed, draft.forming));
 }
 
-/** The turn with every subagent its call waited on marked settled, as the call is. */
 function withSettledSubagents(turn: Turn, callId: string): Turn {
   const held = turn.subagents;
   if (held === undefined) return turn;
@@ -265,7 +190,6 @@ function withSettledSubagents(turn: Turn, callId: string): Turn {
   return { ...turn, subagents };
 }
 
-/** Everything one event's moments do, gathered as they are folded. */
 class Fold {
   state: NativeProjection;
   readonly writes: NativeWrite[] = [];
@@ -281,7 +205,6 @@ class Fold {
     this.state = turn === undefined ? rest : { ...rest, turn };
   }
 
-  /** Tells the writer one event of the turn, numbered after the last. */
   #tell(turn: Turn, body: RunEventBody): Turn {
     const told = turn.told + 1;
     this.writes.push({
@@ -296,7 +219,6 @@ class Fold {
     return { ...turn, told };
   }
 
-  /** The turn under way, opened here, by the event's own number, where none is. */
   turn(): Turn {
     const held = this.state.turn;
     if (held !== undefined) return held;
@@ -313,7 +235,6 @@ class Fold {
     return opened;
   }
 
-  /** The step's words through what may be told now, or whole where `whole`, where the writer was told less. */
   #drafted(turn: Turn, step: Step, whole: boolean): Turn {
     const { completed, forming } = step.draft;
     const text =
@@ -327,7 +248,6 @@ class Fold {
     return { ...told, step: { ...step, draft: { ...step.draft, told: text.length } } };
   }
 
-  /** The step's words told whole, and the step closed. */
   #closed(turn: Turn): Turn {
     const step = turn.step;
     if (step === undefined) return turn;
@@ -335,7 +255,6 @@ class Fold {
     return { ...told, step: { ...(told.step ?? step), open: false } };
   }
 
-  /** The step the next part belongs to: the one open, where it is the same model call's, or a new one. */
   #step(key: string | undefined): Turn {
     const turn = this.turn();
     const step = turn.step;
@@ -354,7 +273,6 @@ class Fold {
     return next;
   }
 
-  /** The step's words grown, and told where another sentence finished. */
   #words(grow: (draft: Draft) => Draft): void {
     const turn = this.#step(undefined);
     const step = turn.step;
@@ -377,8 +295,6 @@ class Fold {
 
   #toolStarted(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.TOOL_STARTED }>): void {
     if (!this.#context.registered(moment.name)) {
-      // Note that a call of the harness's own unrecorded tools is left out without a word,
-      // because every launch makes them and none is work a record could miss.
       if (!UNRECORDED_TOOLS.has(moment.name)) {
         this.#context.report(`A call to ${moment.name} names no stored tool and is not recorded.`);
       }
@@ -410,7 +326,6 @@ class Fold {
     );
   }
 
-  /** A subagent call kept open while its subagent runs, where the turn holds the call. */
   #subagentRunning(
     moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_RUNNING }>,
   ): void {
@@ -422,7 +337,6 @@ class Fold {
     this.#setTurn({ ...turn, subagents: { ...turn.subagents, [moment.key]: subagent } });
   }
 
-  /** A background subagent's end, settling the call it runs under; nothing for a key no held call waits on, such as a foreground subagent's, which its answer settled, or one whose call already settled. */
   #subagentEnded(
     moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_ENDED }>,
   ): void {
@@ -438,12 +352,6 @@ class Fold {
     });
   }
 
-  /**
-   * The turn a launch's end settles: the one under way, or, where the launch
-   * failed before its first, one opened for it, so why it failed is kept.
-   * None for any other end that finds no turn, nor for a warm launch's, whose
-   * turn already ended at its IDLE.
-   */
   #endedTurn(
     moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>,
   ): Turn | undefined {
@@ -453,9 +361,7 @@ class Fold {
     return this.turn();
   }
 
-  /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
   #ended(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>): void {
-    // Note that the wakeups are the launch's, written whether or not a turn was under way.
     if (moment.wakeups !== undefined) {
       this.writes.push({ kind: NATIVE_WRITE.WAKEUPS, wakeups: moment.wakeups });
     }
@@ -466,7 +372,6 @@ class Fold {
     const turn = this.#closed(held);
     const status = statusOf(moment.ending, turn.failure);
     const failed = status === RUN_STATUS.FAILED;
-    // Note that a refusal of the starter's own key leads with the coder's word for it, so the window reads the failure as a key to replace rather than a model call failed.
     const ownKeyRefused =
       turn.refused === true && this.#context.ownKey ? CODER_REFUSAL.ACCOUNT_KEY_REFUSED : undefined;
     const detail = [ownKeyRefused, moment.detail, turn.failure, this.state.rateLimit]
@@ -496,7 +401,6 @@ class Fold {
       });
     }
     this.#setTurn(undefined);
-    // Note that a limit is the launch's: the next launch is refused again or it is not.
     const { rateLimit: _spent, rateLimitResetsAt: _resets, ...rest } = this.state;
     this.state = rest;
   }
@@ -506,7 +410,6 @@ class Fold {
     this.#setTurn({ ...turn, usage: addModelUsage(turn.usage, usage) });
   }
 
-  /** A running total metered: the turn under way takes what it grew by; with no turn under way it is only noted, so it is not metered again. */
   #usageTotal(total: RunUsage): void {
     const grown = usageGrowth(this.state.metered, total);
     this.state = { ...this.state, metered: total };
@@ -579,7 +482,6 @@ class Fold {
         this.#usageTotal(moment.total);
         return;
       case NATIVE_MOMENT.CONTEXT:
-        // Note that a call that read nothing, as an error the CLI makes up does, leaves the last one standing.
         if (moment.usage.inputTokens > 0) {
           this.writes.push({ kind: NATIVE_WRITE.CONTEXT, usage: moment.usage });
         }
@@ -604,7 +506,6 @@ class Fold {
         return;
       }
       case NATIVE_MOMENT.PLAN: {
-        // Note that a reached limit resets when the limit the harness last reported says.
         const resetsAt =
           moment.status === PLAN_STATUS.LIMIT_REACHED ? this.state.rateLimitResetsAt : undefined;
         const turnOpenedAt = this.state.turn?.openedAt;
@@ -623,7 +524,6 @@ class Fold {
         return;
       }
       case NATIVE_MOMENT.WAITING: {
-        // Note that a waiting turn is still under way: its words are told whole and nothing ends.
         const turn = this.state.turn;
         if (turn !== undefined) this.#setTurn(this.#closed(turn));
         return;
@@ -637,11 +537,6 @@ class Fold {
 
 type Usage = typeof UsageSchema.Type;
 
-/**
- * What a running total grew by since the one before: all of it where none
- * was metered or where it is smaller (a new thread counts from nothing), and
- * nothing where it did not grow.
- */
 function usageGrowth(before: Usage | undefined, total: Usage): RunUsage | undefined {
   const grown = {
     inputTokens: total.inputTokens - (before?.inputTokens ?? 0),
@@ -655,7 +550,6 @@ function usageGrowth(before: Usage | undefined, total: Usage): RunUsage | undefi
   return counts.some((count) => count > 0) ? grown : undefined;
 }
 
-/** The turn's status by how its launch ended: done, unless its last model turn failed; stopped is canceled. */
 function statusOf(
   ending: (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING],
   failure: string | undefined,
@@ -670,7 +564,6 @@ function statusOf(
   }
 }
 
-/** One event's moments folded into the projection: the state it moves to, and the writes it asks for, in order. */
 export function projectMoments(
   state: NativeProjection,
   moments: readonly NativeMoment[],

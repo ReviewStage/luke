@@ -48,18 +48,6 @@ import {
 } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
-/**
- * The coding agent's inbox tools, through their public functions against a
- * real dialect: a first post under a key opens a thread the task's inbox
- * reads, a later one adds a message, its ask replacing the open one, the
- * pictures its body draws are read from the sandbox and kept, a withdrawal
- * settles the open ask with why, and every call answers the agent's whole
- * inbox, each thread's messages with their asks and answers. Nothing of
- * another account's agent is read or written.
- *
- * Synthetic accounts, tasks, and words throughout.
- */
-
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -67,7 +55,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An agent the account starts on the task, in its repository. */
 const agentOn = (userId: string, task: { readonly id: string; readonly workspaceId: string }) =>
   Effect.gen(function* () {
     const started = yield* createAgent(userId, {
@@ -90,7 +77,6 @@ const agentOn = (userId: string, task: { readonly id: string; readonly workspace
     return { ...agent, workspaceId: task.workspaceId };
   });
 
-/** An account with one task and one agent started on it, in its repository. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -118,13 +104,10 @@ const SETTINGS = {
   },
 };
 
-/** A tool's input as eve hands it over. */
 const input = (value: WireBoundaryInput) => unparsedWire(value);
 
-/** A sandbox door no post with words alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-/** A sandbox holding the files given by their path from the checkout, each read as one stream. */
 function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxDoor {
   const byPath = new Map(
     Object.entries(files).map(([path, bytes]) => [posix.resolve(CODER.CHECKOUT_PATH, path), bytes]),
@@ -146,14 +129,11 @@ function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxD
     });
 }
 
-/** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
-/** A post run as the tool runs one, over the sandbox given. */
 const post = (agent: ThreadPoster, value: WireBoundaryInput, sandbox = noSandbox) =>
   postToInbox(agent, input(value), sandbox);
 
-/** The one thread of the agent's task, as the task's inbox reads it. */
 const onlyItem = (agent: Pick<InboxAgent, "userId"> & { readonly taskId: string }) =>
   Effect.map(taskInboxItems(agent.userId, agent.taskId), (items) => {
     assert.equal(items.length, 1, "one thread per key");
@@ -162,19 +142,16 @@ const onlyItem = (agent: Pick<InboxAgent, "userId"> & { readonly taskId: string 
     return item;
   });
 
-/** The mention an agent writes a thread of its own as, by its id alone under its workspace, its link spelled out as the window reads one. */
 function mentionOf(agent: { readonly workspaceId: string }, title: string, itemId: string): string {
   return `[@${title}](https://vespin.dev/workspace-${agent.workspaceId}/inbox/${itemId})`;
 }
 
-/** The message whose ask the thread holds open. */
 function openAsk(item: InboxItem) {
   const asking = item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN);
   assert.ok(asking);
   return asking;
 }
 
-/** The refusal a call answered, or a failure where it was taken. */
 function refusalOf(result: { readonly status: string; readonly reason?: string }): string {
   assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
   return result.reason ?? "";
@@ -509,7 +486,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        // Past a message's file bound too, which the item's table held a recording to before.
         const recording = paddedTo(webmBytes(1280, 800), AGENT_BOUNDS.MAX_PDF_BYTES + 1);
         const sandbox = sandboxWith({ "/tmp/video/flow.webm": recording });
 
@@ -713,7 +689,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           yield* TestClock.adjust(Duration.seconds(1));
           yield* post(agent, { key: QUEUE.key, body: text });
         }
-        // The agent's words after the answer bring the thread back as a notice, which the member's reply on it settles.
         const notice = yield* onlyItem(agent);
         assert.equal(notice.status, INBOX_STATUS.OPEN);
         yield* TestClock.adjust(Duration.seconds(1));
@@ -842,7 +817,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           randomUUID(),
         );
         assert.ok(Option.isSome(nodded));
-        // A deployment from before threads closed a notice with why; no tool from version 5 closes one.
         yield* Database.use((db) =>
           db
             .update(inboxItem)

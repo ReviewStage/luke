@@ -1,38 +1,3 @@
-/**
- * messages-procedures.ts -- the held message reads, and the writes on the same paths, as the hosted oRPC router answers them.
- *
- * Two reads the desktop holds open while nothing it reads has moved: one
- * agent's transcript (`GET /api/agents/{id}/messages`) and its worker's
- * (`GET /api/agents/{id}/subagents/{call}/messages`), held while the agent
- * or the worker runs (`coder-host/transcript.ts`). Each is a long-held JSON
- * procedure, its hold the store's own, unchanged: the handler adds no
- * deadline of its own, and the hold ends when the store's does, answering
- * the page as it stands. Beside them, the write the same path takes: a
- * message to an agent (`POST /api/agents/{id}/messages`), handed to its
- * session through the one steer path the voice brain's tool shares
- * (`coder-host/steer.ts`).
- *
- * Every row a read touches is one of a workspace the caller is a member of:
- * an agent or a task of any other workspace answers exactly as one that
- * names nothing, and an id that is no UUID names no row. A title, the
- * agent's or a worker's, is read after the page, since it can land after a
- * turn ends, which a held read may span. An agent's or a worker's
- * transcript read with `wait=none` is answered at once rather than held,
- * with whether the held read would have held on it and how soon the clock
- * alone may end that hold, for a reader following
- * its live statements (`live-wire.ts`). A transcript read with `parts=cut`
- * carries each heavy part cut to its two ends (`coder-host/part-cut.ts`), and
- * the part reads beside them answer one such part whole, under the same
- * reach as the transcript it stands in.
- *
- * Beside them, the same two transcripts read back from their end, at once
- * (`GET /api/agents/{id}/messages/newest`, and its worker's under
- * `subagents/{call}`): the newest page, with the cursor a reader follows
- * on from past it, or, where `before` names the oldest row a reader holds,
- * the page below it, so a desktop opening a long transcript draws its end
- * first and reads back only as far as it is scrolled.
- */
-
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
@@ -118,14 +83,12 @@ import {
   transcriptPast,
 } from "./coder-host/transcript.js";
 
-/** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
 
 export interface MessagesProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The agent the path names, where the account is a member of its workspace, its conversation targeted under the member who started it; not found otherwise. */
 const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, id: string) {
   const agentId = yield* pathUuid(id);
   const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, agentId));
@@ -137,7 +100,6 @@ const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string
   return { agent: agent.value, target };
 });
 
-/** The delegation call the path names, or not found for one that is no call id. */
 const callNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: string,
 ): Effect.fn.Return<string, HostedRefusal> {
@@ -146,7 +108,6 @@ const callNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** The cursor a read names, or none; refused where it names something else. */
 const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   after: string | undefined,
 ): Effect.fn.Return<string | undefined, HostedRefusal> {
@@ -156,7 +117,6 @@ const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** Where a read back from the end names it reads below, or none for the newest page; refused where it names something else. */
 const beforeNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   before: string | undefined,
 ): Effect.fn.Return<number | undefined, HostedRefusal> {
@@ -167,50 +127,30 @@ const beforeNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   return seq;
 });
 
-/**
- * Whether the agent's owner's titles are told by a model, which may land
- * after its turn ends: only where the owner saved an API key, which the
- * title model runs on (`coder-host/model.ts`). Without one a title is the
- * opening's first words, written as the words are received, so no read
- * waits on it.
- */
 const titledByModel = (parent: ConversationTarget) =>
   Effect.map(
     listProviderKeyRows(parent.userId, PROVIDER_KEY_KIND.API_KEY),
     (rows) => rows.length > 0,
   );
 
-/**
- * What a read of an ended agent, or of its worker, waits on for a title:
- * the worker named, or the agent's own or any of its workers' where none
- * is; nothing for an owner whose titles no model tells (`titledByModel`).
- */
 function titleAwaitedOf(parent: ConversationTarget, childConversationId?: string): TitleAwaited {
   return Effect.flatMap(titledByModel(parent), (byModel) =>
     byModel ? titleMayLand(parent, childConversationId) : NO_TITLE_AWAITED,
   );
 }
 
-/**
- * A page's messages as the wire declares them: each part the stored JSON
- * the row holds, which the SDK's own types describe more narrowly than the
- * wire's verbatim JSON does.
- */
 function wireMessages(
   messages: TranscriptPage["messages"] | readonly AgentTranscriptMessage[],
   cut: boolean,
 ): AgentMessagesAnswer["messages"] {
-  // SAFETY: every part and metadata is the JSON its row stored (`storedObjectSchema`), which the SDK's part types only name more narrowly.
   const stored = messages as AgentMessagesAnswer["messages"];
   return cut ? stored.map(cutMessage) : stored;
 }
 
-/** Whether a transcript read asks its heavy parts cut (`TRANSCRIPT_PARTS_QUERY`). */
 function readsCut(parts: string | undefined): boolean {
   return parts === TRANSCRIPT_PARTS_QUERY.CUT;
 }
 
-/** A part's index as its path segment spells it, or not found for one that is no index. */
 const indexNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   index: string,
 ): Effect.fn.Return<number, HostedRefusal> {
@@ -218,7 +158,6 @@ const indexNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Number(index);
 });
 
-/** One part of a message of the conversation, whole, or not found where none stands at the index. */
 const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   target: ConversationTarget,
   message: string,
@@ -234,19 +173,16 @@ const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return answer;
 });
 
-/** When the window of every title `titleAwaitedOf` waits on closes, on the same terms: none where no model tells the owner's titles. */
 function titleEdgeOf(parent: ConversationTarget, childConversationId?: string): TitleEdge {
   return Effect.flatMap(titledByModel(parent), (byModel) =>
     byModel ? titleWindowEdge(parent, childConversationId) : NO_TITLE_EDGE,
   );
 }
 
-/** Whether a transcript read asks for the page at once rather than held, as a reader following its live statements does (`live-wire.ts`). */
 function readsNow(wait: string | undefined): boolean {
   return wait === TRANSCRIPT_NOW_QUERY.NONE;
 }
 
-/** The changes to a queue after which its first message may go at once, where the agent stands idle: every change but a delete, a hold let go among them. */
 const HANDS_ON: ReadonlySet<string> = new Set([
   QUEUE_CHANGE.ADD,
   QUEUE_CHANGE.EDIT,
@@ -255,7 +191,6 @@ const HANDS_ON: ReadonlySet<string> = new Set([
   QUEUE_CHANGE.HOLD,
 ]);
 
-/** A page of an agent's or a worker's transcript as the wire answers it, with whether the held read would have held on it where it was read at once, and how soon the clock alone may end that hold. */
 function transcriptAnswer(
   page: TranscriptPage,
   title: string | null,
@@ -284,7 +219,6 @@ function transcriptAnswer(
   };
 }
 
-/** A transcript's newest page as the wire answers it, with where the page before it is read below. */
 function newestAnswer(
   newest: TranscriptNewest,
   title: string | null,
@@ -296,7 +230,6 @@ function newestAnswer(
   };
 }
 
-/** An older page of a transcript as the wire answers it. */
 function olderAnswer(older: TranscriptOlder, cut: boolean): AgentOlderAnswer {
   return {
     messages: wireMessages(older.messages, cut),
@@ -304,7 +237,6 @@ function olderAnswer(older: TranscriptOlder, cut: boolean): AgentOlderAnswer {
   };
 }
 
-/** A detailed input whose body's words run past the bound, whatever else it carries: refused as too long rather than as a body that does not read. */
 const isTooLong = Schema.is(
   Schema.Struct({
     body: Schema.Struct({
@@ -315,12 +247,6 @@ const isTooLong = Schema.is(
   }),
 );
 
-/**
- * A message its schema refused because its words run past the bound is
- * refused as too long, as the old group refused it; any other refusal of
- * its shape stands. Note that this runs before the input is validated, so
- * it sees the refusal and the body as it came.
- */
 const tooLongMiddleware = middlewareGen<HostedContext>(function* ({ next }, input) {
   return yield* next().pipe(
     Effect.catchIf(
@@ -331,7 +257,6 @@ const tooLongMiddleware = middlewareGen<HostedContext>(function* ({ next }, inpu
   );
 });
 
-/** The messages resource: its five held reads, the two transcripts read back from their end, the two writes on their paths, and the two part reads, each to a signed-in caller. */
 export function messagesProcedures(seams: MessagesProcedureSeams) {
   const signedIn = hosted.messages.use(accountMiddleware(seams.resolveUserId));
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -342,7 +267,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const titleAwaited = titleAwaitedOf(target);
       const cursor = cursorOfWire(after);
       const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
-      // Note that a cursor read before the transcript's last rewind is answered at once, never held, since its reader reads afresh.
       const rewound = yield* hostedStoreOrUnavailable(readRewoundRevision(target));
       const stale = rewound !== undefined && cursor.revision < rewound;
       const { page, holds, wakeIn } =
@@ -373,7 +297,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
               holds: undefined,
               wakeIn: undefined,
             };
-      // The title is read after the page, since it lands after a turn ends, which a held read may span.
       const titled = yield* hostedStoreOrUnavailable(readAgent(context.userId, agent.id));
       return {
         ...transcriptAnswer(
@@ -397,7 +320,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const { txid } = yield* steerMemberWords(writer, context.userId, agent, input.body);
         const summary = yield* summaryOf(context.userId, agent);
-        // The transaction that wrote the line, which the host waits to see live before it confirms the send.
         return txid === undefined ? { agent: summary } : { agent: summary, txid };
       }),
 
@@ -407,11 +329,9 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     }) {
       const { agent } = yield* reachedAgent(context.userId, input.params.id);
       const { userId } = context;
-      // The queue is its starter's own messages to come, so the starter alone changes it; a teammate reads it.
       if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       const eve: QueueSessions = routedSessions;
       const body = input.body;
-      /** A store's answer for the account's agent, its absence answered as no such agent. */
       const found = <A>(effect: Effect.Effect<Option.Option<A>, StoreFailure, DatabaseServices>) =>
         Effect.flatMap(hostedStoreOrUnavailable(effect), (answer) =>
           Option.isSome(answer)
@@ -441,7 +361,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           }
           break;
         case QUEUE_CHANGE.DELETE:
-          // Note that a message being sent has left the queue, so deleting it deletes nothing, which is said.
           if (Option.isNone(yield* found(takeQueuedMessage(userId, agent.id, body.messageId)))) {
             return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
           }
@@ -452,8 +371,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           }
           break;
         case QUEUE_CHANGE.STEER: {
-          // Steered, the message is claimed first, with an edit's words and files where it steers one, so no hand-off
-          // sends it beside this send, and goes now, into the turn under way or as the next; a refusal lets it go back.
           const claimed = yield* found(
             claimQueuedMessage(
               userId,
@@ -482,9 +399,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           yield* found(resumeAgentQueue(userId, agent.id));
           break;
       }
-      // A queue added to, put in order, resumed, or let go of by an edit while the agent stands idle hands on
-      // its first message now, since no turn's end is coming to hand it on: claimed here, before the answer
-      // reads the queue, so the answer never lists a message about to go, and sent once the answer is out.
       const claimed = HANDS_ON.has(body.change)
         ? yield* claimNext(agent)
         : Option.none<QueuedMessageRow>();
@@ -544,7 +458,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
             holds: undefined,
             wakeIn: undefined,
           };
-      // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
       return transcriptAnswer(
         page,
@@ -580,12 +493,10 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         );
       }
       const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
-      // The rewind is read before the page, so a page read after a rewind never carries the one before it.
       const rewound = yield* hostedStoreOrUnavailable(readRewoundRevision(target));
       const newest = yield* hostedStoreOrUnavailable(
         transcriptNewest(target, CODER_TOOL_SET, standing, agent),
       );
-      // The title is read after the page, as the forward read's is, so one that landed while the page was read is told rather than lost to a follow that starts after it.
       const titled = yield* hostedStoreOrUnavailable(readAgent(context.userId, agent.id));
       return {
         ...newestAnswer(
@@ -605,7 +516,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const read = yield* hostedStoreOrUnavailable(delegationNow(target, conversationId, agent));
       if (read.delegation === undefined) {
         if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        // The call's record has not landed yet, so its worker has written nothing.
         if (before !== undefined) return olderAnswer({ messages: [] }, false);
         return newestAnswer(
           {
@@ -630,7 +540,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const newest = yield* hostedStoreOrUnavailable(
         transcriptNewest(worker, CODER_TOOL_SET, started),
       );
-      // The title is read after the page, since it lands beside the worker's start, which the page's reads may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
       return newestAnswer(newest, titles.get(conversationId) ?? null, readsCut(input.parts));
     }),

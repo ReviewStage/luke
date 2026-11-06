@@ -14,18 +14,6 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "./task-pages-live.js";
 
-/**
- * A task's pages as Realtime would deliver them, over the real migrations on
- * PGlite: the statement run as Realtime runs it, its rows decoded and ordered
- * as the desktop does, beside `listPages`, the held read the Inbox read them
- * with. The two agree as pages are shown, as a page's next version lands,
- * and for an account that does not reach the task; and so for the pages a
- * coding agent on no task showed on itself, which hold none of a task's.
- *
- * Synthetic accounts, pages, and words throughout.
- */
-
-/** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -33,11 +21,9 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** A coding agent of the account's, on the task named or, in the workspace, on none. */
 const openAgent = (userId: string, place: { taskId: string } | { organizationId: string }) =>
   Effect.map(
     createAgent(userId, {
@@ -58,7 +44,6 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
     (started) => Option.getOrThrow(started).agent.id,
   );
 
-/** The pages as Realtime would deliver them to `reader`, as the desktop orders them. */
 const liveRowsOf = (statement: LiveStatement) =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeUnknownEffect(taskPagesLiveRowsSchema)({
@@ -67,11 +52,9 @@ const liveRowsOf = (statement: LiveStatement) =>
     return pagesOfLiveRows(rows);
   });
 
-/** The task's pages as Realtime would deliver them to `reader`, as the desktop orders them. */
 const livePagesOf = (reader: string, taskId: string) =>
   liveRowsOf(Option.getOrThrow(taskPagesLiveStatements(reader, taskId)).pages);
 
-/** The agent's own pages as Realtime would deliver them to `reader`. */
 const liveAgentPagesOf = (reader: string, agentId: string) =>
   liveRowsOf(Option.getOrThrow(agentPagesLiveStatements(reader, agentId)).pages);
 

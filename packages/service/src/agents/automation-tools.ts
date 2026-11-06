@@ -76,35 +76,10 @@ import { calledId } from "./called-id.js";
 import { acceptedAgentChoice } from "./coder-host/start.js";
 import { workspaceAgent } from "./workspace-agents.js";
 
-/**
- * automation-tools.ts -- the tools a coding agent keeps its workspace's automations by: list them, make one, change one, and delete one.
- *
- * Each call acts as the member the agent acts for (its starter), on the
- * automations of the agent's own workspace, under the same rules the
- * automations page writes by (`../automations/automation-writes.ts`): the
- * same checks of a schedule, a model, and the repositories the workspace's
- * installation reaches, and the same access, so a personal automation is
- * its creator's to change and a workspace's its creator's, owners', and
- * admins'. A run starts as the automation's creator, so an automation an
- * agent makes runs as the member who started that agent. A webhook trigger
- * is never made or set here: its secret is shown once, in the window that
- * minted it (`AGENTS.md`), and no agent's answer may carry it. A Sentry
- * trigger is refused where this deployment configures no Sentry integration
- * or the workspace installed none, since nothing would ever fire it, and a
- * delivery to Slack where the workspace connected no Slack bot, since
- * nothing would ever be sent. An automation
- * is made under an id drawn from eve's key for the call (`called-id.ts`),
- * so a call eve runs again names the one it made. Every answer is data the
- * model reads, never a credential.
- */
-
-/** How many runs one automation's read answers, the newest first. */
 const RUNS_READ = 10;
 
-/** The most characters of a prompt the list shows of each automation; a read by its id shows it whole. */
 const LISTED_PROMPT_CHARS = 300;
 
-/** Why a call changed nothing, in words the model can act on. */
 export const AUTOMATION_TOOL_REFUSAL = {
   UNREADABLE_CREATE:
     `Not made: give a name of at most ${AUTOMATION_BOUNDS.MAX_NAME_CHARS} characters, a prompt ` +
@@ -244,7 +219,6 @@ const LIST_AUTOMATIONS_INPUT = Schema.Struct({
   ),
 });
 
-/** An automation as both tools take it: create needs its name, prompt, and trigger, and update takes any of them. */
 const AUTOMATION_FIELDS = {
   name: automationCreateRequestSchema.fields.name,
   prompt: PROMPT,
@@ -285,7 +259,6 @@ const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AUTOMATION_INPUT);
 const readDeleteAsked = Schema.decodeUnknownResult(DELETE_AUTOMATION_INPUT);
 const readRunAsked = Schema.decodeUnknownResult(RUN_AUTOMATION_INPUT);
 
-/** The tools as every coding agent is offered them: each its name, its words, and its input schema. */
 export const LIST_AUTOMATIONS_TOOL = {
   name: AGENT_TOOL.LIST_AUTOMATIONS,
   description:
@@ -350,7 +323,6 @@ export const RUN_AUTOMATION_TOOL = {
   inputSchema: RUN_AUTOMATION_INPUT,
 } as const;
 
-/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and our Sentry integration. */
 type AutomationToolServices =
   | DatabaseServices
   | ModelCatalog
@@ -358,7 +330,6 @@ type AutomationToolServices =
   | HttpClient.HttpClient
   | SentryApp;
 
-/** A refusal of the shared writes in the model's words. */
 function refusalWords(refusal: HostedRefusal): string {
   switch (refusal.error) {
     case HOSTED_API_ERROR.NOT_FOUND:
@@ -378,7 +349,6 @@ function refusalWords(refusal: HostedRefusal): string {
   }
 }
 
-/** The names a call's disabledServers holds that are no connection's, read off the input as sent, since the wire's own read drops them unsaid. */
 function unknownServers(input: UnparsedWireValue): readonly string[] {
   const named = isRecord(input) ? input.disabledServers : undefined;
   if (!Array.isArray(named)) return [];
@@ -388,7 +358,6 @@ function unknownServers(input: UnparsedWireValue): readonly string[] {
   );
 }
 
-/** A refusal of the servers named that are no connection's, or nothing where every one is. */
 function serversRefused(input: UnparsedWireValue): WireRecord | undefined {
   const unknown = unknownServers(input);
   return unknown.length === 0
@@ -396,12 +365,10 @@ function serversRefused(input: UnparsedWireValue): WireRecord | undefined {
     : agentToolRejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} ${unknown.join(", ")}.`);
 }
 
-/** An instant as the model reads it. */
 function isoOf(at: number | null): string | null {
   return at === null ? null : new Date(at).toISOString();
 }
 
-/** One run as an answer names it: what fired it, where it stands and why, and the agent it started. */
 function runReading(run: AutomationRunSummary): WireRecord {
   return {
     id: run.id,
@@ -423,7 +390,6 @@ function runReading(run: AutomationRunSummary): WireRecord {
   };
 }
 
-/** Where an automation's runs land, as an answer names it. */
 function landingOf(summary: AutomationSummary): WireRecord | string {
   const target = summary.target;
   if (target === undefined || target.kind === AUTOMATION_TARGET.NEW_AGENT) {
@@ -432,7 +398,6 @@ function landingOf(summary: AutomationSummary): WireRecord | string {
   return { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: target.agentId };
 }
 
-/** One automation as an answer names it, its prompt whole or cut to the list's length. */
 function automationReading(summary: AutomationSummary, whole: boolean): WireRecord {
   const { prompt } = summary.action;
   const shown =
@@ -461,7 +426,6 @@ function automationReading(summary: AutomationSummary, whole: boolean): WireReco
   };
 }
 
-/** The schedule's refusal in the model's words, where the trigger is a schedule that does not read. */
 const scheduleRefused = (
   trigger: { readonly kind: string } & Partial<{ cron: string; timezone: string }>,
 ) =>
@@ -482,7 +446,6 @@ const scheduleRefused = (
     }
   });
 
-/** Sentry's refusal in the model's words, where the trigger is Sentry's and this deployment configures no Sentry integration or the workspace installed none. */
 const sentryRefused = Effect.fn("agents/automationSentryRefused")(function* (
   workspaceId: string,
   trigger: { readonly kind: string },
@@ -500,7 +463,6 @@ const sentryRefused = Effect.fn("agents/automationSentryRefused")(function* (
   return installed ? undefined : AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED;
 });
 
-/** Slack's refusal in the model's words, where the call turns delivery to Slack on and the workspace connected no Slack bot. */
 const slackRefused = (workspaceId: string, slackDelivery: boolean | undefined) =>
   slackDelivery !== true
     ? Effect.succeed(undefined)
@@ -508,7 +470,6 @@ const slackRefused = (workspaceId: string, slackDelivery: boolean | undefined) =
         Option.isSome(installation) ? undefined : AUTOMATION_TOOL_REFUSAL.SLACK_NOT_CONNECTED,
       );
 
-/** The model and effort named, both or neither; undefined for neither, and null where one came without the other. */
 function namedChoice(asked: {
   readonly model?: string;
   readonly effort?: string;
@@ -518,7 +479,6 @@ function namedChoice(asked: {
   return { model: asked.model, effort: asked.effort };
 }
 
-/** The choice's refusal in the model's words, where the catalog offers the member no such model and effort. */
 const choiceRefused = (
   userId: string,
   choice: ModelChoice | undefined,
@@ -534,7 +494,6 @@ const choiceRefused = (
         Effect.catch((refusal) => Effect.succeed(refusalWords(refusal))),
       );
 
-/** Where runs land as the call names an agent, which must be one of the caller's workspace, the caller itself among them: none named leaves it as it stands. */
 const landingNamed = (
   userId: string,
   workspaceId: string,
@@ -555,13 +514,11 @@ const landingNamed = (
   );
 };
 
-/** An automation of the caller's workspace that its member may read, or nothing: one of another workspace is none of the caller's. */
 const workspaceAutomation = (userId: string, workspaceId: string, id: string) =>
   Effect.map(readAutomation(userId, id), (found) =>
     Option.filter(found, (automation) => automation.organizationId === workspaceId),
   );
 
-/** One call of `list_automations`: the caller's workspace's automations its member may read, or one of them whole. */
 export function runListAutomations(
   call: AgentReadCall,
   input: UnparsedWireValue,
@@ -609,7 +566,6 @@ export function runListAutomations(
   );
 }
 
-/** One call of `create_automation`: an automation made for the caller's member in the caller's workspace, once under the call's key. */
 export function runCreateAutomation(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -628,7 +584,6 @@ export function runCreateAutomation(
       if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
-      // A call run again finds the automation it made first, as it was made.
       const already = yield* workspaceAutomation(userId, workspace.value, id);
       if (Option.isSome(already)) {
         const kept = yield* summaryOf(userId, already.value).pipe(Effect.result);
@@ -685,7 +640,6 @@ export function runCreateAutomation(
       ).pipe(Effect.result);
       if (Result.isFailure(written)) {
         const refusal = written.failure;
-        // Note that a workspace scope is refused alike in the personal workspace, which the model can act on.
         if (
           refusal.error === HOSTED_API_ERROR.INVALID_REQUEST &&
           made.scope === AUTOMATION_SCOPE.WORKSPACE
@@ -694,7 +648,6 @@ export function runCreateAutomation(
         }
         return agentToolRejected(refusalWords(refusal));
       }
-      // A make run again beside the one that wrote answers that automation, which must be this workspace's.
       if (written.success.automation.workspaceId !== workspace.value) {
         return agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNAVAILABLE);
       }
@@ -706,7 +659,6 @@ export function runCreateAutomation(
   );
 }
 
-/** One call of `update_automation`: an automation of the caller's workspace changed as its member may change it. */
 export function runUpdateAutomation(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -793,7 +745,6 @@ export function runUpdateAutomation(
   );
 }
 
-/** One call of `delete_automation`: an automation of the caller's workspace deleted with its history, as its member may delete it. */
 export function runDeleteAutomation(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -828,7 +779,6 @@ export function runDeleteAutomation(
   );
 }
 
-/** One call of `run_automation`: an automation of the caller's workspace run now, once under the call's key, as its member may run it. */
 export function runRunAutomation(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -848,7 +798,6 @@ export function runRunAutomation(
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
       const runnable = yield* readAutomation(userId, automationId, AUTOMATION_ACCESS.RUN);
       if (Option.isNone(runnable)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NOT_RUNNABLE);
-      // Note that the run reaches eve as the deployment acting for the account it starts as, its creator, whoever fired it, as the sweep's runs do.
       const ran = yield* runAutomationNowAs(
         userId,
         runnable.value,

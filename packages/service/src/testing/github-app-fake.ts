@@ -1,20 +1,3 @@
-/**
- * github-app-fake.ts -- our GitHub App over a GitHub that answers from a test's own script, a workspace's connected installation, and the account rows a sign-in leaves.
- *
- * A suite stands the real `GitHubApp` over fixed settings and a fake
- * `HttpClient`, so what it holds is what the service asks GitHub and what it
- * makes of the answer. A workspace reaches repositories only through the
- * installation connected to it, which `connectWorkspaceGitHub` links as a
- * finished connect would. The account rows are the ones Better Auth leaves
- * on a sign-in through the App: tokens sealed under the session secret, with
- * their expiries beside them. A row's instants hang off the test clock as it
- * stands rather than off a clock the test moved: under a real Postgres pool
- * a `TestClock.setTime` jump left every later statement waiting, which
- * PGlite never showed. A member's own GitHub token is saved sealed under a
- * fixture ring the App is stood over where a test hands
- * `GITHUB_APP_WITH_TOKENS`. Synthetic keys, secrets, and tokens throughout.
- */
-
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { Database } from "@repo/database/core/query";
 import { saveGitHubToken } from "@repo/database/models/github-token-store";
@@ -39,7 +22,6 @@ export const GITHUB_FIXTURE = {
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 
-/** The key the App's JWT is checked against. */
 export const GITHUB_APP_PUBLIC_KEY = publicKey;
 
 export const GITHUB_APP_SETTINGS: GitHubAppSettings = {
@@ -51,80 +33,64 @@ export const GITHUB_APP_SETTINGS: GitHubAppSettings = {
   sessionSecret: Redacted.make(GITHUB_FIXTURE.SESSION_SECRET),
 };
 
-/** One request as GitHub saw it. */
 export interface SentToGitHub {
   readonly url: string;
   readonly method: string;
   readonly headers: Headers;
   readonly body: string;
-  /** The caller's own, which a fake holding the request answers on giving up. */
   readonly signal?: AbortSignal;
 }
 
 export interface FakeGitHub {
   readonly layer: Layer.Layer<GitHubApp | HttpClient.HttpClient>;
-  /** Every request, in the order sent. */
   readonly sent: SentToGitHub[];
-  /** The fake as `fetch` answers, for a client that sends on `fetch` rather than the layer's `HttpClient`. */
   readonly respond: (url: string, init: RequestInit) => Promise<Response>;
 }
 
-/** The App over the fixture settings, which is what every fake stands unless a test hands another. */
 const GITHUB_APP_LAYER: Layer.Layer<GitHubApp> = GitHubApp.layer(GITHUB_APP_SETTINGS);
 
-/** The ring members' own tokens are sealed under here: fixed bytes written for the fixtures. */
 export const GITHUB_FIXTURE_TOKEN_RING = Redacted.make(
   `1:${Buffer.alloc(32, 7).toString("base64")}`,
 );
 
-/** The App over the fixture settings that opens a member's own token, sealed under the fixture ring. */
 export const GITHUB_APP_WITH_TOKENS: Layer.Layer<GitHubApp> = GitHubApp.layer(
   GITHUB_APP_SETTINGS,
   [],
   GITHUB_FIXTURE_TOKEN_RING,
 );
 
-/** A member's own classic token as a test saves it, and the GitHub account GitHub said it is. */
 export const GITHUB_FIXTURE_MEMBER = {
   TOKEN: "ghp_fixture_member_token",
   LOGIN: "octo-member",
   ID: "4242",
 } as const;
 
-/** The token the fake App mints for a repository, which is what a test reads for at the sandbox's firewall. */
 export const GITHUB_FIXTURE_INSTALLATION_TOKEN = "ghs_fixture_installation_token";
 
-/** The token the fake App mints for listing one installation's repositories, naming the installation so the listing knows whose it is. */
 export function listingTokenOf(installationId: number): string {
   return `ghs_fixture_listing_${installationId}`;
 }
 
-/** The user access token GitHub's web flow hands the fake for any code but the refused one, on the fixture member's GitHub account. */
 export const GITHUB_FIXTURE_AUTHORIZED_TOKEN = "ghu_fixture_authorized";
 
-/** A code the fake's token endpoint refuses, as GitHub refuses one spent or expired. */
 export const GITHUB_FIXTURE_REFUSED_CODE = "refused-code";
 
-/** One account as GitHub records it, as far as a commit identity reads: the name null where the account set none. */
 export interface UserFixture {
   readonly id: number;
   readonly login: string;
   readonly name?: string | null;
 }
 
-/** The fixture App's own bot user, under the login GitHub gives an App's bot. */
 export const GITHUB_FIXTURE_BOT: UserFixture = {
   id: 90_001,
   login: `${GITHUB_FIXTURE.SLUG}[bot]`,
   name: null,
 };
 
-/** Whom GitHub knows, beside the installations: the App's bot, or none under the App's slug. */
 export interface GitHubPeople {
   readonly bot?: UserFixture | null;
 }
 
-/** The App over a GitHub nobody reaches: a test whose calls read no repository hands this where production reads GitHub. */
 export const NO_GITHUB: Layer.Layer<GitHubApp | HttpClient.HttpClient> = Layer.suspend(
   () =>
     fakeGitHub(() => {
@@ -132,7 +98,6 @@ export const NO_GITHUB: Layer.Layer<GitHubApp | HttpClient.HttpClient> = Layer.s
     }).layer,
 );
 
-/** GitHub's token endpoint and API answering from the script given, every request written down, under the App given. */
 export function fakeGitHub(
   answer: (sent: SentToGitHub) => Response | Promise<Response>,
   app: Layer.Layer<GitHubApp> = GITHUB_APP_LAYER,
@@ -152,44 +117,31 @@ export function fakeGitHub(
   return { layer: Layer.mergeAll(fakeHttpClientLayer(respond), app), sent, respond };
 }
 
-/** One repository as a test names it; GitHub's record is built from it. */
 export interface RepositoryFixture {
   readonly owner: string;
   readonly name: string;
-  /** When GitHub last saw it change, ISO; a fixed instant when unsaid. */
   readonly updatedAt?: string;
   readonly private?: boolean;
   readonly defaultBranch?: string;
 }
 
-/** One installation as a test names it: on whose account, the repositories it reaches for the user, and what it grants the App, by permission name; the fixture's own when unsaid. */
 export interface InstallationFixture {
   readonly id: number;
   readonly login: string;
-  /** GitHub's id for the account it is on; one derived from the installation's when unsaid. */
   readonly accountId?: number;
-  /** The kind of account it is on; a user when unsaid. */
   readonly accountType?: "User" | "Organization";
   readonly repositories: readonly RepositoryFixture[];
   readonly permissions?: Readonly<Record<string, string>>;
-  /** Whether it was given every repository of its account or a chosen few; a chosen few when unsaid. */
   readonly repositorySelection?: "all" | "selected";
-  /** When its account suspended it, ISO; running when unsaid. */
   readonly suspendedAt?: string;
 }
 
-/** What an installation grants the App where a test says nothing: what every installation of the App granted before CI read was added. */
 const FIXTURE_INSTALLATION_PERMISSIONS = {
   contents: "write",
   metadata: "read",
   pull_requests: "write",
 } as const;
 
-/**
- * GitHub's id for a repository as a test names it: one per name in any
- * case, since every reach records the id under its name and two names under
- * one id read as a rename.
- */
 export function repositoryIdOf(fixture: RepositoryFixture): number {
   let hash = 2_166_136_261;
   for (const char of `${fixture.owner}/${fixture.name}`.toLowerCase()) {
@@ -198,7 +150,6 @@ export function repositoryIdOf(fixture: RepositoryFixture): number {
   return 1_000 + (hash % 1_000_000_000);
 }
 
-/** GitHub's own record of a repository, as much of it as the service reads and a little it does not. */
 function repositoryJson(fixture: RepositoryFixture) {
   return {
     id: repositoryIdOf(fixture),
@@ -213,12 +164,10 @@ function repositoryJson(fixture: RepositoryFixture) {
   };
 }
 
-/** GitHub's record of a repository as a member's own token reads it, with whether the token may push to it. */
 export function memberRepositoryJson(fixture: RepositoryFixture, push: boolean) {
   return { ...repositoryJson(fixture), permissions: { admin: false, push, pull: true } };
 }
 
-/** The page GitHub was asked for, as its query spells it; the first, and a hundred, when unsaid. */
 function pageOf(url: string) {
   const query = new URL(url).searchParams;
   return { page: Number(query.get("page") ?? 1), perPage: Number(query.get("per_page") ?? 100) };
@@ -235,7 +184,6 @@ const APP_TOKEN = /^\/applications\/[^/]+\/token$/u;
 const TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
 const USER_BY_LOGIN = /^\/users\/([^/]+)$/u;
 
-/** GitHub's own record of a user, as much of it as the service reads and a little it does not. */
 function userJson(fixture: UserFixture) {
   return {
     login: fixture.login,
@@ -246,12 +194,10 @@ function userJson(fixture: UserFixture) {
   };
 }
 
-/** What a repository answers on its own paths, where a test scripts one, at once or once a step of the test's own is done; nothing hands the request on to not found. */
 export type RepositoryScript = (
   sent: SentToGitHub,
 ) => Response | undefined | Promise<Response | undefined>;
 
-/** GitHub's own record of an installation, as `GET /app/installations/{id}` and `GET /user/installations` answer it. */
 function installationJson(installation: InstallationFixture) {
   return {
     id: installation.id,
@@ -267,18 +213,6 @@ function installationJson(installation: InstallationFixture) {
   };
 }
 
-/**
- * A GitHub on which the App is installed as given, each installation's
- * repositories listed on a token minted for the listing and paged the way
- * GitHub pages them; the App mints a token for any of those installations
- * but a suspended one, which GitHub refuses as forbidden;
- * GitHub's web flow exchanges any code but the refused one for an expiring
- * user access token, the fixture member's, that sees every installation
- * given, and revokes it, and refreshes no token; the App's
- * bot is the one given, the fixture's own when unsaid; and a repository
- * answers from the script given where a test hands one. Nothing else: any
- * other request fails.
- */
 export function githubReaching(
   installations: readonly InstallationFixture[],
   app: Layer.Layer<GitHubApp> = GITHUB_APP_LAYER,
@@ -290,7 +224,6 @@ export function githubReaching(
   return fakeGitHub(async (sent) => {
     if (sent.url === TOKEN_ENDPOINT) {
       const asked = new URLSearchParams(sent.body);
-      // Note that only the web flow's exchange is answered: a refresh finds GitHub unavailable.
       if (!asked.has("code")) return new Response(null, { status: 503 });
       return asked.get("code") === GITHUB_FIXTURE_REFUSED_CODE
         ? Response.json({ error: "bad_verification_code" })
@@ -332,7 +265,6 @@ export function githubReaching(
       const asked: { repositories?: unknown; permissions?: Record<string, string> } = JSON.parse(
         sent.body,
       );
-      // Note that GitHub refuses a mint naming a permission the installation never granted, at any level.
       const granted = installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS;
       if (Object.keys(asked.permissions ?? {}).some((permission) => !(permission in granted))) {
         return Response.json(
@@ -384,7 +316,6 @@ export function githubReaching(
   }, app);
 }
 
-/** The installation connected to the workspace, as a finished connect links it. */
 export const connectWorkspaceGitHub = (organizationId: string, installation: InstallationFixture) =>
   linkInstallation(organizationId, {
     installationId: installation.id,
@@ -394,11 +325,9 @@ export const connectWorkspaceGitHub = (organizationId: string, installation: Ins
     suspended: installation.suspendedAt !== undefined,
   });
 
-/** A sealed token as Better Auth writes one on the account row. */
 const sealed = (token: string): Effect.Effect<string> =>
   Effect.promise(() => symmetricEncrypt({ key: GITHUB_FIXTURE.SESSION_SECRET, data: token }));
 
-/** The token columns of one GitHub account row, unsealed. */
 export interface GitHubAccountRow {
   readonly accessToken: string;
   readonly refreshToken: string | null;
@@ -406,7 +335,6 @@ export interface GitHubAccountRow {
   readonly refreshTokenExpiresAt: Date | null;
 }
 
-/** The row a sign-in through the App left at `now`: hours on its token, months on its refresh token. */
 export const standingGithubRow = (now: number): GitHubAccountRow => ({
   accessToken: "ghu_standing",
   refreshToken: "ghr_standing",
@@ -414,11 +342,6 @@ export const standingGithubRow = (now: number): GitHubAccountRow => ({
   refreshTokenExpiresAt: new Date(now + 170 * 24 * GITHUB_FIXTURE.HOUR_MS),
 });
 
-/**
- * A user with one GitHub account row, the fixture member's GitHub account,
- * its tokens sealed the way a sign-in leaves them; the standing row off the
- * clock when none is given. The user's id.
- */
 export const openGithubUser = (standing?: GitHubAccountRow) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -428,7 +351,6 @@ export const openGithubUser = (standing?: GitHubAccountRow) =>
     return userId;
   });
 
-/** The GitHub account row a sign-in through the App leaves on a user who already stands, as `openGithubUser` leaves it. */
 export const signInWithGitHub = (userId: string, standing?: GitHubAccountRow) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -448,10 +370,6 @@ export const signInWithGitHub = (userId: string, standing?: GitHubAccountRow) =>
     });
   });
 
-/**
- * A member signed in with GitHub who saved their own token, the fixture's
- * unless another is given, sealed under the fixture ring. The member's id.
- */
 export const openTokenMember = (options: { readonly token?: string } = {}) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();

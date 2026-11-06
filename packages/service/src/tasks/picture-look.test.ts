@@ -24,20 +24,6 @@ import {
 } from "./picture-look.js";
 import type { DescriptionDocumentBinding } from "./description-notes.js";
 
-/**
- * `look_at_picture`, the planning model's and a coding agent's look at one
- * of the description's pictures, through its public functions against a real
- * dialect: a member's look hands the model the picture as an image while
- * the conversation keeps only that it looked; a picture of another description, one
- * the description does not hold, and one read by an account outside the plan's
- * workspace are refused alike; a video is refused, and its bytes reach no
- * model in any form; and a turn looks as often as it asks. The
- * model is the boundary, played by reading what it would be shown.
- *
- * Synthetic accounts and pictures throughout.
- */
-
-/** A picture's bytes: a PNG's signature and a few more, which is all the store reads of them. */
 const PICTURE: Picture = {
   contentType: PICTURE_TYPE.PNG,
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]),
@@ -50,7 +36,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Two plans in a workspace the owner made and the teammate joined, a picture the teammate pasted into the first, and an account in neither. */
 const openPicturedTasks = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -66,7 +51,6 @@ const openPicturedTasks = Effect.gen(function* () {
   return { owner, outsider, planId: task.id, otherId: other.id, attachmentId: kept.id, address };
 });
 
-/** A look as a turn makes one: bound to the description as the account. */
 function lookCall(userId: string, taskId: string): DescriptionDocumentBinding {
   return { userId, taskId: taskId };
 }

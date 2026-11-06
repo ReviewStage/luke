@@ -31,19 +31,6 @@ import { openGithubUser } from "../testing/github-app-fake.js";
 import { SentryApp, type SentryAppSettings, sentryAppService } from "./sentry/sentry-app-config.js";
 import { triggerIngressApp } from "./trigger-ingress-app.js";
 
-/**
- * The trigger ingress answering Sentry the way a function answers it, over
- * a real dialect: a signed alert through a workspace's installation queues
- * one run for each of that workspace's automations listening for it whose
- * filters it passes, carrying the issue and the summary and never the body;
- * Sentry's redelivery under the same `Request-ID` queues none; another
- * workspace's automation never queues; a delivery through an installation
- * no workspace stands for, or one uninstalled since, is answered and queues
- * nothing; and a delivery whose signature does not hold is refused, as is
- * every delivery to a deployment with no Sentry integration configured.
- * Synthetic accounts, organizations, and words throughout.
- */
-
 const ORIGIN = "https://app.test";
 const PATH = "/api/triggers/sentry";
 const SECRET = "synthetic-client-secret";
@@ -60,7 +47,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The ingress over the test's own database, with the integration configured or not. */
 const standing = (settings: SentryAppSettings | undefined) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -79,14 +65,12 @@ const standing = (settings: SentryAppSettings | undefined) =>
         const response = yield* Effect.promise(() =>
           ingress.handler(new Request(`${ORIGIN}${PATH}`, init)),
         );
-        // SAFETY: the group answers JSON; the test reads it as the wire value it is.
         const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
     return { ask };
   });
 
-/** A fixture's body, delivered through the installation named. */
 function fixture(name: string, installation: string): string {
   return readFileSync(
     new URL(`./sentry/__fixtures__/${name}.json`, import.meta.url),
@@ -94,7 +78,6 @@ function fixture(name: string, installation: string): string {
   ).replaceAll(FIXTURE_INSTALLATION, installation);
 }
 
-/** A delivery as Sentry sends it: signed under the secret given, about the resource named. */
 function delivery(
   resource: string,
   body: string,
@@ -114,7 +97,6 @@ function delivery(
   };
 }
 
-/** A workspace with Sentry installed on it under a fresh installation, and a member of it. */
 const openWorkspace = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const task = yield* startTask(owner, { name: "Errors", repository: null });
@@ -128,7 +110,6 @@ const openWorkspace = Effect.gen(function* () {
   return { owner, workspaceId: task.workspaceId, installation };
 });
 
-/** An automation of the workspace on the Sentry event, filtered as named. */
 const sentryAutomation = (
   owner: string,
   workspaceId: string,

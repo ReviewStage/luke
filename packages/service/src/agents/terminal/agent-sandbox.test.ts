@@ -22,20 +22,6 @@ import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
 
-/**
- * A coding agent's sandbox as its Terminal tab reaches it, through
- * `@vercel/sandbox` over a fake of Vercel answering from a script: a stopped sandbox lists no
- * shells and is never woken by a list or a start, a running one's shells are
- * read from tmux in its running session, a shell starts under the id given
- * and is read back, one tmux does not hold is not found, a list tmux could
- * not give is an outage, and only a resume wakes a stopped sandbox, by its
- * name. A GitHub credential is set at the firewall in its shape: an
- * installation's on GitHub's two hosts, a member's own on its repository's
- * paths alone, its record kept in the test's own database under a key ring
- * of the suite's. The token is a synthetic one, unexpired, so nothing
- * refreshes it.
- */
-
 const SESSION = "wrun_fixture";
 const SANDBOX = "eve-sbx-vercel-fixture";
 const RUNNING_SESSION = "sbs_running";
@@ -49,7 +35,6 @@ interface Asked {
   readonly args?: readonly string[];
 }
 
-/** The running session of the fixture's sandbox, under an account of its own, whose firewall a credential is set at. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
@@ -58,7 +43,6 @@ const ownSession = Effect.gen(function* () {
   return { userId, name: SANDBOX, sandboxSessionId: RUNNING_SESSION };
 });
 
-/** A command's stream as Vercel answers a waited run in the running session: the command, what it printed, and its end. */
 const commandStream = (exitCode: number, stdout = "") =>
   commandRunStreamed({ id: "cmd_1", sessionId: RUNNING_SESSION }, { exitCode, stdout, stderr: "" });
 
@@ -66,11 +50,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/**
- * Vercel as the scenario has it: the session's sandbox in the status given,
- * tmux holding the shells the list prints, refusing to name a shell it does
- * not hold, and a resume that brings the sandbox up under a fresh session.
- */
 function vercel(
   status: string | undefined,
   shells: readonly string[] = [],
@@ -78,7 +57,6 @@ function vercel(
   interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
   shellCheckExit: number = TMUX_EXIT.NO_SESSION,
 ) {
-  // The layer asks under the deployment's own token, read where the platform hands it.
   vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const policies: unknown[] = [];
@@ -93,13 +71,11 @@ function vercel(
           const body = JSON.parse(await new Response(init.body).text());
           const args: readonly string[] = body.args;
           asked.push({ method, url: parsed, args });
-          // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
           const scriptAt = args.indexOf("-c") + 1;
           const tmuxArgs = args.slice(scriptAt + 2);
           if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
           if (tmuxArgs[0] === "new-session") return commandStream(0);
           const named = tmuxArgs.some((arg) => arg.startsWith(`=terminal-${SHELL}`));
-          // The shell check exits its own code for a session tmux does not hold, or what a tmux that would not start exits.
           if (args[scriptAt]?.includes("has-session"))
             return commandStream(named ? 0 : shellCheckExit);
           return commandStream(named ? 0 : 1);
@@ -136,7 +112,6 @@ function vercel(
   return { layer, asked, policies };
 }
 
-/** One field as the list prints it: what tmux printed, newline and all, in base64. */
 const field = (value: string) => Buffer.from(`${value}\n`).toString("base64");
 
 const listedShell = (id: string, title: string, command: string) =>
@@ -205,9 +180,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a running sandbox's ports are the ones its servers listen on, each once, never root's or the browser's, and tables it could not read are an outage",
     () =>
       Effect.gen(function* () {
-        // The kernel's tables as `cat` prints them, by hand: the sandbox's init on 23456 as root,
-        // the browser's DevTools on 9333, a dev server on 3000 over both families with a connection
-        // to it, and a server on 5173.
         const tables = [
           "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
           "   0: 00000000:5BA0 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 3107 1",

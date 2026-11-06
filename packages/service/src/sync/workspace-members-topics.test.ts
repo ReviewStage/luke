@@ -23,23 +23,8 @@ import { postInboxThread } from "../inbox/inbox-store.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { workspaceInvitationsLive, workspaceMembersLive } from "./live-queries.js";
 
-/**
- * A workspace's people and its invitations (`workspaceMembersLive`,
- * `workspaceInvitationsLive`) on the migrated capture: each write that moves
- * either read, through its real writer, notifies the workspace's topic, which
- * both reads are woken on, so a window holding them hears it within a
- * coalesce window rather than at the hold's end. Memberships and invitations
- * are written by the organization plugin through the seams our routes
- * call; an account's name and its sign-in by the account's own row, as the
- * plugin's adapter writes them; and the work that names a former member by
- * the stores. A sign-in moves no read, so it notifies nothing.
- *
- * Synthetic accounts, workspaces, and work throughout.
- */
-
 type WorkspacePlugin = Effect.Success<typeof openWorkspacePlugin>;
 
-/** The live reads a workspace's settings hold, both bound to the reader and the workspace. */
 const WORKSPACE_READS = [workspaceMembersLive, workspaceInvitationsLive];
 
 const openAccount = (name: string) =>
@@ -50,14 +35,12 @@ const openAccount = (name: string) =>
     return id;
   });
 
-/** A session of the account's, as the headers the plugin's calls are made under. */
 const sessionOf = (plugin: WorkspacePlugin, userId: string) =>
   Effect.map(
     plugin.sessionBearerOf(userId),
     (bearer) => new Headers({ authorization: `Bearer ${bearer}` }),
   );
 
-/** A shared workspace the owner makes through the plugin's server-only create. */
 const openTeam = (plugin: WorkspacePlugin, ownerId: string) =>
   Effect.map(
     Effect.promise(() =>
@@ -68,10 +51,6 @@ const openTeam = (plugin: WorkspacePlugin, ownerId: string) =>
     (made) => made.id,
   );
 
-/**
- * Runs the write, held to the topics it notifies, and fails unless one of
- * them wakes each of the workspace's reads for the reader.
- */
 const wakesTheWorkspace = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],

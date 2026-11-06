@@ -34,19 +34,6 @@ import {
   saveNotes,
 } from "./description-notes.js";
 
-/**
- * The named tasks and their one document, through the store's public
- * functions and `saveNotes`, the description's one write, against a real dialect.
- * Every description is one Markdown text: each note lands in the section under the
- * heading it names and nowhere else, and what is saved is the text the window
- * and the brain both read (`readTask`). Nothing but the binding the
- * service built names the account and the task, so no note can move a save
- * onto another account's task, bring a deleted task back, or leave an
- * oversized document saved.
- *
- * Synthetic accounts, repositories, and tasks throughout.
- */
-
 const RELAY_TASK: TestTask = {
   name: "Teammate invitations",
 };
@@ -60,7 +47,6 @@ const INVITATIONS_CONTEXT =
 
 const INVITATIONS_HARD_PART = "- A withdrawn invite's link never grants access.";
 
-/** Notes that write an invitations draft into a description: its context, a hard part, an open question, and an assumption. */
 const INVITATIONS_NOTES: readonly DescriptionNote[] = [
   added("Context", INVITATIONS_CONTEXT),
   added("Hard parts", INVITATIONS_HARD_PART),
@@ -71,7 +57,6 @@ const INVITATIONS_NOTES: readonly DescriptionNote[] = [
 const EMPTY_STATE_CONTEXT =
   "Developers opening the Plans tab for the first time see an empty list that says nothing about how to start.";
 
-/** Notes that write a small copy change into a description: its context and its goal. */
 const EMPTY_STATE_NOTES: readonly DescriptionNote[] = [
   added("Context", EMPTY_STATE_CONTEXT),
   added("Goal", 'The empty list reads "No plans yet. Start one with New plan."'),
@@ -84,12 +69,10 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The binding the service builds for a task: its account and its id. */
 function bound(userId: string, taskId: string): DescriptionDocumentBinding {
   return { userId, taskId };
 }
 
-/** The document a saved result carries, failing the test on any other outcome. */
 function savedDocument(result: DescriptionSaveResult): DescriptionDocument {
   if (result.status !== DESCRIPTION_SAVE_STATUS.SAVED) {
     return assert.fail(`expected a save, got: ${JSON.stringify(result)}`);
@@ -97,7 +80,6 @@ function savedDocument(result: DescriptionSaveResult): DescriptionDocument {
   return result.document;
 }
 
-/** The document the window opens and the model resumes from, failing the test where the task does not read. */
 const resumedDocument = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (stored) =>
     Option.match(stored, {
@@ -106,7 +88,6 @@ const resumedDocument = (userId: string, taskId: string) =>
     }),
   );
 
-/** One section of a text as it stands, its heading line among its lines, failing the test where the text has none under that heading. */
 function sectionText(text: string, heading: string): string {
   const section = descriptionSections(text).find((each) => each.heading === heading);
   return section?.text ?? assert.fail(`the text holds no section under ${heading}`);
@@ -327,7 +308,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
         const userId = yield* openUser;
         const started = yield* startTask(userId, { name: "Relay", repository: "acme/relay" });
         const team = yield* openWorkspace(userId);
-        // A change of repository lands while the move is asked for.
         yield* updateTask(userId, started.id, { repository: "octocat/dotfiles" });
         const seen: (string | null)[] = [];
 

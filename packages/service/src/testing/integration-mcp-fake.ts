@@ -1,15 +1,3 @@
-/**
- * integration-mcp-fake.ts -- an integration's hosted MCP server as a suite stands it up: Linear's, at its own address, admitting one member's bearer.
- *
- * The server is the MCP SDK's own, over its web-standard transport with no
- * session, so a client of ours speaks to it as it speaks to a provider.
- * Its tools answer fixed results: a JSON text, structured content, a
- * picture, and an error of the tool's own; `list_issues` refuses one team
- * with a JSON-RPC error instead. Vercel Connect is a fake that
- * issues each account a token naming it, for Linear and Notion; every
- * other provider is one this deployment never set up.
- */
-
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -29,26 +17,22 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./integration-con
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
-/** The token Connect issues a member for Linear, which names the member. */
 export function linearTokenOf(userId: string): string {
   return `lin_oauth_${userId}_${"k".repeat(24)}`;
 }
 
-/** A connector this deployment set up, issuing every account its token. */
 const ISSUING: ConnectorService = {
   ...CONNECTOR_ASKED_NOTHING,
   token: (subject) =>
     Effect.succeed({ token: Redacted.make(linearTokenOf(subject)), expiresAt: Infinity }),
 };
 
-/** A provider this deployment never set up. */
 const UNCONFIGURED: ConnectorService = { ...CONNECTOR_ASKED_NOTHING, configured: false };
 
 export const LINEAR_AND_NOTION_CONNECT = integrationConnectOf((provider: IntegrationProvider) =>
   provider === LINEAR || provider === NOTION ? ISSUING : UNCONFIGURED,
 );
 
-/** Linear's tools, as its server lists them. */
 const LINEAR_TOOLS = [
   {
     name: "list_issues",
@@ -77,16 +61,13 @@ const LINEAR_TOOLS = [
   { name: "attach", description: "Attaches files.", inputSchema: { type: "object" } },
 ];
 
-/** The team `list_issues` refuses with a JSON-RPC error, after the session listed its tools. */
 export const REJECTED_TEAM = "REJECT";
 
-/** What Linear's fake server heard: each call's tool and arguments, and the bearers it was sent. */
 export interface Heard {
   readonly calls: { readonly name: string; readonly arguments: unknown }[];
   readonly bearers: string[];
 }
 
-/** Linear's MCP server for the member: the SDK's own, admitting their bearer alone, and listing `tools`; anything else answers 401. */
 export function linearServer(
   bearer: string,
   heard: Heard,
@@ -113,7 +94,6 @@ export function linearServer(
       heard.calls.push({ name: request.params.name, arguments: request.params.arguments });
       switch (request.params.name) {
         case "list_issues":
-          // A team the server refuses outright, as a JSON-RPC error rather than the tool's own.
           if (request.params.arguments?.team === REJECTED_TEAM) {
             throw new McpError(ErrorCode.InvalidParams, "Unknown team.");
           }
@@ -154,7 +134,6 @@ export function linearServer(
           return { content: [{ type: "text", text: "Team not found." }], isError: true };
       }
     });
-    // No session id generator: the server keeps no session, as a stateless provider does.
     const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(new Request(url, init));

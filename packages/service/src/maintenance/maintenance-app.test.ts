@@ -37,20 +37,7 @@ import { recordingSentry, type SentItem, sentOfType } from "../testing/sentry-tr
 import { maintenanceApp } from "./maintenance-app.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 
-/**
- * The sweep's group as the cron reaches it, told to Sentry's Crons through a
- * recording transport. A sweep that runs does so over an empty migrated
- * database, so it finds nothing to do and reaches no provider; what each
- * sweep does is `maintenance-sweep.test.ts`'s. The exceptions are a
- * deleted task's agent, whose conversation the purge takes once its
- * retention has passed and not before, and an automation the sweep starts,
- * whose agent's harness is reached acting for its owner, with nothing sent
- * to eve or under the cron's bearer the sweep itself was called with, over
- * GitHub and eve as one fake HTTP boundary.
- */
-
 const CRON_SECRET = "cron-secret-1";
-/** The deployment's own secret at eve's door, which every deployment here holds beside the cron's. */
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -70,7 +57,6 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
   };
 }
 
-/** Each check-in's monitor and status, in the order they were sent. */
 function checkIns(sent: readonly SentItem[]): string[][] {
   return sentOfType(sent, "check_in").map((item) => [
     item.payload.monitor_slug ?? "",
@@ -78,7 +64,6 @@ function checkIns(sent: readonly SentItem[]): string[][] {
   ]);
 }
 
-/** The services a run of the sweep reads: the test's own database and clock, since the handler runs on the router's fiber. */
 const testDatabase = Effect.gen(function* () {
   return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -87,7 +72,6 @@ const testDatabase = Effect.gen(function* () {
   );
 });
 
-/** The scheduler's call with `bearer`, answered by the group on a deployment whose cron secret is `cronSecret`. */
 const sweep = (
   cronSecret: string | undefined,
   bearer: string,
@@ -161,7 +145,6 @@ it.layer(getTestDB())("a sweep that runs", (it) => {
   );
 });
 
-/** A task with one coding agent on it, deleted now, answering the agent's conversation. */
 const deleteTaskWithAgent = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const task = yield* startTask(owner, { name: "Rate limits", repository: "acme/api" });
@@ -185,7 +168,6 @@ const deleteTaskWithAgent = Effect.gen(function* () {
   return conversationId;
 });
 
-/** Whether the conversation's row still stands. */
 const stands = (conversationId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -220,7 +202,6 @@ it.layer(getTestDB())("a deleted task's agent", (it) => {
   );
 });
 
-/** The one installation reaching the automation's repository. */
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const INSTALLATION: InstallationFixture = {
   id: 7_100,
@@ -230,7 +211,6 @@ const INSTALLATION: InstallationFixture = {
 };
 const MODEL = "openai/gpt-6.1-sol";
 
-/** An owner, a task on the installation's repository, and an automation on it due a minute ago. */
 const openDueAutomation = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   yield* connectAgentApiKeys(owner);
@@ -260,11 +240,6 @@ const openDueAutomation = Effect.gen(function* () {
   return owner;
 });
 
-/**
- * GitHub reaching the automation's repository, the catalog the automation's
- * model is offered in, and a harness that writes down each call and whom it
- * acted for.
- */
 function githubAndHarness() {
   const github = githubReaching([INSTALLATION]);
   const catalog = modelCatalogOf([

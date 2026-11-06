@@ -9,13 +9,6 @@ import {
 import { test } from "vitest";
 import { commentAskMessage } from "./comment-ask.js";
 
-/**
- * A description's comment thread as it is handed to an agent: the words it is
- * handed over in. The hand-over itself, through the one steer path every
- * message to an agent takes, is the comments route's suite
- * (`apps/web/tests/description-comments.test.ts`). Synthetic throughout.
- */
-
 const THREAD: DescriptionCommentThread = {
   id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
   scope: DESCRIPTION_COMMENT_SCOPE.WORDS,

@@ -4,7 +4,6 @@ import { Effect, Metric } from "effect";
 import { TestClock } from "effect/testing";
 import { countAnswerBytes, countAnswerWait, TRANSCRIPT_METRIC } from "./transcript-metrics.js";
 
-/** The measures a transcript's live answers are counted by: a held answer that moved is counted by the bytes of its rows, and one that ended unmoved is not. */
 it.effect(
   "counts the bytes of the rows an answer carries, and none for an answer with no rows",
   () =>
@@ -17,7 +16,6 @@ it.effect(
       });
 
       const bytes = yield* Metric.value(TRANSCRIPT_METRIC.ANSWER_BYTES);
-      // `[{"id":1},{"id":2}]` is 19 bytes and `[]` is 2.
       assert.equal(bytes.count, 1);
       assert.equal(bytes.sum, 21);
     }),

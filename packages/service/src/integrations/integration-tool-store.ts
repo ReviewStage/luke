@@ -1,25 +1,3 @@
-/**
- * integration-tool-store.ts -- the tools a provider's MCP server last listed on one grant, kept beside the grant's row so a native agent's launch lists them without a token.
- *
- * A native agent's harness lists every integration server's tools at each
- * launch (`connection-door.ts`), and a live list needs the grant's token
- * from Vercel Connect, which bills each ask. So the list is kept on the row
- * that stands for the grant it was read on, the account's own
- * (`schemas/integration.ts`). A grant from the account's GitHub
- * sign-in has no row and keeps nothing, since reading its token asks Connect
- * nothing. What is kept is each tool's name, words, and schemas as the server
- * sent them, never a credential, and it is read back only for the grant it
- * was listed on, so one account's list never reaches another.
- *
- * A list is kept only while its row stands connected under the grant it was
- * read on, only where that grant was completed before the read began, so a
- * list read on a grant a sign-in has since replaced is dropped rather than
- * kept over the new one, and only over a list whose read began no later, so
- * two reads that finish out of order keep the newer. A completed sign-in
- * clears the row's list (`integration-store.ts`), and a Disconnect deletes
- * the row and the list with it.
- */
-
 import { Database } from "@repo/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import { InstantColumnSchema } from "@repo/database/models/columns";
@@ -31,7 +9,6 @@ import type { IntegrationStoreEffect } from "./integration-store.js";
 import { INTEGRATION_GRANT_HOLDER, type IntegrationGrantRef } from "./integration-token.js";
 import { type McpToolSchema, McpToolSchemaSchema } from "./mcp-tools.js";
 
-/** A grant's kept list: its tools, and when the read that listed them began. */
 export interface StoredTools {
   readonly tools: readonly McpToolSchema[];
   readonly listedAt: Date;
@@ -52,7 +29,6 @@ const AccountGrantSchema = Schema.Struct({
   connectSubject: Schema.String,
 });
 
-/** The account's connected row under the connection name, while it stands for the grant under this subject. */
 function ofAccountGrant({
   userId,
   connectionName,
@@ -101,18 +77,10 @@ const updateAccountTools = SqlSchema.void({
     ),
 });
 
-/**
- * What a row keeps of a list: the list, or none for an empty one. Note that
- * an empty list is kept as none, because a provider that answers no tools
- * for a moment would otherwise hide every tool for a week, while a list
- * kept from before would go on naming tools the provider no longer lists;
- * none is listed live at the next listing.
- */
 function keptOf(tools: readonly McpToolSchema[]): readonly McpToolSchema[] | null {
   return tools.length === 0 ? null : tools;
 }
 
-/** A row's kept list, where it holds one that still reads as tools. */
 const storedOf = Option.match({
   onNone: (): StoredTools | undefined => undefined,
   onSome: ({ tools, toolsListedAt }: typeof StoredRowSchema.Type): StoredTools | undefined => {
@@ -123,7 +91,6 @@ const storedOf = Option.match({
   },
 });
 
-/** The list kept for the grant, or nothing where none is kept, the grant keeps none, or its row no longer stands for it. */
 export function readStoredTools(
   grant: IntegrationGrantRef,
 ): IntegrationStoreEffect<StoredTools | undefined> {
@@ -135,12 +102,6 @@ export function readStoredTools(
   }
 }
 
-/**
- * Keeps the tools a read begun at `from` listed on the grant, or none where
- * it listed none, where its row still stands for that grant, the grant was
- * completed by then, and no list from a later read is kept; nothing is
- * written otherwise, nor for a grant that keeps none.
- */
 export function storeTools(
   grant: IntegrationGrantRef,
   tools: readonly McpToolSchema[],

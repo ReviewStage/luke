@@ -1,25 +1,3 @@
-/**
- * agent-changes-tool.ts -- `read_agent_changes`: what an agent of the caller's workspace published, its pull request and the files it changes, as the agent's Pull request and Changes tabs read them.
- *
- * The agent is found as `read_agent` finds it (`workspaceAgentOf`), on the
- * caller's member's standing now, so an agent of another workspace, even one
- * the member is also in, is none. What it published is the branch and pull
- * request its row holds as GitHub holds them now (`agentPublished`), its
- * state and checks among it, which the Pull request tab reads
- * (`GET /api/agents/{id}/pull-request`); its files, reviewers, and reviews
- * that said something are read afresh on a token minted for its repository
- * (`pullRequestChangesRead`), as the Changes tab reads them
- * (`GET /api/agents/{id}/changes`), with the head commit it stands on,
- * which a merge names (`agent_pull_request_action`). Each file is named
- * with what became of it and the lines it adds and removes, without its
- * patch, since a pull request's patches together may run to millions of
- * characters; one file the
- * call names by its path is answered with its patch beside, cut on a line
- * to a bound. A GitHub that did not answer, or a repository the workspace's
- * installation no longer reaches, is refused in the model's words, never
- * answered as no pull request.
- */
-
 import { hasRepository } from "@repo/database/models/agent-store";
 import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
@@ -45,13 +23,10 @@ import { pullRequestChangesRead } from "./agents-procedures.js";
 import { githubReadRefusal } from "./asked-pull-request.js";
 import { agentPublished, agentPullRequestReach } from "./coder-host/published.js";
 
-/** The name the tool is offered under. */
 export const READ_AGENT_CHANGES = "read_agent_changes";
 
-/** The most characters of one file's patch a read answers, about ten thousand tokens: the rest is counted, never sent. */
 const PATCH_READ_CHARS = 40_000;
 
-/** Why a read answered nothing, in words the model can act on. */
 const READ_AGENT_CHANGES_REFUSAL = {
   UNREADABLE:
     `Not read: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a path, if ` +
@@ -67,7 +42,6 @@ const READ_AGENT_CHANGES_REFUSAL = {
     "may be made again.",
 } as const;
 
-/** A read names the agent and, at most, one file whose patch to answer beside the list. */
 export const READ_AGENT_CHANGES_INPUT = Schema.Struct({
   agentId: describeWire(
     wireUuidSchema,
@@ -84,14 +58,12 @@ export const READ_AGENT_CHANGES_INPUT = Schema.Struct({
 
 const readChangesAsked = Schema.decodeUnknownResult(READ_AGENT_CHANGES_INPUT);
 
-/** A read of GitHub that did not land, in the model's words: the repository out of the installation's reach, or GitHub or the store not answering. */
 function unreadWords(error: string): string {
   return error === HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE
     ? READ_AGENT_CHANGES_REFUSAL.NOT_REACHABLE
     : READ_AGENT_CHANGES_REFUSAL.UNANSWERED;
 }
 
-/** One call of `read_agent_changes`: the agent's published branch and pull request, the files it changes, and the patch of the one file named, or why there is none. */
 export function runReadAgentChanges(
   call: AgentReadCall,
   input: UnparsedWireValue,
@@ -155,7 +127,6 @@ export function runReadAgentChanges(
             ? undefined
             : { comments: comments.map((comment) => ({ ...comment, by: { ...comment.by } })) }),
         },
-        // The file named, with its patch cut to the bound, or why GitHub carried none.
         ...(named === undefined
           ? undefined
           : {

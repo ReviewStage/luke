@@ -1,46 +1,3 @@
-/**
- * slack-bot.ts -- our own Slack bot: the team its token answers for, and a member written to directly.
- *
- * The bot is one Slack app whose token Vercel Connect holds under the
- * connector `SLACK_BOT_CONNECTOR_UID` names, under an app subject, never a
- * member's, so it is apart from the Slack each member connects for their
- * agents (`integrations.ts`). Its token is asked for at the moment a call is
- * made and kept in the SDK's own cache, never stored.
- *
- * A workspace's owner or admin connects the bot, which reads the team the
- * token answers for (`auth.test`) and keeps it
- * (`@repo/database/models/slack-installation-store`). Writing to a member
- * finds their Slack user id the first time and keeps it: through a Slack
- * account they connected themselves under Settings › Integrations, whose own
- * token `auth.test` answers their user id and team for, the first in the
- * bot's team taken; else by their email (`users.lookupByEmail`), a miss
- * kept and asked again only after `SLACK_MEMBER_MISS_LIFETIME`. A member
- * with no match is written nothing.
- *
- * A member who writes to the bot is found by the id kept for them, else
- * through the Slack accounts the workspace's members connected themselves
- * whose ids are not kept yet (`memberOf`); the caller falls back to the
- * email Slack holds for them (`users.info`). The bot replies in the thread
- * they wrote in (`chat.postMessage` with `thread_ts`), reading the thread's
- * earlier messages (`conversations.replies`) and its link
- * (`chat.getPermalink`). Settings lists the team's channels
- * (`conversations.list`), and an owner or admin puts the bot in a public one
- * (`conversations.join`) or takes it out of one (`conversations.leave`).
- *
- * Files go both ways as Slack's own external upload takes them: each file
- * is handed an address (`files.getUploadURLExternal`), its bytes are sent
- * there, and the files sent are shared together in a thread
- * (`files.completeUploadExternal`); a file a member shared is read from its
- * private address on the bot's token, on Slack's file host alone and held
- * to the bound its caller names.
- *
- * `dm`, `update`, those reads, replies, joins, and leaves, and the files
- * are best-effort: whatever fails, Slack, Connect, or the store, is logged
- * by a fixed line and Slack's own error code, never Slack's words or the
- * token, and answers nothing. Note that neither is to be
- * yielded inside a transaction, because each waits on Slack.
- */
-
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import {
@@ -70,16 +27,12 @@ import { text } from "../core.js";
 import { type ConnectorService, IntegrationConnect } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
 
-/** The variable this deployment names the bot's connector by; a blank value is absent. */
 export const SLACK_BOT_ENVIRONMENT = { CONNECTOR: "SLACK_BOT_CONNECTOR_UID" } as const;
 
-/** How long a member whose email matched no one in the team is written nothing before Slack is asked again. */
 export const SLACK_MEMBER_MISS_LIFETIME = Duration.days(1);
 
-/** Where Slack's Web API answers. */
 const SLACK_API_ORIGIN = "https://slack.com";
 
-/** The Web API methods the bot calls. */
 const SLACK_METHOD = {
   AUTH_TEST: "auth.test",
   USERS_LOOKUP_BY_EMAIL: "users.lookupByEmail",
@@ -98,28 +51,22 @@ const SLACK_METHOD = {
 
 type SlackMethod = (typeof SLACK_METHOD)[keyof typeof SLACK_METHOD];
 
-/** Slack's error code for an email that matches no member of the team. */
 const SLACK_USERS_NOT_FOUND = "users_not_found";
 
-/** Slack's error code as a log line may keep it: a short slug, and nothing shaped like a sentence or a token. */
 const SLACK_CODE_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
-/** One Block Kit block, as Slack's own docs spell it. */
 export type SlackBlock = Readonly<Record<string, unknown>>;
 
-/** What the bot writes: Block Kit blocks, and the plain text Slack shows in a notification and wherever blocks are not drawn. */
 export interface SlackMessageContent {
   readonly text: string;
   readonly blocks: readonly SlackBlock[];
 }
 
-/** A message the bot wrote, by the conversation it is in and its timestamp, which is what `update` names it by. */
 export interface SlackMessage {
   readonly channel: string;
   readonly ts: string;
 }
 
-/** One message of a Slack thread as the bot reads it: who wrote it, a member by user id or a bot, and its words. */
 export interface SlackThreadMessage {
   readonly ts: string;
   readonly user?: string;
@@ -127,7 +74,6 @@ export interface SlackThreadMessage {
   readonly text: string;
 }
 
-/** A channel of the team as the bot sees it: its name, whether it is private, and whether the bot is in it. */
 export interface SlackChannel {
   readonly id: string;
   readonly name: string;
@@ -135,20 +81,17 @@ export interface SlackChannel {
   readonly member: boolean;
 }
 
-/** A file the bot shares in a thread: its file name, the title Slack shows it under where it is not the name, and its bytes. */
 export interface SlackUpload {
   readonly name: string;
   readonly title?: string;
   readonly bytes: Uint8Array;
 }
 
-/** The Slack team the bot's token answers for. */
 export interface SlackTeam {
   readonly id: string;
   readonly name: string;
 }
 
-/** Why Slack answered nothing usable: the deployment names no connector, or Connect or Slack refused, keeping Slack's code where it is a slug. */
 export class SlackBotFailure extends Data.TaggedError("SlackBotFailure")<{
   readonly method: SlackMethod;
   readonly code?: string;
@@ -160,108 +103,75 @@ export class SlackBotFailure extends Data.TaggedError("SlackBotFailure")<{
   }
 }
 
-/** Why a file's bytes did not move: its address was refused or no Slack file host's, or the bytes ran past their bound. */
 export class SlackFileFailure extends Data.TaggedError("SlackFileFailure") {
   override get message(): string {
     return "A Slack file's bytes could not be moved";
   }
 }
 
-/**
- * The bytes a file moves outside the Web API's form posts: sent to the
- * address Slack handed for its upload, or read from a file's private
- * address on the bot's token, as many as `maxBytes` at most.
- */
 export interface SlackFileTransfer {
   readonly send: (url: string, bytes: Uint8Array) => Effect.Effect<void, SlackFileFailure>;
   readonly read: (url: string, maxBytes: number) => Effect.Effect<Uint8Array, SlackFileFailure>;
 }
 
-/**
- * One Web API call: the method, its arguments, and Slack's answer as JSON,
- * an answer Slack marked not ok refused by its code. It is made on the
- * bot's token, or on the token of a member's own Slack account where
- * `memberSubject` names the subject Connect holds that account under.
- */
 export type SlackWebApi = (
   method: SlackMethod,
   args: Readonly<Record<string, string>>,
   memberSubject?: string,
 ) => Effect.Effect<unknown, SlackBotFailure>;
 
-/** our Slack bot as this deployment holds it. */
 export interface SlackBotService {
-  /** Whether the deployment names the bot's connector; one that does not writes nothing. */
   readonly configured: boolean;
-  /** The team the bot's token answers for, as `auth.test` says. */
   readonly team: Effect.Effect<SlackTeam, SlackBotFailure>;
-  /** Writes to the member directly, in the thread under the DM `thread` names where given, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
   readonly dm: (
     organizationId: string,
     userId: string,
     content: SlackMessageContent,
     thread?: SlackMessage,
   ) => Effect.Effect<Option.Option<SlackMessage>, never, DatabaseServices>;
-  /** The member of the workspace a Slack user of its connected team is, by the id kept for them or through a Slack account a member connected themselves; nothing where neither finds one. */
   readonly memberOf: (
     organizationId: string,
     teamId: string,
     slackUserId: string,
   ) => Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices>;
-  /** Rewrites a message the bot wrote; a failure is logged and answers nothing. */
   readonly update: (
     channel: string,
     ts: string,
     content: SlackMessageContent,
   ) => Effect.Effect<void>;
-  /** Replies in the thread under the message `threadTs` names; nothing where it failed. */
   readonly reply: (
     channel: string,
     threadTs: string,
     content: SlackMessageContent,
   ) => Effect.Effect<Option.Option<SlackMessage>>;
-  /** The thread's messages, oldest first, as far as Slack's first page holds them; none where the read failed. */
   readonly threadMessages: (
     channel: string,
     threadTs: string,
   ) => Effect.Effect<readonly SlackThreadMessage[]>;
-  /** The message's link in Slack; nothing where the read failed. */
   readonly permalink: (channel: string, ts: string) => Effect.Effect<Option.Option<string>>;
-  /** The email Slack holds for the user; nothing where it holds none, or the read failed. */
   readonly userEmail: (slackUserId: string) => Effect.Effect<Option.Option<string>>;
-  /** The team's public channels and the private ones the bot is in, archived ones left out, as far as Slack's first page holds them; nothing where the read failed. */
   readonly channels: Effect.Effect<Option.Option<readonly SlackChannel[]>>;
-  /** Puts the bot in a public channel; false where Slack refused. */
   readonly join: (channel: string) => Effect.Effect<boolean>;
-  /** Takes the bot out of a channel; false where Slack refused. */
   readonly leave: (channel: string) => Effect.Effect<boolean>;
-  /** Reacts to a message with the emoji Slack names `emoji`; a failure is logged and answers nothing. */
   readonly react: (channel: string, ts: string, emoji: string) => Effect.Effect<void>;
-  /** Shares the files in the thread under the message `threadTs` names, each sent apart; a file that failed is logged and left out. */
   readonly upload: (
     channel: string,
     threadTs: string,
     files: readonly SlackUpload[],
   ) => Effect.Effect<void>;
-  /** A file a member shared, read from its private address up to `maxBytes`; nothing where the read failed or ran past them. */
   readonly download: (url: string, maxBytes: number) => Effect.Effect<Option.Option<Uint8Array>>;
 }
 
 export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("SlackBot") {}
 
-/** `auth.test`'s answer, as far as it is read. */
 const AuthTestSchema = Schema.Struct({ team_id: Schema.String, team: Schema.String });
 
-/** `auth.test`'s answer on a member's own token, as far as it is read: who they are, and in which team. */
 const MemberAuthSchema = Schema.Struct({ team_id: Schema.String, user_id: Schema.String });
 
-/** `users.lookupByEmail`'s answer, as far as it is read. */
 const LookupSchema = Schema.Struct({ user: Schema.Struct({ id: Schema.String }) });
 
-/** `chat.postMessage`'s answer, as far as it is read. */
 const PostedSchema = Schema.Struct({ channel: Schema.String, ts: Schema.String });
 
-/** `conversations.replies`' answer, as far as it is read. */
 const RepliesSchema = Schema.Struct({
   messages: Schema.Array(
     Schema.Struct({
@@ -273,17 +183,14 @@ const RepliesSchema = Schema.Struct({
   ),
 });
 
-/** `chat.getPermalink`'s answer, as far as it is read. */
 const PermalinkSchema = Schema.Struct({ permalink: Schema.String });
 
-/** `users.info`'s answer, as far as it is read. */
 const UserInfoSchema = Schema.Struct({
   user: Schema.Struct({
     profile: Schema.optional(Schema.Struct({ email: Schema.optional(Schema.String) })),
   }),
 });
 
-/** `conversations.list`'s answer, as far as it is read. */
 const ChannelsSchema = Schema.Struct({
   channels: Schema.Array(
     Schema.Struct({
@@ -295,27 +202,20 @@ const ChannelsSchema = Schema.Struct({
   ),
 });
 
-/** `files.getUploadURLExternal`'s answer, as far as it is read. */
 const UploadUrlSchema = Schema.Struct({ upload_url: Schema.String, file_id: Schema.String });
 
-/** The most channels read, Slack's own bound for one page; a team with more is read by its first page. */
 const CHANNELS_READ = "1000";
 
-/** The kinds of conversation the channel list reads. */
 const CHANNEL_TYPES = "public_channel,private_channel";
 
-/** The most of a thread's messages read; a thread longer than this is read by its first page. */
 const THREAD_MESSAGES_READ = "200";
 
-/** Any Web API answer: whether Slack did it, and its code where it did not. */
 const AnswerSchema = Schema.Struct({ ok: Schema.Boolean, error: Schema.optional(Schema.String) });
 
-/** A Slack code as a failure keeps it. */
 function codeOf(code: string | undefined): string | undefined {
   return code !== undefined && SLACK_CODE_PATTERN.test(code) ? code : undefined;
 }
 
-/** An answer read as the schema says, a shape not read refused. */
 function readAnswer<A>(
   method: SlackMethod,
   schema: Schema.Codec<A, unknown>,
@@ -326,21 +226,14 @@ function readAnswer<A>(
   );
 }
 
-/** A message's arguments as the Web API takes them, its blocks as the JSON Slack reads them from. */
 function contentArgs(content: SlackMessageContent): Record<string, string> {
   return { text: content.text, blocks: JSON.stringify(content.blocks) };
 }
 
-/**
- * A new message's arguments: its content, with Slack's link and media
- * previews off. Note that we turn them off, because an agent's words name
- * many pull requests, and a preview of each buries the message itself.
- */
 function postArgs(content: SlackMessageContent): Record<string, string> {
   return { ...contentArgs(content), unfurl_links: "false", unfurl_media: "false" };
 }
 
-/** Logs a failure by its fixed line, and answers nothing. */
 function swallowed<A>(what: string) {
   return (cause: { readonly message: string }) =>
     Effect.as(
@@ -349,7 +242,6 @@ function swallowed<A>(what: string) {
     );
 }
 
-/** The user id one of a member's own Slack accounts is in the team, as `auth.test` on its token says; nothing for an account in another team, or one whose token failed. */
 function connectedSlackId(
   api: SlackWebApi,
   teamId: string,
@@ -364,7 +256,6 @@ function connectedSlackId(
   );
 }
 
-/** The member's Slack user id in the team through the Slack accounts they connected themselves, the first in the team taken and kept; nothing where none is. */
 const connectedMemberSlackId = Effect.fnUntraced(function* (
   api: SlackWebApi,
   organizationId: string,
@@ -383,13 +274,6 @@ const connectedMemberSlackId = Effect.fnUntraced(function* (
   return Option.none<string>();
 });
 
-/**
- * The member's Slack user id in the team: kept, or found through a Slack
- * account they connected themselves, or looked up by their email, and
- * kept; an email miss within its lifetime answers nothing. Note that a
- * kept miss still asks their own accounts, so a member who connects Slack
- * after a miss is found on the next write.
- */
 const memberSlackId = Effect.fn("web/slackMemberId")(function* (
   api: SlackWebApi,
   organizationId: string,
@@ -426,13 +310,6 @@ const memberSlackId = Effect.fn("web/slackMemberId")(function* (
   return found;
 });
 
-/**
- * The member a Slack user of the workspace's team is: the one kept under
- * that id, or else one found by asking Slack, through each Slack account a
- * member whose id is not kept connected themselves, who that account is in
- * the team; each member found so is kept, and the asking stops at the
- * Slack user sought.
- */
 const memberOfSlackUser = Effect.fn("web/slackMemberOf")(function* (
   api: SlackWebApi,
   organizationId: string,
@@ -457,7 +334,6 @@ const memberOfSlackUser = Effect.fn("web/slackMemberOf")(function* (
   return Option.none<string>();
 });
 
-/** The file's address from Slack, and its bytes sent there; its id where they arrived, nothing where either failed. */
 function sentFile(
   api: SlackWebApi,
   files: SlackFileTransfer,
@@ -476,11 +352,6 @@ function sentFile(
   );
 }
 
-/**
- * Each file sent to its own address, then those that arrived shared
- * together in the thread; nothing is shared where none arrived. Note that
- * they are sent one at a time, because each holds its bytes in memory.
- */
 function uploadFiles(
   api: SlackWebApi,
   transfer: SlackFileTransfer,
@@ -501,7 +372,6 @@ function uploadFiles(
   });
 }
 
-/** The bot over one Web API and the file transfer beside it, or over none where the deployment names no connector; a bot handed no transfer moves no file. */
 export function slackBotOver(
   api: SlackWebApi | undefined,
   transfer?: SlackFileTransfer,
@@ -542,7 +412,6 @@ export function slackBotOver(
           userId,
         );
         if (Option.isNone(slackId)) return Option.none<SlackMessage>();
-        // Note that a user id as the channel writes to the bot's own conversation with them.
         const posted = yield* api(SLACK_METHOD.CHAT_POST_MESSAGE, {
           ...(thread === undefined
             ? { channel: slackId.value }
@@ -675,20 +544,12 @@ export function slackBotOver(
   };
 }
 
-/**
- * The subject the bot's token is asked under: the app's, as Slack bot tokens
- * are one per install. Note that this is exactly what `@vercel/connect/chat`'s
- * `connectSlackAdapter(connector).botToken()` asks, called here directly,
- * because that helper's type comes from a Chat SDK package we do not install.
- */
 const BOT_SUBJECT = { subject: { type: "app" } } as const;
 
-/** The bot's token from its own connector. */
 function botToken(connector: string): Effect.Effect<string, unknown> {
   return Effect.tryPromise(() => getToken(connector, BOT_SUBJECT));
 }
 
-/** The token a call is made on: the bot's from its own connector, or a member's own Slack account's from the connector members connect Slack through. */
 function tokenFor(
   method: SlackMethod,
   connector: string,
@@ -704,7 +565,6 @@ function tokenFor(
   );
 }
 
-/** The Web API under a token from Connect, each call a form post as Slack's docs take every method. */
 function slackWebApi(
   connector: string,
   members: ConnectorService,
@@ -734,10 +594,8 @@ function slackWebApi(
     });
 }
 
-/** The host Slack serves a file's private address from, the one the bot's token is ever sent to outside the Web API. */
 const SLACK_FILE_HOST = "files.slack.com";
 
-/** Whether an address is https on the host given, and none other. */
 function isHttpsOn(url: string, host: string | undefined): boolean {
   const parsed = URL.parse(url);
   return (
@@ -747,12 +605,6 @@ function isHttpsOn(url: string, host: string | undefined): boolean {
   );
 }
 
-/**
- * A file's bytes moved over HTTP: sent as the upload address takes them, a
- * raw body, on no token, since the address is itself the grant; and read
- * on the bot's token from Slack's file host alone, refused past the bound
- * by the length it states and again by the bytes that came.
- */
 function slackFileTransfer(connector: string, client: HttpClient.HttpClient): SlackFileTransfer {
   const failed = () => new SlackFileFailure();
   return {
@@ -788,7 +640,6 @@ function slackFileTransfer(connector: string, client: HttpClient.HttpClient): Sl
   };
 }
 
-/** The bot as this deployment's environment configures it, read as the services are built. */
 export const slackBotFromEnvironment: Layer.Layer<
   SlackBot,
   Config.ConfigError,

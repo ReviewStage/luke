@@ -25,13 +25,6 @@ import {
   mentionedServers,
 } from "./mentioned-context.js";
 
-/**
- * What a coding agent's message mentions of its plan, handed beside its
- * words as it stood at the send, within its bounds; and the line that
- * carried it matched by eve's receipt of what eve was handed, its words
- * alone read back as the developer's. Synthetic plan.
- */
-
 const TASK: Task = {
   id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
   workspaceId: "workspace-personal",
@@ -623,7 +616,6 @@ test("the people the words mention are what the send reads, each once, by the id
   assert.deepEqual(ids.people, [PERSON_ID, "Zz9"]);
 });
 
-/** A section's address as its heading's ⋯ "Copy link" copies it, bare. */
 const bareSection = (heading: string) =>
   encodeMention({ kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: anchorOf(heading) }, PLACE);
 

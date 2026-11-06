@@ -1,20 +1,3 @@
-/**
- * admin-procedures.ts -- the admin dashboard's reads and its one star write, as one hosted resource.
- *
- * The reads answer the dashboard's screens (metrics, cost, reliability, the
- * roster, one account, one day, the workspaces, and one workspace); the write is the Users
- * tab's star, PUT to set it and DELETE to take it back. Each answers for its
- * own query and its own refusals (`admin-*.ts`) and is answered as it was
- * built, the bytes the old group wrote.
- *
- * What the resource owns is the gate (`gate.ts`), on its implementer rather
- * than on each procedure, so it runs before oRPC reads the input, as the old
- * group resolved the viewer before it read a query: an auth seam that fails
- * is a 503, an anonymous request a 401 the page answers with a sign-in, and a
- * signed-in non-admin a 403 the page answers with a plain refusal. A method
- * an address does not answer is the handler's 405 before any of them.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { hosted } from "../orpc/base.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
@@ -29,12 +12,9 @@ import { type AdminWorkspaceOptions, handleAdminWorkspace } from "./admin-worksp
 import { type AdminWorkspacesOptions, handleAdminWorkspaces } from "./admin-workspaces.js";
 import { type AdminViewerResolver, adminGateMiddleware } from "./gate.js";
 
-/** What the resource is handed that the deployment alone can answer for. */
 export interface AdminProcedureSeams {
-  /** The browser session the request rides in on; a refusal is an outage, never a sign-out. */
   resolveViewer: AdminViewerResolver;
   readMetrics: AdminMetricsOptions["readMetrics"];
-  /** The Cost screen's read, which prices at the model catalog the instance holds. */
   readCost: AdminCostOptions<DatabaseServices | ModelCatalog>["readCost"];
   readUsers: AdminUsersOptions["readUsers"];
   readUser: AdminUserOptions["readUser"];

@@ -1,16 +1,3 @@
-/**
- * admin-workspaces.ts -- the Workspaces tab: headline counts of shared
- * workspaces and a table of workspaces, sorted by the last week's activity.
- *
- * A workspace is a Better Auth `organization`, and most are the personal one
- * made for each account, which says nothing about teams using the app together.
- * So the headline counts read shared workspaces alone, two or more members
- * and nobody's personal one, and the table lists them unless the read asks
- * for every workspace. What a row names is the workspace's name, its owner,
- * counts, statuses, and the GitHub account its installation is on, never a
- * task's title, a description's text, or anything a member wrote.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminWorkspaceInstallation,
@@ -32,54 +19,35 @@ import { Clock, Effect } from "effect";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
-/**
- * How many rows one read returns, on the roster's terms: past it, `total`
- * still counts every workspace the filter keeps and the search narrows the
- * read itself, so a workspace past the bound is still findable by name.
- */
 export const ADMIN_WORKSPACES_LIMIT = 200;
 
-/** The trailing run of UTC days a row's activity counts and the active tile cover. */
 export const ADMIN_WORKSPACES_ACTIVITY_DAYS = ADMIN_METRICS_WINDOW.WEEK;
 
-/**
- * Where an invitation stands, as the organization plugin writes it. Only
- * pending and accepted are reachable while rejecting and canceling stay
- * shut (`auth-policy.ts`); any other status still counts as settled.
- */
 export const INVITATION_STATUS = {
   PENDING: "pending",
   ACCEPTED: "accepted",
 } as const;
 
-/** A workspace as the main read answers it, before its owner and connections are folded on. */
 type AdminWorkspaceSourceRow = Omit<AdminWorkspaceRow, "owner" | "installations">;
 
-/** What the queries read, before the builder folds it into the page's answer. */
 export interface AdminWorkspaceListSource {
   total: number;
-  /** Already in the table's order and cut at the bound. */
   rows: readonly AdminWorkspaceSourceRow[];
-  /** Each listed workspace's owners, the earliest first. */
   owners: readonly { organizationId: string; owner: AdminWorkspaceOwner }[];
-  /** Each listed workspace's installations, the first linked first. */
   installations: readonly { organizationId: string; installation: AdminWorkspaceInstallation }[];
   summary: {
     shared: number;
     sharedActiveWeek: number;
     sharedWithActive: number;
     sharedWithSuspended: number;
-    /** Invitation counts by status, with how many of each are past their expiry. */
     invitations: readonly { status: string; count: number; pastExpiry: number }[];
   };
 }
 
-/** A share, or none where there is nothing to share out. */
 function ratio(part: number, whole: number): number | null {
   return whole === 0 ? null : part / whole;
 }
 
-/** What each workspace's rows of one kind carry, keyed by its id, in the order they were read. */
 function byWorkspace<Row extends { organizationId: string }, Value>(
   rows: readonly Row[],
   pick: (row: Row) => Value,
@@ -93,7 +61,6 @@ function byWorkspace<Row extends { organizationId: string }, Value>(
   return grouped;
 }
 
-/** Folds the invitation counts into the tile's figures. */
 function invitationSummary(
   counts: AdminWorkspaceListSource["summary"]["invitations"],
 ): AdminWorkspaceSummary["invitations"] {
@@ -102,8 +69,6 @@ function invitationSummary(
   let expired = 0;
   let settled = 0;
   for (const { status, count, pastExpiry } of counts) {
-    // Note that only a pending invitation is still open, and only until its
-    // expiry; whatever else became of one, it has settled.
     if (status === INVITATION_STATUS.PENDING) {
       pending += count - pastExpiry;
       expired += pastExpiry;
@@ -116,7 +81,6 @@ function invitationSummary(
   return { accepted, pending, expired, settled, acceptanceRate: ratio(accepted, settled) };
 }
 
-/** Shapes the queried workspaces into the page's answer. */
 export function buildAdminWorkspaceList(
   source: AdminWorkspaceListSource,
   now: number,
@@ -162,11 +126,6 @@ export interface AdminWorkspacesOptions {
   ) => AdminSeamEffect<AdminWorkspaceList>;
 }
 
-/**
- * Answers the Workspaces read behind the same gate and refusals the roster
- * stands behind, at the same scope and search vocabulary: admins' own
- * workspaces are hidden by default the way every dashboard count hides them.
- */
 export function handleAdminWorkspaces(
   options: AdminWorkspacesOptions,
 ): Effect.Effect<AdminWorkspaceList, AdminRefusal, DatabaseServices> {

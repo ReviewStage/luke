@@ -45,38 +45,15 @@ import { SlackBot, type SlackFileTransfer, type SlackWebApi, slackBotOver } from
 import { slackEventsApp } from "./slack-events-app.js";
 import { dmThreadPost } from "./thread-dms.js";
 
-/**
- * Our Slack route, answered by its group the way a function answers it,
- * over a real store, a fake Slack, and a verifier standing in for Vercel's
- * keys: a press of a decide ask's option in the DM the bot wrote is
- * acknowledged before anything is done, then answers
- * the ask as the member it was written to, hands the agent its answer, and
- * rewrites the DM to say the option chosen, and a request Connect did not
- * sign is refused before anything of it is read; and a mention of the bot
- * starts an agent as the member Slack's email names on a task made for it,
- * replying with its link, and starts nothing for a Slack user who is no member; a message in
- * the thread of an archived agent brings it back and hands it the message,
- * and one in the thread of an agent whose session ended continues it in a
- * new agent on the same task, which the thread moves to; a member's reply under the DM of an inbox
- * thread is posted on that thread as theirs, bringing its archived agent back as a Submit
- * in the DM does, and starts no agent; and a
- * direct message sharing an image and no words starts an agent handed the
- * image.
- *
- * Synthetic accounts, workspaces, tokens, and Slack ids throughout.
- */
-
 const ORIGIN = "https://app.test";
 const EVENTS = "/api/slack/events";
 const CONNECT_TOKEN = "connect-oidc-fixture";
 
-/** One Web API call the fake Slack was handed. */
 interface SlackCall {
   readonly method: string;
   readonly args: Readonly<Record<string, string>>;
 }
 
-/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at the timestamp given. */
 function fakeSlack(calls: SlackCall[], postedTs = "1700000000.000100"): SlackWebApi {
   return (method, args) => {
     calls.push({ method, args });
@@ -100,13 +77,11 @@ function fakeSlack(calls: SlackCall[], postedTs = "1700000000.000100"): SlackWeb
   };
 }
 
-/** A one-pixel PNG, as a member shares a screenshot. */
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64",
 );
 
-/** A Slack whose every private file is the PNG, writing down each address read. */
 function fakeFiles(read: string[]): SlackFileTransfer {
   return {
     send: () => Effect.void,
@@ -118,7 +93,6 @@ function fakeFiles(read: string[]): SlackFileTransfer {
   };
 }
 
-/** Connect's bearer as the deployment's verifier holds it: the fixture token alone. */
 const verify = (request: Request) =>
   request.headers.get("authorization") === `Bearer ${CONNECT_TOKEN}`;
 
@@ -134,16 +108,13 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The native harnesses an answer is handed to, writing down each with the account it acted for. */
 const HARNESS = recordingHarness();
 
-/** The decide ask the member is written: one option of two to pick. */
 const PICK_ONE = {
   type: INBOX_ASK.DECIDE,
   options: [{ label: "A week" }, { label: "A month" }],
 } as const;
 
-/** A member's agent at work on a task in a workspace whose bot is connected, its decide ask written to them in Slack. */
 const openAskedMember = (
   bot: Layer.Layer<SlackBot>,
   ask: Parameters<typeof postInboxThread>[1]["ask"] = PICK_ONE,
@@ -195,21 +166,18 @@ const openAskedMember = (
     return { owner, item };
   });
 
-/** The installation the mention's workspace connects, reaching the repository its channel defaults to. */
 const RELAY_INSTALLATION: InstallationFixture = {
   id: 8_100,
   login: "Acme",
   repositories: [{ owner: "Acme", name: "Relay" }],
 };
 
-/** The installation the thread agent below works through, its own since an installation stands in one workspace. */
 const BEACON_INSTALLATION: InstallationFixture = {
   id: 8_101,
   login: "Acme",
   repositories: [{ owner: "Acme", name: "Beacon" }],
 };
 
-/** The group over the test's store, the bot, and the verifier, answering one request; its after-response work runs in place unless kept. */
 const answer = (
   bot: Layer.Layer<SlackBot>,
   request: Request,
@@ -244,7 +212,6 @@ const answer = (
     return { status: response.status, body };
   });
 
-/** Slack's press of the button, form-encoded as interactivity arrives, with Connect's bearer or none, and the message's checkboxes as they stand. */
 function press(
   button: { readonly action_id: string; readonly value: string },
   slackUserId: string,
@@ -269,7 +236,6 @@ function press(
   });
 }
 
-/** Slack's mention of the bot in a channel by the Slack user given, as Connect forwards it with its bearer. */
 function mention(slackUserId: string, eventId: string): Request {
   const payload = {
     type: "event_callback",
@@ -291,7 +257,6 @@ function mention(slackUserId: string, eventId: string): Request {
   });
 }
 
-/** Slack's mention of the bot in the thread given by the Slack user given, as Connect forwards it with its bearer. */
 function threadMention(slackUserId: string, eventId: string, threadTs: string): Request {
   const payload = {
     type: "event_callback",
@@ -314,7 +279,6 @@ function threadMention(slackUserId: string, eventId: string, threadTs: string): 
   });
 }
 
-/** Slack's direct message to the bot by the Slack user given, sharing a PNG screenshot, a Mac's HEIC one, and a PDF with no words, as Connect forwards it. */
 function directShare(slackUserId: string, eventId: string): Request {
   const shared = (name: string, mimetype: string) => ({
     name,
@@ -352,7 +316,6 @@ function directShare(slackUserId: string, eventId: string): Request {
   });
 }
 
-/** Slack's direct message to the bot by the Slack user given, in the thread of the DM given, as Connect forwards it. */
 function dmReply(
   slackUserId: string,
   eventId: string,
@@ -380,7 +343,6 @@ function dmReply(
   });
 }
 
-/** A member's agent on the task a Slack message made, on the runtime given, in the Beacon repository where asked and none otherwise, started from a Slack thread of its own; with that thread and the Slack user their email names. */
 const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -415,7 +377,6 @@ const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
       `wrun_${randomUUID()}`,
       yield* DateTime.nowAsDate,
     );
-    // Note that each agent's thread is its own, because a message is read against every workspace of the team, oldest first.
     const threadTs = `1700000001.${randomUUID().replace(/\D/gu, "").slice(0, 6)}`;
     yield* recordSlackAgentThread({
       organizationId: workspaceId,
@@ -440,7 +401,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
       return Effect.gen(function* () {
         const { owner, item } = yield* openAskedMember(bot);
-        // The DM saying the thread's title, then the ask as a reply under it.
         const [title, posted] = calls.filter((call) => call.method === "chat.postMessage");
         const [actions] = JSON.parse(posted?.args.blocks ?? "[]").filter(
           (block: { type: string }) => block.type === "actions",
@@ -459,7 +419,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const kept = keptAfterResponse();
         const signed = yield* answer(bot, press(month, slackUserId, CONNECT_TOKEN), kept.layer);
         const atAnswer = yield* askStatus;
-        // The press's work, then the settle of the DM it hands on once the answer is taken.
         yield* kept.run;
         yield* kept.run;
 
@@ -512,7 +471,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const ticked = checkboxes.options.filter(
           (option: { text: { text: string } }) => option.text.text !== "Slack",
         );
-        // The archive settles the ask, which bringing the agent back opens again for the answer.
         yield* archiveAgent(owner, item.agentId, true);
 
         const kept = keptAfterResponse();
@@ -579,7 +537,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
           updated[0]?.args.text,
           "How long should an invitation last? · You marked it done",
         );
-        // The settled DM keeps the steps it asked.
         assert.equal(JSON.parse(updated[0]?.args.blocks ?? "[]")[0]?.text, words);
       });
     },
@@ -640,7 +597,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
           .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
           .where(eq(slackAgentThread.userId, owner));
         assert.equal(startedAgent?.repository, "Acme/Relay");
-        // The thread links the agent at once, before its first turn settles.
         assert.deepEqual(
           others.map((call) => call.args.thread_ts),
           ["1700000002.000300"],
@@ -672,12 +628,10 @@ it.layer(getTestDB())("our Slack route", (it) => {
           startedAgent?.prompt?.startsWith("find the flakiest test and fix it"),
           "the message is the agent's prompt",
         );
-        // The agent keeps where it came from, which the lists mark it by.
         assert.deepEqual(startedAgent?.source, {
           kind: "slack",
           url: "https://team.slack.com/archives/C0001/p1",
         });
-        // The first line says Slack carried it, with the member's own words alone, for a window to draw.
         assert.deepEqual(startedAgent?.metadata, {
           channel: "slack",
           words: "find the flakiest test and fix it",
@@ -725,7 +679,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
       return Effect.gen(function* () {
-        // An agent left on eve runs on no harness, so its session has ended for good.
         const { owner, agent, taskId, threadTs, slackUserId } = yield* openThreadAgent(
           CONVERSATION_RUNTIME.EVE,
           true,
@@ -763,7 +716,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
     "a reply under a thread's DM is posted on that thread as the member it went to, brings its archived agent back and tells it, reacts with 👀, and starts no agent",
     () => {
       const calls: SlackCall[] = [];
-      // Note that the DM's timestamp is this test's own, because the store is shared with the press above.
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls, "1700000004.000500")));
       return Effect.gen(function* () {
         const { owner, item } = yield* openAskedMember(bot);

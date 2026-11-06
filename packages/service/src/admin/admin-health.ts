@@ -1,16 +1,3 @@
-/**
- * admin-health.ts -- what the Reliability screen's System health says: the
- * database's answer to a probe, and which of the deployment's providers its
- * environment configures.
- *
- * Each provider is reported by the presence of the variables it is read
- * from, never their values, so a maintainer reads that error reporting is
- * off or the GitHub App unset without any secret crossing into the answer.
- * A provider the environment cannot show without a value, AI Gateway's
- * public catalog or the OIDC token Vercel Sandbox and Vercel Connect run on,
- * is not listed.
- */
-
 import type { AdminIntegration } from "@repo/features/admin-answer-wire";
 import {
   INTEGRATION_NAME,
@@ -18,7 +5,6 @@ import {
   type IntegrationProvider,
 } from "@repo/features/integration-wire";
 
-/** The providers the deployment reads from its own environment, in the order the list draws them. */
 const ADMIN_INTEGRATION = {
   GITHUB_APP: { key: "github-app", label: "GitHub App (installations and webhooks)" },
   GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
@@ -30,7 +16,6 @@ const ADMIN_INTEGRATION = {
   OWN_KEYS: { key: "own-key-encryption", label: "Encryption of accounts' own API keys" },
 } as const;
 
-/** Whether each provider's configuration is present — never its value. */
 export interface AdminIntegrationPresence {
   githubApp: boolean;
   githubSignIn: boolean;
@@ -40,11 +25,9 @@ export interface AdminIntegrationPresence {
   analyticsErasure: boolean;
   sweep: boolean;
   ownKeys: boolean;
-  /** Each account integration Vercel Connect grants, by whether its connector is named; a provider with no connector is absent. */
   connectors: ReadonlyMap<IntegrationProvider, boolean>;
 }
 
-/** The health list, in the fixed order the screen draws it: the deployment's own providers, then each connector. */
 export function adminIntegrations(present: AdminIntegrationPresence): AdminIntegration[] {
   const connectors = INTEGRATION_PROVIDER_LIST.flatMap((provider) => {
     const configured = present.connectors.get(provider);

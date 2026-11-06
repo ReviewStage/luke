@@ -16,73 +16,38 @@ import {
 } from "../http/http-effect.js";
 import { CREDENTIAL_HEADER } from "./session-credential.js";
 
-/**
- * device-secret.ts -- a host's own credentials: minting a device secret, a pairing's poll secret, or its user code, and reading the host a request's bearer names.
- *
- * A host calls the service on a device secret (`@repo/features/host-wire`),
- * as `Authorization: Bearer lkd_…`, never the desktop's sign-in, and with
- * its daemon's version in `HOST_WIRE.VERSION_HEADER` on every call. That
- * secret is minted here, answered once, and kept by the store only as its
- * SHA-256 (`@repo/database/models/host-store`), so a secret is looked up by
- * its hash and a database read never yields one. A pairing box's poll
- * secret is minted, answered, and kept the same way; its user code is the one
- * thing a member types or follows a link to, eight letters drawn evenly
- * from `HOST_USER_CODE.ALPHABET`, about 34 bits.
- *
- * `hostCallerOf` is the one door every host-facing route reads its caller
- * through, the device-agents procedures and the runner token route alike:
- * a bearer that is no device secret is none of its business, and answers
- * nothing, so the route refuses it as unauthenticated
- * (`../orpc/base.ts`'s `deviceCallerOf`); a device secret
- * that names no standing host (unknown, or its host removed) is
- * refused at once, as the 401 every host has read as removed, marked
- * `hostRemoved` (`HOST_REMOVED_REFUSAL`) so a host tells it from any other
- * 401 on the service's origin; and a host whose daemon is below `HOST_VERSION.FLOOR`,
- * or sent no version, is refused as needing an upgrade, after its version
- * was recorded, so its Hosts row says which it runs.
- */
-
 export const HOST_VERSION = {
-  /** The lowest daemon version the service takes a call from. Raise it when a daemon below it would break against this service. */
   FLOOR: "0.8.0",
 } as const;
 
-/** The bytes of randomness behind a device secret and a poll secret. */
 const SECRET_BYTES = 32;
 
-/** What every bearer begins with. */
 const BEARER_PREFIX = "Bearer ";
 
-/** A secret, answered once, and the hash the store keeps of it. */
 export interface MintedSecret {
   readonly secret: string;
   readonly hash: string;
 }
 
-/** The host a device secret named: its device, its account, and the version it called with. */
 export interface HostCaller {
   readonly userId: string;
   readonly deviceId: string;
 }
 
-/** A secret's SHA-256 in hex, which is all the store keeps of it. */
 export function hostSecretHash(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
 }
 
-/** A fresh secret of the prefix given (`HOST_WIRE.DEVICE_SECRET_PREFIX`, `HOST_WIRE.POLL_SECRET_PREFIX`), and its hash. */
 export function mintHostSecret(prefix: string): MintedSecret {
   const secret = `${prefix}${randomBytes(SECRET_BYTES).toString("base64url")}`;
   return { secret, hash: hostSecretHash(secret) };
 }
 
-/** A fresh user code: its eight letters, each drawn evenly from the alphabet, with no dash. */
 export function mintHostUserCode(): string {
   const { ALPHABET, LENGTH } = HOST_USER_CODE;
   return Array.from({ length: LENGTH }, () => ALPHABET[randomInt(ALPHABET.length)]).join("");
 }
 
-/** The secret of the prefix given a request's bearer carries, or nothing where it carries another bearer or none. */
 function presentedBearer(request: Request, prefix: string): string | undefined {
   const authorization = request.headers.get(CREDENTIAL_HEADER.AUTHORIZATION)?.trim() ?? "";
   if (!authorization.startsWith(BEARER_PREFIX)) return undefined;
@@ -90,27 +55,19 @@ function presentedBearer(request: Request, prefix: string): string | undefined {
   return bearer.startsWith(prefix) ? bearer : undefined;
 }
 
-/** The device secret a request's bearer carries, or nothing where it carries another bearer or none. */
 function presentedDeviceSecret(request: Request): string | undefined {
   return presentedBearer(request, HOST_WIRE.DEVICE_SECRET_PREFIX);
 }
 
-/** The poll secret a pairing box's poll carries as its bearer, or nothing where it carries another bearer or none. */
 export function presentedPollSecret(request: Request): string | undefined {
   return presentedBearer(request, HOST_WIRE.POLL_SECRET_PREFIX);
 }
 
-/** The daemon version a request carries, trimmed, or nothing where it carries none. */
 export function presentedHostVersion(request: Request): string | undefined {
   const version = request.headers.get(HOST_WIRE.VERSION_HEADER)?.trim();
   return version === undefined || version.length === 0 ? undefined : version;
 }
 
-/**
- * The daemon version given, where it is at or past the floor; refused as
- * needing an upgrade otherwise, one that sent no version, or one that does
- * not read as `MAJOR.MINOR.PATCH`, alike.
- */
 export function admittedHostVersion(
   version: string | undefined,
 ): Effect.Effect<string, HostedRefusal> {
@@ -120,11 +77,6 @@ export function admittedHostVersion(
   return Effect.fail(hostUpgradeNeeded(HOST_VERSION.FLOOR));
 }
 
-/**
- * The host a request's device secret names, on the terms above: nothing
- * where its bearer is no device secret, the host where it names a standing
- * one whose daemon is at or past the floor, and refused otherwise.
- */
 export const hostCallerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<Option.Option<HostCaller>, HostedRefusal, DatabaseServices> {
@@ -133,7 +85,6 @@ export const hostCallerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const host = yield* hostedStoreOrUnavailable(hostBySecret(hostSecretHash(secret)));
   if (Option.isNone(host)) return yield* Effect.fail(HOST_REMOVED_REFUSAL);
   const version = presentedHostVersion(request);
-  // Note that only a version that reads is recorded, so a header of junk never lands on the Hosts row.
   if (
     version !== undefined &&
     readHostVersion(version) !== undefined &&

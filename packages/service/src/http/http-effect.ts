@@ -14,24 +14,8 @@ import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
-/**
- * The hosted response vocabulary as an `HttpRouter` answers it, with the same
- * statuses and the same bodies `http.ts` answers with. A JSON answer here also
- * carries `cache-control: private, no-store`, which `http.ts` does not send.
- *
- * A refusal is the body itself rather than a `Schema.TaggedError`: `error` is
- * already the discriminant the desktop's hosted clients read, and the `_tag` a
- * tagged error encodes beside it would be a byte those clients never asked for.
- */
-
-/**
- * What every hosted JSON answer is cached under: an answer is one account's
- * data, so neither a browser nor a shared cache on the way may keep a copy,
- * which matters once a browser reads it on a cookie.
- */
 const HOSTED_CACHE_CONTROL = "private, no-store";
 
-/** The status each refusal is answered with, which is a function of the refusal alone. */
 export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: HOSTED_HTTP_STATUS.UNAUTHORIZED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_HTTP_STATUS.BAD_REQUEST,
@@ -86,7 +70,6 @@ export const HOSTED_REFUSAL_STATUS = {
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), for a plan's reached limit, when it resets (`planLimitReached`), and for a skill refused, which and why (`installedSkillRefused`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
@@ -104,124 +87,70 @@ export type HostedRefusal = {
   readonly hostRemoved?: true;
 };
 
-/**
- * Resolves the signed-in account behind what a request carries, or none.
- * Nothing distinguishes a missing header from an expired or revoked token on
- * purpose: every one is none, one 401, and the desktop's refresh machinery is
- * what answers it. A failure is the auth service's, not a refused token, so a
- * route answers it as unavailable (`resolvedAccount`), which a caller retries,
- * rather than as signed out. `Input` is the request itself, or the
- * `Authorization` value alone where it arrived somewhere other than on its
- * own request.
- */
 export type UserIdResolver<Input = Request> = (
   input: Input,
 ) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
-/** A Better Auth session's account, or none; a failure is the auth service's, not a signed-out caller. */
 export type SessionUserIdResolver = (
   request: Request,
 ) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
-/** The refusal values themselves, each bare; a repository out of reach carries its reason through `repositoryNotReachable`. */
 export const HOSTED_REFUSAL = {
   INVALID_TOKEN: { error: HOSTED_API_ERROR.INVALID_TOKEN },
   INVALID_REQUEST: { error: HOSTED_API_ERROR.INVALID_REQUEST },
   METHOD_NOT_ALLOWED: { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED },
-  /** A path the group the request reached declares no route for. */
   NOT_FOUND: { error: HOSTED_API_ERROR.NOT_FOUND },
-  /** The prepared prompt is longer than the brain contract's own envelope; nothing was sent upstream. */
   PROMPT_TOO_LARGE: { error: HOSTED_API_ERROR.PROMPT_TOO_LARGE },
   QUOTA_EXHAUSTED: { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED },
-  /** A tool name the brain contract's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: { error: HOSTED_API_ERROR.UNKNOWN_TOOL },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
-  /** What this service asks on the caller's behalf, a terminal's sandbox, refused or did not answer; nothing was changed, and a retry may be taken. */
   UPSTREAM_ERROR: { error: HOSTED_API_ERROR.UPSTREAM_ERROR },
-  /** The workspace's GitHub installation reaches no such repository, or it has none; nothing was written. */
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
-  /** GitHub did not answer whether the workspace reaches the repository; nothing was written, and a retry may be taken. */
   GITHUB_UNANSWERED: { error: HOSTED_API_ERROR.GITHUB_UNANSWERED },
-  /** The task names no repository, so no coding agent can be started on it; nothing was written. */
   NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
-  /** The branch a coding agent was asked to start on is none of the repository's; nothing was written. */
   BRANCH_NOT_FOUND: { error: HOSTED_API_ERROR.BRANCH_NOT_FOUND },
-  /** The message to a coding agent spells more than the wire's bound; nothing was sent. */
   MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
-  /** The agent's session is still coming up; the same message a moment later is taken. */
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
-  /** The agent's session has ended for good, as every agent's that ran on eve has, so nothing reaches it again and only a new agent goes on from its work; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
-  /** The agent runs on a native harness this function cannot reach; nothing was written. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
-  /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */
   OPENAI_KEY_MISSING: { error: HOSTED_API_ERROR.OPENAI_KEY_MISSING },
-  /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },
-  /** The agent runs on its starter's plan, whose provider did not answer; nothing was written, and the same request later may be taken. */
   AGENT_PLAN_UNREACHABLE: { error: HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE },
-  /** The agent runs on its starter's plan, whose usage limit is reached until it resets; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
-  /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
-  /** The account keeps neither the model provider's subscription nor its API key, and our key pays for no coding agent; nothing was written. */
   AGENT_CREDENTIAL_MISSING: { error: HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING },
-  /** The agent runs on its starter's API key, which is saved but does not open under this deployment's key ring; nothing was written, and no retry opens it. */
   AGENT_API_KEY_UNREADABLE: { error: HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE },
-  /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-  /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
-  /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
-  /** The coding agent's sandbox can never resume, its snapshot and saved files gone; nothing was resumed. */
   SANDBOX_SNAPSHOT_GONE: { error: HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE },
-  /** A skill of that name is already installed in the scope asked; nothing was installed. */
   SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
-  /** A skill's files were refused; nothing was installed. */
   SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
-  /** A slug the owner chose is spelled other than a slug may be; nothing was written. */
   WORKSPACE_SLUG_MALFORMED: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED },
-  /** A slug the owner chose is reserved; nothing was written. */
   WORKSPACE_SLUG_RESERVED: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED },
-  /** A slug the owner chose is another workspace's; nothing was written. */
   WORKSPACE_SLUG_TAKEN: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN },
-  /** A Start on This Mac was refused (`localAgentRefused`, which names why); nothing was written. */
   LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
   EXTRA_REPOSITORY_REFUSED: { error: HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED },
-  /** A host's daemon is below the service's floor (`hostUpgradeNeeded`, which names the floor); nothing was read or written. */
   HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
-  /** The agent ran on a host its starter removed; nothing was sent. */
   DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
-  /** A child task works in its parent's repository; a create that names another is refused, nothing written. */
   CHILD_REPOSITORY_LOCKED: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
-  /** A block asked for would close a cycle among the workspace's tasks; nothing was written. */
   TASK_BLOCK_CYCLE: { error: HOSTED_API_ERROR.TASK_BLOCK_CYCLE },
-  /** A parent asked for is the task itself or one of its descendants; nothing was written. */
   TASK_PARENT_CYCLE: { error: HOSTED_API_ERROR.TASK_PARENT_CYCLE },
-  /** A start asked to be the parent of a task that has a parent already, which it never takes the place of; nothing was written. */
   TASK_PARENT_HELD: { error: HOSTED_API_ERROR.TASK_PARENT_HELD },
-  /** The account named too many pairing codes no pending pairing has (`hostPairingHeld`, which names until when); nothing was read or written. */
   HOST_PAIRING_HELD: { error: HOSTED_API_ERROR.HOST_PAIRING_HELD },
-  /** A write sent again under an idempotency key it was taken under before; nothing ran again. */
   ALREADY_WRITTEN: { error: HOSTED_API_ERROR.ALREADY_WRITTEN },
-  /** The member has Memory off; nothing was read or written. */
   MEMORY_OFF: { error: HOSTED_API_ERROR.MEMORY_OFF },
-  /** A memory's words look like a credential; nothing was written. */
   MEMORY_CREDENTIAL: { error: HOSTED_API_ERROR.MEMORY_CREDENTIAL },
-  /** The workspace holds as many memories as it may; nothing was written. */
   MEMORY_FULL: { error: HOSTED_API_ERROR.MEMORY_FULL },
 } as const satisfies Record<string, HostedRefusal>;
 
-/** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
 export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
   return resetsAt === undefined
     ? HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED
     : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
 }
 
-/** A Start on This Mac refused, named so the words can say why, and, where the device is another member's, which device and whose. */
 export function localAgentRefused(
   localAgentRefusal: LocalAgentRefusal,
   refusedDevice?: RefusedDevice,
@@ -233,7 +162,6 @@ export function localAgentRefused(
   };
 }
 
-/** A Start naming repositories beside its agent's own refused, named so the words can say why, and which repository where one is why. */
 export function extraRepositoryRefused(
   extraRepositoryRefusal: ExtraRepositoryRefusal,
   refusedRepository?: string,
@@ -245,28 +173,23 @@ export function extraRepositoryRefused(
   };
 }
 
-/** A host's daemon below the floor given, named so the daemon can say which version to upgrade to. */
 export function hostUpgradeNeeded(minimumVersion: string): HostedRefusal {
   return { ...HOSTED_REFUSAL.HOST_UPGRADE_NEEDED, minimumVersion };
 }
 
-/** A device secret no standing host holds refused: still the 401 every released host reads as removed, marked so a host tells it from any other 401 on its origin. */
 export const HOST_REMOVED_REFUSAL: HostedRefusal = {
   ...HOSTED_REFUSAL.INVALID_TOKEN,
   hostRemoved: true,
 };
 
-/** An account's pairing guesses held until the instant given, in epoch milliseconds, named so the words can say when to try again. */
 export function hostPairingHeld(heldUntil: number): HostedRefusal {
   return { ...HOSTED_REFUSAL.HOST_PAIRING_HELD, heldUntil };
 }
 
-/** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */
 export function credentialMissing(provider: ModelProvider): HostedRefusal {
   return { ...HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING, provider };
 }
 
-/** A skill refused, by name where one was read, and why where the store says. */
 export function installedSkillRefused(
   refusal: typeof HOSTED_REFUSAL.SKILL_NAME_TAKEN | typeof HOSTED_REFUSAL.SKILL_FILES_REFUSED,
   skillName: string | undefined,
@@ -279,46 +202,18 @@ export function installedSkillRefused(
   };
 }
 
-/** The repository out of reach, with why, so the desktop can offer what mends it. */
 export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {
   return { ...HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE, unreached };
 }
 
-/** The upstream refused what was asked of it, with the status it answered and none of its body. */
 export function upstreamRefused(upstreamStatus: number): HostedRefusal {
   return { ...HOSTED_REFUSAL.UPSTREAM_ERROR, upstreamStatus };
 }
 
-/**
- * Whether a request carries an `Authorization`, so its account was read
- * from that bearer alone and never from a browser's session cookie
- * (`auth/bearer.ts`'s `requestUserId`, which resolves nobody for one that
- * does not verify). An endpoint that does on a GET what a link must not
- * make a browser do asks for this itself, because a Lax cookie rides a
- * top-level navigation and every function holding a group answers every
- * path the group declares.
- */
 export function hostedCarriesBearer(request: Request): boolean {
   return request.headers.has("authorization");
 }
 
-/**
- * The headers bytes a member, an agent, or GitHub wrote are served under
- * beside the type the service checked them to be: a task's picture, an
- * inbox attachment, a picture a tool answered, a workspace's photo, and an
- * image GitHub's rendering of a pull request names. The browser is told not
- * to sniff them for another type; nothing on the way may keep a copy, since
- * they are one account's or one workspace's; and a document a browser opens
- * from them runs no script, loads nothing, and stands in an origin of its
- * own (`sandbox`). Note that the policy is what keeps markup among them, an
- * SVG's, from acting as this origin, because every account route takes the
- * browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`) and a
- * tab opened on one of these paths carries it. For the same reason no other
- * site's page may embed them (`cross-origin-resource-policy`): an `<img>` there
- * would load them with the cookie of whoever is looking. Every reader of them
- * is same-origin: the web app's own tab, and the Mac's host, which fetches
- * them with its bearer and hands its renderer the bytes.
- */
 export const HOSTED_BYTES_HEADERS = {
   "x-content-type-options": "nosniff",
   "cache-control": "private, no-store",
@@ -326,13 +221,6 @@ export const HOSTED_BYTES_HEADERS = {
   "cross-origin-resource-policy": "same-origin",
 } as const;
 
-/**
- * A store read or write the handler cannot answer without: its failure is
- * logged and the request is refused as unavailable, since a database the
- * service cannot reach is an outage the caller may retry and not a defect of
- * the route. `mapError` touches the typed channel alone, so an interruption
- * of the request's fiber passes through untouched.
- */
 export function hostedStoreOrUnavailable<A, R>(
   effect: Effect.Effect<A, StoreFailure, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
@@ -342,11 +230,6 @@ export function hostedStoreOrUnavailable<A, R>(
   );
 }
 
-/**
- * The account a resolver answered, or none; an auth service that could not
- * answer is logged and refused as unavailable, an outage the caller may
- * retry, never as a signed-out caller.
- */
 export function resolvedAccount<Input>(
   resolveUserId: UserIdResolver<Input>,
   input: Input,
@@ -357,12 +240,6 @@ export function resolvedAccount<Input>(
   );
 }
 
-/**
- * The bearer's account, or the invalid-token refusal. The account is the
- * request's log annotation `userId` from here until the request's scope
- * closes, so every line the route writes after it names the account, and
- * every issue it raises names it as Sentry's user (`observability/sentry.ts`).
- */
 export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: { readonly resolveUserId: UserIdResolver },
   request: Request,
@@ -374,14 +251,6 @@ export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   return account.value;
 });
 
-/**
- * An id a path named, or not found where it is no UUID, since it names no row.
- *
- * Note that each refusal here is failed as a `HostedRefusal` rather than its
- * own literal: an `Effect` failing with the bare literal, checked this early,
- * leads `apps/web`'s exact-optional build to infer the refusal unions of
- * other modules' `Effect.catch` callbacks too narrowly.
- */
 export const pathUuid = /* @__PURE__ */ Effect.fnUntraced(function* (
   id: string,
 ): Effect.fn.Return<string, HostedRefusal> {
@@ -390,7 +259,6 @@ export const pathUuid = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** The one id the path put under the query name; two is refused, and one that is no UUID names no row. */
 export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
   name: string,
@@ -403,29 +271,18 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* pathUuid(id);
 });
 
-/** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */
 export function hostedRefusing<R>(
   endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> {
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** A refusal as the response a route group answers with. */
 function hostedRefusalResponse(refusal: HostedRefusal): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(refusal, {
     status: HOSTED_REFUSAL_STATUS[refusal.error],
   });
 }
 
-/**
- * The route every hosted group registers last: the hosted vocabulary's own
- * `not-found` for a path the group declares no route of its own for. The
- * router reaches a wildcard only once every declared path has failed to
- * match, so this answers exactly what the router's own `RouteNotFound` stood
- * for before the routes became a layer — and, since it is a route like any
- * other, it answers it as the group's own refusal rather than as the empty
- * 404 an unhandled `RouteNotFound` would become.
- */
 export const hostedNotFoundRoute: Layer.Layer<never, never, HttpRouter.HttpRouter> = HttpRouter.add(
   ANY_METHOD,
   ANY_PATH,
@@ -434,12 +291,6 @@ export const hostedNotFoundRoute: Layer.Layer<never, never, HttpRouter.HttpRoute
 
 const HTTP_METHOD = { HEAD: "HEAD" } as const;
 
-/**
- * A HEAD answer's status and headers, carried on the `HttpServerResponse`
- * because the platform's web handler builds a HEAD response from those alone
- * rather than from the raw answer beneath them — the same reason
- * `auth-app.ts`'s passthrough carries a HEAD this way.
- */
 function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.empty({
     status: answer.status,
@@ -448,15 +299,6 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
   });
 }
 
-/**
- * A handler's answer, carried to the `HttpApp` a group composes: the handler
- * already answers the hosted vocabulary's own bytes, so nothing here reads or
- * rewrites the response beside forwarding it, except a HEAD, whose status and
- * headers the web handler reads off the `HttpServerResponse` rather than the
- * raw answer it wraps. The handler runs on the group's own fiber rather than
- * through a runner of its own, so a failed statement it reads is a defect
- * here.
- */
 export const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthrough")(function* <R>(
   handle: (request: Request) => Effect.Effect<Response, unknown, R>,
 ): Effect.fn.Return<
@@ -472,10 +314,6 @@ export const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthroug
     : HttpServerResponse.raw(answer);
 });
 
-/**
- * An answer as the response, the way `jsonResponse` answers one today, under
- * `private, no-store`.
- */
 export function hostedJsonResponse<Body extends object>(
   status: number,
   body: Body,
@@ -486,12 +324,6 @@ export function hostedJsonResponse<Body extends object>(
   });
 }
 
-/**
- * The request's body as the bytes it arrived as. The stream is counted as it
- * arrives rather than trusting a Content-Length the sender may omit or
- * misstate, and is left the moment the bound is passed, so an oversized
- * request is never held whole.
- */
 export const readBodyBytesEffect = /* @__PURE__ */ Effect.fn("web/readBodyBytesEffect")(function* (
   maximumBytes: number,
 ): Effect.fn.Return<Uint8Array, HostedRefusal, HttpServerRequest.HttpServerRequest> {
@@ -516,16 +348,13 @@ export const readBodyBytesEffect = /* @__PURE__ */ Effect.fn("web/readBodyBytesE
   return joined;
 });
 
-/** A text's JSON, or nothing a reader takes where it is none, as a PTY's stray output or a body that is no JSON is. */
 export function jsonOf(text: string): UnparsedWireValue {
   const parsed = Result.try(() => JSON.parse(text));
   return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
 }
 
-/** Bytes read as UTF-8 JSON, the unparsed wire value a schema reads next; anything else is an invalid request. */
 export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireValue, HostedRefusal> {
   return Effect.try({
-    // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
     try: () =>
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as UnparsedWireValue,
     catch: () => HOSTED_REFUSAL.INVALID_REQUEST,

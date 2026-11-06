@@ -15,20 +15,10 @@ import {
 } from "../testing/github-app-fake.js";
 import { refreshRepositoryReads } from "./repository-reads.js";
 
-/**
- * Which teammates see a task reached on its owner's own GitHub token, as the
- * service asks GitHub on each member's own token: a member whose token
- * GitHub answers with the repository sees it, one GitHub answers not found
- * and one who keeps no token do not, and a member's answer is asked again
- * only once the hour is out. GitHub is a fake that answers from the test's
- * script; synthetic accounts, repositories, and tokens throughout.
- */
-
 const READER_TOKEN = "fixture-reader-token";
 const REFUSED_TOKEN = "fixture-refused-token";
 const SIDE = { owner: "octo-member", name: "side" } as const;
 
-/** GitHub's `GET /repos/{owner}/{repo}` on a member's token: the repository for the reader's, not found for any other. */
 function answer(sent: SentToGitHub): Response {
   const reads = sent.headers.get("authorization") === `Bearer ${READER_TOKEN}`;
   const asked = new URL(sent.url).pathname === `/repos/${SIDE.owner}/${SIDE.name}`;

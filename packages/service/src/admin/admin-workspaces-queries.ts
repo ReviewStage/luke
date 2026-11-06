@@ -1,16 +1,3 @@
-/**
- * admin-workspaces-queries.ts -- the reads behind the Workspaces tab, over
- * the organization plugin's tables and the rows a workspace's work leaves.
- *
- * Every read here keys on `organization`, so the scope, the kind, and the
- * search are each one condition over its row, and each per-workspace count
- * is a correlated subquery on an index the workspace's own reads already use
- * (`member_organizationId_idx`, `task_organization_created`,
- * `coding_agent_org_created`). Nothing here selects a task's name, a description's
- * text, a prompt, or a title: only names of workspaces and accounts,
- * statuses, logins, and counts.
- */
-
 import { Database, queryBuilder } from "@repo/database/core/query";
 import {
   GITHUB_INSTALLATION_STATUS,
@@ -61,7 +48,6 @@ import {
 } from "./admin-workspaces.js";
 import type { AdminSeamEffect } from "./seam.js";
 
-/** The fewest members a workspace has to count as shared. */
 const SHARED_MEMBERS = 2;
 
 const _UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
@@ -70,21 +56,12 @@ const ScopeSchema = Schema.Literals([ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_METRI
 
 const KindSchema = Schema.Literals([ADMIN_WORKSPACES_KIND.SHARED, ADMIN_WORKSPACES_KIND.ALL]);
 
-/** Whether the workspace is the personal one made for some account. */
 const PERSONAL = sql<boolean>`exists(select 1 from ${personalWorkspace} where ${personalWorkspace.organizationId} = ${organization.id})`;
 
 const MEMBER_COUNT = sql<number>`(select count(*)::int from ${member} where ${member.organizationId} = ${organization.id})`;
 
-/** Two or more members and nobody's personal workspace: a team using the app together. */
 const SHARED = sql<boolean>`(not ${PERSONAL} and ${MEMBER_COUNT} >= ${SHARED_MEMBERS})`;
 
-/**
- * The workspaces a scope keeps. Admin accounts are the maintainers' own, so
- * the default keeps a workspace only while one member of it is not an admin
- * (a null role is an ordinary account's, as the other reads take it): a
- * maintainer's personal workspace and one only maintainers share drop out,
- * and a customer's workspace a maintainer joined stays.
- */
 function keptByScope(scope: AdminMetricsScope): SQL | undefined {
   if (scope === ADMIN_METRICS_SCOPE.ALL) return undefined;
   return exists(
@@ -101,36 +78,26 @@ function keptByScope(scope: AdminMetricsScope): SQL | undefined {
   );
 }
 
-/** The workspace's tasks started since the instant. */
 function tasksSince(since: Date): SQL<number> {
   return sql<number>`(select count(*)::int from ${task} where ${and(eq(task.organizationId, organization.id), gte(task.createdAt, since))})`;
 }
 
-/** The workspace's coding agents started since the instant. */
 function agentsSince(since: Date): SQL<number> {
   return sql<number>`(select count(*)::int from ${agentTable} where ${and(eq(agentTable.organizationId, organization.id), gte(agentTable.createdAt, since))})`;
 }
 
-/** Revisions written on the workspace's descriptions since the instant, by a member, the app, or an agent alike. */
 function revisionsSince(since: Date): SQL<number> {
   return sql<number>`(select count(*)::int from ${descriptionRevision} inner join ${task} on ${task.id} = ${descriptionRevision.taskId} where ${and(eq(task.organizationId, organization.id), gte(descriptionRevision.at, since))})`;
 }
 
-/**
- * Pull requests from the workspace's agents that merged since the instant,
- * by their address: an agent continued from another publishes the same pull
- * request, which counts once.
- */
 function prsMergedSince(sinceMs: number): SQL<number> {
   return sql<number>`(select count(distinct ${agentTable.published} ->> 'url')::int from ${agentTable} where ${eq(agentTable.organizationId, organization.id)} and (${agentTable.published} ->> 'mergedAt')::numeric >= ${sinceMs})`;
 }
 
-/** Whether the workspace saw a task, an agent, or a description revision since the instant. */
 function activeSince(since: Date): SQL<boolean> {
   return sql<boolean>`(${tasksSince(since)} > 0 or ${agentsSince(since)} > 0 or ${revisionsSince(since)} > 0)`;
 }
 
-/** Whether the workspace holds an installation standing at the status. */
 function installedAs(status: GitHubInstallationStatus): SQL<boolean> {
   return sql<boolean>`exists(select 1 from ${githubInstallation} where ${and(eq(githubInstallation.organizationId, organization.id), eq(githubInstallation.status, status))})`;
 }
@@ -143,7 +110,6 @@ const WorkspaceFilterSchema = Schema.Struct({
 
 type WorkspaceFilter = typeof WorkspaceFilterSchema.Type;
 
-/** The scope, the kind, and the search as one condition, which is the whole table filter. */
 function keptByFilter(filter: WorkspaceFilter): SQL | undefined {
   return and(
     keptByScope(filter.scope),
@@ -182,14 +148,6 @@ const WorkspaceRowSchema = Schema.Struct({
 
 const ActivityWindowSchema = Schema.Struct({ since: Schema.Date, sinceMs: Schema.Number });
 
-/**
- * The listed workspaces, busiest week first: tasks, agents, and description
- * revisions summed, so a workspace that only planned this week still ranks
- * above one that did nothing; merged pull requests break the ties, then the
- * youngest workspace, then the id, so equal rows keep one order across
- * refreshes. The counts are read once in a subquery the ordering reads
- * back, rather than spelled again in the ordering.
- */
 const findWorkspaceRows = SqlSchema.findAll({
   Request: Schema.Struct({ ...WorkspaceFilterSchema.fields, ...ActivityWindowSchema.fields }),
   Result: WorkspaceRowSchema,
@@ -293,17 +251,6 @@ const findSharedSummary = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Every invitation into a workspace the scope keeps, counted by status with
- * how many of each are past their expiry. Note that these are not cut to
- * shared workspaces, because an invitation is how a workspace becomes one:
- * an accepted invitation makes its workspace shared while a pending or
- * expired one leaves it solo, so cutting to shared would keep the accepted
- * and drop the rest, and the rate would read near one whatever happened. The expiry is a count filter
- * rather than a grouping, because a grouped expression carrying a bound
- * instant is a different parameter in the select list than in the grouping,
- * which Postgres will not match.
- */
 const findInvitationCounts = SqlSchema.findAll({
   Request: Schema.Struct({ scope: ScopeSchema, now: Schema.Date }),
   Result: Schema.Struct({
@@ -326,7 +273,6 @@ const findInvitationCounts = SqlSchema.findAll({
     ),
 });
 
-/** The per-workspace reads for the listed rows, or nothing to ask when no row was listed. */
 function readConnections(organizationIds: readonly string[]) {
   if (organizationIds.length === 0) {
     return Effect.succeed([[], []] as const);
@@ -336,7 +282,6 @@ function readConnections(organizationIds: readonly string[]) {
   });
 }
 
-/** The trailing week's first instant, which every row's activity counts from. */
 function activitySince(now: number): Date {
   const sinceDay = lastNDayKeys(now, ADMIN_WORKSPACES_ACTIVITY_DAYS)[0];
   return new Date(`${sinceDay}T00:00:00.000Z`);
@@ -344,11 +289,6 @@ function activitySince(now: number): Date {
 
 const { revisionsWeek: _revisionsWeek, ...WORKSPACE_DETAIL_FIELDS } = WorkspaceRowSchema.fields;
 
-/**
- * One workspace, by its id, with the counts a row of the table carries,
- * whatever the scope and the kind; the revisions the table ranks by are
- * not read, since nothing here is ranked.
- */
 const findWorkspaceRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ id: Schema.String, ...ActivityWindowSchema.fields }),
   Result: Schema.Struct(WORKSPACE_DETAIL_FIELDS),
@@ -370,7 +310,6 @@ const findWorkspaceRow = SqlSchema.findOneOption({
     ),
 });
 
-/** Every member of one workspace, the earliest to join first. */
 const findMembers = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -393,12 +332,6 @@ const findMembers = SqlSchema.findAll({
     ),
 });
 
-/**
- * Reads one workspace's page: its row as the table counts it, every member,
- * and its installations, or nothing where no workspace carries the id. It
- * reads every workspace whatever the table's scope and kind, since a page is
- * opened by its id from somewhere that already named it.
- */
 export function readAdminWorkspaceSource(input: {
   now: number;
   id: string;
@@ -415,9 +348,6 @@ export function readAdminWorkspaceSource(input: {
     );
     if (Option.isNone(found)) return undefined;
     const { createdAt, ...row } = found.value;
-    // Note that the plugin's role text may name several roles, so each is
-    // read as the highest it names, and the owners are moved first after,
-    // keeping the order they joined in.
     const read = members.map(({ memberRole, joinedAt, role, ...account }) => ({
       account: { ...account, admin: isAdminRole(role) },
       role: roleOf(memberRole),
@@ -434,14 +364,6 @@ export function readAdminWorkspaceSource(input: {
   });
 }
 
-/**
- * Reads the Workspaces tab: the headline counts over the shared workspaces
- * the scope keeps, whatever the kind and the search say, and the table's
- * rows under all three, cut at the bound while `total` counts every
- * workspace they keep. Each listed workspace's owners and installations
- * ride reads of their own keyed on the listed ids, because a join would fan
- * the row's counts out across them.
- */
 export function readAdminWorkspacesSource(input: {
   now: number;
   scope: AdminMetricsScope;

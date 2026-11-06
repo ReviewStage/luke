@@ -11,18 +11,6 @@ import {
   terminalsOf,
 } from "./tmux.js";
 
-/**
- * A Terminal tab's shells as tmux sessions in the agent's sandbox: the
- * commands that start, name, and end one name its session exactly, never by
- * a prefix tmux would take for another, and splice nothing into shell text;
- * a list reads back only the sessions a tab started, oldest first, each
- * named as the developer named it or as its foreground command is, and
- * running where that command is not the shell at its prompt. Every command
- * runs on a tmux server of its own, and none installs anything or reaches
- * for sudo itself.
- */
-
-/** The script a command runs, past `sh -c`. */
 function scriptOf(ask: { readonly args: readonly string[] }): string | undefined {
   return ask.args[1];
 }
@@ -30,10 +18,8 @@ function scriptOf(ask: { readonly args: readonly string[] }): string | undefined
 const SHELL_A = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const SHELL_B = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 
-/** One field as the list prints it: what tmux printed, newline and all, in base64. */
 const field = (value: string) => Buffer.from(`${value}\n`).toString("base64");
 
-/** One line as the list prints it: the session's name, when it was created, and its free-text fields in base64. */
 function listed(
   name: string,
   created: number,
@@ -54,7 +40,6 @@ test("starting, naming, and ending a shell target its session exactly and carry 
   for (const ask of [started, renamed, killed]) {
     assert.ok(!scriptOf(ask)?.includes(hostile), "nothing typed is spliced into the script");
   }
-  // tmux would take a bare name as a prefix of another session's; an option command takes the session's own pane.
   assert.ok(started.args.includes(`${exact}:`) && renamed.args.includes(`${exact}:`));
   assert.ok(killed.args.includes(exact));
   assert.equal(started.args.at(-1), hostile);

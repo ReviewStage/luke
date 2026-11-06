@@ -185,56 +185,28 @@ import type { SummaryModelOf } from "./replay-summary.js";
 import { NativeAgentSessions, RUNNER_CHECKOUT, type RunnerCheckout } from "./runtime-sessions.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
-/**
- * A coding agent's tools about the other agents of its workspace, through
- * the coding-agent host as the agent's own session calls them, over the real
- * migrations on PGlite and eve's coding-agent service faked at its HTTP
- * door: a list names every other agent of the caller's workspace, on any
- * plan and by any member, archived ones marked, and none of another
- * workspace's; a message reaches another member's agent on another plan as
- * the deployment acting for the caller's starter, once under the call's
- * key, opening with who sent it and kept under the sending agent's name; an
- * archived agent, an agent of another workspace, and the caller itself take
- * nothing, and a deployment with no secret sends nothing. An archive takes an
- * idle agent of the workspace, a teammate's among them, for the caller's
- * starter, recording the caller and its reason, once, and an unarchive
- * brings it back; a working agent, the caller itself, and an agent of
- * another workspace are not archived. A stop takes a teammate's running
- * agent's turn by the Stop button's own cancel, once, and the list then reads
- * it canceled; an idle agent is answered as idle, and the caller itself, an
- * archived agent, and an agent of another workspace are not stopped.
- * Synthetic accounts, plans, and words throughout.
- */
-
 const NOW = 1_800_000_000_000;
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-/** What every agent the suite starts runs on and works in. */
 const AGENT_CHOICE = {
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   repository: RELAY_FULL_NAME,
 } as const;
-/** The name an untitled agent on that model goes by, as its tab names it. */
 const AGENT_CHOICE_NAME = "Opus 5.5";
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
 const OPUS_FAST = "anthropic/claude-opus-5.5-fast";
 const SOL = "openai/gpt-6.1-sol";
-/** A model with a small window, which a long replay does not fit whole. */
 const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as const;
-/** The model the agents run on, as the catalog offers it. */
-/** What the agents' tools counted, across the file; a test reads its own account's, from where it began. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The properties of each of one event the account was counted for, in order. */
 const countedWith = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** How many tasks the account was counted as making. */
 const tasksCounted = (userId: string) => countedWith(userId, SERVER_EVENT.TASK_CREATE).length;
 
 const CATALOG: readonly OfferedModel[] = [
@@ -245,7 +217,6 @@ const CATALOG: readonly OfferedModel[] = [
     efforts: ["low", "medium", "high", "max"],
   },
 ];
-/** The branch of the repository a stacked agent starts on, and the commit GitHub says it stands at. */
 const STACKED_BRANCH = "luke/invitation-expiry";
 const BRANCH_COMMIT = "89abcdef0123456789abcdef0123456789abcdef";
 
@@ -257,13 +228,11 @@ const writer = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 let minted = 0;
 let installations = 0;
 
-/** A Claude Code session's id, as every agent the suite starts runs on that harness. */
 function sessionId(): string {
   minted += 1;
   return `${NATIVE_SESSION_PREFIX.claude_code}${String(minted).padStart(22, "0")}`;
 }
 
-/** The agent tools' seams over the suite's store, its summaries written on the model given. */
 function hostOf(summaryModel?: SummaryModelOf): AgentDoorSeams {
   return {
     writer: () => Effect.succeed(writer),
@@ -271,7 +240,6 @@ function hostOf(summaryModel?: SummaryModelOf): AgentDoorSeams {
   };
 }
 
-/** The agent's own conversation as the MCP door admits its runner's bearer: its starter's, on the session it recorded. */
 function admittedOf(agent: StartedAgent): AdmittedConversation {
   return {
     caller: agent.userId,
@@ -283,12 +251,10 @@ function admittedOf(agent: StartedAgent): AdmittedConversation {
 
 interface StartedAgent extends ConversationTarget {
   readonly id: string;
-  /** The name the agent goes by in every answer and mention: its title, or its model before it has one. */
   readonly name: string;
   readonly sessionId: string;
 }
 
-/** An agent started by the account on the plan, its eve session recorded as the store hook records it; it belongs to the run named, or to none. */
 async function agentOn(
   userId: string,
   taskId: string,
@@ -305,7 +271,6 @@ async function agentOn(
   });
 }
 
-/** An agent started by the account in the workspace on no task, as an automation's run starts one, its session recorded; it belongs to the run named, or to none. */
 async function tasklessAgentOn(
   userId: string,
   workspaceId: string,
@@ -323,7 +288,6 @@ async function tasklessAgentOn(
   });
 }
 
-/** `count` runs, fired by hand a minute apart, of an automation the account makes in the workspace: their ids in the order fired, and the automation's. */
 async function automationRunsOf(
   userId: string,
   workspaceId: string,
@@ -356,12 +320,10 @@ async function automationRunsOf(
   return { runIds, automationId: automation.id };
 }
 
-/** The agent the start made, its eve session recorded as the store hook records it. */
 async function claimed(
   userId: string,
   start: Parameters<typeof createAgent>[1],
 ): Promise<StartedAgent> {
-  // An agent starts on its starter's API key, as a Start's would, on the harness its start names.
   const started = await database.run(
     createAgent(userId, {
       payer: AGENT_PAYER.API_KEY,
@@ -380,13 +342,6 @@ async function claimed(
   };
 }
 
-/**
- * eve's coding-agent service as a script beside the fake GitHub, whose
- * installation reaching the repository is connected to the workspace:
- * every message to a session answered taken, or refused as a session eve
- * no longer runs where `retired` says or once `retire` is called, every
- * cancel answered as `cancelStatus` says, and each written down.
- */
 async function fakeCoderEve(
   workspaceId: string,
   branches: readonly string[] = [],
@@ -408,7 +363,6 @@ async function fakeCoderEve(
   const sent: SentCall[] = [];
   const github = githubReaching([installation], undefined, undefined, async (request) => {
     const { pathname } = new URL(request.url);
-    // The repository holds the branches given, each at a commit; any other is GitHub's not found.
     const ref = pathname.slice(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`.length);
     if (pathname.startsWith(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`) && branches.includes(ref)) {
       return Response.json({ object: { type: "commit", sha: BRANCH_COMMIT } });
@@ -426,23 +380,15 @@ async function fakeCoderEve(
   };
 }
 
-/** Where the suite's harness files each call it is made, and the headers it names the call's account, conversation, and turn under. */
 const SESSIONS_PATH = "/sessions";
 const HEADER = { ACCOUNT: "account", CONVERSATION: "conversation", TURN: "turn" } as const;
 
-/** One call a harness was made, as the suite reads it back. */
 interface SentCall {
   readonly path: string;
   readonly headers: Headers;
   readonly body: string;
 }
 
-/**
- * The native harnesses as the suite's script answers them, acting for the
- * agent's starter, each call written down beside every other: an open takes
- * a new session, a message is retired once the script says so, and a cancel
- * answers the status the script names.
- */
 function harnessRecording(
   sent: SentCall[],
   retired: () => boolean,
@@ -492,7 +438,6 @@ function harnessRecording(
   return Layer.succeed(NativeAgentSessions, scriptedHarness(sessionsOf, checkout));
 }
 
-/** Our Sentry integration as a deployment that configures it holds it. */
 const SENTRY_CONFIGURED = Layer.succeed(
   SentryApp,
   sentryAppService(
@@ -501,7 +446,6 @@ const SENTRY_CONFIGURED = Layer.succeed(
   ),
 );
 
-/** A caller of the agent tools from the agent's own session, as the MCP door runs them under the seams given, over the suite's catalog and a configured Sentry integration unless others are given. */
 async function peerCaller(
   host: AgentDoorSeams,
   agent: StartedAgent,
@@ -522,7 +466,6 @@ async function peerCaller(
     );
 }
 
-/** The words a message eve was sent opens with: the message where it is words alone, or its first part's where it carries what its words mention. */
 function sentWords(body: string | undefined): string {
   const message: unknown = JSON.parse(body ?? "").message;
   if (typeof message === "string") return message;
@@ -530,11 +473,6 @@ function sentWords(body: string | undefined): string {
   return isRecord(first) && typeof first.text === "string" ? first.text : "";
 }
 
-/**
- * The agent's own `message_agent` to another agent, run through the agent
- * tools door as the MCP door runs it, which is how one agent messages
- * another; answers what the tool answers.
- */
 async function directMessage(
   host: AgentDoorSeams,
   from: StartedAgent,
@@ -555,7 +493,6 @@ async function directMessage(
   );
 }
 
-/** A turn of the agent's, begun as eve begins one and ended where `ended` says, so the agent reads as working or as idle; answers the turn's id. */
 async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const turnId = randomUUID();
@@ -585,7 +522,6 @@ async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
   return turnId;
 }
 
-/** The agent's turn ended as eve ends one it canceled. */
 async function canceledTurnEnds(agent: StartedAgent, turnId: string): Promise<void> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   await database.run(
@@ -601,7 +537,6 @@ async function canceledTurnEnds(agent: StartedAgent, turnId: string): Promise<vo
   );
 }
 
-/** A turn of the agent's that ended on the answer given, journaled as the relay journals one. */
 async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuilder): Promise<void> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const turnId = randomUUID();
@@ -635,29 +570,21 @@ async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuild
   );
 }
 
-/** The tail a read answered, each entry as the record it is. */
 function tailOf(read: WireRecord): readonly WireRecord[] {
   assert.ok(Array.isArray(read.tail), JSON.stringify(read));
   return read.tail.map((entry) => (isRecord(entry) ? entry : assert.fail(JSON.stringify(entry))));
 }
 
-/** What each entry of a read's tail says. */
 function tailTexts(read: WireRecord): readonly unknown[] {
   return tailOf(read).map((entry) => entry.text);
 }
 
-/** The message each entry of a read's tail stands in. */
 function tailMessageIds(read: WireRecord): readonly string[] {
   return tailOf(read).map((entry) =>
     isWireString(entry.messageId) ? entry.messageId : assert.fail(JSON.stringify(entry)),
   );
 }
 
-/**
- * One workspace with the caller's agent on one plan, a teammate's agent on
- * another plan, and an archived agent; a second workspace the caller's
- * starter is also in, with an agent of its own; and a stranger's workspace.
- */
 async function openWorkspaces() {
   const alice = await database.createUser();
   await database.run(connectAgentApiKeys(alice));
@@ -700,7 +627,6 @@ async function openWorkspaces() {
     workspaceId,
     elsewhere,
     plans: { invitations: invitations.id, billing: billing.id, elsewhere: elsewhereTask.id },
-    // The workspace counts its tasks from one in the order they were made, which their links name them by.
     numbers: { invitations: 1, billing: 2 },
     agents: { caller, teammates, archived, otherWorkspaces, strangers },
   };
@@ -778,7 +704,6 @@ test("list_agents narrows by archive, by whose agents, by an automation's runs, 
   };
   const bobsLink = `[@Bob](https://vespin.dev/workspace-${workspaceId}/person/${agents.teammates.userId})`;
 
-  // The caller's own task's agents come first, then the rest newest first.
   assert.deepEqual(await idsOf({}), [agents.archived.id, sweeper.id, agents.teammates.id]);
   assert.deepEqual(await idsOf({ archived: true }), [agents.archived.id]);
   assert.deepEqual(await idsOf({ archived: false }), [sweeper.id, agents.teammates.id]);
@@ -833,7 +758,6 @@ test("list_agents from an agent another started names its starter first, ahead o
 
   const first = await call(CODER_TOOL.LIST_AGENTS, {});
   assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(first));
-  // The starter, older than every agent on the worker's task, still comes first; then the task's, newest first.
   assert.deepEqual(ids(first), [agents.caller.id, ...newer.slice(1).reverse()]);
   assert.equal(first.nextOffset, WORKSPACE_AGENTS_LIST_LIMIT);
   const second = await call(CODER_TOOL.LIST_AGENTS, { offset: WORKSPACE_AGENTS_LIST_LIMIT });
@@ -849,7 +773,6 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
-  // The teammate's final report runs past the short entry the app summarizes aloud.
   const report = Array.from(
     { length: 10 },
     () => "The invitations backfill stalls on rows whose inviter left the workspace.",
@@ -878,12 +801,10 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
     tailTexts(await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 1 })),
     [`Said: ${report}`],
   );
-  // Each entry names the message it stands in, one turn's entries one message, which a fork names.
   const [firstTurn] = tailMessageIds(read);
   assert.ok(firstTurn !== undefined);
   assert.deepEqual(tailMessageIds(read), [firstTurn, firstTurn]);
 
-  // A tail longer than the newest turns hold reaches back into older ones.
   for (const turn of [2, 3, 4]) {
     const later = new AssistantMessageBuilder();
     later.stepStart();
@@ -904,7 +825,6 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
     "each turn's journal is a message of its own",
   );
 
-  // An agent of another workspace is none of the caller's, even one its starter is also in.
   for (const other of [agents.otherWorkspaces, agents.strangers]) {
     assert.deepEqual(await call(CODER_TOOL.READ_AGENT, { agentId: other.id }), {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -932,7 +852,6 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
-  // The agent is answered with the mention its starter names it by, its model's name while it has no title.
   assert.equal(
     started.agent.mention,
     `[@${stored.title ?? AGENT_CHOICE_NAME}](https://vespin.dev/workspace-${workspaceId}/agent/${startedId})`,
@@ -947,19 +866,16 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
   assert.ok(message.includes(`"${caller.name}"`) && message.includes(caller.id), message);
-  // It reports back by message.
   assert.ok(
     message.includes(`call ${CODER_TOOL.MESSAGE_AGENT} with its agentId, ${caller.id}.`),
     message,
   );
-  // An agent's own pick of a model is no member's new default.
   assert.equal((await database.run(readAccountPreferences(caller.userId)))?.agent, undefined);
 
   const again = await call(CODER_TOOL.START_AGENT, { prompt }, "call-start");
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
-  // Counted once under its starter's member, as an agent's start rather than theirs.
   assert.deepEqual(
     countedWith(caller.userId, SERVER_EVENT.AGENT_START)
       .slice(startsBefore)
@@ -1040,7 +956,6 @@ test("start_agent naming a device by its name runs on the caller's member's own 
       ] as const) {
         yield* registerDevice(agents.caller.userId, { id, name, ...DEVICE_LAYOUT });
       }
-      // The laptops last beat an hour and a day ago, so they read away, the latest first.
       const db = yield* Database;
       for (const [id, ago] of [
         [laptop, 3_600_000],
@@ -1119,14 +1034,12 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
 });
 
-/** A PNG's bytes of the size given, each a mark of its own so two pictures never share a hash. */
 function pngOf(size: number, mark: number): Uint8Array {
   const bytes = new Uint8Array(size);
   bytes.set([137, 80, 78, 71, mark]);
   return bytes;
 }
 
-/** A picture kept beside the agent's conversation, as `show_image` keeps one, a PNG unless another type is given; answers its attachment id. */
 async function keptPicture(
   agent: ConversationTarget,
   bytes: Uint8Array,
@@ -1141,7 +1054,6 @@ async function keptPicture(
   return Option.getOrThrow(kept).id;
 }
 
-/** The file parts a message eve was sent carries, each as eve is handed it. */
 function sentFiles(body: string | undefined): readonly unknown[] {
   const message: unknown = JSON.parse(body ?? "").message;
   return Array.isArray(message)
@@ -1149,7 +1061,6 @@ function sentFiles(body: string | undefined): readonly unknown[] {
     : [];
 }
 
-/** A file part as eve is handed a PNG forwarded under its attachment id. */
 function forwardedPng(attachmentId: string, bytes: Uint8Array) {
   return {
     type: "file",
@@ -1189,7 +1100,6 @@ test("start_agent on the description with a note hands the agent the pictures im
     forwardedPng(otherId, other),
   ]);
 
-  // The same call run again answers the agent it made, though a picture it named is gone since.
   await database.run(
     Effect.gen(function* () {
       const db = yield* Database;
@@ -1206,7 +1116,6 @@ test("start_agent on the description with a note hands the agent the pictures im
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
 });
 
-/** The JSON Schema goldens of this package, where a tool's input a model is shown is recorded. */
 const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../../fixtures/json-schema");
 
 test("start_agent shows the model the recorded input, images among it", async () => {
@@ -1320,7 +1229,6 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const startedId = started.agent.id;
-  // The agent goes by its title from the start.
   const named = Option.getOrThrow(await database.run(readAgent(caller.userId, startedId)));
   assert.equal(named.title, title);
   assert.equal(
@@ -1328,7 +1236,6 @@ test("start_agent with a title names the agent by it from the start, and a title
     `[@${named.title}](https://vespin.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
 
-  // The title generated as the agent's words arrive is filled only where none stands.
   assert.equal(
     await database.run(fillAgentTitle(caller.userId, startedId, "Generated name")),
     false,
@@ -1406,7 +1313,6 @@ test("start_agent with a branch starts an agent whose checkout is cloned at that
   const stored = Option.getOrThrow(await database.run(readAgent(caller.userId, started.agent.id)));
   assert.equal(stored.startBranch, STACKED_BRANCH);
 
-  // The same call run again once the branch is gone answers the agent its start made.
   branches.length = 0;
   const again = await call(
     CODER_TOOL.START_AGENT,
@@ -1431,7 +1337,6 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
     },
     { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
   ];
-  // The starter's own Anthropic key, which its agents run on, was never granted fast mode.
   const owner = agents.caller.userId;
   const [anthropicRow] = (
     await database.run(listProviderKeyRows(owner, PROVIDER_KEY_KIND.API_KEY))
@@ -1474,7 +1379,6 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
     "call-fast",
   );
   assert.equal(fast.status, ACTION_RESULT_STATUS.REJECTED);
-  // The refusal lists the choices list_models does, and not the version it refused.
   assert.ok(
     String(fast.reason).endsWith(
       "The choices are: anthropic/claude-opus-5.5 (low, medium, high, max); openai/gpt-6.1-sol (low, high).",
@@ -1511,7 +1415,6 @@ test("list_models says the default is no longer offered where the catalog droppe
   assert.equal(unnamed.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(eve.sent.length, 0);
 
-  // A refusal lists the models the start was checked against, even where the catalog fails on any later read.
   let reads = 0;
   const flaky = Layer.succeed(ModelCatalog, {
     read: Effect.suspend(() => {
@@ -1536,7 +1439,6 @@ test("list_models says the default is no longer offered where the catalog droppe
   });
 });
 
-/** An agent's turn that ended on the words given, so the agent reads as done and has a message to fork at. */
 async function saidTurnOn(agent: StartedAgent, words: string): Promise<void> {
   const answer = new AssistantMessageBuilder();
   answer.stepStart();
@@ -1544,13 +1446,11 @@ async function saidTurnOn(agent: StartedAgent, words: string): Promise<void> {
   await answeredTurnOn(agent, answer);
 }
 
-/** The words of the newest session eve was asked to open. */
 function openingWords(sent: Awaited<ReturnType<typeof fakeCoderEve>>["sent"]): string {
   const opening = sent.findLast((each) => each.path === SESSIONS_PATH);
   return JSON.stringify(JSON.parse(opening?.body ?? "{}").message);
 }
 
-/** The agent a start answered, as the store holds it. */
 async function storedStart(userId: string, started: WireRecord) {
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
@@ -1677,7 +1577,6 @@ test("start_agent continues a teammate's agent on no task in its own workspace, 
   const forkWords = openingWords(eve.sent);
   assert.ok(forkWords.includes("shared temp dir") && !forkWords.includes("a clock read"));
 
-  // A second continue names the first, and so does that call run again, as on a task.
   const from = { agentId: sweeper.id };
   const second = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-taskless-again");
   assert.ok(Array.isArray(second.earlierContinuations), JSON.stringify(second));
@@ -1710,7 +1609,6 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   await refused({ from: { agentId: teammates.id }, prompt: "Do it again." }, R.FROM_WITH_PROMPT);
   await refused({ from: { agentId: teammates.id }, branch: STACKED_BRANCH }, R.FROM_WITH_PROMPT);
   await refused({ from: { agentId: caller.id } }, R.SELF_CONTINUE);
-  // A teammate's agent with no turn yet is still starting, and one whose turn runs is working.
   await refused({ from: { agentId: teammates.id } }, R.SOURCE_RUNNING);
   await turnOn(teammates, false);
   await refused({ from: { agentId: teammates.id } }, R.SOURCE_RUNNING);
@@ -1775,7 +1673,6 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
   assert.equal(forked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(forked));
 });
 
-/** A teammate's agent on the task given, started on the branch given, its session recorded. */
 async function agentOnBranch(
   userId: string,
   taskId: string,
@@ -1823,7 +1720,6 @@ test("start_agent refuses to continue an agent whose session died while it still
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: START_AGENT_REFUSAL.SOURCE_RUNNING,
   });
-  // eve runs no turn on the dead session, so the Stop stops nothing there, yet the turn reads canceled.
   const stopped = await call(CODER_TOOL.STOP_AGENT, from, "call-2");
   assert.equal(stopped.stopped, false, JSON.stringify(stopped));
   assert.ok(isRecord(stopped.agent));
@@ -1919,7 +1815,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     ],
   );
 
-  // Narrowed by words of a name, whatever their case, and paged by an offset.
   const billing = await call(CODER_TOOL.LIST_TASKS, { nameContains: "BILL" });
   assert.deepEqual(
     Array.isArray(billing.tasks) ? billing.tasks.map((task) => isRecord(task) && task.id) : [],
@@ -1944,7 +1839,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(stored.taskId, taskIds.billing);
   assert.equal(started.agent.onYourTask, false, "an agent started on another task is said to be");
   assert.equal(eve.sent.length, 1);
-  // The same call run again answers the agent it made, and starts nothing.
   const again = await call(
     CODER_TOOL.START_AGENT,
     { taskId: taskIds.billing, prompt: "Add the invoice export." },
@@ -1952,8 +1846,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   );
   assert.ok(isRecord(again.agent), JSON.stringify(again));
   assert.equal(again.agent.id, started.agent.id);
-  // Once its task has moved to another workspace, its agents with it as a move takes them, the call
-  // tells nothing of that agent and still starts none.
   await database.run(
     Effect.flatMap(Database, (db) =>
       Effect.andThen(
@@ -1985,10 +1877,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   );
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
-  // An agent on no task starts one on a task made for it, untitled for its agent's title to name,
-  // assigned to the member it works for, in progress with a blank description, the prompt handed to the agent
-  // alone, in its own repository, or in none where it names none, and on a task it names only where it names one. A run's agent starts one
-  // on a task made for it that belongs to its run, and one on a named task that the task alone owns.
   const {
     runIds: [run = "", later = ""],
   } = await automationRunsOf(caller.userId, workspaceId, 2);
@@ -2052,8 +1940,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   ]);
   assert.equal(eve.sent.length, 4);
 
-  // A later run handed to the same agent, as a same-agent automation hands each run, owns the
-  // agents it starts from then on, from the run's claim on, before the run holds the agent.
   assert.ok(await database.run(claimAutomationRun(later, sweeper.id)));
   assert.deepEqual(
     (
@@ -2062,7 +1948,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     [workspaceId, RELAY_FULL_NAME, later],
   );
 
-  // A run's agent on the task its run made starts one beside itself there, which belongs to its run too.
   const fromRunTask = await peerCaller(
     hostOf(),
     await agentOn(caller.userId, taskIds.invitations, run),
@@ -2075,7 +1960,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(eve.sent.length, 6);
 });
 
-/** The ids of the tasks of the workspace the account reads under the name, newest first. */
 async function tasksNamed(userId: string, workspaceId: string, name: string): Promise<string[]> {
   const listed = await database.run(listTasks(userId));
   return listed
@@ -2085,14 +1969,12 @@ async function tasksNamed(userId: string, workspaceId: string, name: string): Pr
 
 test("create_task makes a task in the caller's workspace for the member the agent acts for, on the repository it works in unless another or none is named, with the brief and description given and no agent on it, once under the call's key; start_agent then starts on it by its id", async () => {
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
-  // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
   await turnDescriptions(bob, true);
   const caller = await agentOn(bob, tasks.invitations);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const name = "Invite expiry migration";
-  // A description handed with its # title keeps its body alone, the task's name standing for the title.
   const body = "## Goal\n\nAdd the invitation's expiry.";
   const description = `# ${name}\n\n${body}`;
   const countedBefore = tasksCounted(bob);
@@ -2120,21 +2002,17 @@ test("create_task makes a task in the caller's workspace for the member the agen
     [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
     [bob, workspaceId, RELAY_FULL_NAME, body, "Invites should lapse after a week."],
   );
-  // Its description's first revision is the calling agent's, as its history shows it.
   const history = await database.run(listRevisions(bob, taskId));
   assert.deepEqual(
     history.revisions.map((revision) => revision.agentId),
     [caller.id],
   );
-  // It names the agent that made it for Bob, which the window draws apart from a task Bob made by hand.
   assert.deepEqual(stored.task.origin, { actor: DESCRIPTION_ACTOR.AGENT, agentId: caller.id });
   assert.equal(eve.sent.length, 0, "a task is made with no agent on it");
-  // It stands in the workspace's list as any task does, for a teammate too, and in no other workspace.
   const alice = agents.caller.userId;
   assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
   assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
 
-  // A call naming the field as it was named before the rename makes nothing, and says what it is named now.
   const retired = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Seats", plan: "## Goal" },
@@ -2143,7 +2021,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.equal(retired.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(retired.reason, CREATE_TASK_REFUSAL.RENAMED_DESCRIPTION);
 
-  // A title in a description written with CRLF line ends is dropped as well.
   const crlf = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Seats", description: "\r\n# Seats\r\n\r\n## Goal\r\n\r\nBill by seat." },
@@ -2155,7 +2032,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
     "## Goal\r\n\r\nBill by seat.",
   );
 
-  // A line opening on # that is no Markdown title is the description's own, and stays.
   const kept = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Limits", description: "#define MAX 10\n\n## Goal\n\nUpdate limits." },
@@ -2167,7 +2043,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
     "#define MAX 10\n\n## Goal\n\nUpdate limits.",
   );
 
-  // The same call run again, even twice at once, answers the task it made, and makes no second.
   const again = await Promise.all([
     call(CODER_TOOL.CREATE_TASK, { name }, "call-new"),
     call(CODER_TOOL.CREATE_TASK, { name }, "call-new"),
@@ -2185,7 +2060,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
   assert.equal(tasksCounted(bob), countedBefore + 4, "each task is counted once, as Bob's");
 
-  // A start on it by its id, as any other task of the workspace.
   const started = await call(
     CODER_TOOL.START_AGENT,
     { taskId, prompt: "Write the migration." },
@@ -2197,7 +2071,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
     taskId,
   );
 
-  // None names no repository, and one the installation does not reach makes nothing.
   const bare = await call(CODER_TOOL.CREATE_TASK, { name: "Bare", repository: null }, "call-bare");
   assert.ok(isRecord(bare.task), JSON.stringify(bare));
   assert.equal(bare.task.repository, null);
@@ -2213,7 +2086,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
     });
   }
 
-  // A start that still names a new task, as starts did before create_task, is refused with where to go.
   assert.deepEqual(
     await call(CODER_TOOL.START_AGENT, { newTask: "Old way", prompt: "Sweep." }, "call-old"),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.NEW_TASK },
@@ -2221,7 +2093,6 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
 
-  // With Descriptions off a description given is not written, and a start with no prompt hands the brief in the description's place.
   await turnDescriptions(bob, false);
   const planless = await call(
     CODER_TOOL.CREATE_TASK,
@@ -2254,7 +2125,6 @@ test("only a pilot makes a task in pilot mode, as a child of another", async () 
   const call = (as: Awaited<ReturnType<typeof peerCaller>>) =>
     as(CODER_TOOL.CREATE_TASK, asked, `call-${randomUUID()}`);
 
-  // A coder asking for one makes nothing.
   const coder = await peerCaller(hostOf(), agents.caller, eve.services);
   assert.deepEqual(await call(coder), {
     status: ACTION_RESULT_STATUS.REJECTED,
@@ -2262,7 +2132,6 @@ test("only a pilot makes a task in pilot mode, as a child of another", async () 
   });
   assert.deepEqual(await tasksNamed(alice, workspaceId, asked.name), []);
 
-  // A pilot makes its child a pilot task.
   const pilot = await claimed(alice, {
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
@@ -2317,7 +2186,6 @@ test("create_task makes a task related to another in one write, refusing a paren
   );
   assert.deepEqual(await tasksNamed(alice, workspaceId, "Twice named"), []);
 
-  // A task with a parent already takes no new one, and the task asked to be it is not left behind.
   const child = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Child", parentTaskId: tasks.invitations },
@@ -2345,7 +2213,6 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
   const call = await peerCaller(host, agents.teammates, eve.services);
   await database.run(leaveWorkspace(workspaceId, agents.teammates.userId));
 
-  // Its own agent is read on the same standing, so the call is refused as one that is no agent's.
   assert.deepEqual(await call(CODER_TOOL.LIST_AGENTS, {}), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: CODER_REFUSAL.NO_AGENT,
@@ -2362,7 +2229,6 @@ test("an agent whose starter no longer sees its task keeps its own tools: it rea
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf();
   const onBilling = await agentOn(agents.caller.userId, tasks.billing);
-  // The task moves onto its owner's own token, which the caller's starter keeps none to read through.
   await database.run(
     Effect.flatMap(Database, (db) =>
       db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, tasks.billing)),
@@ -2411,7 +2277,6 @@ test("update_agent archives a teammate's idle agent on another task for the call
   assert.equal(archivedAs(await archive({ archived: true, reason: "Again." }, "call-2")), true);
   assert.deepEqual((await row()).archivedBy, record, "a second archive keeps the first record");
 
-  // An unarchive, here beside a rename, brings it back with the record cleared, and again is done.
   assert.equal(archivedAs(await archive({ archived: false, title: "Billing" }, "call-3")), false);
   assert.deepEqual([(await row()).archivedAt, (await row()).archivedBy], [null, null]);
   assert.equal((await row()).title, "Billing");
@@ -2504,7 +2369,6 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   const billing = Option.getOrThrow(
     await database.run(readTask(agents.teammates.userId, tasks.billing)),
   );
-  // An unarchive moves the task into progress, which assigns the caller's member a task no one was on.
   const assignee = `[@Test User](https://vespin.dev/workspace-${workspaceId}/person/${agents.caller.userId})`;
   const answered = (status: string, already: boolean, assigned: string | null = null) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -2544,7 +2408,6 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     null,
     "its agent is stopped first, as the app's archive stops it, and not archived",
   );
-  // Every member still lists it, where list_tasks narrows to the status it settled in.
   assert.deepEqual(
     listedIds(
       await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill", status: TASK_STATUS.CANCELED }),
@@ -2573,7 +2436,6 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     }),
   );
   assert.deepEqual(await archive(true, "call-4"), answered(TASK_STATUS.DONE, false, assignee));
-  // A task already settled keeps its status under an archive asked again.
   await database.run(
     updateTask(agents.teammates.userId, tasks.billing, { status: TASK_STATUS.CANCELED }),
   );
@@ -2647,14 +2509,12 @@ test("update_task renames a task, pins it for the caller's starter alone, sets i
   assert.equal(isRecord(cleared.task) && cleared.task.repository, null, JSON.stringify(cleared));
   const set = await update({ repository: RELAY_FULL_NAME }, "call-5");
   assert.equal(isRecord(set.task) && set.task.repository, RELAY_FULL_NAME, JSON.stringify(set));
-  // The repository named in another casing is GitHub's same one, which already stands.
   const again = await update({ repository: RELAY_FULL_NAME.toLowerCase() }, "call-5b");
   assert.deepEqual(
     [isRecord(again.task) && again.task.repository, again.already],
     [RELAY_FULL_NAME, true],
     JSON.stringify(again),
   );
-  // The caller's own task, recorded as reached on its owner's token, is confirmed again through the App.
   const ownRepository = (key: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.invitations, repository: RELAY_FULL_NAME }, key);
   await database.run(
@@ -2820,7 +2680,6 @@ test("update_task puts a task under a parent and takes it out with null, answeri
   assert.equal(await parentOf(tasks.billing), null);
 });
 
-/** The agent as the caller's `list_agents` and `read_agent` read it: its status, and why where it failed. */
 async function standingAsRead(
   call: Awaited<ReturnType<typeof peerCaller>>,
   agentId: string,
@@ -2839,14 +2698,12 @@ async function standingAsRead(
   ];
 }
 
-/** The turn of the agent's conversation newest now: its status, and why where it failed. */
 async function newestTurnOf(agent: StartedAgent): Promise<readonly unknown[]> {
   const turns = await database.run(latestTurnsOf(agent.userId, [agent.conversationId]));
   const newest = turns.get(agent.conversationId);
   return [newest?.id, newest?.status, newest?.failure ?? undefined];
 }
 
-/** The openings eve was asked for, each as the conversation it names and the words it carries. */
 function openingsOf(
   eve: Awaited<ReturnType<typeof fakeCoderEve>>,
 ): readonly (readonly [string | null, string | null, string])[] {
@@ -2880,7 +2737,6 @@ test("message_agent hands another agent of the workspace the words under the sen
     words,
   );
   assert.ok(words.endsWith(`${NOTE}\n\n${agentMessageReplyLine(agents.caller.id)}`), words);
-  // The other agent's row says another agent wrote it, so its window draws it as the sender's and no title is named from it.
   const [line] = await database.run(
     Database.use((db) =>
       db
@@ -2970,7 +2826,6 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
   const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
-  // Counted as failed, with why.
   assert.deepEqual(
     countedWith(agents.teammates.userId, SERVER_EVENT.TURN_END).map((properties) =>
       "outcome" in properties && "failure" in properties
@@ -2998,7 +2853,6 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   );
 });
 
-/** A turn of the agent's that eve began and that failed on its model call, as eve ends one. */
 async function failedTurnOn(agent: StartedAgent): Promise<void> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const turnId = randomUUID();
@@ -3275,7 +3129,6 @@ test("read_page reads a page a teammate showed on another task of the caller's w
 
   const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: READ_PAGE_REFUSAL.NO_PAGE };
   assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 3 }), refused);
-  // The caller's starter is a member of the other workspace too, but the caller is not of it.
   assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: elsewhere.id }), refused);
   assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 0 }), {
     status: ACTION_RESULT_STATUS.REJECTED,
@@ -3327,7 +3180,6 @@ test("read_page reads a page an agent on no task of the caller's workspace showe
     String(read.mention),
   );
   assert.equal(own.isYours, true);
-  // The caller's starter is a member of the other workspace too, but the caller is not of it.
   assert.deepEqual(await byCaller(CODER_TOOL.READ_PAGE, { pageId: elsewhereShown.id }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_PAGE_REFUSAL.NO_PAGE,
@@ -3351,7 +3203,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   assert.ok(isRecord(made.section) && isWireString(made.section.id));
   const growth = made.section.id;
   assert.equal(made.section.title, "Growth");
-  // The same call run again names the section it made, as it was made, and makes no second one.
   assert.deepEqual(await call(CODER_TOOL.CREATE_SECTION, { title: "Billing" }, "call-1"), made);
   const kept = await sectionsOf(caller.userId, workspaceId);
   assert.deepEqual(
@@ -3363,7 +3214,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     reason: TASK_SECTION_TOOL_REFUSAL.UNREADABLE_CREATE,
   });
 
-  // A teammate's task moves into it, which list_tasks then names, and the teammate's own sidebar wears nothing.
   const move = (taskId: string, sectionId: string | null, callId?: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId, sectionId }, callId);
   const moved = await move(taskIds.billing, growth);
@@ -3373,7 +3223,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     [moved.task.name, moved.task.section, moved.already],
     ["Billing", { id: growth, title: "Growth" }, false],
   );
-  // A move to where it already stands is done.
   assert.equal((await move(taskIds.billing, growth, "call-again")).already, true);
   const listed = await call(CODER_TOOL.LIST_TASKS, {});
   assert.deepEqual(listed.sections, [{ id: growth, title: "Growth" }]);
@@ -3386,7 +3235,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   );
   assert.deepEqual((await sectionsOf(teammates.userId, workspaceId)).sections, []);
 
-  // A section or a task of another workspace the starter is also in is none of the caller's.
   const theirs = randomUUID();
   const madeElsewhere = await database.run(
     writeTaskSections(caller.userId, {
@@ -3413,7 +3261,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   ]);
   assert.equal((await sectionsOf(caller.userId, elsewhere)).sections.length, 1);
 
-  // Moved out under null, it stands under Tasks again; moved back in beside a rename, a delete puts it there too.
   const out = await move(taskIds.billing, null);
   assert.equal(isRecord(out.task) && out.task.section, null, JSON.stringify(out));
   assert.deepEqual((await sectionsOf(caller.userId, workspaceId)).entries, []);
@@ -3439,7 +3286,6 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
 test("update_agent renames a teammate's eve agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on a task and one on no task, refuses a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, otherWorkspaces } = agents;
-  // Note that only an agent on eve moves to another provider's model and takes a window, so the teammate's is one.
   const teammates = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const eve = await fakeCoderEve(workspaceId);
   const offered: readonly OfferedModel[] = [
@@ -3464,14 +3310,12 @@ test("update_agent renames a teammate's eve agent, moves it to a model the catal
     [changed.agent.title, changed.agent.model, changed.agent.modelName, changed.agent.effort],
     ["Billing export", SOL, "GPT-6.1 Sol", "low"],
   );
-  // A model with one window keeps its whole one, as the catalog reads the choice.
   const after = await stored();
   assert.deepEqual(
     [after.title, after.model, after.effort, after.contextWindow, after.disabledServers],
     ["Billing export", SOL, "low", "long", ["notion"]],
   );
 
-  // A pin is the caller's developer's alone, on a task's agent as on one with none.
   const pinnedBy = async (agentId: string) =>
     (
       await database.run(
@@ -3490,7 +3334,6 @@ test("update_agent renames a teammate's eve agent, moves it to a model the catal
   const pinned = await call(CODER_TOOL.UPDATE_AGENT, { agentId: sweeper.id, pinned: true });
   assert.equal(isRecord(pinned.agent) && pinned.agent.pinned, true, JSON.stringify(pinned));
 
-  // A refused model is said with the choices, and nothing else asked beside it is written.
   const refused = await call(CODER_TOOL.UPDATE_AGENT, {
     agentId: teammates.id,
     title: "Not this",
@@ -3505,7 +3348,6 @@ test("update_agent renames a teammate's eve agent, moves it to a model the catal
   assert.ok(String(refused.reason).includes(`${SOL} (low, high)`), String(refused.reason));
   assert.equal((await stored()).title, "Billing export");
 
-  // An empty title clears it, so the tab falls back to the model's name.
   const cleared = await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates.id, title: "" });
   assert.equal(isRecord(cleared.agent) && cleared.agent.title, SOL);
   assert.equal((await stored()).title, null);
@@ -3534,12 +3376,6 @@ test("update_agent renames a teammate's eve agent, moves it to a model the catal
   assert.equal(theirs.title, null);
 });
 
-/**
- * The catalog the runtime tests read: a Claude model with its fast version
- * and two windows, another Claude model, and a GPT model with its fast
- * version, as the panel's
- * chip test reads the same (`packages/panel/src/tasks/agent-model-chip.test.ts`).
- */
 const SONNET = "anthropic/claude-sonnet-5.5";
 const SOL_FAST = "openai/gpt-6.1-sol-fast";
 const SOL_ULTRAFAST = "openai/gpt-6.1-sol-ultrafast";
@@ -3578,7 +3414,6 @@ const RUNTIME_CATALOG: readonly OfferedModel[] = [
   },
 ];
 
-/** An agent of the account's on the task, on Claude Code and paid for by the account's Claude plan. */
 async function claudeCodeAgentOn(userId: string, taskId: string): Promise<StartedAgent> {
   return claimed(userId, {
     ...AGENT_CHOICE,
@@ -3591,7 +3426,6 @@ async function claudeCodeAgentOn(userId: string, taskId: string): Promise<Starte
   });
 }
 
-/** An agent of the account's on the task on eve, as a row from before the native harnesses still reads. */
 async function eveAgentOn(userId: string, taskId: string): Promise<StartedAgent> {
   return claimed(userId, {
     ...AGENT_CHOICE,
@@ -3627,7 +3461,6 @@ test("list_models for a Claude Code agent lists its Claude models alone, their f
   assert.deepEqual(ids(forClaudeCode), [OPUS, OPUS_FAST, SONNET]);
   assert.deepEqual(forClaudeCode.default, forStart.default);
 
-  // A GPT default is offered to a start, and is not one a Claude Code agent may move to.
   await database.run(
     writeAccountPreferences(agents.caller.userId, { agent: { model: SOL, effort: "low" } }),
   );
@@ -3709,7 +3542,6 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
   const after = await stored(onClaudeCode);
   assert.deepEqual([after.model, after.effort], [SONNET, "low"]);
 
-  // An eve agent still moves to a fast version, another provider's model, and the standard window.
   for (const change of [
     { model: OPUS_FAST, effort: "high" },
     { model: OPUS, effort: "high", contextWindow: "standard" },
@@ -3883,7 +3715,6 @@ test("read_task reads a teammate's task of the caller's workspace with its descr
   const own = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.invitations });
   assert.equal(isRecord(own.task) && own.task.isYourTask, true, JSON.stringify(own));
 
-  // A description past the bound is cut on a line, and what was left out is counted.
   const line = `${"x".repeat(999)}\n`;
   const long = line.repeat(41);
   await database.run(saveDescriptionText(teammates.userId, taskIds.billing, long));
@@ -3895,13 +3726,11 @@ test("read_task reads a teammate's task of the caller's workspace with its descr
   assert.equal(cut.description.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.description.leftOutChars, long.length - (line.length * 40 - 1));
 
-  // With Descriptions off the task is read all the same, without its description.
   await turnDescriptions(caller.userId, false);
   const planless = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
   assert.deepEqual([isRecord(planless.task), "description" in planless], [true, false]);
 
-  // A task started from a brief, its description still untouched, is read with the developer's words.
   const briefed = await database.run(
     createTask(teammates.userId, {
       organizationId: workspaceId,
@@ -4031,7 +3860,6 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
   const stored = Option.getOrThrow(await database.run(readTask(caller.userId, filed.id)));
   assert.equal(stored.task.assignee?.userId, teammates.userId);
 
-  // The link a read hands back is one a call may name, whole or as its bare address.
   assert.deepEqual(await listedIds({ assignee: filed.assignee }), [filed.id]);
   assert.deepEqual(await listedIds({ assignee: personLink(teammates.userId) }), [filed.id]);
   const unassigned = await listedIds({ assignee: null });
@@ -4041,7 +3869,6 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
     filed.assignee,
   );
 
-  // A child made with no assignee named takes its parent's; a null names no one.
   const childAssignee = async (input: { assignee?: null; parentTaskId?: string }, key: string) => {
     const child = taskOf(
       await call(CODER_TOOL.CREATE_TASK, { name: key, parentTaskId: filed.id, ...input }, key),
@@ -4081,7 +3908,6 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
       reason: UPDATE_TASK_REFUSAL.NOT_MEMBER,
     });
   }
-  // Carol is a member of another workspace of Alice's, not this one.
   assert.deepEqual(
     await call(
       CODER_TOOL.CREATE_TASK,
@@ -4095,7 +3921,6 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
     undefined,
   );
 
-  // A parent's assignee who has since left the workspace gives the child none, and no error.
   const assigned = taskOf(
     await call(
       CODER_TOOL.CREATE_TASK,
@@ -4128,7 +3953,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const created = await call(CODER_TOOL.CREATE_AUTOMATION, made, "call-make");
   assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(created));
   const automation = automationOf(created);
-  // It works in the repository the caller works in, lands on a new agent each run, and is due.
   assert.deepEqual(
     [
       automation.name,
@@ -4151,16 +3975,13 @@ test("list_automations, create_automation, update_automation, and delete_automat
       "string",
     ],
   );
-  // The answer carries the start of the prompt, as the list does, not the whole of it.
   assert.ok(
     isWireString(automation.prompt) && automation.prompt.length === 301,
     JSON.stringify(automation.prompt),
   );
   assert.ok(isWireString(automation.id));
   const id = automation.id;
-  // The same call run again names the automation it made, and makes no second one.
   assert.equal(automationOf(await call(CODER_TOOL.CREATE_AUTOMATION, made, "call-make")).id, id);
-  // Counted once, as the agent's automation rather than its starter's own.
   assert.deepEqual(countedWith(agents.caller.userId, SERVER_EVENT.AUTOMATION_CREATE), [
     { trigger_kind: "schedule", source: SERVER_AUTOMATION_SOURCE.AGENT },
   ]);
@@ -4177,7 +3998,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const read = await call(CODER_TOOL.LIST_AUTOMATIONS, { automationId: id });
   assert.deepEqual([automationOf(read).prompt, read.runs], [prompt.trim(), []]);
 
-  // What a write checks, said so the model can act on it; a webhook is never made here.
   const make = (asked: WireRecord, key: string) =>
     call(CODER_TOOL.CREATE_AUTOMATION, { ...made, ...asked } as WireBoundaryInput, key);
   assert.deepEqual(
@@ -4222,7 +4042,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
     rejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} not-a-server.`),
   );
 
-  // Run now: one run under the call's key, started as a scheduled run starts, and the same call again names it.
   const ran = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
   assert.equal(ran.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(ran));
   assert.ok(isRecord(ran.run) && isRecord(ran.run.agent), JSON.stringify(ran));
@@ -4240,7 +4059,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
     rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
   );
 
-  // A change: paused, its next due cleared; a new prompt and model, and every run handed to one agent.
   const update = (asked: WireRecord, by = call, key = "call-change") =>
     by(CODER_TOOL.UPDATE_AUTOMATION, { automationId: id, ...asked } as WireBoundaryInput, key);
   const paused = automationOf(await update({ enabled: false }));
@@ -4265,7 +4083,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
   );
   assert.deepEqual(await update({}), rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE));
 
-  // A teammate reads a personal automation of the starter's not at all, then a workspace's, which it may turn on but not change or delete.
   assert.deepEqual((await teammate(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
   assert.equal(
     automationOf(
@@ -4285,7 +4102,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
     automationOf(await update({ enabled: true }, teammate, "teammate-toggle")).enabled,
     true,
   );
-  // A teammate runs a workspace's automation as its creator: the run starts the creator's agent.
   const teammateRan = await teammate(
     CODER_TOOL.RUN_AUTOMATION,
     { automationId: id },
@@ -4300,14 +4116,12 @@ test("list_automations, create_automation, update_automation, and delete_automat
     readAgent(agents.caller.userId, String(teammateRan.run.agent.id)),
   );
   assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
-  // eve is reached as the creator the run starts as, not as the teammate who fired it.
   assert.equal(eve.sent.at(-1)?.headers.get(HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),
   );
 
-  // Another workspace's agent reaches none of it.
   assert.deepEqual((await stranger(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
   assert.deepEqual(
     await stranger(CODER_TOOL.LIST_AUTOMATIONS, { automationId: id }),
@@ -4323,7 +4137,6 @@ test("list_automations, create_automation, update_automation, and delete_automat
     await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete-again"),
     rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
   );
-  // An agent's own edits and delete are counted as its, once each, and a delete that found nothing is not.
   const automationChanges = countedWith(agents.caller.userId, SERVER_EVENT.AUTOMATION_CHANGE);
   assert.deepEqual(automationChanges[0], {
     action: SERVER_AUTOMATION_CHANGE_ACTION.EDIT,
@@ -4433,14 +4246,12 @@ test("create_automation and update_automation take a Sentry trigger once the wor
   );
 });
 
-/** Turns the Descriptions experiment on or off for a member, whose agents read and write no description while it is off. */
 async function turnDescriptions(userId: string, on: boolean): Promise<void> {
   await database.run(
     writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }),
   );
 }
 
-/** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
 async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {
   for (const userId of userIds) {
     await database.run(
@@ -4449,7 +4260,6 @@ async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {
   }
 }
 
-/** The words of the memories a recall answered. */
 function recalledWords(answer: WireRecord): readonly unknown[] {
   assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.ok(Array.isArray(answer.memories));
@@ -4551,12 +4361,6 @@ const WEB = { owner: RELAY.owner, name: "Web" } as const;
 const DOCS = { owner: "Globex", name: "Docs" } as const;
 let severalConnected = 0;
 
-/**
- * A workspace whose installation reaches the agents' repository and its
- * neighbor, with another installation on another account reaching a third,
- * and the harness and GitHub its tools
- * reach, the harness answering an added repository's checkout as given.
- */
 async function openSeveralRepositories(checkout: RunnerCheckout) {
   const opened = await openWorkspaces();
   severalConnected += 1;
@@ -4584,7 +4388,6 @@ async function openSeveralRepositories(checkout: RunnerCheckout) {
   return { ...opened, sent, services };
 }
 
-/** The repositories the agent works in, by name, as its starter reads them. */
 async function repositoriesOf(agent: StartedAgent): Promise<readonly string[]> {
   const read = await database.run(readAgentRepositories(agent.userId, agent.id));
   return read.map((each) => each.repository);
@@ -4618,7 +4421,6 @@ test("update_agent adds a repository beside an agent's own, after the others, an
   assert.equal(itself.told, line, JSON.stringify(itself));
   assert.deepEqual(await repositoriesOf(helper), [RELAY_FULL_NAME, `${WEB.owner}/${WEB.name}`]);
   assert.deepEqual(await repositoriesOf(caller), [RELAY_FULL_NAME, `${WEB.owner}/${WEB.name}`]);
-  // The helper is told in its own conversation; the caller, which read its answer, is sent nothing.
   assert.deepEqual(
     sent.map((each) => [each.headers.get(HEADER.CONVERSATION), sentWords(each.body)]),
     [[helper.conversationId, line]],
@@ -4703,7 +4505,6 @@ test("update_agent refuses a repository added to another member's agent, to an a
     assert.deepEqual(await repositoriesOf(agent), [RELAY_FULL_NAME]);
   }
   assert.deepEqual(await repositoriesOf(inNone), []);
-  // Only the teammate's agent's message reached the caller; no agent was told of a repository.
   assert.deepEqual(
     sent.map((each) => each.headers.get(HEADER.CONVERSATION)),
     [caller.conversationId],

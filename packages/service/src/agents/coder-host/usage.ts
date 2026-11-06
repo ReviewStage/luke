@@ -4,30 +4,10 @@ import { standardModelIdOf } from "@repo/features/models-wire";
 import type { RunUsage } from "../../core.js";
 import { type OfferedModel, tokensCostUsd } from "../../providers/model-catalog.js";
 
-/**
- * usage.ts -- what a coding agent has cost: its turns' tokens summed, and their price where the catalog lists one for every model they ran on.
- *
- * A turn's row keeps its counts whole and, since the model can change
- * between steps, the same counts by the model each step ran on; a row from
- * before that breakdown was kept ran every step on the model the row
- * names. Each share is priced at its own model's catalog prices, a fast
- * version's at its base model's where Anthropic refused a fast step of the
- * turn, since those steps ran and were billed at standard speed and every
- * step of an organization never granted fast mode is refused; and the
- * price is answered only when every share has one: a model the catalog no
- * longer lists, or lists without prices, leaves the tokens alone to tell.
- * The catalog's prices are per token to many places, so the dollars are
- * rounded to the cent's hundredth once summed, which is also what keeps a
- * float sum off the wire.
- */
-
-/** How many decimals of a dollar the wire carries. */
 const USD_DECIMALS = 6;
 
-/** Counts as they are priced: at the model named, or at none. */
 type UsageShare = RunUsage & { readonly model?: string };
 
-/** The turn's counts by model: the breakdown its row keeps, or the whole at the row's model, which is nothing to price where the row names none; a fast version's at its base model where a fast step was refused. */
 function sharesOf(row: TurnUsageRow): readonly UsageShare[] {
   const { byModel, ...whole } = row.usage;
   const shares: readonly UsageShare[] =
@@ -40,11 +20,6 @@ function sharesOf(row: TurnUsageRow): readonly UsageShare[] {
   );
 }
 
-/**
- * The turns' price unrounded, where every share of them has one. Exported
- * for a caller that sums many such prices, the admin Cost screen's, which
- * rounds once at the end rather than per summand.
- */
 export function costOfTurns(
   rows: readonly TurnUsageRow[],
   offered: readonly OfferedModel[],
@@ -60,7 +35,6 @@ export function costOfTurns(
   return costUsd;
 }
 
-/** The tokens of every turn summed, and their price where every share of them has one. */
 export function usageOfTurns(
   rows: readonly TurnUsageRow[],
   offered: readonly OfferedModel[],

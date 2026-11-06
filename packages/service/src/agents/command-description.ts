@@ -1,18 +1,6 @@
 import { describeWire } from "@repo/wire/effect";
 import { Schema } from "effect";
 
-/**
- * command-description.ts -- the few plain words a model gives each command it runs, which the developer's transcript names the call by.
- *
- * A coding agent's `run_on_mac` (`mac-command.ts`) takes one beside the
- * command, as Claude Code's shell does, so a row reads
- * "Find where invites are sent" rather than a pipeline of `grep`s. It is
- * optional, so a call without one still runs, and it is never run nor handed
- * to the Mac: it rides in the call's stored input, where the desktop reads
- * it for the row's title and draws the command in the row's body.
- */
-
-/** The field as a model is shown it, beside a shell's `command`. */
 export const COMMAND_DESCRIPTION = Schema.optionalKey(
   describeWire(
     Schema.String,
@@ -22,7 +10,6 @@ export const COMMAND_DESCRIPTION = Schema.optionalKey(
   ),
 );
 
-/** The line each model's instructions ask for it in. */
 export const COMMAND_DESCRIPTION_INSTRUCTION =
   "Give every command a `description`, what it is for in 3 to 8 plain words, which the " +
   "developer reads in place of the command.";

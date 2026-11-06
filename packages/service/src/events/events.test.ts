@@ -1,11 +1,3 @@
-/**
- * events.test.ts -- one batch recorded for an account: read through the allowlist, braked, stamped, and forwarded.
- *
- * The caller, the kill switch, and the body's size are the route's
- * (`events-procedures.test.ts`); this is what happens to a batch once
- * they are settled. Synthetic accounts and events throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -39,7 +31,6 @@ interface Forwarded {
 function upstream(status = 200) {
   const forwarded: Forwarded[] = [];
   const layer = fakeHttpClientLayer((url, init) => {
-    // SAFETY: the body is the batch document this endpoint just serialized.
     const body = JSON.parse(String(init.body)) as PosthogBatch;
     forwarded.push({ url, body });
     return new Response("{}", { status });
@@ -51,10 +42,6 @@ function options(overrides: Partial<EventsOptions> = {}): EventsOptions {
   return { projectApiKey: PROJECT_KEY, ...overrides };
 }
 
-/**
- * One batch recorded for the account named, at the test's instant, over a
- * database that refuses every statement and the upstream handed in.
- */
 function post(
   userId: string,
   batch: WireValue,
@@ -64,7 +51,6 @@ function post(
   return Effect.provide(postOverDatabase(userId, batch, posthog, overrides), noDatabase);
 }
 
-/** One batch recorded for the account named, at the test's instant, over the database the test provides. */
 function postOverDatabase(
   userId: string,
   batch: WireValue,
@@ -77,7 +63,6 @@ function postOverDatabase(
   });
 }
 
-/** A new account, with the personal workspace the app makes for every account; answers both. */
 const openAccount = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Database.use((db) =>
@@ -91,7 +76,6 @@ const openAccount = Effect.gen(function* () {
   return { userId, personal };
 });
 
-/** The workspace group each event of the account's next batch was filed under, or none. */
 const groupsOfBatchFrom = (userId: string) =>
   Effect.gen(function* () {
     const posthog = upstream();
@@ -166,14 +150,7 @@ it.effect(
       );
       assert.deepEqual(
         batch.map((item) => item.timestamp),
-        [
-          // A month back is pulled up to the oldest instant the window keeps.
-          "2026-08-12T12:00:00.000Z",
-          // An hour ahead of the service's clock is pulled back to it.
-          "2026-08-19T12:00:00.000Z",
-          // Inside the window, the desktop's own instant stands.
-          "2026-08-19T11:59:30.000Z",
-        ],
+        ["2026-08-12T12:00:00.000Z", "2026-08-19T12:00:00.000Z", "2026-08-19T11:59:30.000Z"],
       );
     }),
 );
@@ -202,7 +179,6 @@ it.effect("a user past the brake is refused as over quota and nothing more is fo
 
     assert.deepEqual(yield* send(), { accepted: 50 });
     assert.deepEqual(yield* send(), { accepted: 50 });
-    // A third full batch puts this account at 150 events in the minute, past 120.
     assert.deepEqual(yield* Effect.flip(send()), HOSTED_REFUSAL.QUOTA_EXHAUSTED);
     assert.equal(posthog.forwarded.length, 2);
   }),
@@ -222,7 +198,6 @@ it.effect("an upstream refusal is refused with its status and none of its body",
 
 it.effect("an older build's retired event names are skipped and its live events still land", () =>
   Effect.gen(function* () {
-    // `session:observe` left the vocabulary, but a 0.7.x build still sends it.
     const retired = { name: "session:observe", at: NOW - 30_000, properties: { session_count: 1 } };
     const posthog = upstream();
     assert.deepEqual(yield* post("user-retired", { events: [retired, LAUNCH] }, posthog), {
@@ -238,7 +213,6 @@ it.effect("an older build's retired event names are skipped and its live events 
     });
     assert.equal(posthog.forwarded.length, 1);
 
-    // A name that was never in the vocabulary still refuses the batch.
     assert.deepEqual(
       yield* Effect.flip(
         post("user-retired", { events: [{ ...LAUNCH, name: "app:lunch" }, LAUNCH] }, posthog),
@@ -267,9 +241,6 @@ it.effect(
       assert.equal(currentEvent?.properties.app_version, "0.18.0");
       assert.equal(currentEvent?.properties.packaged, false);
 
-      // Builds 0.7 to 0.17 send no `build`; their counts land with the
-      // deployment alone, and a service Vercel names no environment for is
-      // not production.
       const older = upstream();
       assert.deepEqual(yield* post("user-stamp", { events: [signIn] }, older), { accepted: 1 });
       const [olderEvent] = older.forwarded[0]?.body.batch ?? [];
@@ -279,8 +250,6 @@ it.effect(
     }),
 );
 
-// The group is the service's own reading of the caller's membership, never a
-// claim the batch makes: a workspace named in the build attaches nothing.
 it.layer(getTestDB())("the workspace a batch is filed under", (it) => {
   it.effect(
     "a member of one shared workspace is filed under it, a solo account under its personal one, and a member of two under none, whatever the batch names",

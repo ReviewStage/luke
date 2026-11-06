@@ -25,18 +25,9 @@ import {
   saveNotes,
 } from "./description-notes.js";
 
-/**
- * A description's history, through the description's one write and the store's reads:
- * every save that changes the description is kept under its writer, the same
- * writer's saves in a row are one revision, a description from before history keeps
- * what it held as its first revision, and the description names its newest
- * revision's writer as its last edit. Synthetic accounts and tasks throughout.
- */
-
 const AGENT_MODEL = "anthropic/claude-opus-5.5";
 const NOTETAKER: DescriptionWriter = { actor: DESCRIPTION_ACTOR.NOTETAKER };
 
-/** Notes that write a draft into a description, each in a section of its own. */
 const DRAFT_NOTES: readonly DescriptionNote[] = [
   added("Context", "A member cannot bring a teammate in without an admin."),
   added("Hard parts", "- A withdrawn invite's link never grants access."),
@@ -53,7 +44,6 @@ const openNamedUser = (name: string) =>
 
 const openUser = openNamedUser("Test User");
 
-/** The developer, as the writer of an edit the window sends. */
 const DEVELOPER: DescriptionWriter = { actor: DESCRIPTION_ACTOR.DEVELOPER };
 
 const openTask = Effect.gen(function* () {
@@ -62,7 +52,6 @@ const openTask = Effect.gen(function* () {
   return { userId, taskId: task.id, workspaceId: task.workspaceId };
 });
 
-/** The title the agent goes by, which its revisions are labeled with. */
 const AGENT_TITLE = "Invite emails";
 
 const startAgent = (userId: string, taskId: string) =>
@@ -81,11 +70,9 @@ const startAgent = (userId: string, taskId: string) =>
     (started) => Option.getOrThrow(started).agent.id,
   );
 
-/** The newest page of the description's history, which holds every revision a test here writes. */
 const revisionsOf = (userId: string, taskId: string) =>
   Effect.map(listRevisions(userId, taskId), (page) => page.revisions);
 
-/** Each revision as the history lists it, without the instants a test's clock decides. */
 function shapeOf(revisions: readonly DescriptionRevisionLine[]) {
   return revisions.map(({ seq, lastEdit, changes }) => ({
     seq,
@@ -143,10 +130,6 @@ it.layer(getTestDB())("a description's history", (it) => {
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
     }),
   );
-  /**
-   * The notetaker's notes, each a revision of its own: the saves stand further apart than
-   * any join.
-   */
   const apart = (userId: string, taskId: string, notes: readonly (readonly [string, string])[]) =>
     Effect.forEach(
       notes,
@@ -235,7 +218,6 @@ it.layer(getTestDB())("a description's history", (it) => {
         yield* joinWorkspace(task.workspaceId, charles);
         const taskId = task.id;
         yield* saveNotes({ userId: dean, taskId }, [added("Goal", "Members invite.")], DEVELOPER);
-        // Within the join's reach, which one member's saves in a row would share.
         yield* saveNotes(
           { userId: charles, taskId },
           [added("Approach", "Invites expire.")],

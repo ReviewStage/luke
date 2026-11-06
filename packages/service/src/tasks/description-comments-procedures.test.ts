@@ -28,21 +28,8 @@ import { Sync, type SyncShape } from "../sync/watch.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import { descriptionCommentsProcedures } from "./description-comments-procedures.js";
 
-/**
- * A description's comments read held on Sync, through the route a desktop
- * holds: a read at the current cursor answers within a coalesce window of
- * a thread started, answered, or deleted on the description, and of the reader
- * leaving the plan's workspace, which it then answers as not found. A hold
- * that watched the wrong topics would answer none of these before the hold
- * ends. The hub's waits run on a clock that announces each one, so a write
- * the database is still delivering is never outrun.
- *
- * Synthetic accounts, plans, and comments throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** The hub's coalesce window: how long a woken watch gathers before it answers. */
 const COALESCE = Duration.millis(100);
 
 const DESCRIPTION_TEXT = "## Goal\n\nAn admin invites a teammate by email.\n";
@@ -56,7 +43,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A plan in a workspace its owner made and a teammate joined. */
 const openSharedDescription = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -67,7 +53,6 @@ const openSharedDescription = Effect.gen(function* () {
   return { owner, teammate, workspace, taskId };
 });
 
-/** A thread the member starts on the description's one sentence, answering its id. */
 const started = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const from = DESCRIPTION_TEXT.indexOf(WORDS);
@@ -89,7 +74,6 @@ const started = (userId: string, taskId: string) =>
     return outcome.answer.thread.id;
   });
 
-/** The comments route on the hub, each wait announced on `asleep` and each look a held read begins on `looking`. */
 const onHub = Effect.gen(function* () {
   const { clock, asleep } = yield* announcingClock;
   const looking = yield* Queue.unbounded<void>();
@@ -107,7 +91,6 @@ const onHub = Effect.gen(function* () {
     Layer.succeed(Clock.Clock, clock),
     Layer.succeed(Sync, announcing),
   );
-  // SAFETY: the read yields the database, the clock, and the hub alone, which is all a test provides of the web runtime's services.
   const context = (yield* Effect.context<SqlClient.SqlClient>().pipe(
     Effect.provide(services),
   )) as Context.Context<WebServices>;
@@ -119,7 +102,6 @@ const onHub = Effect.gen(function* () {
         ),
     }),
   });
-  /** The description's comments read as the account, past the cursor where one is named. */
   const read = (userId: string, taskId: string, after?: string) =>
     Effect.gen(function* () {
       const url = new URL(`/api/plans/${taskId}/comments`, ORIGIN);
@@ -132,24 +114,16 @@ const onHub = Effect.gen(function* () {
   return { read, asleep, looking: Queue.asDequeue(looking) };
 });
 
-/** What a read answered, failing the test where it does not read. */
 function readIn(answered: { readonly body: string }) {
   const read = readEither(descriptionCommentsAnswerSchema)(unparsedWire(JSON.parse(answered.body)));
   if (Result.isFailure(read)) return assert.fail(answered.body);
   return read.success;
 }
 
-/** The ids of the threads a read answered. */
 function threadIdsIn(answered: { readonly body: string }): readonly string[] {
   return readIn(answered).threads.map((thread) => thread.id);
 }
 
-/**
- * Holds the reader's read at the cursor they read last, makes the write
- * once its first look found nothing moved, and answers what the write and
- * the read answered, failing unless the read answered within a coalesce
- * window of the write.
- */
 const heldThrough = <A, E, R>(
   hub: Effect.Success<typeof onHub>,
   reader: string,
@@ -162,7 +136,6 @@ const heldThrough = <A, E, R>(
       startImmediately: true,
     });
     yield* Queue.take(hub.looking);
-    // Note that the waits announced while the read was held count for nothing now.
     yield* Queue.clear(hub.asleep);
     const from = yield* Clock.currentTimeMillis;
     const value = yield* write;

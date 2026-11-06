@@ -51,19 +51,6 @@ import { DAY_MS, TURN_FAILURE } from "../core.js";
 import { buildAdminAccountSupport } from "./admin-account.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 
-/**
- * admin-account.test.ts -- one account's support sections, read over a real
- * dialect and folded: the window's tasks, agents, and pull requests; its
- * newest agents with the status and failure class the panel
- * would draw and their pull request's state; its workspaces by name, role,
- * size, and GitHub installation; its keys and connections; its defaults and
- * experiments; and the window's failures, newest first, each an enumerated
- * word. A second account's rows stand beside every one of the first's and
- * are never read into it.
- *
- * Synthetic accounts throughout, at a fixed instant handed to the read.
- */
-
 const NOW = Date.UTC(2026, 9, 21, 12);
 const WINDOW_START = Date.UTC(2026, 8, 22);
 
@@ -89,7 +76,6 @@ const openAccount = (name: string) =>
     return id;
   });
 
-/** An agent of the account's, started `daysAgo`, its one turn ended as `turn` where it ran one. */
 const startAgent = (
   userId: string,
   organizationId: string,
@@ -139,7 +125,6 @@ const startAgent = (
     return agent?.id ?? "";
   });
 
-/** Every kind of row the page reads, written for `userId` in its own workspace. */
 const seedAccount = (userId: string, sharedWorkspace: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -252,7 +237,6 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       firedAt: at(6),
       settledAt: at(6),
     });
-    // Started long before the window, its turn failed inside it.
     const lateFailure = yield* startAgent(userId, own, 45, {
       turn: {
         status: TURN_STATUS.FAILED,
@@ -289,7 +273,6 @@ it.layer(getTestDB())("one account's support sections", (it) => {
         }),
       );
       const agents = yield* seedAccount(ada, shared);
-      // Lin's own rows stand beside Ada's everywhere, and none is read into hers.
       yield* seedAccount(lin, shared);
 
       const support = yield* read(ada);

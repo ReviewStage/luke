@@ -9,42 +9,16 @@ import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_OPENAI_DEFAULTS } from "../providers/openai.js";
 
-/**
- * transcription.ts -- one dictated clip turned into its words by OpenAI's transcription model, on the caller's own OpenAI API key.
- *
- * One multipart POST to `/audio/transcriptions` with the clip, the model,
- * and the words the clip is likely to say as `keywords`, which is how the
- * model is told to spell "pnpm" rather than hear "P N P M"
- * (https://developers.openai.com/api/docs/guides/speech-to-text). The key
- * is revealed into the bearer header alone. Nothing of the exchange is
- * logged here, since the request is the developer's voice and the answer
- * their words; a failure carries the status OpenAI answered and nothing it
- * said.
- */
-
 const TRANSCRIPTION = {
-  /** The model OpenAI recommends for recorded speech in its own language. */
   MODEL: "gpt-transcribe",
   PATH: "/audio/transcriptions",
-  /** The name the clip is sent under, whose extension is how the endpoint knows the container. */
   FILE_NAME: "dictation.webm",
 } as const;
 
-/**
- * How long the model is given for a clip of up to two minutes before the clip
- * is answered as failed: inside the desktop's own wait for the route, so the
- * route answers why before the desktop stops listening.
- */
 const TRANSCRIPTION_TIMEOUT = Duration.seconds(25);
 
-/** The usage kind an answer reports where the model bills by the audio's length. */
 const USAGE_TYPE_DURATION = "duration";
 
-/**
- * The parts of an answer read here: the text, and the usage where the model
- * reports one. The model names more (the languages it heard), which is
- * dropped unread.
- */
 const TranscriptionAnswerSchema = Schema.Struct({
   text: Schema.String,
   usage: Schema.optionalKey(
@@ -55,13 +29,11 @@ const TranscriptionAnswerSchema = Schema.Struct({
   ),
 });
 
-/** What a clip came to: its words, and the seconds the model billed where it said. */
 export interface Transcribed {
   readonly text: string;
   readonly billedSeconds: number | undefined;
 }
 
-/** The clip was not transcribed: refused with a status, unanswered, or answered with no text. */
 export class TranscriptionFailed extends Data.TaggedError("TranscriptionFailed")<{
   readonly status: number | undefined;
 }> {}
@@ -85,7 +57,6 @@ function transcriptionRequest(input: {
   );
 }
 
-/** What the model answered: its status, and its body where it answered with words; a refusal's body is never read. */
 interface ModelReply {
   readonly status: number;
   readonly body: UnparsedWireValue;
@@ -103,14 +74,12 @@ function replyOf(
   }));
 }
 
-/** Transcribes one clip over the ambient client; a failure carries a status at most. */
 export const transcribeClip = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
   readonly key: Redacted.Redacted;
   readonly audio: Uint8Array<ArrayBuffer>;
   readonly keywords: readonly string[];
 }): Effect.fn.Return<Transcribed, TranscriptionFailed, HttpClient.HttpClient> {
   const client = yield* HttpClient.HttpClient;
-  // A request that failed or timed out is no answer, and its cause is dropped unread.
   const answered = yield* client.execute(transcriptionRequest(input)).pipe(
     Effect.flatMap((response) => replyOf(response)),
     Effect.scoped,

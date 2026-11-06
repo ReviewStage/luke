@@ -1,34 +1,3 @@
-/**
- * pull-request-links.ts -- the pull request a link draws, read once a minute per instance rather than once per link.
- *
- * A screen of plans and threads draws every pull request link as a chip, and
- * each chip asks `GET /api/github/repositories/pull-request` as it mounts,
- * so one desktop asks for the same pull request in bursts. Each ask read
- * the installation, minted or found a token, and read GitHub, and a burst
- * of them is what GitHub's secondary rate limit answers 403 to.
- *
- * So the answer is kept on the instance, per pull request as one member
- * asked for it: concurrent asks join the one read under way, an answer is
- * kept for `KEPT_LINK.ANSWER_TTL`, and a refusal GitHub answers 403 or 429
- * is held for as long as its `Retry-After` asks, or `KEPT_LINK.REFUSAL_HOLD`
- * where it names none, never past `KEPT_LINK.REFUSAL_HOLD_MAX`, so the asks
- * that follow a refusal are answered with it rather than sent. Any other
- * failure is not kept, so the next ask reads afresh. A failure is logged
- * where it is read, once per read rather than once per ask it answers.
- *
- * Note that the member is part of the key, because a repository no
- * installation reaches may be read on the member's own token, and what that
- * token reads is not another member's to see. Who may ask at all is checked
- * on every ask, before the kept answer is read, and so is whether the
- * workspace's installation or the member's token still reaches the
- * repository: through `GitHubApp`'s own kept reach and token, which read the
- * store's links and the member's token on every ask and GitHub only when
- * their own keeping lapses, so an installation disconnected or a token
- * revoked stops the kept answer at once rather than when it lapses. A held
- * refusal is answered before that check, since it shows nothing of the pull
- * request and may outlast the reach `GitHubApp` keeps.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import type { GitHubPullRequestSummary } from "@repo/features";
 import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
@@ -45,7 +14,6 @@ import { logWorkspaceReadFailure } from "./github-refusal.js";
 import { pullRequestQueued } from "./pull-request-merging.js";
 import { pullRequestByNumber } from "./pull-requests.js";
 
-/** How many links an instance keeps, and for how long an answer and a refusal are kept. */
 export const KEPT_LINK = {
   CAPACITY: 2_048,
   ANSWER_TTL: Duration.minutes(1),
@@ -53,10 +21,8 @@ export const KEPT_LINK = {
   REFUSAL_HOLD_MAX: Duration.minutes(15),
 } as const;
 
-/** What a read of a link may require of the function that stands it. */
 type LinkServices = DatabaseServices | GitHubApp | HttpClient.HttpClient;
 
-/** One pull request of one repository of one workspace, as one member asked for it. */
 export class PullRequestLinkKey extends Data.Class<{
   readonly workspaceId: string;
   readonly repository: string;
@@ -64,7 +30,6 @@ export class PullRequestLinkKey extends Data.Class<{
   readonly number: number;
 }> {}
 
-/** How long a read's outcome is kept: an answer a minute, GitHub's refusal as long as it asked, anything else not at all. */
 function keptFor(exit: Exit.Exit<unknown, GitHubWorkspaceReadFailure>): Duration.Duration {
   if (Exit.isSuccess(exit)) return KEPT_LINK.ANSWER_TTL;
   const failure = Option.getOrUndefined(Exit.findErrorOption(exit));
@@ -76,12 +41,6 @@ function keptFor(exit: Exit.Exit<unknown, GitHubWorkspaceReadFailure>): Duration
   return Duration.min(failure.retryAfter ?? KEPT_LINK.REFUSAL_HOLD, KEPT_LINK.REFUSAL_HOLD_MAX);
 }
 
-/**
- * The pull request of the number given, of a repository the workspace's
- * installation or the member's own token reaches, as much of it as a link
- * draws; none where neither reaches the repository or the repository holds
- * none of that number.
- */
 const pullRequestOfLink = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: PullRequestLinkKey,
 ): Effect.fn.Return<GitHubPullRequestSummary | null, GitHubWorkspaceReadFailure, LinkServices> {
@@ -97,7 +56,6 @@ const pullRequestOfLink = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Option.isNone(found)) return null;
   const pull = found.value;
-  // Note that a queue read GitHub could not answer draws the link as open rather than failing it.
   const queued =
     pull.state === PULL_REQUEST_STATE.OPEN &&
     (yield* pullRequestQueued(reached.value.token, key.repository, key.number).pipe(
@@ -126,18 +84,15 @@ const pullRequestOfLink = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** The pull requests links draw, kept on the instance on the terms above. */
 export class PullRequestLinks extends Context.Service<
   PullRequestLinks,
   {
-    /** The pull request the key names, kept or read, where the repository is still reached; a failure is logged where it was read, not by the caller. */
     readonly read: (
       key: PullRequestLinkKey,
     ) => Effect.Effect<GitHubPullRequestSummary | null, GitHubWorkspaceReadFailure, LinkServices>;
   }
 >()("PullRequestLinks") {}
 
-/** The instance's kept links, empty at the start. */
 export const pullRequestLinksLayer: Layer.Layer<PullRequestLinks> = Layer.effect(
   PullRequestLinks,
   Effect.gen(function* () {
@@ -149,7 +104,6 @@ export const pullRequestLinksLayer: Layer.Layer<PullRequestLinks> = Layer.effect
     return {
       read: (key) =>
         Effect.gen(function* () {
-          // Note that a held refusal is answered before the reach is read, because a hold may outlast the reach `GitHubApp` keeps, and a refusal shows nothing of the pull request.
           yield* Cache.getOption(kept, key);
           const app = yield* GitHubApp;
           const reached = yield* app

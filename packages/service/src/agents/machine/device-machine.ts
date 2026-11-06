@@ -1,63 +1,3 @@
-/**
- * device-machine.ts -- the agent machine over the starter's Mac: the runner launched there by a line the Mac follows, its stdin written as more lines, and our doors read through requests the Mac answers.
- *
- * A local agent (`agent.machine` is `mac`) runs its runner on the
- * Mac it is pinned to (`agent.device_id`), which follows the rows the
- * service queues for it (`@repo/database/models/device-agent-store`, the wire
- * in `@repo/features/device-agent-wire`) and answers through its procedures
- * (`../device-agents-procedures.ts`). Nothing here reaches the Mac directly:
- * every call is a row, and the Mac's word is a row it settled or answered.
- *
- * `layout` and `open` answer at once, from the agent and the agents folder
- * its Mac registered, or its home folder where it named none, with no round
- * trip: the agent's folder there holds
- * its worktree, which the Mac makes as it takes the launch line, the files
- * a message carries, and the skills its member installed into the app
- * (`deviceAgentLayout`). `launchRunner` queues the launch line, its runner's
- * environment and first lines sealed together under the deployment's key
- * ring (`sealMacLaunchSecrets`) and opened again only by the Mac's claim,
- * which clears the row's copy. `writeLine`, `writeFiles`, and `kill` queue a
- * message, files, or stop line, files in as many lines as their size takes
- * (`DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES`); a runner whose launch line
- * its Mac settled has ended, and a write to it answers `NOT_FOUND_STATUS`,
- * so a message relaunches it. `runnerExit` reads the exit code the Mac settled the
- * launch line with.
- *
- * Note that every line of one agent is queued under its runner lease, which
- * every caller of `launchRunner`, `writeLine`, `writeFiles`, and `kill`
- * holds (`../coder-host/runner-sessions.ts`), because the lines' order is
- * their order of commit and only the lease keeps two from interleaving
- * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
- * has no firewall we set, so its `firewall` does nothing, and nothing
- * to stop, resume, or throw away, since a warm runner is retired by the service
- * under its lease, settling its line: past its window by the sweep
- * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it,
- * or at its IDLE where its device waits to update
- * (`../coder-host/runner-sessions.ts`); the agent's folder goes from its
- * device only once the agent is archived (`../device-discard.ts`).
- * `wrote` reads whether a write was queued after the runner's launch line,
- * as a Stop's is, which the runner ends on.
- *
- * Whether a runner runs is read off the agent's newest launch line, which
- * stands for the record a sandbox's runner keeps in our store: it runs while that
- * line is unsettled and no stop line was queued after it, so a Stop is
- * honored the moment it is queued, whenever the Mac gets to it. A record
- * that no longer tells of a runner still running, as a retire's, queues a
- * stop line after it for the same reason, so a message sent next relaunches
- * rather than landing behind a line the runner ends on.
- *
- * `readFile` queues a request under an id it mints, waits for its answer
- * at most `MAC_MACHINE.ANSWER_WAIT`, and withdraws it however the wait ends; a Mac that has not beaten within
- * `MAC_PRESENCE.FRESH_MS` is away, and the call is unavailable at once, as a
- * stopped sandbox's is. `launchRunner`, `writeFiles`, and `writeLine` refuse
- * an away Mac at once too, as a Start on it is refused
- * (`LOCAL_AGENT_REFUSAL.MAC_AWAY`), and a host its account removed by name,
- * rather than queue a line no one may take for hours: a message, a Stop, or
- * a retire to it fails in words, and its open run is taken from it once its
- * lease lapses
- * (`../../maintenance/device-lease-sweep.ts`).
- */
-
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { hasRepository, readAgent } from "@repo/database/models/agent-store";
@@ -133,20 +73,11 @@ import {
 } from "./agent-machine.js";
 
 export const MAC_MACHINE = {
-  /** How long a tool's request waits for its Mac's answer before the call is unavailable. */
   ANSWER_WAIT: Duration.seconds(30),
-  /** How often a waiting request, or a runner's exit, is read again where the sync hub cannot wake it. */
   POLL: Duration.millis(250),
-  /** How long a read of a runner's exit waits where its caller names no wait, as a sandbox's does. */
   EXIT_WAIT: Duration.seconds(2),
 } as const;
 
-/**
- * The machine over the Mac, and whether a session is a local agent's, which
- * the router asks first (`agent-machines.ts`). Its open reaches none of the
- * services a sandbox's does, only the store it was made over; its launch
- * reads GitHub too, for who the agent's commits are by.
- */
 export interface DeviceMachineService extends AgentMachineService {
   readonly owns: (session: string) => Effect.Effect<boolean, SandboxUnavailable>;
   readonly open: <A, E, R, B, EB, RB>(
@@ -170,7 +101,6 @@ const encodeFilesPayload = Schema.encodeSync(deviceAgentFilesPayloadSchema);
 const encodeLaunchPayload = Schema.encodeSync(deviceAgentLaunchPayloadSchema);
 const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchSecretsSchema));
 
-/** A local agent's place on its Mac, under our session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
   return {
     machine: AGENT_MACHINE.DEVICE,
@@ -180,26 +110,18 @@ function macPlace(session: string, agentId: string): MachinePlace {
   };
 }
 
-/** The line that writes the text given to a runner's stdin, as a message or a Stop is written and later looked for. */
 function stdinLine(text: string) {
   return { kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } } as const;
 }
 
-/** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
 function unavailable(): SandboxUnavailable {
   return new SandboxUnavailable({});
 }
 
-/** The account's topic, which every write to its agents' lines and requests notifies (`deviceAgentLineSync`, `deviceAgentRequestSync`): a Mac's claim, answer, or settle among them. */
 function deviceTopics(userId: string): readonly SyncTopic[] {
   return [[TOPIC.ACCOUNT, userId]];
 }
 
-/**
- * The files given split into files lines, in their order, each holding at
- * most `DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES` of paths and bytes; a file
- * is never split, so one larger goes in a line alone.
- */
 function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFile[])[] {
   const lines: SandboxFile[][] = [];
   let bytes = 0;
@@ -217,38 +139,27 @@ function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFi
   return lines;
 }
 
-/** A line's payload as the row holds it: a JSON object. */
 function objectOf(value: object): DeviceAgentObject {
-  // SAFETY: every payload is a struct's encoded form, a JSON object of string keys.
   return value as DeviceAgentObject;
 }
 
-/**
- * The machine over the account's Macs, its store calls made on the services
- * given and its launches sealed under the deployment's key ring, where the
- * services carry one.
- */
 function deviceMachineOver(
   context: Context.Context<DatabaseServices>,
   environment: Option.Option<typeof HostedEnvironment.Service>,
 ): DeviceMachineService {
-  /** One store call on the services given, a failure of it unavailable. */
   const stored = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) =>
     effect.pipe(
       Effect.provideContext(context),
       Effect.mapError(() => unavailable()),
     );
 
-  /** The local agent a place names, by its id. */
   const pinOfPlace = (place: MachinePlace) =>
     Effect.flatMap(stored(deviceAgentPin(place.running)), (pin) =>
       Option.isSome(pin) ? Effect.succeed(pin.value) : Effect.fail(unavailable()),
     );
 
-  /** The local agent running in the session, where one does. */
   const pinOfSession = (session: string) => stored(deviceAgentOfSession(session));
 
-  /** Where the agent's things stand on its Mac, under the agents folder that Mac registered, or its home folder where it named none; refused where it is pinned to no Mac of its starter's. */
   const layoutOf = (userId: string, agentId: string, deviceId: string | null | undefined) =>
     Effect.gen(function* () {
       if (deviceId === null || deviceId === undefined) {
@@ -256,12 +167,10 @@ function deviceMachineOver(
       }
       const device = yield* stored(deviceLayout(userId, deviceId));
       if (Option.isNone(device)) {
-        // Note that a removed host is refused by name, so the member is told it is gone rather than to try again.
         return yield* (yield* stored(hostRemoved(userId, deviceId)))
           ? new LaunchRefused({ reason: "host removed", deviceRemoved: true })
           : new LaunchRefused({ reason: "no mac" });
       }
-      // Note that a Mac's own word for its agents folder is taken over this build's root, so a release that moves the root on either side still lays a launch out where its Mac looks.
       const folders = deviceAgentLayoutIn(
         device.value.agentsFolder ?? deviceAgentsFolder(device.value.home),
         agentId,
@@ -269,20 +178,16 @@ function deviceMachineOver(
       const layout: MachineLayout = {
         checkoutPath: folders.checkoutPath,
         installedSkills: folders.installedSkills,
-        // Note that the Mac writes the skills where they are installed, since no root installs them after.
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
-        // Note that the Mac answers reads inside the agent's folder alone, so what we read back is saved in its temp folder, never `/tmp`.
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
-        // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
       };
       return layout;
     });
 
-  /** One line queued for the agent; unavailable where the store holds no such agent on a Mac. */
   const queued = (
     pin: DeviceAgentPin,
     line: {
@@ -297,14 +202,12 @@ function deviceMachineOver(
       (row) => (Option.isSome(row) ? Effect.void : Effect.fail(unavailable())),
     );
 
-  /** Whether the runner a handle names has ended: its launch line settled, or gone. */
   const runnerEnded = (pin: DeviceAgentPin, handle: RunnerHandle) =>
     Effect.map(
       stored(deviceAgentLineStanding(pin.userId, handle.command)),
       (standing) => Option.isNone(standing) || standing.value.settled,
     );
 
-  /** Whether the agent's Mac has beaten lately. */
   const present = (pin: DeviceAgentPin) =>
     Effect.gen(function* () {
       if (pin.deviceId === null) return false;
@@ -314,11 +217,6 @@ function deviceMachineOver(
       return seen.some((device) => device.id === pin.deviceId);
     });
 
-  /**
-   * Refused as a Start on an away Mac is, where the agent's Mac has not
-   * beaten lately; refused by name where it is a host its account removed,
-   * which no presence read lists and no message brings back.
-   */
   const refuseAway = (pin: DeviceAgentPin) =>
     Effect.gen(function* () {
       if (yield* present(pin)) return;
@@ -328,11 +226,6 @@ function deviceMachineOver(
       return yield* new LaunchRefused({ reason: "mac away", deviceAway: true });
     });
 
-  /**
-   * One request asked of the agent's Mac and its answer waited for, the row
-   * withdrawn however the wait ends; unavailable where the Mac is away, or
-   * did not answer in time.
-   */
   const asked = (
     session: string,
     kind: (typeof DEVICE_AGENT_REQUEST_KIND)[keyof typeof DEVICE_AGENT_REQUEST_KIND],
@@ -360,7 +253,6 @@ function deviceMachineOver(
       return answer.value;
     });
 
-  /** The runner's exit as its launch line was settled: its code, gone where it settled with none or the line is gone, null while it runs. */
   const exitOf = (pin: DeviceAgentPin, handle: RunnerHandle) =>
     Effect.map(
       stored(deviceAgentLineStanding(pin.userId, handle.command)),
@@ -371,7 +263,6 @@ function deviceMachineOver(
       },
     );
 
-  /** Whether the agent's Mac registered that it launches an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
   const signsInOwnGithub = (pin: DeviceAgentPin) =>
     pin.deviceId === null
       ? Effect.succeed(false)
@@ -381,7 +272,6 @@ function deviceMachineOver(
           ),
         );
 
-  /** The deployment's key ring, which a launch's secrets are sealed under; refused where it has none. */
   const keyRing = Effect.gen(function* () {
     const keys = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
     const ring = keys === undefined ? undefined : parseKeyRing(keys);
@@ -396,9 +286,6 @@ function deviceMachineOver(
 
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
 
-    // The worktree is the device's to make of its shared clone as it takes the launch line, on the
-    // agent's own GitHub token, or the device's own GitHub sign-in for an agent on its starter's
-    // token, so the open asks the device nothing and leaves nothing to finish.
     open: (ask, use) =>
       Effect.gen(function* () {
         const [layout, beside] = yield* Effect.all(
@@ -416,7 +303,6 @@ function deviceMachineOver(
         );
       }),
 
-    // The session's pin names its account, so the account given is not needed to find it.
     findPlaces: (_userId, session) =>
       Effect.gen(function* () {
         const pin = yield* pinOfSession(session);
@@ -448,14 +334,11 @@ function deviceMachineOver(
           running: place,
           runner: live,
           launch: Option.getOrUndefined(mark),
-          // SAFETY: the pin is this machine's own to read back; no caller reads it.
           kept: pin.value as unknown as MachineKept,
         };
         return [found];
       }),
 
-    // The record is the agent's launch and stop lines themselves, which `findPlaces` reads: a
-    // runner the record no longer tells of is stopped, and one it tells of was recorded by its launch.
     recordRunner: (place, record) =>
       Effect.gen(function* () {
         if (record.kind === RUNNER_RECORD.RUNNING) return;
@@ -472,20 +355,13 @@ function deviceMachineOver(
       clear: () => Effect.void,
     },
 
-    // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
     resume: (found) =>
       found.running === undefined ? Effect.fail(unavailable()) : Effect.succeed(found.running),
 
     stop: () => Effect.void,
 
-    // The device removes the agent's folder on its own discard line (`device-discard.ts`), so
-    // nothing is thrown away here; a retired bearer shuts its runner out.
     discard: () => Effect.void,
 
-    // Note that files go to an away Mac no more than the message naming them does, so a message
-    // refused while it is away leaves nothing behind for it to write when it is back. They go in
-    // as many lines as their size takes, because the Mac's claim of one answers 4.5 MB at most;
-    // each is queued in turn, so a line queued after them, as a launch, is delivered after them all.
     writeFiles: (place, files: readonly SandboxFile[]) =>
       Effect.flatMap(pinOfPlace(place), (pin) =>
         Effect.andThen(
@@ -510,18 +386,10 @@ function deviceMachineOver(
         ),
       ),
 
-    // The secrets and the first lines are sealed together, bound to the agent, before the line is
-    // queued; a launch whose line was not queued undoes what its caller recorded of it. Who the
-    // agent's commits are by is read beside the caller's steps, as a sandbox's deepen reads it
-    // (`agentCommitIdentity`), and kept as it ended, so a read that failed fails the launch where
-    // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
-    // so an agent whose repository was made before the field gets it too.
-    // Note that only an agent in the cloud works in repositories beside its own, so a device clones none.
     checkOutExtras: () => Effect.void,
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);
-        // Note that the refusal comes before the caller's steps run, so it has nothing to undo.
         yield* refuseAway(pin);
         const read = Effect.gen(function* () {
           const agent = yield* stored(readAgent(pin.userId, pin.agentId));
@@ -537,7 +405,6 @@ function deviceMachineOver(
         if (Option.isNone(agent)) return yield* new LaunchRefused({ reason: "no agent" });
         const onOwnSignIn =
           hasRepository(agent.value) && agent.value.githubAccess === GITHUB_ACCESS.TOKEN;
-        // Note that an agent on its starter's own token whose host is a build from before it, as one whose host went back to an older release since its Start, is refused here too, since that host would ask for a token the service never hands a device.
         if (onOwnSignIn && !(yield* signsInOwnGithub(pin))) {
           yield* Effect.ignore(launch.abandon(ready));
           return yield* new LaunchRefused({ reason: "host predates its own github sign-in" });
@@ -582,7 +449,6 @@ function deviceMachineOver(
         yield* queued(pin, stdinLine(text));
       }),
 
-    // The runner's handle names its launch line, after which every write to it is queued in order.
     wrote: (handle, text) =>
       Effect.flatMap(pinOfPlace(handle), (pin) =>
         stored(deviceAgentLineQueuedAfter(pin.userId, handle.command, stdinLine(text))),
@@ -622,7 +488,6 @@ function deviceMachineOver(
   };
 }
 
-/** The machine over the account's Macs, on the calling fiber's store and, where it has one, the deployment's key ring. */
 export const deviceMachine: Effect.Effect<DeviceMachineService, never, DatabaseServices> =
   Effect.gen(function* () {
     const context = yield* Effect.context<DatabaseServices>();

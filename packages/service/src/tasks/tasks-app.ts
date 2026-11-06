@@ -18,44 +18,22 @@ import {
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 
-/**
- * tasks-app.ts -- a description's attachment served as its bytes, a picture its text names or a file one of its comments carries: the one plan read the hosted oRPC router does not answer, since it answers bytes rather than JSON.
- *
- * The plans themselves, and each one's edit, history, transcript, work,
- * and Stop, are the router's (`tasks-procedures.ts`), and so are its
- * repository's files, its pages, and a picture kept on it
- * (`task-files-procedures.ts`). The read here resolves the bearer before it
- * touches a row, and every row it touches is one the bearer's account
- * reaches: a plan id another account owns answers exactly as one that names
- * nothing, so nothing is learned about plans the caller does not hold.
- */
-
 const TASKS_PATH = {
-  /** GET serves one attachment of the description as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
   ATTACHMENT: "/api/plans/attachment",
 } as const;
 
 const TASK_ID_QUERY = "id";
 
-/** The query naming one attachment of the description by its id. */
 const ATTACHMENT_QUERY = "attachment";
 
 export interface TasksAppSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** What the route may require of the function that stands it: the store. */
 export type TasksAppServices = DatabaseServices;
 
 type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest | Scope.Scope;
 
-/**
- * GET serves one attachment of the description as its bytes, to the members of the
- * plan's workspace alone: a picture or a video its text names, under the
- * media type the service sniffed it to be as it was kept, or else a file one
- * of its comments carries, under the type it traveled as. An attachment of a plan the
- * account does not reach, or of another plan, is not found, as a plan is.
- */
 const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/descriptionAttachmentEndpoint")(
   function* (
     seams: TasksAppSeams,
@@ -84,7 +62,6 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/descriptionAttachmentE
   },
 );
 
-/** The group: the task paths, and the hosted vocabulary's own refusal for any other. */
 export function tasksApp(seams: TasksAppSeams): WebRoutes<TasksAppServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, TASKS_PATH.ATTACHMENT, hostedRefusing(attachmentEndpoint(seams))),

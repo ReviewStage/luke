@@ -1,19 +1,3 @@
-/**
- * agent-machines.ts -- the two agent machines behind one: each call answered by the machine its agent's row names, Vercel Sandbox or the starter's Mac.
- *
- * A call that holds an agent asks the machine its row names
- * (`agent.machine`), and one that holds a place or a runner asks the
- * machine that place names. A call that holds a session alone, as a door
- * and a later call's find do, asks the Mac first whether the session is a
- * local agent's, and Vercel Sandbox otherwise, so a sandbox's session costs
- * one read of the store before its own call.
- *
- * The deployment composes it once for the native harnesses and the doors
- * (`agentMachinesLayer`), and a launch's end and the sweep's retire, which
- * hold no edge's runner for a checkout, compose its lifecycle alone
- * (`deploymentLifecycle`).
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
@@ -24,7 +8,6 @@ import { AgentMachine, type AgentMachineService, type MachineLifecycle } from ".
 import { type DeviceMachineService, deviceMachine } from "./device-machine.js";
 import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./vercel-machine.js";
 
-/** The lifecycle of whichever machine answers for the session, or for the place or runner named. */
 function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
   const of = (machine: AgentMachineKind): MachineLifecycle =>
     machine === AGENT_MACHINE.DEVICE ? mac : cloud;
@@ -57,7 +40,6 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
   };
 }
 
-/** Both machines behind one, as above. */
 function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): AgentMachineService {
   const of = (machine: AgentMachineKind | undefined): AgentMachineService =>
     machine === AGENT_MACHINE.DEVICE ? mac : cloud;
@@ -71,7 +53,6 @@ function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): A
   };
 }
 
-/** The deployment's machines' lifecycle, Vercel asked under the function's own OIDC token. */
 export const deploymentLifecycle: Effect.Effect<
   MachineLifecycle,
   never,
@@ -81,7 +62,6 @@ export const deploymentLifecycle: Effect.Effect<
   return routedLifecycle(vercelLifecycle(api), yield* deviceMachine);
 });
 
-/** The deployment's machines behind one, Vercel asked under the token given and its checkout run through the edge's runner. */
 export function agentMachinesLayer(
   options: VercelMachineOptions,
 ): Layer.Layer<AgentMachine, never, HttpClient.HttpClient | DatabaseServices> {

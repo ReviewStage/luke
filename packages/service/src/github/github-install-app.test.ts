@@ -10,16 +10,6 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { GitHubApp, type GitHubAppSettings } from "./github-app.js";
 import { githubInstallApp } from "./github-install-app.js";
 
-/**
- * The install group over the real `GitHubApp` with GitHub a fake behind the
- * `HttpClient`. Both routes are browser navigations, so what each case holds
- * is where the browser is sent: to GitHub's install page, or on to the
- * landing page with the one status word the route settled on, whatever
- * GitHub sent or failed to send.
- *
- * Synthetic key and secrets throughout.
- */
-
 const ORIGIN = "https://app.test";
 const INSTALLATION_ID = 777;
 const LANDING = "/github-installed?status=";
@@ -40,7 +30,6 @@ interface Sent {
   readonly authorization: string | null;
 }
 
-/** GitHub knowing one installation of the App, every request written down. */
 function githubKnowing(installationId: number | undefined, status: number = HOSTED_HTTP_STATUS.OK) {
   const sent: Sent[] = [];
   const layer = fakeHttpClientLayer((url, init) => {
@@ -57,7 +46,6 @@ function githubKnowing(installationId: number | undefined, status: number = HOST
   return { layer, sent };
 }
 
-/** The group's answer over the fake GitHub, with the App configured or, for a deployment without one, not. */
 function answer(
   path: string,
   github: ReturnType<typeof githubKnowing>,
@@ -92,7 +80,6 @@ test("an install GitHub confirms as this App's lands as installed, asked for as 
   assert.equal(response.headers.get("location"), `${LANDING}${GITHUB_INSTALL_STATUS.INSTALLED}`);
   const [read] = github.sent;
   assert.equal(read?.url, `https://api.github.com/app/installations/${INSTALLATION_ID}`);
-  // The App's JWT, never its client secret, is what asks.
   assert.match(
     read?.authorization ?? "",
     /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u,

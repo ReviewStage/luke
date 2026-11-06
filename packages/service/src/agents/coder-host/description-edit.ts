@@ -43,58 +43,18 @@ import {
 import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
 
-/**
- * description-edit.ts -- the coding agent's `edit_description` tool: the notetaker's own notes, taken into the description of the task it names, and pictures from its sandbox added to it.
- *
- * An agent that meets something the description does not settle, verifies a fact
- * the description has wrong, or makes a decision the description left open does not stop
- * and does not keep it to itself: it takes notes on the description through the
- * description's one write (`description-notes.ts`), which journals the save under the
- * agent's id, so the developer and the other agents read them and see which
- * agent wrote what. Every call names the task whose description it edits, its own
- * or any other of its workspace, as a pilot fixes a child task's description, so
- * an agent on no task edits one too; the store writes only a task the
- * member whose turn it is reaches (`agent-doors.ts`). A call's notes
- * may land anywhere in the description, its headings among it, and land together or
- * not at all: one naming what the description does not hold exactly once answers the
- * description as it stands, so the agent retries from it rather than from the text
- * it was handed. Note that the call answers at once, whatever was
- * saved, because the agent's turn is its whole run and nothing is answered
- * to it mid-turn; an answer reaches it as a later message. A turn may take
- * only so many notes: past the cap the agent is told to go on and name the
- * rest in its message, so a model that writes at every step cannot rewrite
- * the description under the developer.
- *
- * Beside its notes the agent may add pictures, which the notetaker cannot,
- * having none: a screenshot it took, or a WebM it recorded of a flow, named
- * by its file in its sandbox, read as an inbox post's is (`inbox-image.ts`),
- * a recording as it is and up to a video's bound, kept as one of the description's
- * pictures as the member the turn runs for, and written as the picture's
- * line at the end of its section, an added point like any other, so the
- * save is the agent's and its byline names it. Every file is read before any
- * picture is kept, and a call with a picture to mend saves nothing.
- *
- * A member's own notes, which an outside agent takes for them through the
- * member MCP server, go through the same save, written as the developer's
- * and with no picture (`recordMemberDescriptionNotes`).
- */
 const DESCRIPTION_EDIT = {
-  /** The most notes one turn may take on the description, across its calls, each picture one of them. */
   MAX_NOTES_PER_TURN: 40,
   MAX_PICTURES_PER_CALL: 4,
   MAX_PATH_CHARS: 1_024,
-  /** The most characters a picture's alt text may spell: what it shows, in a sentence or two. */
   MAX_ALT_CHARS: 300,
-  /** The most characters a picture's caption may spell: one short line. */
   MAX_CAPTION_CHARS: 200,
 } as const;
 
-/** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
   return Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumChars));
 }
 
-/** One picture the agent adds: its file in the sandbox, its words, and the section it goes under. */
 const pictureSchema = Schema.Struct({
   section: descriptionNoteSectionSchema,
   path: describeWire(
@@ -122,10 +82,8 @@ const readPictures = readEither(picturesSchema);
 
 const editedTaskSchema = Schema.Struct({ taskId: wireUuidSchema });
 
-// The call's notes and pictures stand beside its task, and are read on their own.
 const readEditedTask = readEither(editedTaskSchema, { excess: EXCESS_KEYS.DROP });
 
-/** What a call carries: the task whose description it edits, the notetaker's notes, and the pictures only an agent adds. */
 const EDIT_DESCRIPTION_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
@@ -140,7 +98,6 @@ const EDIT_DESCRIPTION_INPUT = Schema.Struct({
   ),
 });
 
-/** The tool as a coding agent is offered it: its name, its words, and the notetaker's own input schema with the pictures beside it. */
 export const EDIT_DESCRIPTION_TOOL = {
   name: "edit_description",
   description:
@@ -164,7 +121,6 @@ export const EDIT_DESCRIPTION_TOOL = {
   inputSchema: EDIT_DESCRIPTION_INPUT,
 } as const;
 
-/** Why a call saved nothing, in the words the model reads. */
 export const DESCRIPTION_EDIT_REFUSAL = {
   UNREADABLE: "Not saved: the notes do not read under the notes' schema.",
   TOO_MANY: `Not saved: a turn may take at most ${DESCRIPTION_EDIT.MAX_NOTES_PER_TURN} notes on the description. Go on, and name what you would have noted in your message.`,
@@ -182,10 +138,8 @@ export const DESCRIPTION_EDIT_REFUSAL = {
     "Not saved: none of this call's notes was taken, because one names what the description does not hold exactly once. The description as it stands is in current; retry from it.",
 } as const;
 
-/** The most of a missed note's find its answer repeats; the description as it stands follows it whole. */
 const MISSED_FIND_CHARS = 200;
 
-/** Why a picture's file was not read (`inbox-image.ts`), in the words the model reads; each is followed by the path. */
 export const TASK_PICTURE_FILE_REFUSAL = {
   NO_FILE: "Not saved: a picture names no file in your sandbox:",
   NOT_IMAGE:
@@ -193,7 +147,6 @@ export const TASK_PICTURE_FILE_REFUSAL = {
   TOO_LARGE: `Not saved: a picture names an image larger than ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, or a video larger than ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB; take it smaller, or at one screen scale, or record a shorter flow:`,
   UNREADABLE: "Not saved: a picture's file could not be read from your sandbox:",
 } as const;
-/** How many notes a turn has taken: the turn and its count. */
 export interface NotesTaken {
   readonly turnId?: string;
   readonly count: number;
@@ -201,21 +154,14 @@ export interface NotesTaken {
 
 export const NO_NOTES_TAKEN: NotesTaken = { count: 0 };
 
-/** How many notes the turn given has taken; a record of another turn counts for nothing. */
 export function takenInTurn(taken: NotesTaken, turnId: string): number {
   return taken.turnId === turnId ? taken.count : 0;
 }
 
-/**
- * The record with a call's notes reserved against the turn's cap before the
- * save goes out, because two calls one step makes run at once and each would
- * otherwise read the count the other has not yet raised.
- */
 export function reserveNotes(taken: NotesTaken, turnId: string, requested: number): NotesTaken {
   return { turnId, count: takenInTurn(taken, turnId) + requested };
 }
 
-/** The record settled once the save answered: the reservation replaced by what was taken, which is nothing for a refused call. */
 export function settleNotes(
   taken: NotesTaken,
   turnId: string,
@@ -225,26 +171,17 @@ export function settleNotes(
   return { turnId, count: Math.max(0, takenInTurn(taken, turnId) - requested + saved) };
 }
 
-/** The task a call names, or nothing where it names none that reads, which refuses it whole. */
 export function editedTaskOf(input: UnparsedWireValue): string | undefined {
   const read = readEditedTask(input);
   return Result.isSuccess(read) ? read.success.taskId : undefined;
 }
 
-/**
- * A call's notes, or nothing where the call holds no list of notes or any
- * of its notes does not read, which refuses it whole.
- */
 function notesOf(input: UnparsedWireValue): readonly DescriptionNote[] | undefined {
   if (!isRecord(input) || !Array.isArray(input.notes)) return undefined;
   const { notes, unread } = readNotes(input);
   return unread > 0 ? undefined : notes;
 }
 
-/**
- * A call's pictures: none where it adds none, or nothing where its pictures
- * do not read, which refuses it whole.
- */
 function picturesOf(input: UnparsedWireValue): readonly TaskPicture[] | undefined {
   if (!isRecord(input)) return undefined;
   if (input.pictures === undefined) return [];
@@ -252,16 +189,10 @@ function picturesOf(input: UnparsedWireValue): readonly TaskPicture[] | undefine
   return Result.isSuccess(read) ? read.success : undefined;
 }
 
-/** How many notes a call asks to take, each picture one, read off its input; nothing readable asks for none, and the save refuses it by name. */
 export function requestedNotes(input: UnparsedWireValue): number {
   return (notesOf(input)?.length ?? 0) + (picturesOf(input)?.length ?? 0);
 }
 
-/**
- * What a call answers, as the model reads it: how many
- * notes it took, or why nothing was saved, with the note that missed and the
- * description as it stands where the description no longer holds what a note names.
- */
 export type DescriptionEditResult =
   | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly taken: number }
   | {
@@ -281,7 +212,6 @@ function refused(
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** A note that missed, in the words the model reads: its kind and where it was aimed, a long find cut. */
 function missedNote(note: DescriptionNote): string {
   if (note.kind === NOTE_KIND.ADD) return `${note.kind} under ${note.section}`;
   const find =
@@ -289,18 +219,11 @@ function missedNote(note: DescriptionNote): string {
   return `${note.kind} ${find}`;
 }
 
-/** A picture the call adds, with its file as read from the sandbox. */
 interface PictureRead {
   readonly picture: TaskPicture;
   readonly file: Picture;
 }
 
-/**
- * Every picture's file read from the sandbox, in order, or the refusal of
- * the first that is not, naming its path. Note that a file is read under an
- * inbox post's bounds, because a description holds an image and a recording to the
- * same two (`PICTURE_BOUNDS`).
- */
 function readPictureFiles(
   pictures: readonly TaskPicture[],
   sandbox: InboxSandboxDoor,
@@ -322,16 +245,13 @@ function readPictureFiles(
   });
 }
 
-/** A call's pictures as read before anything is kept: their files, and the workspace step their addresses are written under. */
 interface PicturesRead {
   readonly slug: string;
   readonly files: readonly PictureRead[];
 }
 
-/** A call that adds no picture: nothing read, and no address to write. */
 const NO_PICTURES: PicturesRead = { slug: "", files: [] };
 
-/** Why a call's save was refused inside its transaction, so the pictures kept before it are rolled back with it. */
 class EditRefused extends Data.TaggedError("EditRefused")<{
   readonly refusal: Extract<
     DescriptionEditResult,
@@ -339,13 +259,6 @@ class EditRefused extends Data.TaggedError("EditRefused")<{
   >;
 }> {}
 
-/**
- * The call's pictures read before anything is kept, or why none can be: the
- * description gone or archived, or a file to mend. The description's address names its
- * workspace by the slug the account reads it under, or by its id where the
- * workspace names none, as the desktop names it: an address is found by its
- * description's id alone.
- */
 function picturesInSandbox(
   binding: DescriptionDocumentBinding,
   pictures: readonly TaskPicture[],
@@ -364,11 +277,6 @@ function picturesInSandbox(
   });
 }
 
-/**
- * The pictures read kept on the description as the binding's account, each written
- * as an added point, its picture's line under its section. Note that this
- * runs inside the call's transaction, so a refusal keeps none of them.
- */
 function keptAsNotes(
   binding: DescriptionDocumentBinding,
   read: PicturesRead,
@@ -404,12 +312,6 @@ function keptAsNotes(
   });
 }
 
-/**
- * The call's notes, and the pictures read for it kept and added after them,
- * saved in one transaction under the writer given, or the refusal the save
- * answered. Note that a refusal anywhere keeps no picture, so none holds a
- * place in the description's bound.
- */
 function savedEdit(
   binding: DescriptionDocumentBinding,
   writer: DescriptionWriter,
@@ -444,13 +346,6 @@ function savedEdit(
   );
 }
 
-/**
- * Runs one call: the notes taken into the description the binding names, and its
- * pictures read from the sandbox, kept, and added after them. Every file is
- * read before the store is written (`savedEdit`). Note that `takenInTurn` is
- * the caller's count of this turn's notes, because the turn's row keeps it
- * (`reserveTurnDescriptionNotes`).
- */
 export function recordDescriptionEdit(
   binding: DescriptionDocumentBinding,
   author: DescriptionNoteAuthor,
@@ -479,14 +374,6 @@ export function recordDescriptionEdit(
   );
 }
 
-/**
- * A member's own notes, as an outside agent takes them for the member
- * through the member MCP server (`../../member-mcp/`): the same save as a
- * coding agent's, written as the developer's, as the member's own edit in the
- * window is, and with no picture, since no sandbox stands behind a member.
- * Note that no turn's count caps them, since a member takes no turn: the
- * notes' schema bounds one call's, which the server checks before it runs.
- */
 export function recordMemberDescriptionNotes(
   binding: DescriptionDocumentBinding,
   input: UnparsedWireValue,

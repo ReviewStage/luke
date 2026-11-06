@@ -1,41 +1,3 @@
-/**
- * codex-plan-sweep.ts -- the scheduled sweep's renewal of the ChatGPT plan token a Codex agent's sandbox carries at its firewall, before the token lapses, for as long as the launch it was set for runs.
- *
- * A Codex launch on its starter's plan in a sandbox holds no token: its token
- * command answers a placeholder, and the launch sets the swap that carries
- * the account's access token in its place on OpenAI's API at the sandbox's
- * firewall (`coder-host/codex-sessions.ts`, `LAUNCH_SWAP.OPENAI_PLAN`). A
- * token lives about an hour and a run may last a day, and nothing in the
- * sandbox asks for another, so this sweep renews it: once a minute it reads
- * a window of the sandbox sessions whose firewall launch is kept, which
- * moves along them from one minute to the next, and in each whose launch
- * holds the plan's swap sets the account's token as it stands behind the
- * same placeholder, renewed first where less than the launch's margin is
- * left of it, and sends the session's whole policy with the agent's
- * repository credential minted afresh (`renewPlanSwap`), to the sandbox its
- * agent's session tag finds running that session. A swap that already
- * carries it is left, so a session is written, and its policy sent, only as
- * its account's token moves on, about every quarter hour. The swap stands no
- * longer than its runner: it is cleared ahead of its sandbox's stop, and let
- * go where a Terminal keeps the sandbox up past the runner's end, so a
- * launch's renewals end with it.
- *
- * Note that a swap is set with at least the margin left on its token, and
- * the window is as wide as reads every standing session within a quarter
- * hour (`CODEX_PLAN_SWEEP`), a third of it, so a token lapses under no turn
- * while the account's sign-in still renews. Past fifteen thousand standing
- * sessions, the widest window one sweep reads, the round grows longer, and
- * the sweep says so each minute it does. A renewal whose send failed
- * leaves the kept launch ahead of the policy, and the session's next write
- * sends it, a message's renewal of its GitHub credential or the Terminal's
- * among them, while the token the policy still carries has the margin
- * left. A sign-in that no longer renews leaves the swap as it stands,
- * and OpenAI refuses the turn once its token lapses, as the route refuses a
- * Mac's command, the sweep counting it failed, as it counts OpenAI not
- * answering or the plan's limit reached. What is logged of a failure
- * is its kind and the composer's words, which name no value.
- */
-
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
@@ -50,29 +12,19 @@ import type { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 
 const CODEX_PLAN_SWEEP = {
-  /** The most minutes between two reads of one standing session, well inside the launch's forty-five minute margin. */
   ROUND_MINUTES: 15,
-  /** The fewest sessions one sweep reads, so a deployment with few reads every one each minute. */
   MIN_SESSIONS: 50,
-  /** The most sessions one sweep reads, so its minute holds; past it the round grows longer. */
   MAX_SESSIONS: 1_000,
   CONCURRENCY: 5,
 } as const;
 
-/** How long one window stands before the next: the sweep's own cadence. */
 const WINDOW_PERIOD_MS = 60_000;
 
-/** What one sweep came to: swaps renewed, and sessions whose renewal failed or found no token to set (`PLAN_RENEWAL.UNANSWERED`), each left for a later minute. */
 export interface CodexPlanSweepOutcome {
   renewed: number;
   failed: number;
 }
 
-/**
- * This minute's window of the `standing` sessions: as wide as reads every
- * one within the round, between the sweep's bounds, starting where the
- * minute puts it and wrapping round, as offsets into their list.
- */
 function windowOf(standing: number, now: Date) {
   const { ROUND_MINUTES, MIN_SESSIONS, MAX_SESSIONS } = CODEX_PLAN_SWEEP;
   const width = Math.min(MAX_SESSIONS, Math.max(MIN_SESSIONS, Math.ceil(standing / ROUND_MINUTES)));
@@ -84,11 +36,6 @@ function windowOf(standing: number, now: Date) {
   return { width, pages };
 }
 
-/**
- * Renews the plan's token behind every standing swap in this minute's
- * window, `CONCURRENCY` at a time; a deployment with no key ring has no
- * launch it could open, and renews nothing, which it says.
- */
 export const sweepCodexPlanSwaps = /* @__PURE__ */ Effect.fn("web/sweepCodexPlanSwaps")(function* (
   keys: Redacted.Redacted | undefined,
   now: Date,

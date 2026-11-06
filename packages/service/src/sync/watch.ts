@@ -1,68 +1,31 @@
-/**
- * watch.ts -- what a wait on the database waits through: a watch on topics, woken by Sync or by its own clock.
- *
- * A reader that waits for rows to change opens a watch on the topics those
- * rows notify (`@repo/database/sync/notification`), then reads, then waits on
- * the watch's `next` before each read after. A watch registers before the
- * first read, so a write that commits while that read runs still wakes the
- * next `next`. Where nothing can wake it (no hub, its listener down, or a
- * watch on no topics) `next` waits the watch's fallback, the caller's own
- * poll, which is how every wait behaved before Sync.
- *
- * `Sync` is the instance's hub (`hub.ts`) where the runtime provides one, as
- * the deployment's does, and the clock where it does not, so a runtime or a
- * test that provides nothing waits on its clock.
- */
 import type { SyncTopic } from "@repo/database/sync/notification";
 import { Context, type Duration, Effect, Option, type Scope } from "effect";
 
-/** The topics a watch with none names: it waits its fallback alone. */
 export const NO_TOPICS: readonly SyncTopic[] = [];
 
-/** What a `next` woken by no write answers. */
 const NO_TXIDS: readonly string[] = [];
 
-/** One reader's watch, standing for as long as the scope it was opened in. */
 export interface SyncWatch {
-  /**
-   * Completes once a write on the watch's topics has committed since the
-   * previous `next` returned, or since the watch was opened, answering the
-   * ids of the transactions it saw; or after the fallback, answering none,
-   * where the hub cannot wake it.
-   */
   readonly next: Effect.Effect<readonly string[]>;
-  /**
-   * The instant, in clock milliseconds, the earliest write the last `next`
-   * answered was heard, which is how long a reader that read after it
-   * took to answer; none where that `next` answered no write.
-   */
   readonly heardAt: Effect.Effect<Option.Option<number>>;
 }
 
 export interface SyncShape {
-  /**
-   * Opens a watch on the topics, answering once the listener hears them, so
-   * a read made after it misses no commit; `fallback` is how long its `next`
-   * waits where nothing wakes it.
-   */
   readonly watch: (
     topics: readonly SyncTopic[],
     fallback: Duration.Duration,
   ) => Effect.Effect<SyncWatch, never, Scope.Scope>;
 }
 
-/** A watch only its clock wakes. */
 export const clockWatch = (fallback: Duration.Duration): SyncWatch => ({
   next: Effect.as(Effect.sleep(fallback), NO_TXIDS),
   heardAt: Effect.succeed(Option.none()),
 });
 
-/** No hub: every watch waits on its clock. */
 const CLOCK_SYNC: SyncShape = {
   watch: (_topics, fallback) => Effect.succeed(clockWatch(fallback)),
 };
 
-/** Sync as one runtime has it: the hub where the runtime provides one, the clock otherwise. */
 export const Sync = Context.Reference<SyncShape>("@repo/service/Sync", {
   defaultValue: () => CLOCK_SYNC,
 });

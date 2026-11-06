@@ -31,19 +31,6 @@ import {
 import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 import { type BrowserLiveDependencies, type BrowserLiveViewer, relayBrowserTab } from "./relay.js";
 
-/**
- * One live view of one tab, over a fake Chromium behind the real browser
- * service and a store the scenario keeps, on the test clock: the tab's
- * frames reach the panel and are acknowledged no faster than the cap, its
- * page state follows, input is refused until the member takes the tab
- * over and reaches the page mapped onto it after, any socket of the member
- * whose takeover stands drives it, a member who does not control the agent
- * cannot take it, a close hands the tab back, and a coding agent's sandbox
- * is held while its tab is watched. A tab the browser no longer holds, or
- * the store no longer lists, closes as gone; an agent with no sandbox yet
- * as not opened; and a panel that sends nothing as idle.
- */
-
 const SESSION = "wrun_live_fixture";
 const TARGET = "page-live";
 const TARGET_SESSION = "target-session-1";
@@ -57,7 +44,6 @@ const ASK = {
 const CONVERSATION = "conversation-agent";
 const FRAME_DATA = "ZmFrZS1mcmFtZQ==";
 
-/** The tab as the store reads it, a coding agent's on the deployment's GitHub App unless another agent is named. */
 function reachedTab(agent: ReachedBrowserTab["agent"] | undefined): ReachedBrowserTab {
   return {
     tab: {
@@ -87,7 +73,6 @@ function reachedTab(agent: ReachedBrowserTab["agent"] | undefined): ReachedBrows
   };
 }
 
-/** The panel's socket as a test drives it: messages pushed in, and what the relay sent and how it closed, kept. */
 const scriptedViewer = Effect.gen(function* () {
   const inbound = yield* Queue.make<RelayFrame, Cause.Done>();
   const sent: RelayFrame[] = [];
@@ -114,11 +99,9 @@ const scriptedViewer = Effect.gen(function* () {
   };
 });
 
-/** A Chromium holding the tab, answering the live view's own commands, and every command it was sent, kept. */
 function liveBrowser(
   options: {
     readonly pages?: readonly { targetId: string; url: string; title: string }[];
-    /** Whether the browser never answers a mouse event, as one stuck behind a slow page. */
     readonly mouseHangs?: boolean;
   } = {},
 ) {
@@ -148,7 +131,6 @@ function liveBrowser(
   });
 }
 
-/** The store as the scenario has it: one tab, its takeover kept on the store's own terms, and the lease. */
 function world(
   browser: BrowserLiveDependencies["browser"],
   options: { readonly reached?: ReachedBrowserTab; readonly session?: Option.Option<string> } = {},
@@ -211,14 +193,12 @@ function world(
       row = undefined;
     },
     driveAs: (userId: string, heldUntil: Date) => setDriver(userId, heldUntil),
-    /** Moves the tab onto the target given, as a browser that started afresh reopens it. */
     reopenAs: (targetId: string) => {
       if (row !== undefined) row = { ...row, tab: { ...row.tab, targetId } };
     },
   };
 }
 
-/** Lets every fiber the last step woke, the fake PTY's readers among them, run until the condition holds. */
 function until(condition: () => boolean) {
   return Effect.gen(function* () {
     for (let step = 0; step < 500 && !condition(); step += 1) yield* Effect.yieldNow;
@@ -246,7 +226,6 @@ const acks = (commands: readonly FakeCdpCommand[]) =>
 const inputs = (commands: readonly FakeCdpCommand[]) =>
   commands.filter((command) => command.method.startsWith("Input."));
 
-/** The relay running for one panel over the browser and store given, once its screencast has started. */
 function started(peer: FakeCdpPeer, commands: readonly FakeCdpCommand[], run: Effect.Effect<void>) {
   return Effect.gen(function* () {
     const fiber = yield* Effect.forkChild(run);
@@ -377,7 +356,6 @@ it.effect("the tab's address, title, and loading state reach the panel as they c
   }),
 );
 
-/** The tab's page moved to the address and title given, as Chromium tells it. */
 const pageMoved = (targetId: string, url: string, title: string) => ({
   method: "Target.targetInfoChanged",
   params: { targetInfo: { targetId, url, title, type: "page" } },
@@ -485,7 +463,6 @@ it.effect(
     }),
 );
 
-/** The commands that move the tab's page, as a step from its bar sends them. */
 const steering = (commands: readonly FakeCdpCommand[]) =>
   commands.filter((command) =>
     ["Page.navigate", "Page.reload", "Page.navigateToHistoryEntry"].includes(command.method),
@@ -629,7 +606,6 @@ it.effect(
       store.driveAs("member-2", new Date(0));
       yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
       yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours === true);
-      // Another window's member takes the tab once this one's takeover lapsed with no input.
       yield* TestClock.adjust(Duration.minutes(2));
       store.driveAs("member-2", new Date(Date.UTC(1970, 0, 1, 1)));
       yield* panel.push(VIEWPORT);
@@ -696,7 +672,6 @@ it.effect(
         coder.commands,
         Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
       );
-      // The panel resizing every four minutes, inside the idle bound, for two keep-alive intervals.
       for (let acted = 0; acted < 2 * every; acted += Duration.toMillis(Duration.minutes(4))) {
         yield* TestClock.adjust(Duration.minutes(4));
         yield* panel.push({ ...VIEWPORT, width: VIEWPORT.width + acted / 60_000 });
@@ -754,7 +729,6 @@ it.effect(
       });
       const panel = yield* scriptedViewer;
       const store = world(browser);
-      // The connection reopens the kept tab on a new target, as `connectRestoring` does after a resume.
       const deps: BrowserLiveDependencies = {
         ...store.deps,
         browser: {
@@ -910,7 +884,6 @@ it.effect(
       );
       yield* resentPanel.push(VIEWPORT);
       yield* settle;
-      // An older panel's keep-alive: the size it already sent, once a minute, past the idle bound.
       for (let minute = 0; minute < 6; minute += 1) {
         yield* TestClock.adjust(Duration.minutes(1));
         yield* resentPanel.push(VIEWPORT);
@@ -970,7 +943,6 @@ it.effect(
       assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.REFUSED), [], "watching drives nothing");
       assert.equal(store.holds.length, 11, "each minute's watching moved the lease on");
 
-      // A resize is the member's input, so the input bound runs from it.
       yield* panel.push({ ...VIEWPORT, width: VIEWPORT.width + 1 });
       yield* settle;
       yield* watchFor(14);
@@ -1193,7 +1165,6 @@ const KEY_A = {
   modifiers: 0,
 } as const;
 
-/** The tab as the store reads it while the member given holds a takeover until the instant given. */
 function drivenTab(userId: string, heldUntil: Date, agent?: ReachedBrowserTab["agent"]) {
   const reached = reachedTab(agent);
   return { ...reached, tab: { ...reached.tab, driverUserId: userId, heldUntil } };
@@ -1275,7 +1246,6 @@ it.effect(
       );
       yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).length > 0);
 
-      // The takeover lapses before the tab is read again.
       yield* TestClock.adjust(Duration.seconds(4));
       yield* panel.push(KEY_A);
       yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);

@@ -6,14 +6,6 @@ import { createInterface } from "node:readline";
 import { it } from "vitest";
 import { PORT_BRIDGE_SOURCE } from "./bridge.js";
 
-/**
- * The port bridge the agent's sandbox runs, as its own Node process in
- * front of a local echo server: every byte value a channel sends comes back
- * whole through its base64 lines, the server closing its end closes the
- * channel, and a channel to a port nothing listens on closes as refused.
- */
-
-/** A local server that writes back whatever it is sent, and ends its side once it is sent `bye`. */
 async function echo() {
   const server = net.createServer((socket) => {
     socket.on("data", (bytes) => {
@@ -23,12 +15,10 @@ async function echo() {
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
-  // SAFETY: a listening TCP server answers its bound address as AddressInfo, never a pipe path.
   const { port } = server.address() as AddressInfo;
   return { port, server };
 }
 
-/** The bridge on the port given, its lines read one at a time. */
 function bridge(port: number) {
   const child = spawn(process.execPath, ["--no-warnings", "-e", PORT_BRIDGE_SOURCE, String(port)], {
     stdio: ["pipe", "pipe", "inherit"],

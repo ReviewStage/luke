@@ -32,32 +32,12 @@ import {
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
 
-/**
- * comment-tools.ts -- a description's comments, and its task's pages', as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, and `update_comment`.
- *
- * A thread on one of the task's pages is the task's as a description's thread is,
- * so it is answered and settled by its id the same way; `read_comments`
- * reads a page's threads where it names the page, and the description's otherwise.
- *
- * An agent reads the threads for context at any time, but replies only where
- * someone sent a thread to it (`comment-ask.ts`), which its instructions say;
- * resolving and reopening are any agent's, as they are any member's. Every
- * call names the task whose description it acts on, the agent's own or any other of
- * its workspace, which the door holds to that workspace
- * (`../agents/coder-host/agent-doors.ts`), so an agent on no task answers a
- * thread too. It runs on the description the door bound, as the member whose turn
- * it is, and is written under the agent that made it, by its id. A call
- * answers what it did as the model reads it, never a failure.
- */
-
-/** Where a call reads and writes: the description the door bound, who writes, the member whose turn it is and the agent, and whether the description's own threads are reached, which they are not while Task descriptions is off (`EXPERIMENT.DESCRIPTIONS`), its pages' alone. */
 export interface CommentToolBinding {
   readonly taskId: string;
   readonly writer: DescriptionCommentWriterRef;
   readonly descriptionsOn: boolean;
 }
 
-/** Why a call took nothing, in the words its result says. */
 export const COMMENT_TOOL_REFUSAL = {
   UNREADABLE: "The input is not one this tool takes.",
   NO_TASK_NAMED: `Name the task whose description's comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
@@ -69,7 +49,6 @@ export const COMMENT_TOOL_REFUSAL = {
     "Task descriptions is off, so the description's comment threads are not reached; a page's threads still are, by the page's id.",
 } as const;
 
-/** The task a call names, whose description's comments it acts on. */
 const TASK_ID = describeWire(
   wireUuidSchema,
   `The task whose description's comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
@@ -77,7 +56,6 @@ const TASK_ID = describeWire(
 
 const THREAD_ID = describeWire(wireUuidSchema, "The thread's id, as read_comments lists it.");
 
-// The call's other fields stand beside its task, and are read on their own.
 const readCommentedTask = readEither(Schema.Struct({ taskId: wireUuidSchema }), {
   excess: EXCESS_KEYS.DROP,
 });
@@ -116,7 +94,6 @@ const UPDATE_INPUT = Schema.Struct({
   ),
 });
 
-/** `read_comments`: the description's threads as they stand. */
 export const READ_COMMENTS_TOOL = {
   name: AGENT_TOOL.READ_COMMENTS,
   description:
@@ -126,7 +103,6 @@ export const READ_COMMENTS_TOOL = {
   inputSchema: READ_INPUT,
 } as const;
 
-/** `reply_to_comment`: an answer in a thread. */
 export const REPLY_TO_COMMENT_TOOL = {
   name: AGENT_TOOL.REPLY_TO_COMMENT,
   description:
@@ -135,7 +111,6 @@ export const REPLY_TO_COMMENT_TOOL = {
   inputSchema: REPLY_INPUT,
 } as const;
 
-/** `update_comment`: a thread settled, or a settled one brought back. */
 export const UPDATE_COMMENT_TOOL = {
   name: AGENT_TOOL.UPDATE_COMMENT,
   description:
@@ -144,24 +119,20 @@ export const UPDATE_COMMENT_TOOL = {
   inputSchema: UPDATE_INPUT,
 } as const;
 
-/** The tools, in the order an agent is offered them. */
 const COMMENT_TOOLS = [READ_COMMENTS_TOOL, REPLY_TO_COMMENT_TOOL, UPDATE_COMMENT_TOOL] as const;
 
 type CommentTool = (typeof COMMENT_TOOLS)[number];
 export type CommentToolName = CommentTool["name"];
 
-/** A call that took nothing, and why. */
 export function commentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** The task a call names, or nothing where it names none that reads, which refuses it whole. */
 export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
   const read = readCommentedTask(input);
   return Result.isSuccess(read) ? read.success.taskId : undefined;
 }
 
-/** Who wrote an entry, as an agent reads it. */
 function writerOf(entry: DescriptionCommentEntry): string {
   switch (entry.writer.actor) {
     case DESCRIPTION_COMMENT_ACTOR.APP:
@@ -173,14 +144,12 @@ function writerOf(entry: DescriptionCommentEntry): string {
   }
 }
 
-/** Whom a thread was sent to, as an agent reads it. */
 function askedName(asked: DescriptionCommentAsked | undefined): string {
   return asked?.actor === DESCRIPTION_COMMENT_ACTOR.APP
     ? PRODUCT_NAME
     : `agent ${asked?.agentId ?? ""}`;
 }
 
-/** A thread as an agent reads it: what it is on, its comments, and who was asked to answer it. */
 function threadRead(thread: DescriptionCommentThread): WireRecord {
   const comments = thread.entries
     .filter((entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT)
@@ -195,7 +164,6 @@ function threadRead(thread: DescriptionCommentThread): WireRecord {
   const asked = thread.entries
     .filter((entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.ASKED && entry.asked !== undefined)
     .map((entry) => ({ by: writerOf(entry), to: askedName(entry.asked) }));
-  // Note that a page's thread stands on no words of the description, so it names its page in their place.
   const where =
     thread.page !== undefined
       ? { page: thread.page }
@@ -213,11 +181,6 @@ function threadRead(thread: DescriptionCommentThread): WireRecord {
   };
 }
 
-/**
- * A write's answer as the result the model reads: the thread as it now
- * stands, with the ones a member's comment could not reach where it says
- * any, or why nothing was taken.
- */
 export function commentAnswerRead(answer: DescriptionCommentThreadAnswer): WireRecord {
   if ("refused" in answer) return commentToolRejected(answer.refused);
   if ("deleted" in answer) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
@@ -228,17 +191,14 @@ export function commentAnswerRead(answer: DescriptionCommentThreadAnswer): WireR
   };
 }
 
-/** A write's outcome as the result the model reads. */
 function written(outcome: DescriptionCommentOutcome): WireRecord {
   if (outcome.status === DESCRIPTION_COMMENT_OUTCOME.NO_TASK)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
-  // Note that no tool starts a thread, so no write of one finds no page; a thread it names is the task's or none.
   if (outcome.status !== DESCRIPTION_COMMENT_OUTCOME.DONE)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
   return commentAnswerRead(outcome.answer);
 }
 
-/** Whether a thread is the description's, standing on no page, and so out of reach while Task descriptions is off; a thread not found is left to the call to refuse as none. */
 export function descriptionThreadOff(
   thread: DescriptionCommentThread | undefined,
   descriptionsOn: boolean,
@@ -246,7 +206,6 @@ export function descriptionThreadOff(
   return !descriptionsOn && thread !== undefined && thread.page === undefined;
 }
 
-/** One call of a comment tool on the description the door bound, answered as the result the model reads. */
 export function runCommentTool(
   name: CommentToolName,
   binding: CommentToolBinding,
@@ -309,17 +268,10 @@ export function runCommentTool(
   );
 }
 
-/**
- * The description's open threads as a coding agent's standing context hands them
- * beside the saved document (`agent-runtime/standing-context.ts`): one line
- * each, so a comment a member left since its last turn is there to raise.
- * Nothing where the description holds no open thread.
- */
 export function openThreadsText(threads: readonly DescriptionCommentThread[]): readonly string[] {
   const open = threads.filter((thread) => thread.status === DESCRIPTION_COMMENT_STATUS.OPEN);
   if (open.length === 0) return [];
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }
 
-/** The marker the open threads ride behind in an agent's standing context. */
 export const OPEN_THREADS_MARKER = "[open comment threads]";

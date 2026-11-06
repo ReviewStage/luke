@@ -15,21 +15,10 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { taskFilesProcedures } from "./task-files-procedures.js";
 
-/**
- * A picture added to a description through the plan files procedures, over a real
- * dialect: the member who adds one is counted as having added a file to the
- * description, in the plan's workspace, and one who may not write the description is
- * refused and counted for nothing.
- *
- * Synthetic accounts, bearers, workspaces, and tasks throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** The eight bytes every PNG begins with, as the `data:` URL the Mac sends a picture as. */
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
-/** What the procedures counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 const openAccount = Effect.gen(function* () {
@@ -40,10 +29,8 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A picture sent to the description under the account's bearer, as its status. */
 const keepAs = (userId: string, taskId: string) =>
   Effect.gen(function* () {
-    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
     const services = (yield* Effect.context<never>().pipe(
       Effect.provide(ANALYTICS.layer),
     )) as Context.Context<WebServices>;

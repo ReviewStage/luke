@@ -60,26 +60,8 @@ import {
 } from "./agent-browser-tabs-procedures.js";
 import { AgentBrowser, agentBrowserOver } from "./browser/agent-browser.js";
 
-/**
- * A task's Browser tabs, answered by the hosted oRPC router the way the web
- * route answers them, over a real dialect: a member who reaches the task
- * lists every tab they see, each naming the coding agent whose browser holds
- * it; a takeover makes them the driver for the hold, a
- * second member's answers the first as driver until that hold lapses, and a
- * hand-back gives the tab back; a member who does not control a coding agent
- * on its starter's own token may see its tab but not drive it; and a task or
- * tab the bearer does not reach is not found. A member who controls a coding
- * agent opens a tab at an http or https address in its browser, a fake
- * Chromium in a fake sandbox, kept with them as its opener and taken over
- * for them; one who does not, an address of another scheme, an agent with no
- * sandbox yet, and a sandbox Vercel does not answer for are each refused.
- *
- * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** The repository a coding agent on its starter's token works in, which a reader's token reads. */
 const TOKEN_REPOSITORY = "octo-member/side";
 
 interface Answer {
@@ -95,7 +77,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A member whose verified token GitHub last answered reading the token agent's repository. */
 const keepReadingToken = (userId: string) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -114,11 +95,6 @@ const keepReadingToken = (userId: string) =>
     );
   });
 
-/**
- * A starter's task, shared with a teammate and a reader, with two tabs: one
- * in a coding agent's browser, and one in a coding agent's on the starter's
- * own token, which the reader sees and the teammate does not.
- */
 const openTask = Effect.gen(function* () {
   const [starter, teammate, reader, outsider] = [
     yield* openAccount,
@@ -186,10 +162,8 @@ const openTask = Effect.gen(function* () {
   };
 });
 
-/** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The tools the account was counted as opening, in order, each in the workspace given. */
 const toolsCounted = (userId: string, workspaceId: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === SERVER_EVENT.AGENT_TOOL_OPEN)
@@ -204,7 +178,6 @@ const answer = (
   agentBrowser: Layer.Layer<AgentBrowser>,
 ) =>
   Effect.gen(function* () {
-    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
     const services = (yield* Effect.context<never>().pipe(
       Effect.provide(ANALYTICS.layer),
     )) as Context.Context<WebServices>;
@@ -218,7 +191,6 @@ const answer = (
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -234,10 +206,8 @@ const tabsPath = (taskId: string) => `/api/plans/${taskId}/browser-tabs`;
 
 const agentTabsPath = (agentId: string) => `/api/agents/${agentId}/browser-tabs`;
 
-/** The eve session a coding agent's sandbox is tagged with once it first ran. */
 const SESSION = "wrun_open_tab_fixture";
 
-/** A member's open of a tab at the address in the agent's browser. */
 function openRequest(userId: string, taskId: string, agentId: string, address: string) {
   return new Request(new URL(tabsPath(taskId), ORIGIN), {
     method: "POST",
@@ -246,7 +216,6 @@ function openRequest(userId: string, taskId: string, agentId: string, address: s
   });
 }
 
-/** A member's open of a tab at the address in the browser of the agent the path names. */
 function agentOpenRequest(userId: string, agentId: string, address: string) {
   return new Request(new URL(agentTabsPath(agentId), ORIGIN), {
     method: "POST",
@@ -255,7 +224,6 @@ function agentOpenRequest(userId: string, agentId: string, address: string) {
   });
 }
 
-/** The agent's conversation recorded as running in the session, as its first turn records it. */
 const runAgent = (agent: { readonly userId: string; readonly conversationId: string }) =>
   Effect.flatMap(DateTime.nowAsDate, (now) =>
     claimRuntimeSession(
@@ -265,13 +233,11 @@ const runAgent = (agent: { readonly userId: string; readonly conversationId: str
     ),
   );
 
-/** The addresses of the pages the fake Chromium holds, past the blank page it starts with. */
 const openedAddresses = (peer: FakeCdpPeer) =>
   Effect.map(peer.pages, (pages) =>
     pages.map((page) => page.url).filter((url) => url !== "about:blank"),
   );
 
-/** The agent's browser over a running sandbox tagged with the session, a fake Chromium behind its bridge. */
 const runningBrowser = Effect.map(fakeCdpPeer(), (peer) => ({
   peer,
   layer: Layer.succeed(
@@ -283,11 +249,9 @@ const runningBrowser = Effect.map(fakeCdpPeer(), (peer) => ({
   ),
 }));
 
-/** The statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** The task's or the agent's tabs as Realtime would deliver them to `reader`, read as a window reads them now, and when they would next be read again for a lapse. */
 const liveTabsOf = (reader: string, place: BrowserTabsPlace) =>
   Effect.gen(function* () {
     const statement = Option.getOrThrow(browserTabsLiveStatement(reader, place));
@@ -380,7 +344,6 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           viewport: { width: 1280, height: 800 },
           at,
         });
-        // A point is an action on the tab: it moves the tab's last action on to it.
         assert.equal(tab?.lastActedAt, at);
       }),
   );
@@ -455,7 +418,6 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         assert.equal(lapsed?.driver, null);
         assert.equal(tabOf(yield* ask(request(teammate, path, "POST"))).driver?.userId, teammate);
         assert.equal(tabOf(yield* ask(request(teammate, path, "DELETE"))).driver, null);
-        // Only a takeover that took the tab and a hand-back that gave it back are counted.
         assert.deepEqual(toolsCounted(starter, workspace), [SERVER_AGENT_TOOL.BROWSER_TAKEOVER]);
         assert.deepEqual(toolsCounted(teammate, workspace), [
           SERVER_AGENT_TOOL.BROWSER_TAKEOVER,
@@ -527,14 +489,11 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           userId: starter,
           heldUntil: now + BROWSER_TAKEOVER_HOLD_MS,
         });
-        // The page stands in the agent's browser beside its kept tab, reopened as the connection
-        // restores it, and the agent's sandbox is held for the sign-in.
         assert.deepEqual(yield* openedAddresses(peer), [
           "http://localhost:3000/",
           "https://accounts.test/sign-in",
         ]);
         assert.equal(yield* sandboxHeld(coder.conversationId, new Date(now)), true);
-        // A teammate lists it, driven by the member who opened it.
         const listed = tabsOf(yield* ask(request(teammate, tabsPath(taskId))));
         assert.deepEqual(
           listed.find((tab) => tab.id === opened.id),
@@ -672,7 +631,6 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         const open = (agentBrowser: Layer.Layer<AgentBrowser>) =>
           ask(openRequest(starter, taskId, coder.id, "https://accounts.test/"), agentBrowser);
 
-        // The agent has run no turn, so no session tags a sandbox of its.
         const { layer } = yield* runningBrowser;
         assert.deepEqual(
           yield* open(layer),
@@ -691,7 +649,6 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           yield* open(unanswered),
           refusal(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
         );
-        // No tab was kept but those the agents opened.
         const listed = tabsOf(yield* ask(request(starter, tabsPath(taskId))));
         assert.deepEqual(
           listed.map((tab) => tab.openedBy.kind),

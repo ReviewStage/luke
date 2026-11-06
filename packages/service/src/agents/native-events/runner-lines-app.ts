@@ -1,29 +1,3 @@
-/**
- * runner-lines-app.ts -- where a cloud runner reads our lines past its cursor, held open until one is queued.
- *
- * A runner whose config names this read (`@repo/agent-runner`'s
- * `RUNNER_LINES`) takes our lines from here rather than from its stdin,
- * so a line stands until the runner says it took it, rather than counting as
- * delivered the moment a write to a pipe succeeded. The read names the
- * launch by its first event number and the place of the last line the
- * runner read, and is answered the agent's lines past that place
- * (`@repo/database`'s `runner-line-store.ts`): those written for the launch,
- * and the message lines an earlier launch never took, queued no longer ago
- * than a line still reads as awaiting its turn (`CODER.LINE_GRACE`), so a
- * line the developer was already told went unanswered is never run behind
- * their back. Where nothing stands past the place, the read is held on the
- * agent's topic (`../../http/held-read.ts`), which a line queued wakes
- * through Sync, and answers none at the hold's end, as a device's read
- * is held; the runner asks again.
- *
- * The bearer is admitted as the events route admits it
- * (`../workspace-mcp/bearer.ts`): one no standing agent holds, a retired one's
- * among them, is refused, and a launch's bearer is its own, so a launch a
- * newer one replaced reads nothing more. An answer carries the lines whole,
- * at least one, up to `RUNNER_LINES_ANSWER.MAX_BYTES`, so a run of large
- * messages is read over several answers.
- */
-
 import { RUNNER_LINES, type RunnerLinesAnswer } from "@repo/agent-runner/protocol";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readAgentOfConversation } from "@repo/database/models/agent-store";
@@ -46,15 +20,8 @@ import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { CODER } from "../coder-host/bounds.js";
 import { admitRunnerBearer, presentedBearer } from "../workspace-mcp/bearer.js";
 
-/** The path a runner reads its lines from. */
 export const RUNNER_LINES_PATH = "/api/agents/runner-lines";
 
-/**
- * What one answer carries: at most `LIMIT` lines, and no more than
- * `MAX_BYTES` of them past the first, under the platform's own bound on a
- * function's answer; and how often a held read looks again where Sync
- * cannot wake it.
- */
 const RUNNER_LINES_ANSWER = {
   LIMIT: 64,
   MAX_BYTES: 4 * 1024 * 1024,
@@ -70,7 +37,6 @@ const ReadQuerySchema = Schema.Struct({
 
 const readQuery = Schema.decodeUnknownOption(ReadQuerySchema);
 
-/** The lines an answer carries: every one up to the bound, and the first whatever its size. */
 function bounded(lines: readonly RunnerLine[]): readonly RunnerLine[] {
   let bytes = 0;
   const carried: RunnerLine[] = [];
@@ -82,7 +48,6 @@ function bounded(lines: readonly RunnerLine[]): readonly RunnerLine[] {
   return carried;
 }
 
-/** GET: the lines past the runner's place, held while there are none. */
 const runnerLinesEndpoint = /* @__PURE__ */ Effect.fn("web/runnerLinesEndpoint")(
   function* (): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
@@ -127,7 +92,6 @@ const runnerLinesEndpoint = /* @__PURE__ */ Effect.fn("web/runnerLinesEndpoint")
   },
 );
 
-/** The group: the one lines path, and the hosted vocabulary's own refusal for any other. */
 export function runnerLinesApp(): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, RUNNER_LINES_PATH, hostedRefusing(runnerLinesEndpoint())),

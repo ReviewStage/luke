@@ -1,20 +1,3 @@
-/**
- * mac-commands-procedures.test.ts -- the Mac's held read and its posted results, byte for byte through the route, over a real dialect.
- *
- * The Mac's held read is answered with the command queued for its account
- * as soon as one waits, and with none once the hold ends; the result it
- * posts is kept for the agent's call. A read naming no kinds, or a kind
- * this service no longer queues, is handed shell commands alone; a call no
- * listening Mac can run is answered not run at once, and one the Mac
- * refuses is answered not run with the Mac's reason. Only the Mac's bearer
- * is read, never a cookie,
- * and before anything the body says. Each refusal answers what the old
- * group answered. Over the sync hub, the held read answers within a coalesce
- * window of a command queued, and a call within one of the Mac settling it.
- *
- * Synthetic accounts, bearers, and commands throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -57,7 +40,6 @@ const COMMAND: MacCommand = {
   timeoutSeconds: 60,
 };
 
-/** What a Mac from before agents lost the Mac's Browser tabs names in its query: shell, and a kind this service no longer queues. */
 const STALE_KINDS = "shell,browser";
 
 const RESULT: MacCommandResult = {
@@ -68,7 +50,6 @@ const RESULT: MacCommandResult = {
   timedOut: false,
 };
 
-/** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
 interface Bytes {
   readonly status: number;
   readonly contentType: string | null;
@@ -76,7 +57,6 @@ interface Bytes {
   readonly text: string;
 }
 
-/** A refusal's bytes, which carry no cache-control. */
 function refused(status: number, error: string): Bytes {
   return {
     status,
@@ -111,12 +91,6 @@ function request(
   });
 }
 
-/**
- * The route answering one request over the test's database, on the
- * fiber's own clock, so a held read waits on the test's. The resolver
- * names any `user-…` bearer, and would name a cookie's caller too, so a
- * refused cookie is the route's own doing.
- */
 const bytes = (incoming: Request) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -136,7 +110,6 @@ const bytes = (incoming: Request) =>
           ),
       }),
     });
-    // SAFETY: the procedures yield the database and the clock alone, which is all a test provides of the web runtime's services.
     const webServices = context as Context.Context<WebServices>;
     const response = yield* Effect.promise(() => handle(incoming, webServices));
     return {
@@ -153,10 +126,8 @@ const account = (userId: string) =>
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   });
 
-/** The commands a read was answered with, as the Mac reads its bytes. */
 const commandsOf = (answer: Bytes): readonly MacCommand[] => JSON.parse(answer.text).commands;
 
-/** A held read that finds nothing waiting, answered once its hold of twenty seconds ends on the test's clock. */
 const emptyRead = (incoming: Request) =>
   Effect.gen(function* () {
     const read = yield* Effect.forkChild(bytes(incoming));
@@ -164,7 +135,6 @@ const emptyRead = (incoming: Request) =>
     return yield* Fiber.join(read);
   });
 
-/** Lets a forked call's statements run until a command waits for the account. */
 const untilQueued = (userId: string) =>
   Effect.gen(function* () {
     const since = new Date(yield* Clock.currentTimeMillis);

@@ -23,35 +23,12 @@ import {
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
 
-/**
- * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document shown in the developer's side panel, the task's or, for an agent on no task, its own.
- *
- * A page is one self-contained HTML document, its scripts and styles inline
- * or from cdnjs, which the Mac draws in a sandbox that reaches no network
- * (`apps/desktop/src/main/window/page-protocol.ts`). A coding agent, which
- * builds pages as files, names one in its sandbox as `path`, read here
- * through the same door its own file tools reach the sandbox by, bounded and
- * never read whole past the bound. Naming a page shown before writes its next version, and naming
- * none makes a new page, so an agent revises a page rather than piling up
- * copies of it. The answer carries the page's id and version, and its
- * mention ready to write (`../agents/written-mentions.ts`), and never the
- * HTML, which the model wrote and need not read again.
- *
- * Note that the account and what the page stands on are the binding the
- * service built from the conversation, never an argument: the
- * conversation's task, or, for a coding agent on no task, the agent itself,
- * whose pages are its own. Every outcome is a result the model reads, never a failure of the
- * call, and a refusal says how to mend the call.
- */
-
-/** A sandbox as the tool reads a page from it: one file read as a stream of bytes, or nothing where there is no file. */
 interface PageSandbox {
   readonly readFile: (options: {
     readonly path: string;
   }) => PromiseLike<ReadableStream<Uint8Array> | null>;
 }
 
-/** Where a call's page is written: the account and what the page stands on that the service bound, and, for an agent with one, its sandbox, opened on first use, and the checkout a relative path is read from. */
 export interface PageToolBinding {
   readonly userId: string;
   readonly owner: PageOwner;
@@ -61,7 +38,6 @@ export interface PageToolBinding {
   };
 }
 
-/** Why a call showed nothing, in words the model can act on. */
 export const SHOW_PAGE_REFUSAL = {
   UNREADABLE_PATH: `Not shown: give a title of at most ${PAGE_BOUNDS.MAX_TITLE_CHARS} characters and the \`path\` of the page's HTML file in your sandbox. Write the page as a file and pass its path; \`html\` is not taken.`,
   NO_SANDBOX: "Not shown: you have no sandbox to read a path from.",
@@ -78,7 +54,6 @@ export const SHOW_PAGE_REFUSAL = {
   UNAVAILABLE: "Not shown: the page could not be saved just now. The call may be made again.",
 } as const;
 
-/** An agent's input: the page is always a file in its sandbox, so `path` is required and there is no `html`. */
 const CODER_SHOW_PAGE_INPUT = Schema.Struct({
   title: describeWire(
     pageTitleSchema,
@@ -98,16 +73,10 @@ const CODER_SHOW_PAGE_INPUT = Schema.Struct({
 
 const readCoderInput = readEither(CODER_SHOW_PAGE_INPUT);
 
-/** Each variable a page may draw with, by its name, as an agent is told them. */
 const THEME_VARIABLES_SAID = Object.values(PAGE_THEME_VARIABLE)
   .map((variable) => `\`${variable}\``)
   .join(", ");
 
-/**
- * How a page is laid out to stand in the transcript it is drawn in, as T3
- * Code tells its agents of an inline render: on the transcript's own ground
- * in the app's theme (`@repo/features/page-theme`), as tall as its content.
- */
 const PAGE_LAYOUT_WORDS =
   "It is drawn in your transcript at its whole height, on the transcript's own ground, and the " +
   "developer can open it in the side panel: leave `html`, `body`, and the " +
@@ -123,7 +92,6 @@ const PAGE_LAYOUT_WORDS =
   "Let the content set the height: no `vh` units or `height: 100%` on `html` or `body`, and a " +
   "chart a fixed height in pixels. ";
 
-/** The tool as an agent is offered it: its name, its words, and its input schema, the page named by `path` alone. */
 export const CODER_SHOW_PAGE_TOOL = {
   name: AGENT_TOOL.SHOW_PAGE,
   description:
@@ -148,19 +116,12 @@ export const CODER_SHOW_PAGE_TOOL = {
   inputSchema: CODER_SHOW_PAGE_INPUT,
 } as const;
 
-/** A call that showed nothing, and why. */
 export function showPageRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** The most bytes a page's file is read to: its bound in characters, at the most bytes UTF-8 spends on one. */
 const MAX_FILE_BYTES = PAGE_BOUNDS.MAX_HTML_CHARS * 4;
 
-/**
- * The stream read whole as text, or nothing where it runs past the bound.
- * The reader is canceled however the read ends, so a stream refused, or
- * one that failed mid-way, holds nothing open behind it.
- */
 const readBoundedText = Effect.fnUntraced(function* (stream: ReadableStream<Uint8Array>) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -177,16 +138,10 @@ const readBoundedText = Effect.fnUntraced(function* (stream: ReadableStream<Uint
   }).pipe(Effect.ensuring(Effect.promise(() => reader.cancel().catch(() => undefined))));
 });
 
-/**
- * The page's HTML at the path, read from the agent's sandbox, or the one
- * sentence refusing it. A path is resolved from the checkout: inside it
- * when relative, as written when absolute.
- */
 function readPageFile(
   sandbox: NonNullable<PageToolBinding["sandbox"]>,
   path: string,
 ): Effect.Effect<Result.Result<string, string>> {
-  // Note that the rule reads the path as resolved, because `x/.env/.` names the `.env` it spells around.
   const resolved = posix.resolve(sandbox.checkout, path);
   if (isSecretFile(resolved)) return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.SECRET));
   return Effect.gen(function* () {
@@ -201,7 +156,6 @@ function readPageFile(
   }).pipe(Effect.catch(() => Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.UNAVAILABLE))));
 }
 
-/** The page's HTML as read from the path the call names; the refusal where there is no sandbox or the file does not read. */
 function htmlOf(
   binding: PageToolBinding,
   path: string,
@@ -211,17 +165,11 @@ function htmlOf(
   return readPageFile(binding.sandbox, path);
 }
 
-/** Why HTML read from a file cannot be a page's: empty, or past the bound in characters. */
 function htmlRefusal(html: string): string | undefined {
   if (html.trim() === "") return SHOW_PAGE_REFUSAL.EMPTY;
   return html.length > PAGE_BOUNDS.MAX_HTML_CHARS ? SHOW_PAGE_REFUSAL.TOO_LARGE : undefined;
 }
 
-/**
- * The page's mention as the agent writes it, its title as its name; none
- * where its task's workspace cannot be read just now, since the page was
- * shown all the same.
- */
 const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) =>
   writtenPageMention(binding.userId, binding.owner, pageId, title).pipe(
     Effect.tapError(logStoreFailure),
@@ -229,7 +177,6 @@ const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) 
     Effect.map((mention) => Option.getOrUndefined(Option.flatten(mention))),
   );
 
-/** Why a write found nothing to write on: no such page of the owner where one was named, else no owner. */
 function missedRefusal(owner: PageOwner, named: boolean): string {
   if (owner.kind === PAGE_OWNER.AGENT) {
     return named ? SHOW_PAGE_REFUSAL.NO_OWN_PAGE : SHOW_PAGE_REFUSAL.NO_AGENT;
@@ -237,7 +184,6 @@ function missedRefusal(owner: PageOwner, named: boolean): string {
   return named ? SHOW_PAGE_REFUSAL.NO_PAGE : SHOW_PAGE_REFUSAL.NO_TASK;
 }
 
-/** One call of `show_page` on what the service bound the page to, by the agent that makes it, answered as the result the model reads. */
 export function runShowPage(
   binding: PageToolBinding,
   input: UnparsedWireValue,

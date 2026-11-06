@@ -18,22 +18,10 @@ import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 
-/**
- * The door to a native agent's sandbox, through `@vercel/sandbox` over a
- * fake of Vercel, as the deployment asks it under its own OIDC token: the sandbox tagged with
- * the agent's session is found, the file is read from its running session
- * by a command, never by Vercel's own file read, a path that is no file is
- * no file, a file past every tool's bound is read only one byte past it, and
- * a conversation that records no session opens no door. The read's command
- * runs in a real bash over a temporary directory standing in for the
- * sandbox's disk. The token is a synthetic one.
- */
-
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 const SESSION = "claude-code-fixture";
 
-/** An unsigned token naming the fixture's project and team. */
 function fixtureToken(): Promise<string> {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify({ project_id: PROJECT, owner_id: TEAM })).toString(
@@ -47,17 +35,14 @@ interface Asked {
   readonly body: unknown;
 }
 
-/** A command's run in the running session as Vercel streams it back: its start, its stdout, and its exit. */
 const commandStream = (exitCode: number, stdout: string) =>
   commandRunStreamed({ id: "cmd_1", sessionId: "sbs_up" }, { exitCode, stdout, stderr: "" });
 
-/** The sandboxes tagged with the session, as Vercel lists them: one stopped, one up. */
 const SANDBOXES = [
   { name: "sbx-stopped", status: "stopped", currentSessionId: "sbs_down", createdAt: 0 },
   { name: "sbx-up", status: "running", currentSessionId: "sbs_up", createdAt: 1 },
 ] as const;
 
-/** A temporary directory standing in for the sandbox's disk, holding the files given by their path under it. */
 function disk(files: Readonly<Record<string, Uint8Array>>): string {
   const root = mkdtempSync(join(tmpdir(), "sandbox-door-"));
   for (const [path, bytes] of Object.entries(files)) {
@@ -67,7 +52,6 @@ function disk(files: Readonly<Record<string, Uint8Array>>): string {
   return root;
 }
 
-/** Vercel with one running sandbox tagged with the session, its disk the directory given; what it was asked is kept. */
 function vercel(root: string) {
   const asked: Asked[] = [];
   const respond = (url: string, init: RequestInit) => {
@@ -82,7 +66,6 @@ function vercel(root: string) {
     if (named !== undefined) return Response.json(sandboxFound(named));
     if (parsed.pathname.endsWith("/cmd")) {
       const { command, args } = body as { command: string; args: string[] };
-      // The command runs as the sandbox's user, in the stand-in disk.
       const ran = spawnSync(command, args, {
         cwd: root,
         encoding: "utf8",
@@ -102,7 +85,6 @@ const ADMITTED: AdmittedConversation = {
   timeZone: undefined,
 };
 
-/** The doors over the layer given, their effects run on this test's own context. */
 const doorsOver = (admitted: AdmittedConversation) =>
   Effect.map(Effect.context<HttpClient.HttpClient>(), (context) => {
     const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
@@ -110,11 +92,9 @@ const doorsOver = (admitted: AdmittedConversation) =>
     return agentSandboxDoors(run, vercelMachineLayer({ readToken: fixtureToken, run }))(admitted);
   });
 
-/** The file door over the layer given. */
 const doorOver = (admitted: AdmittedConversation) =>
   Effect.map(doorsOver(admitted), (doors) => doors.files);
 
-/** A stream read whole. */
 async function bytesOf(stream: ReadableStream<Uint8Array> | null): Promise<number[] | null> {
   if (stream === null) return null;
   return [...new Uint8Array(await new Response(stream).arrayBuffer())];
@@ -143,7 +123,6 @@ it.effect(
       assert.equal(list?.url.searchParams.get("tags"), `sessionId:${SESSION}`);
       assert.equal(list?.url.searchParams.get("teamId"), TEAM);
       assert.equal(file?.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/cmd");
-      // Vercel's own file read reads as root, whatever the path names.
       assert.equal(
         api.asked.some(({ url }) => url.pathname.endsWith("/fs/read")),
         false,

@@ -30,40 +30,16 @@ import {
   type TriggerSource,
 } from "./trigger-source.js";
 
-/**
- * trigger-ingress-app.ts -- where an integration delivers its events: a delivery verified by its trigger source, matched to the automations of the workspace that installed the integration, and queued as their runs.
- *
- * Every source's delivery is read the same way. Nothing of it is read
- * before its source confirms the signature over the body's own bytes, and a
- * deployment that holds no secret for the provider answers unavailable, so
- * an unconfigured integration trusts nothing. A delivery about the source's
- * own installation is handled by it and fires nothing. A delivery through
- * an installation no workspace stands for, unknown or uninstalled, is
- * answered and queues nothing, so the provider does not retry it. Each
- * event the source reads it as finds the enabled automations of that
- * workspace alone listening for it, keeps those whose filters it passes,
- * and queues one run for each under the delivery's own key, so a
- * redelivery queues none; the run carries the event's subject and its
- * summary, never the delivery's body, and the minute sweep starts each
- * agent, since a provider waits only a second or so for the answer.
- * Nothing of the body is logged.
- */
-
-/** The largest delivery read; Sentry's are tens of kilobytes. */
 const MAXIMUM_DELIVERY_BYTES = 1024 * 1024;
 
-/** The most automations one event queues runs for, of those listening for it. */
 const MAXIMUM_AUTOMATIONS = 100;
 
-/** Every integration we receive events from, by its trigger source. */
 const TRIGGER_SOURCES = {
   [TRIGGER_PROVIDER.SENTRY]: sentryTriggerSource,
 } as const satisfies Record<TriggerProvider, TriggerSource<SentryApp>>;
 
-/** What the sources need beside the store. */
 type TriggerSourceServices = SentryApp;
 
-/** The runs one event queues in its workspace: one for each automation listening for it whose filters it passes. */
 const queueEvent = Effect.fnUntraced(function* (
   provider: TriggerProvider,
   organizationId: string,
@@ -97,7 +73,6 @@ const queueEvent = Effect.fnUntraced(function* (
   return queued;
 });
 
-/** POST: one delivery, verified by its source before anything of it is read. */
 function deliveryEndpoint(source: TriggerSource<TriggerSourceServices>) {
   return Effect.fn("web/triggerIngressEndpoint")(function* (): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
@@ -139,7 +114,6 @@ function deliveryEndpoint(source: TriggerSource<TriggerSourceServices>) {
   });
 }
 
-/** The group: each source's delivery path, and the hosted vocabulary's own refusal for any other. */
 export function triggerIngressApp(): WebRoutes<DatabaseServices | TriggerSourceServices> {
   const deliveries = Object.values(TRIGGER_SOURCES).map((source) =>
     HttpRouter.add(ANY_METHOD, source.path, hostedRefusing(deliveryEndpoint(source)())),

@@ -16,18 +16,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../../environme
 import { ownKeyOf } from "./account-keys.js";
 import { productionSummaryModel } from "./replay-summary.js";
 
-/**
- * The key a call beside an account's agents spends, read from the account's
- * rows over a real dialect and spent against a provider faked at its fetch:
- * the account's own API key for the provider it prefers or the other's, and
- * none, never ours, where it saved none, holds only a Claude setup-token, or
- * its key cannot be read; and a replay's summary told on it, never on the
- * key the deployment holds for titles.
- *
- * Synthetic keys and accounts; the key-encryption keys are fixed bytes
- * written for this file.
- */
-
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
@@ -46,7 +34,6 @@ const CHOICE = {
   [PROVIDER_KEY_PROVIDER.OPENAI]: { model: "openai/gpt-6.1-sol", effort: "high" },
 } as const;
 
-/** A message Anthropic's API answers a call with. */
 const ANTHROPIC_MESSAGE = {
   id: "msg_fixture",
   type: "message",
@@ -57,12 +44,10 @@ const ANTHROPIC_MESSAGE = {
   usage: { input_tokens: 1, output_tokens: 1 },
 };
 
-/** What a request asked a provider for: the model its body names, where it names one. */
 const readRequestModel = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ model: Schema.optional(Schema.String) })),
 );
 
-/** A provider answering each request with the next of its answers, keeping the key every request carried and where it went, with the model it asked for. */
 function provider(answers: readonly Response[]) {
   const keys: string[] = [];
   const asked: { readonly host: string; readonly model: string | undefined }[] = [];
@@ -87,7 +72,6 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
   const ring = parseKeyRing(Redacted.make(RING.HELD));
   if (Result.isFailure(ring)) return assert.fail("not a ring");
   for (const [named, key] of Object.entries(saved)) {
-    // SAFETY: the entries are the record's own, keyed by the providers above.
     const providerId = named as ProviderKeyProvider;
     const sealed = sealProviderKey(
       ring.success,
@@ -109,7 +93,6 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
   return userId;
 }
 
-/** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null. */
 async function ownKey(
   userId: string,
   preferred: ProviderKeyProvider,
@@ -121,7 +104,6 @@ async function ownKey(
   return own === undefined ? undefined : { provider: own.provider, key: Redacted.value(own.key) };
 }
 
-/** An account holding a Claude setup-token alone, which is no API key. */
 async function accountWithSetupToken() {
   const userId = await database.createUser();
   const ring = parseKeyRing(Redacted.make(RING.HELD));
@@ -175,7 +157,6 @@ test("a call beside an account's agents, such as chapters or a replay's summary,
   assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
 });
 
-/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and our own key for titles, which no such call spends. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -188,7 +169,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: Redacted.make("sk-ant-vespin-title-key-1111"),
 };
 
-/** Asks the model once, answering its text or nothing where the provider refused. */
 async function askOnce(
   model: LanguageModel,
   providerOptions?: Record<string, Record<string, string>>,
@@ -206,7 +186,6 @@ async function askOnce(
   }
 }
 
-/** A replay's summary model for the account and the new agent's choice, as a Start reads it, over the provider's door given. */
 function summaryModelFor(userId: string, choice: ModelChoice, fetch: typeof globalThis.fetch) {
   return database.run(
     productionSummaryModel(userId, choice, "low", fetch).pipe(
@@ -235,7 +214,6 @@ test("a replay's summary is written on the account's own key, the new agent's ow
   assert.deepEqual(anthropic.asked, [{ host: "api.anthropic.com", model: "claude-opus-5-5" }]);
   assert.deepEqual(openAi.keys, [ACCOUNT_KEY.OPENAI]);
   assert.deepEqual(openAi.asked, [{ host: "api.openai.com", model: "gpt-6.1-sol" }]);
-  // The other provider's model may hold less than the new agent's, so its chunks are sized to its own window.
   assert.equal(own.windowTokens, undefined);
   assert.equal(other.windowTokens, 200_000);
   assert.equal(await summaryModelFor(none, opus, anthropic.fetch), undefined);

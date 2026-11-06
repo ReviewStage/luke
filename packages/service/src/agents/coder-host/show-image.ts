@@ -17,25 +17,6 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
 
-/**
- * show-image.ts -- a coding agent or its worker shows the developer pictures from its sandbox, kept beside its transcript as one set.
- *
- * The agent names each file by its path and says in a line what it shows;
- * the service reads each through the same door the agent's file tools reach
- * the sandbox by (`inbox-image.ts`), held to a picture's bound and the three
- * types, or a WebM video the agent recorded of what it did, which the
- * transcript plays in a picture's place, measures it, and keeps it beside the transcript the call is written
- * to (`conversation-pictures.ts`), the agent's own or its worker's. The
- * answer names each kept picture by id, never by its bytes, so the record
- * carries an id, and the developer's window draws the set from it. The
- * model is answered in words and ids alone: it made the files, and reads
- * one back with `read_file` when it wants to look. A call is shown whole or
- * not at all: the first file refused refuses the call in one sentence the
- * model can act on, naming the path, before anything is kept, and a set
- * the transcript has room for only part of keeps none of it.
- */
-
-/** Why a call showed nothing, in the words the model reads; a sentence ending in a colon is followed by the path. */
 export const SHOW_IMAGE_REFUSAL = {
   UNREADABLE: `Not shown: give images as a list of 1 to ${CONVERSATION_PICTURE_BOUNDS.MAX_PER_CALL} items, each a path in your sandbox and a caption of one line of at most ${INBOX_BOUNDS.MAX_ALT_CHARS} characters.`,
   NO_FILE: "Not shown: no such file in your sandbox:",
@@ -88,19 +69,16 @@ export const SHOW_IMAGE_TOOL = {
   inputSchema: SHOW_IMAGE_INPUT,
 } as const;
 
-/** A call that showed nothing, and why. */
 export function showImageRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** Where one call's pictures are read from and kept: the transcript it is written to, and the sandbox it names files in. */
 export interface ShowImageBinding {
   readonly target: ConversationTarget;
   readonly sandbox: InboxSandboxDoor;
   readonly checkout: string;
 }
 
-/** One picture read and measured, ready to keep. */
 interface ReadPicture {
   readonly bytes: Uint8Array;
   readonly contentType: KeptPicture["mediaType"];
@@ -108,7 +86,6 @@ interface ReadPicture {
   readonly height: number;
 }
 
-/** The picture at the path, read, held to the bound, and measured; or the sentence refusing it. */
 function readPicture(
   binding: ShowImageBinding,
   path: string,
@@ -132,16 +109,8 @@ function readPicture(
   );
 }
 
-/** A set the transcript has no room for whole, which rolls back what of it was kept. */
 class SetPastBudget extends Data.TaggedError("SetPastBudget") {}
 
-/**
- * Every picture kept, in order, in one transaction; nothing where the
- * transcript has room for only part of the set. Note that a refusal fails
- * the transaction rather than returning from it, because the pictures kept
- * before it would otherwise stand, counted against the budget, named by no
- * answer.
- */
 function keepAll(
   target: ConversationTarget,
   pictures: readonly ReadPicture[],
@@ -161,12 +130,6 @@ function keepAll(
   );
 }
 
-/**
- * One `show_image` call: every file read before any is kept, so a refused
- * file shows nothing; then each kept beside the transcript in the order
- * given, the same bytes answered as the row already kept. A store that
- * fails answers that the call may be made again, as a page's does.
- */
 export function runShowImage(
   binding: ShowImageBinding,
   input: UnparsedWireValue,

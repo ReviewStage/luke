@@ -14,21 +14,10 @@ import {
 import { firstIntegrationAccount } from "../testing/integration-connect.js";
 import { SlackBotFailure, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 
-/**
- * Our Slack bot writing to a member, over a real store and a fake
- * Slack: a member whose email Slack knows is written to, one it does not
- * know is written nothing unless they connected their own Slack account in
- * the bot's team, and a Slack that refuses answers nothing rather than
- * failing whoever asked.
- *
- * Synthetic accounts, workspaces, and Slack ids throughout.
- */
-
 const KNOWN_EMAIL = "known@app.test";
 const POSTED = { channel: "D0001", ts: "1700000000.000100" };
 const CONTENT = { text: "A thread needs you", blocks: [] };
 
-/** A Slack that knows one member, by `KNOWN_EMAIL`, answers a member's own account as the user its subject names in the team, and posts every message it is handed. */
 const fakeSlack: SlackWebApi = (method, args, memberSubject) => {
   switch (method) {
     case "auth.test":
@@ -56,7 +45,6 @@ const openAccount = (email: string) =>
     return id;
   });
 
-/** The account's own Slack account, connected as Settings › Integrations connects it, under the account's id as its subject. */
 const connectOwnSlack = (userId: string) =>
   Effect.gen(function* () {
     const state = `state-${randomUUID()}`;
@@ -68,7 +56,6 @@ const connectOwnSlack = (userId: string) =>
     yield* completeIntegrationSignIn(userId, INTEGRATION_PROVIDER.SLACK, state);
   });
 
-/** The account made a member of the workspace. */
 const joinWorkspace = (organizationId: string, userId: string) =>
   Effect.gen(function* () {
     yield* (yield* Database).insert(member).values({
@@ -79,7 +66,6 @@ const joinWorkspace = (organizationId: string, userId: string) =>
     });
   });
 
-/** A workspace whose bot is connected, by the member given. */
 const openConnectedWorkspace = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;

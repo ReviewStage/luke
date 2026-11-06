@@ -22,29 +22,6 @@ import { and, asc, eq, inArray, isNotNull, notInArray, or, type SQL } from "driz
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
-/**
- * workspace-members.ts -- who is in a workspace, read off the organization plugin's own rows.
- *
- * A member is the plugin's `member` row, read here through Drizzle as
- * `workspace-store.ts` reads it, since the list is read under the Mac's
- * OAuth token, which no plugin call takes. Removing a member and leaving
- * are the plugin's own calls under the Mac's session (`workspace-seams.ts`);
- * the one thing read here for them is the member id the plugin removes by.
- * A member's sign-in picture is listed only where it is an address the
- * renderer may draw (`pinnedPictureUrl`), so the window shows a teammate's
- * face as it shows the account's own, and a picture anywhere else is left out
- * rather than handed to a renderer whose image policy would refuse it.
- *
- * The plugin keeps no row for a membership that ended, so who left is read
- * off the workspace's own work: an account that created one of its tasks,
- * started one of its agents, saved a version of one of its tasks, or
- * answered one of its Inbox items, and is no longer a member. Each is named
- * by the name and picture their account holds now, which the window draws
- * grayed wherever their work names them; nobody the workspace's work does
- * not name is ever listed, and an account that is gone is not named at all.
- */
-
-/** The order roles are listed in: owners, then admins, then members. */
 const ROLE_ORDER: readonly WorkspaceRole[] = [
   WORKSPACE_ROLE.OWNER,
   WORKSPACE_ROLE.ADMIN,
@@ -77,12 +54,6 @@ const findMembers = SqlSchema.findAll({
     ),
 });
 
-/**
- * The condition that the account a statement reads is named by the
- * workspace's work and is no longer a member of it: it created one of its
- * tasks, started one of its agents, made one of its workspace automations,
- * saved a version of one of its tasks, or answered one of its Inbox items.
- */
 function formerOf(organizationId: string): SQL | undefined {
   const tasks = queryBuilder
     .select({ id: task.id })
@@ -104,7 +75,6 @@ function formerOf(organizationId: string): SQL | undefined {
           .from(agentTable)
           .where(eq(agentTable.organizationId, organizationId)),
       ),
-      // Note that only the workspace's own automations count, since a personal one is read by its maker alone.
       inArray(
         user.id,
         queryBuilder
@@ -131,7 +101,6 @@ function formerOf(organizationId: string): SQL | undefined {
         queryBuilder
           .select({ id: inboxItem.answeredBy })
           .from(inboxItem)
-          // Note that an item is the workspace's by its own column, since an agent with no task holds items too.
           .where(
             and(eq(inboxItem.organizationId, organizationId), isNotNull(inboxItem.answeredBy)),
           ),
@@ -177,7 +146,6 @@ const findMemberId = SqlSchema.findOneOption({
     ),
 });
 
-/** A workspace's members, owners first, then admins, then members, each by name. */
 export function listMembers(
   organizationId: string,
 ): WorkspaceStoreEffect<readonly WorkspaceMember[]> {
@@ -191,7 +159,6 @@ export function listMembers(
   });
 }
 
-/** Who the workspace's work still names but who is no longer a member of it, by name, with their picture where the window may draw it. */
 export function listFormerMembers(
   organizationId: string,
 ): WorkspaceStoreEffect<readonly FormerMember[]> {
@@ -203,7 +170,6 @@ export function listFormerMembers(
   );
 }
 
-/** The plugin's member id for the account in the workspace, or none where it is not a member. */
 export function memberIdOf(
   userId: string,
   organizationId: string,
@@ -214,17 +180,8 @@ export function memberIdOf(
   );
 }
 
-/** The statements a workspace's people are followed by live: its members, and who its work names but left. */
 export type WorkspaceMembersLiveStatements = Readonly<Record<"members" | "former", LiveStatement>>;
 
-/**
- * A workspace's people written for Neon Realtime, read for `readerId`: the
- * same rows and columns as `listMembers` and `listFormerMembers`, each under
- * the key `live-wire.ts` reads it by, and none at all once the reader is no
- * longer a member, so a subscription stays bound to the rule its endpoint
- * checked. The order is the reader's to keep, since Realtime keeps none.
- * None where a statement names a value Realtime cannot carry.
- */
 export function workspaceMembersLiveStatements(
   readerId: string,
   organizationId: string,

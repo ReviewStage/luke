@@ -26,28 +26,14 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { dictationProcedures } from "./dictation-procedures.js";
 
-/**
- * A dictated clip answered by the hosted oRPC router the way the web route answers it, over
- * a real dialect and OpenAI faked at its HTTP door: the clip and its words
- * go to the transcription model on the account's own OpenAI key, never
- * ours, the text comes back, the account's day is metered, and nothing of
- * the clip or the text is logged. An account with no key of its own is
- * refused as missing one.
- *
- * Synthetic accounts, bearers, clip bytes, and words throughout.
- */
-
-/** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 const ORIGIN = "https://app.test";
 const DICTATION_PATH = "/api/dictation";
 const TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_KEY = "sk-proj-account-test-key-0000000000000dict";
-/** The deployment's ring the account's key is sealed under: fixed bytes written for this file. */
 const RING = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 
-/** Bytes that stand for a clip; the fake reads them back rather than hearing them. */
 const CLIP = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01]);
 const CLIP_BASE64 = Buffer.from(CLIP).toString("base64");
 
@@ -71,7 +57,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** How the fake model answers: the words, with the seconds it billed where given, or a status of its own. */
 type ModelAnswer =
   | { readonly text: string; readonly seconds?: number }
   | { readonly status: number }
@@ -89,7 +74,6 @@ function modelResponse(answer: ModelAnswer): Response {
   });
 }
 
-/** The account's own OpenAI API key, sealed under the test's ring and saved as Settings saves one. */
 const saveOwnKey = (userId: string, key: string) =>
   Effect.gen(function* () {
     const ring = parseKeyRing(Redacted.make(RING));
@@ -110,7 +94,6 @@ const saveOwnKey = (userId: string, key: string) =>
     );
   });
 
-/** An account behind its own bearer, with its own key saved where one is given, the model, and the group answering. */
 const openAccount = (
   options: { model?: ModelAnswer; key?: string | undefined; ringless?: boolean } = {},
 ) =>
@@ -150,11 +133,9 @@ const answer = (
       ...NO_ENVIRONMENT,
       providerKeyEncryptionKeys: seams.ring === undefined ? undefined : Redacted.make(seams.ring),
     };
-    // Every line the procedure logs is kept, so the test can read what it says.
     const recorder = Logger.make(({ message, cause }) => {
       seams.logged.push(`${JSON.stringify(message)} ${Cause.pretty(cause)}`);
     });
-    // The procedure runs on the services handed to it: the test's own, with the key, the model, and the recorder beside them.
     const services = yield* Effect.context<never>().pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -165,13 +146,11 @@ const answer = (
         ),
       ),
     );
-    // SAFETY: the dictation procedure yields the database, the clock, the environment, and the model's HTTP client alone, which the context above holds.
     const webServices = services as Context.Context<WebServices>;
     const response = yield* Effect.promise(() =>
       hostedFetch({ dictation: procedures })(request, webServices),
     );
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -196,7 +175,6 @@ const clip = (userId: string | undefined, fields: Record<string, WireBoundaryInp
     body: { audio: CLIP_BASE64, durationMs: 9_000, keywords: KEYWORDS, ...fields },
   });
 
-/** The form the model was sent, failing the test where it was sent none. */
 function formOf(call: RecordedRequest): FormData {
   const body = call.init.body;
   assert.ok(body instanceof FormData, "the clip goes as a multipart form");

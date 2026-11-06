@@ -97,36 +97,17 @@ import { workspaceInvitationsProcedures } from "./workspace-invitations-procedur
 import { workspacesApp } from "./workspaces-app.js";
 import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspaces-procedures.js";
 
-/**
- * The account's workspaces, answered by their group the way a function
- * answers them, and GitHub connected through the App's Setup URL and the
- * one-time authorization after it, over Better Auth's own organization
- * plugin on PGlite and a GitHub the test scripts: the bearer names the
- * account and nothing else does, a workspace a member creates is theirs to
- * own, only an owner or admin connects GitHub, nobody disconnects it from
- * the app, and an installation is linked to a workspace only through a live
- * intent, only where the user who authorized sees it, and only to one
- * workspace.
- *
- * Synthetic accounts, bearers, installations, and logins throughout.
- */
-
-/** What the endpoints counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The properties of each event of one name the account was counted for, in order. */
 const countedProperties = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** What Resend was asked to send, across the file; a test reads its own invitee's. */
 const RESEND = recordingHttpClient(() => jsonResponse({ id: "email-1" }));
 
-/** The sender invitations are emailed from in these tests. */
 const INVITE_FROM = "Invites <invites@app.test>";
 
-/** The invitation mailer over the recorded Resend, as a deployment naming a key and a sender builds it. */
 const INVITATION_MAIL = invitationMailFromEnvironment.pipe(
   Layer.provide(
     Layer.merge(
@@ -141,7 +122,6 @@ const INVITATION_MAIL = invitationMailFromEnvironment.pipe(
   ),
 );
 
-/** The emails Resend was asked to send to `address`, as their bodies. */
 const emailsTo = (address: string) =>
   RESEND.requests
     .map(
@@ -173,7 +153,6 @@ interface Answer {
   readonly location: string | null;
 }
 
-/** An account under the name given, signed in with GitHub, its token on its account row. */
 const openGithubAccount = (name: string) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -181,7 +160,6 @@ const openGithubAccount = (name: string) =>
     return userId;
   });
 
-/** An account under the name given, signed in with Google alone: it holds no GitHub row. */
 const openGoogleAccount = (name: string) =>
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
@@ -191,7 +169,6 @@ const openGoogleAccount = (name: string) =>
     return userId;
   });
 
-/** Every account's GitHub row, as whose it is and which GitHub user it stands for. */
 const githubRows = Database.use((db) =>
   db
     .select({ userId: account.userId, accountId: account.accountId })
@@ -199,13 +176,11 @@ const githubRows = Database.use((db) =>
     .where(eq(account.providerId, GITHUB_PROVIDER_ID)),
 );
 
-/** The plugin's member writes and the session they are made under, for the paths that write through the plugin. */
 interface SessionSeams {
   readonly members: MemberSeams;
   readonly resolveSessionUserId: WorkspacesProcedureSeams["resolveSessionUserId"];
 }
 
-/** No session at all: a path that takes one finds none, and nothing writes through the plugin. */
 const NO_SESSION: SessionSeams = {
   members: {
     inviteMember: () => Effect.die("no member write without a session"),
@@ -219,13 +194,11 @@ const NO_SESSION: SessionSeams = {
   resolveSessionUserId: () => Effect.succeed(Option.none()),
 };
 
-/** An OAuth bearer stands for the account it names. */
 const bearerUserId = (incoming: Request) =>
   Effect.succeed(
     Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
   );
 
-/** The paths the hosted oRPC router answers, every other one the old groups. */
 const HOSTED_PATHS: ReadonlySet<string> = new Set([
   HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT,
   HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT,
@@ -243,12 +216,6 @@ const HOSTED_PATHS: ReadonlySet<string> = new Set([
   HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET,
 ]);
 
-/**
- * One request answered by the hosted oRPC router, the workspaces group, and the install group over
- * the ambient database and the GitHub given, its response read by `read`
- * before the handler is let go; an OAuth bearer stands for the account it
- * names, and a session bearer is read by the plugin itself.
- */
 const answered = <A>(
   seams: WorkspaceSeams,
   github: FakeGitHub,
@@ -257,7 +224,6 @@ const answered = <A>(
   read: (response: Response) => Promise<A>,
 ) =>
   Effect.gen(function* () {
-    // The handler runs on the router's own fiber, so it is handed the test's clock: an intent's expiry and a token's are read off it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
@@ -278,7 +244,6 @@ const answered = <A>(
           members: session.members,
         }),
       });
-      // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
       const response = yield* Effect.promise(() =>
         procedures(request, context as Context.Context<WebServices>),
       );
@@ -298,7 +263,6 @@ const answered = <A>(
     return result;
   });
 
-/** One request answered as `answered` answers it, its body read as the JSON it is, or a redirect's location. */
 const send = (
   seams: WorkspaceSeams,
   github: FakeGitHub,
@@ -307,12 +271,10 @@ const send = (
 ) =>
   answered(seams, github, request, session, async (response): Promise<Answer> => {
     const text = await response.text();
-    // SAFETY: the groups answer JSON or a redirect; the test compares the body as the wire value it is.
     const body = (text === "" ? undefined : JSON.parse(text)) as WireBoundaryInput;
     return { status: response.status, body, location: response.headers.get("location") };
   });
 
-/** A bearer's request to the workspaces group: a read, or a POST with the body given. */
 function bearerRequest(path: string, userId: string | undefined, body?: WireBoundaryInput) {
   const headers = new Headers();
   if (userId !== undefined) headers.set("authorization", `Bearer ${userId}`);
@@ -325,7 +287,6 @@ function bearerRequest(path: string, userId: string | undefined, body?: WireBoun
   return new Request(new URL(path, ORIGIN), init);
 }
 
-/** GitHub's return through the Setup URL, with the query given. */
 function setupRequest(query: Record<string, string>) {
   const search = new URLSearchParams(query);
   return new Request(new URL(`${HOSTED_SERVICE_PATH.GITHUB_INSTALLED}?${search}`, ORIGIN), {
@@ -333,7 +294,6 @@ function setupRequest(query: Record<string, string>) {
   });
 }
 
-/** What an answer carries under the wire's schema, failing the test where it is not the wire's. */
 function readAs<A>(
   answered: Pick<Answer, "status" | "body">,
   schema: Schema.Codec<A, unknown>,
@@ -345,21 +305,18 @@ function readAs<A>(
   return read.success;
 }
 
-/** The workspaces the bearer's account reads. */
 const workspacesOf = (seams: WorkspaceSeams, github: FakeGitHub, userId: string) =>
   Effect.map(
     send(seams, github, bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES, userId)),
     (answered) => readAs(answered, workspacesAnswerSchema, HOSTED_HTTP_STATUS.OK).workspaces,
   );
 
-/** The workspace an account creates under the name given. */
 const createAs = (seams: WorkspaceSeams, github: FakeGitHub, userId: string, name: string) =>
   Effect.map(
     send(seams, github, bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES, userId, { name })),
     (answered) => readAs(answered, workspaceAnswerSchema, HOSTED_HTTP_STATUS.CREATED).workspace,
   );
 
-/** The state the install address carries for an owner's or admin's connect of the workspace. */
 const connectState = (
   seams: WorkspaceSeams,
   github: FakeGitHub,
@@ -377,22 +334,13 @@ const connectState = (
     return new URL(url).searchParams.get("state") ?? assert.fail("no state on the install address");
   });
 
-/** GitHub's web flow, which hands every authorization this code unless a test says otherwise. */
 const ONE_TIME_CODE = "one-time-code";
 
-/** A browser signed in to an account: the session cookie it sends, and the session read that names its account. */
 interface SignedInBrowser {
   readonly cookie: string;
   readonly session: SessionSeams;
 }
 
-/**
- * Where GitHub's return through the Setup URL lands the browser, as its
- * status word: at once, or once GitHub's one-time authorization returns to
- * the callback the Setup URL sent it on to, with the code given, or with
- * none where the user declined, from the browser given, or one signed in to
- * nothing.
- */
 const landedAt = (
   seams: WorkspaceSeams,
   github: FakeGitHub,
@@ -429,7 +377,6 @@ const landedAt = (
     return returned.location?.replace(LANDING, "");
   });
 
-/** The GitHub account a workspace in the list carries. */
 function githubOf(workspaces: readonly Workspace[], workspaceId: string) {
   return workspaces.find((workspace) => workspace.id === workspaceId)?.github;
 }
@@ -678,7 +625,6 @@ it.effect(
         const elsewhere = yield* install(ada, yield* browserOf(grace));
         yield* install(ada, yield* browserOf(ada));
         yield* install(ada, yield* browserOf(ada));
-        // The GitHub user GitHub's flow authorizes is Ada's now, so Grace's own install keeps nothing.
         yield* install(grace, yield* browserOf(grace));
 
         assert.equal(elsewhere, GITHUB_INSTALL_STATUS.CONNECTED);
@@ -916,7 +862,6 @@ it.effect(
             githubInstallations: [{ installationId: ACME.id, login: "acme", active: true }],
           },
         );
-        // A connect begun before the refused disconnect still links: nothing was spent.
         assert.equal(
           yield* landedAt(seams, github, {
             installation_id: String(ACME.id),
@@ -988,17 +933,13 @@ it.effect("a plugin that refuses the account's first workspace is answered as un
   }),
 );
 
-/** The Better Auth API the plugin's tests stand over. */
 type WorkspacePluginApi = Effect.Success<typeof openWorkspacePlugin>["api"];
 
-/** A GitHub the account reaches nothing on: a members read asks GitHub nothing. */
 const NO_GITHUB_TO_READ = githubReaching([]);
 
-/** Where a workspace's members are read, the workspace named in the query. */
 const membersAt = (workspaceId: string) =>
   `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${new URLSearchParams({ workspaceId })}`;
 
-/** A members read under the bearer's account, as its status and body. */
 const readMembers = (seams: WorkspaceSeams, userId: string, path: string) =>
   Effect.map(send(seams, NO_GITHUB_TO_READ, bearerRequest(path, userId)), ({ status, body }) => ({
     status,
@@ -1009,7 +950,6 @@ const refusedAs = (status: number, error: string) => ({ status, body: { error } 
 
 type WorkspacePlugin = Effect.Success<typeof openWorkspacePlugin>;
 
-/** A POST under a fresh session of the account's, signed as the Mac carries one, as its status and body. */
 const postedInSession = (
   plugin: WorkspacePlugin,
   userId: string,
@@ -1027,22 +967,18 @@ const postedInSession = (
     return { status, body: answered };
   });
 
-/** One member removed by the account, under its session. */
 const removing = (plugin: WorkspacePlugin, userId: string, workspaceId: string, removed: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE, {
     workspaceId,
     userId: removed,
   });
 
-/** The account leaving the workspace, under its session. */
 const leaving = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, { workspaceId });
 
-/** The account renaming the workspace, under its session. */
 const renaming = (plugin: WorkspacePlugin, userId: string, workspaceId: string, name: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_RENAME, { workspaceId, name });
 
-/** The account changing the workspace's slug, under its OAuth token. */
 const settingSlug = (plugin: WorkspacePlugin, userId: string, workspaceId: string, slug: string) =>
   Effect.map(
     send(
@@ -1054,7 +990,6 @@ const settingSlug = (plugin: WorkspacePlugin, userId: string, workspaceId: strin
     ({ status, body }) => ({ status, body }),
   );
 
-/** The account setting the workspace's photo, or removing it with null, under its session. */
 const settingPhoto = (
   plugin: WorkspacePlugin,
   userId: string,
@@ -1063,7 +998,6 @@ const settingPhoto = (
 ) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET, { workspaceId, photo });
 
-/** The text a workspace's `logo` holds, as the plugin's row keeps it. */
 const logoOf = (organizationId: string) =>
   Effect.map(
     Database.use((db) =>
@@ -1075,7 +1009,6 @@ const logoOf = (organizationId: string) =>
     ([row]) => (row ?? assert.fail(`no organization ${organizationId}`)).logo,
   );
 
-/** A workspace's name and slug, as the plugin's row holds them. */
 const organizationOf = (organizationId: string) =>
   Effect.map(
     Database.use((db) =>
@@ -1087,7 +1020,6 @@ const organizationOf = (organizationId: string) =>
     ([row]) => row ?? assert.fail(`no organization ${organizationId}`),
   );
 
-/** Who is in a workspace, by account and role, as the plugin's rows hold them. */
 const membersOf = (organizationId: string) =>
   Database.use((db) =>
     db
@@ -1097,7 +1029,6 @@ const membersOf = (organizationId: string) =>
       .orderBy(member.role, member.userId),
   );
 
-/** A shared workspace the owner makes through the plugin's server-only create, its teammates added under their roles through its server-only add. */
 const openTeam = (
   api: WorkspacePluginApi,
   ownerId: string,
@@ -1145,7 +1076,6 @@ it.effect("a member reads the workspace's members, owners first, then admins, th
   }),
 );
 
-/** Gives the account a sign-in picture at an address, as its provider's profile would. */
 const pictured = (userId: string, image: string) =>
   Database.use((db) => db.update(user).set({ image }).where(eq(user.id, userId)));
 
@@ -1227,11 +1157,9 @@ it.effect(
     }),
 );
 
-/** Where the group serves a workspace's photo, its workspace in the query the path's rewrite moves it into. */
 const photoAt = (workspaceId: string) =>
   `/api/workspaces/photo?${new URLSearchParams({ id: workspaceId })}`;
 
-/** A photo read under the bearer's account, as its status, the headers it was served under, and its bytes in base64. */
 const readPhoto = (seams: WorkspaceSeams, userId: string | undefined, workspaceId: string) =>
   answered(
     seams,
@@ -1601,7 +1529,6 @@ it.effect(
     }),
 );
 
-/** The account giving a teammate a role, under its session. */
 const changingRole = (
   plugin: WorkspacePlugin,
   userId: string,
@@ -1615,20 +1542,17 @@ const changingRole = (
     role,
   });
 
-/** The account handing the workspace to a teammate, under its session. */
 const transferring = (plugin: WorkspacePlugin, userId: string, workspaceId: string, heir: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER, {
     workspaceId,
     userId: heir,
   });
 
-/** Each member's role in a workspace, by account, as the plugin's rows hold them. */
 const rolesIn = (organizationId: string) =>
   Effect.map(membersOf(organizationId), (rows) =>
     Object.fromEntries(rows.map((row) => [row.userId, row.role])),
   );
 
-/** Each member's role, by account, as a members answer carries them, failing the test where it is not one. */
 const rolesAnswered = (answer: Pick<Answer, "status" | "body">) =>
   Object.fromEntries(
     readAs(answer, workspaceMembersAnswerSchema, HOSTED_HTTP_STATUS.OK).members.map((one) => [
@@ -1637,7 +1561,6 @@ const rolesAnswered = (answer: Pick<Answer, "status" | "body">) =>
     ]),
   );
 
-/** A member's row made an owner's, as a handover cut short between its two writes leaves the heir. */
 const ownerByHand = (organizationId: string, userId: string) =>
   Database.use((db) =>
     db
@@ -1698,7 +1621,6 @@ it.effect(
           { userId: grace, role: "admin" },
           { userId: alan, role: "member" },
         ]);
-        // A second owner, as a handover cut short leaves one, is still an owner nobody changes.
         yield* ownerByHand(acme, grace);
 
         const ofOwner = yield* changingRole(plugin, ada, acme, grace, WORKSPACE_ROLE.MEMBER);
@@ -1754,7 +1676,6 @@ it.effect(
         assert.deepEqual(yield* rolesIn(acme), handedOver);
         assert.equal(yield* roleOf(ada), WORKSPACE_ROLE.ADMIN);
         assert.equal(yield* roleOf(grace), WORKSPACE_ROLE.OWNER);
-        // The old owner, an admin now, may leave, and the new owner may not.
         assert.deepEqual(yield* leaving(plugin, grace, acme), {
           status: HOSTED_HTTP_STATUS.FORBIDDEN,
           body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
@@ -2022,7 +1943,6 @@ it.effect(
           refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: "acme-labs" });
-        // Note that Grace is in two workspaces, so a link the old slug names must not fall to her other one.
         const gracesListed = yield* workspacesOf(plugin.seams, NO_GITHUB_TO_READ, grace);
         assert.equal(workspaceOfSlug(gracesListed, before.toUpperCase())?.id, acme);
         assert.equal(workspaceOfSlug(gracesListed, "acme-labs")?.id, acme);
@@ -2101,15 +2021,12 @@ it.effect(
     }),
 );
 
-/** A photo's `data:` URL of the type given, holding `bytes` bytes. */
-/** Each photo type's signature, which a photo's bytes must open with to be the image its label names. */
 const PHOTO_SIGNATURES = {
   [WORKSPACE_PHOTO_TYPE.PNG]: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
   [WORKSPACE_PHOTO_TYPE.JPEG]: [0xff, 0xd8, 0xff],
   [WORKSPACE_PHOTO_TYPE.WEBP]: [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
 } as const satisfies Record<WorkspacePhotoType, readonly number[]>;
 
-/** A photo of `bytes` bytes of the type given as its `data:` URL: its signature, then filler. */
 const photoOfBytes = (type: WorkspacePhotoType, bytes: number) => {
   const buffer = Buffer.alloc(bytes, 7);
   buffer.set(PHOTO_SIGNATURES[type]);
@@ -2244,7 +2161,6 @@ it.effect(
         const grace = yield* openGithubAccount("Grace Hopper");
         const acme = yield* openTeam(api, ada, [{ userId: grace, role: "member" }]);
 
-        // The OAuth bearer stands for its account on every other path here.
         const underToken = (path: string, body: WireBoundaryInput) =>
           Effect.map(
             send(plugin.seams, NO_GITHUB_TO_READ, bearerRequest(path, ada, body), plugin),
@@ -2330,11 +2246,9 @@ it.effect(
     }),
 );
 
-/** The invitations path, a workspace's pending ones named in the query. */
 const invitationsAt = (workspaceId: string) =>
   `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS}?${new URLSearchParams({ workspaceId })}`;
 
-/** A read under a fresh session of the account's, as its status and body. */
 const readInSession = (plugin: WorkspacePlugin, userId: string, path: string) =>
   Effect.gen(function* () {
     const sessionBearer = yield* plugin.sessionBearerOf(userId);
@@ -2347,7 +2261,6 @@ const readInSession = (plugin: WorkspacePlugin, userId: string, path: string) =>
     return { status, body };
   });
 
-/** An invitation asked for by the account, under its session, as a member unless told otherwise. */
 const inviting = (
   plugin: WorkspacePlugin,
   userId: string,
@@ -2402,7 +2315,6 @@ it.effect(
     }),
 );
 
-/** A workspace's pending invitations as the desktop builds them from the live rows at `now`, run as Realtime runs them, for `readerId`. */
 const liveInvitationsOf = (readerId: string, workspaceId: string, now: number) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -2471,11 +2383,9 @@ it.effect(
     }),
 );
 
-/** The accept page's read of the invitation `id`. */
 const offerAt = (id: string) =>
   `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER}?${new URLSearchParams({ id })}`;
 
-/** The account's address marked verified, as a provider's sign-in marks it, and that address. */
 const verified = (userId: string) =>
   Effect.gen(function* () {
     yield* Database.use((db) =>
@@ -2484,7 +2394,6 @@ const verified = (userId: string) =>
     return `${userId}@app.test`;
   });
 
-/** The invitation accepted through the plugin's own call, under the account's session, as the accept page accepts it. */
 const accepting = (plugin: WorkspacePlugin, userId: string, invitationId: string) =>
   Effect.gen(function* () {
     const sessionBearer = yield* plugin.sessionBearerOf(userId);
@@ -2840,7 +2749,6 @@ it.effect(
           plugin,
         );
 
-        // A malformed input is read only after the caller, so it is unauthenticated too, as it always was.
         const malformed = yield* send(
           plugin.seams,
           NO_GITHUB_TO_READ,
@@ -2886,7 +2794,6 @@ it.effect("each workspace says how many members it has, to every member alike", 
         workspaces.find((each) => each.id === acme.id)?.memberCount;
       assert.equal(countOf(yield* workspacesOf(seams, github, ada)), 2);
       assert.equal(countOf(yield* workspacesOf(seams, github, grace)), 2);
-      // The account's first workspace holds the account alone.
       const [first] = yield* workspacesOf(seams, github, grace);
       assert.equal(first?.memberCount, 1);
     }).pipe(Effect.provide(database));

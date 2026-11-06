@@ -1,26 +1,8 @@
-/**
- * coverage.ts -- the hosted procedures that do what each member MCP tool does, so a client of the hosted API reaches everything an outside agent does.
- *
- * The member MCP server and the hosted API are two front ends over the
- * service's operations: the tools are written for a model, the procedures
- * for the desktop, the web app, and the command-line tool. Neither calls the
- * other, so this table is what keeps them level. Every tool named in
- * `MEMBER_MCP_TOOL` has a row, and a tool added without one does not build;
- * each row names the procedures, by their declarations in the contract
- * itself, that together do what the tool does, a read a write needs among
- * them, such as the description a comment is anchored in. A procedure may answer in
- * other words and shapes than its tool, and may take several calls where the
- * tool takes one, but no tool may do what no procedure reaches. Where a
- * procedure the tool needs does not exist, it is added to the contract
- * before the tool's row can name it.
- */
-
 import { hostedContract } from "@repo/features/contract";
 import { MEMBER_MCP_TOOL, type MemberMcpToolName } from "./tools.js";
 
 type HostedContract = typeof hostedContract;
 
-/** One procedure of the hosted contract, as the contract declares it. */
 type HostedProcedure = {
   [Resource in keyof HostedContract]: HostedContract[Resource][keyof HostedContract[Resource]];
 }[keyof HostedContract];
@@ -29,7 +11,6 @@ const { account, agentPullRequests, agents, automations, inbox, messages, models
 const { descriptionComments, plans, taskFiles, agentPages, taskSections, workspaces } =
   hostedContract;
 
-/** Each tool's procedures: at least one, so no row stands empty. */
 export const MEMBER_MCP_COVERAGE = {
   [MEMBER_MCP_TOOL.LIST_WORKSPACES]: [workspaces.list],
   [MEMBER_MCP_TOOL.LIST_TASKS]: [plans.list, taskSections.list],

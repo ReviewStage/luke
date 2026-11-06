@@ -27,21 +27,10 @@ import {
 } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 
-/**
- * The scheduled sweep's settle of a native agent's turn whose runner died
- * mid-turn, over a real store and a fake of Vercel Sandbox's REST API that
- * keeps the project's sandboxes and what it was asked: the turn is settled
- * failed and reported, a runner still up keeps its turn, and each sweep
- * reads no more than its bounds, leaving the rest to the next minute.
- *
- * Synthetic accounts, agents, sandboxes, and tokens throughout.
- */
-
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 const NOW = new Date(Date.UTC(2026, 9, 14, 12));
 const minutesBefore = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
-/** The page the fake answers a list in: the API's widest, as the sweep asks for. */
 const PAGE = 50;
 
 interface FakeSandbox {
@@ -51,21 +40,16 @@ interface FakeSandbox {
   tags: Record<string, string>;
 }
 
-/** A sandbox of the fake's as Vercel names it, created at the epoch. */
 const listedOf = (sandbox: FakeSandbox) => ({ ...sandbox, createdAt: 0 });
 
-/** Vercel's refusal of a call, as one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer. */
 const refusal = () => Response.json({ error: { code: "bad_request" } }, { status: 400 });
 
-/** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
 function vercel(
   options: { readonly refuseList?: boolean; readonly refuseLaterPages?: boolean } = {},
 ) {
   const sandboxes: FakeSandbox[] = [];
-  /** The detached commands, by id, with their exit code, or null while they run, and what they printed on stderr. */
   const commands = new Map<string, ReadCommand & { readonly stderr?: string }>();
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
-  /** Each network policy sent, by the session it was sent to. */
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
@@ -119,7 +103,6 @@ function vercel(
     return commandLogsStreamed(found.stderr ?? "");
   };
   return {
-    // The sweep's settle of a lost runner reaches GitHub's client, which no test here sends on.
     layer: Layer.merge(sandboxFetchOver(respond), noNetwork),
     sandboxes,
     commands,
@@ -128,7 +111,6 @@ function vercel(
   };
 }
 
-/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */
 const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at: Date }) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -160,13 +142,11 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
-/** How a native sandbox was named and tagged: as one is opened now, or as one made before the rename was. */
 const NAMING = {
   TODAY: { name: "agent-sandbox-", agent: "agentId" },
   BEFORE_RENAME: { name: "luke-agent-", agent: "lukeAgent" },
 } as const;
 
-/** A running sandbox as we name a native agent's, tagged with its session and its agent. */
 function nativeSandbox(
   agentId: string,
   naming: (typeof NAMING)[keyof typeof NAMING] = NAMING.TODAY,
@@ -180,14 +160,12 @@ function nativeSandbox(
   };
 }
 
-/** The session a sandbox's tag names. */
 function sessionOf(sandbox: FakeSandbox): string {
   const { sessionId } = sandbox.tags;
   assert.ok(sessionId !== undefined);
   return sessionId;
 }
 
-/** A running native sandbox of the agent's whose session records the command given as its runner, as a launch at event 7 records it. */
 const sandboxRunning = (agent: Agent, commandId: string) =>
   Effect.gen(function* () {
     const sandbox = nativeSandbox(agent.id);
@@ -202,7 +180,6 @@ const sandboxRunning = (agent: Agent, commandId: string) =>
     return sandbox;
   });
 
-/** A running sandbox as eve names one, tagged with its session alone. */
 function eveSandbox(): FakeSandbox {
   const id = randomUUID();
   return {
@@ -213,7 +190,6 @@ function eveSandbox(): FakeSandbox {
   };
 }
 
-/** A running sandbox whose runner exited while its agent's turn still runs. */
 const lostSandbox = (api: ReturnType<typeof vercel>) =>
   Effect.gen(function* () {
     const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
@@ -287,7 +263,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           settled?.failureDetail,
           "the agent's runner stopped before its turn ended: exit 137, stderr: agent-runner: JavaScript heap out of memory",
         );
-        // Note that the stderr stays in the turn's row: what is reported reaches Sentry.
         assert.equal(reported.length, 1);
         assert.equal(reported[0]?.exitCode, "137");
         assert.ok(!JSON.stringify(reported).includes("heap out of memory"));
@@ -358,7 +333,6 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel();
-        // Sandboxes whose run goes on keep running sweep after sweep, as agents at work do.
         const running = NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES * 2 + 10;
         for (let each = 0; each < running; each += 1)
           api.sandboxes.push(nativeSandbox(randomUUID()));

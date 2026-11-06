@@ -1,15 +1,3 @@
-/**
- * admin-overview-queries.ts -- the Overview's reads of tasks, description revisions,
- * coding agents, pull requests, the inbox, and automations.
- *
- * Every read counts rows or reads a timestamp, a status, or an id; none names
- * a column that holds what an account typed, said, or ran. Every read joins
- * the account each row is attributed to and keeps it through `keptByScope`,
- * so the hide-admins toggle filters every number here as it does the rest of
- * the dashboard. `buildAdminOverview` in `admin-overview.ts` shapes what this
- * reads.
- */
-
 import { Database, type DatabaseServices, queryBuilder } from "@repo/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
 import { agentAutomationRunSql } from "@repo/database/models/agent-name";
@@ -88,45 +76,29 @@ import {
 const DailyCountSchema = Schema.Literals(Object.values(DAILY_COUNT));
 const ReachFeatureSchema = Schema.Literals(Object.values(REACH_FEATURE));
 
-/** An instant a union's column is compared to, cast because the union's columns carry no codec. */
 function instant(at: Date): SQL {
   return sql`${at.toISOString()}::timestamptz`;
 }
 
-/** A fixed name riding a union's rows, cast so Postgres knows the parameter's type. */
 function tag(name: string): SQL.Aliased<string> {
   return sql<string>`${name}::text`.as("tag");
 }
 
-/** When an agent's pull request merged, in epoch milliseconds; null where it has not. */
 const MERGED_AT_MS = sql`(${agentTable.published} ->> 'mergedAt')::numeric`;
 
-/** When an agent's pull request merged, as an instant; null where it has not. */
 const MERGED_AT = sql`to_timestamp(${MERGED_AT_MS} / 1000)`;
 
-/** Whether an agent's pull request is merged, by its stamp or its state. */
 const PR_MERGED = or(
   isNotNull(sql`${agentTable.published} ->> 'mergedAt'`),
   eq(sql`${agentTable.published} ->> 'state'`, PULL_REQUEST_STATE.MERGED),
 );
 
-/** Whether an automation started the agent, as every query asks it. */
 const STARTED_BY_AUTOMATION = agentAutomationRunSql(agentTable);
 
-/** Whether the Slack bot started the agent; false rather than null for an agent with no source. */
 const STARTED_FROM_SLACK = sql<boolean>`coalesce(${agentTable.source} ->> 'kind' = ${AGENT_SOURCE.SLACK}, false)`;
 
-/** Whether another coding agent's `start_agent` started the agent. */
 const STARTED_BY_AGENT = isNotNull(agentTable.startedByAgentId);
 
-/**
- * The agents started since `since`, and before `until` where given, that
- * `filters` keep, tagged `count`: one filtered arm of the same scan per
- * figure. The origins' filters spell `AGENT_ORIGIN`'s precedence, each
- * leaving out the origins before it, so no agent is counted under two; by
- * hand is what they leave of every agent, which the fold takes rather than a
- * fourth arm restating it.
- */
 function agentsStartedRows(
   count: DailyCount,
   since: Date,
@@ -143,14 +115,6 @@ function agentsStartedRows(
     .where(and(within(agentTable.createdAt, since, until), ...filters));
 }
 
-/**
- * Every row a daily count counts since `since`, tagged with the count it
- * belongs to: the account it is attributed to and the instant it is dated by.
- * An inbox answer is the answering member's, and an automation run its
- * owner's; a run a guard held back started nothing and is no run. `until`,
- * where given, ends the span, so the Day page reads one UTC day of the very
- * rows a bar of the Overview's chart counts.
- */
 export function dailyCountRows(since: Date, until?: Date) {
   return unionAll(
     queryBuilder
@@ -244,12 +208,6 @@ export function dailyCountRows(since: Date, until?: Date) {
   ).as("daily_count_row");
 }
 
-/**
- * Every account that used a reachable feature since `since`, tagged with the
- * feature. Integrations are a state rather than a use, so they carry no
- * bound: an account counts with a connection of its own, or one connected on
- * a workspace it belongs to, standing now.
- */
 function reachRows(since: Date) {
   return unionAll(
     queryBuilder
@@ -324,10 +282,6 @@ const findActiveDevelopers = SqlSchema.findOneOption({
   },
 });
 
-/**
- * Each daily count per UTC day since the bound, and before `until` where one
- * is given: the Overview's chart and trends, and one day of it on the Day page.
- */
 export const findDailyCounts = SqlSchema.findAll({
   Request: Schema.Struct({
     since: Schema.Date,
@@ -353,7 +307,6 @@ export const findDailyCounts = SqlSchema.findAll({
   },
 });
 
-/** The pull requests opened by agents started since the bound, and how many of those merged. */
 const findPrsOpened = SqlSchema.findOneOption({
   Request: BoundScopeSchema,
   Result: Schema.Struct({ opened: AggregateColumnSchema, merged: AggregateColumnSchema }),
@@ -376,18 +329,12 @@ const findPrsOpened = SqlSchema.findOneOption({
     ),
 });
 
-/** Whether the account in the outer row ever did something, as a correlated `exists`. */
 function everDid(subquery: Parameters<typeof exists>[0]): SQL<number> {
   return sql<number>`count(*) filter (where ${exists(subquery)})`;
 }
 
 const one = sql`1`;
 
-/**
- * Each funnel step over the accounts created since the bound: how many of
- * them ever took it, at any time since signing up. GitHub counts as connected
- * where a workspace the account belongs to holds an active installation.
- */
 const findFunnel = SqlSchema.findOneOption({
   Request: BoundScopeSchema,
   Result: Schema.Struct({
@@ -444,7 +391,6 @@ const findFunnel = SqlSchema.findOneOption({
   },
 });
 
-/** Each feature's distinct users since the bound, among the accounts active since it. */
 const findReach = SqlSchema.findAll({
   Request: BoundScopeSchema,
   Result: Schema.Struct({ tag: ReachFeatureSchema, value: AggregateColumnSchema }),
@@ -467,12 +413,6 @@ const findReach = SqlSchema.findAll({
   },
 });
 
-/**
- * The accounts with the most days holding a meaningful action since the
- * bound. Days present come before volume: thirty quiet days outrank one heavy
- * one, and the action count only breaks ties, the account id after it, so
- * equally active accounts keep one order across refreshes.
- */
 const findTopAccounts = SqlSchema.findAll({
   Request: BoundScopeSchema,
   Result: Schema.Struct({
@@ -576,7 +516,6 @@ function countsByUser(
   return new Map(rows.map((row) => [row.userId, row.value ?? 0]));
 }
 
-/** The ranked accounts' own counts over the window; no account, no read. */
 const readAccountCounts = /* @__PURE__ */ Effect.fn("web/readOverviewAccountCounts")(function* (
   userIds: readonly string[],
   since: Date,
@@ -605,11 +544,6 @@ const readAccountCounts = /* @__PURE__ */ Effect.fn("web/readOverviewAccountCoun
   };
 });
 
-/**
- * Distinct cohort accounts with a meaningful action per (signup week, action
- * week) pair, on the same Monday-started UTC weeks the hosted grid's query
- * names, so the two bases draw the same rows and columns.
- */
 const findMeaningfulCohortActivity = SqlSchema.findAll({
   Request: Schema.Struct({ oldestWeekStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: Schema.Struct({
@@ -652,12 +586,6 @@ const readMeaningfulRetention = /* @__PURE__ */ Effect.fn("web/readMeaningfulRet
   return cohortRetention(sizeRows, activeRows);
 });
 
-/**
- * Reads everything the Overview shows beyond signups, retention's hosted
- * basis, and the health card. Like the rest of the metrics read, it runs only
- * once the database answered the probe; its runs are UTC days, so the trend
- * runs and the window start on a day's first instant.
- */
 export function readAdminOverviewSource(input: {
   now: number;
   scope: AdminMetricsScope;
@@ -726,10 +654,6 @@ export function readAdminOverviewSource(input: {
   });
 }
 
-/**
- * The whole Overview read: the signup and hosted-retention source and the
- * overview's beside it, at once.
- */
 export function readAdminDashboardSources(input: {
   now: number;
   scope: AdminMetricsScope;

@@ -21,16 +21,6 @@ import { authDatabaseHooks } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
 
-/**
- * A new account, signed up through the auth route over Better Auth's own
- * hooks and organization plugin as `auth.ts` configures them, on a migrated
- * PGlite: it comes away owning its personal workspace, with nothing else
- * asked of the service, and is sent one welcome email, which signing in again
- * does not repeat. Email and password sign-up stands in for the Google
- * or GitHub sign-in, whose provider this test cannot be. Synthetic account
- * throughout.
- */
-
 const BASE_URL = "http://127.0.0.1";
 
 const WELCOME_FROM = "Charles <charles@app.test>";

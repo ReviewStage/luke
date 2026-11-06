@@ -1,45 +1,3 @@
-/**
- * servers.ts -- which integrations' MCP servers one turn of an agent is handed, read as the turn starts.
- *
- * Every agent is handed its account's integrations as its launch starts
- * (`../../integrations/connection-door.ts`), and what it is handed is its
- * role's connection policy (`role.ts`), among the
- * integrations this deployment offers the account
- * (`accountIntegrationConnect`): one not set up here, or withheld from the
- * account, is handed to none of its agents. A coding agent is handed every
- * one but those the developer switched off for it from its composer, which writes
- * the agent's `disabled_servers` (`agent-store.ts`); its worker's
- * session is admitted for its parent's conversation, so it follows its
- * parent agent's switches. A server the developer mentioned in a message to
- * a coding agent (`@Linear`) is handed to the next turn the agent starts
- * whatever its switch says, and to that turn alone: the turn takes the
- * mentions from the row as it reads its standing, and the switch is never
- * written. A worker takes none. A turn already running keeps what it was
- * handed, and eve tells the model at its next step when a connection came or
- * went.
- *
- * A user account may hold more than one account at a provider (two Notion
- * workspaces), and each is handed as a connection of its own, under the
- * name its row goes by (`notion`, `notion-2`): every one standing connected
- * or expired, and the bare provider for one with none, so its first call
- * says how to connect it. The switches and the mentions name
- * connections, and a name stored before a second account was possible is
- * the provider's own, which is its first account's. The accounts read are
- * the caller's, the member acting in the conversation, as the grant each
- * connection reads is (`../../integrations/integration-token.ts`), so
- * a mention of `notion-2` reaches the caller's own second account or none.
- * A provider with more than one account handed tells the model which each
- * is by its label alone, quoted as a string the label cannot step out of,
- * and to ask which one where the developer has not said, before it writes.
- *
- * The read fails closed: a turn whose admission or row could not be read is
- * handed no server, so one the developer switched off never comes back on
- * through a passing store failure, and the turn carries on without it. A
- * resolver that threw would fail the whole turn instead, which is why
- * nothing here throws. The log line keeps the failure's kind alone, since a
- * store failure's message may name a statement.
- */
-
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import {
@@ -72,18 +30,13 @@ import {
 import type { ConversationAdmission } from "../eve-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
-/** One connection a turn is handed: one account at a provider, by the name it goes by. */
 interface HandedConnection {
   readonly provider: IntegrationProvider;
-  /** eve's name for the connection, and the switch and mention that name it. */
   readonly connectionName: string;
-  /** The account the connection is credentialed for, which eve keys its authorization state by. */
   readonly instanceKey: string;
-  /** What the model is told of which account this is, beside the provider's own description, where the provider hands more than one. */
   readonly accountNote?: string;
 }
 
-/** Which servers a turn is handed, under the account they are credentialed for, or none. */
 export type ServerStanding =
   | {
       readonly on: true;
@@ -94,20 +47,12 @@ export type ServerStanding =
 
 const SERVERS_OFF: ServerStanding = { on: false };
 
-/** How the session a turn runs in is admitted: a root's own standing, or a worker's ownership alone. */
 type ServerAdmission = Effect.Effect<
   ConversationAdmission,
   QueryError | Schema.SchemaError,
   DatabaseServices
 >;
 
-/**
- * The servers mentioned since the agent's last turn started, taken by the
- * turn starting now; none where the policy takes none. Note that a take
- * that failed hands only what the switches say rather than failing the
- * standing, so a passing store failure costs the turn a mention, never
- * every server.
- */
 function takenMentions(
   policy: ConnectionPolicy,
   userId: string,
@@ -126,43 +71,28 @@ function takenMentions(
   );
 }
 
-/** Whether a row stands for a grant an agent may be handed: connected, or expired so its call says to connect it again. */
 function handedRow(row: IntegrationConnectionRow): boolean {
   return (
     row.status === INTEGRATION_ROW_STATUS.CONNECTED || row.status === INTEGRATION_ROW_STATUS.EXPIRED
   );
 }
 
-/**
- * What the model is told of one account among its provider's others: its
- * label and the others' labels, never their connection names, which a
- * person never reads, and to ask which account where the developer has not
- * said, so a write lands in the account meant and is said to have.
- */
 function accountNote(
   row: IntegrationConnectionRow,
   others: readonly IntegrationConnectionRow[],
 ): string {
   const name = INTEGRATION_NAME[row.provider];
-  // Note that two accounts called alike are told apart by their places, so no two notes read the same.
-  // Note that a label is cut to a label's length before two alike are told apart, so the place that tells them apart is never cut away.
   const names = integrationAccountNames(
     [row, ...others].map((each) => ({
       connection: each.connectionName,
       label: each.label?.slice(0, INTEGRATION_LABEL_MAX),
     })),
   );
-  // Note that a label is quoted as a string literal, because a provider names it and the model reads it.
   const label = (each: IntegrationConnectionRow) =>
     JSON.stringify(names.get(each.connectionName) ?? "");
   return `This connection is the developer's ${label(row)} ${name} account. They also connected ${andList(others.map(label))}. If the developer hasn't said which account, ask before writing. Say which account you read from or wrote to.`;
 }
 
-/**
- * The connections the account's rows hand for one provider: each account
- * standing connected or expired, with what the model is told of which it is
- * where there is more than one, or the bare provider where none stands.
- */
 function providerConnections(
   provider: IntegrationProvider,
   rows: readonly IntegrationConnectionRow[],
@@ -189,14 +119,6 @@ function providerConnections(
   }));
 }
 
-/**
- * The servers the turn starting is handed under the policy, among those
- * offered to the account: every one for a session admitted at all, and for
- * a coding agent every one its row does not list, and every one mentioned
- * since its last turn where the policy takes mentions; none for a session
- * the host does not admit, one admitted for no agent where the policy reads
- * an agent's switches, or a read that failed.
- */
 export function turnServers(
   admission: ServerAdmission,
   policy: ConnectionPolicy,
@@ -207,10 +129,8 @@ export function turnServers(
     if (Result.isFailure(admitted)) return SERVERS_OFF;
     const { caller } = admitted.success;
     const { userId, conversationId } = admitted.success.target;
-    // The caller's own offer, as the accounts read and every token read are the caller's.
     const connect = yield* accountIntegrationConnect(caller);
     const github = yield* githubOffered;
-    // A provider the account's GitHub sign-in grants is offered wherever the GitHub App is.
     const offered = INTEGRATION_PROVIDER_LIST.filter((provider) =>
       INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
         ? github
@@ -224,7 +144,6 @@ export function turnServers(
     const agent = yield* readAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
-    // A native turn took its mentions as it started and names them here (`turnMentions`); an eve turn takes them now.
     const mentioned = [...turnMentions, ...(yield* takenMentions(policy, userId, conversationId))];
     const connections = handed.filter(
       ({ connectionName }) =>

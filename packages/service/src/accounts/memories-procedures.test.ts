@@ -26,30 +26,12 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { memoriesProcedures } from "./memories-procedures.js";
 
-/**
- * A workspace's shared memories as Settings › Memory reads and forgets them
- * through the account's procedures, over a real dialect: every member reads
- * what the workspace's agents kept, most recently kept first, each named by
- * the member whose words it holds; a member forgets their own memories, and
- * owners and admins any, while a member's forget of a teammate's is refused;
- * a deleted member's memory stays the workspace's, named by nobody; a
- * forgotten memory leaves the list and is never recalled again; a member's
- * own client keeps a memory in their words and searches them, only with
- * Memory on, never words like a credential; an account outside the
- * workspace reads, forgets, keeps, and searches nothing; and the bearer
- * names the account and nothing else does.
- *
- * Synthetic accounts, workspaces, bearers, and words throughout.
- */
-
 const ORIGIN = "https://app.test";
 const MEMORIES_PATH = "/api/account/memories";
 const SEARCH_PATH = "/api/account/memories/search";
 
-/** What the procedures counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The workspaces each forget of the account was counted in, in order. */
 const forgetsCountedFor = (userId: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === SERVER_EVENT.MEMORY_FORGET)
@@ -63,7 +45,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** A workspace's owner and one more member, an account outside it, each behind a bearer and with Memory on. */
 const openTeam = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, teammate, outsider] = [
@@ -99,7 +80,6 @@ const openTeam = Effect.gen(function* () {
 const answer = (procedures: ReturnType<typeof memoriesProcedures>, request: Request) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -108,7 +88,6 @@ const answer = (procedures: ReturnType<typeof memoriesProcedures>, request: Requ
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -150,7 +129,6 @@ const search = (userId: string, workspaceId: string, query?: string) =>
     userId,
   );
 
-/** An answer read as the wire's schema reads it, failing the test where it is not the wire's. */
 function wireOf<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   answered: Answer,
@@ -161,7 +139,6 @@ function wireOf<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** The answer as the wire reads it, failing the test where it is not the wire's. */
 function memoriesOf(answered: Answer): MemoriesAnswer {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
   const read = readEither(memoriesAnswerSchema)(unparsedWire(answered.body));
@@ -228,7 +205,6 @@ it.layer(getTestDB())("the memories procedures", (it) => {
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
         );
         assert.deepEqual(wordsOf(ownForgotten), [TESTS_RUN]);
-        // A forget retried after it landed answers the same memories, and no transaction, since it deleted nothing.
         assert.ok(
           memoriesOf(ownForgotten).txid !== undefined,
           "the forget answered its transaction",
@@ -237,7 +213,6 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         assert.equal(recalled.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(recalled.memories, []);
         assert.deepEqual(wordsOf(byOwner), []);
-        // The refused forget is not counted, and each of the others is, in the workspace and under whoever made it.
         assert.deepEqual(forgetsCountedFor(owner), [workspaceId]);
         assert.deepEqual(new Set(forgetsCountedFor(teammate)), new Set([workspaceId]));
       }),

@@ -22,97 +22,33 @@ import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
 
-/**
- * title.ts -- a coding agent's title, generated from its opening as its words are received and from its first exchange as a turn of its ends, and a subagent's from the task it was handed.
- *
- * One small call, bounded in words and in time, asked for a sentence-case
- * title of a few words with nothing around it; what comes back is tidied
- * of the quotes and the full stop a model adds anyway, and cut to the
- * wire's bound. An agent is asked for its title as the developer's words
- * are received, so a first turn that runs long is named as it starts, from
- * its opening alone, and again as each of its first turns ends where none
- * stands yet. It is named from what the developer first said to
- * it, what they said last where that is another message, and what it last
- * answered where it has, each cut to an excerpt, as a conversation is
- * named from its opening rather than from the description it was started under:
- * an agent started from the description said the description first, so the description is what
- * names it, and one started on a prompt of its own is named for that prompt.
- * An agent started from another is named from the brief and the note it
- * was handed, never from the other agent's transcript replayed between
- * them (`@repo/features/agent-replay`), whose words are that agent's.
- * A message to the Slack bot is named from its member's words alone, as a
- * window draws it, never the thread's other messages or what the agent is
- * told of the reply.
- * An automation's run is named from the automation's prompt alone in its
- * opening's place, without the lines we add of the firing, which would
- * name every run of it alike, and the GitHub event's subject where one
- * fired it; a run about one pull request or issue was named by it as it
- * started (`automation-runs.ts`), so no model is asked.
- * An exchange that names no task yet, a greeting or a file with no words,
- * is answered with nothing, and the next words or turn's end ask again, for the
- * agent's first `CODER.TITLE_TURNS` turns; a call that fails, times out, or
- * answers nothing writes nothing, and the tab shows the automation's name
- * meanwhile, where an automation's run started the agent, and the model's
- * otherwise. A line another agent's message steered in is no word of the
- * developer's, so it names nothing. A subagent, a coding agent's worker or a
- * planning worker, is named by the same call over the task it was handed alone, and its title
- * is filled on its child conversation (`child-titles.ts`). Nothing of the
- * conversation leaves here but to the model.
- *
- * The model runs on our own key (`model.ts`'s `deploymentTitleModel`),
- * never the account's, so an account that saved no API key, as one paying
- * only through a subscription, is named by the model all the same. A
- * deployment holding no such key names it with no model call at all: the
- * first words of the first line of its opening, or of the automation's
- * prompt, or of the task a subagent was handed, tidied as a model's answer
- * is (`firstWordsTitle`).
- *
- * A task still standing untitled, as one started from a prompt alone does,
- * takes the title its first agent to be titled is given, and keeps it: a
- * name a member or the app gave the task, before or meanwhile, is never
- * written over, and a later agent's title never renames it.
- */
-
 const AGENT_TITLE = {
-  /** The most tokens the model may spend on the title, which is a few words. */
   MAX_OUTPUT_TOKENS: 64,
-  /** How long the call may take before the agent goes untitled. */
   TIMEOUT: CODER.TITLE_TIMEOUT,
-  /** The least effort the model is asked for, since a title is no reasoning task. */
   EFFORT: "low",
-  /** Anthropic's word for no thinking at all: Haiku thinks by default, and its thinking would spend the few output tokens a title has before any of its words. */
   THINKING: "disabled",
-  /** The most words of its first line a title falls back to where no model names it. */
   FALLBACK_WORDS: 6,
-  /** The most of each message the call reads, which is enough to tell the task from. */
   EXCERPT_CHARS: 2_000,
-  /** The newest messages read for the agent's latest answer, past the lines sent since it ended. */
   RECENT_MESSAGES: 8,
 } as const;
 
 const INSTRUCTIONS =
   "Name the task below in three to six words, as a sentence-case title: a capital on the first word only, no quotes, and no punctuation at the end. Answer with the title and nothing else, or with nothing at all where no task is named yet, as in a greeting.";
 
-/** The quotes a model wraps a title in, and the punctuation it ends one with. */
 const SURROUNDING_QUOTES = /^["'“”‘’`]+|["'“”‘’`]+$/gu;
 const TRAILING_PUNCTUATION = /[.!?:;,]+$/u;
 
-/** A Markdown link, whose label alone a fallback title keeps; its address may hold one level of parentheses, as a page's name often does. */
 const MARKDOWN_LINK = /\[([^[\]]*)\]\((?:[^()]|\([^()]*\))*\)/gu;
 
-/** The Markdown marks a fallback title drops: a heading's, emphasis, code, and a quote's. */
 const MARKDOWN_MARKS = /[#*`>]+/gu;
 
-/** A list item's marker at the start of a line. */
 const LIST_MARKER = /^\s*(?:[-+]|\d+\.)\s+/u;
 
-/** Who each message of an agent's exchange is said by, as the call reads it. */
 const SPEAKER = {
   DEVELOPER: "Developer",
   AGENT: "Agent",
 } as const;
 
-/** The model's answer as a title: its first line, unquoted, unpunctuated, and bounded; nothing where nothing is left. */
 function tidyAgentTitle(answer: string): Option.Option<string> {
   const line = answer.trim().split("\n")[0] ?? "";
   const title = line
@@ -121,22 +57,12 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
     .trim()
     .slice(0, AGENT_BOUNDS.MAX_TITLE_CHARS)
     .trim();
-  // A task's own sentinel names nothing, so a task it would name stays open to the next title.
   if (title.length === 0 || titlesNothing(title)) {
     return Option.none();
   }
   return Option.some(title);
 }
 
-/**
- * A title with no model call: the first words of the first line with any
- * words on it, its Markdown marks and links' addresses left out, tidied as
- * a model's answer is and opening on a capital, as the model's sentence-case
- * titles do; nothing where no words stand. Note that the text is
- * cut to the excerpt first, and that a link's label holds no bracket and its
- * address parentheses one level deep at most, because the words are the developer's and a
- * pattern that may rescan them from every bracket would be slow on long ones.
- */
 function firstWordsTitle(text: string): Option.Option<string> {
   const line =
     text
@@ -151,20 +77,17 @@ function firstWordsTitle(text: string): Option.Option<string> {
       )
       .find((each) => each.length > 0) ?? "";
   const words = line.split(/\s+/u).slice(0, AGENT_TITLE.FALLBACK_WORDS).join(" ");
-  // Note that only the first letter is raised, because the rest are the developer's own and may be a name's.
   return Option.map(
     tidyAgentTitle(words),
     (title) => `${title.charAt(0).toUpperCase()}${title.slice(1)}`,
   );
 }
 
-/** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */
 function withoutReplay(text: string): string {
   const read = firstMessageParts(text);
   return read.note === undefined ? read.brief : `${read.brief}\n${read.note.text}`;
 }
 
-/** A message's words as the call reads them: its text alone, any replay of another agent left out, or a Slack message's member's words alone, without the thread and the instructions around them, cut to the excerpt; a file it carries is no word of it. */
 function excerptOf(message: StoredUIMessage | undefined): string {
   if (
     message?.role === MESSAGE_ROLE.USER &&
@@ -181,7 +104,6 @@ function excerptOf(message: StoredUIMessage | undefined): string {
   return words.slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
-/** What an automation's run is named from in its opening's place: the GitHub event's subject where one fired it, then the automation's prompt alone, cut to the excerpt; the subject leads, so a long prompt never cuts it off. */
 function originWords(origin: StoredAutomationOrigin): string {
   const { firing } = origin;
   const subject =
@@ -196,33 +118,19 @@ function originWords(origin: StoredAutomationOrigin): string {
   return [...subject, origin.prompt.trim()].join("\n").slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
-/** A row of the developer's own words: a user row no other agent's message wrote, and no note the runtime wrote down. */
 function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
   if (message?.role !== MESSAGE_ROLE.USER || "source" in message.metadata) return false;
   return message.metadata.channel !== MESSAGE_CHANNEL.AGENT_MESSAGE;
 }
 
-/** What the line before an answer is known to be, in the window a title reads. */
 const HEARD = {
-  /** No answer yet in the window: the line an answer answers may lie before it. */
   UNKNOWN: "unknown",
-  /** A line of the developer's since the answer before. */
   DEVELOPER: "developer",
-  /** No line of the developer's since the answer before. */
   OTHER: "other",
 } as const;
 
 type Heard = (typeof HEARD)[keyof typeof HEARD];
 
-/**
- * The agent's latest answer to the developer: one that follows a line of
- * the developer's since the answer before it, or, before any answer in the
- * window, one whose turn another agent's message did not open, since the
- * line it answers may lie before the window. Note that an answer another
- * agent's message alone prompted is left out, because it speaks to that
- * agent, while one to a developer's line a message was steered in after
- * still answers the developer.
- */
 function answerToDeveloper<
   Row extends { readonly message: StoredUIMessage; readonly turnId?: string },
 >(records: readonly Row[], noticed: ReadonlySet<string>): Row | undefined {
@@ -238,13 +146,6 @@ function answerToDeveloper<
   return answer;
 }
 
-/**
- * The turns among the answers another agent's message opened. Note that
- * the line that opened a turn is read by the turn's id rather than from the
- * window, because messages a turn took in mid-run can push it out of the window, and
- * a line taken in mid-run names no turn. Nothing where the read is refused,
- * so every answer stands.
- */
 function turnsNoticed(
   target: ConversationTarget,
   tools: ToolSet,
@@ -266,7 +167,6 @@ function turnsNoticed(
   );
 }
 
-/** What an agent is named from: the exchange a model reads, and the opening a title with no model is cut from. */
 interface ConversationNaming {
   readonly exchange: string;
   readonly opening: string;
@@ -274,14 +174,6 @@ interface ConversationNaming {
 
 const NOTHING_TO_NAME: ConversationNaming = { exchange: "", opening: "" };
 
-/**
- * What an agent is named from: the developer's first message, or an
- * automation's prompt alone where its run started the agent, their latest
- * where it is another, so a retry past a greeting reads the task that
- * followed it, and the agent's latest answer, each by its speaker, a
- * message with no words left out; and, for a title with no model, the
- * first of the developer's words alone, or the automation's prompt.
- */
 function conversationExchange(
   target: ConversationTarget,
   tools: ToolSet,
@@ -301,7 +193,6 @@ function conversationExchange(
     const said = newest.findLast((record) => saidByDeveloper(record.message));
     const answered = answerToDeveloper(newest, yield* turnsNoticed(target, tools, newest));
     const opened = saidByDeveloper(first?.message) ? first : undefined;
-    // An answer to no word of the developer's, as to a wake the brain took before anyone spoke, names nothing.
     if (origin === null && opened === undefined && said === undefined) return NOTHING_TO_NAME;
     const exchange = [
       {
@@ -322,7 +213,6 @@ function conversationExchange(
   });
 }
 
-/** The title the model gives the task, or nothing for a call that failed, ran out of time, or answered nothing. */
 function generateAgentTitle(
   model: LanguageModel,
   named: string,
@@ -350,14 +240,6 @@ function generateAgentTitle(
   );
 }
 
-/**
- * The title generated from a conversation's first exchange, as one of its
- * first `CODER.TITLE_TURNS` turns asks for it, under the tools given, its
- * automation's origin in its opening's place where one started it, or cut
- * from its opening where no model is given. Nothing
- * for a conversation past those turns, one with no words in it yet, and a
- * call that answered nothing, so the next turn asks again.
- */
 function titleOfConversation(
   model: LanguageModel | undefined,
   target: ConversationTarget,
@@ -379,13 +261,6 @@ function titleOfConversation(
   });
 }
 
-/**
- * The agent's title filled, and its task named with it where the task still
- * stands untitled, in one transaction, so a rename that fails takes the
- * title back with it and the next words or turn's end ask again. Note that
- * a title the developer set meanwhile is theirs for the agent alone, so the
- * fill that finds one names no task.
- */
 function titledWithTask(
   userId: string,
   agent: Agent,
@@ -399,12 +274,6 @@ function titledWithTask(
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
 }
 
-/**
- * The title the agent-title model gives a thread a member started with no
- * subject, named from the opening of their message as an agent's task is
- * named from its first words; nothing where the message says nothing or
- * the call answers nothing.
- */
 export function titleInboxThread(
   model: LanguageModel,
   text: string,
@@ -413,13 +282,6 @@ export function titleInboxThread(
   return words === "" ? Effect.succeed(Option.none()) : generateAgentTitle(model, words);
 }
 
-/**
- * An agent's title generated from its first exchange and written where
- * none stands, as words are received or as one of its first
- * `CODER.TITLE_TURNS` turns ends (`titleOfConversation`), its task named
- * with it where that still stands untitled. A title already standing,
- * the developer's own included, is never asked for again.
- */
 export function titleAgent(
   model: LanguageModel | undefined,
   target: ConversationTarget,

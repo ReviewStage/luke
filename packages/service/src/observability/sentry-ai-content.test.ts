@@ -1,10 +1,3 @@
-/**
- * sentry-ai-content.test.ts -- an agent's turn reaches Sentry as timing alone: its spans leave, but no instructions, prompt, tool arguments, tool result, or reply of the model's.
- * Sentry is started as an eve root starts it, over the recording transport;
- * the model is a script. It stands in a file of its own because eve's start
- * installs process-wide integrations the web suite's tests do not expect.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import * as Sentry from "@sentry/effect";
@@ -13,7 +6,6 @@ import { MockLanguageModelV4 } from "ai/test";
 import { Effect } from "effect";
 import { recordingEveSentry, sentOfType } from "../testing/sentry-transport.js";
 
-/** Words each part of the turn carries, none of which may reach Sentry. */
 const CONTENT = {
   INSTRUCTIONS: "fixture-instructions-amber",
   PROMPT: "fixture-prompt-cobalt",
@@ -27,7 +19,6 @@ const USAGE = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-/** A model that calls `read_file` once, then replies in words once it has read the call's result. */
 function modelCallingReadFile() {
   let calls = 0;
   return new MockLanguageModelV4({
@@ -66,7 +57,6 @@ it.effect("an agent's turn sends its spans to Sentry without the model's inputs 
           system: CONTENT.INSTRUCTIONS,
           prompt: CONTENT.PROMPT,
           stopWhen: stepCountIs(3),
-          // Note that the turn asks for its content to be recorded, as eve's trace policy does for a public audience, and Sentry still sends none.
           experimental_telemetry: { isEnabled: true, recordInputs: true, recordOutputs: true },
           tools: {
             read_file: tool({

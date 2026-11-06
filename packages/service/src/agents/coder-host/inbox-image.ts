@@ -6,35 +6,14 @@ import { mediaDimensions, sniffMediaType } from "@repo/features/media-signature"
 import { Effect, Result } from "effect";
 import type { InboxImage } from "../../inbox/inbox-store.js";
 
-/**
- * inbox-image.ts -- a picture read from the agent's sandbox, an image block's or one `show_image` shows: the file at the path the agent named, bounded, and sniffed for what it is.
- *
- * The agent names a file in its sandbox, a screenshot it took of what it
- * rendered or a WebM it recorded of a flow, and nothing else of it: no
- * address, no type. The file is read here through the same door the
- * agent's own file tools reach the sandbox by, as a stream: its first
- * bytes are read for a PNG, JPEG, or WebP signature, or a WebM's where the
- * read takes one, as soon as they are in, since the name a file
- * carries says nothing about what it holds and the type is what the
- * picture is served to the desktop under, so a file that is no image is
- * refused at its first chunk, and one past the bound is refused at the
- * bound, neither read whole into the function's memory. A path is resolved
- * from the checkout as the file tools resolve one, so the agent spells it
- * as it spelled it to them. Each refusal is one sentence the model reads,
- * naming the path, so the agent mends the block rather than the item.
- */
-
-/** The sandbox as the inbox reaches it: one file read as a stream of bytes, or nothing where there is no file. */
 interface InboxSandbox {
   readonly readFile: (options: {
     readonly path: string;
   }) => PromiseLike<ReadableStream<Uint8Array> | null>;
 }
 
-/** The door to the session's sandbox, opened on first use, or a test's double. */
 export type InboxSandboxDoor = () => Promise<InboxSandbox>;
 
-/** Why a picture was not read, in the words the model reads; each is followed by the path. */
 export interface SandboxImageRefusals {
   readonly NO_FILE: string;
   readonly NOT_IMAGE: string;
@@ -42,25 +21,17 @@ export interface SandboxImageRefusals {
   readonly UNREADABLE: string;
 }
 
-/**
- * What one tool's read of a picture holds it to: the most bytes it may be,
- * the sentence each refusal opens with, which names the tool's own act, and
- * the types its first bytes may be sniffed as, which `show_image` widens to
- * a WebM it plays.
- */
 export interface SandboxImageTerms<Type extends string = InboxImageType> {
   readonly maxBytes: number;
   readonly refusals: SandboxImageRefusals;
   readonly sniff: (head: Uint8Array) => Type | undefined;
 }
 
-/** A file read from the sandbox: the type its bytes were sniffed to be, and the bytes. */
 export interface SandboxImage<Type extends string> {
   readonly contentType: Type;
   readonly bytes: Uint8Array;
 }
 
-/** The chunks as one array. */
 function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   const bytes = new Uint8Array(length);
   let at = 0;
@@ -71,7 +42,6 @@ function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   return bytes;
 }
 
-/** Why a stream was not read whole: it is no image, or it ran past the bound. */
 const STREAM_REFUSAL = {
   NOT_IMAGE: "not-image",
   TOO_LARGE: "too-large",
@@ -79,12 +49,6 @@ const STREAM_REFUSAL = {
 
 type StreamRefusal = (typeof STREAM_REFUSAL)[keyof typeof STREAM_REFUSAL];
 
-/**
- * The stream read whole as one picture: sniffed once its signature is in,
- * and stopped where it is no image or runs past the bound. The reader is
- * canceled however the read ends, so a stream refused, or one that failed
- * mid-way, holds nothing open behind it.
- */
 const readImageStream = Effect.fnUntraced(function* <Type extends string>(
   stream: ReadableStream<Uint8Array>,
   maxBytes: number,
@@ -107,7 +71,6 @@ const readImageStream = Effect.fnUntraced(function* <Type extends string>(
       }
     }
     const bytes = joined(chunks, length);
-    // A file shorter than the longest signature is sniffed whole, since a JPEG's is three bytes.
     contentType ??= sniff(bytes);
     if (contentType === undefined) return Result.fail(STREAM_REFUSAL.NOT_IMAGE);
     const image: SandboxImage<Type> = { contentType, bytes };
@@ -115,7 +78,6 @@ const readImageStream = Effect.fnUntraced(function* <Type extends string>(
   }).pipe(Effect.ensuring(Effect.promise(() => reader.cancel().catch(() => undefined))));
 });
 
-/** A refusal of the picture at the path, in the words the model reads. */
 function refused<Type extends string>(
   refusal: string,
   path: string,
@@ -123,7 +85,6 @@ function refused<Type extends string>(
   return Result.fail(`${refusal} ${path}`);
 }
 
-/** The stream's refusal in the words the model reads. */
 function streamRefused<Type extends string>(
   refusal: StreamRefusal,
   refusals: SandboxImageRefusals,
@@ -135,12 +96,6 @@ function streamRefused<Type extends string>(
   );
 }
 
-/**
- * The picture at the path, read from the sandbox and held to the terms'
- * bound and the three types, or the one sentence refusing it in the terms'
- * words. A path is resolved from the checkout: inside it when relative, as
- * written when absolute.
- */
 export function readSandboxImage<Type extends string>(
   door: InboxSandboxDoor,
   checkout: string,
@@ -157,20 +112,10 @@ export function readSandboxImage<Type extends string>(
   }).pipe(Effect.catch(() => Effect.succeed(refused<Type>(terms.refusals.UNREADABLE, path))));
 }
 
-/** The most bytes a posted file of the type may be: a still's bound, or a recording's. */
 function postedBytesOf(type: ConversationMediaType): number {
   return isVideoType(type) ? INBOX_BOUNDS.MAX_VIDEO_BYTES : INBOX_BOUNDS.MAX_IMAGE_BYTES;
 }
 
-/**
- * A picture or a WebM recording a post draws, at the path, or the one
- * sentence refusing it in the refusals' words: a still held to the picture
- * bound, and a recording to the video bound and refused where it states no
- * size, as `show_image` refuses one (`@repo/features/media-signature`).
- * Note that the stream is read to the larger bound and a still is held to
- * its own once its type is known, because the type is sniffed from bytes
- * the bound has already let in.
- */
 export function readSandboxMedia(
   door: InboxSandboxDoor,
   checkout: string,

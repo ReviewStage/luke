@@ -1,23 +1,3 @@
-/**
- * part-cut.ts -- a transcript page's heavy parts cut to their two ends, and one part read whole.
- *
- * A coding agent's journal holds every command's output and every thought
- * whole, and one call's output can run to megabytes, so a page that carried
- * them would weigh what the journal does. A page a reader asked cut
- * (`TRANSCRIPT_PARTS_QUERY`) carries, for each tool part whose output and
- * each reasoning part whose words run past `MAX_PART_CHARS`, the part
- * without that field, and beside the message the field's first and last
- * characters and its whole size (`cutParts`). The reader fetches the part
- * whole, by the message's id and the part's index, when it opens it.
- * Note that a part is cut on the page alone: the row, and every other read
- * of it, keeps it whole. Only the outputs of the tools that read something
- * and answer it as words are cut (`CUT_TOOLS`): a command's, a file's, a
- * search's, a web page's, and a connection's, under every harness's name.
- * Every other call's answer is carried whole, because the window reads it
- * for what it means, the agent a start began or the page a show made, and
- * a tool added later is carried whole until it is named here.
- */
-
 import { Buffer } from "node:buffer";
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import { readMessageById } from "@repo/database/models/message-reads";
@@ -42,10 +22,8 @@ import { toolPartName } from "@repo/wire/ui-messages";
 import type { ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
 
-/** How many characters of a cut field a page carries at each end. */
 export const CUT_END_CHARS = Math.floor(AGENT_BOUNDS.MAX_PART_CHARS / 2);
 
-/** The tools whose output a page may cut: each reads something and answers it as words, which the window only draws. */
 export const CUT_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.BASH,
   AGENT_TOOL.READ_FILE,
@@ -69,16 +47,13 @@ export const CUT_TOOLS: ReadonlySet<string> = new Set([
   ...Object.values(INTEGRATION_REMOTE_TOOL),
 ]);
 
-/** The part type whose words a page may cut beside the tool parts. */
 export const REASONING_PART_TYPE = "reasoning";
 
-/** A part's heavy field as words: which field, and its words, a tool's output that is no string as its JSON text. */
 interface HeavyField {
   readonly field: PartCutField;
   readonly words: string;
 }
 
-/** The field of a part a page may cut, as words; none for a part that has none. */
 function heavyFieldOf(part: WireValue): HeavyField | undefined {
   if (!isRecord(part) || !isWireString(part.type)) return undefined;
   if (part.type === REASONING_PART_TYPE) {
@@ -93,7 +68,6 @@ function heavyFieldOf(part: WireValue): HeavyField | undefined {
   };
 }
 
-/** The part without its cut field, and what the page says of the field; none for a part within the bound. */
 function cutPart(
   part: WireValue,
   index: number,
@@ -116,7 +90,6 @@ function cutPart(
   };
 }
 
-/** A message as a page asked cut carries it: each part past the bound without its field, and the cuts beside them; the message itself where none is. */
 export function cutMessage(message: AgentTranscriptMessage): AgentTranscriptMessage {
   const cuts: PartCut[] = [];
   const parts = message.parts.map((part, index) => {
@@ -128,12 +101,6 @@ export function cutMessage(message: AgentTranscriptMessage): AgentTranscriptMess
   return cuts.length === 0 ? message : { ...message, parts, cutParts: cuts };
 }
 
-/**
- * One part of a message of the conversation, whole, as a page of it reads
- * it: by the message's id and the part's index among the parts the read
- * answers. None where no such message stands in the conversation under the
- * account the target names, or it holds no part at the index.
- */
 export function wholePartOf(
   target: ConversationTarget,
   tools: ToolSet,
@@ -143,7 +110,6 @@ export function wholePartOf(
   return Effect.map(
     readMessageById(target.userId, target.conversationId, tools, messageId),
     (read) => {
-      // SAFETY: every part is the JSON its row stored, which the SDK's part types only name more narrowly.
       const parts = (read.ok ? (read.value[0]?.message.parts ?? []) : []) as readonly WireValue[];
       return Option.fromNullishOr(parts[index]);
     },

@@ -1,16 +1,3 @@
-/**
- * handler.test.ts -- an oRPC procedure answers the bytes an old route group answered.
- *
- * The handler's proof that an oRPC procedure answers the bytes an old route
- * group answered: the same request is put to a test-only router behind
- * `hostedFetch` and to an `HttpRouter` group answering the same value the
- * way the old groups did, and the two answers are compared whole: status,
- * the two headers a caller reads, and the body's bytes. The cases are the
- * ones a later resource copies: an answer whose wire schema transforms (a
- * date the wire carries as text, an id folded to lower case), a refusal
- * carrying more than its slug, an input its schema refuses, and a defect.
- */
-
 import assert from "node:assert/strict";
 import "@orpc/experimental-effect/extensions/effect";
 import { it } from "@effect/vitest";
@@ -43,10 +30,8 @@ const DEFECT_PATH = "/api/test/defect";
 const CAPPED_PATH = "/api/test/capped";
 const LIMITED_PATH = "/api/test/limited";
 
-/** A small cap of the capped procedure's own, in bytes, well under the handler's ceiling. */
 const CAP = 64;
 
-/** A wire answer whose `Type` is not its `Encoded`: a date carried as ISO text, and an id read folded to lower case. */
 const whenSchema = Schema.Struct({
   id: Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.toLowerCase())),
   at: Schema.DateFromString,
@@ -110,7 +95,6 @@ const testRouter = test.router({
   capped: test.capped.handler(({ input }) => ({ name: input.name })),
 });
 
-/** The route groups' way of answering the same values: `hostedJsonResponse`, `hostedRefusing`, and a defect left to the platform. */
 const oldGroup = Layer.mergeAll(
   HttpRouter.add(
     HTTP_METHOD.GET,
@@ -153,7 +137,6 @@ const read = (response: Response) =>
     }),
   );
 
-/** The same request answered by the oRPC router and by the old group. */
 const bothAnswer = (init: { path: string; method?: string; body?: string }) =>
   Effect.gen(function* () {
     const request = () => {
@@ -164,7 +147,6 @@ const bothAnswer = (init: { path: string; method?: string; body?: string }) =>
       }
       return new Request(new URL(init.path, ORIGIN), requestInit);
     };
-    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
     const services = Context.empty() as Context.Context<WebServices>;
     const handle = hostedFetch(testRouter);
     const orpc = yield* read(yield* Effect.promise(() => handle(request(), services)));
@@ -235,7 +217,6 @@ it.effect(
   "every answer, a success, a refusal, a defect, a path under another method and a path no procedure serves alike, is never sniffed and is no other site's to load",
   () =>
     Effect.gen(function* () {
-      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
       const services = Context.empty() as Context.Context<WebServices>;
       const handle = hostedFetch(testRouter);
       for (const [path, status] of [
@@ -258,7 +239,6 @@ it.effect(
   "a path the description was edited and read back at before its rename asks the older client to update, where any other unserved path is none",
   () =>
     Effect.gen(function* () {
-      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
       const services = Context.empty() as Context.Context<WebServices>;
       const handle = hostedFetch(testRouter);
       for (const [method, path] of [
@@ -290,7 +270,6 @@ it.effect(
       const past = new TextEncoder().encode(
         JSON.stringify({ name: "x".repeat(HOSTED_BODY_CEILING_BYTES) }),
       );
-      // SAFETY: Node's fetch takes a streamed body only half-duplex, which the DOM's RequestInit does not name.
       const request = new Request(new URL(ITEMS_PATH, ORIGIN), {
         method: HTTP_METHOD.POST,
         headers: { "content-type": "application/json" },
@@ -302,7 +281,6 @@ it.effect(
         }),
         duplex: "half",
       } as RequestInit);
-      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
       const services = Context.empty() as Context.Context<WebServices>;
       const answered = yield* read(
         yield* Effect.promise(() => hostedFetch(testRouter)(request, services)),
@@ -316,13 +294,11 @@ it.effect(
     }),
 );
 
-/** A JSON body of exactly `bytes` bytes naming an item, its name padded to fit. */
 const itemBodyOf = (bytes: number): string => {
   const frame = JSON.stringify({ name: "" }).length;
   return JSON.stringify({ name: "x".repeat(bytes - frame) });
 };
 
-/** A body sent in chunks of at most `chunkBytes`, as a chunked upload arrives, with no length stated. */
 const chunkedBody = (text: string, chunkBytes: number): ReadableStream<Uint8Array> => {
   const bytes = new TextEncoder().encode(text);
   return new ReadableStream({
@@ -335,7 +311,6 @@ const chunkedBody = (text: string, chunkBytes: number): ReadableStream<Uint8Arra
   });
 };
 
-/** The capped procedure's answer to a POST of the body given, under the headers given beside its JSON type. */
 const cappedAnswer = (
   body: string | ReadableStream<Uint8Array>,
   headers: Record<string, string> = {},
@@ -347,9 +322,7 @@ const cappedAnswer = (
       body,
       duplex: "half",
     };
-    // SAFETY: Node's fetch takes a streamed body only half-duplex, which the DOM's RequestInit does not name.
     const request = new Request(new URL(CAPPED_PATH, ORIGIN), init as RequestInit);
-    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
     const services = Context.empty() as Context.Context<WebServices>;
     return yield* read(yield* Effect.promise(() => hostedFetch(testRouter)(request, services)));
   });

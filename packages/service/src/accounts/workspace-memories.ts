@@ -15,35 +15,9 @@ import type { MemorySaveAnswer, MemorySummary } from "@repo/features/memory-wire
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { Effect, Option } from "effect";
 
-/**
- * workspace-memories.ts -- a workspace's shared memories as one member reads and forgets them from Settings.
- *
- * Every member of a workspace reads its shared memories, each named by the
- * member whose words it holds. Forgetting follows the workspace automations' rule
- * (`automation-store.ts`'s `allowedTo`): the member whose words a memory
- * holds may forget it, and so may the workspace's owners and admins, the
- * only ones who may forget one whose member's account is gone; every other
- * member reads it and may correct it only on a call, where the conversation
- * wins. An account that is not a member reads and forgets
- * nothing, and is answered exactly as a workspace that names nothing.
- *
- * A keep and a search here are the one operation behind every surface that
- * keeps or searches a memory: a member's own client, such as the
- * command-line tool, the member MCP server's `save_memory` and
- * `search_memory`, and a coding agent's (`../agents/memory-tools.ts`), each
- * answering the outcome in its own words. Words that look like a credential
- * are never kept, and a search ranks the memories by how many of its words
- * each holds (`rankMemories`). Whether the member has Memory on is the
- * caller's to check, as each tool and procedure does before it calls here.
- */
-
-/** What a member's read or forget came to. */
 export const WORKSPACE_MEMORY = {
-  /** The workspace's memories as they stand now. */
   READ: "read",
-  /** The account is no member of the workspace, or the workspace names nothing. */
   NOT_MEMBER: "not_member",
-  /** The memory stands and the member may not forget it; nothing was deleted. */
   NOT_PERMITTED: "not_permitted",
 } as const;
 
@@ -51,27 +25,22 @@ export type WorkspaceMemoryAnswer =
   | {
       readonly kind: typeof WORKSPACE_MEMORY.READ;
       readonly memories: readonly MemorySummary[];
-      /** The transaction a forget deleted its memory in; none for a read, or a forget of one already gone. */
       readonly txid?: string;
     }
   | {
       readonly kind: typeof WORKSPACE_MEMORY.NOT_MEMBER | typeof WORKSPACE_MEMORY.NOT_PERMITTED;
     };
 
-/** The roles that manage a workspace's memories beyond their own. */
 const MANAGING_ROLES: ReadonlySet<WorkspaceRole> = new Set([
   WORKSPACE_ROLE.OWNER,
   WORKSPACE_ROLE.ADMIN,
 ]);
 
 const MEMORY_SEARCH_BOUNDS = {
-  /** The most memories one search hands back. */
   RECALL_RESULTS: 8,
-  /** The most distinct words of a query matched. */
   QUERY_WORDS: 16,
 } as const;
 
-/** Words too common to tell one memory from another. */
 const COMMON_WORDS: ReadonlySet<string> = new Set([
   "a",
   "an",
@@ -100,12 +69,6 @@ const COMMON_WORDS: ReadonlySet<string> = new Set([
   "with",
 ]);
 
-/**
- * Shapes a credential takes: a private key block, a provider's token by its
- * prefix, a signed token, a URL carrying a password, a secret assigned to a
- * name, and a long opaque run mixing cases and digits as generated keys do.
- * A commit hash or a UUID, all lower case, is none of them.
- */
 const CREDENTIAL_SHAPES: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/u,
   /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}/u,
@@ -121,10 +84,8 @@ const CREDENTIAL_SHAPES: readonly RegExp[] = [
   /\b(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)\b\s*[:=]\s*\S{6,}/iu,
 ];
 
-/** A run long and mixed enough to be a generated secret rather than a word. */
 const OPAQUE_RUN = /[A-Za-z0-9+/=_-]{32,}/gu;
 
-/** The member's role in the workspace, where they are one. */
 function roleIn(
   userId: string,
   workspaceId: string,
@@ -135,7 +96,6 @@ function roleIn(
   );
 }
 
-/** The member whose words a memory holds, as the reader is told; nobody for an account that is gone. */
 function keeperOf(
   userId: string | null,
   names: ReadonlyMap<string, string>,
@@ -145,7 +105,6 @@ function keeperOf(
   return name === undefined ? null : { userId, name };
 }
 
-/** Whether words look like they hold a credential, so they are never kept. */
 function looksLikeCredential(text: string): boolean {
   if (CREDENTIAL_SHAPES.some((shape) => shape.test(text))) return true;
   return (text.match(OPAQUE_RUN) ?? []).some(
@@ -153,17 +112,10 @@ function looksLikeCredential(text: string): boolean {
   );
 }
 
-/** A text's words as a search compares them: lower case, letters and digits alone. */
 function wordsOf(text: string): readonly string[] {
   return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
-/**
- * The memories a query finds, best first: each scored by how many of the
- * query's distinct words begin one of its own, so "deploy" finds
- * "deployment", ties going to the one kept most recently. A query with no
- * telling word answers the most recent; one that finds nothing answers none.
- */
 function rankMemories(
   memories: readonly StoredMemory[],
   query: string | undefined,
@@ -184,7 +136,6 @@ function rankMemories(
     .map((scored) => scored.memory);
 }
 
-/** The workspace's memories as the reader sees them: each named by its member, and forgettable where the reader may. */
 function summariesFor(
   userId: string,
   manages: boolean,
@@ -196,7 +147,6 @@ function summariesFor(
   );
 }
 
-/** One memory as the reader sees it, its member's name read beside it. */
 function summaryOf(
   userId: string,
   manages: boolean,
@@ -213,7 +163,6 @@ function summaryOf(
   };
 }
 
-/** The workspace's memories, to a member of it. */
 export function readWorkspaceMemories(
   userId: string,
   workspaceId: string,
@@ -227,12 +176,6 @@ export function readWorkspaceMemories(
   });
 }
 
-/**
- * Forgets one of the workspace's memories, where the member may, and answers
- * the memories as they then stand, with the transaction it was deleted in. A
- * memory already gone answers the same as one forgotten now, with no
- * transaction, so a forget retried after it landed answers the same.
- */
 export function forgetWorkspaceMemory(
   userId: string,
   workspaceId: string,
@@ -254,17 +197,11 @@ export function forgetWorkspaceMemory(
   });
 }
 
-/** What a member's keep came to. */
 export const WORKSPACE_MEMORY_SAVE = {
-  /** The memory was kept, was already kept, or corrected the one it replaces. */
   SAVED: "saved",
-  /** The account is no member of the workspace, or the workspace names nothing. */
   NOT_MEMBER: "not_member",
-  /** The words look like they hold a credential; nothing was written. */
   CREDENTIAL: "credential",
-  /** The memory it replaces is not the workspace's, or was forgotten; nothing was written. */
   NOT_FOUND: "not_found",
-  /** The workspace holds as many memories as it may; nothing was written. */
   FULL: "full",
 } as const;
 
@@ -285,12 +222,6 @@ export type WorkspaceMemorySearchAnswer =
     }
   | { readonly kind: typeof WORKSPACE_MEMORY.NOT_MEMBER };
 
-/**
- * Keeps a memory in the member's words, in a workspace they are a member
- * of, or corrects the one `replaces` names, and answers what that came to
- * with the memory as the member then sees it. Words that look like a
- * credential are refused before the store is reached.
- */
 export function saveWorkspaceMemory(
   userId: string,
   workspaceId: string,
@@ -317,7 +248,6 @@ export function saveWorkspaceMemory(
   });
 }
 
-/** The workspace's memories a search's words find, best first, as recall ranks them, and how many it holds, to a member of it. */
 export function searchWorkspaceMemories(
   userId: string,
   workspaceId: string,

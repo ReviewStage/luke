@@ -1,14 +1,3 @@
-/**
- * repository-pull-request-procedures.test.ts -- a pull request read, changed, or chaptered by its repository and number refuses a non-member exactly as it refuses a number the repository holds none under.
- *
- * Over the real `GitHubApp`, a GitHub the test scripts, and the account and
- * workspace rows on a real dialect. The member reads the pull request and
- * labels it, on their own GitHub sign-in, so the refusals below are the
- * procedures' own and not a route that answers nothing.
- *
- * Synthetic accounts, bearers, tokens, and repositories throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -33,10 +22,8 @@ import { repositoryPullRequestProcedures } from "./repository-pull-request-proce
 
 const ORIGIN = "https://app.test";
 
-/** A change any pull request takes: a label put on it. */
 const LABEL = JSON.stringify({ action: PULL_REQUEST_ACTION.ADD_LABEL, label: "ready" });
 
-/** Every ask that reaches the pull request by its number, each naming it in its query: its reads, its change, and a Generate of its chapters. */
 const NUMBERED_ASKS = [
   { method: HTTP_METHOD.GET, path: "/api/pull-requests" },
   { method: HTTP_METHOD.GET, path: "/api/pull-requests/changes" },
@@ -48,16 +35,13 @@ const NUMBERED_ASKS = [
   { method: HTTP_METHOD.POST, path: "/api/pull-requests/chapters" },
 ] as const;
 
-/** The review options' read, of the repository and so of no number: a member's missing one still answers. */
 const REVIEW_OPTIONS_READ = {
   method: HTTP_METHOD.GET,
   path: "/api/pull-requests/review-options",
 } as const;
 
-/** The chapters' read, which asks GitHub nothing of the number, so a member's missing one answers as no chapters rather than as none found. */
 const CHAPTERS_READ = { method: HTTP_METHOD.GET, path: "/api/pull-requests/chapters" } as const;
 
-/** `acme/relay`'s pull request 42, open, its head's checks none, as GitHub's API answers each; nothing for any other read. */
 function relayRead(sent: { readonly url: string }): Response | undefined {
   const path = new URL(sent.url).pathname;
   if (path === "/repos/acme/relay/pulls/42") {
@@ -144,7 +128,6 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
               headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
               ...(body === undefined ? undefined : { body }),
             });
-            // SAFETY: the procedures yield the database, the clock, the GitHub App, and its HTTP client alone, which is all a test provides of the web runtime's services.
             const response = yield* Effect.promise(() =>
               handle(request, services as Context.Context<WebServices>),
             );
@@ -167,7 +150,6 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           text: JSON.stringify({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
         });
-        // The label is put on as the member, on their own sign-in, and never on the token minted for the repository.
         const write = github.sent.find((sent) => new URL(sent.url).pathname.endsWith("/labels"));
         assert.equal(
           write?.headers.get("authorization"),
@@ -179,7 +161,6 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
           assert.deepEqual(yield* ask(numbered, outsider, 42), notFound, numbered.path);
         }
         assert.deepEqual(yield* ask(CHAPTERS_READ, outsider, 42), notFound);
-        // The review options are the repository's, so a member's missing number answers and only a non-member is refused.
         const options = yield* ask(REVIEW_OPTIONS_READ, member, 99);
         assert.equal(options.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(JSON.parse(options.text), {

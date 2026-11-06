@@ -23,16 +23,6 @@ import {
   workspaceMembersLiveStatements,
 } from "./workspace-members.js";
 
-/**
- * A workspace's people as the live statements deliver them: the members and
- * who the workspace's work names but left, exactly as the held reads answer
- * them, to a member, and nothing at all to an outsider or to a member once
- * they leave.
- *
- * Synthetic accounts throughout, over PGlite.
- */
-
-/** A new account under the name and sign-in picture given. */
 const openUser = (name: string, image: string | null = null) =>
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
@@ -42,7 +32,6 @@ const openUser = (name: string, image: string | null = null) =>
     return userId;
   });
 
-/** The workspace's people as the desktop builds them from the live rows, run as Realtime runs them, for `readerId`. */
 const livePeopleOf = (readerId: string, organizationId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;

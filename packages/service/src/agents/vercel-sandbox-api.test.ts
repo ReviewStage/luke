@@ -1,7 +1,3 @@
-/**
- * vercel-sandbox-api.test.ts -- what a call of Vercel Sandbox through `@vercel/sandbox` says of a failure, against a scripted fake of Vercel behind the SDK's `fetch`: the call, its status, and Vercel's error or the cause's, every token-shaped run redacted; and what this module decides beside the SDK: a joining create meets its name taken with the sandbox holding it and a refusing one with the 409, each list asks the query Vercel takes, and a sandbox or a snapshot already gone reads as gone.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -31,7 +27,6 @@ const REFUSAL = { code: "bad_request", message: "Invalid request: the fixture's 
 const SECRET_ENV = "fixture-secret-env-value";
 const CREATED_AT = Date.UTC(2026, 10, 5);
 
-/** A sandbox as Vercel's list names it, up in the session it runs. */
 const RUNNING_SANDBOX = {
   name: NAME,
   status: "running",
@@ -39,7 +34,6 @@ const RUNNING_SANDBOX = {
   createdAt: CREATED_AT,
 } as const;
 
-/** A create of the fixture's sandbox, with a secret in its environment, and what a taken name does. */
 const createAsk = (whenNameTaken: NameTaken) => ({
   name: NAME,
   image: "agent-image:fixture",
@@ -51,7 +45,6 @@ const createAsk = (whenNameTaken: NameTaken) => ({
   whenNameTaken,
 });
 
-/** Each call made through the SDK's statics, as a caller asks it. */
 const CALLS: readonly {
   readonly call: SandboxCall;
   readonly ask: (api: VercelSandboxApi) => Effect.Effect<unknown, SandboxUnavailable>;
@@ -64,7 +57,6 @@ const CALLS: readonly {
 
 type Responder = (url: string, init: RequestInit) => Response | Promise<Response>;
 
-/** The API under the fixture's token, the SDK sending through the responder given. */
 function apiOver(
   respond: Responder,
   readToken: () => Promise<string> = () => Promise.resolve(fixtureToken()),
@@ -72,7 +64,6 @@ function apiOver(
   return vercelSandboxApi(readToken).pipe(Effect.provide(sandboxFetchOver(respond)));
 }
 
-/** A page of the sandboxes named, as Vercel's list answers it. */
 const listed = (...names: readonly string[]) =>
   Response.json(sandboxesListed(names.map((name) => ({ ...RUNNING_SANDBOX, name }))));
 
@@ -117,7 +108,6 @@ it.effect("a secret Vercel or a cause echoes back is redacted from the detail", 
     const refusing = yield* apiOver(() =>
       Response.json({ error: { code: "bad_request", message: echoed } }, { status: 400 }),
     );
-    // Note that the cause is an abort, because the SDK tries any other failure to connect again on a real timer.
     const throwing = yield* apiOver(() => {
       throw Object.assign(new Error(echoed), { name: "AbortError" });
     });
@@ -238,10 +228,8 @@ it.effect(
     }),
 );
 
-/** A stopped sandbox as Vercel's list names it. */
 const STOPPED_SANDBOX = { ...RUNNING_SANDBOX, status: "stopped" } as const;
 
-/** Vercel's answer to a lookup and to a delete, as `@vercel/sandbox` reads them. */
 const sandboxAnswer = (method: string) =>
   Response.json(
     method === "DELETE" ? sandboxDeleted(STOPPED_SANDBOX) : sandboxFound(STOPPED_SANDBOX),
@@ -277,7 +265,6 @@ it.effect(
     }),
 );
 
-/** A sandbox opened in the runner's fake, and its session held, with a detached command started in it. */
 const commandStarted = Effect.gen(function* () {
   const fake = runnerSandboxApi();
   const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(Effect.provide(fake.layer));

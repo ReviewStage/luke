@@ -3,14 +3,6 @@ import { OVERVIEW_BOUNDS } from "@repo/features/agent-wire";
 import { describe, test } from "vitest";
 import { type StackCandidate, stackOf } from "./pull-request-stack.js";
 
-/**
- * The stack a pull request stands in, worked out from the repository's open
- * pull requests as stage-cli works it out: base first, a branch many target
- * stacking none of them, a fork's head standing on nothing, and a loop no
- * stack at all. Synthetic branches throughout.
- */
-
-/** An open pull request of the repository from `head` into `base`. */
 function open(number: number, head: string, base: string, crossRepository = false): StackCandidate {
   return {
     number,

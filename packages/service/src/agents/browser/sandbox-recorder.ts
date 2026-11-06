@@ -1,82 +1,28 @@
-/**
- * sandbox-recorder.ts -- the commands that record an agent's browser as a video in its sandbox: a recorder started beside the browser, stopped and encoded on the agent's word, and the video's file the service reads back.
- *
- * A browser call's DevTools session lasts that call alone (`browser-tool.ts`),
- * so a recording, which spans the calls between `record` and
- * `stop_recording`, runs in the sandbox instead: `RECORDER_SOURCE`, run by
- * Node detached from the command that starts it, attaches to every page the
- * browser holds and every page it opens, has each cast its frames
- * (`Page.startScreencast`), as the live view does (`browser-live/relay.ts`),
- * and writes to disk the latest frame of each tenth of a second, with the
- * time the browser drew it, so a page that redraws fast costs no more than
- * the video's own rate; the frames go once encoded. A frame of a document
- * that has not yet drawn any content, as a page still loading shows, blank
- * while a dev server compiles it, is left out (`RECORDING_PAINTED_SOURCE`),
- * so the video opens on the page and a navigation holds the page before it
- * until the next one draws; where no frame drew content, every frame is
- * kept. Only a
- * page on screen draws, so the frames follow the tab the browser shows; and
- * it draws the agent's pointer into each page it records
- * (`recording-cursor.ts`), which the frames would otherwise lack. It
- * stops when the stop file appears or its time runs out, whichever comes
- * first, then re-times the frames to a steady rate, holding each until the
- * next, and encodes them as a VP9 WebM with the ffmpeg Playwright installs
- * beside its Chromium, at ever smaller sizes until one fits the byte bound,
- * and writes what came of it to `done.json`.
- *
- * Both scripts run as the sandbox's default user, as the browser does, and
- * keep the recording under the browser's
- * own state directory, which a new recording clears. The recorder dies
- * with the sandbox, so a recording not stopped before the agent's turn
- * ends is lost. Every value a script reads is a constant of this module or
- * a bound it is handed, as a positional argument.
- */
-
 import { PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
 import { LINK_SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./recording-cursor.js";
 import { SANDBOX_BROWSER } from "./sandbox-browser.js";
 
-/** Where a recording is kept under the sandbox user's home, and the files it is made of. */
 export const SANDBOX_RECORDING = {
   DIRECTORY: `${SANDBOX_BROWSER.STATE_DIRECTORY}/recording`,
-  /** The video, once encoded, as the service reads it back. */
   VIDEO: `${SANDBOX_BROWSER.STATE_DIRECTORY}/recording/recording.webm`,
-  /** How long the start waits on the recorder to reach the browser, in tenths of a second. */
   READY_WAIT_TENTHS: 50,
-  /** How long the stop waits on the encoding, in tenths of a second: inside the action's own bound. */
   DONE_WAIT_TENTHS: 800,
 } as const;
 
-/** How a start ends, apart from the shell's own exits. */
 export const RECORDING_START_EXIT = {
   NO_ENCODER: 4,
   NOT_STARTED: 5,
 } as const;
 
-/** The name both scripts run under, as `$0`. */
 export const RECORDING_SCRIPT_NAME = "agent-recording";
 
-/** What a start that succeeded prints: a recording it started, or one that already runs. */
 export const RECORDING_START_OUTPUT = { STARTED: "started", RUNNING: "running" } as const;
 
-/**
- * Whether the page's document has drawn content yet: its first contentful
- * paint, which a background alone or the recorder's own pointer never is.
- * The recorder asks it of a page from its first frame, and again after each
- * navigation, every tenth of a second until it says yes.
- */
 export const RECORDING_PAINTED_SOURCE =
   'performance.getEntriesByName("first-contentful-paint").length > 0';
 
-/**
- * The recorder, run by Node with the DevTools port, its directory, its most
- * seconds and bytes, the encoder, and the frame's most width and height as
- * its arguments. It writes `ready` once it reaches the browser, and
- * `done.json` once it has stopped: the video's seconds and bytes, or why
- * there is none (`RECORDING_FAILURE`).
- */
 export const RECORDER_SOURCE = `"use strict";
 const fs = require("node:fs");
 const path = require("node:path");
@@ -247,38 +193,20 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
 }, () => end({ ok: false, reason: "unreachable" }));
 `;
 
-/** Why a recording came to no video, as `done.json` and the stop say. */
 export const RECORDING_FAILURE = {
-  /** No recording runs or waits to be read. */
   NONE: "none",
-  /** The browser drew nothing while it ran. */
   EMPTY: "empty",
-  /** The encoder failed. */
   ENCODER: "encoder",
-  /** No size the recorder tried fit the byte bound. */
   TOO_LARGE: "too-large",
-  /** The recorder never reached the browser. */
   UNREACHABLE: "unreachable",
-  /** The encoding did not finish within the stop's wait. */
   SLOW: "slow",
 } as const;
 
 export type RecordingFailure = (typeof RECORDING_FAILURE)[keyof typeof RECORDING_FAILURE];
 
-/**
- * Whether the recorder the pid file names still runs: checked by the
- * directory its command line names, since a resumed sandbox may have handed
- * the pid to another process, and Node names its own main thread.
- */
 const RECORDER_ALIVE =
   'alive() { pid=$(cat "$dir/pid" 2>/dev/null); [ -n "$pid" ] && grep -qaF -- "$dir" "/proc/$pid/cmdline" 2>/dev/null; }';
 
-/**
- * The start, as positional parameters take it: the port, the browser's
- * state directory under the home, the most seconds and bytes, the frame's
- * width and height, and the recorder's source. A recording that already
- * runs is left to run.
- */
 const START_SCRIPT = [
   "set -u",
   'port="$1" state="$HOME/$2" max="$3" bytes="$4" width="$5" height="$6" source="$7"',
@@ -287,7 +215,6 @@ const START_SCRIPT = [
   RECORDER_ALIVE,
   'mkdir -p "$state" && chmod 700 "$state"',
   `if [ ! -e "$dir/done.json" ] && alive; then echo ${RECORDING_START_OUTPUT.RUNNING}; exit 0; fi`,
-  // Note that an image from before Playwright's shared folder kept the encoder in the default user's cache, which a sandbox resumed from its snapshot still holds.
   `encoder=$(ls ${PLAYWRIGHT_PIN.BROWSERS}/ffmpeg-*/ffmpeg-linux 2>/dev/null | sort -V | tail -n 1)`,
   `[ -n "$encoder" ] || encoder=$(ls "$HOME"/.cache/ms-playwright/ffmpeg-*/ffmpeg-linux 2>/dev/null | sort -V | tail -n 1)`,
   `[ -x "$encoder" ] || { echo 'no encoder in the image' >&2; exit ${RECORDING_START_EXIT.NO_ENCODER}; }`,
@@ -303,14 +230,6 @@ const START_SCRIPT = [
   `echo ${RECORDING_START_OUTPUT.STARTED}`,
 ].join("\n");
 
-/**
- * The stop, as positional parameters take it: the browser's state directory
- * under the home, and how long to wait on the encoding. It prints what came
- * of the recording as JSON, as often as it is asked until the next
- * recording starts, so a video the service could not read or keep is read
- * again on the next stop, and kept once, since the transcript keeps a video
- * once by its bytes.
- */
 const STOP_SCRIPT = [
   "set -u",
   'dir="$HOME/$1/recording" tenths="$2"',
@@ -325,11 +244,9 @@ const STOP_SCRIPT = [
   "    sleep 0.1",
   "  done",
   "fi",
-  // Note that what came of it is left in place, so a stop whose video could not be read or kept just then reads it again; the next recording clears it.
   'cat "$dir/done.json"',
 ].join("\n");
 
-/** Starts a recording of the browser, where none runs; read its run with `recordingStartOf`. */
 export function startRecording(maxSeconds: number, maxBytes: number): CommandAsk {
   return {
     command: "bash",
@@ -348,7 +265,6 @@ export function startRecording(maxSeconds: number, maxBytes: number): CommandAsk
   };
 }
 
-/** Stops the recording and waits on its video; read its run with `recordingStopOf`. */
 export function stopRecording(): CommandAsk {
   return {
     command: "bash",
@@ -362,17 +278,8 @@ export function stopRecording(): CommandAsk {
   };
 }
 
-/** How a read ends where there is no video to read. */
 export const RECORDING_READ_EXIT = { NO_VIDEO: 3 } as const;
 
-/**
- * Reads the video back, up to the bytes given and one past them, as base64
- * on one line after the line naming its absolute path, as the sandbox's
- * default user reads its other files (`workspace-mcp/sandbox-door.ts`); read
- * its run with `recordingBytesOf`. Note
- * that the path is the sandbox user's home's, which the agent's own may not
- * be, as a native runner's is not, so the agent is answered it whole.
- */
 export function readRecording(maxBytes: number): CommandAsk {
   return {
     command: "bash",
@@ -386,13 +293,11 @@ export function readRecording(maxBytes: number): CommandAsk {
   };
 }
 
-/** The video as a read printed it: the absolute path it stays at, and its bytes. */
 export interface RecordingFile {
   readonly path: string;
   readonly bytes: Uint8Array;
 }
 
-/** The video as a read printed it; nothing where there was none, or where it ran past the bytes given. */
 export function recordingBytesOf(run: CommandRun, maxBytes: number): RecordingFile | undefined {
   if (run.exitCode !== 0) return undefined;
   const lineEnd = run.stdout.indexOf("\n");
@@ -405,7 +310,6 @@ export function recordingBytesOf(run: CommandRun, maxBytes: number): RecordingFi
   return { path, bytes };
 }
 
-/** What a start's run says: a recording started, one already running, or which of its exits it ended on. */
 export type RecordingStart =
   | { readonly ok: true; readonly running: boolean }
   | { readonly ok: false; readonly exitCode: number };
@@ -415,7 +319,6 @@ export function recordingStartOf(run: CommandRun): RecordingStart {
   return { ok: true, running: run.stdout.trim() === RECORDING_START_OUTPUT.RUNNING };
 }
 
-/** What a stop's run says: the video's length and size, or why there is none. */
 export type RecordingStop =
   | { readonly ok: true; readonly seconds: number; readonly bytes: number }
   | { readonly ok: false; readonly reason: RecordingFailure; readonly bytes?: number };

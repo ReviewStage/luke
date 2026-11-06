@@ -1,14 +1,3 @@
-/**
- * admin-reliability-queries.ts -- the Reliability screen's reads, from the
- * rows the service already writes for its own operation.
- *
- * Every read is an aggregate or a status word, counted through the account's
- * user row so the scope that hides the maintainers' own accounts holds on
- * each. A coding agent's failure is classed by the coder host's own reading
- * (`coder-host/status.ts`), handed the turn's failure word and detail here,
- * on the server, so the detail is read and never answered.
- */
-
 import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
@@ -67,36 +56,27 @@ import { ADMIN_ATTENTION_LIMIT, type AdminReliabilitySource } from "./admin-reli
 
 type AdminQueryFailure = QueryError | Schema.SchemaError;
 
-/** The provider-key statuses that leave the key unused: refused, out of quota, or unreadable. */
 const BROKEN_KEY_STATUSES = [
   PROVIDER_KEY_STATUS.INVALID,
   PROVIDER_KEY_STATUS.QUOTA_EXCEEDED,
   PROVIDER_KEY_STATUS.UNREADABLE,
 ] as const;
 
-/** The integration status that leaves a connection unused; no other row status is a breakage. */
 const BROKEN_INTEGRATION_STATUSES = [INTEGRATION_ROW_STATUS.EXPIRED] as const;
 
-/** The installation statuses that leave a workspace's repositories out of reach. */
 const BROKEN_INSTALLATION_STATUSES = [
   GITHUB_INSTALLATION_STATUS.SUSPENDED,
   GITHUB_INSTALLATION_STATUS.DELETED,
 ] as const;
 
-/** The turn statuses that mean the turn ended, which is what a failure rate is a share of. */
 const ENDED_TURN_STATUSES = [TURN_STATUS.SETTLED, TURN_STATUS.CANCELED, TURN_STATUS.FAILED];
 
-/** The automation-run statuses a run settles in. */
 const SETTLED_RUN_STATUSES = [
   AUTOMATION_RUN_STATUS.STARTED,
   AUTOMATION_RUN_STATUS.SKIPPED,
   AUTOMATION_RUN_STATUS.FAILED,
 ];
 
-/**
- * Whether the database answers at all, and how long it took. A failure is the
- * answer rather than the read's, because the health card is what reports it.
- */
 const probeDatabase = Effect.map(
   Effect.timed(Effect.result(Database.use((db) => db.execute(sql`select 1`)))),
   ([elapsed, probed]) => ({
@@ -105,15 +85,12 @@ const probeDatabase = Effect.map(
   }),
 );
 
-/** How long a coding agent's first turn may take to land before the coder host reads it failed. */
 const STARTING_GRACE_MS = Duration.toMillis(CODER.STARTING_GRACE);
 
-/** The UTC day an instant column falls on, as the YYYY-MM-DD key the series is built from. */
 function utcDayOf(column: PgColumn) {
   return sql<string>`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD')`;
 }
 
-/** The conversation a child conversation was delegated from, to tell a coding agent's subagent from the app's. */
 const parentConversation = alias(conversations, "parent_conversation");
 
 const WindowScopeSchema = Schema.Struct({
@@ -125,12 +102,6 @@ type WindowScope = typeof WindowScopeSchema.Type;
 
 const TURN_DAY = utcDayOf(turns.settledAt);
 
-/**
- * Every ended turn of the window, by its day, its conversation's kind and
- * its parent's, its status, and its failure word. Grouped on the columns
- * themselves rather than a case over them, so the fold below decides which
- * turns are the app's and which a coding agent's.
- */
 const findTurnOutcomes = SqlSchema.findAll({
   Request: WindowScopeSchema,
   Result: Schema.Struct({
@@ -173,11 +144,6 @@ const findTurnOutcomes = SqlSchema.findAll({
     ),
 });
 
-/**
- * The window's failed coding-agent turns by failure word and detail, each
- * distinct pair once: the detail is cut at its write to a few hundred
- * characters, so the pairs stay few, and it is read only to be classed.
- */
 const findAgentFailures = SqlSchema.findAll({
   Request: WindowScopeSchema,
   Result: Schema.Struct({
@@ -204,12 +170,6 @@ const findAgentFailures = SqlSchema.findAll({
     ),
 });
 
-/**
- * The coding agents no turn was ever written for whose starting grace ends
- * inside the window, which reaches back a grace before it opens. Whether
- * each is still inside its grace or failed to start is the coder host's own
- * reading, made in the fold.
- */
 const findTurnlessAgents = SqlSchema.findAll({
   Request: Schema.Struct({ createdSince: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: Schema.Struct({ createdAt: InstantColumnSchema }),
@@ -327,7 +287,6 @@ const findBrokenIntegrations = SqlSchema.findAll({
     ),
 });
 
-/** Every member of a workspace whose GitHub installation stands suspended or deleted; the workspace itself is never read. */
 const BrokenInstallationRowSchema = Schema.Struct({
   userId: Schema.String,
   status: Schema.Literals(BROKEN_INSTALLATION_STATUSES),
@@ -354,7 +313,6 @@ const findBrokenInstallations = SqlSchema.findAll({
     ),
 });
 
-/** Each account's coding agents with a turn that failed since the bound, each agent once. */
 const findFailedAgentCounts = SqlSchema.findAll({
   Request: Schema.Struct({ ids: Schema.Array(Schema.String), since: Schema.Date }),
   Result: Schema.Struct({ userId: Schema.String, value: AggregateColumnSchema }),
@@ -375,7 +333,6 @@ const findFailedAgentCounts = SqlSchema.findAll({
     ),
 });
 
-/** One day's count bumped in place, the empty count first where the day has none. */
 function bump<Count>(
   map: Map<string, Count>,
   day: string,
@@ -389,7 +346,6 @@ const NO_FAILURES: AdminFailureCount = { failed: 0, total: 0 };
 
 const NO_RUNS: AdminAutomationCount = { failed: 0, skipped: 0, total: 0 };
 
-/** Whose work a turn is: the app's, a coding agent's own run, or a subagent one of its turns delegated to. */
 const TURN_WORK = {
   APP: "app",
   AGENT: "agent",
@@ -404,13 +360,6 @@ function turnWorkOf(kind: string, parentKind: string | null): TurnWork {
   return TURN_WORK.APP;
 }
 
-/**
- * The turn and agent series and the failure classes. A coding agent's run is
- * a turn of its own conversation, or a Start that never got one; its
- * subagents' turns run inside that turn, so they count toward neither rate.
- * Every other ended turn is the app's. An abandoned turn counts whatever its
- * kind.
- */
 const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(function* (
   request: WindowScope,
   now: number,
@@ -454,10 +403,6 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
       agentFailures.set(failure, (agentFailures.get(failure) ?? 0) + row.value);
   }
 
-  // An agent with no turn is a run only once the coder host reads it failed,
-  // one still inside its starting grace neither, and its run failed the
-  // moment the grace ran out, which is the day it counts on and what keeps
-  // it inside the window or out.
   for (const agent of turnless) {
     const status = agentStatusOf(undefined, { createdAt: agent.createdAt, now });
     const failure = agentFailureOf(undefined);
@@ -500,11 +445,6 @@ const readAutomationSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityAutom
   return { automationRuns, automationReasons };
 });
 
-/**
- * Folds every broken row into its account's problems. An account in several
- * workspaces whose installations broke the same way reads that once, at the
- * newest instant, because no workspace is named to tell them apart.
- */
 function problemsByAccount(
   keys: readonly (typeof BrokenKeyRowSchema.Type)[],
   integrations: readonly (typeof BrokenIntegrationRowSchema.Type)[],
@@ -549,11 +489,6 @@ function problemsByAccount(
   return byAccount;
 }
 
-/**
- * The accounts with something broken, newest breakage first and cut at the
- * bound, each with its account fields and how many of its coding agents
- * failed in the last week. The total counts every such account.
- */
 const readAttention = /* @__PURE__ */ Effect.fn("web/readReliabilityAttention")(function* (
   scope: AdminMetricsScope,
   now: number,
@@ -625,12 +560,6 @@ function emptySource(
   };
 }
 
-/**
- * Reads everything the Reliability screen shows. A database that does not
- * answer the probe short-circuits to an empty source whose health card says
- * so, rather than a page of zeros under a green light; the providers and the
- * analytics console, read from the environment, still fill in.
- */
 export function readAdminReliabilitySource(input: {
   now: number;
   scope: AdminMetricsScope;

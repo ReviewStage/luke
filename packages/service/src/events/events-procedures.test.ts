@@ -1,18 +1,3 @@
-/**
- * events-procedures.test.ts -- the desktop's analytics batch, byte for byte through the route.
- *
- * An unconfigured deployment does no work at all, not even resolving the
- * caller; an unsigned caller is refused before its batch is read; a batch
- * taken is answered 202 with the count recorded; and an upstream that
- * refused is answered with its status. Three answers moved with the route
- * onto oRPC, and are pinned here as they now stand: a body that is not
- * JSON is refused as invalid before the caller is read, a body past the
- * cap is refused as too large, and a batch taken carries `private,
- * no-store`. Every sender drops the answer whichever it is.
- *
- * Synthetic accounts, bearers, and events throughout.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@repo/database/testing/no-database";
@@ -47,7 +32,6 @@ const RECORDING: HostedEnvironmentValues = {
   posthogProjectApiKey: Redacted.make("phc_project"),
 };
 
-/** One launch, at a fixed instant the service clamps into its window. */
 const BATCH = JSON.stringify({
   events: [
     {
@@ -65,7 +49,6 @@ interface Bytes {
   readonly text: string;
 }
 
-/** A refusal's bytes, which carry no cache-control: its slug, and an upstream's status where it has one. */
 function refused(status: number, error: string, upstreamStatus?: number): Bytes {
   const body = upstreamStatus === undefined ? { error } : { error, upstreamStatus };
   return { status, contentType: JSON_TYPE, cacheControl: null, text: JSON.stringify(body) };
@@ -85,7 +68,6 @@ function request(
   });
 }
 
-/** The analytics processor, answering every batch with the status given, and what it was sent. */
 function upstream(status = 200) {
   const forwarded: string[] = [];
   const layer = fakeHttpClientLayer((_url, init) => {
@@ -95,11 +77,6 @@ function upstream(status = 200) {
   return { layer, forwarded };
 }
 
-/**
- * The route answering one request, over the environment and processor
- * handed in and a database that refuses every statement; the resolver
- * names any `user-…` bearer, and counts every time it is asked.
- */
 function bytes(
   incoming: Request,
   environment: HostedEnvironmentValues,
@@ -123,7 +100,6 @@ function bytes(
           }),
       }),
     });
-    // SAFETY: the procedure yields the environment, the processor's client, and the database alone, which is all a test provides of the web runtime's services.
     const webServices = context as Context.Context<WebServices>;
     const response = yield* Effect.promise(() => handle(incoming, webServices));
     return {

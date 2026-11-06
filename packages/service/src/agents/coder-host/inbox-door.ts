@@ -1,12 +1,3 @@
-/**
- * inbox-door.ts -- the door every runtime's call of a coding agent's thread tools goes through: the agent the conversation is, then the tool.
- *
- * A native harness's runner reaches it through our MCP server
- * (`../workspace-mcp/tools.ts`). It imports no
- * eve runtime, because the web function that serves the MCP server bundles
- * no sandbox.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readAgentHeaderOfConversation } from "@repo/database/models/agent-store";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
@@ -24,7 +15,6 @@ import {
 } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
-/** One call of the agent's thread tools, by the tool's name and the input its runtime held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
 export type InboxCall =
   | {
       readonly tool: typeof INBOX_TOOL.POST;
@@ -36,7 +26,6 @@ export type InboxCall =
       readonly input: UnparsedWireValue;
     };
 
-/** Runs one of the agent's thread tools as the admitted conversation's agent: a post, a withdrawal, or a read of its own items; a store failure is the tool's own refusal. */
 export function runAgentInbox(
   admitted: AdmittedConversation,
   call: InboxCall,

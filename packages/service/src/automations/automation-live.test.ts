@@ -25,15 +25,6 @@ import {
   automationWorkspaceRunsLiveStatements,
 } from "./automation-live.js";
 
-/**
- * A workspace's automations, an automation's runs, and a workspace's runs,
- * as their live endpoints seal them, call only functions Postgres marks
- * immutable, since Neon Realtime refuses any other ("scalar expression uses
- * a mutable function") where Postgres runs it without a word. A workspace's
- * runs hold only the runs of the automations the account may read.
- */
-
-/** An account, as the auth plugin would leave its row. */
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -41,7 +32,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A workspace the accounts named are plain members of. */
 const openWorkspace = (...members: readonly string[]) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -58,7 +48,6 @@ const openWorkspace = (...members: readonly string[]) =>
     return id;
   });
 
-/** An automation of `userId`'s in the workspace, under `scope`, that ran once at `firedAt`. */
 const ranOnce = (
   userId: string,
   organizationId: string,

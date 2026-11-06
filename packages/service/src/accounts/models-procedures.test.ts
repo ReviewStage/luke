@@ -1,15 +1,3 @@
-/**
- * models-procedures.test.ts -- the models route, byte for byte, over a real dialect.
- *
- * The models route, answered by the hosted oRPC router the way the web
- * route answers it, over a real dialect: the signed-in desktop reads the offered models as
- * the catalog holds them, but for Anthropic's fast versions where the key
- * its agents run on, its own or ours, belongs to an organization never
- * granted fast mode, and nobody else reads anything.
- *
- * Synthetic accounts, bearers, and sealed keys throughout.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
@@ -54,10 +42,8 @@ const CATALOG: readonly CatalogModel[] = [OPUS, SOL];
 
 const OPUS_FAST: CatalogModel = { ...OPUS, id: "anthropic/claude-opus-5.5-fast" };
 
-/** The catalog with Opus's fast version listed beside it. */
 const FAST_CATALOG: readonly CatalogModel[] = [OPUS, OPUS_FAST, SOL];
 
-/** An account holding an Anthropic key of its own, as a save left it, with the fast access its save found. */
 const accountWithAnthropicKey = (userId: string, fastAccess: FastAccess | null) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -78,10 +64,8 @@ const accountWithAnthropicKey = (userId: string, fastAccess: FastAccess | null) 
     );
   });
 
-/** The ids the account reads, and the base models it is told have fast mode withheld. */
 const offeredTo = (catalog: Layer.Layer<ModelCatalog>, userId: string) =>
   Effect.map(answer(catalog, request(MODELS, { userId })), (answered) => {
-    // SAFETY: the group answers the wire's models answer; the test reads the two fields it compares.
     const { models } = answered.body as {
       models: readonly { id: string; fastNotEnabled?: boolean }[];
     };
@@ -96,7 +80,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
 interface Bytes {
   readonly status: number;
   readonly contentType: string | null;
@@ -104,7 +87,6 @@ interface Bytes {
   readonly text: string;
 }
 
-/** The hosted router over the catalog handed in and the test's database, with a resolver that reads the test's own bearers. */
 const fetchOver = (catalog: Layer.Layer<ModelCatalog>) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<ModelCatalog | DatabaseServices>().pipe(
@@ -126,12 +108,10 @@ const fetchOver = (catalog: Layer.Layer<ModelCatalog>) =>
           ),
       }),
     });
-    // SAFETY: the models procedure yields the catalog and the database alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     return (request: Request) => Effect.promise(() => handle(request, webServices));
   });
 
-/** One request's bytes, as the route answers it. */
 const bytes = (catalog: Layer.Layer<ModelCatalog>, request: Request) =>
   Effect.gen(function* () {
     const response = yield* (yield* fetchOver(catalog))(request);
@@ -143,10 +123,8 @@ const bytes = (catalog: Layer.Layer<ModelCatalog>, request: Request) =>
     } satisfies Bytes;
   });
 
-/** One request answered, its body read as JSON. */
 const answer = (catalog: Layer.Layer<ModelCatalog>, request: Request) =>
   Effect.map(bytes(catalog, request), (answered): Answer => {
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(answered.text) as WireBoundaryInput;
     return { status: answered.status, body };
   });
@@ -161,7 +139,6 @@ function request(
   });
 }
 
-/** The models as the wire carries them, each list a fresh array as JSON reads it back. */
 const wire = (models: readonly CatalogModel[]) =>
   models.map((model) => ({ ...model, efforts: [...model.efforts] }));
 
@@ -191,7 +168,6 @@ it.layer(getTestDB())("the models route", (it) => {
       Effect.gen(function* () {
         const catalog = modelCatalogOf([OPUS]);
         const json = "application/json";
-        // An account whose Anthropic key pays reads the catalog's models unmarked, as before.
         yield* accountWithAnthropicKey("user-bytes", null);
         assert.deepEqual(yield* bytes(catalog, request(MODELS, { userId: "user-bytes" })), {
           status: HOSTED_HTTP_STATUS.OK,

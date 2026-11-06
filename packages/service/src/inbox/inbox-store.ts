@@ -104,184 +104,78 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import type { SyncMoved } from "../sync/live-query.js";
 
-/**
- * inbox-store.ts -- the developer's inbox: the items a task's coding agents post, close, and read as threads of messages with asks, and the developer's answers to them.
- *
- * Every statement names the account beside the task, the agent, or the
- * item. An item is its agent's, written under the member who started the
- * agent, and the task's inbox is the workspace's: every member of the
- * task's workspace reads and answers it, gated on that membership
- * (`workspace-store.ts`), so an item of a workspace the account is not in
- * reads and writes exactly as one that names nothing. An agent posts an item under a key of its own, which is
- * one row per agent and key: posting under a key it used before writes
- * that row again, moves its revision on, and opens it again whether it was
- * answered or closed, so the agent keeps an item current rather than
- * posting it twice. From version 5 an item is a thread of messages, and
- * a post is the agent's message on it: its words, and the ask they end
- * with, held open by the item (`open_ask_message_id`), any ask held open
- * before replaced, only the standing keys of an ask's JSON ever rewritten.
- * The row keeps the title, blocks, and response beside the thread as the
- * view of that ask a desktop before version 5 reads, as the wire's own JSON
- * under the version of the vocabulary that wrote them, decoded on every
- * read against the wire's closed shapes; a post that asks nothing waits on
- * nobody, and its item stands to such a desktop as a note already settled,
- * its words its message. An image block is posted by a path and kept by an
- * attachment: the caller reads the file's bytes from the agent's sandbox
- * and hands them in beside the post, and the post writes each as a file of
- * its message (`@repo/database/schemas/attachment`) under an id minted
- * here, which the block kept on the item names in the path's place; the
- * item's own files from before version 5 go with the same write. A post
- * counts the agent's open items against the bound
- * under a lock on the agent's own row, so two posts of one step cannot both
- * slip under it. Only what the agent asks moves the revision: a post, or a
- * close, which withdraws the ask held open with its reason. An answer by
- * revision, as a desktop before version 5 sends one, is taken only by the
- * revision it names and only while the item is open, so an answer to an
- * item the agent has since changed is refused rather than taken for what
- * it now asks; an answer by the ask's message, from version 5, only while
- * the item holds that ask open, checked against it. Either is written as
- * the member's message that answers the ask, under the answer's key, with
- * its words and its files, the ask stood answered and the item answered
- * with the answer's view; an item from before version 5, which holds no
- * ask, keeps the answer and its files as its own, deleted when the agent
- * posts the item again. An answer sent again under the key it was taken by
- * finds it taken, and one taken back takes its message with it and opens
- * the ask again. A member may instead close the item without an answer,
- * at the revision they were shown, which withdraws the ask it holds open
- * with no reason, an agent's close always giving one, and moves no
- * revision; a close taken back opens the ask again. A member of the item's
- * workspace, or the item's agent, writes a message on its thread at any
- * point, open or settled: the message and its files are written in one
- * write that moves the item's last change and nothing else of it, so every
- * read that compares where items stand sees the thread move, and a member's
- * message sent again under its key finds the one it wrote. A post under the
- * item's key leaves the thread and its files standing. A read carries the
- * thread twice: as a desktop before version 5 draws it, without the
- * messages that ask or answer, which the item's own fields stand for; and
- * whole, its first message and the ask it holds open however long it runs,
- * each ask as it stands on the item, so one a deployment from before
- * version 5 left open while it closed the item reads withdrawn. What waits across
- * the account, every open item on its tasks, is read on
- * its own index, so a desktop can hold that read whichever task is open.
- * Every read of an item says whether it is unread for the member reading
- * it, by that member's own marker (`@repo/database/schemas/inbox-item-read`):
- * an item is unread while it changed after the last change they read
- * through, or while they marked it unread and have not read it since. A
- * member's own answer or message marks it read for them in the same write,
- * and marking an item read, or every item their Inbox lists, writes only
- * their own marker and only where it moves, so opening an item already
- * read writes nothing. The stamps a held read compares carry the reader's
- * unread state too, so a marker moved wakes that member's held reads.
- * Every function is an effect over the ambient `SqlClient` and names no
- * database of its own.
- */
-
 type InboxStoreFailure = QueryError | Schema.SchemaError;
 
-/** What an inbox store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type InboxStoreEffect<A> = Effect.Effect<A, InboxStoreFailure, DatabaseServices>;
 
-/** The agent an item belongs to, as every write of the agent's names it: the task it works on, or none for an agent an automation started with no task. */
 export interface InboxAgent {
   readonly userId: string;
   readonly taskId: string | null;
   readonly agentId: string;
 }
 
-/** Why a post was not written. */
 export const INBOX_POST_REFUSAL = {
-  /** The agent holds as many open asks as it may; it closes one first. */
   TOO_MANY_OPEN: "too-many-open",
-  /** The agent holds as many notices the developer has yet to acknowledge as it may. */
   TOO_MANY_NOTICES: "too-many-notices",
-  /** The agent is no longer the account's. */
   NO_AGENT: "no-agent",
-  /** The post names no title and opens a thread under a key with no item, which needs one. */
   NO_TITLE: "no-title",
-  /** The post addresses its ask to an account that is no member of the agent's workspace. */
   NO_ADDRESSEE: "no-addressee",
-  /** The post addresses its ask to a member of the workspace who may not read its thread (`itemVisibleTo`): one who sees not the agent, or not its task, as their GitHub access stands. */
   ADDRESSEE_CANNOT_SEE: "addressee-cannot-see",
 } as const;
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
 
-/** Where one item stands, without what it says. */
 export interface InboxStamp {
   readonly id: string;
   readonly revision: number;
   readonly status: InboxItem["status"];
   readonly updatedAt: number;
-  /** Whether the item is unread for the member the stamps were read for. */
   readonly unread: boolean;
-  /** The member the item waits on: its task's assignee, else its agent's starter. */
   readonly waitsOn: string;
 }
 
-/** An item as the service holds it, beyond what the wire carries: the key its answer was taken under. */
 export interface StoredInboxItem {
   readonly item: InboxItem;
   readonly answerKey: string | null;
 }
 
-/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, a still's or a video's, and the bytes. */
 export interface InboxImage {
   readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
 }
 
-/** A picture as the agent's message on a thread carries it: its file's own name, the type its bytes were sniffed to be, and the bytes. */
 export interface InboxNamedImage extends InboxImage {
   readonly name: string;
 }
 
-/** One file of a message's as the store writes it: its own name, its type, and its bytes. */
 interface MessageFile {
-  /** The id it is kept under, where the message's words name it by its address; minted by the database where none is given. */
   readonly id?: string;
   readonly name: string;
   readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
 }
 
-/** A file an item's answer carried as a read answers it: the type it traveled as, and the bytes; a picture of a block's reads the same way. */
 export interface InboxFile {
   readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
 }
 
-/**
- * An item as a member's write on it answers it: the item as it then stands,
- * and the transaction that wrote it, which a follower of the inbox waits
- * for on its live view; none where this write changed nothing.
- */
 export type InboxItemWritten = InboxItem & { readonly txid?: string };
 
-/** A member's read state moved: the transaction that moved it, none where it stood as asked already. */
 export interface InboxMarked {
   readonly txid?: string;
 }
 
-/**
- * The id of the transaction that made a write, read in the write's own
- * `RETURNING`, as Neon's mutations guide does it: a follower of the inbox
- * waits for it to arrive on its live view. A write that changed no row
- * returns none, so there is nothing to wait for.
- */
 const TXID = sql<string>`pg_current_xact_id()::text`;
 
-/** The types a file of an item's may be served under: a picture's, a video's, or any a message's file travels as. */
 const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
-/** The item's own id, named by its table, since a statement over the item alone spells its columns bare and a bare id inside the files' subquery would be the file's. */
 const ITEM_ID = sql`${sql.identifier(getTableName(inboxItem))}.${sql.identifier(inboxItem.id.name)}`;
 
-/** A column named by its table, for a subquery nested inside another whose own columns would otherwise take the bare name. */
 function qualified(table: AnyPgTable, column: AnyPgColumn): SQL {
   return sql`${sql.identifier(getTableName(table))}.${sql.identifier(column.name)}`;
 }
 
-/** The message whose ask the item holds open, named by the item's table, for the subqueries nested in a read of the item. */
 const ITEM_OPEN_ASK = qualified(inboxItem, inboxItem.openAskMessageId);
 
 const MESSAGE = {
@@ -296,49 +190,26 @@ const MESSAGE = {
   createdAt: qualified(inboxMessage, inboxMessage.createdAt),
 };
 
-/** The files one message of the thread carried, in the order they were attached, each named as an answer's file is. */
 const MESSAGE_FILES = sql`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${attachment.id}, 'name', ${attachment.name}, 'mediaType', ${attachment.contentType}) order by ${attachment.position}), '[]'::jsonb) from ${attachment} where ${attachment.inboxMessageId} = ${MESSAGE.id})`;
 
-/** As many messages as a read carries. */
 const MESSAGES_READ = sql.raw(String(INBOX_BOUNDS.MAX_MESSAGES_READ));
 
-/** A set of the item's messages under the table's own name, so the columns above name them. */
 function messagesAs(select: SQL): SQL {
   return sql`(${select}) as ${sql.identifier(getTableName(inboxMessage))}`;
 }
 
-/**
- * The item's whole thread as a read carries it: its latest messages, as
- * many as a read carries, and its first message and the one whose ask it
- * holds open, however many were written since, so a long thread never
- * loses what opened it or what waits on an answer.
- */
 const THREAD_MESSAGES = messagesAs(
   sql`select * from ${inboxMessage} where ${inboxMessage.itemId} = ${ITEM_ID} and (${inboxMessage.id} in (select ${inboxMessage.id} from ${inboxMessage} where ${inboxMessage.itemId} = ${ITEM_ID} order by ${inboxMessage.createdAt} desc, ${inboxMessage.id} desc limit ${MESSAGES_READ}) or ${inboxMessage.id} = (select ${inboxMessage.id} from ${inboxMessage} where ${inboxMessage.itemId} = ${ITEM_ID} order by ${inboxMessage.createdAt}, ${inboxMessage.id} limit 1) or ${inboxMessage.id} = ${ITEM_OPEN_ASK})`,
 );
 
-/**
- * Messages oldest first, each with its author, the member's name as their
- * account holds it now, its words, its files, the ask it ends with and the
- * answer it carries as they were kept, the member an agent's message was
- * addressed to and their name, the key a member's was sent under, and
- * when it was written in epoch milliseconds.
- */
 function messagesOf(source: SQL): SQL<unknown> {
   return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'addresseeId', ${MESSAGE.addresseeId}, 'addresseeName', (select "name" from ${user} where ${user.id} = ${MESSAGE.addresseeId}), 'clientKey', ${MESSAGE.clientKey}, 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
 }
 
-/** Whether the item is settled: answered, or closed by its agent. */
 const SETTLED = sql`${inboxItem.status} <> ${INBOX_STATUS.OPEN}`;
 
-/**
- * Whether an open item is a notice: its agent's post asked nothing, so it
- * holds no ask open and waits on the developer's nod alone, takes no place
- * among the agent's open asks, and no withdrawal finds it.
- */
 const NOTICE = sql`${inboxItem.openAskMessageId} is null`;
 
-/** Whether the item holds an ask open: open, and no notice. */
 const ASKING = sql<boolean>`(${inboxItem.status} = ${INBOX_STATUS.OPEN} and not (${NOTICE}))`;
 
 const ITEM_TABLE = sql.identifier(getTableName(inboxItem));
@@ -354,81 +225,39 @@ const READ = {
   remindThrough: qualified(inboxItemRead, inboxItemRead.remindThrough),
 };
 
-/**
- * Whether the item is unread for the reader: marked unread by them, or
- * changed after the later of the change they read through and the instant
- * the item itself is read through by everyone, which stands only on an item
- * from before unread was kept. A reader with no marker reads it by the
- * item's instant alone, so an item posted since is unread until they read
- * it and one that stood before is read until it changes.
- */
 function unreadFor(readerId: string): SQL<boolean> {
   const noMarker = sql`${ITEM_UPDATED_AT} > coalesce(${ITEM_READ_THROUGH}, '-infinity'::timestamptz)`;
   return sql<boolean>`coalesce((select ${READ.markedUnread} or ${ITEM_UPDATED_AT} > coalesce(greatest(${READ.readThrough}, ${ITEM_READ_THROUGH}), '-infinity'::timestamptz) from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), ${noMarker})`;
 }
 
-/** Whether the reader marked the item unread and has not read it since, as their marker holds it; false where they keep no marker. */
 function markedUnreadFor(readerId: string): SQL<boolean> {
   return sql<boolean>`coalesce((select ${READ.markedUnread} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), false)`;
 }
 
-/**
- * When the reader's reminder on the item comes due, as their marker holds
- * it, while the item has not changed since they set it; null where they
- * set none, canceled it, keep no marker, or a change ended it. Note that a
- * reminder whose time has passed still answers its time, which the reader
- * lists the item by, since it came back then, and that a reminder with no
- * change of its own stands as the release before it weighed one, while the
- * item is read, because that release set one by marking the item read,
- * canceled one by marking it unread, and goes on serving the migrated
- * database for a while.
- */
 function remindAtFor(readerId: string): SQL<Date | null> {
   return sql<Date | null>`(select ${READ.remindAt} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId} and coalesce(${READ.remindThrough} >= ${ITEM_UPDATED_AT}, not ${READ.markedUnread} and ${READ.readThrough} >= ${ITEM_UPDATED_AT}))`;
 }
 
-/** `remindAtFor` in epoch milliseconds, as the wire carries an instant; null where the reader set no reminder on the item. */
 function remindAtMillisFor(readerId: string): SQL<number | null> {
   return sql<number | null>`floor(extract(epoch from ${remindAtFor(readerId)}) * 1000)::float8`;
 }
 
-/**
- * The reader's reminder as a live read carries it: under `remindAt`, and
- * under `snoozedUntil`, the key a desktop from before the rename reads,
- * which goes with the minimum supported desktop version.
- */
 function liveReminderFor(readerId: string): { remindAt: SQL; snoozedUntil: SQL } {
   return { remindAt: remindAtFor(readerId), snoozedUntil: remindAtFor(readerId) };
 }
 
-/**
- * The member an item waits on: the member its agent addressed it to, or,
- * where it names none, its task's assignee, or the member who started its
- * agent where the task has nobody assigned or the agent works on no task. A
- * scalar read rather than a join, because `returning` projects it too and
- * joins nothing, and every name is qualified, because it is nested in reads
- * that join the task themselves.
- */
 const WAITS_ON = sql<string>`coalesce(${qualified(inboxItem, inboxItem.addresseeId)}, (select ${qualified(task, task.assigneeId)} from ${task} where ${qualified(task, task.id)} = ${qualified(inboxItem, inboxItem.taskId)}), ${qualified(inboxItem, inboxItem.userId)})`;
 
-/** Whether the item's agent addressed it to a member, who `WAITS_ON` then names; qualified as `WAITS_ON` is. */
 const ADDRESSED = sql<boolean>`(${qualified(inboxItem, inboxItem.addresseeId)} is not null)`;
 
-/** The name of the member an item waits on (`WAITS_ON`), as their account holds it; none once the account is gone. */
 const WAITS_ON_NAME = sql<
   string | null
 >`(select "name" from ${user} where ${user.id} = ${WAITS_ON})`;
 
-/**
- * When a settled item was settled, in epoch milliseconds: the instant kept,
- * or, on an item settled before it was kept, its last change, which no
- * message has moved yet, since the first one keeps that instant first.
- */
 const SETTLED_AT = sql<
   number | null
 >`floor(extract(epoch from coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)) * 1000)::float8`;
 
-/** The columns every read and every `returning` projects for the reader, so a row decodes one way whatever wrote it. */
 function inboxColumns(readerId: string) {
   return {
     ...INBOX_ITEM_COLUMNS,
@@ -438,7 +267,6 @@ function inboxColumns(readerId: string) {
   };
 }
 
-/** What an item says whoever reads it. */
 const INBOX_ITEM_COLUMNS = {
   id: inboxItem.id,
   agentId: inboxItem.agentId,
@@ -457,7 +285,6 @@ const INBOX_ITEM_COLUMNS = {
   addressed: ADDRESSED,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
-  // A scalar read rather than a join, because `returning` projects these too and joins nothing.
   answeredByName: sql<
     string | null
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.answeredBy})`,
@@ -496,7 +323,6 @@ const MessageRowSchema = Schema.Struct({
 
 type MessageRow = typeof MessageRowSchema.Type;
 
-/** A message as the wire carries it: the member named where their account stands, no files where it carried none, its ask as it stands on the item, whom it was addressed to where their account stands, and the key it was sent under where `keysFor` names the member who sent it. */
 function storedMessage(
   row: MessageRow,
   item: InboxAskStanding,
@@ -554,12 +380,6 @@ const InboxRowSchema = Schema.Struct({
 
 type InboxRow = typeof InboxRowSchema.Type;
 
-/**
- * A row as the wire carries it, each absent field left out rather than
- * null. Note that a member's message carries the key it was sent under to
- * that member alone, named by `keysFor` on a read answering their own
- * write, so no other member, and no agent, is ever handed one.
- */
 function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
   const message = (each: MessageRow) => storedMessage(each, row, keysFor);
   return {
@@ -592,7 +412,6 @@ function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
       updatedAt: row.updatedAt.getTime(),
       unread: row.unread,
       ...(row.markedUnread ? { markedUnread: true } : undefined),
-      // Note that the reminder is carried under `snoozedUntil` too, as `liveReminderFor` carries it.
       ...(row.remindAt === null
         ? undefined
         : { remindAt: row.remindAt, snoozedUntil: row.remindAt }),
@@ -603,10 +422,8 @@ function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
 const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
-/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`). */
 function itemAgentSeenBy(userId: string): SQL {
   const seen = exists(
     queryBuilder
@@ -617,20 +434,10 @@ function itemAgentSeenBy(userId: string): SQL {
   return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
 }
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it: what an agent's own reads of its items keep, under the member who started it, as it acts as itself (`agentReachableBy`). What a member reads keeps `itemVisibleTo`. */
 function itemReachableBy(userId: string): SQL {
   return sql`(${workspaceReachableBy(userId, ITEM_WORKSPACE)} and ${itemAgentSeenBy(userId)})`;
 }
 
-/**
- * The condition that the account may read the item a statement reads, the
- * one rule every Inbox read keeps, a count as much as a list or
- * a read by id: it reaches the item (`itemReachableBy`), and for an item on a
- * task that task too (`taskReachableBy`). Note that the task is asked as
- * well, because a teammate's agent may reach the reader while its task, on
- * a token the reader's reads no repository of, does not, and then its items
- * stand nowhere the reader looks, as the agent does (`agentVisibleTo`).
- */
 function itemVisibleTo(userId: string): SQL {
   const taskReached = exists(
     queryBuilder
@@ -641,10 +448,8 @@ function itemVisibleTo(userId: string): SQL {
   return sql`(${itemReachableBy(userId)} and (${inboxItem.taskId} is null or ${taskReached}))`;
 }
 
-/** The step a link names the agent's workspace by: its slug, or its id where it has none, as a description's picture names it. */
 const AGENT_WORKSPACE_STEP = sql<string>`coalesce((select ${organization.slug} from ${organization} where ${organization.id} = ${AGENT_WORKSPACE}), ${AGENT_WORKSPACE})`;
 
-/** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({
@@ -668,7 +473,6 @@ const lockAgent = SqlSchema.findOneOption({
     ),
 });
 
-/** How many asks the agent holds open under a key other than the one given; a notice holds none. */
 const countOpenBesides = SqlSchema.findOne({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ open: Schema.Number }),
@@ -688,7 +492,6 @@ const countOpenBesides = SqlSchema.findOne({
     ),
 });
 
-/** How many notices the agent holds open, waiting on the developer's nod, under a key other than the one given. */
 const countNoticesBesides = SqlSchema.findOne({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ open: Schema.Number }),
@@ -728,16 +531,13 @@ const MessageWriteSchema = Schema.Struct({
   author: Schema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
   userId: Schema.NullOr(Schema.String),
   text: Schema.String,
-  // Note that the ask is taken as it is typed, because it is written as the read shape whole and a type a newer deployment named encodes to no other shape.
   ask: Schema.NullOr(Schema.toType(inboxReadAskSchema)),
   answers: Schema.NullOr(inboxAnswersSchema),
-  /** The member an agent's post was addressed to; null where it named none, and on a member's message. */
   addresseeId: Schema.NullOr(Schema.String),
   clientKey: Schema.NullOr(Schema.String),
   now: Schema.Date,
 });
 
-/** The message written on the item's thread; nothing where a message of the item's stands under its key already. */
 const insertMessage = SqlSchema.findOneOption({
   Request: MessageWriteSchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -762,7 +562,6 @@ const MessageFileWriteSchema = Schema.Struct({
   bytes: Schema.Uint8Array,
   now: Schema.Date,
   messageId: Schema.String,
-  /** The id the file is kept under, where the message's words name it; minted by the database where none is given. */
   id: Schema.optionalKey(Schema.String),
 });
 
@@ -783,37 +582,25 @@ const insertMessageFiles = SqlSchema.void({
     ),
 });
 
-/** A message's files written as rows of the item's in one statement, each naming the message, at its place among the message's files. */
 function writeMessageFiles(
   files: readonly (typeof MessageFileWriteSchema.Type)[],
 ): InboxStoreEffect<void> {
   return files.length === 0 ? Effect.void : insertMessageFiles(files);
 }
 
-/** Where an ask is to stand: open again, answered, replaced, or withdrawn with why. */
 const AskStandingSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_ASK_STATUS)),
   withdrawnReason: Schema.NullOr(Schema.String),
-  /** When a withdrawn ask was withdrawn, in epoch milliseconds; null on any other standing. */
   withdrawnAt: Schema.NullOr(Schema.Number),
 });
 
-/**
- * The keys of an ask's standing merged over the ask as it was kept, a null
- * one left out. Note that nothing else of the ask is written, because a
- * deployment that does not know the ask's type must never strip the keys it
- * does not read, and that a withdrawal's time is taken off first, so an ask
- * opened again never keeps the time of a withdrawal that no longer stands.
- */
 function askStanding({ status, withdrawnReason, withdrawnAt }: typeof AskStandingSchema.Type): SQL {
   const standing = sql`jsonb_strip_nulls(jsonb_build_object('status', ${status}::text, 'withdrawnReason', ${withdrawnReason}::text, 'withdrawnAt', ${withdrawnAt}::bigint))`;
   return sql`(${inboxMessage.ask} - 'withdrawnAt') || ${standing}`;
 }
 
-/** Whether a message's ask stands open, as it was kept. */
 const ASK_KEPT_OPEN = sql`${inboxMessage.ask} ->> 'status' = ${INBOX_ASK_STATUS.OPEN}`;
 
-/** Every ask of the item kept open, but the one message's named, set to stand as given: what a post replaces and a close withdraws. */
 const settleOpenAsks = SqlSchema.void({
   Request: Schema.Struct({
     ...AskStandingSchema.fields,
@@ -835,7 +622,6 @@ const settleOpenAsks = SqlSchema.void({
     ),
 });
 
-/** The ask of the one message named set to stand as given: what an answer settles and an answer taken back opens again. */
 const standAsk = SqlSchema.void({
   Request: Schema.Struct({ ...AskStandingSchema.fields, messageId: Schema.String }),
   execute: ({ messageId, ...standing }) =>
@@ -847,7 +633,6 @@ const standAsk = SqlSchema.void({
     ),
 });
 
-/** The item pointed at the message whose ask it now holds open. */
 const holdAsk = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, messageId: Schema.String }),
   execute: ({ itemId, messageId }) =>
@@ -856,7 +641,6 @@ const holdAsk = SqlSchema.void({
     ),
 });
 
-/** The ask the item holds open, by its message, where the account reaches the item and it stands open: the ask an answer settles. */
 const findOpenAsk = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, ask: inboxReadAskSchema }),
@@ -877,7 +661,6 @@ const findOpenAsk = SqlSchema.findOneOption({
     ),
 });
 
-/** The member's message on the item under the answer's key that carries an answer, with the answer: what taking the answer back deletes, opening its ask again. */
 const findAnsweringMessage = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, answers: inboxAnswersSchema }),
@@ -896,12 +679,6 @@ const findAnsweringMessage = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The item's last change moved to now, and nothing else of it: what a
- * message on its thread does to the item. Note that a settled item settled
- * before the instant was kept keeps its last change as that instant first,
- * because the change is what a read took it for until now.
- */
 const touchItem = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, now: Schema.Date }),
   execute: ({ itemId, now }) =>
@@ -916,7 +693,6 @@ const touchItem = SqlSchema.void({
     ),
 });
 
-/** The message the member's client wrote under its key on the item, deleted with its files; nothing else of the thread is. */
 const deleteMessage = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
   execute: ({ itemId, clientKey }) =>
@@ -927,7 +703,6 @@ const deleteMessage = SqlSchema.void({
     ),
 });
 
-/** The attachment, a block's picture or an answer's file, where it is the item's and the account reaches the item's task: its type and its bytes. */
 const findAttachment = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -951,12 +726,6 @@ const findAttachment = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The item written under the agent's key for its post: a new row at
- * revision one, or the standing one written again, its revision moved on,
- * its answer cleared, no ask held open until the post's own message is
- * written, and addressed to the member the post names or to nobody; its id.
- */
 const upsertItem = SqlSchema.findOne({
   Request: PostWriteSchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -997,14 +766,6 @@ const upsertItem = SqlSchema.findOne({
   },
 });
 
-/**
- * The agent's item under the key that holds an ask open closed with why, its
- * revision moved on and no ask held open; its id, or nothing where the agent
- * has no such item under it, a notice among them. Note that the close moves
- * no last change, as a settle by its task does (`inbox-settle.ts`), because
- * a withdrawn ask asks nothing of the reader, so it must neither make the
- * thread unread again nor lift it to the top of their Inbox.
- */
 const closeItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...AgentKeySchema.fields,
@@ -1037,7 +798,6 @@ const closeItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Where a read looks: one task's items, any member's agents' alike; one agent's own, under the member who started it; one agent's, as any member of its workspace reads them; or every item of one workspace a member may read. */
 const INBOX_SCOPE = {
   TASK: "plan",
   AGENT: "agent",
@@ -1053,7 +813,6 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the task's, the agent's, or the workspace's where the account may read them (`itemVisibleTo`), or the agent's own under the account that started it, which its tools read as it acts as itself. */
 function inScope(scope: InboxScope) {
   switch (scope.scope) {
     case INBOX_SCOPE.TASK:
@@ -1067,10 +826,8 @@ function inScope(scope: InboxScope) {
   }
 }
 
-/** The order every read keeps: the latest changed first, and by id among those changed at one instant, so two reads of the same rows agree. */
 const LATEST_FIRST = [desc(inboxItem.updatedAt), desc(inboxItem.id)] as const;
 
-/** Every open item the scope holds, however long ago it last changed; the open bound per agent keeps these few. */
 const findOpenItems = SqlSchema.findAll({
   Request: ScopeSchema,
   Result: InboxRowSchema,
@@ -1084,7 +841,6 @@ const findOpenItems = SqlSchema.findAll({
     ),
 });
 
-/** The scope's settled items, the latest changed first, as many as the read carries. */
 const findSettledItems = SqlSchema.findAll({
   Request: Schema.Struct({ ...ScopeSchema.fields, limit: Schema.Number }),
   Result: InboxRowSchema,
@@ -1099,7 +855,6 @@ const findSettledItems = SqlSchema.findAll({
     ),
 });
 
-/** Where one item stands, without what it says: what a held read compares between looks. */
 const StampRowSchema = Schema.Struct({
   id: Schema.String,
   revision: Schema.Number,
@@ -1109,7 +864,6 @@ const StampRowSchema = Schema.Struct({
   waitsOn: Schema.String,
 });
 
-/** Where an item stands for the reader: its own stamp, whether it is unread for them, so their marker moving wakes their held reads, and who it waits on, so its task's assignee changing does too. */
 function stampColumns(readerId: string) {
   return {
     id: inboxItem.id,
@@ -1148,11 +902,6 @@ const findSettledStamps = SqlSchema.findAll({
     ),
 });
 
-/**
- * The open items on the tasks of the account's workspaces, whichever
- * member's agent posted each: the rows the account's read of what waits
- * names.
- */
 function accountWaiting(userId: string) {
   return and(
     isNotNull(inboxItem.taskId),
@@ -1161,7 +910,6 @@ function accountWaiting(userId: string) {
   );
 }
 
-/** The open items of agents with no task in the account's workspaces, whichever member's agent posted each: what the account's read names beside the tasks' items. */
 function tasklessWaiting(userId: string) {
   return and(
     isNull(inboxItem.taskId),
@@ -1170,34 +918,14 @@ function tasklessWaiting(userId: string) {
   );
 }
 
-/**
- * The condition that the agent of an item with no task works in a
- * repository, unless the reader asked to be carried those of agents that
- * work in none (`ACCOUNT_INBOX_REPOSITORYLESS`). Note that a build from before it reads the repository as a string,
- * so one null would fail its whole read.
- */
 function repositoryCarried(repositoryless: boolean): SQL | undefined {
   return repositoryless ? undefined : isNotNull(agentTable.repository);
 }
 
-/** How many of a group's items are questions waiting on the reader (`askingReader`), as a number rather than a `bigint`. */
 function toDoCount(userId: string): SQL<number> {
   return sql<number>`(count(*) filter (where ${askingReader(userId)}))::int`;
 }
 
-/**
- * The settled items still unread that wait on the reader (`WAITS_ON`) in
- * their workspaces, a task's or an agent's with no task, among those they
- * may read (`itemVisibleTo`): what To do lists beside the open items, so
- * their read marks and new messages on those items move the account's
- * cursor as an open item's change does. Note that who it waits on is
- * spelled out against the task joined on the left rather than read through
- * `WAITS_ON`, because the starter's side then reaches the items by the
- * reader's own index (`inbox_item_user_status_updated`) and the assignee's
- * by the task's, where a `coalesce` would read every settled item of their
- * workspaces on each look; an item addressed to someone waits on them
- * alone, and one with no task, which joins no assignee, on its starter.
- */
 function accountUnreadSettled(userId: string) {
   const derived = or(
     and(eq(inboxItem.userId, userId), isNull(task.assigneeId)),
@@ -1213,7 +941,6 @@ function accountUnreadSettled(userId: string) {
 
 const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
 
-/** One open item as the account's read carries it, with its agent as its row names it now. */
 const WaitingRowSchema = Schema.Struct({
   id: Schema.String,
   taskId: Schema.String,
@@ -1262,7 +989,6 @@ const findWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task. */
 const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
@@ -1312,7 +1038,6 @@ const findTasklessWaitingItems = SqlSchema.findAll({
         })
         .from(inboxItem)
         .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-        // The automation, its id as its name, is told only to an account that may read the automation itself.
         .leftJoin(
           automation,
           and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
@@ -1322,7 +1047,6 @@ const findTasklessWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** Where every item the account's read names or counts stands: a task's or an agent's with no task open, and the reader's own settled ones still unread, which its tasks' To do counts. Note that the task is joined on the left, because an item with no task has none to join. */
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
@@ -1337,7 +1061,6 @@ const findWaitingStamps = SqlSchema.findAll({
     ),
 });
 
-/** One task holding items as the account's read lists it: how many, how many are the reader's to do, and when the latest changed. */
 const TaskItemsRowSchema = Schema.Struct({
   taskId: Schema.String,
   items: Schema.Number,
@@ -1345,15 +1068,8 @@ const TaskItemsRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
 });
 
-/** When a task's latest item changed, which orders the tasks holding items. */
 const LATEST_ITEM = max(inboxItem.updatedAt);
 
-/**
- * Every task of the account's workspaces that holds an item, open or
- * settled, whichever member's agent posted it, with how many of them are
- * questions waiting on the reader (`askingReader`), the task whose item
- * changed latest first.
- */
 const findTasksWithItems = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String }),
   Result: TaskItemsRowSchema,
@@ -1373,20 +1089,12 @@ const findTasksWithItems = SqlSchema.findAll({
     ),
 });
 
-/** One automation holding items of its runs' agents with no task, as the account's read lists it; null for the agents no standing automation names. */
 const AutomationItemsRowSchema = Schema.Struct({
   automationId: Schema.NullOr(Schema.String),
   items: Schema.Number,
   updatedAt: InstantColumnSchema,
 });
 
-/**
- * Every automation whose runs' agents with no task hold an item in the
- * account's workspaces, open or settled, whichever member's agent posted
- * it, the automation whose item changed latest first, as the tasks are
- * listed; one the account may not read is listed as none, beside the
- * agents no standing automation names.
- */
 const findAutomationsWithItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: AutomationItemsRowSchema,
@@ -1396,7 +1104,6 @@ const findAutomationsWithItems = SqlSchema.findAll({
         .select({ automationId: automation.id, items: count(), updatedAt: LATEST_ITEM })
         .from(inboxItem)
         .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-        // An automation the account may not read groups with the agents no standing automation names.
         .leftJoin(
           automation,
           and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
@@ -1407,7 +1114,6 @@ const findAutomationsWithItems = SqlSchema.findAll({
     ),
 });
 
-/** How an agent with no task holding items is named, as an open item of it names it (`findTasklessWaitingItems`), its automation only to a reader who may read it. */
 const AGENT_HOLDING_NAMING = {
   agentTitle: agentTable.title,
   agentModel: agentTable.model,
@@ -1417,7 +1123,6 @@ const AGENT_HOLDING_NAMING = {
   workspaceId: agentTable.organizationId,
 };
 
-/** One agent with no task holding items as the account's read lists it, as a task is listed, and as an open item of it names it. */
 const AgentItemsRowSchema = Schema.Struct({
   agentId: Schema.String,
   items: Schema.Number,
@@ -1431,16 +1136,6 @@ const AgentItemsRowSchema = Schema.Struct({
   workspaceId: Schema.NullOr(Schema.String),
 });
 
-/**
- * Every agent with no task of the account's workspaces that holds an item
- * the reader may read (`itemVisibleTo`), open or settled, whichever
- * member's agent posted it, with how many of them are questions waiting on
- * the reader (`askingReader`), the agent whose item changed latest first,
- * as `findTasksWithItems` lists the tasks; those of agents with no
- * repository only where `repositoryless` asks (`repositoryCarried`). Note
- * that it groups by the agent's and the automation's own keys, which every
- * column it names of either depends on.
- */
 const findAgentsWithItems = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, repositoryless: Schema.Boolean }),
   Result: AgentItemsRowSchema,
@@ -1468,7 +1163,6 @@ const findAgentsWithItems = SqlSchema.findAll({
     ),
 });
 
-/** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape. */
 export interface AccountInboxLiveStatements {
   readonly items: LiveStatement;
   readonly planless: LiveStatement;
@@ -1477,15 +1171,6 @@ export interface AccountInboxLiveStatements {
   readonly agents: LiveStatement;
 }
 
-/**
- * What waits on the developer across the account, written for Neon Realtime:
- * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
- * `accountTasklessItems`, `accountInboxTasks`, and
- * `accountInboxAutomations`, and `accountInboxAgents`, each item unread or not for the account as they say it, each
- * column under the key `account-inbox-wire.ts` reads it by and each instant
- * in epoch milliseconds, so a row decodes as the held read's entry does. The order is the reader's to keep, since Realtime keeps none.
- * None where a statement names a value Realtime cannot carry.
- */
 export function accountInboxLiveStatements(
   userId: string,
   repositoryless: boolean,
@@ -1597,37 +1282,14 @@ export function accountInboxLiveStatements(
   });
 }
 
-/**
- * The statements a plan's or an agent's inbox is subscribed to live: its
- * open items and its latest settled ones, as one result, and the threads
- * and files they carry, each its own.
- */
 export interface ScopeInboxLiveStatements {
   readonly items: LiveStatement;
   readonly messages: LiveStatement;
   readonly files: LiveStatement;
 }
 
-/** A scope's thread read under its own name, so a message's latest siblings are read beside it. */
 const sibling = alias(inboxMessage, "sibling");
 
-/**
- * A scope's items written for Neon Realtime: the same rows, joins, bound,
- * and rule of who may read them as `scopeItems` with `MAX_ITEMS_READ`, and
- * the same columns, whether each is unread for the reader among them, each
- * column under the key `live-wire.ts` reads it by and each instant in epoch
- * milliseconds. The open items and the latest settled ones are one
- * statement, so an item settling moves from one to the other in one change
- * rather than leaving the reader a moment holding neither. The order is the
- * reader's to keep, since Realtime keeps none.
- *
- * Note that each item's thread, the messages either of a read's threads
- * draws (`messagesOf`'s `LATEST_PLAIN_MESSAGES` and `THREAD_MESSAGES`), and
- * the files its answer and its messages carried are statements of their own,
- * which the reader joins to the items, rather than lists the item's row
- * aggregates, because `jsonb_agg` and `jsonb_build_object` are only stable
- * and Realtime refuses any function that is not immutable.
- */
 function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveStatements> {
   const latestSettled = queryBuilder
     .select({ id: inboxItem.id })
@@ -1644,7 +1306,6 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
   );
 }
 
-/** The items `read` names, whole as a scope's inbox carries them, with their threads and files, each unread or not for the reader (`scopeLiveStatements`). */
 function itemsLiveStatements(
   readerId: string,
   read: SQL | undefined,
@@ -1663,7 +1324,6 @@ function itemsLiveStatements(
     .where(ofItem)
     .orderBy(sibling.createdAt, sibling.id)
     .limit(1);
-  // The messages the thread draws: the latest, the first, and the one whose ask is held open.
   const latestMessage = and(
     inArray(inboxMessage.itemId, itemIds),
     or(
@@ -1706,7 +1366,6 @@ function itemsLiveStatements(
             postedAt: inboxItem.postedAt,
             updatedAt: inboxItem.updatedAt,
             ...liveReminderFor(readerId),
-            // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
             settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
           },
         ),
@@ -1727,7 +1386,6 @@ function itemsLiveStatements(
             text: MESSAGE.text,
             ask: MESSAGE.ask,
             answers: MESSAGE.answers,
-            // The key a member's message was sent under, to that member alone, as `storedItem` hands it.
             clientKey: sql`case when ${MESSAGE.userId} = ${readerId} then ${MESSAGE.clientKey} end`,
           },
           { createdAt: MESSAGE.createdAt },
@@ -1758,27 +1416,10 @@ function itemsLiveStatements(
   return Option.all({ items, messages, files });
 }
 
-/** The statements the account's inbox items are subscribed to live: where each item stands, and those changed since the reader's instant whole. */
 export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
   readonly stamps: LiveStatement;
 }
 
-/**
- * Every inbox item the account reaches written for Neon Realtime: where
- * each stands (`stamps`), every open item, every settled one changed,
- * settled, or brought back by the reader's reminder at or after
- * `settledSince`, and the items among those changed at or after
- * `since` whole, with their threads and files, as a scope's inbox carries
- * them (`itemsLiveStatements`). A stamp carries what moves an item without
- * moving its last change: whether it is unread for the reader, who it waits
- * on, and how many messages its thread holds, which a withdrawn message
- * moves. Note that the instants are bound rather than read from the clock,
- * because a live read measures nothing from it, and that a stamp still
- * carries `channelId`, the item's workspace in its place, because a desktop
- * from before the inbox's channels were removed decodes a stamp without it
- * as no stamp: the key goes with the minimum supported desktop version. None
- * where a statement names a value Realtime cannot carry.
- */
 export function accountItemsLiveStatements(
   userId: string,
   since: Date,
@@ -1787,7 +1428,6 @@ export function accountItemsLiveStatements(
   return accountItemsOf(userId, settledSince, sql`true`, gte(inboxItem.updatedAt, since));
 }
 
-/** The account's items `narrowed` keeps, as `accountItemsLiveStatements` reads them, those `changed` keeps among them whole. */
 function accountItemsOf(
   userId: string,
   settledSince: Date,
@@ -1795,9 +1435,7 @@ function accountItemsOf(
   changed: SQL,
 ): Option.Option<AccountItemsLiveStatements> {
   const carried = and(
-    // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
     itemVisibleTo(userId),
-    // Note that a settled item stands by the latest of its last change, its settling, and the time the reader's reminder brings it back, since a nod on an old notice settles it without moving its last change, and a reminder must find it still carried when it comes back.
     or(
       eq(inboxItem.status, INBOX_STATUS.OPEN),
       sql`greatest(${inboxItem.updatedAt}, ${inboxItem.settledAt}, ${remindAtFor(userId)}) >= ${settledSince}`,
@@ -1835,15 +1473,8 @@ function accountItemsOf(
   );
 }
 
-/** The tables whose moved rows name the tasks and agents whose items they move. */
 const ITEM_NAMERS = [inboxMessageSync, inboxItemReadSync, attachmentSync, taskSync, agentSync];
 
-/**
- * The items what moved could move: their own rows, those of a task or an
- * agent a moved message, read mark, file, task, or agent names, and those
- * naming a moved member, as their starter, answerer, closer, addressee, or
- * task's assignee, or as the author of one of their messages.
- */
 function movedItems(moved: SyncMoved): SQL {
   const members = moved.keys(userSync, user.id);
   const named = (kind: typeof TOPIC.TASK | typeof TOPIC.AGENT) =>
@@ -1871,13 +1502,6 @@ function movedItems(moved: SyncMoved): SQL {
   );
 }
 
-/**
- * The account's inbox items narrowed to those what moved past a reader's
- * sync id could move, every part of them, `stamps` among them, and each
- * moved item whole with its thread's messages and files, which the reader
- * takes in place of what it holds of the item; none where a statement
- * names a value Realtime cannot carry.
- */
 export function accountItemsDeltaStatements(
   userId: string,
   settledSince: Date,
@@ -1886,7 +1510,6 @@ export function accountItemsDeltaStatements(
   return accountItemsOf(userId, settledSince, movedItems(moved), sql`true`);
 }
 
-/** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
 export function taskInboxLiveStatements(
   userId: string,
   taskId: string,
@@ -1894,7 +1517,6 @@ export function taskInboxLiveStatements(
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
 }
 
-/** One agent's inbox written for Neon Realtime, as `memberAgentInboxItems` reads it. */
 export function memberAgentInboxLiveStatements(
   userId: string,
   agentId: string,
@@ -1902,7 +1524,6 @@ export function memberAgentInboxLiveStatements(
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** The scope's items: every open one, then the latest settled ones up to the limit, the two read at once, each of the member `keysFor` names carrying the key it was sent under (`storedItem`). */
 function scopeItems(
   scope: InboxScope,
   settledLimit: number,
@@ -1928,7 +1549,6 @@ const findItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Where an item the account may read stands: its agent, its task, and its workspace. */
 const findItemHome = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
   Result: Schema.Struct({
@@ -1949,7 +1569,6 @@ const findItemHome = SqlSchema.findOneOption({
     ),
 });
 
-/** The item by its id alone, read for the reader named where the caller has reached it already. */
 const findItemOf = SqlSchema.findOneOption({
   Request: Schema.Struct({ readerId: Schema.String, itemId: Schema.String }),
   Result: InboxRowSchema,
@@ -1959,7 +1578,6 @@ const findItemOf = SqlSchema.findOneOption({
     ),
 });
 
-/** The account, task, and workspace an item stands under, which its attachments are written under too. */
 const findItemScope = SqlSchema.findOne({
   Request: Schema.Struct({ itemId: Schema.String }),
   Result: Schema.Struct({
@@ -1980,46 +1598,25 @@ const findItemScope = SqlSchema.findOne({
     ),
 });
 
-/** The item's scope, read where the caller has just written the item, so a missing row is a broken contract. */
 function itemScope(request: { readonly itemId: string }) {
   return findItemScope(request).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
 }
 
-/** A marker's column as the row an insert would have written, which an upsert's update takes. */
 function excluded(column: AnyPgColumn): SQL {
   return sql`excluded.${sql.identifier(column.name)}`;
 }
 
-/**
- * A read written over a marker that stands: read through the later of the
- * two changes, and no longer marked unread. Note that it
- * never moves a marker back, because the change a read selected may be
- * older than one a write of the member's own, such as their answer,
- * recorded while the read waited on the marker's lock.
- */
 const READ_ON = {
   readThrough: sql`greatest(${inboxItemRead.readThrough}, ${excluded(inboxItemRead.readThrough)})`,
   markedUnread: false,
 };
 
-/**
- * Whether a read moves the marker that stands: it was marked unread, or the
- * read reaches a later change than it had read through. Note that a read
- * never touches a reminder, so opening an item in the Reminders list
- * leaves its reminder standing.
- */
 const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)}`;
 
 const ReaderItemSchema = Schema.Struct({ userId: Schema.String, itemId: Schema.String });
 
 const MarkedSchema = Schema.Struct({ itemId: Schema.String, txid: Schema.String });
 
-/**
- * The member's marker on the item read through its last change, where the
- * account reaches the item; nothing where the marker already read through
- * that change or a later one and was not marked unread, so a read already
- * standing writes no row.
- */
 const upsertRead = SqlSchema.findOneOption({
   Request: ReaderItemSchema,
   Result: MarkedSchema,
@@ -2047,7 +1644,6 @@ const upsertRead = SqlSchema.findOneOption({
     ),
 });
 
-/** The member's marker on the item marked unread, where the account reaches the item; nothing where it stands marked already. */
 const upsertUnread = SqlSchema.findOneOption({
   Request: ReaderItemSchema,
   Result: MarkedSchema,
@@ -2074,18 +1670,6 @@ const upsertUnread = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The member's marker on the item reminding them at the instant over its
- * last change, or, where none is named, its reminder canceled now, where
- * the account reaches the item. Note that it leaves whether the item is
- * read alone: a marker it makes reads through no change and is marked
- * unread by no one, which reads the item as having none does
- * (`unreadFor`). A change after it ends the reminder (`remindAtFor`). A
- * reminder canceled is one that came due now rather than none, because the
- * item came back then, which keeps a
- * settled one carried as long as it would have been had it come due
- * (`accountItemsOf`); one already past stands as it came due.
- */
 const upsertReminder = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2118,8 +1702,7 @@ const upsertReminder = SqlSchema.findOneOption({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
           set:
             until === null
-              ? // Note that `least` passes over a null, so a marker with no reminder keeps none.
-                {
+              ? {
                   remindAt: sql`case when ${inboxItemRead.remindAt} is null then null else least(${inboxItemRead.remindAt}, now()) end`,
                 }
               : {
@@ -2131,7 +1714,6 @@ const upsertReminder = SqlSchema.findOneOption({
     ),
 });
 
-/** Whether the item is unread for the member, where the account reaches it. */
 const findReaderUnread = SqlSchema.findOneOption({
   Request: ReaderItemSchema,
   Result: Schema.Struct({ unread: Schema.Boolean }),
@@ -2144,7 +1726,6 @@ const findReaderUnread = SqlSchema.findOneOption({
     ),
 });
 
-/** The item's id, where the account reaches it. */
 const findReachedItem = SqlSchema.findOneOption({
   Request: ReaderItemSchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -2157,7 +1738,6 @@ const findReachedItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Every item the account's Inbox lists that is unread for it, with a reminder or not, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
 const upsertAllRead = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, workspaceId: Schema.NullOr(Schema.String) }),
   Result: MarkedSchema,
@@ -2191,11 +1771,6 @@ const upsertAllRead = SqlSchema.findAll({
     ),
 });
 
-/**
- * The item answered where it stands open at the revision named, holding
- * open the ask named, and no ask held open once it is; its id and the
- * transaction that wrote it, or nothing where it does not stand so.
- */
 const answerItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2231,19 +1806,6 @@ const answerItem = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The notice settled by a member's nod, Got it, or by their message on its
- * thread: answered under the nod's or the message's own key, so a nod sent
- * again finds the one it made and a hand-off that fails takes it back
- * (`withdrawInboxAnswer`, `withdrawInboxMessage`); its id and the
- * transaction that wrote it, or nothing where the item is no open notice
- * the member reaches at the revision they were shown, so a nod on what came
- * before never settles a notice posted since. Note that it moves the item's
- * settled instant and not its last change, because a nod (which opening a
- * notice sends) writes nothing on the thread: the row keeps the age of what
- * was last written there, and the item neither climbs the list nor reads
- * unread again for every other member.
- */
 const acknowledgeNotice = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2277,7 +1839,6 @@ const acknowledgeNotice = SqlSchema.findOneOption({
     ),
 });
 
-/** The item as the reader named reads it, by its id alone, where the caller has just written it, so a missing row is a broken contract. */
 function itemAsWritten(
   readerId: string,
   itemId: string,
@@ -2290,7 +1851,6 @@ function itemAsWritten(
   );
 }
 
-/** The message written, or the database breaking its contract where a message that names no key found one standing under it. */
 function writtenMessage(
   message: typeof MessageWriteSchema.Type,
 ): InboxStoreEffect<{ readonly id: string }> {
@@ -2300,14 +1860,8 @@ function writtenMessage(
   );
 }
 
-/** The address a picture of the item's is written by in a message's words, by the picture's id. */
 type PictureAddress = (pictureId: string) => string;
 
-/**
- * The agent's words with each picture's path written as the address of the
- * file it was kept as, by the picture's id; a picture standing in code, or
- * naming a path no picture was handed in for, stands as written.
- */
 function withPictureAddresses(
   body: string,
   pictureOfPath: (path: string) => string | undefined,
@@ -2325,13 +1879,6 @@ function withPictureAddresses(
   );
 }
 
-/**
- * The item closed by the member without an answer where it is open at the
- * revision named, under the key their client sent the close with, kept
- * where an answer's is, so a close sent again finds the one it made and a
- * close taken back finds its own, and no ask held open; its id and the
- * transaction that wrote it, or nothing where it is not open there.
- */
 const memberCloseItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2366,45 +1913,37 @@ const memberCloseItem = SqlSchema.findOneOption({
     ),
 });
 
-/** What a post writes on the item: its title, and whether the agent is to hear the answer to its `do` ask. */
 interface PostView {
   readonly title: string;
   readonly needsReply: boolean;
 }
 
-/** One picture a post keeps as a file of its message: the id its blocks and words name it by, its file's own name, its type, and its bytes. */
 interface PostPicture extends InboxNamedImage {
   readonly id: string;
 }
 
-/** One picture the agent's words name by its path in the agent's sandbox, as the caller read it there: the path as written, its file's own name, its type, and its bytes. */
 export interface InboxBodyPicture extends InboxNamedImage {
   readonly path: string;
 }
 
-/** A post as the store writes it: the item's key, its view, the words of the agent's message, the ask the message ends with, and the message's pictures. */
 interface PostWrite {
   readonly key: string;
   readonly view: PostView;
-  /** The message's words, its pictures written by the addresses the item gives them. */
   readonly body: (addressOf: PictureAddress) => string;
   readonly ask: InboxAsk | undefined;
   readonly pictures: readonly PostPicture[];
   readonly addresseeId: string | null;
 }
 
-/** The agent's workspace as its locked row names it: its id, which the item's rows are written under, and the step its links name it by. */
 interface LockedWorkspace {
   readonly organizationId: string;
   readonly workspaceStep: string;
 }
 
-/** The item as its link names it: under its agent, whichever task it works on, whose reader finds the task by the agent. */
 function itemPlace(agent: InboxAgent, itemId: string): InboxItemPlace {
   return { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId };
 }
 
-/** The address each picture of the item is written by in a message's words (`inbox-attachment-link.ts`). */
 function pictureAddressOf(
   agent: InboxAgent,
   workspace: LockedWorkspace,
@@ -2414,13 +1953,11 @@ function pictureAddressOf(
   return (pictureId) => inboxAttachmentAddress(place, pictureId, workspace.workspaceStep);
 }
 
-/** Pictures handed in by the paths the agent's words name them by, as a post keeps them: each under an id minted for it, and the id of the first each path names. */
 interface PicturesByPath {
   readonly kept: readonly PostPicture[];
   readonly idOf: (path: string) => string | undefined;
 }
 
-/** The pictures handed in, each under an id minted for it, found by the path the agent's words name it by. */
 function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
   const kept = pictures.map(({ path: _path, ...picture }) => ({ ...picture, id: randomUUID() }));
   const ids = new Map<string, string>();
@@ -2431,24 +1968,11 @@ function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
   return { kept, idOf: (path) => ids.get(path) };
 }
 
-/**
- * The columns a post writes on the item, which it opens: an ask's, with
- * whether its agent waits on the answer; a notice's, which asks nothing and
- * waits on the developer's nod alone, which the agent never hears.
- */
 function postColumns(view: PostView, ask: InboxAsk | undefined) {
   const needsReply = ask === undefined ? false : view.needsReply;
   return { title: view.title, needsReply, status: INBOX_STATUS.OPEN, settledAt: null } as const;
 }
 
-/**
- * A post written on the agent's locked row's workspace: the item under its
- * key written for it, the agent's message with the
- * post's words and its ask written on the thread, every ask the thread held
- * open before replaced, the new one held open, and the message's pictures
- * kept as its files; the item as
- * its agent's starter then reads it.
- */
 function keepPost(
   agent: InboxAgent,
   workspace: LockedWorkspace,
@@ -2504,25 +2028,20 @@ function keepPost(
   });
 }
 
-/** The agent's open asks besides the key's against the bound: whether one more may stand open. */
 function roomToAsk(agent: InboxAgent, key: string): InboxStoreEffect<boolean> {
   return countOpenBesides({ ...agent, key }).pipe(
-    // A count that returned no row is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", Effect.die),
     Effect.map(({ open }) => open < INBOX_BOUNDS.MAX_OPEN_PER_AGENT),
   );
 }
 
-/** The agent's open notices besides the key's against the same bound: whether one more may wait on the developer's nod. */
 function roomToNotify(agent: InboxAgent, key: string): InboxStoreEffect<boolean> {
   return countNoticesBesides({ ...agent, key }).pipe(
-    // A count that returned no row is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", Effect.die),
     Effect.map(({ open }) => open < INBOX_BOUNDS.MAX_OPEN_PER_AGENT),
   );
 }
 
-/** Whether the post finds room under its bound: an ask among the open asks, a notice among the open notices. */
 function roomToPost(
   agent: InboxAgent,
   key: string,
@@ -2537,26 +2056,15 @@ function roomToPost(
       );
 }
 
-/** A post as the tool from version 5 writes one: the item's key, its title where the post names one, the agent's words in Markdown, the ask they end with, if any, and whether the agent is to hear the answer. */
 interface InboxThreadPost {
   readonly key: string;
-  /** The item's title; absent keeps the title of the item standing under the key, which a first post must name. */
   readonly title?: string | undefined;
   readonly body: string;
   readonly ask?: InboxAsk | undefined;
   readonly needsReply?: boolean | undefined;
-  /** The member of the agent's workspace the post is addressed to, whom it waits on (`WAITS_ON`); absent addresses it to nobody. */
   readonly addresseeId?: string | undefined;
 }
 
-/**
- * Whom the post waits on, read under the lock on its agent: the member it
- * is addressed to, refused where they are no member of the agent's
- * workspace, or one who may
- * not read the thread, since its agent or its task is hidden from them
- * (`agentVisibleTo`, which `itemVisibleTo` reads alike). Note that an ask
- * addressed to someone who never sees it would wait on them unseen.
- */
 function placeOf(
   agent: InboxAgent,
   locked: LockedWorkspace,
@@ -2574,18 +2082,12 @@ function placeOf(
   });
 }
 
-/** The thread's open ask addressed to the member a follow-up names, whom it then waits on. */
 const updateItemAddressee = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, addresseeId: Schema.String }),
   execute: ({ itemId, addresseeId }) =>
     Database.use((db) => db.update(inboxItem).set({ addresseeId }).where(eq(inboxItem.id, itemId))),
 });
 
-/**
- * The open ask of the thread a follow-up names an addressee for addressed
- * to that member; left as it stands where it names none, since a follow-up
- * replaces no ask.
- */
 function replaceItem(
   itemId: string,
   place: { readonly addresseeId: string | null },
@@ -2595,12 +2097,6 @@ function replaceItem(
     : updateItemAddressee({ itemId, addresseeId: place.addresseeId });
 }
 
-/**
- * The agent's words that ask nothing written as its message on the thread
- * of its item standing under the key, as its reply is, with the pictures
- * they name kept as the message's files and written by their addresses;
- * the item as its agent's starter then reads it.
- */
 function followUp(
   agent: InboxAgent,
   workspace: LockedWorkspace,
@@ -2617,34 +2113,12 @@ function followUp(
     } as const;
     return writeInboxMessage(agent.userId, itemId, writer, text, kept);
   }).pipe(
-    // The item was found under the lock on its agent, so a message that finds none is a broken contract.
     Effect.flatMap(Effect.fromOption),
     Effect.catchTag("NoSuchElementError", Effect.die),
     Effect.map((written) => written.item),
   );
 }
 
-/**
- * The agent's post written, as the tool from version 5 posts one: its
- * words in Markdown, and the ask they end with, if any. The pictures are
- * those the words name by their paths in the agent's sandbox, read by the
- * caller, each kept as a file of the agent's message under an id minted
- * here, its path in the words written as its address. A post that asks is
- * written as `keepPost` writes one; it is refused where the agent would hold more open
- * asks than the bound, and a notice where it would hold more open notices
- * than the same bound. A post that asks nothing on a thread whose ask
- * still stands open is a message on it, as the agent's reply is, which
- * moves nothing of the item but its last change, and the addressee it
- * names, if any; on any other thread, or
- * under a key with no item, it is written as `keepPost` writes one, the
- * item a notice waiting on the developer's nod again. A post naming no title
- * keeps the standing item's, read under the same lock; refused where no
- * item stands under the key, which a first post opens and must name. A post
- * written as `keepPost` writes one waits on the member it is addressed
- * to, or on whoever `WAITS_ON` derives where it names none; refused where
- * the member is not in the agent's workspace. Refused where the agent is no longer the
- * account's.
- */
 export function postInboxThread(
   agent: InboxAgent,
   post: InboxThreadPost,
@@ -2686,7 +2160,6 @@ export function postInboxThread(
   );
 }
 
-/** The picture or the answer's file, where it is the item's: its type and its bytes; nothing where the account reaches no such item or the item carries no such attachment. */
 export function readInboxAttachment(
   userId: string,
   itemId: string,
@@ -2695,13 +2168,6 @@ export function readInboxAttachment(
   return findAttachment({ userId, itemId, attachmentId });
 }
 
-/**
- * The agent's item under the key closed with why, its revision moved on,
- * and the ask it held open withdrawn with the same why; nothing where it
- * has none under the key, or the item is not open, since an answered
- * item's ask is no longer one to withdraw. Note that the status is checked
- * in the write itself, so an answer that lands first is never closed over.
- */
 export function closeInboxItem(
   agent: Pick<InboxAgent, "userId" | "agentId">,
   key: string,
@@ -2727,29 +2193,15 @@ export function closeInboxItem(
   );
 }
 
-/**
- * The agent's own items as its tools answer with them: every one still
- * open, then the latest settled ones, few enough that a tool's answer stays
- * a small part of the agent's context. Note that the open items are read
- * apart from the bound, so one the developer has yet to answer is never
- * dropped from what the agent holds.
- */
 export function agentInboxItems(
   agent: Pick<InboxAgent, "userId" | "agentId">,
 ): InboxStoreEffect<readonly InboxItem[]> {
-  // Note that the agent's own read names no member, so it is handed no member's key.
   return scopeItems(
     { userId: agent.userId, scope: INBOX_SCOPE.AGENT, id: agent.agentId },
     INBOX_BOUNDS.MAX_SETTLED_TOLD,
   );
 }
 
-/**
- * The task's inbox: every item still open, then the latest settled ones as
- * many as a read carries. Note that the open items are read apart from the
- * bound, because one left unanswered while many others changed must still
- * wait where the developer looks.
- */
 export function taskInboxItems(
   userId: string,
   taskId: string,
@@ -2761,7 +2213,6 @@ export function taskInboxItems(
   );
 }
 
-/** One agent's items as any member of its workspace reads them, an agent with no task as much as one on a task: every open one, then the latest settled. */
 export function memberAgentInboxItems(
   userId: string,
   agentId: string,
@@ -2773,14 +2224,6 @@ export function memberAgentInboxItems(
   );
 }
 
-/**
- * Every item of one workspace the member may read, a task's or an agent's
- * with no task, any member's agents' alike: every open one, then the latest
- * settled as many as an agent's own read is told (`MAX_SETTLED_TOLD`), what
- * an outside agent acting for the member reads of their inbox
- * (`member-mcp/inbox.ts`). Note that it is handed no member's key, since
- * the reader is no window that sent one.
- */
 export function workspaceInboxItems(
   userId: string,
   workspaceId: string,
@@ -2791,7 +2234,6 @@ export function workspaceInboxItems(
   );
 }
 
-/** Where each of the agent's items stands, the same items `memberAgentInboxItems` reads and none of their words: what a held read compares between looks. */
 export function memberAgentInboxStamps(
   userId: string,
   agentId: string,
@@ -2799,7 +2241,6 @@ export function memberAgentInboxStamps(
   return scopeStamps({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** Where each of the task's items stands, the same items `taskInboxItems` reads and none of their words: what a held read compares between looks. */
 export function taskInboxStamps(
   userId: string,
   taskId: string,
@@ -2807,7 +2248,6 @@ export function taskInboxStamps(
   return scopeStamps({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
 }
 
-/** Where the scope's items stand: every open one, then the latest settled, as `scopeItems` reads them, the two at once. */
 function scopeStamps(scope: InboxScope): InboxStoreEffect<readonly InboxStamp[]> {
   return Effect.map(
     Effect.all(
@@ -2819,12 +2259,10 @@ function scopeStamps(scope: InboxScope): InboxStoreEffect<readonly InboxStamp[]>
   );
 }
 
-/** Whether the item holds an ask open that waits on the reader: what a to-do count counts. */
 function askingReader(userId: string): SQL<boolean> {
   return sql<boolean>`(${ASKING} and ${WAITS_ON} = ${userId})`;
 }
 
-/** The item, with the key its answer was taken under; nothing for one of a workspace the account is not in. */
 export function readInboxItem(
   userId: string,
   itemId: string,
@@ -2835,7 +2273,6 @@ export function readInboxItem(
   );
 }
 
-/** Where the item stands, its agent, task, and workspace, as a link by its id alone is opened; nothing for one the account may not read, as for one that does not exist. */
 export function readInboxItemHome(
   userId: string,
   itemId: string,
@@ -2843,11 +2280,6 @@ export function readInboxItemHome(
   return findItemHome({ userId, itemId });
 }
 
-/**
- * What the marker's write came to: the transaction that moved the marker,
- * none where the account reaches an item whose marker stood as asked
- * already, and false where it reaches no such item.
- */
 function markerFound(
   marked: Option.Option<typeof MarkedSchema.Type>,
   request: typeof ReaderItemSchema.Type,
@@ -2856,13 +2288,6 @@ function markerFound(
   return Effect.map(findReachedItem(request), (found) => (Option.isSome(found) ? {} : false));
 }
 
-/**
- * The item marked read for the member, read through its last change and
- * no longer marked unread, which is what opening it does: the transaction
- * that wrote it, or false where the account reaches no such item. A read
- * already standing writes nothing and answers no transaction, so marking an
- * item read again is one statement and one lookup.
- */
 export function markInboxItemRead(
   userId: string,
   itemId: string,
@@ -2871,7 +2296,6 @@ export function markInboxItemRead(
   return Effect.flatMap(upsertRead(request), (marked) => markerFound(marked, request));
 }
 
-/** The item marked unread for the member, standing so until they read it again, whatever changes meanwhile; the transaction as marking it read answers it. */
 export function markInboxItemUnread(
   userId: string,
   itemId: string,
@@ -2880,12 +2304,6 @@ export function markInboxItemUnread(
   return Effect.flatMap(upsertUnread(request), (marked) => markerFound(marked, request));
 }
 
-/**
- * The item's reminder set for the member for `until`, or canceled now
- * where `until` is null, leaving whether it is read alone; the transaction that
- * wrote it and whether the item is unread for them, or false where the
- * account reaches no such item. Another member's marker is never touched.
- */
 export function remindInboxItem(
   userId: string,
   itemId: string,
@@ -2900,14 +2318,6 @@ export function remindInboxItem(
   });
 }
 
-/**
- * Every item the member's Inbox lists marked read for them, open or
- * settled, in the one workspace named or in every workspace of theirs
- * where none is: how many were unread, an item back from a reminder counted
- * among them, and the transaction that marked them, none where none was. An
- * item already read is not written, and another member's markers are never
- * touched.
- */
 export function markInboxRead(
   userId: string,
   workspaceId: string | undefined,
@@ -2918,11 +2328,6 @@ export function markInboxRead(
   });
 }
 
-/**
- * The answer taken back off the item it was taken on under the key,
- * opening it again and holding open again the ask the answer settled, where
- * one did; its id, or nothing where that answer no longer stands.
- */
 const withdrawAnswer = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2956,12 +2361,6 @@ const withdrawAnswer = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The answer taken under the key withdrawn, where it still stands: the item
- * open again, and the member's message that carried it deleted with its
- * files and the ask it answered open again, or, for a nod on a notice, the
- * notice waiting on the nod again; nothing where it does not stand.
- */
 export function withdrawInboxAnswer(
   userId: string,
   itemId: string,
@@ -2984,7 +2383,6 @@ export function withdrawInboxAnswer(
           });
           yield* deleteMessage({ itemId, clientKey: answerKey });
         }
-        // The answer taken back is the member's own, so it leaves the item read for them as the answer did.
         yield* upsertRead({ userId, itemId });
         return Option.map(
           yield* findItem({ userId, itemId }),
@@ -2995,18 +2393,6 @@ export function withdrawInboxAnswer(
   );
 }
 
-/**
- * The item closed by a member without an answer, at the revision named and
- * under the key their client sent the close with, where it is open there,
- * and the ask it held open withdrawn with no reason, which is how a
- * member's close reads on the thread; nothing where it is not open there,
- * or where a message of the thread holds the key.
- * The revision stays, as an answer's does. The close is the member's own,
- * so it leaves the item read for them, as an answer does; a message is
- * written for it only where it carries a note, words or files, which is
- * written as the member's under the close's key in the same write. Answers
- * the transaction it was written in beside the item.
- */
 export function closeInboxItemAsMember(
   userId: string,
   itemId: string,
@@ -3022,7 +2408,6 @@ export function closeInboxItemAsMember(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
-        // A key a message of the thread holds names that message, never this close, so taking the close back deletes only its own note.
         if (yield* keyTaken(itemId, closeKey)) return Option.none();
         const closed = yield* memberCloseItem({ userId, itemId, revision, closeKey, now });
         if (Option.isNone(closed)) return Option.none();
@@ -3037,7 +2422,6 @@ export function closeInboxItemAsMember(
             now,
           });
         }
-        // Note that the reason is left out, because an agent's close always says why and a member's never does.
         yield* settleOpenAsks({
           itemId,
           except: null,
@@ -3056,11 +2440,6 @@ export function closeInboxItemAsMember(
   );
 }
 
-/**
- * A member's close taken back off the item it was taken on under the key,
- * opening it again and holding open again the ask it withdrew, where it
- * withdrew one; its id, or nothing where that close no longer stands.
- */
 const withdrawClose = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -3088,7 +2467,6 @@ const withdrawClose = SqlSchema.findOneOption({
             itemVisibleTo(userId),
             eq(inboxItem.answerKey, closeKey),
             eq(inboxItem.status, INBOX_STATUS.CLOSED),
-            // The agent's own close since, which always says why, is never opened by taking the member's back.
             isNull(inboxItem.closedReason),
           ),
         )
@@ -3096,7 +2474,6 @@ const withdrawClose = SqlSchema.findOneOption({
     ),
 });
 
-/** The item's latest message that asks, with its ask as it was kept. */
 const findLatestAsk = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, ask: inboxReadAskSchema }),
@@ -3111,12 +2488,6 @@ const findLatestAsk = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The ask a member's close withdrew, by its message: the item's latest ask,
- * where it stands withdrawn with no reason. Note that no post can have
- * come since the close, because a post clears the key the close stands
- * under, so the latest ask is the one it withdrew.
- */
 function askTheCloseWithdrew(itemId: string): InboxStoreEffect<string | null> {
   return Effect.map(findLatestAsk({ itemId }), (latest) =>
     Option.isSome(latest) &&
@@ -3127,7 +2498,6 @@ function askTheCloseWithdrew(itemId: string): InboxStoreEffect<string | null> {
   );
 }
 
-/** The member's close taken under the key withdrawn, the item open again, the ask it withdrew open again, and the note written beside it taken back off the thread, where it still stands; nothing where it does not. */
 export function withdrawInboxClose(
   userId: string,
   itemId: string,
@@ -3159,31 +2529,21 @@ export function withdrawInboxClose(
   );
 }
 
-/** A file's base64 as the bytes it spells; the wire held it to standard padded base64 already. */
 function bytesOf(file: AgentAttachment): Uint8Array {
   return new Uint8Array(Buffer.from(file.data, "base64"));
 }
 
-/** The answer's own words, its files, and the ask it settles, by message, as the answer's write keeps them. */
 interface AnswerWrite {
   readonly userId: string;
   readonly itemId: string;
   readonly answerKey: string;
   readonly words: string;
   readonly files: readonly AgentAttachment[];
-  /** The message whose ask the answer settles. */
   readonly askId: string;
-  /** The answer to the ask as a member's message carries it. */
   readonly answers: InboxAnswers;
   readonly now: Date;
 }
 
-/**
- * The member's message that carries an answer or a close's note, written
- * under its key; the caller found no message under it first, so one
- * standing there now is a race that rolls the write back rather than
- * leaving it unheard.
- */
 function answeringMessage(
   message: typeof MessageWriteSchema.Type,
 ): InboxStoreEffect<Option.Some<{ readonly id: string }>> {
@@ -3196,11 +2556,6 @@ function answeringMessage(
   );
 }
 
-/**
- * The member's message written under the key with its words, its files,
- * and the answer it carries, where it carries one: what an answer taken and
- * a close with a note write on the thread (`answeringMessage`).
- */
 function keepMemberMessage(write: {
   readonly userId: string;
   readonly itemId: string;
@@ -3240,11 +2595,6 @@ function keepMemberMessage(write: {
   });
 }
 
-/**
- * What an answer taken writes beside the item: the ask it settles stood
- * answered, and the member's message carrying the answer, under the
- * answer's key, with the answer's words and its files.
- */
 function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
   return Effect.andThen(
     standAsk({
@@ -3257,19 +2607,10 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
   );
 }
 
-/** Whether a message of the item's thread stands under the key. */
 function keyTaken(itemId: string, clientKey: string): InboxStoreEffect<boolean> {
   return Effect.map(findKeyedMessage({ itemId, clientKey }), Option.isSome);
 }
 
-/**
- * A member's nod on a notice, Got it, taken at the revision they were
- * shown under the key their client sent it with: the notice answered,
- * which its agent never hears unless it waits on it, and left read for the
- * member. Nothing where the item is no open notice at that revision, or a
- * message of its thread holds the key. Answers the transaction it was
- * written in beside the item.
- */
 export function acknowledgeInboxItem(
   userId: string,
   itemId: string,
@@ -3280,11 +2621,9 @@ export function acknowledgeInboxItem(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
-        // A key a message of the thread holds names that message, never this nod.
         if (yield* keyTaken(itemId, answerKey)) return Option.none();
         const nodded = yield* acknowledgeNotice({ userId, itemId, revision, answerKey, now });
         if (Option.isNone(nodded)) return Option.none();
-        // The member's own nod leaves the item read for them.
         yield* upsertRead({ userId, itemId });
         const { txid } = nodded.value;
         return Option.map(yield* findItem({ userId, itemId }), (row) => ({
@@ -3296,46 +2635,25 @@ export function acknowledgeInboxItem(
   );
 }
 
-/** What an answer to an ask came to. */
 export const INBOX_ASK_ANSWER = {
-  /** This write took it. */
   TAKEN: "taken",
-  /** An answer under the same key stands on the item already. */
   REPEATED: "repeated",
-  /** The ask is no longer the item's open one: answered, replaced, or withdrawn. */
   NOT_OPEN: "not-open",
-  /** The answer does not fit the ask; nothing was written. */
   REFUSED: "refused",
 } as const;
 
 type InboxAskAnswer = (typeof INBOX_ASK_ANSWER)[keyof typeof INBOX_ASK_ANSWER];
 
-/** Why an answer under a key the thread already holds is refused: the key names another message, or the same key with other words, files, or answer. */
 const KEY_NAMES_ANOTHER_MESSAGE = "The key names another message of the thread.";
 
-/** What an answer to an ask came to: the item as it then stands, what this write did, and why it was refused, where it was. */
 interface InboxAskAnswered {
   readonly item: InboxItem;
   readonly outcome: InboxAskAnswer;
   readonly refusal?: string;
-  /** The ask this write answered, where it took the answer, which the item's thread read may no longer carry. */
   readonly ask?: InboxAsk;
-  /** The transaction this write took the answer in; none where it took none. */
   readonly txid?: string;
 }
 
-/**
- * A member's answer to the ask the item holds open, named by its message:
- * checked against the ask
- * (`inboxAnswersRefusal`), then written in one write as the member's
- * message carrying it under the client's key, with its words and files,
- * the ask stood answered, and the item answered; nothing where the account reaches no such
- * item. The same answer sent again under the key it was taken by, by the
- * same member with the same words and files, finds it taken; any other
- * under a key the thread already holds is refused, so the agent never hears
- * what the thread does not show. An ask the item no longer holds open
- * takes none.
- */
 export function answerInboxAsk(
   userId: string,
   itemId: string,
@@ -3360,7 +2678,6 @@ export function answerInboxAsk(
           });
         const keyed = yield* findKeyedMessage({ itemId, clientKey: sent.clientKey });
         if (Option.isSome(keyed)) {
-          // Only the same answer sent again is the one taken, so the agent never hears what the thread does not hold.
           const resent =
             found.value.answerKey === sent.clientKey &&
             sameAnswers(keyed.value.answers, sent.answers) &&
@@ -3396,7 +2713,6 @@ export function answerInboxAsk(
           now,
         });
         if (Option.isNone(answered)) return standing(INBOX_ASK_ANSWER.NOT_OPEN);
-        // The member's own answer leaves the item read for them, and unread for every other member.
         yield* upsertRead({ userId, itemId });
         yield* keepAnswer({
           userId,
@@ -3420,34 +2736,26 @@ export function answerInboxAsk(
   );
 }
 
-/** Who writes a message on an item's thread: a member of its workspace by their account, under the key their client made, or the item's own agent. */
 type InboxMessageWriter =
   | {
       readonly author: typeof INBOX_MESSAGE_AUTHOR.MEMBER;
       readonly userId: string;
       readonly clientKey: string;
-      /** The revision of the notice the member was shown, which their message settles; absent where it settles none. */
       readonly revision?: number | undefined;
     }
   | {
       readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT;
-      /** The member the agent's words were addressed to; null where it named none. */
       readonly addresseeId: string | null;
     };
 
-/** What a member's message under its key came to. */
 export const INBOX_MESSAGE_OUTCOME = {
-  /** This write wrote it. */
   WRITTEN: "written",
-  /** The key found the same message written already, by the same member, with the same words and files. */
   REPEATED: "repeated",
-  /** The key found another message written already, by another member or with other words or files; nothing was written. */
   KEY_REUSED: "key-reused",
 } as const;
 
 type InboxMessageOutcome = (typeof INBOX_MESSAGE_OUTCOME)[keyof typeof INBOX_MESSAGE_OUTCOME];
 
-/** What a message came to: the item as it then stands, and what this write did. */
 export interface InboxMessageWritten {
   readonly item: InboxItem;
   readonly outcome: InboxMessageOutcome;
@@ -3460,7 +2768,6 @@ const KeyedMessageSchema = Schema.Struct({
   answers: Schema.NullOr(inboxAnswersSchema),
 });
 
-/** The message standing under a member's key on the item: who wrote it, its words, its files by name and type in order, and the answer it carries. */
 const findKeyedMessage = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
   Result: KeyedMessageSchema,
@@ -3478,7 +2785,6 @@ const findKeyedMessage = SqlSchema.findOneOption({
     ),
 });
 
-/** Whether two lists hold the same entries in the same order, by the test given; an absent list holds none. */
 function sameList<T>(
   standing: readonly T[] | undefined,
   sent: readonly T[] | undefined,
@@ -3495,7 +2801,6 @@ function sameList<T>(
   );
 }
 
-/** Whether the answer standing on a message is the one sent again: the same ask, reply, picks, values, and ticks, in order. */
 function sameAnswers(standing: InboxAnswers | null, sent: InboxAnswers): boolean {
   return (
     standing !== null &&
@@ -3511,7 +2816,6 @@ function sameAnswers(standing: InboxAnswers | null, sent: InboxAnswers): boolean
   );
 }
 
-/** Whether the message standing under the key is the one sent again: the same member, the same words, and the same files by name and type. */
 function sameMessage(
   standing: typeof KeyedMessageSchema.Type,
   sent: {
@@ -3531,21 +2835,6 @@ function sameMessage(
   );
 }
 
-/**
- * The message written on the item's thread, the item standing open or
- * settled, with the files it carried in the order given, and the item's
- * last change moved to now, all in one write: the item's status, answer,
- * and revision are left as they stand, but that a member's message naming
- * the revision of the notice it answers settles it as their nod does. A member's message sent again under
- * its key is the one already written, which writes nothing and moves
- * nothing; another message under a key already taken, by another member or
- * with other words or files, is refused as the key reused, so the thread
- * never names one message while the agent hears another. A member's
- * message marks the item read for them in the same write. The item comes
- * back as the reader named reads it: the member, or the agent's starter.
- * The caller has read the item as the writer may reach it, so the
- * item named is one that stands.
- */
 function writeInboxMessage(
   readerId: string,
   itemId: string,
@@ -3583,9 +2872,7 @@ function writeInboxMessage(
           );
           yield* touchItem({ itemId, now });
           if (member !== undefined) {
-            // A member's own message leaves the item read for them, and unread for every other member.
             yield* upsertRead({ userId: member.userId, itemId });
-            // Their words on the notice they were shown are their nod to it, as Got it is.
             const { userId, clientKey: answerKey, revision } = member;
             if (revision !== undefined) {
               yield* acknowledgeNotice({ userId, itemId, revision, answerKey, now });
@@ -3605,7 +2892,6 @@ function writeInboxMessage(
   );
 }
 
-/** What a member's message whose key found one standing came to: the same message sent again, or another under a key reused. */
 function repeatOutcome(
   itemId: string,
   member: { readonly userId: string; readonly clientKey: string } | undefined,
@@ -3620,11 +2906,6 @@ function repeatOutcome(
   );
 }
 
-/**
- * A member's message on an item of a workspace they are a member of, open
- * or settled, as `writeInboxMessage` writes one; nothing where the account
- * reaches no such item.
- */
 export function postInboxMessage(
   userId: string,
   itemId: string,
@@ -3632,7 +2913,6 @@ export function postInboxMessage(
     readonly text: string;
     readonly clientKey: string;
     readonly files?: readonly AgentAttachment[] | undefined;
-    /** The revision of the notice the member was shown, which the message settles where it still stands there. */
     readonly revision?: number | undefined;
   },
 ): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
@@ -3654,13 +2934,10 @@ export function postInboxMessage(
   );
 }
 
-/** The longest stem a key minted from a subject keeps, leaving room for the number that sets it apart from one the agent keeps already. */
 const KEY_STEM_CHARS = INBOX_BOUNDS.MAX_KEY_CHARS - 8;
 
-/** The stem of a key minted from a subject that spells no letter or digit. */
 const KEY_STEM_FALLBACK = "thread";
 
-/** A subject as the stem of a key, spelled as an agent spells one: its letters and digits in lower case, each run of anything else one hyphen. */
 function keyStem(title: string): string {
   const stem = title
     .normalize("NFKD")
@@ -3672,7 +2949,6 @@ function keyStem(title: string): string {
   return stem === "" ? KEY_STEM_FALLBACK : stem;
 }
 
-/** The stem, or the stem numbered from two, whichever first names no item of the agent's. */
 function freeKey(stem: string, taken: ReadonlySet<string>): string {
   if (!taken.has(stem)) return stem;
   let next = 2;
@@ -3680,7 +2956,6 @@ function freeKey(stem: string, taken: ReadonlySet<string>): string {
   return `${stem}-${next}`;
 }
 
-/** The agent's keys that are the stem or the stem numbered, which a key minted from it must not be. Note that a stem spells no `%` or `_`, so it matches as written. */
 const findStemKeys = SqlSchema.findAll({
   Request: Schema.Struct({ agentId: Schema.String, stem: Schema.String }),
   Result: Schema.Struct({ key: Schema.String }),
@@ -3698,7 +2973,6 @@ const findStemKeys = SqlSchema.findAll({
     ),
 });
 
-/** The agent, where the member may read it (`agentVisibleTo`), as an item of its reaches them (`itemVisibleTo`). */
 const findReachedAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -3711,7 +2985,6 @@ const findReachedAgent = SqlSchema.findOneOption({
     ),
 });
 
-/** The thread the member started with the agent under the key their client sent it with: the item whose first message is theirs under it. */
 const findStartedThread = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -3738,12 +3011,6 @@ const findStartedThread = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * A thread a member opens, written under the agent's starter as every item
- * of the agent's is, so its tools find it under the key: settled with the
- * member's own nod, since it asks the member nothing and waits on the
- * agent, its words being its first message.
- */
 const insertStartedItem = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -3777,7 +3044,6 @@ const insertStartedItem = SqlSchema.findOne({
     ),
 });
 
-/** A thread a member started, deleted with its messages and files, where it still holds nothing but their first message under the key. */
 const deleteStartedItem = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
   execute: ({ itemId, clientKey }) =>
@@ -3801,19 +3067,6 @@ const deleteStartedItem = SqlSchema.void({
     }),
 });
 
-/**
- * A thread a member opens with an agent of a workspace they are a member of
- * and whose agent they see, as a new mail is written: an item under a key
- * minted from its subject, past every key the agent keeps, so it never
- * writes over one of the agent's, and the member's words and files as its
- * first message, read for them. The agent's row is locked as its own posts
- * lock it, so a post of its own under the minted key waits on this one. A
- * thread started again under the client's key is the one it started, which
- * writes nothing; nothing where the member does not reach the agent, or its
- * starter is no longer a member of its workspace; one started again with
- * other words or files is refused as the key reused. The item comes back
- * as the member reads it.
- */
 export function startInboxThread(
   userId: string,
   agent: InboxAgent,
@@ -3841,7 +3094,6 @@ export function startInboxThread(
         if (Option.isSome(started)) {
           const item = yield* itemAsWritten(userId, started.value.id, userId);
           const first = yield* findKeyedMessage({ itemId: item.id, clientKey });
-          // Note that other words or files under a key taken are refused, so the agent never hears what the thread does not show; the subject is not compared, since the agent may retitle the thread and the agent hears it as the thread stands.
           const same = Option.isSome(first) && sameMessage(first.value, { userId, text, files });
           const outcome = same ? INBOX_MESSAGE_OUTCOME.REPEATED : INBOX_MESSAGE_OUTCOME.KEY_REUSED;
           return Option.some({ item, outcome });
@@ -3891,13 +3143,6 @@ export function startInboxThread(
   );
 }
 
-/**
- * A thread a member started with no subject given the title named, where
- * it still bears the one its first message stood for, so a title its agent
- * wrote since stands; its revision moved on, which wakes every held read of
- * it, and its last change left as it was, so it neither moves in the list
- * nor reads unread to the member who sent it.
- */
 const retitleItem = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, standing: Schema.String, title: Schema.String }),
   execute: ({ itemId, standing, title }) =>
@@ -3909,7 +3154,6 @@ const retitleItem = SqlSchema.void({
     ),
 });
 
-/** A thread started with no subject titled anew, where it still bears the title it was started under (`retitleItem`). */
 export function retitleInboxThread(
   itemId: string,
   standing: string,
@@ -3918,12 +3162,6 @@ export function retitleInboxThread(
   return title === standing ? Effect.void : retitleItem({ itemId, standing, title });
 }
 
-/**
- * A thread the member started taken back, as a message the agent was not
- * told is: deleted whole, where the member reaches it and it holds nothing
- * but their first message under the key, so a thread the agent has since
- * written on stands.
- */
 export function withdrawInboxThread(
   userId: string,
   itemId: string,
@@ -3934,7 +3172,6 @@ export function withdrawInboxThread(
   );
 }
 
-/** The agent's own item under the key, as its tools name one, and whether it holds an ask open, where the member who started the agent is still a member of the item's workspace. */
 const findAgentItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, title: Schema.String, asking: Schema.Boolean }),
@@ -3954,13 +3191,6 @@ const findAgentItem = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The agent's message on the thread of its own item under the key, open or
- * settled, as `writeInboxMessage` writes one, with the pictures it read from
- * its sandbox, each named by its file's own name; nothing where it has no
- * item under the key, or its starter has left the item's workspace, which
- * writes there as one outside it no longer.
- */
 export function replyInboxItem(
   agent: Pick<InboxAgent, "userId" | "agentId">,
   key: string,
@@ -3983,14 +3213,6 @@ export function replyInboxItem(
   );
 }
 
-/**
- * The member's message written under the key taken back off the item's
- * thread, its files with it, where the account still reaches the item: what
- * a hand-off to the agent that failed leaves, so the thread never shows a
- * message the agent was not told. The item's last change stays where the
- * message moved it, and a notice the message settled waits on the
- * developer's nod again.
- */
 export function withdrawInboxMessage(
   userId: string,
   itemId: string,
@@ -4008,23 +3230,14 @@ export function withdrawInboxMessage(
   );
 }
 
-/** One item that waits as the account's read holds it: the entry the wire carries, and where it stands, which a cursor digests. */
 type AccountWaitingRow = AccountInboxEntry & Pick<InboxStamp, "status">;
 
-/**
- * Every item that waits on the developer across the account's tasks, the
- * latest changed first: open.
- * Note that none is left out for being old, because one left unanswered
- * while many others changed must still be counted; the open bound per
- * agent keeps these few.
- */
 export function accountWaitingItems(
   userId: string,
 ): InboxStoreEffect<readonly AccountWaitingRow[]> {
   return Effect.map(findWaitingItems({ userId }), (rows) =>
     rows.map(({ taskId, ...row }) => ({
       ...row,
-      // Note that the reminder is carried under `snoozedUntil` too, as `liveReminderFor` carries it.
       snoozedUntil: row.remindAt,
       planId: taskId,
       postedAt: row.postedAt.getTime(),
@@ -4033,16 +3246,8 @@ export function accountWaitingItems(
   );
 }
 
-/** One open item of an agent with no task as the account's read carries it, and where it stands. */
 type AccountTasklessRow = AccountTasklessEntry & Pick<InboxStamp, "status">;
 
-/**
- * Every item that waits on the developer from an agent with no task in the
- * account's workspaces, the latest changed first, with the automation and
- * repository that stand in a task's place; none is left out for being old,
- * as `accountWaitingItems` leaves none out, and those of agents with no
- * repository only where `repositoryless` asks (`repositoryCarried`).
- */
 export function accountTasklessItems(
   userId: string,
   repositoryless: boolean,
@@ -4058,19 +3263,12 @@ export function accountTasklessItems(
   );
 }
 
-/** Where each item `accountWaitingItems` and `accountPlanlessItems` read stands, the same items and none of their words: what a held read of the account compares between looks. */
 export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
   return Effect.map(findWaitingStamps({ userId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }
 
-/**
- * Every task of the account's that holds an inbox item, waiting or settled,
- * with how many, how many are the reader's to do, and when the latest
- * changed, the task whose item changed latest first: what the desktop's
- * Inbox lists.
- */
 export function accountInboxTasks(userId: string): InboxStoreEffect<readonly AccountInboxTask[]> {
   return Effect.map(findTasksWithItems({ userId }), (rows) =>
     rows.map(({ taskId, ...row }) => ({
@@ -4081,7 +3279,6 @@ export function accountInboxTasks(userId: string): InboxStoreEffect<readonly Acc
   );
 }
 
-/** Every automation whose runs' agents with no task hold an item, waiting or settled, listed as `accountInboxTasks` lists the tasks. */
 export function accountInboxAutomations(
   userId: string,
 ): InboxStoreEffect<readonly AccountInboxAutomation[]> {
@@ -4090,7 +3287,6 @@ export function accountInboxAutomations(
   );
 }
 
-/** Every agent with no task holding an item, waiting or settled, listed as `accountInboxTasks` lists the tasks, and named as `accountTasklessItems` names an open item's agent. */
 export function accountInboxAgents(
   userId: string,
   repositoryless: boolean,

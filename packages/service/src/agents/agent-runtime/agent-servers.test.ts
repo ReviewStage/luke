@@ -34,18 +34,6 @@ import type { ConversationAdmission } from "../eve-host/conversation.js";
 import { CONNECTION_POLICY } from "./role.js";
 import { type ServerStanding, turnServers } from "./servers.js";
 
-/**
- * The MCP servers an agent's turn is handed, read as the turn starts under
- * its role's policy: a coding agent's switched per agent from its composer,
- * and the brain agents' every one, for a call admitted at all, among the integrations
- * the deployment offers the account. The store is the real one over the
- * migrations on PGlite, and the agent's conversation is admitted as the MCP
- * door admits it; every provider is set up and offered
- * to every account but where a test reads a deployment's variables, and the
- * deployment holds the GitHub App, which is what offers GitHub.
- */
-
-/** An account with a coding agent on Claude Code on a task, and its conversation as the MCP door admits it. */
 const codingSession = Effect.gen(function* () {
   const userId = yield* openGithubUser();
   const task = yield* startTask(userId, {
@@ -79,7 +67,6 @@ const codingSession = Effect.gen(function* () {
   };
 });
 
-/** A call no conversation admitted, as one over another account's conversation is. */
 const REFUSED_ADMISSION = Effect.succeed<ConversationAdmission>(
   Result.fail(EVE_HOST_REFUSAL.NOT_OWNER),
 );
@@ -90,7 +77,6 @@ const SLACK = INTEGRATION_PROVIDER.SLACK;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 const { ALWAYS_ON, AGENT_SWITCHES, AGENT_SWITCHES_AND_MENTIONS } = CONNECTION_POLICY;
 
-/** Each provider's server handed bare, as one with no account connected is, under the account. */
 function bare(account: string, providers: readonly IntegrationProvider[]): ServerStanding {
   return {
     on: true,
@@ -103,14 +89,12 @@ function bare(account: string, providers: readonly IntegrationProvider[]): Serve
   };
 }
 
-/** Every integration's server on, under the account. */
 function allOn(account: string): ServerStanding {
   return bare(account, INTEGRATION_PROVIDER_LIST);
 }
 
 const EVERY_CONNECTOR = integrationConnectOf(() => CONNECTOR_ASKED_NOTHING);
 
-/** A deployment that holds the GitHub App, which is what offers GitHub. */
 const GITHUB_APP = GitHubApp.layer(GITHUB_APP_SETTINGS);
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
@@ -125,7 +109,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
 
           assert.deepEqual(yield* turnServers(agent.admission, ALWAYS_ON), allOn(agent.userId));
           assert.deepEqual(yield* turnServers(agent.admission, ALWAYS_ON), allOn(agent.userId));
-          // A call over another account's conversation is admitted for nobody.
           assert.deepEqual(yield* turnServers(REFUSED_ADMISSION, ALWAYS_ON), {
             on: false,
           });
@@ -153,7 +136,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
           const standing = (providers: readonly IntegrationProvider[]): ServerStanding =>
             bare(agent.userId, providers);
 
-          // The account's email is the one `openGithubUser` left on its row.
           assert.deepEqual(yield* handed("@stagereview.example"), [
             standing([GITHUB, LINEAR]),
             standing([GITHUB, LINEAR]),
@@ -304,7 +286,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
           yield* account("notion-2", `subject-${agent.agentId}`, `state-personal-${agent.agentId}`);
           yield* renameIntegrationConnection(agent.userId, NOTION, "Acme");
           yield* renameIntegrationConnection(agent.userId, "notion-2", "Personal");
-          // An account whose first sign-in never finished is handed to no turn.
           yield* beginIntegrationSignIn(
             agent.userId,
             {

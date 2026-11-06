@@ -46,23 +46,6 @@ import {
 } from "./live-queries.js";
 import type { LiveParams, LiveQuery } from "./live-query.js";
 
-/**
- * A workspace's automations and runs (`automationsLive`,
- * `automationWorkspaceRunsLive`, `automationRunsLive`) on the migrated
- * capture: each write that moves them, through its real writer, notifies
- * the workspace's topic, which all three reads are woken on, so a
- * teammate's window hears the owner's write within a coalesce window rather
- * than at the hold's end. That holds for a member joining, an automation
- * made, changed, and deleted, a run fired and its agent started, and that
- * agent renamed and its turn queued, started, and settled. A line awaiting
- * the agent's next turn notifies its conversation alone, which the
- * transcript's own test holds (`transcript-topics.test.ts`), so these reads
- * show it with the next turn or at the hold's end.
- *
- * Synthetic accounts, workspaces, automations, agents, and turns throughout.
- */
-
-/** A fixed instant the run events are stamped at, since no read here measures time. */
 const NOW = 1_800_000_000_000;
 
 const openAccount = Effect.gen(function* () {
@@ -72,10 +55,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/**
- * An owner and a teammate in one workspace, the owner's agent on no task in
- * it, and the id the owner's workspace automation will be made under.
- */
 const openAutomationWorld = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -93,7 +72,6 @@ const openAutomationWorld = Effect.gen(function* () {
 
 type AutomationWorld = Effect.Success<typeof openAutomationWorld>;
 
-/** The owner's workspace automation, made under the world's id, as the settings page makes one. */
 const makeAutomation = (world: AutomationWorld) =>
   Effect.map(
     createAutomation(world.owner, {
@@ -111,10 +89,8 @@ const makeAutomation = (world: AutomationWorld) =>
     Option.getOrThrow,
   );
 
-/** A read as one reader follows it: its definition, and the params its procedure binds. */
 type Followed = readonly [LiveQuery<string, string, readonly SyncTopic[]>, LiveParams<string>];
 
-/** The three reads as the teammate follows them: the workspace's automations and runs, and the world's automation's runs. */
 const teammateReads = (world: AutomationWorld): readonly Followed[] => {
   const workspace = { userId: world.teammate, workspaceId: world.workspaceId };
   return [
@@ -124,7 +100,6 @@ const teammateReads = (world: AutomationWorld): readonly Followed[] => {
   ];
 };
 
-/** Runs the write, held to exactly the topics it notifies, and fails unless each of the teammate's reads is woken by one of them. */
 const wakesTheTeammate = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],

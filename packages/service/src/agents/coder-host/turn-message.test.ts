@@ -24,28 +24,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 import { handedAfterCompaction, type TurnHanded, taskWithLead } from "./turn-context.js";
 import { coderTurnMessage } from "./turn-message.js";
 
-/**
- * turn-message.test.ts -- the message a coding agent's turn opens with: the call's words let go after a spoken turn, and its task handed again once another writer saved the description.
- *
- * Over the real migrations on PGlite, an agent on a task, admitted as the
- * MCP door admits it, its turns written through the store writer as a
- * native harness's are: the turn after a spoken one says the call's words
- * no longer hold, as after a compaction that kept only that, and the next
- * says nothing of them; and a typed turn hands the task once after the
- * agent's first turn, then only where someone other than the agent saved
- * the description after its previous turn started, never on its first turn or for
- * its own notes. Synthetic accounts, tasks, and words throughout.
- */
-
 const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
-/** When the agent's first turn starts, which a test reads against its own clock, which starts at nothing. */
 const TURN_STARTS_AT = 10 * 60_000;
 
-/** A sandbox door no call of notes alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-/** An account with one agent on Claude Code on a task, admitted as the MCP door admits it. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
   yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
@@ -71,7 +55,6 @@ const openAgent = Effect.gen(function* () {
   return { userId, agent, admitted };
 });
 
-/** The agent's turn, started at the instant given and ended, as a native harness's runner reports one. */
 const ranTurn = (admitted: AdmittedConversation, turnId: string, at: number) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -133,7 +116,6 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         const firstTurn = randomUUID();
         const nextTurn = randomUUID();
         let handed: TurnHanded = {};
-        // Each typed turn's message, the session keeping what it handed; the task's text, or nothing where it was not handed.
         const typedAt = (turnId: string) =>
           Effect.map(
             Effect.suspend(() =>
@@ -148,7 +130,6 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
             (message) => {
               handed = message.handed;
               const text = message.text ?? "";
-              // Note that the task is read as handed by its lead, since with Descriptions off it is handed without its document.
               return text.includes(taskWithLead("")) ? text : undefined;
             },
           );
@@ -163,17 +144,13 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
             (answer) => answer.status,
           );
 
-        // Our notes before the agent's first turn: that turn opens on the description as its first message.
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
         assert.equal(yield* typedAt(firstTurn), undefined);
-        // The first turn runs, started after our notes.
         yield* ranTurn(admitted, firstTurn, TURN_STARTS_AT);
-        // Once the first turn ran, the session hands the task whole once: its threads and brief are new to it.
         assert.ok(yield* typedAt(nextTurn));
         assert.equal(yield* typedAt(nextTurn), undefined);
 
-        // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
         yield* TestClock.adjust("10 minutes");
         assert.equal(
           yield* agentNotes([added("Approach", "- Invites expire after 7 days.")]),
@@ -181,8 +158,6 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         );
         assert.equal(yield* typedAt(nextTurn), undefined);
 
-        // Our notes while that turn ran, and the agent's after them in the same section, which
-        // leave the agent the section's last writer: the next typed turn is handed the description all the same.
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Approach", "- A withdrawn invite never grants access.")]);
         yield* TestClock.adjust("1 minute");
@@ -194,7 +169,6 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
         assert.ok(!changed.includes("## This turn is spoken"), changed);
 
-        // With Descriptions off a save hands nothing, and the description is never what a turn reads.
         yield* writeAccountPreferences(userId, {
           experiments: { [EXPERIMENT.DESCRIPTIONS]: false },
         });
@@ -202,7 +176,6 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
         assert.equal(yield* typedAt(nextTurn), undefined);
 
-        // A turn runs after that save, and Descriptions goes back on: the next turn is handed the description it was not.
         yield* TestClock.adjust("1 minute");
         yield* ranTurn(admitted, nextTurn, yield* Clock.currentTimeMillis);
         yield* TestClock.adjust("1 minute");

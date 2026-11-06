@@ -1,21 +1,3 @@
-/**
- * agent-browser-fake.ts -- an agent's browser for the suites that drive one: a fake Chromium that speaks CDP, the bridge in front of it on a fake PTY, and a fake sandbox it runs in.
- *
- * The service under them is the real one (`agents/browser/agent-browser.ts`);
- * only what it reaches across a process boundary is faked. The sandbox is
- * Vercel's REST API as a scenario has it: listed under a session's tag or
- * not, running or stopped, resuming after some asks, and running the
- * browser's start as the start script would, started the first time and
- * attached to after, until a resume brings the sandbox up without it. The
- * PTY runs the bridge only where its start frame names it, writes what a
- * real PTY would around it (a stray line, `\r\n` line ends, a line split
- * across frames, mid-character), and carries each command line to the
- * fake Chromium and its answer back. The Chromium keeps page targets,
- * answers `Target.getTargets`, `createTarget`, and `closeTarget`, refuses
- * any method it does not know as Chrome does, and answers what a suite's
- * own `answer` says first, which may be nothing at all.
- */
-
 import type { CdpEvent, PageTarget } from "@repo/features/browser-cdp";
 import { type Cause, Effect, Layer, Queue, Redacted, Ref, Schema, Stream } from "effect";
 import {
@@ -46,23 +28,19 @@ import {
 } from "../agents/vercel-sandbox-api.js";
 import type { RelayFrame } from "../terminal/relay.js";
 
-/** Chrome's own refusal of a method it does not know, and of a target it does not hold. */
 const CHROME_ERROR = { NO_METHOD: -32601, INVALID_PARAMS: -32602 } as const;
 
-/** What the fake Chromium answers a command: a result, a refusal, or nothing ever. */
 export type FakeCdpAnswer =
   | { readonly result: unknown }
   | { readonly error: { readonly code: number; readonly message: string } }
   | { readonly silent: true };
 
-/** A command as the fake Chromium reads it off its line. */
 export interface FakeCdpCommand {
   readonly method: string;
   readonly params: { readonly [key: string]: unknown };
   readonly sessionId?: string | undefined;
 }
 
-/** How the bridge comes up: ready, unable to reach the browser, never saying anything, or unable only on its first PTY, as just after a fresh start. */
 export const FAKE_BRIDGE = {
   READY: "ready",
   ERROR: "error",
@@ -73,17 +51,11 @@ export const FAKE_BRIDGE = {
 export type FakeBridge = (typeof FAKE_BRIDGE)[keyof typeof FAKE_BRIDGE];
 
 export interface FakeCdpPeer {
-  /** The page targets the browser holds now. */
   readonly pages: Effect.Effect<readonly PageTarget[]>;
-  /** Sends an event on every open connection. */
   readonly emit: (event: CdpEvent) => Effect.Effect<void>;
-  /** Ends every open connection, as a bridge that exits does. */
   readonly hangUp: Effect.Effect<void>;
-  /** Writes what the PTY says to every open connection; the service's PTY reader takes it. */
   readonly write: (text: string) => Effect.Effect<void>;
-  /** Registers a connection's output, which events and the hang-up then reach. */
   readonly attach: (output: Queue.Queue<RelayFrame, Cause.Done>) => Effect.Effect<void>;
-  /** The answer to one command. */
   readonly answer: (command: FakeCdpCommand) => Effect.Effect<FakeCdpAnswer>;
 }
 
@@ -96,7 +68,6 @@ const CommandLineSchema = Schema.Struct({
 
 const decodeCommandLine = Schema.decodeUnknownOption(Schema.fromJsonString(CommandLineSchema));
 
-/** A text's bytes, split in two frames inside its first multi-byte character where it has one, so a reader must join them. */
 function framesOf(text: string): readonly RelayFrame[] {
   const bytes = new TextEncoder().encode(text);
   const wide = bytes.findIndex((byte) => byte >= 0x80);
@@ -104,7 +75,6 @@ function framesOf(text: string): readonly RelayFrame[] {
   return [{ bytes: bytes.slice(0, at) }, { bytes: bytes.slice(at) }];
 }
 
-/** A fake Chromium holding the pages given, answering a suite's own `answer` first. */
 export function fakeCdpPeer(
   options: {
     readonly pages?: readonly PageTarget[];
@@ -180,7 +150,6 @@ export function fakeCdpPeer(
   });
 }
 
-/** Whether a PTY start frame runs the bridge, on the port the browser listens on. */
 function startsBridge(text: string): boolean {
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== "object" || parsed === null || !("args" in parsed)) return false;
@@ -192,7 +161,6 @@ function startsBridge(text: string): boolean {
   );
 }
 
-/** The sandbox's PTY, running the bridge in front of the fake Chromium as it is told to come up. */
 export function fakeBridgePty(
   peer: FakeCdpPeer,
   bridge: FakeBridge = FAKE_BRIDGE.READY,
@@ -248,23 +216,14 @@ export function fakeBridgePty(
   };
 }
 
-/** What a fake sandbox has: its status, if it is listed at all, and what it does when asked. */
 export interface FakeSandboxScenario {
-  /** The status the sandbox is listed in; none for a session that opened no sandbox. */
   readonly status: string | undefined;
-  /** The session tag it is listed under. */
   readonly sessionId: string;
-  /** How many resumes answer it still pending before one answers it running; one that never comes up is `Infinity`. */
   readonly pendingResumes?: number;
-  /** The exit the browser's start ends on; 0 where it starts or attaches. */
   readonly startExit?: number;
-  /** Whether every call is unavailable, as Vercel answering the status given. */
   readonly unavailable?: number;
-  /** Whether every resume is unavailable, as Vercel answering the status given. */
   readonly resumeUnavailable?: number;
-  /** The error code Vercel's body names on that refusal, where it names one. */
   readonly resumeCode?: string;
-  /** What the recording's commands answer: the start's output (`started` where none is named), the stop's JSON (none recorded where none is named), and the video the stop leaves behind. */
   readonly recording?: {
     readonly start?: CommandRun;
     readonly stop?: string;
@@ -278,8 +237,6 @@ export const FAKE_SANDBOX = {
   RESUMED_SESSION: "sbs_resumed",
 } as const;
 
-/** Vercel's REST API over one sandbox as the scenario has it, and the commands it ran, by the session each ran in. */
-/** Where the fake sandbox's recorder leaves its video, under the sandbox user's home, as a read prints it. */
 export const FAKE_RECORDING_PATH = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
 
 export function fakeSandboxApi(scenario: FakeSandboxScenario) {
@@ -316,7 +273,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
         resumes += 1;
         status = resumes > (scenario.pendingResumes ?? 0) ? "running" : "pending";
         current = FAKE_SANDBOX.RESUMED_SESSION;
-        // A resume starts from the snapshot, where no browser runs.
         browserUp = false;
         return listed();
       }),
@@ -346,7 +302,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
                     stderr: "",
                   };
             }
-            // The stop is the recording's other script, named as the start is.
             if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
               const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
               return { exitCode: 0, stdout: `${stop}\n`, stderr: "" };
@@ -368,11 +323,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
   return { api, ran };
 }
 
-/**
- * `AgentBrowser` over a running sandbox tagged with the session given and a
- * ready bridge in front of the peer: the double a suite that drives a
- * browser provides.
- */
 export function agentBrowserTestLayer(
   peer: FakeCdpPeer,
   sessionId: string,
@@ -381,11 +331,6 @@ export function agentBrowserTestLayer(
   return Layer.succeed(AgentBrowser, agentBrowserOver(api, fakeBridgePty(peer)));
 }
 
-/**
- * `AgentBrowser` for an agent that has opened no sandbox: every call is
- * refused as not reachable. The double a suite provides where its agent
- * never reaches a browser.
- */
 export const noSandboxBrowserLayer: Layer.Layer<AgentBrowser> = Layer.succeed(AgentBrowser, {
   ensure: () => Effect.fail(new BrowserUnreachable({ reason: BROWSER_UNREACHABLE.NOT_OPENED })),
   startRecording: () =>

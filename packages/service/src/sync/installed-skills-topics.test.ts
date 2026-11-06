@@ -12,16 +12,6 @@ import { expectTopicsFire, getTestDB, openWorkspace } from "@repo/database/testi
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import { Effect } from "effect";
 
-/**
- * The skills members install on the migrated capture: an install, through
- * the store's real writer, notifies the skills topic of the scope the skill
- * stands in, which the skills' live read is woken on, and never the
- * workspace's or the account's own, which would wake every member's task
- * list and the account's session reads.
- *
- * Synthetic accounts, workspaces, and skills throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

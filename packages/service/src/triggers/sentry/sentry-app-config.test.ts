@@ -7,13 +7,6 @@ import {
   sentryAppFromEnvironment,
 } from "./sentry-app-config.js";
 
-/**
- * The Sentry integration read from a deployment's environment: whole, it
- * answers its settings with the secret sealed; partial or absent, the layer
- * still builds and every read names what is missing.
- */
-
-/** The integration's settings read over a record of this test's own in place of the environment. */
 const settingsOver = (variables: Record<string, string>) =>
   Effect.flatMap(SentryApp, (app) => Effect.result(app.settings)).pipe(
     Effect.provide(sentryAppFromEnvironment),

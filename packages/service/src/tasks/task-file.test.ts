@@ -15,19 +15,11 @@ import {
 } from "../testing/github-app-fake.js";
 import { readTaskFile } from "./task-file.js";
 
-/**
- * The File tab's read of a task's repository on the member's own token,
- * where no installation reaches it: GitHub is asked with the documented
- * Bearer header, and a 401 marks the token invalid. GitHub is a script and
- * the store PGlite. Synthetic accounts, repositories, and tokens throughout.
- */
-
 const SIDE = { owner: "octo-member", name: "side", defaultBranch: "main" } as const;
 const SIDE_FULL_NAME = `${SIDE.owner}/${SIDE.name}`;
 const HEAD = "a".repeat(40);
 const README = { path: "README.md", firstLine: 1, lastLine: 1 } as const;
 
-/** GitHub answering the member's token on the repository, its head, and its README; the README read refused 401 where `refused` says so. */
 const onMemberToken =
   (refused = false) =>
   (sent: SentToGitHub): Response | undefined => {

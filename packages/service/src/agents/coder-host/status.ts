@@ -44,57 +44,18 @@ import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
 
-/**
- * status.ts -- where a coding agent stands, read from its newest turn.
- *
- * An agent's status is its conversation's newest turn row and the one
- * thing beside it, a message of the developer's still awaiting its turn:
- * `starting` before the first turn is queued, `running` while eve runs a
- * turn or a line waits for the turn it will open, and how the newest turn
- * ended after. A turn still running that carries a Stop stamp
- * reads as canceled already, since the Stop is on its way to eve and
- * nothing the turn still does changes where it ends. An agent with no turn
- * row long past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather
- * than starting forever, as one that never started: eve took the session,
- * and its first turn lands in seconds or not at all. A line that awaits its
- * turn reads as running whatever the newest turn says, because the session
- * took the message and the turn it opens is on its way
- * (`@repo/database/models/message-reads`'s `awaitingLinesOf` is where a
- * line is counted as waiting), but only for so long: a line that has
- * waited past `LINE_GRACE_MILLIS` with no turn running reads as failed, as
- * one whose turn is not coming, so the developer is offered Continue on it
- * rather than watching it run forever. Failed rather than as the newest
- * turn says, because the line went unanswered, and a settled agent would
- * offer neither Continue nor any word of why. A line older than the newest
- * turn's queueing that the turn never took awaits nothing either: that turn
- * was its, and ended without the store hearing it received. A failed turn
- * is also read for why, as one of the wire's fixed words: the sweep's own
- * word for a turn it settled, else the host's refusal sentences where the
- * turn's detail carries one, GitHub's or the sandbox's, else a provider's
- * refusal of a prompt longer than the model's window, else the model
- * call, which is what every other eve failure of a coding turn is. An
- * unanswered line after a turn that did not fail has no word, and its end
- * line says Failed alone. Nothing of the detail itself leaves here.
- */
-
-/** When the agent was started, when it is being read, which is what an agent with no turn is judged by, when the newest line of the developer's still awaiting its turn was written, and whether it was started blank. */
 export interface AgentStanding {
   readonly createdAt: Date;
-  /** Epoch milliseconds now. */
   readonly now: number;
-  /** When the newest message of the developer's standing in the transcript with no turn yet was written; none where none stands or unsaid. */
   readonly awaitingLineAt?: Date | undefined;
-  /** Whether the agent was started blank, handed neither the description nor a prompt, so no first turn is on its way; unsaid reads as not. */
   readonly blank?: boolean | undefined;
 }
 
-/** Whether an agent was started blank, as a full read or a list line says it. */
 export function startedBlank(agent: Agent | Pick<AgentLine, "brief">): boolean {
   const brief = "brief" in agent ? agent.brief : agentBriefOf(agent);
   return brief === AGENT_BRIEF.BLANK;
 }
 
-/** What of the newest turn the shared rule reads (`@repo/features/agent-status`), each instant in epoch milliseconds. */
 function statusTurnOf(turn: AgentLatestTurn | undefined): StatusTurn | undefined {
   return turn === undefined
     ? undefined
@@ -108,7 +69,6 @@ function statusTurnOf(turn: AgentLatestTurn | undefined): StatusTurn | undefined
       };
 }
 
-/** Whether a line of the developer's awaits the turn it opens, which keeps the agent at work: what an archive or a Stop reads the agent idle by. */
 export function lineAwaitsTurn(
   turn: AgentLatestTurn | undefined,
   standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
@@ -119,13 +79,6 @@ export function lineAwaitsTurn(
   });
 }
 
-/**
- * Where an agent stands, from its newest turn; running where a line awaits
- * its turn, failed where one went unanswered past its grace, starting with
- * no turn inside the grace, failed with none past it. An agent started blank
- * with no turn yet has done all it was asked, which is nothing, so it reads
- * as completed, however long ago it started: no first turn is on its way.
- */
 export function agentStatusOf(
   turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
@@ -138,12 +91,6 @@ export function agentStatusOf(
   });
 }
 
-/**
- * The next instant past which the clock alone moves the agent's status, in
- * epoch milliseconds: a line's grace running out, from running to failed,
- * or, with no turn and no line, the starting grace running out, from
- * starting to failed. None where nothing but a row changing can move it.
- */
 export function statusClockEdge(
   turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
@@ -156,56 +103,22 @@ export function statusClockEdge(
   });
 }
 
-/**
- * What a provider says, in the error eve keeps in a failed turn's detail,
- * when the prompt is longer than the model's window: Anthropic's
- * "prompt is too long: 1368155 tokens > 1000000 maximum", and OpenAI's
- * error code and words for the same.
- */
 const CONTEXT_OVERFLOW_WORDS: readonly string[] = [
   "prompt is too long",
   "context_length_exceeded",
   "maximum context length",
 ];
 
-/**
- * What the turn of a run its host lost records after the host's name, the
- * lease sweep having taken the run from a host that stopped beating
- * (`device-lease-sweep.ts`): the same words in every such turn, the name
- * before them being the host's own.
- */
 const HOST_AWAY_DETAIL = " went away during this turn. Send a message to carry on once it's back.";
 
-/** What the turn of a run the host named lost records. */
 export function hostAwayDetail(hostName: string): string {
   return `${hostName}${HOST_AWAY_DETAIL}`;
 }
 
-/**
- * What the turn a launch waited on records when its host settled the
- * launch unstarted after reporting a step (`DEVICE_LAUNCH_STEP`): these
- * words, then the step as the wire spells it, and nothing the host printed.
- */
 const LAUNCH_STOPPED_DETAIL = "the agent's host settled its launch unstarted at the step ";
 
-/**
- * What follows the step in that detail where the host said why the launch
- * never started (`DEVICE_LAUNCH_UNSTARTED`): these words, then the reason as
- * the wire spells it.
- */
 const LAUNCH_UNSTARTED_DETAIL = ", because of ";
 
-/**
- * The host's refusal sentences, a provider's words for a prompt past the
- * window, and the words of a run its host lost or a launch it settled
- * unstarted, a failed turn's detail may carry, by the word the wire says for
- * each. Note that those last two read as `other` rather than words of their
- * own, because a window reads `failureReason` as one of the words it knows
- * and an older build would refuse the whole page over a new one: `other`
- * reads there as a run that ended without saying why, rather than as the
- * model's failure, and a newer window names the host from the page's
- * `hostLost`, or the step from its `launch`.
- */
 export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]])[] = [
   [
     AGENT_FAILURE.GITHUB,
@@ -238,7 +151,6 @@ export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]]
   [AGENT_FAILURE.OTHER, [HOST_AWAY_DETAIL, LAUNCH_STOPPED_DETAIL]],
 ];
 
-/** The host that lost a failed turn's run, by the name its turn records; nothing for any other turn. */
 export function hostLostOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): { readonly host: string } | undefined {
@@ -250,15 +162,6 @@ export function hostLostOf(
   return host.length > 0 ? { host } : undefined;
 }
 
-/**
- * What the turn of a launch its host settled unstarted records, by the step
- * the line last held and the reason its host said, where it said one;
- * nothing where it held no step this build knows and said no reason, which
- * leaves a runner gone's words. Note that a reason with no step is recorded
- * at the first step, because the host reports each step apart from its
- * settle, so the step may land after it, and every reason is one the host
- * finds while it prepares.
- */
 export function launchStoppedDetail(
   step: string | null,
   unstarted?: DeviceLaunchUnstarted,
@@ -271,7 +174,6 @@ export function launchStoppedDetail(
   return `${LAUNCH_STOPPED_DETAIL}${known}${why}`;
 }
 
-/** The step and the reason a failed turn's detail records for a launch its host settled unstarted (`launchStoppedDetail`); nothing for any other turn. */
 function launchStoppedParts(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): { readonly step: string; readonly unstarted: string | undefined } | undefined {
@@ -285,7 +187,6 @@ function launchStoppedParts(
   return { step, unstarted };
 }
 
-/** The step a launch its host settled unstarted stopped at, as its failed turn records it; nothing for any other turn. */
 export function launchStoppedOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): DeviceLaunchStep | undefined {
@@ -293,7 +194,6 @@ export function launchStoppedOf(
   return DEVICE_LAUNCH_STEPS.find((each) => each === parts?.step);
 }
 
-/** Why a launch its host settled unstarted never started, as its failed turn records the reason its host said; nothing for any other turn, and for one whose host said none this build knows. */
 export function launchUnstartedOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): DeviceLaunchUnstarted | undefined {
@@ -301,7 +201,6 @@ export function launchUnstartedOf(
   return Object.values(DEVICE_LAUNCH_UNSTARTED).find((each) => each === parts?.unstarted);
 }
 
-/** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */
 export function agentFailureOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): AgentFailure | undefined {
@@ -317,15 +216,12 @@ export function agentFailureOf(
   return named?.[0] ?? AGENT_FAILURE.MODEL;
 }
 
-/** What an agent's status is read from: its newest turn, and when the newest line of the developer's awaiting its turn was written. */
 export interface AgentTurnStanding {
   readonly turn: AgentLatestTurn | undefined;
   readonly awaitingLineAt: Date | undefined;
-  /** The provider's own harness its conversation runs on; none on eve, and where the read named none. */
   readonly runtime?: NativeAgentRuntime | undefined;
 }
 
-/** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
 export function agentRunStartedAt(
   turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
@@ -334,19 +230,6 @@ export function agentRunStartedAt(
   return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
-/**
- * When the agent last did something settled, in epoch milliseconds: the
- * later of when it was started and when its newest turn to end ended
- * (`lastSettledTurnsOfReached`). Note that a turn's start is no activity,
- * because a turn starts on whatever wakes the agent, a check finishing or a
- * wakeup it set as often as a line of the developer's, and the row would
- * read "now" with nothing new on it; what the turn did shows once it ends.
- * So a list ordered by it holds still while the agent works, and moves once,
- * when the turn ends. Note too that a subagent's turns run inside its
- * parent's, and that an item the agent posts to the Inbox or a pull request
- * it opens is posted inside a turn, so the parent's turn already brackets
- * them, and none is read apart.
- */
 export function agentActivityAt(
   lastSettledAt: Date | undefined,
   standing: Pick<AgentStanding, "createdAt">,
@@ -354,7 +237,6 @@ export function agentActivityAt(
   return Math.max(standing.createdAt.getTime(), lastSettledAt?.getTime() ?? 0);
 }
 
-/** Who archived an agent as its banner says it: the member, where their account stands, the agent acting for them, and why. */
 function archivedByOf(archive: StoredArchive, names: ReadonlyMap<string, string>): AgentArchivedBy {
   const member = names.get(archive.userId);
   return {
@@ -368,10 +250,8 @@ function archivedByOf(archive: StoredArchive, names: ReadonlyMap<string, string>
   };
 }
 
-/** No Mac read: a summary built from it names no Mac. */
 const NO_MACS: ReadonlyMap<string, Device> = new Map();
 
-/** The Mac a local agent runs on as its summary names it, by its name and when it last beat; none for an agent in a sandbox or whose Mac was not read. */
 function macOf(
   agent: Pick<AgentLine, "machine" | "deviceId">,
   macs: ReadonlyMap<string, Device>,
@@ -383,7 +263,6 @@ function macOf(
     : { name: device.name, seenAt: device.lastSeenAt.getTime(), deviceId: device.id };
 }
 
-/** The Macs a read's local agents are pinned to, by id, which `devicesNamed` reads. */
 export function summaryDevices(
   agents: readonly Pick<AgentLine, "machine" | "deviceId">[],
 ): readonly string[] {
@@ -392,7 +271,6 @@ export function summaryDevices(
   );
 }
 
-/** What every read of one agent says of it but its task, its status read at `now`, its owner as `owners` reads it, the agents started from it where any was, and the Mac it runs on where `macs` holds it. */
 function summaryFields(
   agent: AgentLine,
   standing: AgentTurnStanding,
@@ -420,9 +298,7 @@ function summaryFields(
       : undefined),
     ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
-    // Note that a pilot says it is one, so a coder's summary is as it was.
     ...(agent.kind === AGENT_KIND.PILOT ? { pilot: true } : undefined),
-    // Likewise only a local agent says where it runs, so a sandboxed agent's summary is as it was.
     ...(agent.machine === AGENT_MACHINE.DEVICE ? { machine: agent.machine } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: agent.createdAt.getTime(),
@@ -472,11 +348,6 @@ function summaryFields(
   };
 }
 
-/**
- * One agent as the tabs draw it, on a task or with none, read whole or as a
- * list's line. Its owner is read from `owners`, which `agentOwnerFactsOf`
- * answers for the agents of the read.
- */
 export function agentSummary(
   agent: Agent | AgentLine,
   standing: AgentTurnStanding,
@@ -494,12 +365,6 @@ export function agentSummary(
   };
 }
 
-/**
- * The run that started an agent as its page opens on it: the prompt alone,
- * the issue or pull request a GitHub event named, a webhook's body, and the
- * member who asked for a run now, named by `names` where their account
- * stands.
- */
 function originOf(origin: StoredAutomationOrigin, names: ReadonlyMap<string, string>): AgentOrigin {
   const { firing } = origin;
   const subject =
@@ -525,14 +390,12 @@ function originOf(origin: StoredAutomationOrigin, names: ReadonlyMap<string, str
   };
 }
 
-/** The accounts an agent's summary names: its starter, and the member it was archived by or for. */
 export function summaryAccounts(
   agent: Pick<AgentLine, "userId" | "archivedBy">,
 ): readonly string[] {
   return agent.archivedBy === null ? [agent.userId] : [agent.userId, agent.archivedBy.userId];
 }
 
-/** The accounts an agent's page names: its summary's, and whoever asked for the run that started it. */
 export function pageAccounts(agent: Agent): readonly string[] {
   const firing = agent.automationOrigin?.firing;
   return firing?.kind === AUTOMATION_FIRING.MANUAL && firing.userId !== undefined
@@ -540,7 +403,6 @@ export function pageAccounts(agent: Agent): readonly string[] {
     : summaryAccounts(agent);
 }
 
-/** One agent as its own page reads it, on a task or with none, its status read at `now`, with the agents started from it and the Mac it runs on. */
 export function agentPage(
   agent: Agent,
   standing: AgentTurnStanding,

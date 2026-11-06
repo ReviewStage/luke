@@ -1,25 +1,11 @@
-/**
- * sync-woken.ts -- a wait held on Sync's hub over the test's database, held to answering within a coalesce window of the write that settles it.
- */
-
 import assert from "node:assert/strict";
 import { Clock, Context, Duration, Effect, Fiber, Layer, Queue } from "effect";
 import { syncHub } from "../sync/hub.js";
 import { Sync, type SyncShape } from "../sync/watch.js";
 import { announcingClock, driven } from "./clock-driven.js";
 
-/** The hub's coalesce window: how long a woken watch gathers before it answers. */
 const COALESCE = Duration.millis(100);
 
-/**
- * Forks the wait on the hub, on a clock that announces each wait, makes the
- * write once the wait's first look found nothing and it waits on its watch,
- * and answers what each answered, failing unless the wait answered within
- * a coalesce window of the write. A wait on the wrong topics, or on its
- * clock alone, is never woken inside that window, so the test fails on its
- * timeout. Note that the waits announced before the write count for
- * nothing, so the clock moves only for the wake the write made.
- */
 export const wokenOnHub = <A, E, R, W, WE, WR>(
   wait: Effect.Effect<A, E, R>,
   write: Effect.Effect<W, WE, WR>,

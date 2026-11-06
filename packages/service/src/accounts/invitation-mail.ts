@@ -1,30 +1,3 @@
-/**
- * invitation-mail.ts -- a workspace invitation emailed to the address it was made for, through Resend.
- *
- * An invitation an owner or an admin makes from Settings is mailed to the
- * invited address as it is made (`workspace-invitations-procedures.ts`), as
- * ReviewStage/stage mailed its teammate invitations: one POST to Resend's
- * `/emails` (https://resend.com/docs/api-reference/emails/send-email) from
- * the sender the deployment names, to the invited address alone, saying who
- * invited them to which workspace, the role they join as, and the day the
- * link stops working, with a button to the accept page, whose bare link the
- * plain text carries. The letter is one quiet card: the workspace's picture,
- * or its initial where it has none, a heading, the inviter's line with their
- * picture or initial, the button, and the expiry. Nothing is mailed when an
- * invitation is canceled, and an address already invited is refused before
- * anything is sent, as stage did.
- *
- * The deployment holds the Resend key (`RESEND_API_KEY`, the one the
- * feedback form sends with) and the sender (`INVITE_FROM`, such as
- * `Name <invites@…>` on a domain Resend has verified). Without either,
- * nothing is mailed and the invitation is made as before, its link copied by
- * hand; the build says so once, by the variables' names. A send Resend
- * refuses or never answers leaves the invitation standing, since the link
- * the owner can copy is the one the email carries, and is logged by its
- * status alone: the key is revealed into the bearer header alone, and
- * nothing of the letter, the address least of all, is logged.
- */
-
 import { BRAND_PALETTE } from "@repo/brand";
 import { githubAvatarAt } from "@repo/features/account-picture";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -37,7 +10,6 @@ import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer } from "../core.js";
 
-/** The deployment's variables the sender is read from: the feedback form's Resend key, and the address invitations come from. */
 export const INVITATION_MAIL_ENVIRONMENT = {
   RESEND_API_KEY: "RESEND_API_KEY",
   FROM: "INVITE_FROM",
@@ -46,22 +18,11 @@ export const INVITATION_MAIL_ENVIRONMENT = {
 const RESEND = {
   BASE_URL: "https://api.resend.com",
   EMAILS_PATH: "/emails",
-  /** Inside the Mac's own wait for the invite's answer, so a slow Resend still answers the invitation made. */
   REQUEST_TIMEOUT_MS: 5_000,
 } as const;
 
-/** What the build says once where a variable is unset, by the variables' names alone. */
 const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATION_MAIL_ENVIRONMENT.FROM} is not set, so workspace invitations are not emailed: each one's link is copied by hand.`;
 
-/**
- * The email's colors, light and dark: the brand's own, read off the brand
- * table `@repo/brand` generates `@repo/ui`'s palette from, so a change of
- * brand reaches the letter with no second copy to forget. Each is spelled as
- * a plain hex because an email client reads no custom property. The page is
- * the sidebar's ground, the letter's card the overlay, and the button the
- * accent's fill under its own words. The inviter's initial sits on the chip's
- * edge, and the footer is the quiet ink, which still reads at AA on the page.
- */
 const MAIL_PALETTE = {
   LIGHT: {
     GROUND: BRAND_PALETTE.LIGHT.SIDEBAR,
@@ -86,20 +47,10 @@ const MAIL_PALETTE = {
 const LIGHT = MAIL_PALETTE.LIGHT;
 const DARK = MAIL_PALETTE.DARK;
 
-/** The pictures' sides in CSS pixels: the workspace's leading the card, the inviter's beside their line. */
 const PICTURE_SIDE = { WORKSPACE: 48, INVITER: 20 } as const;
 
-/** How many device pixels a GitHub avatar is asked for per CSS pixel, so it stays sharp on a dense screen. */
 const PICTURE_DENSITY = 2;
 
-/**
- * The email's look, inline, since an email client takes inline styles alone:
- * a light letter by default, which the dark-mode block below turns dark where
- * the client honors `prefers-color-scheme`. The layout is tables, which
- * every client, Outlook's Word engine among them, draws the same. One card
- * holds the workspace's picture, the heading, the inviter's line, the button,
- * and the expiry; the footer stands under it on the page.
- */
 const EMAIL_STYLE = {
   BODY: `background-color:${LIGHT.GROUND};margin:0;padding:0;-webkit-text-size-adjust:100%`,
   OUTER: `background-color:${LIGHT.GROUND};padding:48px 20px`,
@@ -122,11 +73,6 @@ const EMAIL_STYLE = {
   FOOTER_LINK: `color:${LIGHT.TEXT_MUTED};text-decoration:none`,
 } as const;
 
-/**
- * The same letter where the reader's client is dark: classes the light inline
- * styles carry, overridden here, which a client that ignores `<style>` never
- * reads and so leaves light.
- */
 const DARK_STYLE = [
   "@media (prefers-color-scheme: dark) {",
   `.v-body, .v-outer { background-color:${DARK.GROUND} !important; }`,
@@ -140,36 +86,25 @@ const DARK_STYLE = [
   "}",
 ].join("\n");
 
-/** One invitation as its email tells it. */
 export interface InvitationLetter {
-  /** The address invited, the email's one recipient. */
   readonly email: string;
-  /** The accept page's address for this invitation, on the service's own origin. */
   readonly acceptUrl: string;
   readonly workspaceName: string;
-  /** Who invited them: their name, or their address where their account has no name. */
   readonly inviterLabel: string;
-  /** The role they join as. */
   readonly role: WorkspaceInvitation["role"];
-  /** When the link stops working, as the invitation's ISO time. */
   readonly expiresAt: string;
-  /** The workspace's picture, an https address a mail client loads with no session; absent where the letter draws the workspace's initial instead. */
   readonly workspacePictureUrl?: string;
-  /** The inviter's sign-in picture, an https address a mail client loads with no session; absent where the letter draws their initial instead. */
   readonly inviterPictureUrl?: string;
 }
 
 interface InvitationMailValues {
-  /** Emails one invitation to its address; never fails, since the invitation stands either way. */
   readonly send: (letter: InvitationLetter) => Effect.Effect<void>;
 }
 
-/** The deployment's sender of invitation emails. Read optionally, so a runtime without one emails nothing. */
 export class InvitationMail extends Context.Service<InvitationMail, InvitationMailValues>()(
   "InvitationMail",
 ) {}
 
-/** Text set into the email's HTML, its markup characters spelled as entities. */
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -179,13 +114,11 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-/** How the letter names the role an invitee joins as. */
 const ROLE_WORDS = {
   [INVITATION_ROLE.MEMBER]: "a member",
   [INVITATION_ROLE.ADMIN]: "an admin",
 } as const satisfies Record<WorkspaceInvitation["role"], string>;
 
-/** The day an invitation expires, in words that name no time zone, since the reader's is unknown. */
 const EXPIRY_DAY = new Intl.DateTimeFormat("en-US", {
   month: "long",
   day: "numeric",
@@ -193,21 +126,14 @@ const EXPIRY_DAY = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** A presentation table: one row of cells, no spacing of its own. */
 function table(cells: string, style = ""): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"${style === "" ? "" : ` style="${style}"`}><tr>${cells}</tr></table>`;
 }
 
-/** The first letter of a name, capitalized and escaped, for a picture's stand-in. */
 function initialOf(name: string): string {
   return escapeHtml(Array.from(name.trim())[0]?.toUpperCase() ?? "");
 }
 
-/**
- * A picture `side` pixels square with corners of `radius`, from `url`, or,
- * where there is none, `initial` on a cell of the class and style given, the
- * same size, so the letter keeps its shape either way.
- */
 function picture(
   url: string | undefined,
   alt: string,
@@ -225,7 +151,6 @@ function picture(
   );
 }
 
-/** The email for one invitation: its subject, its HTML, and the plain text that says the same. */
 function invitationEmail(letter: InvitationLetter) {
   const { email, acceptUrl, workspaceName, inviterLabel, role, expiresAt } = letter;
   const subject = `You're invited to join ${workspaceName} on ${PRODUCT_NAME}`;
@@ -288,21 +213,15 @@ function invitationEmail(letter: InvitationLetter) {
   return { subject, html, text };
 }
 
-/** Resend's send-email body for one invitation, from `from`. */
 function resendBody(letter: InvitationLetter, from: string): string {
   return JSON.stringify({ from, to: [letter.email], ...invitationEmail(letter) });
 }
 
-/** A variable as the deployment holds it, trimmed, and nothing where it is unset or blank. */
 function presentText(value: Option.Option<string>): string | undefined {
   const trimmed = Option.getOrUndefined(value)?.trim();
   return trimmed === "" ? undefined : trimmed;
 }
 
-/**
- * The sender over Resend, once the deployment names both its key and its
- * address, read as the services are built; one that sends nothing otherwise.
- */
 export const invitationMailFromEnvironment: Layer.Layer<
   InvitationMail,
   never,
@@ -335,7 +254,6 @@ export const invitationMailFromEnvironment: Layer.Layer<
             body: resendBody(letter, from),
           });
           if (callAnswered(answer) && answer.response.ok) return;
-          // Note that the status alone is logged, because the letter carries the invitee's address.
           yield* Effect.logWarning(
             callAnswered(answer)
               ? `Invitation email refused with status ${answer.response.status}`

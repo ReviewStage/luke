@@ -25,16 +25,6 @@ import {
   runCommentTool,
 } from "./comment-tools.js";
 
-/**
- * The coding agents' comment tools, over a real dialect: the open threads
- * read with what they are on and every comment by its writer, a reply
- * written under its writer beside a teammate's, a resolved thread read only
- * when asked for and taking no reply until reopened, a thread of another
- * plan named as none, a page's threads read by naming the page, and the
- * open threads handed to an agent as one line each. Synthetic accounts and
- * plans.
- */
-
 const DESCRIPTION_TEXT = "## Approach\n\nAdmins can withdraw an invite from the members page.\n";
 const WORDS = "withdraw an invite";
 
@@ -46,7 +36,6 @@ const openAccount = (name: string) =>
     return id;
   });
 
-/** A plan with one thread a teammate started, in a workspace the owner made and the teammate joined. */
 const openThreadedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
   const teammate = yield* openAccount("Charles Pan");
@@ -71,7 +60,6 @@ const openThreadedTask = Effect.gen(function* () {
   return { owner, taskId, thread: started.answer.thread };
 });
 
-/** A call made as the owner, with Plans on unless said. */
 const asOwner = (owner: string, taskId: string, descriptionsOn = true) => ({
   taskId,
   writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: owner } as const,

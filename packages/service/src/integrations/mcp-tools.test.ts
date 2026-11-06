@@ -4,20 +4,9 @@ import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { listMcpTools, MCP_TOOLS_FAILURE } from "./mcp-tools.js";
 
-/**
- * What the tools read keeps of a provider's MCP server: each tool's title in
- * the spec's order, its description whole, bounded, its hints exactly as the
- * server sent them, and none it did not send, and the arguments its input
- * schema declares, each in a few words; and why a
- * server listed no tools, with the server's own JSON-RPC message where it
- * sent one under an error status, and never a message that could carry the
- * account's bearer.
- */
-
 const URL = "https://mcp.example.test/mcp";
 const TOKEN = "xoxp-account-bearer";
 
-/** A server that answers every request with `status` and a JSON-RPC error of `code` and `message`. */
 function refusingServer(status: number, code: number, message: string) {
   return fakeHttpClientLayer(
     () =>
@@ -28,12 +17,9 @@ function refusingServer(status: number, code: number, message: string) {
   );
 }
 
-/** A server whose `tools/list` answers `tools`, as one JSON body per request. */
 function listingServer(tools: readonly unknown[]) {
   return fakeHttpClientLayer(async (_url, init) => {
-    // The session's end, and a notification, answer nothing.
     if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
-    // SAFETY: the client sends one JSON-RPC message per request.
     const message = JSON.parse(await new Response(init.body).text()) as {
       id?: number;
       method: string;

@@ -45,22 +45,6 @@ import {
   withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
 
-/**
- * An inbox item as a thread of messages, through the store's public
- * functions against a real dialect: every post is the agent's message on
- * the thread, the ask it ends with held open and the one before replaced;
- * a post that asks nothing is a notice, open until the developer's nod
- * and holding no ask, or, on a thread whose ask stands open, a message on
- * it; the revision moves only with what the agent asks; an answer is the
- * member's message that answers the open ask, checked against it; a nod
- * settles a notice at the revision the member was shown, once under its
- * key; a read's `thread` carries its first message and its open ask
- * however long it runs; and an account outside the workspace reads and
- * answers none of it.
- *
- * Synthetic accounts, tasks, and words throughout.
- */
-
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -68,7 +52,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one task and one agent started on it, and the workspace the task is in. */
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Preview deploys" });
@@ -89,7 +72,6 @@ const openAgentIn = Effect.gen(function* () {
 
 const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
 
-/** An account's workspace with one agent started in it on no task, as an automation's run starts one. */
 const openTasklessAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const workspaceId = yield* openWorkspace(userId);
@@ -108,7 +90,6 @@ const openTasklessAgent = Effect.gen(function* () {
   return { userId, taskId: null, agentId: started.value.agent.id };
 });
 
-/** A choice between two regions, one recommended. */
 const REGION = {
   key: "deploy-region",
   title: "Where should the preview deploy?",
@@ -120,7 +101,6 @@ const REGION = {
   },
 } as const;
 
-/** A `do` of no steps, which the agent does not wait to hear done. */
 const SETTINGS = {
   key: "branch-protection",
   title: "Require a review on main",
@@ -129,7 +109,6 @@ const SETTINGS = {
   needsReply: false,
 } as const;
 
-/** The ask a `decide` post ends with. */
 const DECIDE = {
   type: INBOX_ASK.DECIDE,
   options: [{ label: "iad1" }, { label: "sfo1" }],
@@ -138,7 +117,6 @@ const DECIDE = {
 const TRACE = new TextEncoder().encode("TypeError: deploy is undefined\n");
 const SHOT = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
-/** Every picture a message's words draw, as the item's picture its address names and the place its address names the item under. */
 function picturesIn(text: string | undefined) {
   return [...(text ?? "").matchAll(/!\[[^\]]*\]\(([^\s)]+)/gu)].flatMap(([, address = ""]) => {
     const picture = inboxAttachmentOf(address);
@@ -153,13 +131,11 @@ const attached = (name: string, bytes: Uint8Array): AgentAttachment => ({
   data: Buffer.from(bytes).toString("base64"),
 });
 
-/** The item a post wrote, where it was written. */
 function posted(result: Result.Result<InboxItem, InboxPostRefusal>): InboxItem {
   assert.ok(Result.isSuccess(result));
   return result.success;
 }
 
-/** The thread as who wrote each message, its ask's type, and where that ask stands. */
 function asksOf(item: InboxItem) {
   return (item.thread ?? []).map((message) => [
     message.author,
@@ -168,7 +144,6 @@ function asksOf(item: InboxItem) {
   ]);
 }
 
-/** The id of the message whose ask the item holds open. */
 function openAskOf(item: InboxItem): string {
   const asking = (item.thread ?? []).find(
     (message) => message.ask?.status === INBOX_ASK_STATUS.OPEN,
@@ -177,12 +152,10 @@ function openAskOf(item: InboxItem): string {
   return asking.id;
 }
 
-/** The answer the member's message on the thread carries, the latest that carries one. */
 function answersOf(item: InboxItem) {
   return (item.thread ?? []).findLast((message) => message.answers !== undefined)?.answers;
 }
 
-/** One second on, so each write after it is the latest. */
 const later = TestClock.adjust(Duration.seconds(1));
 
 it.layer(getTestDB())("an inbox item's thread", (it) => {
@@ -904,7 +877,6 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           }),
         );
         yield* later;
-        // Posted again under its key, so the revision first shown is one the agent has moved on from.
         const notice = posted(
           yield* postInboxThread(agent, {
             key: "preview-up",

@@ -11,17 +11,6 @@ import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect } from "effect";
 import { accountPreferencesLive } from "./live-queries.js";
 
-/**
- * The account's preferences on the migrated capture: a default written
- * through its real writer notifies the account's topic, which the
- * preferences' live read is woken on, so a default chosen on another device
- * draws within a coalesce window; and a runs-on pick on a row that stands
- * notifies nothing, since every Start with Runs on writes one and would
- * otherwise wake every read of the account.
- *
- * Synthetic accounts throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

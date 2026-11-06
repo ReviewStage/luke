@@ -27,15 +27,6 @@ import { openGithubUser } from "../../testing/github-app-fake.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START, transcriptPast } from "./transcript.js";
 
-/**
- * transcript.test.ts -- an agent's transcript reads every call it ever made, those of tools no agent is offered now among them.
- *
- * Over the real migrations on PGlite, a turn journaled by the store writer
- * as a transcript from before the inbox moved to threads holds it, read
- * back as the panel reads an agent's page. Synthetic accounts and words
- * throughout.
- */
-
 const CATALOG = [
   {
     id: "anthropic/claude-opus-5.5",

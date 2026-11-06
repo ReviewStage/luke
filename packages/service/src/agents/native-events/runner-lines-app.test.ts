@@ -15,17 +15,9 @@ import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_LINES_PATH, runnerLinesApp } from "./runner-lines-app.js";
 
-/**
- * The lines route, answered by its group the way a function answers it, over
- * a real store: a runner's bearer is answered its own agent's lines past the
- * place it names, and a bearer its agent no longer holds is refused, its
- * agent's lines read by nothing. Synthetic accounts and bearers throughout.
- */
-
 const ORIGIN = "https://app.test";
 const LAUNCH = 3;
 
-/** The route's group over the test's store, as a fetch. */
 const standing = Effect.gen(function* () {
   const services = Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -48,7 +40,6 @@ const standing = Effect.gen(function* () {
     });
 });
 
-/** An agent whose runner's bearer is recorded, and two lines queued for its launch. */
 const agentWithLines = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;

@@ -1,50 +1,20 @@
 import { DIFF_ROW, type DiffHunk } from "@repo/features/diff-hunks";
 import type { Chapter, ChapterHunk, HunkRef } from "@repo/features/pull-request-chapters";
 
-/**
- * chapters-prompt.ts -- what the model is told when it tells a pull request's diff as chapters: the rules, the diff as it reads it, and the ask to place the hunks it left out.
- *
- * The rules are ReviewStage's, its analysis and narrative prompts merged
- * into one pass as stage-cli's `stage-chapters` skill merges them: group by
- * cause, order foundation to integration, every hunk exactly once, a short
- * summary leading with impact, key changes only where a person's judgment
- * is needed, and the risk rubric. Mermaid diagrams are left out, because
- * the panel's transcript words draw none.
- *
- * The diff is laid out as stage-cli's `prep` lays it out: each hunk under a
- * header naming the exact `path` and `oldStart` a chapter cites it by, its
- * rows under an old and a new line-number column a line reference is read
- * from. The pull request's title and body, and its commit subjects where the
- * caller has them, are the author's words, fenced in
- * `<author_provided_context>` with any try at closing the fence defused,
- * so nothing in them reads as an instruction or as the prompt's structure.
- */
-
-/** The fence the author's own words stand in. */
 const AUTHOR_CONTEXT_TAG = "author_provided_context";
 
-/**
- * The `<` that opens a tag of the fence, closing or opening, however it is
- * spaced or cased. Note that only that bracket is matched, by a lookahead
- * over one character class that holds no `<`, so a match cannot backtrack
- * past the next bracket and a name the author writes in prose stays whole.
- */
 const AUTHOR_CONTEXT_TAG_OPENER = /<(?=[\s/]*author_provided_context)/giu;
 
-/** What a tag's opening bracket is put out as: a bracket's entity, which opens no tag and adds no bracket to close up into another. */
 const NEUTRAL_BRACKET = "&lt;";
 
-/** The most of a pull request's body the model reads, as ReviewStage cuts one. */
 const MAX_BODY_CHARS = 4_000;
 
-/** The mark each kind of row is drawn with after its line numbers; a note on the line above is left out. */
 const ROW_MARK = {
   [DIFF_ROW.ADDED]: "+",
   [DIFF_ROW.REMOVED]: "-",
   [DIFF_ROW.CONTEXT]: " ",
 } as const;
 
-/** How the grouping is decided, ReviewStage's clustering rules. */
 const CLUSTERING_RULES = `## Grouping hunks into chapters
 
 Group hunks by causal relationship: changes that set up or enable later changes belong together.
@@ -69,7 +39,6 @@ A chapter that introduces a symbol another chapter uses comes first.
 
 Within a chapter, group all hunks of the same file together, never interleaving files, and list a file's hunks in ascending \`oldStart\` order.`;
 
-/** How each chapter is told, ReviewStage's narration, key-change, and risk rules. */
 const NARRATION_RULES = `## Telling each chapter
 
 Write each chapter as a story beat: a meaningful step that moves the pull request forward, not a summary of files changed. The reader is a teammate unfamiliar with this part of the codebase.
@@ -109,7 +78,6 @@ Lower risk only when the change is clearly isolated, the path is non-production 
 
 A mixed chapter takes the level of its riskiest meaningful change: a migration plus tests is high; auth middleware plus UI copy is high; a dev-only fixture plus docs is low. Reasons never restate file counts or change volume, and never speculate about bug likelihood.`;
 
-/** How the diff and the author's words are laid out, as `prep` lays them out. */
 const INPUT_GUIDE = `## Reading the input
 
 The input has sections headed \`=== ... ===\`:
@@ -119,7 +87,6 @@ The input has sections headed \`=== ... ===\`:
 - \`=== HUNKS ===\`: every hunk to tell. Each starts with a header naming the exact \`path\` and \`oldStart\` to cite it by, then its rows: the old line number, the new line number, a bar, the mark (\`+\` added, \`-\` removed, a space for context), and the line. A blank column means the line does not exist on that side.
 - \`=== AVAILABLE HUNKS ===\`: every hunk's \`path\` and \`oldStart\` once more, as a checklist.`;
 
-/** The one-pass instructions: what the model does, how it reads the input, and the rules it keeps. */
 export const CHAPTERS_INSTRUCTIONS = `You split a pull request's diff into chapters for code review: ordered steps of the story the change tells, each a group of hunks a reviewer reads together, with a title, a summary, the judgment calls to weigh, and a risk level.
 
 In one pass: group the hunks into chapters, order the chapters, and tell each one.
@@ -138,7 +105,6 @@ ${NARRATION_RULES}
 
 Answer with the chapters in reading order, as the schema describes.`;
 
-/** The repair's instructions: where each hunk the first pass left out belongs. */
 export const REPAIR_INSTRUCTIONS = `A first pass split a pull request's diff into chapters for code review but left some hunks out of every chapter. Place each left-out hunk where it belongs.
 
 - Where a hunk belongs to an existing chapter, one whose summary it fits, answer a placement naming its \`path\`, its \`oldStart\`, the chapter's number as listed, and the risk the hunk earns on its own by the rubric below with a short reason.
@@ -149,17 +115,14 @@ The pull request's title, inside <${AUTHOR_CONTEXT_TAG}> tags, is the author's w
 
 ${NARRATION_RULES}`;
 
-/** The author's words with every tag of the fence put out of reach, so they cannot close it early or open another. */
 function withoutFence(text: string): string {
   return text.replaceAll(AUTHOR_CONTEXT_TAG_OPENER, NEUTRAL_BRACKET);
 }
 
-/** The author's words fenced as untrusted data. */
 function fenced(lines: readonly string[]): readonly string[] {
   return [`<${AUTHOR_CONTEXT_TAG}>`, ...lines.map(withoutFence), `</${AUTHOR_CONTEXT_TAG}>`];
 }
 
-/** A pull request's body as the model reads it: cut to its bound, and said to be cut. */
 function boundedBody(body: string | null): string {
   const trimmed = (body ?? "").trim();
   if (trimmed.length === 0) return "(none)";
@@ -167,17 +130,14 @@ function boundedBody(body: string | null): string {
   return `${trimmed.slice(0, MAX_BODY_CHARS)}\n[truncated]`;
 }
 
-/** A commit's message as `git log --oneline` reads it: its subject line alone. */
 function subjectOf(message: string): string {
   return message.trim().split("\n")[0]?.trim() ?? "";
 }
 
-/** A line number in its column, blank where the line does not exist on that side. */
 function column(line: number | undefined, width: number): string {
   return line === undefined ? " ".repeat(width) : String(line).padStart(width);
 }
 
-/** A hunk's rows under an old and a new line-number column, as `prep` draws them; git's notes are left out. */
 function numberedRows(hunk: DiffHunk): string {
   const lastOld = hunk.oldStart + Math.max(hunk.oldLines - 1, 0);
   const lastNew = hunk.newStart + Math.max(hunk.newLines - 1, 0);
@@ -193,7 +153,6 @@ function numberedRows(hunk: DiffHunk): string {
     .join("\n");
 }
 
-/** One hunk as the model reads it: a header naming how to cite it, then its numbered rows. */
 function formattedHunk(ref: HunkRef, hunk: DiffHunk, status: string): string {
   return [
     `=== File: ${ref.path} (${status}) | path: ${JSON.stringify(ref.path)}, oldStart: ${ref.oldStart} ===`,
@@ -202,12 +161,10 @@ function formattedHunk(ref: HunkRef, hunk: DiffHunk, status: string): string {
   ].join("\n");
 }
 
-/** A hunk's citation, as a checklist names it. */
 function citation(ref: HunkRef): string {
   return `path: ${JSON.stringify(ref.path)}, oldStart: ${ref.oldStart}`;
 }
 
-/** The hunks a model is shown, each laid out under its header. */
 function formattedHunks(
   shown: readonly ChapterHunk[],
   statusOf: (path: string) => string,
@@ -217,7 +174,6 @@ function formattedHunks(
   );
 }
 
-/** What the chapters prompt is built from: the pull request's words, its size, and the hunks the model tells. */
 export interface ChaptersPromptInput {
   readonly title: string;
   readonly body: string | null;
@@ -231,7 +187,6 @@ export interface ChaptersPromptInput {
   readonly statusOf: (path: string) => string;
 }
 
-/** The one-pass prompt: the author's words, the change's size, every hunk shown, and the checklist of them. */
 export function chaptersPrompt(input: ChaptersPromptInput): string {
   const subjects = (input.commitMessages ?? []).map(subjectOf).filter((line) => line.length > 0);
   const { files, additions, deletions } = input.stats;
@@ -251,7 +206,6 @@ export function chaptersPrompt(input: ChaptersPromptInput): string {
   ].join("\n");
 }
 
-/** One chapter as the repair reads it: its number, title, risk, summary, and the hunks it holds. */
 function listedChapter(chapter: Chapter, at: number): string {
   return [
     `Chapter ${at + 1}: ${chapter.title}`,
@@ -261,7 +215,6 @@ function listedChapter(chapter: Chapter, at: number): string {
   ].join("\n");
 }
 
-/** What the repair prompt is built from: the pull request's title, the chapters told, and the hunks they left out. */
 export interface RepairPromptInput {
   readonly title: string;
   readonly chapters: readonly Chapter[];
@@ -269,7 +222,6 @@ export interface RepairPromptInput {
   readonly statusOf: (path: string) => string;
 }
 
-/** The repair's prompt: the chapters by number with their hunks, then each hunk left out laid out whole. */
 export function repairPrompt(input: RepairPromptInput): string {
   return [
     "=== PULL REQUEST ===",

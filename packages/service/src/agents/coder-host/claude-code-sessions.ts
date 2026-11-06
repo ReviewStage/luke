@@ -1,26 +1,3 @@
-/**
- * claude-code-sessions.ts -- a coding agent's sessions on Claude Code: the runner in its Claude Code mode, launched on the account's setup-token.
- *
- * The `claude_code` implementation of `AgentSessions`
- * (`eve-host/eve-sessions.ts`), on the launch machinery every native
- * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
- * runner's config names the image's `claude` and appends our coder
- * instructions to Claude Code's prompt; the plan's token, opened from the
- * account's sealed `claude_setup_token` row, is the launch's credential, or,
- * for an agent its starter's API key pays for, that key opened as
- * `ANTHROPIC_API_KEY`; a plan's is refused in its plan's words where the
- * row is gone, refused, unreadable, or at a limit whose named reset is
- * still ahead, so the agent waits on its plan and never turns to another
- * payer; in a sandbox the credential is held at its firewall, the CLI's
- * variable carrying a placeholder minted for the launch (`launchCredential`),
- * and on a host it is the variable's own; and every message to a running runner
- * goes behind a `model` line with the agent's model, effort, and fast mode
- * as they stand: a fast version runs its base model with Claude Code's own
- * fast mode on, which Anthropic bills to the account's usage credits. The
- * CLI's own session id is the conversation's `native_session`, which the
- * events route records from the runner's `init`, and a relaunch resumes.
- */
-
 import { CLAUDE_EXECUTABLE } from "@repo/agent-runner/pins";
 import {
   type ClaudeCodeConfig,
@@ -62,16 +39,8 @@ import {
 } from "./runner-sessions.js";
 import type { NativeSessions } from "./runtime-sessions.js";
 
-/** Anthropic's API: the one host the CLI sends its credential to, in either mode (CLI 2.1.304, as its requests were recorded). */
 const ANTHROPIC_API = "api.anthropic.com";
 
-/**
- * How the CLI sends each credential: the variable it reads it from, the
- * header it sends it in, named in lower case, and what goes ahead of it
- * there, as CLI 2.1.304's requests were recorded: the setup-token as a
- * bearer, and an API key in Anthropic's own `x-api-key`, each sent whole,
- * whatever its shape, so a placeholder keeps the CLI in its mode.
- */
 const CLI_CREDENTIAL = {
   PLAN: { variable: RUNNER_ENV.CLAUDE_TOKEN, header: "authorization", scheme: BEARER_PREFIX },
   API_KEY: { variable: RUNNER_ENV.API_KEY, header: "x-api-key", scheme: "" },
@@ -79,14 +48,6 @@ const CLI_CREDENTIAL = {
 
 type CliCredential = (typeof CLI_CREDENTIAL)[keyof typeof CLI_CREDENTIAL];
 
-/**
- * The credential as a launch hands it. On a host, which has no firewall of
- * ours, the CLI reads it from its variable itself. In a sandbox the
- * variable holds a placeholder minted for the launch, which keeps the CLI
- * in the same mode, and the firewall sets the real value in its place on
- * requests to Anthropic's API that carry the placeholder in the CLI's
- * header, so the credential never enters the sandbox.
- */
 function launchCredential(
   agent: Agent,
   sent: CliCredential,
@@ -114,21 +75,13 @@ function launchCredential(
   };
 }
 
-/** The effort the CLI takes for the agent's own, where it names one of the SDK's. */
 function effortOf(effort: string): Effort | undefined {
   return Object.values(EFFORT).find((level) => level === effort);
 }
 
-/** Claude Code as the shared launch drives it, for one account. */
 function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
   const { userId } = options;
 
-  /**
-   * The account's setup-token's row, where its plan may pay: refused in the
-   * plan's words where it is gone, refused, or at a limit whose named reset
-   * is still ahead. A launch and every message to a live runner ask it, so a
-   * plan another agent's turn found refused stops this agent's too.
-   */
   const standingPlan = Effect.gen(function* () {
     const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
     const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
@@ -155,19 +108,11 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     return row;
   });
 
-  /** Who pays for the agent, as recorded as it started; none for an agent from before payers were. */
   const payerOf = (agent: Agent) =>
     Effect.map(readAgentRouting(userId, agent.id), (routing) =>
       Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
 
-  /**
-   * Where the account's saved credential pays for the agent: its own API key
-   * for an agent started on it; for one started on its Mac's login, signed
-   * out since, the plan where Settings lets it pay for agents, the account's
-   * key otherwise, and the plan's refusal where it keeps neither; the plan
-   * for every other.
-   */
   const savedPayer = (agent: Agent) =>
     Effect.gen(function* () {
       const payer = yield* payerOf(agent);
@@ -175,18 +120,15 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
       if (payer !== AGENT_PAYER.MAC_SIGN_IN) return AGENT_PAYER.CLAUDE_SUBSCRIPTION;
       const anthropic = (rows: readonly { readonly provider: string }[]) =>
         rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-      // Note that the plan pays only where Settings lets it pay for agents, as Start decides (`providerRuntimeChoice`).
       const plans = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
       if (anthropic(plans.filter((row) => row.forAgents))) {
         return AGENT_PAYER.CLAUDE_SUBSCRIPTION;
       }
-      // Note that an account that saved neither is refused in the plan's words, as signed out, which its Mac now is.
       return anthropic(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY))
         ? AGENT_PAYER.API_KEY
         : AGENT_PAYER.CLAUDE_SUBSCRIPTION;
     });
 
-  /** The deployment's ring, which every sealed credential opens under. */
   const keyRing = Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
     const ring = environment.providerKeyEncryptionKeys;
@@ -197,12 +139,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     return parsed.success;
   });
 
-  /**
-   * The account's Anthropic API key opened, as the CLI's documented
-   * `ANTHROPIC_API_KEY` (https://code.claude.com/docs/en/agent-sdk/quickstart),
-   * for an agent its starter's key pays for; refused where the key is gone
-   * or unreadable, and never turned to the plan.
-   */
   const apiKeyCredential = (agent: Agent) =>
     Effect.gen(function* () {
       const ring = yield* keyRing;
@@ -225,7 +161,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
       return launchCredential(agent, CLI_CREDENTIAL.API_KEY, opened.success);
     });
 
-  /** The CLI's credential and the variable it is read from: the account's plan token opened. */
   const planCredential = (agent: Agent) =>
     Effect.gen(function* () {
       const ring = yield* keyRing;
@@ -273,16 +208,12 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
         integrations: yield* options.integrations(agent),
-        // Note that a host's older runner, bundled before Claude Code's command sandbox was removed, refuses a config without domains.
         allowedDomains: [],
         installedSkills: layout.installedSkills,
       };
       return written;
     });
 
-  // The agent's model, effort, and fast mode as they stand go ahead of every message, which a change since the launch takes effect from.
-  // Note that the plan is asked first, so a message to a live runner on a refused or limited plan is refused as a launch would be;
-  // an agent on its API key has no plan to ask, and its runner holds the key it launched with.
   const ahead = (agent: Agent) => {
     const effort = effortOf(agent.effort);
     const model = providerModelOf(agent.model);
@@ -314,13 +245,11 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
           : planCredential(agent);
       }),
     config,
-    // Note that Claude Code reads a checkout's skills from `.claude/skills` alone.
     skillRoots: [SKILL_ROOT.CLAUDE],
     ahead,
   };
 }
 
-/** The sessions for one account, over the calling fiber's services. */
 export const claudeCodeSessions = <Turn extends EveHostTurn = EveHostTurn>(
   options: RunnerSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>

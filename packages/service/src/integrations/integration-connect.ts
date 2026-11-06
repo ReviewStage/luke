@@ -1,37 +1,3 @@
-/**
- * integration-connect.ts -- Vercel Connect, as we ask it about one account's grant at one provider.
- *
- * Vercel Connect holds every account's grant at every provider, encrypted,
- * and refreshes it; we name each account by the subject its row keeps
- * (`integration-store.ts`): its own user id for the first account at a
- * provider, a minted id for another, so two accounts at one provider are two
- * grants. We never store a token. Three things are ever asked of a
- * provider's connector, each through `@vercel/connect` as its docs and
- * README describe it: a browser sign-in for the account to begin, the
- * account's token now, and the grant revoked. A token is asked for at the
- * moment it is used and served from the SDK's in-process cache until just
- * before it expires; one a provider refuses is dropped from that cache
- * (`evict`) under the same connector and parameters the read named, so the
- * next read asks Connect again rather than every read forcing a refresh.
- * Note that we ask Connect nothing its docs do not describe, so how a
- * sign-in ended is learned only from whether the account now holds a
- * grant. Each answers either what was asked or one of three fixed words,
- * never Connect's own message: an error's message is Connect's or the
- * provider's words, which nothing here can vouch for holding no credential,
- * so what a failure keeps is its word and, where it carries them, Connect's
- * machine code and status.
- *
- * Asking Connect for any subject's token needs the deployment's own Vercel
- * OIDC token, which the SDK reads from the request or the environment
- * itself; what this deployment configures per provider is the connector's
- * UID and, where it names any, the accounts the provider is offered to,
- * each read from the variable `integrations.ts` names. A provider whose
- * connector variable is unset answers every ask as not configured, and
- * every agent still runs, only without that provider; a provider withheld
- * from an account answers that account the same way
- * (`accountIntegrationConnect`).
- */
-
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   INTEGRATION_LABEL_MAX,
@@ -56,25 +22,19 @@ import { text } from "../core.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import { credentialFreeLine, namesSecret } from "./mcp-tools.js";
 
-/** Why Connect answered nothing usable. */
 export const INTEGRATION_CONNECT_FAILURE = {
-  /** The deployment names no connector, or Connect says the connector is not installed for it. */
   NOT_CONFIGURED: "not-configured",
-  /** Connect holds no grant it can turn into a token for the account: never signed in, declined, or revoked at the provider. */
   NOT_AUTHORIZED: "not-authorized",
-  /** Connect could not be asked, or refused for a reason of its own. */
   UNAVAILABLE: "unavailable",
 } as const;
 
 export type IntegrationConnectFailureReason =
   (typeof INTEGRATION_CONNECT_FAILURE)[keyof typeof INTEGRATION_CONNECT_FAILURE];
 
-/** Connect's machine code as a failure may keep it: a lower-case slug, and nothing shaped like a sentence or a token. */
 const CONNECT_CODE_PATTERN = /^[a-z][a-z0-9_.-]{0,62}$/;
 
 export class IntegrationConnectFailure extends Data.TaggedError("IntegrationConnectFailure")<{
   readonly reason: IntegrationConnectFailureReason;
-  /** Connect's own code, where it sent one of the fixed shape above. */
   readonly code?: string;
   readonly status?: number;
 }> {
@@ -86,54 +46,39 @@ export class IntegrationConnectFailure extends Data.TaggedError("IntegrationConn
   }
 }
 
-/** One account's token as Connect issued it; the token itself travels sealed until the one place that hands it to eve. */
 export interface IntegrationToken {
   readonly token: Redacted.Redacted;
-  /** When it stops being good, in milliseconds since the epoch. */
   readonly expiresAt: number;
-  /** The account's name at the provider, where Connect's grant names one shaped like no credential: a label, never logged. */
   readonly accountName?: string;
 }
 
-/** A browser sign-in Connect began: the address the browser opens. */
 interface IntegrationAuthorization {
   readonly url: string;
 }
 
-/** The accounts a provider is offered to, each entry lower-cased: whole email domains, each with its `@`, and single emails. */
 interface AllowedAccounts {
   readonly domains: readonly string[];
   readonly emails: readonly string[];
 }
 
-/** What we ask of one provider's connector. */
 export interface ConnectorService {
-  /** Whether the deployment names this connector at all; a deployment without it never asks Connect anything. */
   readonly configured: boolean;
-  /** The accounts the deployment offers this provider to; absent, it is offered to every account. */
   readonly allowedAccounts?: AllowedAccounts;
-  /** Whether a user account may hold more than one account at this provider (`integrations.ts`). */
   readonly multipleAccounts: boolean;
-  /** The OAuth `prompt` a sign-in for another account asks the provider for, where the provider documents one. */
   readonly addAccountPrompt?: string;
-  /** Begins a browser sign-in for the account under `subject`, which Connect returns to `callbackUrl`; answers the address the browser opens. */
   readonly authorize: (
     subject: string,
     callbackUrl: string,
     options?: { readonly prompt?: string },
   ) => Effect.Effect<IntegrationAuthorization, IntegrationConnectFailure>;
-  /** The token of the account under `subject` now; `fresh` asks Connect itself rather than the SDK's in-process cache. */
   readonly token: (
     subject: string,
     options: { readonly fresh: boolean },
   ) => Effect.Effect<IntegrationToken, IntegrationConnectFailure>;
-  /** Revokes the grant of the account under `subject` at Connect, which revokes it at the provider where the provider allows it. */
   readonly revoke: (subject: string) => Effect.Effect<void, IntegrationConnectFailure>;
-  /** Drops the token of the account under `subject` from the SDK's in-process cache, as Connect's docs say to once a provider rejects it; asks Connect nothing. */
   readonly evict: (subject: string) => Effect.Effect<void>;
 }
 
-/** Every provider's connector, configured or not. */
 export type IntegrationConnectService = Readonly<Record<IntegrationProvider, ConnectorService>>;
 
 export class IntegrationConnect extends Context.Service<
@@ -141,12 +86,10 @@ export class IntegrationConnect extends Context.Service<
   IntegrationConnectService
 >()("IntegrationConnect") {}
 
-/** The subject every ask names: the one the account's row keeps, so a grant is that account's whatever principal a session runs under. */
 function subjectOf(subject: string) {
   return { subject: { type: "user", id: subject } } as const;
 }
 
-/** Connect's failure as the word it amounts to, keeping only its code and status. */
 function failureOf(cause: unknown): IntegrationConnectFailure {
   if (!(cause instanceof ConnectError)) {
     return new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE });
@@ -166,7 +109,6 @@ function failureOf(cause: unknown): IntegrationConnectFailure {
   });
 }
 
-/** Whether a sign-in address is one a browser may be sent to: https, and nothing else. */
 function isBrowserAddress(url: string): boolean {
   try {
     return new URL(url).protocol === "https:";
@@ -179,7 +121,6 @@ const NOT_CONFIGURED = new IntegrationConnectFailure({
   reason: INTEGRATION_CONNECT_FAILURE.NOT_CONFIGURED,
 });
 
-/** The connector of a provider this deployment names none for: nothing is ever asked. */
 const UNCONFIGURED_CONNECTOR: ConnectorService = {
   configured: false,
   multipleAccounts: false,
@@ -189,7 +130,6 @@ const UNCONFIGURED_CONNECTOR: ConnectorService = {
   evict: () => Effect.void,
 };
 
-/** The calls of Vercel Connect's SDK a connector makes, which a test hands a fake Connect for. */
 export interface ConnectSdk {
   readonly startAuthorization: typeof startAuthorization;
   readonly getTokenResponse: typeof getTokenResponse;
@@ -204,20 +144,10 @@ const VERCEL_CONNECT_SDK: ConnectSdk = {
   deleteTokenCacheEntry,
 };
 
-/** The longest account name a grant's fields or a provider's answer are read as a label for. */
 const ACCOUNT_NAME_MAX = INTEGRATION_LABEL_MAX;
 
-/** An email as an account is called by it: a local part of the characters a mailbox's name is spelled with, `@`, then a host of at least two labels. */
 const ACCOUNT_EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 
-/**
- * An account's name at the provider as an account's label keeps it, from a
- * grant's fields or the provider's own answer alike: a short line shaped like
- * no credential, or a short email that names no secret. Note that an email
- * is held by its own shape rather than `credentialFreeLine`, which drops a
- * long run mixing letters and digits, as many a mailbox's name is; and that
- * every name is held to a label's length, which is what an agent is told.
- */
 export function accountNameLine(candidate: string): string | undefined {
   const name = candidate.trim();
   const line =
@@ -225,7 +155,6 @@ export function accountNameLine(candidate: string): string | undefined {
   return line === undefined || line.length > ACCOUNT_NAME_MAX ? undefined : line;
 }
 
-/** Where in a grant's metadata an account's name may stand, each read alone so one of the wrong shape hides none of the others. */
 const GRANT_NAME_READS = [
   (response: ConnectTokenResponse) =>
     Option.map(
@@ -257,14 +186,6 @@ const GRANT_NAME_READS = [
     ),
 ] as const;
 
-/**
- * The account's name at the provider as Connect's grant carries it, for an
- * account's label: Notion's `workspace_name`, Slack's team, an
- * organization's name, or the grant's own `name` where it is not the
- * connector's id. Note that each field is read only as `accountNameLine`
- * keeps a name, because what Connect's driver stores is no contract we can
- * vouch for.
- */
 function grantAccountName(response: ConnectTokenResponse): string | undefined {
   const candidates = [
     ...GRANT_NAME_READS.flatMap((read) => Option.toArray(read(response))),
@@ -279,7 +200,6 @@ function grantAccountName(response: ConnectTokenResponse): string | undefined {
   return undefined;
 }
 
-/** One connector, asking Vercel Connect itself, or the SDK a test hands it. */
 export function vercelConnector(
   connector: string,
   sdk: ConnectSdk = VERCEL_CONNECT_SDK,
@@ -323,25 +243,15 @@ export function vercelConnector(
         try: () => sdk.revokeToken(connector, subjectOf(subject)),
         catch: failureOf,
       }),
-    // Note that the parameters are the ones `token` reads with, because the cache's key is made of them.
     evict: (subject) => Effect.sync(() => sdk.deleteTokenCacheEntry(connector, subjectOf(subject))),
   };
 }
 
-/** One account's grant as a revoke names it: its provider and the subject Connect holds it under. */
 export interface IntegrationGrantKey {
   readonly provider: IntegrationProvider;
   readonly connectSubject: string;
 }
 
-/**
- * Asks Connect to revoke one account's grant, where the deployment names
- * its provider's connector at all: a Disconnect asks it, and so does
- * deleting the account. A revoke that fails is logged by its word, code,
- * and status, never Connect's sentence, and answered as done, because
- * whoever asked has already deleted the account's row, so no agent reads a
- * token again whatever Connect answered.
- */
 export const revokeIntegrationGrant = /* @__PURE__ */ Effect.fn("web/revokeIntegrationGrant")(
   function* ({
     provider,
@@ -362,16 +272,6 @@ export const revokeIntegrationGrant = /* @__PURE__ */ Effect.fn("web/revokeInteg
   },
 );
 
-/**
- * Asks Connect to revoke every grant the account may hold, which is what
- * deleting the account asks once its rows are gone: the first account's at
- * every provider this deployment names a connector for, under the
- * account's own user id, whether or not a row still named it, because a
- * sign-in canceled after Connect took its grant, or a Disconnect whose
- * revoke failed, leaves a grant no row names; and every other account's
- * the rows named, under its own subject. Each is asked on the terms of
- * `revokeIntegrationGrant`, so none can fail it.
- */
 export function revokeIntegrationGrants(
   userId: string,
   grants: readonly IntegrationGrantKey[],
@@ -384,22 +284,10 @@ export function revokeIntegrationGrants(
   return Effect.forEach([...firsts, ...others], revokeIntegrationGrant, { discard: true });
 }
 
-/** An allowlist entry for every email at one domain: `@`, then a host name of at least two labels. */
 const DOMAIN_ENTRY_PATTERN = /^@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 
-/** An allowlist entry for one email: a local part, `@`, then a domain as above. */
 const EMAIL_ENTRY_PATTERN = /^[^@\s]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 
-/**
- * The accounts an allowlist variable names: comma-separated entries, each
- * `@domain.com` for every email at that domain or one exact email, matched
- * without regard to case. Note that the list fails closed, because it is
- * what keeps an internal app from strangers: an unset variable names no
- * list, which offers the provider to every account, but one set to
- * nothing but blanks names an empty list, and an entry of neither shape
- * (a bare `@`, say, which every email ends in) is dropped rather than read
- * as matching anything.
- */
 function allowedAccountsOf(value: string): AllowedAccounts {
   const entries = value
     .split(",")
@@ -411,7 +299,6 @@ function allowedAccountsOf(value: string): AllowedAccounts {
   };
 }
 
-/** Whether a connector is one the account with this email may use: configured, and offered to it. */
 function offeredTo(connector: ConnectorService, email: string | undefined): boolean {
   if (!connector.configured) return false;
   const allowed = connector.allowedAccounts;
@@ -423,15 +310,6 @@ function offeredTo(connector: ConnectorService, email: string | undefined): bool
   );
 }
 
-/**
- * Every provider's connector as one account may use it: the deployment's
- * own where the provider is offered to the account, and the connector of a
- * provider the deployment names none for where it is not, so every route
- * and every agent answers a provider withheld from the account exactly as
- * it answers one this deployment never set up. The account's email is read
- * from its user row only when some provider names the accounts it is
- * offered to; an id no row holds is offered none of those.
- */
 export const accountIntegrationConnect = /* @__PURE__ */ Effect.fn("web/accountIntegrationConnect")(
   function* (
     userId: string,
@@ -446,7 +324,6 @@ export const accountIntegrationConnect = /* @__PURE__ */ Effect.fn("web/accountI
     );
     if (!restricted) return connect;
     const email = (yield* readAccountPerson(userId))?.email;
-    // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
     return Object.fromEntries(
       INTEGRATION_PROVIDER_LIST.map((provider) => [
         provider,
@@ -456,15 +333,8 @@ export const accountIntegrationConnect = /* @__PURE__ */ Effect.fn("web/accountI
   },
 );
 
-/** The words that hold a provider to one account where its multiple-accounts variable is set. */
 const SINGLE_ACCOUNT_WORDS: ReadonlySet<string> = new Set(["off", "false", "0"]);
 
-/**
- * One provider's connector as this deployment's environment configures it:
- * the UID its variable names, the accounts its allowlist does, and whether
- * it offers more than one account, which a provider with a multiple-accounts
- * variable does unless that variable holds it to one.
- */
 function connectorFromEnvironment(provider: IntegrationProvider) {
   const {
     CONNECTOR_VARIABLE,
@@ -472,7 +342,6 @@ function connectorFromEnvironment(provider: IntegrationProvider) {
     MULTIPLE_ACCOUNTS_VARIABLE,
     ADD_ACCOUNT_PROMPT,
   }: IntegrationDefinition = INTEGRATION[provider];
-  // A provider granted by the account's own sign-in has no connector to read.
   if (CONNECTOR_VARIABLE === undefined || ALLOWED_ACCOUNTS_VARIABLE === undefined) {
     return Effect.succeed(UNCONFIGURED_CONNECTOR);
   }
@@ -505,7 +374,6 @@ function connectorFromEnvironment(provider: IntegrationProvider) {
   );
 }
 
-/** Every provider's connector as this deployment's environment configures it. */
 export const integrationConnectFromEnvironment: Layer.Layer<
   IntegrationConnect,
   Config.ConfigError
@@ -515,7 +383,6 @@ export const integrationConnectFromEnvironment: Layer.Layer<
     Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
       Effect.map(connectorFromEnvironment(provider), (connector) => [provider, connector] as const),
     ),
-    // SAFETY: the entries are one per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
     (entries) => Object.fromEntries(entries) as IntegrationConnectService,
   ),
 );

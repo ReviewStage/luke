@@ -15,16 +15,6 @@ import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { macCommandsLive } from "./live-queries.js";
 
-/**
- * The Mac's live read of the commands it may claim (`macCommandsLive`) on
- * the migrated capture: a command queued, claimed, settled, and withdrawn,
- * each through its real writer, notifies the account's topic, which the
- * read is woken on, so a Mac holding the read hears an agent's command
- * within a coalesce window rather than at its next look.
- *
- * Synthetic accounts and commands throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -32,7 +22,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Runs the write, held to the topics it notifies, and fails unless one of them wakes the account's read. */
 const wakesTheMac = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],

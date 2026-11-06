@@ -37,22 +37,10 @@ import {
   seedDemoWorld,
 } from "./demo-seed.js";
 
-/**
- * The demo seed over a migrated PGlite of each test's own, with the
- * seed's Better Auth over the same database, as the command builds it over
- * Postgres: what Dean reads back through the reads a route answers, and
- * the ids the seed chose, the same for two fresh databases. Synthetic
- * accounts; the credential is a fixture sealed under the suites' ring.
- * Note that a seed takes about five seconds, since it opens a migrated
- * PGlite and writes the whole world into it, a few thousand statements, so
- * the file, which seeds three times, takes about fifteen.
- */
-
 const SEEDED_AT = Date.parse("2026-11-02T21:00:00Z");
 
 const CLAUDE_TOKEN = "demo-claude-token-fixture";
 
-/** The seed run over a fresh migrated PGlite, at a fixed instant, and what the reads under it answer. */
 const seededThen = <A, E, R>(
   credential: Option.Option<DemoCredential>,
   host: Option.Option<DemoHost>,
@@ -70,7 +58,6 @@ const seededThen = <A, E, R>(
     ).pipe(Effect.provide(database));
   });
 
-/** The secret the host's record holds, minted once for the suite as the seed's runner mints it. */
 const HOST_SECRET = demoHostSecret();
 
 it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credential and host", () =>
@@ -121,7 +108,6 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
           tasks.find((task) => task.name === "Webhook retries")?.status,
           TASK_STATUS.DONE,
         );
-        // The pilot's four sub-tasks stand under the task it broke down, and the tasks waiting on an open one read blocked.
         const billing = tasks.find((task) => task.name === "Usage-based billing");
         assert.deepEqual(
           new Set(
@@ -144,7 +130,6 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
             "Resend an expired invite",
           ]),
         );
-        // The asks and notices waiting on Dean, those he and his teammates answered or nodded away no longer among them.
         assert.deepEqual(
           new Set(
             inbox.items.filter((item) => item.waitsOn === DEMO_DEAN.id).map((item) => item.title),
@@ -170,7 +155,6 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         assert.ok(kept !== undefined);
         const opened = openProviderKey(ring, owner, kept);
         assert.equal(Result.isSuccess(opened) && Redacted.value(opened.success), CLAUDE_TOKEN);
-        // The host the run starts is Dean's, its record's secret calls in as it, and his pick runs on it.
         assert.deepEqual(
           hosts.map((host) => host.id),
           [DEMO_HOST.id],
@@ -185,9 +169,7 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
           machine: AGENT_MACHINE.DEVICE,
           deviceId: DEMO_HOST.id,
         });
-        // Bring your own host stays off, since with it on the app would enroll the Mac's own account install with the demo's server.
         assert.equal(ownHosts, false);
-        // The seeded agents are Dean's on that host, paid for by his plan, so a follow-up to one runs there, those his pilot started among them.
         assert.deepEqual(
           agents.map((agent) => [agent.userId, agent.machine, agent.deviceId]),
           Array.from({ length: 8 }, () => [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id]),
@@ -231,7 +213,6 @@ it("the seed's database is a Postgres on loopback, and nothing else", () => {
     ),
     DEMO_DATABASE_REFUSAL.NOT_LOOPBACK,
   );
-  // A `host` parameter overrides the address's host in node-postgres, so it cannot carry the seed elsewhere.
   assert.equal(
     Option.getOrUndefined(
       Result.getFailure(demoDatabaseUrl("postgresql://luke@localhost/demo?host=db.example.com")),

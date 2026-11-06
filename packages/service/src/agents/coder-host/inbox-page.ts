@@ -22,63 +22,14 @@ import {
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
 
-/**
- * inbox-page.ts -- a task's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
- *
- * The cursor is a digest of where every item stands (`http/held-read.ts`),
- * so a post, a close, an answer, and a new item each move it, and a reader
- * that holds it hears the next change once. A read whose cursor is
- * still the inbox's is held, looked at again as each write to the task's
- * items, their threads, files, and read marks lands, which notifies the
- * task's topic, as the task's live read is woken (`taskInboxLive`), or
- * every `MESSAGES_POLL` where the sync hub cannot wake it, each
- * look reading where the items stand and none of their words, and let
- * go at `MESSAGES_HOLD` as a transcript read is (`transcript.ts`), so the
- * Inbox tab hears an item the moment it lands without asking on a clock of
- * its own; a read past the hold answers the inbox unchanged, and the reader
- * asks again.
- *
- * The account's read is the same hold over the account's open items, the
- * desktop's one read that stands whichever task is open: it is what says an
- * item landed while the developer was elsewhere. Its hold covers the
- * reader's own settled items still unread too, which each task's To do
- * count holds, so reading one, or its agent writing on it again, moves the
- * count at once. It names every task holding
- * an item too, settled ones included, read once per answer rather than on
- * each look: a task's list moves with its open items, since every item
- * opens before it settles, and what moves it alone, such as an archive, is
- * answered at the hold's end at the latest. It looks again on the
- * account's topic, which an item written anywhere in its workspaces, its
- * own read marks, and its automations' runs notify, as the account's live
- * read is woken (`inboxLive`); where the sync hub cannot wake it, it looks every
- * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
- * it for as long as it is signed in rather than while a tab is on screen.
- * A reader that asks is listed the archived tasks holding items beside the
- * rest, though none of their items waits on it.
- * The open items of agents with no task, and the automations holding them,
- * ride beside the tasks' under keys of their own, and move the same cursor;
- * each agent with no task holding an item, settled ones included, is
- * listed as a task is, and its own settled items still unread are held as
- * a task's are.
- * So does the newest run of each of the account's own automations that
- * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
- * is what its owner is told of whichever plan is open; a run aging out of
- * that window is a change no write makes, so it shows at the hold's end.
- * An agent's inbox is held on the agent's topic as a task's is on the
- * task's (`agentInboxLive`).
- */
-
-/** How far back a run that failed to start is still carried to its automation's owner, as the live read keeps it too. */
 const FAILED_RUN_WINDOW = Duration.millis(FAILED_RUN_WINDOW_MILLIS);
 
-/** What a cursor digests of one thing it covers, an item, whose stamp says whether it is unread for the reader and who it waits on, or a failed run. */
 type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {
   readonly status: string;
   readonly unread?: boolean;
   readonly waitsOn?: string;
 };
 
-/** Where each item a read answers stands, as its stamp says it (`taskInboxStamps`): the member it waits on by id. */
 function itemStamps(items: InboxAnswer["items"]): readonly InboxCursorStamp[] {
   return items.map(({ waitsOn, ...item }) => ({
     ...item,
@@ -86,7 +37,6 @@ function itemStamps(items: InboxAnswer["items"]): readonly InboxCursorStamp[] {
   }));
 }
 
-/** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends, looking again as a write on the topics lands. */
 function heldUntilMoved(
   stamps: InboxStoreEffect<readonly InboxCursorStamp[]>,
   after: string,
@@ -96,7 +46,6 @@ function heldUntilMoved(
   return heldOpen(stamps, after, topics, poll, CODER.MESSAGES_HOLD);
 }
 
-/** The newest run of each of the account's own automations that failed to start in the window, as its owner is told of it. */
 function failedRunsOf(userId: string): InboxStoreEffect<readonly AccountFailedRun[]> {
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -106,7 +55,6 @@ function failedRunsOf(userId: string): InboxStoreEffect<readonly AccountFailedRu
   });
 }
 
-/** Where each failed run stands, as the cursor digests it beside the items: a run settles once, so its id and instant are all of it. */
 function failedRunStamps(runs: readonly AccountFailedRun[]): readonly InboxCursorStamp[] {
   return runs.map((run) => ({
     id: run.id,
@@ -116,7 +64,6 @@ function failedRunStamps(runs: readonly AccountFailedRun[]): readonly InboxCurso
   }));
 }
 
-/** One agent's inbox as any member of its workspace reads it, held while its cursor is still the reader's: what an agent's page answers from. */
 export function agentInboxPast(
   userId: string,
   agentId: string,
@@ -133,7 +80,6 @@ export function agentInboxPast(
   );
 }
 
-/** The task's inbox as it stands, held while its cursor is still the reader's. */
 export function taskInboxPast(
   userId: string,
   taskId: string,
@@ -150,7 +96,6 @@ export function taskInboxPast(
   );
 }
 
-/** Where everything that waits on the account stands: its open items, its planless agents' among them, and its automations' failed runs. */
 function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorStamp[]> {
   return Effect.gen(function* () {
     const items = yield* accountWaitingStamps(userId);
@@ -159,12 +104,6 @@ function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorSta
   });
 }
 
-/**
- * What waits on the developer across the account, held while its cursor is
- * still the reader's, and when it was read. Note that the instant is taken
- * before the items are, because an item written between the two would
- * otherwise read as changed before an answer that does not hold it.
- */
 export function accountInboxPast(
   userId: string,
   after: string,
@@ -172,7 +111,6 @@ export function accountInboxPast(
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
-    // Note that the cursor is read before what it stands for, so a change landing between them wakes the reader again rather than being lost.
     const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
     const tasks = yield* accountInboxTasks(userId);

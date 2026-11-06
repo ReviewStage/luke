@@ -35,16 +35,8 @@ import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 
-/**
- * Every statement the live endpoints answer calls only functions Postgres
- * marks immutable, so the same rows always read alike: a statement that read
- * the clock or the session would digest anew on every look, and a held read
- * would answer at once rather than hold.
- */
-
 const USER_ID = "user-live-statements";
 
-/** Every live statement the endpoints answer, by the part it answers. */
 function liveStatements() {
   const parent = randomUUID();
   const transcript = Option.getOrThrow(

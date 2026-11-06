@@ -62,27 +62,11 @@ import {
   wakeAgents,
 } from "./agent-wakes.js";
 
-/**
- * What happens on a coding agent's pull request after its turn ends, told
- * to the agent as a message from GitHub: a review, a comment on the pull
- * request, and a failed check on its branch are read off their deliveries
- * and nothing else is; a person's review reaches the agent whether or not it
- * is at work, a comment our own App made reaches only an agent idle since
- * before it was made, so an agent's own reply never wakes it, and a failed
- * check only an agent not at work; and every check on an agent's head
- * finished only the agent at work on that head, once GitHub says none is
- * left to finish; a check line names the checks that failed, and carries
- * each by its name, how it ended, and its page, where the head's checks
- * were read. Over a real dialect, eve a fake at the client's boundary
- * and GitHub a script. Synthetic throughout.
- */
-
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const APP_BOT = "luke-agents[bot]";
 const MADE_AT = Date.parse("2026-10-16T12:00:00Z");
 
-/** One installation per test's workspace, since one installation connects to one workspace and the tests share a database. */
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 14 }, (_, index) => ({
   id: 8_100 + index,
   login: RELAY.owner,
@@ -96,7 +80,6 @@ const repository = {
   html_url: `https://github.com/${RELAY_FULL_NAME}`,
 };
 
-/** Who GitHub names by the login given: the member by the id their account is linked to, anyone else by one of their own. */
 function sender(login: string) {
   return {
     login,
@@ -105,7 +88,6 @@ function sender(login: string) {
   };
 }
 
-/** GitHub's delivery of review 9 submitted on pull request 41 from the branch given, by the login given, saying what is given. */
 function reviewDelivery(
   ref: string,
   login: string,
@@ -127,10 +109,8 @@ function reviewDelivery(
   };
 }
 
-/** Where GitHub lists the inline comments of review 9 of pull request 41. */
 const REVIEW_COMMENTS_PATH = `/repos/${RELAY_FULL_NAME}/pulls/41/reviews/9/comments`;
 
-/** The wake of review 9 on the branch given, by the login given, saying what is given. */
 function reviewWakeOf(ref: string, login: string, body?: string): AgentWake {
   const wake = agentWakeOf(
     "pull_request_review",
@@ -141,13 +121,11 @@ function reviewWakeOf(ref: string, login: string, body?: string): AgentWake {
   return wake;
 }
 
-/** The words of a message sent to eve, its text parts joined where a mention's note rides beside them. */
 function sentText(message: EveMessage["message"] | undefined): string {
   if (message === undefined || !Array.isArray(message)) return message ?? "";
   return message.map((part) => (part.type === "text" ? part.text : "")).join("\n");
 }
 
-/** A turn of the agent's that ran and ended at the instant given, or one still running. */
 function turn(settledAt: number | undefined): AgentLatestTurn {
   return {
     conversationId: "conversation",
@@ -166,7 +144,6 @@ function turn(settledAt: number | undefined): AgentLatestTurn {
   };
 }
 
-/** eve's coding-agent service as the deployment reaches it for each account, writing down every message sent. */
 function fakeEve() {
   const sent: { readonly sessionId: string; readonly message: EveMessage }[] = [];
   const sessions: AgentSessions = {
@@ -183,7 +160,6 @@ function fakeEve() {
   return { sent, sessionsFor: () => Effect.succeed(sessions) };
 }
 
-/** An account whose plan's workspace reaches the repository, with one agent on the `githubAccess` given standing on a branch of its own, its session opened. */
 const openAgentOn = (githubAccess: GitHubAccess) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -218,13 +194,10 @@ const openAgentOn = (githubAccess: GitHubAccess) =>
     return { owner, agent, ref, target: { userId: owner, conversationId: agent.conversationId } };
   });
 
-/** {@link openAgentOn} an agent on the App's access, as most are. */
 const openAgent = openAgentOn(GITHUB_ACCESS.APP);
 
-/** The commit an agent's pull request's head stands at in the checks tests. */
 const HEAD = "0123abcd0123abcd0123abcd0123abcd0123abcd";
 
-/** The agent's turn, still running since before everything below was made, as the relay leaves one mid-turn. */
 const runningTurn = (owner: string, conversationId: string) =>
   Database.use((db) =>
     db.insert(turns).values({
@@ -237,7 +210,6 @@ const runningTurn = (owner: string, conversationId: string) =>
     }),
   );
 
-/** The agent's row keeping pull request 41 with its head at the commit given, as a read of it leaves the row. */
 const publishedAt = (owner: string, agentId: string, headSha: string) =>
   recordAgentPublished(owner, agentId, {
     number: 41,
@@ -251,12 +223,10 @@ const publishedAt = (owner: string, agentId: string, headSha: string) =>
     headSha,
   });
 
-/** The page GitHub names for the check run of the id given. */
 function runPage(id: number): string {
   return `https://github.com/${RELAY_FULL_NAME}/runs/${id}`;
 }
 
-/** Check run `id` as GitHub lists it on the head, by the name given, finished at the instant given with the conclusion given, or still running. */
 function checkRun(id: number, name: string, conclusion: string | null, at: number) {
   const run = { name, html_url: runPage(id) };
   return conclusion === null
@@ -264,14 +234,12 @@ function checkRun(id: number, name: string, conclusion: string | null, at: numbe
     : { ...run, status: "completed", conclusion, completed_at: new Date(at).toISOString() };
 }
 
-/** The line a wake wrote the agent of `owner`, by the client id eve was sent it under. */
 const lineMetadataOf = (owner: string, conversationId: string, lineId: string | undefined) =>
   Effect.map(readMessageByClientId(owner, conversationId, {}, lineId ?? ""), (read) => {
     const line = read.ok ? read.value[0]?.message : undefined;
     return line !== undefined && "metadata" in line ? line.metadata : undefined;
   });
 
-/** A GitHub that answers the head's check runs and commit statuses from what `held` holds when it is asked. */
 function githubHoldingChecks(held: { checkRuns: object[]; statuses: object[] }) {
   const commit = `/repos/${RELAY_FULL_NAME}/commits/${HEAD}`;
   return githubReaching(INSTALLATIONS, undefined, {}, (sent) => {
@@ -282,7 +250,6 @@ function githubHoldingChecks(held: { checkRuns: object[]; statuses: object[] }) 
   }).layer;
 }
 
-/** The agent's turn, ended at the instant given, as the relay leaves one. */
 const endedTurn = (owner: string, conversationId: string, settledAt: number) =>
   Database.use((db) =>
     db.insert(turns).values({
@@ -359,7 +326,6 @@ test("a review submitted, a comment on a pull request, a failed check suite or c
     pullRequest: 41,
     url: `https://github.com/${RELAY_FULL_NAME}/commit/0123abcd/checks`,
     by: "github-actions[bot]",
-    // GitHub serves an App's logo by its id, which its bot's login does not name.
     byAvatar: "https://avatars.githubusercontent.com/in/15368?v=4",
     at: MADE_AT,
     sha: "0123abcd",
@@ -371,7 +337,6 @@ test("a review submitted, a comment on a pull request, a failed check suite or c
     updated_at: new Date(MADE_AT).toISOString(),
     repository,
     sender: { login: "buildkite[bot]", type: "Bot" },
-    // An agent's branch under the prefix agents worked on before, whose pull requests still stand open.
     branches: [{ name: "main" }, { name: branch }, { name: "luke/another-agent" }],
     description: "Never read.",
   });
@@ -412,14 +377,12 @@ test("a review submitted, a comment on a pull request, a failed check suite or c
     url: `https://github.com/${RELAY_FULL_NAME}/pull/41`,
     by: "octocat",
     byId: "583231",
-    // GitHub's delivery names no instant of its own, so it is told as of when it arrived.
     at: 7,
     reason: "CI_FAILURE",
   });
 
   for (const [event, payload] of [
     ["pull_request_review", reviewDelivery(ref, "octocat", "edited")],
-    // Taken out by hand, as the agent's own `gh pr merge --disable-auto` takes it out.
     ["pull_request", dequeued(ref, "MANUAL")],
     ["pull_request", dequeued(ref, "MERGE", { state: "closed", merged: true })],
     ["pull_request", dequeued("main", "CI_FAILURE")],
@@ -490,7 +453,6 @@ test("a check suite or check run completed, whatever its conclusion, or a commit
     ...finished,
     by: "vercel[bot]",
   });
-  // A run whose suite names no branch is placed by the pull requests it names.
   const placedByPull = {
     ...run("completed", null),
     check_run: {
@@ -511,7 +473,6 @@ test("a check suite or check run completed, whatever its conclusion, or a commit
   for (const [event, payload] of [
     ["check_suite", suite("requested", ref, null)],
     ["check_suite", suite("completed", "main", "success")],
-    // A fork's branch, which GitHub names as none.
     ["check_suite", suite("completed", null, "success")],
     ["check_run", run("created", ref)],
     ["check_run", run("completed", "release")],
@@ -698,7 +659,6 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           login: "octocat",
         });
 
-        // The agent replied as our App inside a turn that has since ended: its own reply wakes nobody.
         yield* endedTurn(owner, agent.conversationId, MADE_AT + 30_000);
         const reply = { ...wake, by: APP_BOT, at: MADE_AT + 20_000 };
         const own = yield* wakeAgents(eve.sessionsFor, reply, randomUUID(), APP_BOT).pipe(
@@ -1030,10 +990,8 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         held.statuses = [
           { state: "success", updated_at: new Date(MADE_AT + 30_000).toISOString() },
         ];
-        // Two suites finishing together are two deliveries reading the same checks.
         const finished = yield* deliver;
         const together = yield* deliver;
-        // One more check registered and finished in the same second the others did.
         held.statuses = [
           ...held.statuses,
           {
@@ -1048,7 +1006,6 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           checkRun(1, "lint", "success", MADE_AT),
           checkRun(3, "test", "failure", MADE_AT + 120_000),
         ];
-        // A status anyone who may push can set, its context and page spelled as an instruction.
         held.statuses = [
           ...held.statuses,
           {

@@ -32,33 +32,16 @@ import {
 } from "./bearer.js";
 import { BEARER_CALLER_TTL, bearerCallersLayer } from "./bearer-callers.js";
 
-/**
- * The account a hosted request names: its OAuth bearer where it carries
- * `Authorization`, and only where it carries none, the browser's session
- * cookie, read by Better Auth with the bearer plugin as `auth.ts` installs
- * it, over a PGlite of its own. The userinfo endpoint is a fake that knows
- * one OAuth token. That a state-changing request's cookie is held to the
- * deployment's own pages first is the adaptor's to prove
- * (`apps/web/tests/cookie-session.test.ts`).
- *
- * Synthetic accounts, tokens, and sessions throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** The one OAuth token the fake userinfo endpoint knows: Ada's. */
 const ADA_BEARER = "Bearer oauth-token-of-ada";
 
-/** A secret no deployment of this suite signs under. */
 const FOREIGN_SECRET = "another-deployment-secret-with-enough-length";
 
-/** Another account's OAuth token, for the faked auth service. */
 const GRACE_BEARER = "Bearer oauth-token-of-grace";
 
-/** A userinfo endpoint that knows no token. */
 const NO_TOKEN: UserInfoEndpoint = () => Effect.succeed(undefined);
 
-/** A token refused as Better Auth's userinfo refuses an unknown, expired, or revoked one. */
 const refusedToken = () => new APIError("UNAUTHORIZED", { error: "invalid_token" });
 
 afterEach(() => {
@@ -70,39 +53,25 @@ function request(headers: Record<string, string> = {}): Request {
   return new Request("https://app.test/api/voice/mint", { method: "POST", headers });
 }
 
-/**
- * The deployment's auth service, faked at its boundary: Better Auth's own
- * userinfo answers the subject each token it holds names, and refuses any
- * other as it refuses an unknown or revoked one. A test issues and revokes
- * tokens on `tokens` as it goes; with `revokeAsAnswered`, a token is revoked
- * the moment it is answered, so only the first ask for it ever names anyone.
- */
 function fakeAuthService(tokens: Map<string, string>, revokeAsAnswered = false) {
-  vi.spyOn(auth.api, "oauth2UserInfo").mockImplementation(
-    // SAFETY: `hostedUserInfo` reads `sub` alone, which the fake answers as the endpoint does.
-    (async (context: { headers: Headers }) => {
-      const authorization = context.headers.get("authorization") ?? "";
-      const sub = tokens.get(authorization);
-      if (sub === undefined) throw refusedToken();
-      if (revokeAsAnswered) tokens.delete(authorization);
-      return { sub };
-    }) as unknown as typeof auth.api.oauth2UserInfo,
-  );
+  vi.spyOn(auth.api, "oauth2UserInfo").mockImplementation((async (context: {
+    headers: Headers;
+  }) => {
+    const authorization = context.headers.get("authorization") ?? "";
+    const sub = tokens.get(authorization);
+    if (sub === undefined) throw refusedToken();
+    if (revokeAsAnswered) tokens.delete(authorization);
+    return { sub };
+  }) as unknown as typeof auth.api.oauth2UserInfo);
 }
 
-/** The account a bearer names, resolved as the Mac's held read resolves it, on the instance's kept callers. */
 const bearerUserId = (authorization: string) =>
   resolveHostedBearerUserId(request({ authorization }));
 
-/** A read of an account route carrying the headers given. */
 function read(headers: Record<string, string>): Request {
   return new Request(new URL(HOSTED_SERVICE_PATH.REPOSITORY_PINS, ORIGIN), { headers });
 }
 
-/**
- * The cookie given, naming the same session but signed under a secret the
- * deployment never held: a signature as well formed as the deployment's own.
- */
 const signedElsewhere = (cookie: string) =>
   Effect.promise(async () => {
     const at = cookie.indexOf("=");
@@ -112,12 +81,6 @@ const signedElsewhere = (cookie: string) =>
     return `${cookie.slice(0, at)}=${encodeURIComponent(forged)}`;
   });
 
-/**
- * Two accounts on Better Auth over its own PGlite, each signed in on a
- * browser of its own, and the request's account resolved as
- * `resolveHostedUserId` resolves it, the plugin's session read standing in
- * for the deployment's.
- */
 const openAccounts = Effect.gen(function* () {
   const plugin = yield* openWorkspacePlugin;
   const [ada, grace] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -141,21 +104,16 @@ const openAccounts = Effect.gen(function* () {
   };
 });
 
-/** What the pins resource answers one request, its caller resolved as given. */
 const answerTo = (resolveUserId: UserIdResolver, request: Request) =>
   Effect.gen(function* () {
-    // The procedure runs on the services handed to it, the test's clock among them: a pin's instant is read from it.
-    // SAFETY: the pins procedures yield the database and the clock alone, which the test's own context holds.
     const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
     const handle = hostedFetch({ repositoryPins: repositoryPinsProcedures({ resolveUserId }) });
     return yield* Effect.promise(() => handle(request, services));
   });
 
-/** The repositories one request to the pins resource answers as pinned, failing the test where it answers anything else. */
 const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
   Effect.gen(function* () {
     const response = yield* answerTo(resolveUserId, request);
-    // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(body));
     const answered = readEither(repositoryPinsWrittenSchema)(unparsedWire(body));
@@ -240,7 +198,6 @@ it.effect(
 
 it.effect("a request with no cookie, or a blank one, asks the auth service for no session", () =>
   Effect.gen(function* () {
-    // A session read that names anyone, so a resolution names nobody only where it never asked.
     const anyone: SessionEndpoint = () => Effect.succeedSome("user-anyone");
 
     for (const headers of [{}, { cookie: "" }, { cookie: "   " }]) {
@@ -260,7 +217,6 @@ it.effect("an auth service that cannot answer is refused as unavailable, never a
       Effect.tryPromise(() => Promise.reject(new APIError("TOO_MANY_REQUESTS")));
     const noSession: SessionEndpoint = () => Effect.succeedNone;
 
-    // A bearer whose userinfo fails or is throttled, and a cookie whose session read fails: a caller retries a 503, where a 401 signs it out.
     for (const [resolveUserId, headers] of [
       [
         (incoming: Request) => requestUserId(incoming, down, noSession),
@@ -306,7 +262,6 @@ it.effect(
       const { plugin, grace, graceCookie, resolveUserId } = yield* openAccounts;
       const junk = "Bearer not-a-token";
 
-      // The hazard: Better Auth's bearer plugin leaves the cookie standing under a bearer it did not sign.
       assert.deepEqual(
         yield* plugin.resolveSessionUserId({
           headers: new Headers({ authorization: junk, cookie: graceCookie }),
@@ -328,9 +283,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { plugin, ada, adaCookie, userInfo } = yield* openAccounts;
-      // The deployment's auth service keeps its sessions in a database this suite never reaches, so it reads a cookie as the plugin over PGlite does.
       vi.spyOn(auth.api, "getSession").mockImplementation(
-        // SAFETY: the resolvers read the session's user id alone, which both instances answer from the same row.
         async (context) =>
           (await plugin.api.getSession({ headers: context?.headers ?? new Headers() })) as Awaited<
             ReturnType<typeof auth.api.getSession>
@@ -380,7 +333,6 @@ it.effect(
       fakeAuthService(tokens, true);
 
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
-      // The trade-off: the token, revoked as it was answered, still resolves on this instance until its TTL runs out.
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
       yield* TestClock.adjust(BEARER_CALLER_TTL);
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.none());
@@ -422,7 +374,6 @@ it.effect("two bearers never answer for each other on one instance", () =>
     ]);
     fakeAuthService(tokens, true);
 
-    // The second round is answered from what the instance kept, the auth service having revoked both as it answered.
     for (const _round of [1, 2]) {
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
       assert.deepEqual(yield* bearerUserId(GRACE_BEARER), Option.some("user-grace"));
@@ -435,7 +386,6 @@ it.effect(
   "a browser's session reads from its cookie cache for at most the cache's age after it is revoked",
   () =>
     Effect.gen(function* () {
-      // Better Auth reads the instant off `Date`, so the test holds that clock alone.
       vi.useFakeTimers({ toFake: ["Date"], now: Date.UTC(2026, 9, 20) });
       const { plugin, ada, adaCookie, resolveUserId } = yield* openAccounts;
       const minted = yield* Effect.promise(() =>

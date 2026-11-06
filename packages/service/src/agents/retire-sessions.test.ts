@@ -1,4 +1,3 @@
-// retire-sessions.test.ts -- a delete's retires end within their budget, whatever the sessions do, so the delete behind them still runs.
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { StandingSession } from "@repo/database/models/recorded-session";
@@ -9,12 +8,6 @@ import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { EVE_RESET_OUTCOME } from "./eve-host/eve-sessions.js";
 import { type Retiring, retireSessions } from "./retire-sessions.js";
-
-/**
- * The sessions are a fake that writes down each session it retired, and
- * answers a session named in `hanging` never, as a reset that never
- * returns would. Synthetic session ids throughout.
- */
 
 function sessionsNamed(count: number, prefix: string): StandingSession[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -42,8 +35,6 @@ it.layer(getTestDB())("sessions retired", (it) => {
     "a large account's retires end a minute in, however many are left waiting, so the erase behind them runs",
     () =>
       Effect.gen(function* () {
-        // Twelve sessions never answered: each alone would give up at thirty-five seconds, four
-        // at a time, so the three rounds without a budget would run to a hundred and five.
         const hung = sessionsNamed(12, "hung");
         const { eveAt } = eveRetiring(new Set(hung.map(({ sessionId }) => sessionId)));
         const retiring = yield* Effect.forkChild(retireSessions(eveAt, hung));

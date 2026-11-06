@@ -5,15 +5,6 @@ import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
 import { test } from "vitest";
 import { type AdminReliabilitySource, buildAdminReliability } from "./admin-reliability.js";
 
-/**
- * The Reliability answer's shaping and its address: each day of the window
- * stands in the series whether or not anything ended on it, a day with
- * nothing ended reads no rate rather than a perfect one, the cards are the
- * series' own totals, the breakdowns come most first with their empty
- * classes gone, and only a week or a month is read.
- */
-
-/** Noon on Oct 17; the week's window runs Oct 11 to Oct 17. */
 const NOW = Date.UTC(2026, 9, 17, 12);
 
 function source(overrides: Partial<AdminReliabilitySource["daily"]> = {}): AdminReliabilitySource {
@@ -44,7 +35,6 @@ test("every window day stands in the series, and a day with nothing ended reads 
     source({
       appTurns: new Map([
         ["2026-10-16", { failed: 1, total: 4 }],
-        // A day before the window, which the source may hold and the answer must not count.
         ["2026-10-01", { failed: 9, total: 9 }],
       ]),
     }),

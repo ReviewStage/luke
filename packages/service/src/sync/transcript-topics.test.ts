@@ -34,21 +34,6 @@ import { wokenOnHub } from "../testing/sync-woken.js";
 import { agentTranscriptLive } from "./live-queries.js";
 import type { LiveParams } from "./live-query.js";
 
-/**
- * A coding agent's transcript (`agentTranscriptLive`) on the migrated
- * capture: each write a transcript reads, through its real writer, notifies
- * a topic the transcript's read is woken on, so a window following it hears
- * the write within a coalesce window rather than at the hold's end. That
- * holds for a developer's line, a turn queued, started, and settled, and the
- * journal it writes, which notify the conversation, a turn the agent's, its
- * task's, and its workspace's too, so every view of the agent's status
- * hears it. A transcript read held on Sync answers the agent's message
- * within a coalesce window of the write.
- *
- * Synthetic accounts, workspaces, tasks, agents, and turns throughout.
- */
-
-/** A fixed instant the run events are stamped at, since no read here measures time. */
 const NOW = 1_800_000_000_000;
 
 const openAccount = Effect.gen(function* () {
@@ -58,7 +43,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** An agent of the account's on a task of its own workspace: the transcript's read for the account, and the topics of the agent's own. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openAccount;
   const workspaceId = yield* openWorkspace(userId);
@@ -86,7 +70,6 @@ const openAgent = Effect.gen(function* () {
   return { userId, target: { userId, conversationId }, params, agentTopics };
 });
 
-/** Runs the write, held to the topics it notifies, and fails unless one of them wakes the transcript's read. */
 const wakesTheTranscript = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],
@@ -102,7 +85,6 @@ const wakesTheTranscript = <A, E, R>(
     return fired;
   });
 
-/** One run event of the turn, as a native harness's runner hands the writer one. */
 const runEvent = (target: ConversationTarget, turnId: string) => ({
   conversationId: sessionKey(target.conversationId),
   turnId,
@@ -115,7 +97,6 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
       Effect.gen(function* () {
         const { userId, params } = yield* openAgent;
         const { agentId } = params;
-        /** What the read answers of the queue now. */
         const queuePart = Effect.map(
           liveCursorParts(agentTranscriptLive, params, {}),
           ({ queries }) => JSON.stringify(queries.queueRevision?.rows ?? []),

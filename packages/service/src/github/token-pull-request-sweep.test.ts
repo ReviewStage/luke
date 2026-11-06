@@ -36,17 +36,6 @@ import {
 import { GITHUB_TOKEN_ABSENCE, openMemberGitHubToken } from "./github-token.js";
 import { sweepTokenPullRequests } from "./token-pull-request-sweep.js";
 
-/**
- * The poll of a token agent's pull request, which no webhook reaches: a new
- * review is told to its agent once, a pull request GitHub answers 304 to
- * tells nothing, a comment by the member's login made while the agent's
- * turn ran is the agent's own and tells nothing, a failed check is told,
- * and a token GitHub refuses is marked invalid. Over a real dialect, eve a
- * fake at the client's boundary and GitHub a script that answers each read
- * with an ETag. The claim is the deployment's, so each test polls a pull
- * request numbered for it alone. Synthetic throughout.
- */
-
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const MADE_AT = Date.parse("2026-10-20T12:00:00Z");
@@ -55,7 +44,6 @@ const MINUTE = 60_000;
 
 let pullRequestsOpened = 40;
 
-/** What the scripted GitHub holds on one pull request, which a test changes between sweeps. */
 interface PullRequestOnGitHub {
   readonly number: number;
   readonly ref: string;
@@ -65,7 +53,6 @@ interface PullRequestOnGitHub {
   statuses: object[];
 }
 
-/** eve's coding-agent service as the deployment reaches it for each account, writing down every message sent. */
 function fakeEve() {
   const sent: EveMessage[] = [];
   const sessions: AgentSessions = {
@@ -82,18 +69,11 @@ function fakeEve() {
   return { sent, sessionsFor: () => Effect.succeed(sessions) };
 }
 
-/** The words of a message sent to eve. */
 function sentText(message: EveMessage["message"] | undefined): string {
   if (message === undefined || !Array.isArray(message)) return message ?? "";
   return message.map((part) => (part.type === "text" ? part.text : "")).join("\n");
 }
 
-/**
- * A GitHub where the member's token may push to the repository, answering
- * the pull request's reads from what it holds now, each with an ETag of its
- * body and a 304 where the request names that ETag; the statuses it
- * answered the poll's reads with are written down.
- */
 function githubHolding(pull: PullRequestOnGitHub) {
   const answered: { readonly path: string; readonly status: number }[] = [];
   const repo = `/repos/${RELAY_FULL_NAME}`;
@@ -145,7 +125,6 @@ function githubHolding(pull: PullRequestOnGitHub) {
   return { layer: reaching.layer, answered, sent: reaching.sent };
 }
 
-/** A member's agent on their own token, on a branch of its own with an open pull request numbered for the test, its session opened, its last turn run over the window given, or still running where it has no end; in the repository given, the relay's where none is. */
 const openTokenAgent = (
   turn: { readonly startedAt: number; readonly settledAt?: number },
   repository: string | null = RELAY_FULL_NAME,
@@ -209,7 +188,6 @@ const openTokenAgent = (
     return { owner, pull, target: { userId: owner, conversationId: agent.conversationId } };
   });
 
-/** One sweep at the instant given, over the GitHub and eve given. */
 const sweepAt = (
   at: number,
   github: Pick<ReturnType<typeof githubHolding>, "layer">,
@@ -219,7 +197,6 @@ const sweepAt = (
     Effect.provide(github.layer),
   );
 
-/** Who GitHub names by the login given: the member by the id their account is linked to, anyone else by one of their own. */
 function author(login: string) {
   return {
     login,
@@ -227,7 +204,6 @@ function author(login: string) {
   };
 }
 
-/** A review GitHub lists, by the login given. */
 function review(id: number, login: string, body: string) {
   return {
     id,
@@ -239,7 +215,6 @@ function review(id: number, login: string, body: string) {
   };
 }
 
-/** A conversation comment GitHub lists, by the login given, made at the instant given. */
 function comment(id: number, login: string, body: string, at: number) {
   return {
     id,
@@ -250,7 +225,6 @@ function comment(id: number, login: string, body: string, at: number) {
   };
 }
 
-/** An agent idle since ten minutes before the instant everything below is made at. */
 const IDLE = { startedAt: MADE_AT - 20 * MINUTE, settledAt: MADE_AT - 10 * MINUTE };
 
 it.layer(getTestDB())("the poll of a token agent's pull request", (it) => {

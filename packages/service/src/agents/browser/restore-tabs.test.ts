@@ -19,19 +19,8 @@ import { agentBrowserTestLayer, fakeCdpPeer } from "../../testing/agent-browser-
 import { AgentBrowser } from "./agent-browser.js";
 import { connectRestoring, restoreBrowserTabs } from "./restore-tabs.js";
 
-/**
- * An agent's kept Browser tabs brought back as its browser is reached, over
- * the real CDP session to a fake Chromium and the real tab store on a
- * migrated database: whoever connects reopens what the browser lost, though
- * another connection started the browser; of two reopening one tab, one page
- * stands; a page whose row did not move is closed again; and a browser
- * that cannot list its pages is left as it is. Synthetic
- * accounts and pages throughout.
- */
-
 const SESSION = "wrun_restore_tabs_fixture";
 
-/** A new account and a conversation of its own, the one an agent's tabs are kept under. */
 const openConversation = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
@@ -47,7 +36,6 @@ const openConversation = Effect.gen(function* () {
   return row.id;
 });
 
-/** A tab kept for the conversation at the target and address given. */
 const keep = (conversationId: string, targetId: string, address: string) =>
   upsertBrowserTab({
     conversationId,
@@ -65,10 +53,8 @@ it.layer(getTestDB())("restoring an agent's Browser tabs", (it) => {
         const conversationId = yield* openConversation;
         yield* keep(conversationId, "before-1", "https://shop.test/cart");
         yield* keep(conversationId, "before-2", "http://localhost:3000/");
-        // The resumed sandbox's browser holds only the blank page it starts with.
         const peer = yield* fakeCdpPeer();
         yield* Effect.gen(function* () {
-          // A first connection started the browser, then was given up on before it reopened anything.
           const agent = yield* AgentBrowser;
           yield* agent.ensure(SESSION);
           yield* Effect.scoped(connectRestoring(SESSION, conversationId));
@@ -95,7 +81,6 @@ it.layer(getTestDB())("restoring an agent's Browser tabs", (it) => {
           Effect.gen(function* () {
             const agent = yield* AgentBrowser;
             const cdp = yield* agent.connect(SESSION);
-            // The other connection reopens the tab and moves its row while this one opens its own page.
             const database = yield* Effect.context<DatabaseServices>();
             const raced: CdpSession = {
               ...cdp,
@@ -170,7 +155,6 @@ it.layer(getTestDB())("restoring an agent's Browser tabs", (it) => {
       const conversationId = yield* openConversation;
       yield* keep(conversationId, "before-1", "https://shop.test/cart");
       yield* TestClock.adjust("1 second");
-      // A second kept tab, opened later, already names the target the browser opens next, so the first move is refused.
       yield* keep(conversationId, "page-1", "https://shop.test/");
       const peer = yield* fakeCdpPeer();
 

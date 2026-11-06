@@ -16,26 +16,11 @@ import { answerInboxAsk, postInboxThread } from "../inbox/inbox-store.js";
 import { SlackBot, type SlackFileTransfer, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js";
 
-/**
- * A thread an agent posts, written by our Slack bot to the member it waits
- * on, over a real store and a fake Slack: the DM goes to that member's
- * Slack user and says the thread's title; the post is the first reply
- * in its Slack thread, the agent's Markdown in a `markdown` block, a mention
- * chip as a plain link, and a link to the thread, the post's picture shared
- * under it, and the title DM then says the open ask under the title; a
- * follow-up is another reply there; and an answer rewrites the post's reply
- * to say it was answered, and the title DM to say the title alone.
- *
- * Synthetic accounts, workspaces, and Slack ids throughout.
- */
-
-/** One Web API call the fake Slack was handed. */
 interface SlackCall {
   readonly method: string;
   readonly args: Readonly<Record<string, string>>;
 }
 
-/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at a timestamp of its own; with `refuseFirstReply`, it refuses the first reply in a thread. */
 function fakeSlack(calls: SlackCall[], refuseFirstReply = false): SlackWebApi {
   let posted = 0;
   let refused = !refuseFirstReply;
@@ -63,7 +48,6 @@ function fakeSlack(calls: SlackCall[], refuseFirstReply = false): SlackWebApi {
   };
 }
 
-/** Slack's upload addresses, writing down each file's bytes as sent to its address. */
 function fakeFiles(sent: { url: string; bytes: Uint8Array }[]): SlackFileTransfer {
   return {
     send: (url, bytes) => Effect.sync(() => void sent.push({ url, bytes })),
@@ -71,7 +55,6 @@ function fakeFiles(sent: { url: string; bytes: Uint8Array }[]): SlackFileTransfe
   };
 }
 
-/** The picture the agent's post carries, a screenshot from its sandbox. */
 const SCREENSHOT = {
   path: "shots/settings.png",
   name: "settings.png",
@@ -79,7 +62,6 @@ const SCREENSHOT = {
   bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
 } as const;
 
-/** An account, with one agent on a task nobody is assigned, in a workspace whose bot is connected. */
 const openConnectedAgent = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -108,7 +90,6 @@ const openConnectedAgent = Effect.gen(function* () {
   return { agent, organizationId, email, slug: workspace.slug };
 });
 
-/** The blocks a call carried, as Slack reads them. */
 const blocksOf = (call: SlackCall | undefined) => JSON.parse(call?.args.blocks ?? "[]");
 
 it.layer(getTestDB())("a thread's Slack DM", (it) => {
@@ -129,7 +110,6 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         const item = Result.getOrThrow(yield* postInboxThread(agent, ask, [SCREENSHOT]));
         yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
         const wasOpen = yield* threadStandsOpen(agent, ask.key);
-        // The follow-up comes later than the ask, as an agent's next post does.
         yield* TestClock.adjust("1 second");
         const followUp = Result.getOrThrow(
           yield* postInboxThread(agent, { key: ask.key, body: "Still needed." }),
@@ -171,7 +151,6 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           type: "markdown",
           text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
         });
-        // The to-do's own buttons, answered by our Slack route, then the open button.
         assert.deepEqual(
           actions.elements.map((element: { text: { text: string } }) => element.text.text),
           ["Mark done", "Couldn't do it", "Open in Vespin"],
@@ -196,7 +175,6 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           (call) => call.method === "chat.update",
         );
         assert.deepEqual(again, []);
-        // The title DM says the open ask while it waits, and the title alone once it is answered.
         assert.equal(asking?.args.ts, "1700000000.000101");
         assert.deepEqual(blocksOf(asking), [header, words]);
         assert.equal(untitled?.args.ts, "1700000000.000101");
@@ -239,7 +217,6 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           [undefined, "1700000000.000101", "1700000000.000101"],
         );
         assert.deepEqual(blocksOf(posted[2])[0], { type: "markdown", text: "Or a month?" });
-        // The title DM is never rewritten as a reply: it says the title and the ask now open.
         const updated = calls.filter((call) => call.method === "chat.update");
         assert.deepEqual(
           updated.map((call) => [call.args.ts, blocksOf(call)]),
@@ -274,7 +251,6 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
       const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
       const askId =
         item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
-      // The DM as it was kept before, the post's words in the thread's first message.
       yield* (yield* Database)
         .update(inboxMessage)
         .set({ slackDm: { channel: "D0001", ts: "1700000000.000050", to: agent.userId } })

@@ -9,12 +9,6 @@ import {
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
 import { POSTHOG_ENVIRONMENT } from "./providers/posthog.js";
 
-/**
- * The environment layer read over a record of this test's own, in place of
- * `process.env`: the layer names `fromEnv` itself, so the record is put in the
- * process environment for the read and taken back out after it. Every line
- * the build logs is kept in `logged`.
- */
 async function environmentOver(
   variables: Record<string, string | undefined>,
   logged: string[] = [],

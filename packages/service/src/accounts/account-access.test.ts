@@ -25,18 +25,6 @@ import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { accountProcedures } from "./account-procedures.js";
 
-/**
- * The account's access, answered by the account procedures the way the
- * hosted oRPC route answers it, over a real dialect: an admin reads that it
- * is one, any other account reads that it is not, and a caller no bearer
- * names is refused. The bearer names the account and nothing else does, so
- * a query naming another account changes nothing of the answer, and the
- * answer is never kept by a cache. A member's grant of support access is
- * answered while it stands.
- *
- * Synthetic accounts and bearers throughout.
- */
-
 const ORIGIN = "https://app.test";
 const ACCESS_PATH = "/api/account/access";
 
@@ -58,7 +46,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** An admin and a member behind their own bearers, and the procedures answering on the test's database and clock. */
 const openAccounts = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -76,7 +63,6 @@ const openAccounts = () =>
         Effect.succeed(
           Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
         ),
-      // This suite deletes nothing, so it retires no session and reaches no eve.
       standingSessions: () => Effect.die(new Error("this suite deletes no account")),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
@@ -99,7 +85,6 @@ const answer = (
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -107,12 +92,10 @@ const answer = (
       Layer.succeed(HostedEnvironment, environment),
       noNetwork,
       modelCatalogOf([]),
-      // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return {
       status: response.status,
@@ -121,7 +104,6 @@ const answer = (
     } satisfies Answer;
   });
 
-/** A read of the access, under the bearer named or none, at the path with the query given. */
 function request(bearer: string | undefined, query = "") {
   return new Request(new URL(`${ACCESS_PATH}${query}`, ORIGIN), {
     method: HTTP_METHOD.GET,

@@ -10,19 +10,6 @@ import { RELAY_UPGRADE_STATUS, type RelayCredential } from "../http/relay-upgrad
 import type { RelayAgent, RelayDependencies } from "./relay.js";
 import { standTerminalRelay, terminalRelayServer } from "./service.js";
 
-/**
- * The relay as a page and the desktop reach it, over a socket of its own on
- * this machine's loopback, with accounts and agents that answer from a
- * script: the agent a socket reaches is read under the account its
- * credential names, so a page of the deployment's own whose cookie names an
- * account the agent is not reached by, Grace of another workspace, is
- * closed as gone; another site's page carrying Ada's cookie is refused
- * before any account is read; and the desktop's bearer, with no origin,
- * reaches Ada's agent as it always did. The agent has not opened its
- * sandbox, so a socket that reaches it is closed as starting, and nothing
- * past the reach stands. Synthetic ids, cookies, and bearers throughout.
- */
-
 const OWN_ORIGIN = "https://app.example.test";
 const ADA = "user-ada";
 const GRACE = "user-grace";
@@ -32,7 +19,6 @@ const ADA_BEARER = "Bearer token-of-ada";
 const ADA_COOKIE = "__Secure-better-auth.session_token=session-of-ada";
 const GRACE_COOKIE = "__Secure-better-auth.session_token=session-of-grace";
 
-/** The account store as the scenario has it: Ada's bearer and cookie name Ada, Grace's cookie names Grace, and every read is kept. */
 function accounts() {
   const read: RelayCredential[] = [];
   const named = (credential: RelayCredential): string | undefined => {
@@ -49,7 +35,6 @@ function accounts() {
   return { read, resolveUserId };
 }
 
-/** Ada's agent as the store reads it for her: it has not opened its sandbox yet. */
 const ADA_AGENT_READ: RelayAgent = {
   userId: "user-ada",
   conversationId: "conversation-of-ada",
@@ -59,7 +44,6 @@ const ADA_AGENT_READ: RelayAgent = {
   turnUnderWay: Effect.succeed(false),
 };
 
-/** The relay's world: Ada's agent, which Grace, of another workspace, does not reach; every reach kept, and nothing past the reach standing. */
 function agents() {
   const reached: { readonly userId: string; readonly agentId: string }[] = [];
   const unused = () => Effect.die("nothing past the reach stands here");
@@ -93,7 +77,6 @@ function agents() {
   return { reached, dependencies };
 }
 
-/** The relay stood for the scope on a loopback server of its own, answering at the address its sockets open for Ada's agent. */
 const standing = (
   resolveUserId: (credential: RelayCredential) => Effect.Effect<Option.Option<string>>,
   dependencies: RelayDependencies,
@@ -117,7 +100,6 @@ const standing = (
       resolveUserId,
       dependencies,
     });
-    // SAFETY: a listening TCP server answers its bound address as AddressInfo, never a pipe path.
     const { port } = relay.server.address() as AddressInfo;
     const query = new URLSearchParams({
       [TERMINAL_RELAY.QUERY.AGENT]: ADA_AGENT,
@@ -128,7 +110,6 @@ const standing = (
     return `ws://127.0.0.1:${port}${TERMINAL_RELAY.PATH}?${query}`;
   });
 
-/** What one upgrade with the headers given comes to: the status it was refused with, or the code its socket was closed with. */
 const upgraded = (url: string, headers: Readonly<Record<string, string>>) =>
   Effect.callback<{ readonly refused: number } | { readonly closed: number }>((resume) => {
     let settled = false;
@@ -143,7 +124,6 @@ const upgraded = (url: string, headers: Readonly<Record<string, string>>) =>
       socket.terminate();
     });
     socket.once("close", (code: number) => settle({ closed: code }));
-    // A close follows every error, and it is the close that is read.
     socket.on("error", () => undefined);
     return Effect.sync(() => socket.terminate());
   });

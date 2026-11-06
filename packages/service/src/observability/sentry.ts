@@ -1,39 +1,3 @@
-/**
- * sentry.ts -- the deployment's Sentry, as Sentry's Effect and eve guides set it up: the options every process starts it with, and the layers that send it errors, spans, logs, and metrics.
- *
- * Sentry's Effect guide (docs.sentry.io/platforms/javascript/guides/effect)
- * composes `Sentry.effectLayer`, which starts the SDK and registers its
- * `ErrorReporter`, with the tracer, the logger, and the metrics layer. This
- * module does the same but for the reporter and the logger, which are its own
- * (`sentryErrorReporter`, `sentryLogger`), so a report's ids land as tags its
- * issue is searched by, a log line keeps its annotations, and both name the
- * account they were made for as Sentry's user (`ACCOUNT_KEY`). The web
- * functions take all of it, with the process's uncaught-exception and
- * unhandled-rejection handlers the Effect SDK leaves out, and send what they
- * queued after each answer (`sentryReportedFetch`), because Vercel may freeze
- * an instance as soon as it has answered. An eve root's process is started by eve's own
- * instrumentation (`instrumentation/sentry.ts`, Sentry's eve guide), which
- * runs before the agent loads, so its runtime takes everything but the
- * start: a second `init` would replace the client eve's integration hangs
- * off.
- *
- * One error is not sent: an agent's tool call refused and answered to the
- * model as the call's result, which the AI SDK integration would capture as
- * unhandled; it stays a breadcrumb and an errored span.
- *
- * Note that the options are Sentry's defaults but for that filter and two
- * more: no model's inputs or outputs leave, so an agent's turn reaches Agent
- * Tracing as its spans, timings, models, tools, and token counts, without the
- * instructions, messages, tool arguments, tool results, or replies, and no
- * request's body leaves either; and every
- * address a span, an event, or a log line carries leaves with its query's
- * values and its credential-shaped path segments redacted. The rest of
- * `dataCollection` is left as the SDK ships it, which `PRIVACY.md` describes.
- * A deployment without
- * `SENTRY_DSN` starts the SDK disabled, and every layer here then sends
- * nothing.
- */
-
 import {
   scrubbedAttributes,
   scrubbedQueryParams,
@@ -49,51 +13,30 @@ import {
 import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
-  /** The `vespin-web` project's DSN; absent means nothing is sent. */
   DSN: "SENTRY_DSN",
-  /** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
   DEPLOYMENT: "VERCEL_ENV",
 } as const;
 
-/** The environment a report names where Vercel names none, as a local `vercel dev` or a test. */
 const UNNAMED_DEPLOYMENT = "development";
 
-/** Sentry's level for an error a class annotated with Effect's `ErrorReporter.severity`; `error` for the rest, as `effectLayer`'s own reporter does. */
 const SEVERITY_LEVEL = { Fatal: "fatal", Warn: "warning" } as const;
 
-/** How a capture at a promise edge is marked: unhandled, since nothing past the edge was there to handle it. */
 const PROMISE_EDGE_MECHANISM = { type: "vespin.promise_edge", handled: false } as const;
 
-/** A scheduled job Sentry's Crons watches, created from its first check-in rather than by hand. */
 export interface CronMonitor {
   readonly slug: string;
-  /** The crontab the job is called on, which Sentry expects a check-in against. */
   readonly crontab: string;
-  /** The longest a run may take before Sentry marks it failed, in minutes. */
   readonly maxRuntimeMinutes: number;
-  /** Late a run may start before Sentry calls it missed, in minutes. */
   readonly checkInMarginMinutes: number;
-  /** Failed or missed runs in a row before Sentry opens the monitor's issue. */
   readonly failuresBeforeIssue: number;
 }
 
-/** A monitor's config as a check-in carries it. */
 type MonitorConfig = NonNullable<Parameters<typeof Sentry.captureCheckIn>[1]>;
 
-/** The share of requests traced, in every process of this deployment. */
 const TRACES_SAMPLE_RATE = 0.1;
 
-/** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
 
-/**
- * The span attributes that carry what a model was handed or answered, as
- * Sentry's AI integrations, the AI SDK's telemetry, and eve's own agent spans
- * name them. Sentry's `dataCollection.genAI` keeps its own integrations from
- * writing them, but eve writes its agent spans by its own trace policy, which
- * records content for a public audience, onto whatever tracer Sentry
- * registered, so they are dropped again as a span leaves.
- */
 const MODEL_CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
   "agent.approval.request",
   "agent.approval.response",
@@ -145,42 +88,24 @@ const MODEL_CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
   "gen_ai.tool.output",
 ]);
 
-/** The attribute Effect's SQL client writes a statement's text in (`effect/sql/Statement`). */
 const DB_QUERY_TEXT = "db.query.text";
 
-/**
- * A span named for what it ran: a database statement's by its text. Note
- * that Effect's SQL client names every statement's span for its database
- * (`postgres`), so without this Sentry's queries view, its N+1 detector, and
- * every search see one query; the text is already among the attributes sent.
- */
 function namedForStatement<Span extends { name: string; attributes?: object }>(span: Span): Span {
   const text: unknown = span.attributes && Reflect.get(span.attributes, DB_QUERY_TEXT);
   return typeof text === "string" && text.length > 0 ? { ...span, name: text } : span;
 }
 
-/** Attributes without any a model was handed or answered, and with their addresses scrubbed. */
 function scrubbedSpanAttributes<Attributes extends object>(attributes: Attributes): Attributes {
   const kept = Object.entries(attributes).filter(([name]) => !MODEL_CONTENT_ATTRIBUTES.has(name));
-  // SAFETY: only whole entries are dropped, and every attribute a span or a trace context carries is optional.
   return scrubbedAttributes(Object.fromEntries(kept) as Attributes);
 }
 
-/** The mechanism the AI SDK's Sentry integration captures a failed tool call under, and the tag naming the tool. */
 const AI_TOOL_ERROR = {
   MECHANISM: "auto.vercelai.channel",
   TOOL_TAG: "vercel.ai.tool.name",
   CALL_TAG: "vercel.ai.tool.callId",
 } as const;
 
-/**
- * An error event that is an agent's tool call failing, which the AI SDK
- * answered the model with as the call's result: the AI SDK integration
- * captures every one as unhandled (`captureToolError`), though the agent
- * reads it and carries on. Only a refusal among them is an outcome of the
- * turn rather than an error of the app (`isRefusal`); a failure beneath the
- * tool is still reported.
- */
 function isAnsweredToolError(event: ErrorEvent): boolean {
   return (
     event.tags?.[AI_TOOL_ERROR.TOOL_TAG] !== undefined &&
@@ -190,20 +115,8 @@ function isAnsweredToolError(event: ErrorEvent): boolean {
   );
 }
 
-/** How deep a refusal's causes are read; a deeper chain, or one that loops, is reported rather than taken for a refusal. */
 const REFUSAL_CAUSE_DEPTH = 5;
 
-/**
- * Whether a failure is a refusal: a bare `Error`, carrying nothing but its
- * words and, where it explains another, a cause that is a refusal too. That is
- * how eve's own tools refused a call (`You must read file … before overwriting
- * it`, a patch that does not apply, a file not found), and how a
- * connection's tool answers an error.
- *
- * Note that a bare `Error` carrying a field of its own beside its cause (a
- * sandbox API error's `response`, undici's `code`) is a failure beneath the
- * tool dressed as one, and is reported.
- */
 function isRefusal(failure: Error, depth = 0): boolean {
   const { cause } = failure;
   return (
@@ -214,18 +127,6 @@ function isRefusal(failure: Error, depth = 0): boolean {
   );
 }
 
-/**
- * Sends every error event but a tool call's refusal answered to the model,
- * which is kept as a breadcrumb instead, so a real error later in the same
- * request still shows what the agent's tools met before it. The tool call's
- * span keeps its error status and message, so Agent Tracing still shows it.
- *
- * Note that the class is what tells a refusal from a defect, because what
- * fails beneath a tool arrives as a class of its own (the sandbox client's
- * API error, an MCP client's error, undici's `TypeError`), alone or as a
- * refusal's cause, and still reports as an issue. A defect in this
- * repository's own tools is thrown as a class of its own too.
- */
 function dropAnsweredToolRefusals(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
   const failure = hint.originalException;
   if (!isAnsweredToolError(event) || !(failure instanceof Error) || !isRefusal(failure))
@@ -243,7 +144,6 @@ function dropAnsweredToolRefusals(event: ErrorEvent, hint: EventHint): ErrorEven
   return null;
 }
 
-/** An event with the addresses its request, its trace, and its breadcrumbs carry scrubbed. */
 function scrubbedEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
   const { request, contexts, breadcrumbs } = event;
   const trace = contexts?.trace;
@@ -269,31 +169,16 @@ function scrubbedEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
   };
 }
 
-/**
- * The options every process starts Sentry with. The release is the SDK's
- * own: it reads Vercel's `VERCEL_GIT_COMMIT_SHA`, the deployment's commit.
- */
 export function sentryOptions(): SentryOptions {
   return {
     dsn: process.env[SENTRY_ENVIRONMENT.DSN],
     environment: process.env[SENTRY_ENVIRONMENT.DEPLOYMENT] ?? UNNAMED_DEPLOYMENT,
-    // Note that one in ten requests is traced, because each request carries
-    // several Effect spans and every request came to about 140,000 spans an
-    // hour in production, which a plan's span quota does not hold. Errors,
-    // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
-    // Note that this outranks a model call's own telemetry asking to record, in an eve root,
-    // and is read by every AI integration Sentry ships (the AI SDK's, MCP's, OpenAI's, Anthropic's).
-    // Note that no request body is kept either, because what is posted to an agent is a
-    // message it hands the model, and an eve root would attach it to an error's report.
     dataCollection: { genAI: { inputs: false, outputs: false }, httpBodies: [] },
     beforeSend: (event, hint) => {
       const kept = dropAnsweredToolRefusals(event, hint);
       return kept && scrubbedEvent(kept);
     },
-    // Note that a span is scrubbed as it streams, because Sentry streams spans by default
-    // and runs no `beforeSendTransaction` then, and its own credential filter runs only in
-    // its HTTP integrations, never over the spans Effect's HTTP client and server open.
     beforeSendSpan: Sentry.withStreamedSpan((span) =>
       namedForStatement({ ...span, attributes: scrubbedSpanAttributes(span.attributes) }),
     ),
@@ -302,43 +187,18 @@ export function sentryOptions(): SentryOptions {
   };
 }
 
-/**
- * Effect's spans as Sentry spans, and Effect's metrics as Sentry's, as the
- * guide's v4 snippet installs them, with a span whose parent is a caller's
- * (`Tracer.externalSpan`, a request's `traceparent`) continuing the caller's
- * trace.
- *
- * Note that the external span layer is needed, because without it Sentry's
- * tracer passes over an external parent and starts a trace of its own, so a
- * server span would name a trace id the caller never saw. With it, Sentry
- * continues the trace as its own propagation does: the caller's trace id,
- * and the caller's sampling flag, so an unsampled call stays a span that
- * records nothing but whose trace id its log lines and issues still carry.
- */
 const sentryTelemetry = Layer.mergeAll(
   Layer.succeed(Tracer.Tracer, Sentry.SentryEffectTracer),
   SentryEffectExternalSpanLayer,
   Sentry.SentryEffectMetricsLayer,
 );
 
-/**
- * The annotation, or a report's attribute, that names the user account a
- * request or a run was made for, by its id: set where a request's caller is
- * resolved (`http/http-effect.ts`, `orpc/base.ts`) and where a run reads its
- * agent's or turn's row. Sentry is handed it as its user's id
- * (`SENTRY_USER_ID`), never as a tag or an attribute of its own, so an
- * account's every issue and log line are found under that user; nothing else
- * of the account, no email, name, or login, is among what is annotated.
- */
 const ACCOUNT_KEY = "userId";
 
-/** The attribute a Sentry log line names its user by, as the SDK's own scope would write it. */
 const SENTRY_USER_ID = "user.id";
 
-/** What every log line this logger sends is marked with, as Sentry's own Effect logger marks its lines. */
 const LOG_ORIGIN = { "sentry.origin": "auto.log.effect" } as const;
 
-/** Sentry's logger method for each Effect level a line is written at. */
 const SENTRY_LOG_METHOD = {
   Fatal: Sentry.logger.fatal,
   Error: Sentry.logger.error,
@@ -348,7 +208,6 @@ const SENTRY_LOG_METHOD = {
   Trace: Sentry.logger.trace,
 } as const;
 
-/** A line's message as one string, folded as Sentry's own Effect logger folds it, so a search for its words still matches. */
 function foldedLogMessage(message: unknown): string {
   if (Predicate.isString(message)) return message;
   if (Array.isArray(message) && message.length === 1) {
@@ -358,19 +217,6 @@ function foldedLogMessage(message: unknown): string {
   return JSON.stringify(message);
 }
 
-/**
- * Every Effect log line as a Sentry log, for the runtime's logger set beside
- * the JSON one: at its level, with the fiber's log annotations as its
- * attributes, so a line can be found in Sentry by the ids it was logged with,
- * and the account it was logged for as its user's id rather than an
- * attribute of its own. `beforeSendLog` scrubs them as it scrubs every log's.
- *
- * Note that this replaces `Sentry.SentryEffectLogger`, because that one sends
- * the message alone and drops the annotations. The line still reaches its
- * trace as Sentry links any log: the tracer (`SentryEffectTracer`) makes the
- * fiber's span the active one while the fiber runs, and Sentry's logger reads
- * the trace and span ids from it.
- */
 export const sentryLogger: Logger.Logger<unknown, void> = Logger.make(
   ({ fiber, logLevel, message }) => {
     if (logLevel === "All" || logLevel === "None") return;
@@ -385,7 +231,6 @@ export const sentryLogger: Logger.Logger<unknown, void> = Logger.make(
   },
 );
 
-/** The attributes a report is searched by, which land as tags on its issue; every other attribute stays its extra data. */
 const REPORT_TAG_ATTRIBUTES: ReadonlySet<string> = new Set([
   "agentId",
   "conversationId",
@@ -397,18 +242,8 @@ const REPORT_TAG_ATTRIBUTES: ReadonlySet<string> = new Set([
   "reason",
 ]);
 
-/** The longest value Sentry keeps on a tag; a longer one is dropped from the event. */
 const TAG_VALUE_MAX_LENGTH = 200;
 
-/**
- * A report's attributes as an issue carries them: those it is searched by as
- * tags where they are a string, a number, or a boolean, the rest as extra data. Note that a tag's value is cut to Sentry's
- * limit, because a longer one is dropped whole, and the whole value then stays
- * in the extra data. The account is its user, as the report's own attribute
- * or, where it names none, as the annotation of the fiber that reported it,
- * so a failure met under a request or a run names the account it was for
- * without each report saying so.
- */
 function reportContext(
   { [ACCOUNT_KEY]: reported, ...attributes }: Readonly<Record<string, unknown>>,
   annotations: Readonly<Record<string, unknown>>,
@@ -421,8 +256,6 @@ function reportContext(
   const extra: Record<string, unknown> = {};
   const account = Predicate.isString(reported) ? reported : annotations[ACCOUNT_KEY];
   for (const [name, value] of Object.entries(attributes)) {
-    // Note that only a primitive becomes a tag, and nothing is serialized here, because a
-    // cyclic or BigInt value would throw and lose the report; Sentry normalizes extra data.
     const text =
       Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
         ? String(value)
@@ -436,13 +269,6 @@ function reportContext(
   return { tags, extra, ...(Predicate.isString(account) ? { user: { id: account } } : undefined) };
 }
 
-/**
- * Each failure a cause carries, captured as `effectLayer`'s own reporter
- * captures it, through Effect's `ErrorReporter.make`, but with the
- * attributes the failure is annotated with (`ErrorReporter.attributes`) split
- * by `reportContext`: Sentry's own reporter sends all of them as extra data,
- * which an issue cannot be searched by.
- */
 const sentryErrorReporter = ErrorReporter.make(({ error, severity, attributes, fiber }) => {
   Sentry.captureException(error, {
     mechanism: { type: "auto.function.effect.error_reporter", handled: false },
@@ -453,25 +279,8 @@ const sentryErrorReporter = ErrorReporter.make(({ error, severity, attributes, f
   });
 });
 
-/** The reporter registered beside whatever reporters stand, as the guide asks of a reporter of one's own. */
 const sentryReporting = ErrorReporter.layer([sentryErrorReporter], { mergeWithExisting: true });
 
-/**
- * Sentry started on `options`, with its `ErrorReporter` registered: a route
- * that fails, a cause handed to `ErrorReporter.report`, and an effect under
- * `Effect.withErrorReporting` are each captured, and so is an exception or a
- * rejection nothing in the process caught.
- *
- * Note that this is `effectLayer`'s start, `Sentry.init`, beside this
- * module's own reporter rather than `effectLayer` itself, because that would
- * register Sentry's reporter too and capture each failure twice.
- *
- * Note that the two process handlers are added here rather than in
- * `sentryOptions`, because the Effect SDK's server `init` starts only its
- * context-lines and linked-errors integrations, while an eve root starts
- * `@sentry/node`'s full defaults from those same options, which already hold
- * both handlers.
- */
 export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Layer<never> {
   const started = Layer.effectDiscard(
     Effect.sync(() =>
@@ -487,20 +296,10 @@ export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Lay
   return Layer.mergeAll(started, sentryReporting, sentryTelemetry);
 }
 
-/** How long an instance is kept awake after an answer for Sentry to send what it queued. */
 const REQUEST_FLUSH_MS = 2_000;
 
-/** A web function's handler, as the platform calls it. */
 type WebFetch = (request: Request) => Promise<Response>;
 
-/**
- * A web function's handler as Sentry watches it. What it throws, such as a
- * runtime whose layer could not be built, is captured before it is thrown on
- * to the platform. Once it has answered or thrown, what Sentry queued is sent,
- * and that sending is handed to `keepAwake` (Vercel's `waitUntil`) rather
- * than awaited, so the answer leaves at once and the instance is not frozen
- * before the report does.
- */
 export function sentryReportedFetch(
   fetch: WebFetch,
   keepAwake: (sending: Promise<boolean>) => void,
@@ -519,26 +318,11 @@ export function sentryReportedFetch(
   };
 }
 
-/**
- * The same reporting for a process eve's instrumentation already started
- * Sentry in, without a second start: a second `init` would replace the
- * client eve's integration hangs off.
- */
 export const sentryReportingLayer: Layer.Layer<never> = Layer.merge(
   sentryReporting,
   sentryTelemetry,
 );
 
-/**
- * A service a promise edge stands for its instance's life, with no request
- * whose answer could carry its failure, so nothing it ends on is discarded.
- * Once the runner runs it, what ends it is reported through the runtime's
- * `ErrorReporter`, which captures a failure and a defect and passes over an
- * interruption. A runner that rejects without running it, as one whose
- * runtime could not be built does, is captured at the promise. The promise
- * settles either way, so the edge that stood the service carries on as it
- * would have without it.
- */
 export function standReported<E, R>(
   run: (service: Effect.Effect<never, E, R>) => Promise<never>,
   service: Effect.Effect<never, E, R>,
@@ -553,13 +337,10 @@ export function standReported<E, R>(
   });
 }
 
-/** How long a run waits for its closing check-in to leave before it returns anyway. */
 const CHECK_IN_FLUSH_MS = 2_000;
 
-/** What Sentry has queued, sent; a flush that runs out of time drops nothing the run depends on. */
 const checkInDelivered = Effect.asVoid(Effect.promise(() => Sentry.flush(CHECK_IN_FLUSH_MS)));
 
-/** The monitor's config, sent with each check-in so Sentry creates or updates it (an upsert). */
 function monitorConfig(monitor: CronMonitor): MonitorConfig {
   return {
     schedule: { type: "crontab", value: monitor.crontab },
@@ -570,15 +351,6 @@ function monitorConfig(monitor: CronMonitor): MonitorConfig {
   };
 }
 
-/**
- * A job's runs as Sentry's Crons guide recommends checking them in: one
- * check-in as a run starts and one as it ends, `ok` or `error`, so Sentry
- * can tell a run that never started from one that ran too long. The closing
- * check-in is flushed before the run returns, because a function frozen once
- * it has answered would otherwise drop it and leave a good run marked missed.
- * A run the deployment could not start checks nothing in: its caller is
- * unauthenticated, and the missed check-in is what Sentry alerts on.
- */
 export function sentryCronCheckIns(monitor: CronMonitor) {
   const config = monitorConfig(monitor);
   return {

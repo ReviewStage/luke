@@ -1,7 +1,3 @@
-/**
- * agent-image.test.ts -- the image's reference read from beside a function's entry, and a build that left none there.
- */
-
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

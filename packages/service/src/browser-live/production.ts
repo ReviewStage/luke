@@ -1,13 +1,3 @@
-/**
- * production.ts -- the live view's dependencies as the deployment stands them: the tab read and taken over in the store by the tabs contract's rules, the agent's sandbox session from its conversation, its browser over Vercel's REST API and the sandbox's PTY, and the terminal's lease.
- *
- * Each dependency answers over the services the function's runtime holds,
- * captured once as the service stands, so the relay itself requires none.
- * A store that cannot take a lease's move is logged, since the panel's next
- * message tries again, as is a keep-alive of the sandbox Vercel did not
- * confirm; nothing a tab shows is.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
   handBackBrowserTab,
@@ -28,10 +18,8 @@ import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import type { BrowserLiveDependencies } from "./relay.js";
 
-/** What the live view's dependencies answer over. */
 export type BrowserLiveServices = DatabaseServices | HttpClient.HttpClient;
 
-/** The live view's dependencies over the services the runtime holds now. */
 export const browserLiveDependencies: Effect.Effect<
   BrowserLiveDependencies,
   never,
@@ -48,14 +36,12 @@ export const browserLiveDependencies: Effect.Effect<
   );
   return {
     readTab: (userId, place, tabId) => run(readBrowserTab(userId, place, tabId)),
-    // Note that the tab was read under the member's reach first, so its agent's conversation is read whoever started it.
     sessionOf: (conversationId) =>
       run(
         Effect.map(standingSessionsNamed([conversationId]), ([session]) =>
           Option.fromUndefinedOr(session?.sessionId),
         ),
       ),
-    // Note that a connection reopens the agent's kept tabs where its browser started afresh.
     browser: {
       connect: (sessionId, conversationId) =>
         connectRestoring(sessionId, conversationId).pipe(

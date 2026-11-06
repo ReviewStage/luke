@@ -27,24 +27,11 @@ import { AUTH_BASE_PATH } from "./auth-policy.js";
 import { oauthUserInfoFromAuthAnswer, requestUserId, type UserInfoEndpoint } from "./bearer.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 
-/**
- * An outside MCP client signs in to the auth service by either door the
- * provider opens, a Client ID Metadata Document or Dynamic Client
- * Registration, for the member MCP server alone: it holds the server's
- * scopes and no other, its token names the server and enters it, and the
- * same token names nobody at an account route, which is what keeps a
- * client the member allowed off the desktop's routes. The auth service and
- * the server stand over a test's own PGlite (`../testing/member-mcp-auth.ts`),
- * the metadata document answered by a double at the plugin's fetch seam.
- */
-
 const ORIGIN = MEMBER_MCP_TEST.ORIGIN;
 const AUTH = `${ORIGIN}${AUTH_BASE_PATH}`;
 
-/** The scopes a client of the server asks for, and the whole of what either door grants. */
 const MCP_SCOPES = [MEMBER_MCP_SCOPE.MCP, MEMBER_MCP_SCOPE.OFFLINE_ACCESS] as const;
 
-/** The document each client named by a URL publishes there, as the MCP 2026-07-28 profile requires it: named, with its redirect, public. */
 const CIMD_CLIENT = {
   ID: "https://client.example/.well-known/oauth-client-metadata.json",
   OPENID_ID: "https://client.example/.well-known/openid-client-metadata.json",
@@ -62,13 +49,11 @@ function metadataDocument(clientId: string, scope?: string) {
   };
 }
 
-/** The two documents, each answered only at its own URL: one asking the server's scopes, one asking `openid`. */
 const CIMD_DOCUMENTS: ReadonlyMap<string, object> = new Map([
   [CIMD_CLIENT.ID, metadataDocument(CIMD_CLIENT.ID)],
   [CIMD_CLIENT.OPENID_ID, metadataDocument(CIMD_CLIENT.OPENID_ID, "openid")],
 ]);
 
-/** The plugin's fetch seam, answering a document by its URL and nothing else. */
 function fetchMetadataDocument(input: RequestInfo | URL): Promise<Response> {
   const url = input instanceof Request ? input.url : String(input);
   const document = CIMD_DOCUMENTS.get(url);
@@ -100,23 +85,19 @@ const decodeAuthServerMetadata = Schema.decodeUnknownSync(
   }),
 );
 
-/** The claims a signed access token carries, read without verifying, which is the server's job. */
 function claimsOf(token: string) {
   const [, payload] = token.split(".");
   return decodeClaims(JSON.parse(Buffer.from(payload ?? "", "base64url").toString()));
 }
 
-/** The auth service's own userinfo over the test's service, as `hostedUserInfo` is over the deployment's. */
 function userInfoOver(auth: MemberMcpTestAuth): UserInfoEndpoint {
   return (input) =>
     Effect.tryPromise(async () => {
-      // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guard validates the selected field.
       const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
       return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
     });
 }
 
-/** The account an account route resolves for the bearer, as `resolveHostedUserId` resolves it: through userinfo, and never a cookie beside an `Authorization`. */
 function accountOf(auth: MemberMcpTestAuth, token: string) {
   return requestUserId(
     new Request(`${ORIGIN}/api/account`, { headers: { authorization: `Bearer ${token}` } }),
@@ -144,7 +125,6 @@ it.effect(
 
       for (const clientId of [CIMD_CLIENT.ID, dynamic.client_id]) {
         const grant = { clientId, scope: MCP_SCOPES, resource: RESOURCE };
-        // No token without consent: the authorization stops on the consent page, not at the client.
         const asked = yield* Effect.promise(() => authorize(auth, cookie, grant));
         assert.equal(asked.pathname, MEMBER_MCP_TEST.CONSENT_PAGE, asked.href);
         assert.equal(asked.searchParams.get("client_id"), clientId);
@@ -177,7 +157,6 @@ it.effect(
       const registered = yield* Effect.promise(() => register(auth, registration(MCP_SCOPES)));
       const dynamic = decodeRegistered(yield* Effect.promise(() => registered.json()));
 
-      // A document asking `openid` names no client at all, so there is no redirect to carry the refusal.
       const unnamed = yield* Effect.promise(() =>
         authorizeAnswer(auth, cookie, {
           clientId: CIMD_CLIENT.OPENID_ID,
@@ -190,7 +169,6 @@ it.effect(
         decodeRefusal(yield* Effect.promise(() => unnamed.json())).error,
         "invalid_scope",
       );
-      // A client of either door asking `openid` at authorization is sent back with the refusal and no code.
       for (const clientId of [CIMD_CLIENT.ID, dynamic.client_id]) {
         const landed = yield* Effect.promise(() =>
           authorize(auth, cookie, { clientId, scope: ["openid"], resource: RESOURCE }),
@@ -236,7 +214,6 @@ it.effect(
     }),
 );
 
-/** The body of an answer, read off a copy so the answer itself can still be read. */
 function text(answer: Response): Effect.Effect<string> {
   return Effect.promise(() => answer.clone().text());
 }

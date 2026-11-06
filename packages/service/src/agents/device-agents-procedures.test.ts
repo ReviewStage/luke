@@ -1,9 +1,3 @@
-/**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a member's sign-in is no device's and is refused as unauthenticated, a Mac enrolls on that sign-in, created where we never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of a newer release and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
- *
- * Synthetic accounts, bearers, codes, Macs, hosts, and keys throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -61,10 +55,8 @@ const PATH = {
   PAIRING_DENY: "/api/hosts/pairing/deny",
 } as const;
 
-/** A daemon below the floor. */
 const OLD_VERSION = "0.0.9";
 
-/** The deployment's environment, its key ring a throwaway of this file's. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -77,16 +69,13 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** What the routes counted, across the file; a case reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The properties of each event of one name the account was counted for, in order. */
 const countedProperties = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** One request of the device's, on the bearer given (an account's, or a host's secret), its body as JSON or its device in the query, a daemon's version where one is given, and the address the platform names where one is given; a POST with no body where asked. */
 function request(
   bearer: string | undefined,
   path: string,
@@ -112,7 +101,6 @@ function request(
   });
 }
 
-/** What the route answered one request with, over the test's database and clock. */
 const answerOf = (incoming: Request) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -135,7 +123,6 @@ const answerOf = (incoming: Request) =>
       deviceAgents: deviceAgentsProcedures(seams),
       hosts: hostsProcedures(seams),
     });
-    // SAFETY: the procedures yield the database, the clock, the environment, and the analytics alone, which is all a test provides of the web runtime's services.
     const response = yield* Effect.promise(() =>
       handle(incoming, context as Context.Context<WebServices>),
     );
@@ -143,10 +130,8 @@ const answerOf = (incoming: Request) =>
     return { status: response.status, body: text.length === 0 ? undefined : JSON.parse(text) };
   });
 
-/** The status the route answered one request with. */
 const statusOf = (incoming: Request) => Effect.map(answerOf(incoming), (answer) => answer.status);
 
-/** An account. */
 const account = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -155,12 +140,10 @@ const account = () =>
     return userId;
   });
 
-/** A register of a Mac under the id given. */
 function registered(deviceId: string) {
   return { deviceId, name: "Studio", ...DEVICE_LAYOUT };
 }
 
-/** A Mac's enroll on its desktop's sign-in under the id given, naming the Mac, and the machine it runs on where one is given. */
 function enrollOwn(bearer: string, deviceId: string, machineId?: string) {
   return request(bearer, PATH.ENROLL_OWN, {
     version: HOST_VERSION.FLOOR,
@@ -174,7 +157,6 @@ function enrollOwn(bearer: string, deviceId: string, machineId?: string) {
   });
 }
 
-/** A Mac's register on its own secret, as its host program's first call is, with where its setup stands where it is not ready. */
 function macRegister(
   secret: string,
   deviceId: string,
@@ -186,7 +168,6 @@ function macRegister(
   });
 }
 
-/** An agent of the account's pinned to the device given, or to none, whose turn is running; its conversation's id. */
 const agentRunningOn = (userId: string, deviceId: string | null) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations" });
@@ -218,18 +199,15 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
     return conversationId;
   });
 
-/** A host's beat on its secret, naming the device given, at the version given or the floor's. */
 function hostBeat(secret: string, deviceId: string, version: string = HOST_VERSION.FLOOR) {
   return request(secret, PATH.PRESENCE, { version, body: { deviceId } });
 }
 
-/** The release the service publishes, which every case that names it needs. */
 function publishedRelease() {
   assert.ok(HOST_RELEASE !== undefined, "a release is published");
   return HOST_RELEASE;
 }
 
-/** A box's pairing start with no credential, from the address given where one is, at the version given or the floor's. */
 function startPairing(init: { readonly version?: string; readonly ip?: string } = {}) {
   return request(undefined, PATH.PAIRING_START, {
     version: init.version ?? HOST_VERSION.FLOOR,
@@ -238,19 +216,16 @@ function startPairing(init: { readonly version?: string; readonly ip?: string } 
   });
 }
 
-/** A pairing box's poll on its poll secret, at the floor's version. */
 function pollPairing(pollSecret: string) {
   return answerOf(
     request(pollSecret, PATH.PAIRING_POLL, { version: HOST_VERSION.FLOOR, post: true }),
   );
 }
 
-/** A member's read, approve, or deny of a pairing by its code, on their bearer. */
 function byCode(bearer: string, path: string, code: string) {
   return answerOf(request(bearer, path, { body: { code } }));
 }
 
-/** A pairing started: its poll secret and the code it shows. */
 const startedPairing = Effect.gen(function* () {
   const started = yield* answerOf(startPairing());
   assert.equal(started.status, HOSTED_HTTP_STATUS.OK);
@@ -258,7 +233,6 @@ const startedPairing = Effect.gen(function* () {
   return { pollSecret, userCode };
 });
 
-/** A host paired under the account with a code it approved, registered on its own secret: its id and its secret. */
 const pairedHost = (userId: string) =>
   Effect.gen(function* () {
     const { pollSecret, userCode } = yield* startedPairing;
@@ -281,14 +255,12 @@ const pairedHost = (userId: string) =>
     return { deviceId, secret };
   });
 
-/** A code no pending pairing has: seven Bs and the letter given. */
 function unusedCode(last: string) {
   return `BBBB-BBB${last}`;
 }
 
 const NOT_FOUND = { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: "not-found" } };
 
-/** What every case runs over: its database, and the deployment's environment. */
 const SERVICES = Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT));
 
 it.layer(SERVICES)("a local agent's Mac", (it) => {
@@ -327,7 +299,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         );
         assert.equal(yield* statusOf(macRegister(secret, deviceId)), HOSTED_HTTP_STATUS.OK);
 
-        // A Mac keyed again on a new sign-in is the same install.
         assert.equal((yield* answerOf(enrollOwn(owner, deviceId))).status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
           { kind: "this_mac" },
@@ -390,7 +361,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
 
         const published = publishedRelease();
 
-        // Note that a beat answers the launches the service holds the device to, none for a host with no agent, and the release published, which a host at the floor is below.
         assert.deepEqual(ownBeat, {
           status: HOSTED_HTTP_STATUS.OK,
           body: {
@@ -438,7 +408,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         const owner = yield* account();
         const host = yield* pairedHost(owner);
         const failure = "the download did not match its checksum";
-        /** The account's one host's update, as Hosts lists it. */
         const listedUpdate = Effect.map(answerOf(request(owner, PATH.HOSTS)), (listed) =>
           listed.body.hosts.map(
             (each: { readonly update?: string; readonly updateFailure?: string }) => [
@@ -455,7 +424,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
           }),
         );
         const whileFailed = yield* listedUpdate;
-        // A host from before the field, or one updating nothing, beats with neither.
         const plain = yield* statusOf(hostBeat(host.secret, host.deviceId));
         const afterPlain = yield* listedUpdate;
 
@@ -482,7 +450,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
 
       assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
       assert.equal(removed, HOSTED_HTTP_STATUS.OK);
-      // Note that the 401 a released host reads as removed stands, marked so a host tells it from any other 401 on the service's origin.
       assert.deepEqual(beat, {
         status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
         body: { error: "invalid-token", hostRemoved: true },
@@ -573,7 +540,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
           .deviceSecret;
         yield* statusOf(macRegister(beforeSecret, before));
         const onBefore = yield* agentRunningOn(owner, before);
-        // Note that the box was reinstalled, so it pairs as a new host and names its machine only at its first register.
         const { pollSecret, userCode } = yield* startedPairing;
         yield* byCode(owner, PATH.PAIRING_APPROVE, userCode);
         const handed = yield* pollPairing(pollSecret);
@@ -716,7 +682,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         const { pollSecret, userCode }: { pollSecret: string; userCode: string } = started.body;
 
         const waiting = yield* pollPairing(pollSecret);
-        // Note that a code is matched whatever its case and dash.
         const read = yield* byCode(owner, PATH.PAIRING, userCode.replace("-", "").toLowerCase());
         const approved = yield* byCode(owner, PATH.PAIRING_APPROVE, userCode);
         const deviceId: string = approved.body.deviceId;

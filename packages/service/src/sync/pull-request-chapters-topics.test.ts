@@ -12,16 +12,6 @@ import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { expectTopicsFire, getTestDB, openWorkspace } from "@repo/database/testing";
 import { Effect } from "effect";
 
-/**
- * A pull request's chapters on the migrated capture: a Generate's claim and
- * its finish, each through the store's own writer, notify the workspace's
- * chapters topic alone, which the chapters' live read is woken on, and
- * never the workspace's own, which would wake every member's task list on
- * each Generate.
- *
- * Synthetic accounts, repositories, and commits throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

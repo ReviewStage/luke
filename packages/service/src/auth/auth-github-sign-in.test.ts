@@ -7,18 +7,6 @@ import type { WireValue } from "../core.js";
 import { authDatabaseHooks, withAuthCounts } from "./auth-counts.js";
 import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./auth-policy.js";
 
-/**
- * A GitHub sign-in, configured as `auth.ts` configures it, over an in-memory
- * database with GitHub a fake behind `fetch`. Sign-in is our GitHub
- * App's user authorization, so what this holds is that GitHub is asked as
- * the App's client and for no OAuth scope; that an account from before the
- * App, the same GitHub user, signs in to the user it already has and comes
- * away holding the App's expiring token and its refresh token, sealed; and
- * that the auth service hands no browser that token.
- *
- * Synthetic accounts, secrets, and tokens throughout.
- */
-
 const BASE_URL = "https://vespin.dev";
 const APP_CLIENT_ID = "Iv1.fixture-app-client";
 const APP_CLIENT_SECRET = "fixture-app-client-secret";
@@ -29,7 +17,6 @@ const HOUR_SECONDS = 60 * 60;
 
 const decodeStarted = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }));
 
-/** What the fake GitHub answers the next token exchange with; the App's answer carries expiries, the OAuth App's did not. */
 interface Grant {
   readonly access_token: string;
   readonly refresh_token?: string;
@@ -45,7 +32,6 @@ const APP_GRANT = {
   scope: "",
 } as const satisfies Grant;
 
-/** Every token exchange GitHub was asked for, as the form it was sent. */
 const exchanges: URLSearchParams[] = [];
 let grant: Grant = APP_GRANT;
 
@@ -53,7 +39,6 @@ function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-/** GitHub's token endpoint and the two profile reads, answering whatever `grant` holds. */
 async function fakeGitHub(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : input);
   if (url.href === "https://github.com/login/oauth/access_token") {
@@ -93,7 +78,6 @@ function cookiesFrom(response: Response): string {
     .join("; ");
 }
 
-/** The sign-in page's GitHub press: answers GitHub's authorize URL and the flow's cookie. */
 async function startSignIn(auth: Auth) {
   const response = await auth.handler(
     new Request(`${BASE_URL}/api/auth/sign-in/social`, {
@@ -108,7 +92,6 @@ async function startSignIn(auth: Auth) {
   };
 }
 
-/** A whole GitHub sign-in: the press, GitHub's consent, and the callback landing; answers the session cookie and what the hooks counted. */
 async function signInCounted(auth: Auth) {
   const { authorize, cookie } = await startSignIn(auth);
   const callback = new URL(`${BASE_URL}/api/auth/callback/github`);

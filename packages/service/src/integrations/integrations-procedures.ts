@@ -1,85 +1,3 @@
-/**
- * integrations-procedures.ts -- the account's integrations: its connections read, begun, ended, and settled.
- *
- * Eight procedures the signed-in desktop calls with its bearer, or a page of
- * the deployment's own with its session cookie; the browser's return from a
- * sign-in is `integrations-app.ts`'s. A user account may hold more than
- * one account at a provider, each its own row and grant under its own
- * connection name; every route about one account reads it from the
- * `connection` query beside the provider, and without one means the
- * provider's first account, so a desktop that predates more than one sees
- * exactly what it saw before.
- *
- * - `GET /api/account/integrations` answers where every provider's
- *   connection stands. For a caller with a bearer, a sign-in still under
- *   way is settled here too, by asking Connect for a token afresh, so a
- *   desktop that reads again after the browser closed learns the outcome
- *   whatever address the browser was returned to; one with no token yet
- *   stands pending until its window runs out, since Connect documents no
- *   way to ask why a sign-in that never returned to us ended. A provider
- *   the deployment does not offer the account
- *   (`accountIntegrationConnect`) stands unavailable, and every route below
- *   refuses it as one with no connector here. A caller with only the
- *   session cookie is answered where each row stands as stored, a sign-in
- *   under way `pending`, and nothing is settled, ended, or labeled: a Lax
- *   cookie rides a link another site's page sends a browser on, which must
- *   not settle the account's sign-in.
- * - `POST /api/account/integrations/settle` is that read with its settling,
- *   for any caller; a POST a cookie carries is held to the deployment's own
- *   pages by the origin guard before it gets here. A desktop that follows
- *   the account's rows live (`live-procedures.ts`'s `integrationStatuses`)
- *   asks it while a sign-in stands pending.
- * - `GET /api/account/integrations/github` answers where GitHub alone
- *   stands, which comes from the account's GitHub sign-in rather than a row,
- *   so a desktop following the rows live reads it beside them.
- * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
- *   to begin a browser sign-in to the provider for the account, records the
- *   sign-in's one-time state, and answers the address the desktop opens and
- *   the account it signs in. With `add=true` it signs in a new account,
- *   under a subject minted for it and the next free connection name, where
- *   the provider offers more than one (`integrations.ts`) and the account
- *   holds fewer than the most; the new account stands pending until its
- *   sign-in settles, and its label is its name at the provider where
- *   Connect's grant carries one.
- * - `POST /api/account/integrations/{provider}/rename` names one account
- *   as the developer calls it, and answers the account as it then stands.
- * - `POST /api/account/integrations/{provider}/cancel` ends the sign-in
- *   under way, if one still is, and nothing else: a first sign-in's row
- *   goes, any other row keeps its status, and no grant is revoked, so a
- *   sign-in that completed just before the press stays connected. It
- *   answers where the provider then stands.
- * - `POST /api/account/integrations/{provider}/disconnect` deletes the
- *   account's row at the provider before anything else, which is what stops
- *   every agent's next token read, then asks Connect to revoke the grant; a
- *   revoke that fails is logged, and the account is disconnected all the
- *   same.
- * - `GET /api/account/integrations/{provider}/tools` answers the tools the
- *   provider's server offers the account's agents, read from the server with
- *   the account's token as an MCP client reads them, and held for a few
- *   minutes per account and provider so a popover opened again asks the
- *   server nothing; GitHub's, whose grant has no instant a new one is told
- *   by, are read every time. A server that listed none answers why, with its own one-line message where it sent one that
- *   carries no credential (`packages/service/src/integrations/mcp-tools.ts`), and is never held, so a
- *   connection mended at the provider reads as mended at once. A provider
- *   the account has not connected is refused before any token is read.
- *
- * A Connect, a Cancel that ended a sign-in, a Disconnect that deleted a
- * row, and a rename each answer the transaction they wrote in as `txid`,
- * which a desktop following the account's live read of its integrations
- * waits to carry before it answers its window; one that wrote nothing
- * answers none.
- *
- * A provider's route names it as a path segment, read as words so a
- * provider this build has no route for is not found, as it was; every
- * procedure resolves its caller before it reads its input, and a rename's
- * body is held to its own cap as it is read (`bodyCap` on its contract). Root AGENTS.md pins that no
- * credential travels in an answer: what each endpoint answers is status
- * words, a server's or Connect's credential-free line, or the sign-in
- * address, never a token. The sign-in address is not logged either, since
- * it begins a grant for the account it was issued for, and neither is the
- * handle Connect answers a sign-in with, which is never answered at all.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@repo/features";
@@ -145,42 +63,29 @@ import {
   readMcpTool,
 } from "./mcp-tools.js";
 
-/** What the integrations procedures ask of the deployment: the store, the clock, the minting, and the caller's resolver. */
 export type IntegrationsProcedureSeams = IntegrationsAppSeams;
 
-/** Where every provider stands, as the statuses read and the settle answer it. */
 type IntegrationStatusesRead = typeof integrationStatusesReadSchema.Type;
 
-/** One account as a rename answers it. */
 type IntegrationAccountAnswer = typeof integrationAccountAnswerSchema.Type;
 
-/** How long a provider's tools stay read for an account before the next ask reads the server again. */
 const INTEGRATION_TOOLS_TTL_MS = 5 * 60 * 1000;
 
-/** One account's tools as read, when, and under which grant: a sign-in completed since names another. */
 interface ToolsRead {
   readonly at: number;
   readonly connectedAt: number | undefined;
   readonly tools: readonly McpTool[];
 }
 
-/** The tools read lately, by user account and then by connection name, for as long as the instance stands. */
 type ToolsCache = Map<string, Map<string, ToolsRead>>;
 
-/** When a provider lately answered no name for an account, asked with its token (`providerAccountName`), and under which grant: a sign-in completed since names another. */
 interface UnnamedRead {
   readonly at: number;
   readonly connectedAt: number | undefined;
 }
 
-/**
- * The accounts whose provider lately answered no name, by user account and
- * then by connection name, for as long as the instance stands, so a provider
- * that keeps failing is asked again only once its hold has passed.
- */
 type UnnamedHold = Map<string, Map<string, UnnamedRead>>;
 
-/** Every read past its time let go, so an instance that stands long holds the reads of no account that stopped asking. */
 function heldReadsSwept(
   cache: Map<string, Map<string, { readonly at: number }>>,
   now: number,
@@ -193,7 +98,6 @@ function heldReadsSwept(
   }
 }
 
-/** The account's rows at one provider, in their places' order. */
 function providerRows(
   rows: readonly IntegrationConnectionRow[],
   provider: IntegrationProvider,
@@ -205,18 +109,15 @@ function providerRows(
     .toSorted((a, b) => placeOf(a) - placeOf(b));
 }
 
-/** One account as the wire answers it, standing as given. */
 function accountOf(row: IntegrationConnectionRow, status: IntegrationStatus): IntegrationAccount {
   return {
     provider: row.provider,
     connection: row.connectionName,
-    // An empty label marks an account whose grant named nothing, which is called by its place.
     ...(row.label !== undefined && row.label !== "" ? { label: row.label } : undefined),
     status,
   };
 }
 
-/** Where a row stands without settling anything: its own status in the wire's words. */
 function rowStatus(row: IntegrationConnectionRow): IntegrationStatus {
   switch (row.status) {
     case INTEGRATION_ROW_STATUS.CONNECTED:
@@ -228,18 +129,11 @@ function rowStatus(row: IntegrationConnectionRow): IntegrationStatus {
   }
 }
 
-/** What a provider's procedure is asked: the path's provider, and the account in the query. */
 interface AccountAsked {
   readonly params: { readonly provider: string };
   readonly query?: { readonly connection?: string | undefined } | undefined;
 }
 
-/**
- * The account a procedure is about: the path's provider, and the connection
- * the caller named in the query, or the provider's first account where it
- * named none. A provider this build has no route for, and a name that is no
- * account at that provider, are not found.
- */
 const requestedAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   asked: AccountAsked,
 ): Effect.fn.Return<
@@ -256,12 +150,6 @@ const requestedAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { provider, connectionName: named };
 });
 
-/**
- * Whether a row holds one of its provider's account places: connected,
- * expired, or a sign-in still under way. Note that a first sign-in that ran
- * out of time holds none, because no read answers it, so nothing the
- * developer sees could free its place.
- */
 function holdsAccountPlace(seams: IntegrationsAppSeams, row: IntegrationConnectionRow): boolean {
   return (
     row.status === INTEGRATION_ROW_STATUS.CONNECTED ||
@@ -270,13 +158,6 @@ function holdsAccountPlace(seams: IntegrationsAppSeams, row: IntegrationConnecti
   );
 }
 
-/**
- * Asks Connect afresh whether the account now holds a grant at the
- * provider, and records it connected where it does; answers whether it
- * does. Connect's own refusal and an outage alike answer no: a sign-in not
- * yet finished reads the same as one Connect could not be asked about, and
- * the next read asks again.
- */
 const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   connector: ConnectorService,
@@ -313,25 +194,17 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { completed, ...(accountName !== undefined ? { accountName } : undefined) };
 });
 
-/** Where one provider stands for the statuses read. */
 interface Standing {
   readonly status: IntegrationStatus;
-  /** The account's name at the provider a sign-in this read settled was granted with, where its grant named one. */
   readonly accountName?: string;
 }
 
-/** Where a row stands once its sign-in is over without a grant: expired where it was, else disconnected. */
 function standingWithoutSignIn(row: IntegrationConnectionRow): IntegrationStatus {
   return row.status === INTEGRATION_ROW_STATUS.EXPIRED
     ? INTEGRATION_STATUS.EXPIRED
     : INTEGRATION_STATUS.DISCONNECTED;
 }
 
-/**
- * Where a stored row stands, settling a sign-in still under way with the
- * provider's connector: connected where Connect now holds a grant, and
- * pending otherwise, until the sign-in's window runs out.
- */
 const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   connector: ConnectorService,
@@ -340,11 +213,8 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (row === undefined) return { status: INTEGRATION_STATUS.DISCONNECTED };
   if (row.status === INTEGRATION_ROW_STATUS.CONNECTED)
     return { status: INTEGRATION_STATUS.CONNECTED };
-  // The state of a sign-in still under way, which is the one a settlement may complete.
   const underWay = signInStands(seams, row.stateIssuedAt) ? row.state : undefined;
-  // A first sign-in that ran out of time never connected anything.
   if (underWay === undefined) return { status: standingWithoutSignIn(row) };
-  // Note that a sign-in under way stands pending even over an expired row, because the window waits on its end either way.
   const settled = yield* settledSignIn(seams, connector, row, underWay);
   if (settled.completed) {
     return {
@@ -355,13 +225,10 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { status: INTEGRATION_STATUS.PENDING };
 });
 
-/** How long the read of whose account a token is may take before the account is left for the next statuses read. */
 const ACCOUNT_NAME_TIMEOUT = Duration.seconds(2);
 
-/** How long the same read through the provider's MCP server may take, its session's opening and end included. */
 const ACCOUNT_NAME_TOOL_TIMEOUT = Duration.seconds(4);
 
-/** The provider's API's answer to whose account a token is, read with it, where it answered with success. */
 const apiAccountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   url: string,
   token: Redacted.Redacted,
@@ -381,13 +248,6 @@ const apiAccountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
 });
 
-/**
- * The account's name as its provider answers it with the account's token
- * (`integrations.ts`'s `ACCOUNT_NAME`), from its API or through its own MCP
- * server, kept as a grant's name is kept (`accountNameLine`), or nothing
- * where the answer holds none; fails where the provider could not be read,
- * whose cause is dropped unread.
- */
 const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
   provider: IntegrationProvider,
   read: AccountNameRead,
@@ -408,22 +268,6 @@ const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrUndefined(Option.flatMapNullishOr(name, accountNameLine));
 });
 
-/**
- * A connected account as the statuses read answers it, labeled once from
- * its grant where it carries no label: an account connected before labels
- * were kept, or one whose sign-in's grant named nothing then. Its name at
- * the provider is read from Connect's grant fields, the same ones a
- * sign-in's are, or, where they name nothing and the provider answers whose
- * account a token is (`integrations.ts`'s `ACCOUNT_NAME`), its name there,
- * and stored; a grant that names nothing is stored as an empty label, so it
- * is asked once and the account is called by its place; a grant or a
- * provider that could not be read, or an account whose reconnect is under
- * way, is left for the next read. Note that an empty label is read again at
- * a provider that answers whose account a token is, because an account
- * connected before that read was kept was stored with one; a provider that
- * answered no name, or could not be read, is held from asking again for as
- * long as a tools read is (`unnamed`), so the read never waits on it twice.
- */
 const labeledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   unnamed: UnnamedHold,
@@ -438,11 +282,9 @@ const labeledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { ACCOUNT_NAME }: IntegrationDefinition = INTEGRATION[row.provider];
   if (!integrationLabelUnread(row.provider, row.label) || status !== INTEGRATION_STATUS.CONNECTED)
     return row;
-  // Note that a reconnect under way is left alone, because the grant it ends with names the account, not the one it replaces.
   if (row.state !== undefined && signInStands(seams, row.stateIssuedAt)) return row;
   const grant = row.connectedAt?.getTime();
   const held = unnamed.get(row.userId)?.get(row.connectionName);
-  // Note that a hold stands only for the grant it was read under, because an account connected again since may answer.
   if (ACCOUNT_NAME !== undefined && held !== undefined && held.connectedAt === grant) return row;
   const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
   if (Result.isFailure(issued)) return row;
@@ -462,20 +304,11 @@ const labeledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { ...row, label };
 });
 
-/** Where one provider stands for the statuses read: its first account's word, and its accounts. */
 interface ProviderStanding {
   readonly status: IntegrationStatus;
   readonly accounts: readonly IntegrationAccount[];
 }
 
-/**
- * Where one Connect provider stands for the account: every row settled as
- * `standingStatus` settles it, the first account's word kept for the
- * provider's own, and every account answered but one whose first sign-in
- * ended without a grant, which stands for nothing. A read that `settles`
- * nothing answers each row as stored (`storedStanding`) and asks Connect
- * nothing.
- */
 const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   unnamed: UnnamedHold,
@@ -485,7 +318,6 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   settles: boolean,
 ): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const held = providerRows(rows, provider);
-  // Note that accounts are settled side by side, because each may wait on its provider's bound for its name.
   const settled = yield* Effect.forEach(
     held,
     (row) => {
@@ -495,7 +327,6 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
       }
       return Effect.gen(function* () {
         const standing = yield* standingStatus(seams, connector, row);
-        // A sign-in this read settled stored its grant's name as the label; the row read before it does not carry it yet.
         const settled =
           standing.accountName !== undefined && (row.label === undefined || row.label === "")
             ? { ...row, label: standing.accountName }
@@ -517,14 +348,6 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/**
- * Where every one of the account's connections stands, each sign-in under
- * way settled first where the read `settles`; a provider with no connector
- * here, or not offered to the account, is unavailable, and one the
- * account's GitHub sign-in grants stands where that sign-in does. Beside
- * each provider's word, every account it holds, and the providers it may
- * add another account at.
- */
 const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   unnamed: UnnamedHold,
@@ -537,7 +360,6 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 > {
   const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId));
   heldReadsSwept(unnamed, seams.now());
-  // A deployment with no connector at all answers from its configuration alone, whatever the store.
   const anyConfigured = INTEGRATION_PROVIDER_LIST.some((provider) => connect[provider].configured);
   const rows = anyConfigured ? yield* hostedStoreOrUnavailable(seams.readConnections(userId)) : [];
   const unavailable: ProviderStanding = {
@@ -558,14 +380,12 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
             : Effect.succeed(unavailable),
         (standing) => ({ provider, ...standing }),
       ),
-    // Note that providers are read side by side, so the read waits on the slowest provider's bound rather than their sum.
     { concurrency: "unbounded" },
   );
   const integrations = Object.fromEntries(
     standings.map(({ provider, status }) => [provider, status]),
   );
   const accounts = standings.flatMap((standing) => standing.accounts);
-  // Note that the places are counted from what this read settled, so a sign-in it ended frees one at once.
   const addable = standings
     .filter(
       ({ provider, accounts: held }) =>
@@ -581,7 +401,6 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** The wire's word for each way a server's tools read can fail. */
 const TOOLS_PROBLEM_OF = {
   [MCP_TOOLS_FAILURE.REFUSED]: INTEGRATION_TOOLS_PROBLEM.REFUSED,
   [MCP_TOOLS_FAILURE.REJECTED]: INTEGRATION_TOOLS_PROBLEM.REJECTED,
@@ -589,7 +408,6 @@ const TOOLS_PROBLEM_OF = {
   [MCP_TOOLS_FAILURE.UNREADABLE]: INTEGRATION_TOOLS_PROBLEM.UNREADABLE,
 } as const satisfies Record<McpToolsFailureReason, IntegrationToolsProblemReason>;
 
-/** Why a server listed no tools, as the window is told: its word, and its own message where one was kept. */
 function toolsProblem(failure: McpToolsFailure) {
   return {
     reason: TOOLS_PROBLEM_OF[failure.reason],
@@ -597,14 +415,6 @@ function toolsProblem(failure: McpToolsFailure) {
   };
 }
 
-/**
- * The account's connected row at one provider, whose subject the tools are
- * read under and whose grant's instant keys the tools held for it; nothing
- * for a grant that is the account's GitHub sign-in, whose tools are never
- * held. A
- * provider with no connector here or not offered to the account, and one the
- * account has not connected, are refused as unavailable.
- */
 const standingGrant = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   provider: IntegrationProvider,
@@ -629,14 +439,8 @@ const standingGrant = /* @__PURE__ */ Effect.fnUntraced(function* (
   return row;
 });
 
-/** A grant the provider's token read says the account no longer holds. */
 const GRANT_REFUSED = "grant-refused";
 
-/**
- * The account's token at one provider for reading its tools: Connect's, or
- * the account's GitHub sign-in's; a grant no longer held is answered as
- * refused, and a token that could not be asked for is unavailable.
- */
 const toolsToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   provider: IntegrationProvider,
   userId: string,
@@ -671,22 +475,12 @@ const toolsToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
 });
 
-/** The callback Connect returns the browser to, on the host the desktop asked through. */
 function callbackUrl(requestUrl: string, state: string): string {
   const url = new URL(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED, requestUrl);
   url.searchParams.set(INTEGRATION_CALLBACK_QUERY.STATE, state);
   return url.toString();
 }
 
-/**
- * The account a Connect signs in: a new one where `add=true` asks for it,
- * under a minted subject and the next free name, where the provider offers
- * more than one and the account holds fewer than the most, letting go of
- * every sign-in at the provider left past its window; otherwise the
- * account named, which must stand unless it is the provider's first, which
- * asks under the account's own user id as every account did before a second
- * was possible.
- */
 const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   connector: ConnectorService,
@@ -698,7 +492,6 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
   if (adding) {
     if (!connector.multipleAccounts) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    // Note that a sign-in left past its window is let go first, so its name is free again and no read takes it for an account.
     const left = providerRows(rows, provider).filter((row) => !holdsAccountPlace(seams, row));
     yield* Effect.forEach(
       left,
@@ -710,7 +503,6 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
             ),
       { discard: true },
     );
-    // Note that the rows are read again, so a sign-in restarted, or an account added, while these were let go keeps its name and its place.
     const remaining =
       left.length === 0 ? rows : yield* hostedStoreOrUnavailable(seams.readConnections(userId));
     const held = providerRows(remaining, provider).filter((row) => holdsAccountPlace(seams, row));
@@ -735,13 +527,6 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { provider, connectionName, connectSubject: userId };
 });
 
-/**
- * Where a provider stands as stored, settling nothing: its row's own
- * status, or disconnected with none, unless a sign-in still within its
- * window stands, which is pending. A Cancel answers this once it ended its
- * sign-in, where only one begun again meanwhile still stands, and so does a
- * statuses read that settles nothing.
- */
 function storedStanding(
   seams: IntegrationsAppSeams,
   row: IntegrationConnectionRow | undefined,
@@ -754,7 +539,6 @@ function storedStanding(
   return INTEGRATION_STATUS.DISCONNECTED;
 }
 
-/** The account as it stands after a rename, read again so the answer is what is stored. */
 const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   userId: string,
@@ -770,22 +554,11 @@ const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { account: accountOf(row, rowStatus(row)) };
 });
 
-/**
- * The integrations resource: every procedure to a signed-in caller,
- * resolved before its input is read, and a rename's body held to its cap
- * before it is. The tools read lately, and the accounts whose provider lately
- * answered no name, are held for as long as the instance stands.
- */
 export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
   const cache: ToolsCache = new Map();
   const unnamed: UnnamedHold = new Map();
   const integrations = hosted.integrations.use(accountMiddleware(seams.resolveUserId));
   return {
-    /**
-     * GET: where every one of the caller's connections stands, settling each
-     * sign-in under way only for a caller that carries a bearer, as the
-     * desktop does.
-     */
     statuses: integrations.statuses.effect(function* ({ context }) {
       return yield* statusesAnswer(
         seams,
@@ -794,27 +567,12 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
         hostedCarriesBearer(context.request),
       );
     }),
-    /**
-     * POST: every sign-in under way settled, then where every one of the
-     * caller's connections stands, as the bearer's read answers it, for any
-     * caller; the origin guard holds a POST a cookie carries to the
-     * deployment's own pages before it reaches here.
-     */
     settle: integrations.settle.effect(function* ({ context }) {
       return yield* statusesAnswer(seams, unnamed, context.userId, true);
     }),
-    /** GET: where GitHub stands for the caller, as the statuses read answers it. */
     github: integrations.github.effect(function* ({ context }) {
       return { status: yield* githubIntegrationStatus(context.userId) };
     }),
-    /**
-     * POST: begins a browser sign-in to one account at a provider. Connect is
-     * asked first, so a sign-in it refused leaves the row as it stood; the
-     * state is recorded before the address is answered, so no browser can
-     * return before the callback can read it. A sign-in for another account
-     * asks the provider for its workspace picker where the provider documents
-     * how.
-     */
     connect: integrations.connect.effect(function* ({ context, input }) {
       const asked = yield* requestedAccount(input);
       const userId = context.userId;
@@ -842,18 +600,9 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
           Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
         );
       const txid = yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state));
-      // Another sign-in took the name meanwhile: this one would settle a grant no row names, so it is refused.
       if (txid === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return { url, connection: account.connectionName, txid };
     }),
-    /**
-     * GET: the tools one provider's server offers the account's agents. A
-     * provider with no connector here or not offered to the account, one the
-     * account has not connected, and a Connect that could not be asked are the
-     * one unavailable refusal. A grant Connect no longer holds, and a server
-     * that listed none, are an answer rather than a refusal: why, which the
-     * desktop draws in place of the connection's "Connected", and never held.
-     */
     tools: integrations.tools.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount({
         params: { provider: input.provider },
@@ -862,7 +611,6 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       const userId = context.userId;
       const row = yield* standingGrant(seams, provider, connectionName, userId);
       const grant = row?.connectedAt?.getTime();
-      // Note that GitHub's tools are never held, because its grant has no instant to tell a new one by.
       const holds = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.CONNECT;
       const held = holds ? cache.get(userId)?.get(connectionName) : undefined;
       if (
@@ -874,7 +622,6 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       }
       const name = INTEGRATION_NAME[provider];
       const issued = yield* toolsToken(provider, userId, row);
-      // A grant no longer held is a refusal the developer mends by connecting again, not an outage.
       if (Result.isFailure(issued)) {
         return { problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED } };
       }
@@ -899,13 +646,6 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       }
       return { tools };
     }),
-    /**
-     * POST: ends the sign-in to one provider under way, under the state the row
-     * holds now, so a sign-in completed since has no state left to end and
-     * stands connected, and one begun again since keeps its own state and
-     * stands pending; answers where the provider then stands. Nothing is
-     * revoked: a grant Connect holds without the row is one no agent reads.
-     */
     cancel: integrations.cancel.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount(input);
       const userId = context.userId;
@@ -926,19 +666,9 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
         ...(txid === undefined ? undefined : { txid }),
       };
     }),
-    /**
-     * POST: ends one account's connection at a provider; every other account
-     * there stands. The row goes first, so whatever Connect answers, no agent
-     * reads a token again; the revoke after it, under that account's own
-     * subject, is the courtesy of telling the provider, and a failed one is
-     * logged rather than answered, since the account asked to be disconnected
-     * and is. GitHub, whose grant is the account's own GitHub sign-in, is
-     * refused as unavailable: nothing here ends that sign-in.
-     */
     disconnect: integrations.disconnect.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount(input);
       const userId = context.userId;
-      // A grant that is the account's GitHub sign-in ends with that sign-in, never here.
       if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
         return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       }
@@ -957,7 +687,6 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
         );
         return { status: INTEGRATION_STATUS.DISCONNECTED, txid };
       }
-      // Note that only the row read is deleted and revoked, so an account added since under the same name stands, and is answered as it stands.
       const standing = (yield* hostedStoreOrUnavailable(seams.readConnections(userId))).find(
         (each) => each.connectionName === connectionName,
       );
@@ -965,11 +694,6 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
         status: standing === undefined ? INTEGRATION_STATUS.DISCONNECTED : rowStatus(standing),
       };
     }),
-    /**
-     * POST: names one account as the developer calls it, a trimmed label of up
-     * to `INTEGRATION_LABEL_MAX` characters; one the account does not hold is
-     * not found, and any other body is an invalid request.
-     */
     rename: integrations.rename.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount(input);
       const userId = context.userId;

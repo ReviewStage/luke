@@ -18,19 +18,6 @@ import { added } from "../testing/task-contents.js";
 import { restoreRevision, saveNotes } from "./description-notes.js";
 import { taskHistoryLiveStatements } from "./task-history-live.js";
 
-/**
- * A task's newest page of description history as Realtime would deliver it, over
- * the real migrations on PGlite: the statement run as Realtime runs it, its
- * rows decoded and ordered as the desktop does, beside `listRevisions`, the
- * held read the version history read it with. The two agree as the notetaker, a
- * coding agent, and the developer save, a revision is restored,
- * the history outgrows a page, and for an account that does not reach the
- * task.
- *
- * Synthetic accounts, tasks, and words throughout.
- */
-
-/** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -38,11 +25,9 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** The newest page of the task's history as Realtime would deliver it to `reader`, as the desktop reads it. */
 const liveHistoryOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskHistoryLiveStatements(reader, taskId));
@@ -99,7 +84,6 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
         assert.equal(written.revisions.length, 4);
         assert.ok(written.revisions.some((line) => line.restoredFrom !== undefined));
 
-        // A history longer than a page answers its newest page and where the older one is read from.
         yield* db.insert(descriptionRevision).values(
           Array.from({ length: DESCRIPTION_HISTORY_BOUNDS.PAGE }, (_, index) => ({
             taskId: task.id,

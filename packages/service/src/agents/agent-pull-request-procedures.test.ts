@@ -1,17 +1,3 @@
-/**
- * agent-pull-request-procedures.test.ts -- the refusals of an agent's Pull request tab's procedures, byte for byte, through the hosted router.
- *
- * Each refusal is answered as the old route group answered it: its status,
- * no `cache-control`, and the bare slug. The caller is resolved before
- * anything else is read, so an unsigned caller is refused as one whatever
- * else its request carries; an agent the path names that the account
- * cannot reach is not found; and a change's body is held to its cap and its
- * shape before any agent is read. The reads and changes themselves, over a
- * faked GitHub, are `agents-app.test.ts`'s.
- *
- * Synthetic accounts and bearers throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -30,7 +16,6 @@ const ORIGIN = "https://app.test";
 const USER_ID = "user-1";
 const JSON_TYPE = "application/json";
 
-/** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
 interface Bytes {
   readonly status: number;
   readonly contentType: string | null;
@@ -38,7 +23,6 @@ interface Bytes {
   readonly text: string;
 }
 
-/** A refusal as the old group answered it. */
 const refused = (status: number, error: string): Bytes => ({
   status,
   contentType: JSON_TYPE,
@@ -46,7 +30,6 @@ const refused = (status: number, error: string): Bytes => ({
   text: JSON.stringify({ error }),
 });
 
-/** One request answered by the tab's procedures over the test's database, a bearer `user-…` naming its account. */
 const bytes = (request: Request) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<DatabaseServices>().pipe(
@@ -67,7 +50,6 @@ const bytes = (request: Request) =>
           ),
       }),
     });
-    // SAFETY: a refused request yields the database alone, which is all a test provides of the web runtime's services.
     const response = yield* Effect.promise(() =>
       handle(request, services as Context.Context<WebServices>),
     );
@@ -94,7 +76,6 @@ function request(
   });
 }
 
-/** The tab's reads, each at its public path. */
 const READS = [
   "pull-request",
   "pull-request/viewed",
@@ -166,7 +147,6 @@ it.layer(getTestDB())("an agent's Pull request tab's refusals", (it) => {
             request(actionPath(id), {
               method: HTTP_METHOD.POST,
               body: JSON.stringify({ action: PULL_REQUEST_ACTION.COMMENT, body: "Looks good." }),
-              // Under the handler's ceiling, so it is the change's own cap that refuses it.
               contentLength: HOSTED_BODY_CEILING_BYTES - 1,
             }),
           ),

@@ -11,15 +11,6 @@ import { Effect } from "effect";
 import { mentionedContext } from "./mentioned-context.js";
 import { readMentioned } from "./mentioned-reads.js";
 
-/**
- * A link naming a task by its number, `/<slug>/task/<number>`, in a
- * message to the task's agent, read at the send as its sender and handed
- * as the description a link by the task's id hands: only where the sender is a
- * member of the workspace the link names.
- *
- * Synthetic accounts, workspaces, and tasks throughout.
- */
-
 const DESCRIPTION = { body: "## Rollout\n\nStore first, then the desktop.", assumptions: [] };
 
 const openAccount = Effect.gen(function* () {
@@ -39,7 +30,6 @@ const slugOf = (organizationId: string) =>
     return row?.slug ?? assert.fail("the workspace was not written");
   });
 
-/** A workspace of the owner's holding one task with a description, and the words naming that description's section by the task's number. */
 const numberedSection = (ownerId: string) =>
   Effect.gen(function* () {
     const workspace = yield* openWorkspace(ownerId);
@@ -49,7 +39,6 @@ const numberedSection = (ownerId: string) =>
     return { workspace, task: { ...created, document: DESCRIPTION }, words };
   });
 
-/** A task of the owner's in a workspace of its own, which the message's agent works on. */
 const agentTask = (ownerId: string) =>
   Effect.gen(function* () {
     const workspace = yield* openWorkspace(ownerId);

@@ -15,20 +15,11 @@ import {
 import { GITHUB_PROVIDER_ID } from "./github-app.js";
 import { changesPeople } from "./github-people.js";
 
-/**
- * Who an agent's pull request names, as its changes carry them, read off a
- * scripted GitHub over a real dialect: GitHub's accounts by login and
- * avatar, a reviewer by where they stand, our own App's bot an App's bot
- * like any other, and a teammate named by their user account only while they
- * are a member of the agent's workspace. Synthetic accounts throughout.
- */
-
 const REPOSITORY = "acme/relay";
 const NUMBER = 7;
 const TOKEN = Redacted.make("ghs_fixture_installation_token");
 const PULL = `/repos/acme/relay/pulls/${NUMBER}`;
 
-/** GitHub's record of an account, its avatar on GitHub's own host unless said otherwise. */
 function githubUser(
   id: number,
   login: string,
@@ -42,25 +33,20 @@ function githubUser(
   };
 }
 
-/** An account as GitHub records it. */
 type GitHubRecord = ReturnType<typeof githubUser>;
 
 const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.png");
-/** An App's bot GitHub draws by its App's logo, at its App's address. */
 const DEVIN_AVATAR = "https://avatars.githubusercontent.com/in/811515?v=4";
 const DEVIN = githubUser(1004, "devin-ai-integration[bot]", DEVIN_AVATAR);
-/** Our own App's bot, whose logo GitHub serves at the fixture App's id. */
 const LUKE_AVATAR = `https://avatars.githubusercontent.com/in/${GITHUB_FIXTURE.APP_ID}?v=4`;
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login, LUKE_AVATAR);
 
-/** A review as GitHub lists one. */
 function review(by: GitHubRecord, state: string, body: string, at: string) {
   return { user: by, state, body, submitted_at: at };
 }
 
-/** A repository answering the pull request's own reads as given, and not found for the rest. */
 function repository(answers: {
   readonly pull?: object;
   readonly reviews?: readonly object[] | Response;
@@ -75,7 +61,6 @@ function repository(answers: {
   };
 }
 
-/** A user account that signed in with GitHub as the GitHub account given. */
 const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -91,7 +76,6 @@ const linkedAccount = (githubId: number) =>
     return userId;
   });
 
-/** Who the pull request names, read off the repository given for an agent of the workspace given. */
 const peopleOf = (organizationId: string, script: RepositoryScript) =>
   changesPeople(TOKEN, { repository: REPOSITORY, organizationId }, NUMBER).pipe(
     Effect.provide(githubReaching([], undefined, undefined, script).layer),
@@ -105,7 +89,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
         const charles = yield* linkedAccount(CHARLES.id);
         const priya = yield* linkedAccount(PRIYA.id);
         const workspace = yield* openWorkspace(charles);
-        // Priya signed in with GitHub too, but in a workspace of her own.
         yield* openWorkspace(priya);
 
         const people = yield* peopleOf(
@@ -135,7 +118,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           userId: charles,
         };
         const asPriya = { login: PRIYA.login, bot: false, avatarUrl: PRIYA.avatar_url };
-        // Note that a bot reviewer stands by its App's logo, the address GitHub gives it.
         const devin = { login: DEVIN.login, bot: true, avatarUrl: DEVIN_AVATAR };
         assert.deepEqual(people.author, luke);
         assert.deepEqual(people.reviewers, [
@@ -164,7 +146,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           },
         ]);
 
-        // Priya joins the workspace, and is named by her user account from then on.
         yield* joinWorkspace(workspace, priya);
         const joined = yield* peopleOf(
           workspace,

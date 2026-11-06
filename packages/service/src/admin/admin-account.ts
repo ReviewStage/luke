@@ -1,22 +1,3 @@
-/**
- * admin-account.ts -- what a maintainer supports one account from, folded from its rows.
- *
- * The account page's support sections: when the account was last seen, how
- * much it did over the window (tasks, coding agents and their pull
- * requests), its newest agents, its workspaces, its keys and
- * connections, its coding-agent defaults and experiments, and a timeline of
- * what failed for it recently. Every value is a count, a status, a model or
- * effort, or one of the service's own enumerated words; nothing the account
- * typed, said, or ran is read into it, so no task title, description, prompt,
- * pull request title, or `failure_detail` is here. A workspace is named,
- * and an agent's repository is, which the developer allowed the admin pages. A coding agent's status and failure class are read by
- * `coder-host/status.ts`, the same reading the panel draws, so the page
- * never says an agent failed where the account's own window says it ran.
- *
- * The builder is pure, split from `admin-account-queries.ts` as the other
- * admin pages split theirs, so the folding is tested without a database.
- */
-
 import type { GitHubInstallationStatus } from "@repo/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import type { AgentLatestTurn } from "@repo/database/models/agent-store";
@@ -44,36 +25,24 @@ import { PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
 import { EXPERIMENTS, type ExperimentChoices } from "@repo/settings";
 import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
 
-/** How many of the account's newest coding agents the page lists. */
 export const ADMIN_RECENT_AGENTS_LIMIT = 10;
 
-/**
- * How many of the window's agents have their status read for the failed
- * share. A status is read from the agent's newest turn, one row per agent,
- * so an automation that starts an agent a minute cannot turn one page into
- * a read of every turn it ran; past the bound the share is of the newest.
- */
 export const ADMIN_ACCOUNT_STATUS_READ_LIMIT = 2000;
 
-/** How many recent failures the timeline lists, and how many each source contributes at most. */
 export const ADMIN_ACCOUNT_FAILURES_LIMIT = 20;
 
-/** One coding agent as the queries read it: the fields the page may show, and what its status is read from. */
 export interface AdminAccountAgentSource {
   id: string;
   createdAt: Date;
-  /** The repository it works in, as `owner/name`; null for an agent with none. */
   repository: string | null;
   model: string;
   effort: string;
   contextWindow: ContextWindow;
-  /** The state of its pull request as GitHub last answered, alone; null where none was found. */
   pullRequestState: PullRequestState | null;
   turn: AgentLatestTurn | undefined;
   awaitingLineAt: Date | undefined;
 }
 
-/** One of the account's workspace memberships: the workspace's name, its size, and its GitHub installations. */
 interface AdminAccountWorkspaceSource {
   id: string;
   name: string;
@@ -83,9 +52,7 @@ interface AdminAccountWorkspaceSource {
   github: readonly GitHubInstallationStatus[];
 }
 
-/** The raw shape the queries produce for one account, before the builder reads statuses and folds the timeline. */
 export interface AdminAccountSource {
-  /** The newest write of any of the account's sign-in sessions. */
   sessionSeenAt: Date | null;
   totals: {
     tasksCreated: number;
@@ -93,13 +60,7 @@ export interface AdminAccountSource {
     pullRequestsOpened: number;
     pullRequestsMerged: number;
   };
-  /**
-   * The window's agents, at most `ADMIN_ACCOUNT_STATUS_READ_LIMIT`, newest
-   * first: those started in it, then older ones whose turn ended in it, so a
-   * failure in the window is read whenever its agent started.
-   */
   windowAgents: readonly AdminAccountAgentSource[];
-  /** The account's newest agents, whenever they started. */
   recentAgents: readonly AdminAccountAgentSource[];
   workspaces: readonly AdminAccountWorkspaceSource[];
   providerKeys: readonly AdminAccountProviderKey[];
@@ -110,11 +71,9 @@ export interface AdminAccountSource {
     contextWindow: ContextWindow | null;
     experiments: ExperimentChoices;
   } | null;
-  /** The window's newest failed runs of the account's automations, at most the timeline's bound. */
   failedRuns: readonly { at: Date; reason: AutomationRunReason | null }[];
 }
 
-/** The pull request's state as the page draws it, a draft being open. */
 function pullRequestOf(state: PullRequestState | null): AdminPullRequest {
   if (state === null) return ADMIN_PULL_REQUEST.NONE;
   if (state === PULL_REQUEST_STATE.MERGED) return ADMIN_PULL_REQUEST.MERGED;
@@ -122,7 +81,6 @@ function pullRequestOf(state: PullRequestState | null): AdminPullRequest {
   return ADMIN_PULL_REQUEST.OPEN;
 }
 
-/** One agent with its status read at `now`, and its failure class where it failed. */
 function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgent {
   const status = agentStatusOf(source.turn, {
     createdAt: source.createdAt,
@@ -143,7 +101,6 @@ function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgen
   };
 }
 
-/** The agents failed inside the window as timeline entries, each at its newest turn's end or, with none, its start. */
 function agentFailures(
   source: AdminAccountSource,
   now: number,
@@ -159,11 +116,6 @@ function agentFailures(
   return failures;
 }
 
-/**
- * The keys and connections that stand bad and last changed inside the
- * window: a key at when its status was set, a connection at its row's last
- * change, the nearest instant its row keeps.
- */
 function credentialFailures(
   source: AdminAccountSource,
   windowStart: number,
@@ -192,18 +144,11 @@ function credentialFailures(
   return failures;
 }
 
-/**
- * Folds one account's queried rows into the page's support sections, read
- * at `now` over the window starting at `windowStart` (epoch milliseconds,
- * the window's first UTC day). Last seen is the newest sign-in session
- * write alone, as the roster's is, so the two pages say the same.
- */
 export function buildAdminAccountSupport(
   source: AdminAccountSource,
   now: number,
   windowStart: number,
 ): AdminAccountSupport {
-  // The failed share is of the agents started in the window, as the count beside it is.
   const windowRead = source.windowAgents
     .filter((agent) => agent.createdAt.getTime() >= windowStart)
     .map((agent) => agentOf(agent, now));

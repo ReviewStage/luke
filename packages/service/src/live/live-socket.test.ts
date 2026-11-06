@@ -20,19 +20,8 @@ import type { WebServices } from "../runtime.js";
 import { liveProcedures } from "./live-procedures.js";
 import { answerLiveSocket } from "./live-socket.js";
 
-/**
- * Two hosts' sockets answered at once over the live router and the test's
- * own database: each ask is answered under its own id, on its own socket,
- * as the poll of the account the socket's upgrade named, so a read naming
- * another account is signed out and another account's task is not found,
- * whatever the frame asks.
- *
- * Synthetic accounts and bearers throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** The account a bearer names: the test's bearer is the account's id. */
 const bearerUserId = (request: Request) => {
   const authorization = request.headers.get("authorization") ?? "";
   return Effect.succeed(
@@ -40,12 +29,10 @@ const bearerUserId = (request: Request) => {
   );
 };
 
-/** A live read's path and query, naming the account it is for. */
 function readOf(path: string, forUser: string, query: Record<string, string> = {}): string {
   return `${path}?${new URLSearchParams({ ...query, [LIVE_USER_QUERY]: forUser })}`;
 }
 
-/** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -53,7 +40,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** One host's socket as a test drives it: asks pushed in, and each answer it was sent read in order. */
 const hostSocket = Effect.gen(function* () {
   const inbound = yield* Queue.make<VoiceFrame, Cause.Done>();
   const sent = yield* Queue.make<string>();
@@ -78,7 +64,6 @@ const hostSocket = Effect.gen(function* () {
   };
 });
 
-/** The tasks a task list answer lists, by id. */
 function listedTasks(answer: LiveSocketAnswer): readonly string[] {
   const listed = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(JSON.parse(answer.body));
   const rows = Schema.decodeUnknownSync(taskListLiveRowsSchema)({
@@ -107,7 +92,6 @@ it.layer(getTestDB())("the live socket", (it) => {
                 workspaces: yield* fakeWorkspaceSeams,
               }),
             }),
-            // SAFETY: the live procedures read only the store of the web runtime's services.
             services: context as Context.Context<WebServices>,
             origin: ORIGIN,
           };

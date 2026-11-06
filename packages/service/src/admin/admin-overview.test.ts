@@ -11,17 +11,6 @@ import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import { test } from "vitest";
 import { buildAdminOverview, emptyOverviewSource } from "./admin-overview.js";
 
-/**
- * admin-overview.test.ts -- the overview's fold: the chart's days are the
- * window's own, zero-filled; each tile's trend compares the last seven UTC
- * days with the seven before, whatever the window; the week's agents split by
- * origin sum to the agents started; the funnel and reach keep
- * the vocabulary's order with shares of their own bases, and no share of
- * nobody; and the most active accounts keep their rank with their counts
- * joined.
- */
-
-/** Wednesday 2026-10-21 at noon UTC. */
 const NOW = Date.UTC(2026, 9, 21, 12);
 
 function dailyOf(
@@ -63,7 +52,6 @@ test("the chart's days are the window's own, every feature zero-filled, today la
     [ACTIVITY_FEATURE.AUTOMATION_RUNS]: 0,
   });
   assert.equal(overview.activity.daily.at(-1)?.[ACTIVITY_FEATURE.AGENTS_STARTED], 4);
-  // The day before the window still counts toward the prior run.
   assert.deepEqual(overview.activity.trend, { days: 7, recent: 6, prior: 9 });
 });
 
@@ -85,7 +73,6 @@ test("each tile compares the last seven days with the seven before, past a short
   );
 
   assert.deepEqual(overview.headline.activeDevelopers, { days: 7, recent: 12, prior: 10 });
-  // The 10-07 tasks fall before both runs.
   assert.deepEqual(overview.headline.tasksCreated, { days: 7, recent: 3, prior: 5 });
   assert.deepEqual(overview.headline.agentsStarted, { days: 7, recent: 8, prior: 0 });
   assert.deepEqual(overview.headline.prsMerged, { days: 7, recent: 1, prior: 4 });
@@ -97,7 +84,6 @@ test("the week's agents split by origin sum to the agents started, by hand the r
     {
       ...emptyOverviewSource(),
       daily: dailyOf([
-        // The 10-14 counts fall in the run before, so no origin carries them.
         [DAILY_COUNT.AGENTS_STARTED, { "2026-10-20": 6, "2026-10-16": 4, "2026-10-14": 50 }],
         [DAILY_COUNT.AGENTS_FROM_AUTOMATIONS, { "2026-10-20": 2, "2026-10-14": 50 }],
         [DAILY_COUNT.AGENTS_FROM_SLACK, { "2026-10-16": 3 }],

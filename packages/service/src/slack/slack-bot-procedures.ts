@@ -1,39 +1,3 @@
-/**
- * slack-bot-procedures.ts -- a workspace's own Slack bot read, connected, and disconnected, and the repositories and channels its Slack starts use.
- *
- * Six procedures the signed-in desktop calls with its bearer:
- *
- * - `GET /api/workspaces/slack-bot` takes any member, and answers whether
- *   this deployment holds the bot and the Slack team the workspace's bot is
- *   connected to.
- * - `POST /api/workspaces/slack-bot/connect` takes an owner or admin, asks
- *   Slack which team the bot's token answers for (`auth.test`), and keeps
- *   it as the workspace's installation.
- * - `POST /api/workspaces/slack-bot/disconnect` takes an owner or admin,
- *   and deletes the installation, every member's Slack id with it; the
- *   bot stays installed in Slack, where only Slack's admins remove it.
- * - `POST /api/workspaces/slack-bot/notifications` takes any member, and
- *   turns their own Slack notifications on or off, in every workspace.
- * - `POST /api/workspaces/slack-bot/repository` takes an owner or admin, and
- *   names the repository Slack starts default to, one the workspace reaches
- *   as GitHub spells it, or clears it.
- * - `POST /api/workspaces/slack-bot/channel` takes an owner or admin, and
- *   puts the bot in a public channel or takes it out of one, forgetting the
- *   channel's repository as it leaves, and names or clears the channel's
- *   default repository.
- *
- * The read answers an owner or admin the team's channels as Slack lists
- * them, each with its default repository; a member is answered none. A
- * connect, a disconnect, and a repository named or forgotten answer the
- * transaction their row was written in beside the bot, which a desktop
- * holding the workspace's integrations live waits for
- * (`workspaceIntegrationsLive`); a write that wrote no row answers none.
- *
- * A workspace the account is not in is not found, whatever it asked. The
- * bearer is resolved before the body is read, by the middleware on the
- * resource.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
   deleteSlackInstallation,
@@ -66,7 +30,6 @@ export interface SlackBotProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The workspace named, as the account sees it; one it is not in is not found. */
 const memberWorkspace = Effect.fn("web/slackBotWorkspace")(function* (
   userId: string,
   workspaceId: string,
@@ -76,7 +39,6 @@ const memberWorkspace = Effect.fn("web/slackBotWorkspace")(function* (
   return workspace.value;
 });
 
-/** The workspace named, where the account is an owner or admin of it. */
 const administeredWorkspace = Effect.fn("web/slackBotAdministered")(function* (
   userId: string,
   workspaceId: string,
@@ -86,7 +48,6 @@ const administeredWorkspace = Effect.fn("web/slackBotAdministered")(function* (
   return workspace;
 });
 
-/** The team's channels as Settings lists them, each with its default repository; none where Slack could not be read. */
 const listedChannels = Effect.fn("web/slackBotChannels")(function* (
   bot: SlackBotService,
   channels: readonly SlackChannelRepository[],
@@ -100,11 +61,6 @@ const listedChannels = Effect.fn("web/slackBotChannels")(function* (
   });
 });
 
-/**
- * The workspace's Slack bot as the wire carries it to the member: the team,
- * their own switch, and the default repository where it is connected, and,
- * to an owner or admin, the team's channels.
- */
 const workspaceSlackBot = Effect.fn("web/workspaceSlackBot")(function* (
   workspace: Workspace,
   userId: string,
@@ -128,7 +84,6 @@ const workspaceSlackBot = Effect.fn("web/workspaceSlackBot")(function* (
   };
 });
 
-/** The bot as it then stands, with the transaction a write committed its row in, where it wrote one. */
 function withTxid(slackBot: WorkspaceSlackBot, txid: Option.Option<string>): WorkspaceSlackBot {
   return Option.match(txid, {
     onNone: () => slackBot,
@@ -136,7 +91,6 @@ function withTxid(slackBot: WorkspaceSlackBot, txid: Option.Option<string>): Wor
   });
 }
 
-/** The repository named, as GitHub spells it, where the workspace reaches it; null clears. */
 const reachedRepository = Effect.fn("web/slackBotRepository")(function* (
   workspaceId: string,
   userId: string,
@@ -151,7 +105,6 @@ const reachedRepository = Effect.fn("web/slackBotRepository")(function* (
   return reached.repository.fullName;
 });
 
-/** The workspace named, where an owner or admin of it asks and its bot is connected; the bot as the deployment holds it. */
 const connectedWorkspace = Effect.fn("web/slackBotConnected")(function* (
   userId: string,
   workspaceId: string,
@@ -164,16 +117,13 @@ const connectedWorkspace = Effect.fn("web/slackBotConnected")(function* (
   return { workspace, bot };
 });
 
-/** The workspace Slack bot resource: connect and disconnect to an owner or admin, and the read and the member's own switch to any member. */
 export function slackBotProcedures(seams: SlackBotProcedureSeams) {
   const resource = hosted.workspaceSlackBot.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** The workspace's Slack bot, to any member of it. */
     read: resource.read.effect(function* ({ input, context }) {
       const workspace = yield* memberWorkspace(context.userId, input.workspaceId);
       return yield* workspaceSlackBot(workspace, context.userId);
     }),
-    /** The bot connected to the team its token answers for; unavailable where the deployment holds no bot or Slack did not answer. */
     connect: resource.connect.effect(function* ({ input, context }) {
       const workspace = yield* administeredWorkspace(context.userId, input.workspaceId);
       const bot = yield* SlackBot;
@@ -194,13 +144,11 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
       );
       return withTxid(yield* workspaceSlackBot(workspace, context.userId), Option.some(txid));
     }),
-    /** The bot disconnected from the workspace; disconnecting one already gone answers it as it stands. */
     disconnect: resource.disconnect.effect(function* ({ input, context }) {
       const workspace = yield* administeredWorkspace(context.userId, input.workspaceId);
       const txid = yield* hostedStoreOrUnavailable(deleteSlackInstallation(workspace.id));
       return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
     }),
-    /** The member's own Slack notifications turned on or off, which holds in every workspace, answered with the transaction it was written in. */
     notifications: resource.notifications.effect(function* ({ input, context }) {
       const workspace = yield* memberWorkspace(context.userId, input.workspaceId);
       const txid = yield* hostedStoreOrUnavailable(
@@ -208,7 +156,6 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
       );
       return { ...(yield* workspaceSlackBot(workspace, context.userId)), txid };
     }),
-    /** The workspace's default repository for Slack starts named, as GitHub spells it, or cleared. */
     repository: resource.repository.effect(function* ({ input, context }) {
       const { workspace } = yield* connectedWorkspace(context.userId, input.workspaceId);
       const repository = yield* reachedRepository(workspace.id, context.userId, input.repository);
@@ -217,13 +164,11 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
       );
       return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
     }),
-    /** The bot put in a public channel or taken out of one, and the channel's default repository named or cleared; unavailable where Slack refused. */
     channel: resource.channel.effect(function* ({ input, context }) {
       const { workspace, bot } = yield* connectedWorkspace(context.userId, input.workspaceId);
       const { channelId } = input;
       if (input.member === false) {
         if (!(yield* bot.leave(channelId))) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-        // A channel the bot left keeps no repository, so a later join starts from the workspace's.
         const txid = yield* hostedStoreOrUnavailable(
           writeSlackChannelRepository(workspace.id, channelId, null),
         );

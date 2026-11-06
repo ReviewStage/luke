@@ -102,20 +102,7 @@ import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
-/**
- * The coding-agent routes, answered by the group the way a function answers
- * them, over a real dialect: a Start is one agent whose eve session opens
- * with the description as its first message, a retry under the same key is that
- * agent and opens nothing again, the list reads each agent's status from its
- * newest turn, the transcript answers the conversation's rows past a cursor,
- * and a Stop is eve's cancel of the turn under way and the row's stamp. eve
- * is a fake at the client's boundary, GitHub a script, the catalog fixed,
- * and the store PGlite. Synthetic accounts, bearers, tasks, and words
- * throughout.
- */
-
 it.layer(getTestDB())("starting an agent from another", (it) => {
-  /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request, its GitHub answering as given. */
   const sourceAgentOn = (github?: RepositoryScript, eve?: ReturnType<typeof fakeEve>) =>
     Effect.gen(function* () {
       const opened = yield* openTask({
@@ -203,7 +190,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ],
         );
         assert.match(parts.replay?.steps[2]?.words ?? "", /Result: ok/u);
-        // A call names the tool it called, and a line when it was sent, which the replay card draws them by.
         assert.deepEqual(
           [
             parts.replay?.steps[2]?.tool,
@@ -245,7 +231,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  /** A source whose session eve opened is claimed, with a turn under way eve knows as `turn_0`; answers the session. */
   const sourceRunning = (stored: Agent, eve: ReturnType<typeof fakeEve>) =>
     Effect.gen(function* () {
       const target = { userId: stored.userId, conversationId: stored.conversationId };
@@ -263,7 +248,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
-      // The source's lines are the turn's, so none of them reads as awaiting a turn of its own.
       yield* Database.use((db) =>
         db
           .update(messages)
@@ -316,7 +300,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgent;
-        // Note that no Start makes a pilot yet, so the source is made one in place.
         yield* Database.use((db) =>
           db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, source.id)),
         );
@@ -378,7 +361,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
-        // The source is made a sub-pilot in place, as the parent's `start_agent` would have started it.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -478,7 +460,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           );
         const continued = yield* startFrom({ agentId: source.id });
         const forked = yield* startFrom({ agentId: source.id, messageId: firstTurn });
-        // Note that the two start within one instant here, so they are compared in the order of their ids.
         const byId = <Named extends { readonly agentId: string }>(
           named: readonly Named[] | undefined,
         ) => [...(named ?? [])].sort((a, b) => a.agentId.localeCompare(b.agentId));
@@ -512,7 +493,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it; GitHub answers its pull request's reads as `pull` does, where given. */
   const copyScenario = (t: TestContext, pull?: RepositoryScript) =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
@@ -539,7 +519,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       return { ...opened, checkout, sandbox, continued };
     });
 
-  /** The fetch the preamble hands on, run in a checkout of the remote cloned as an agent's is, with the default branch alone; answers that checkout. */
   const fetchedAsHanded = (checkout: SourceCheckout, preamble: string) => {
     const fetch = /`(git remote set-branches [^`]+)`/u.exec(preamble)?.[1] ?? "";
     const fresh = join(checkout.root, "fresh");
@@ -574,11 +553,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ),
         );
         assert.ok(preamble.includes(`Its own branch was \`${PUBLISHED.branch}\``));
-        // The words the preamble hands on, run in a checkout cloned as an agent's is, find the copy.
         const fresh = fetchedAsHanded(checkout, preamble);
         assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
         assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
-        // The stop runs behind the Start, which answered without waiting on it.
         yield* Deferred.await(sandbox.stopAsked);
         assert.deepEqual(
           [sandbox.ran, sandbox.stops],
@@ -592,7 +569,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     (t) =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, source, checkout } = yield* copyScenario(t);
-        // An automation's run leaves an agent so: in its workspace, on no task, handed a prompt.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -636,7 +612,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     (t) =>
       Effect.gen(function* () {
         const { checkout, continued } = yield* copyScenario(t, publishedPullRequest);
-        // The source worked on its pull request's branch, pushed, with its change still uncommitted.
         checkout.sh(checkout.checkout, "git", "switch", "--quiet", "-c", PUBLISHED.branch);
         checkout.sh(checkout.checkout, "git", "push", "--quiet", "origin", PUBLISHED.branch);
 
@@ -706,7 +681,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     (t) =>
       Effect.gen(function* () {
         const { owner, source, checkout, sandbox, continued } = yield* copyScenario(t);
-        // A name git allows whose words a shell would run, joined so it reads as no template placeholder.
         const pushedBranch = ["luke/invites$(touch$", "{IFS}pwned)"].join("");
         checkout.sh(
           checkout.checkout,
@@ -782,7 +756,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             },
             output: "ok",
           },
-          // A native harness's edits count as the agent's own file tools' do.
           {
             type: "tool-Edit",
             toolCallId: "call-7",
@@ -940,7 +913,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           /After that message it edited `src\/mailer\.ts`; undo/u,
         );
 
-        // A press that saw the step's words and not yet its call keeps the words alone.
         const within = yield* fork(1, 1);
         assert.equal(within.started.from?.messageStepParts, 1);
         assert.equal(within.replay?.steps.at(-1)?.summary, "Said: Writing the expiry first.");
@@ -1130,7 +1102,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.equal(eve.opened.length, before);
 
-        // A source on no task and in no repository is continued in its workspace, in none.
         const bare = yield* createAgent(owner, {
           taskId: null,
           organizationId: task.workspaceId,
@@ -1157,7 +1128,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           [null, task.workspaceId, null],
         );
 
-        // The same path from an agent on a task starts on that task, as the task's own Start would.
         const onTask = readAnswer(
           agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -1174,7 +1144,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.equal(fromTask.planId, task.id);
         assert.equal(Option.getOrThrow(yield* readAgent(owner, fromTask.id)).taskId, task.id);
 
-        // A retry is answered with the agent its key made though the source is gone since.
         yield* Database.use((db) => db.delete(agentTable).where(eq(agentTable.id, source.id)));
         const retried = readAnswer(
           agentAnswerSchema,
@@ -1185,14 +1154,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  /** A server mention as the desktop writes one. */
   const serverMention = (provider: IntegrationProvider, name: string) =>
     mentionMarkdown({ kind: MENTION_KIND.SERVER, provider }, name, {
       workspace: "acme",
       repository: null,
     });
 
-  /** The words and files the session opened on, its first part's words read back as a first message. */
   const openedWithFiles = (eve: ReturnType<typeof fakeEve>) => {
     const message = eve.opened.at(-1)?.message.message;
     assert.ok(Array.isArray(message), "the session opened on parts");
@@ -1543,7 +1510,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const stored = Option.getOrThrow(yield* readAgent(owner, source.id));
         const turns = REPLAY_BOUNDS.MAX_ROWS + 50;
         const ids: string[] = [];
-        // Note that the rows go in by the thousand, because one insert a row would take minutes.
         for (let from = 0; from < turns; from += 1_000) {
           const rows = Array.from({ length: Math.min(1_000, turns - from) }, (_, at) => ({
             userId: stored.userId,
@@ -1551,7 +1517,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             seq: from + at + 2,
             clientId: randomUUID(),
             role: MESSAGE_ROLE.ASSISTANT,
-            // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
             parts: [text(`Step ${from + at}.`)] as never,
             metadata: { author: MESSAGE_AUTHOR.MODEL },
             placedAt: new Date(),
@@ -1576,14 +1541,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
         assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
 
-        // A fork with more rows after it than are read names no files as if they were all it edited.
         yield* startFrom({ agentId: source.id, messageId: ids[10] ?? "" });
         assert.match(
           openedParts(eve).parts.replay?.preamble ?? "",
           /Which files it edited after that message could not all be read/u,
         );
 
-        // A fork with exactly as many rows after it as are read still names what they edited, here nothing.
         yield* startFrom({
           agentId: source.id,
           messageId: ids[turns - 1 - REPLAY_BOUNDS.MAX_ROWS] ?? "",
@@ -1593,7 +1556,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           /Its file tools edited no file after that message/u,
         );
 
-        // A row past the cut that does not read refuses a continue, but not a fork that needs none of it.
         yield* transcriptRow(stored, turns + 2, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
         assert.deepEqual(
           yield* ask(
@@ -1611,7 +1573,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  /** A source on the small-window model with a transcript of thirty long turns after its brief. */
   const longSource = (options: { readonly summaryModel?: SummaryModelOf } = {}) =>
     Effect.gen(function* () {
       const opened = yield* openTask(options);
@@ -1654,7 +1615,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, stored, source } = yield* sourceAgent;
-        // A result that reads like a failure and a subject that reads like a running call are neither.
         const output = `Failed: nothing, this is what it printed\n${"line of output\n".repeat(400)}the end`;
         yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
           {
@@ -1839,14 +1799,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue of an agent that never ran a turn is sent to the branch and pull request of the agent that one took up, not the default branch, unless that branch is in a repository the task moved from",
     () =>
       Effect.gen(function* () {
-        // GitHub holds the source's pull request open, as its row says, when the first continue reads it again.
         const { owner, task, ask, eve, source } = yield* sourceAgentOn(publishedPullRequest);
         const continueFrom = (agentId: string) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
             (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
           );
-        // The middle agent's session never ran a turn: it has no rows, no branch, and no sandbox.
         const never = yield* continueFrom(source.id);
         yield* continueFrom(never.id);
         const preamble = openedParts(eve).parts.replay?.preamble ?? "";
@@ -1860,7 +1818,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.ok(preamble.includes(`/pull/${PUBLISHED.number}`));
         assert.doesNotMatch(preamble, /start from the repository's default branch/u);
 
-        // A branch left in a repository the task has since moved from is none the new checkout holds.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1888,12 +1845,10 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             briefTokens: 100,
             at,
           });
-        // Its thirty steps of about five thousand bytes each, as its model last read them whole.
         yield* stepAt(LONG_TURNS * 2_600, 1_000);
         const whole = yield* continueFrom(first.id, { model: SOL, effort: "low" });
         assert.equal(whole.from?.steps, LONG_TURNS, "a source that never compacted replays whole");
 
-        // eve folded all but the newest into a summary, and the next step read far less.
         const measured = 6_000;
         yield* recordAgentCompaction(owner, first.id, new Date(2_000));
         yield* stepAt(measured, 3_000);
@@ -1916,7 +1871,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           model: SMALL_WINDOW.model,
           effort: "low",
         });
-        // The runner's events record what Claude Code read, and nothing of instructions the CLI composed.
         yield* recordAgentStep(owner, first.id, {
           inputTokens: LONG_TURNS * 2_600,
           outputTokens: 500,

@@ -23,19 +23,8 @@ import {
 } from "./agent-browser.js";
 import { BROWSER_START_EXIT } from "./sandbox-browser.js";
 
-/**
- * An agent's browser over a fake sandbox and a fake Chromium behind a fake
- * bridge: the browser is started once and attached to after, a stopped
- * sandbox is resumed and waited for, a worker reaches its parent's sandbox,
- * a bridge that does not come up at first is tried again, and a CDP session
- * answers commands, carries events, and lists, opens, and closes pages.
- * Every way the browser cannot be reached says why, and a
- * command fails as refused, timed out, or closed.
- */
-
 const SESSION = "wrun_browser_fixture";
 
-/** The service over a sandbox as the scenario has it and a bridge that comes up as told. */
 function browserOver(
   peer: FakeCdpPeer,
   scenario: Partial<FakeSandboxScenario> = {},
@@ -45,7 +34,6 @@ function browserOver(
   return { service: agentBrowserOver(sandbox.api, fakeBridgePty(peer, bridge)), ran: sandbox.ran };
 }
 
-/** Why the effect failed, where it failed as unreachable. */
 function reasonOf<A>(exit: Exit.Exit<A, BrowserUnreachable>) {
   return Exit.isFailure(exit) ? Exit.findErrorOption(exit) : undefined;
 }
@@ -302,7 +290,6 @@ it.effect("a resume whose snapshot is gone is given up on at once, saying so", (
       resumeCode: "snapshot_not_found",
     });
 
-    // Note that the clock never moves, so a resume tried again would never answer.
     const unreachable = yield* Effect.flip(service.ensure(SESSION));
 
     assert.equal(unreachable.reason, BROWSER_UNREACHABLE.SNAPSHOT_GONE);

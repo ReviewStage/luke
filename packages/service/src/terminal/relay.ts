@@ -1,42 +1,3 @@
-/**
- * relay.ts -- one attached shell: a panel's socket, the desktop's or the web app's, piped to the shell's PTY in the agent's sandbox, held while someone types and closed when nobody has for five minutes.
- *
- * A connection reaches its agent through the one rule every agent route
- * keeps, then attaches only to a sandbox that is running: a stopped one is
- * never woken here, which is the developer's resume and nothing else, and
- * one the agent has not opened yet is said to be starting. The shell is a
- * tmux session that outlives this connection, so a socket that drops — a
- * sleep, a network change, the function's own bound — reattaches to the same
- * process on the next. What was typed goes to the PTY as it came and what
- * the shell printed comes back as it came; neither is read, kept, logged, or
- * counted, here or anywhere the relay writes.
- *
- * The connection holds the agent's sandbox through the lease every terminal
- * of it shares (`sandbox-terminal-lease.ts`): an attach holds it, and typing
- * moves it on, written at most once a minute and so held a minute past the
- * idle bound, which no keystroke between two writes outlasts. Each
- * connection closes as idle once nobody has typed in it for the bound,
- * whatever its sandbox's other terminals do, and the sweep stops the
- * sandbox once the lease every terminal moved on has lapsed past its grace.
- * While a terminal is connected it also keeps the sandbox alive past its
- * short timeout, every keep-alive interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`,
- * `agents/sandbox-keep-alive.ts`), so a developer typing after the agent's
- * turn ended is never cut off by it. While a terminal is connected, the GitHub token at the sandbox's firewall
- * is kept fresh on the rule the agent's own steps keep it by, claimed
- * through the lease so two windows mint one token between them; a renewal
- * that fails gives its claim back, is logged, and is tried again at the
- * next check. A member's own token, which never ages, is set at every check
- * instead, so another window's close never leaves this one without it, and
- * is taken off as the connection closes unless a turn of the agent is under
- * way, which keeps it until the turn ends. The shell is said to be attached
- * once the first renewal has ended, so a command typed at once finds the
- * token set, and what was typed before waits for it, up to a bound past
- * which the shell attaches at once.
- *
- * How the connection ended is the close code the panel's host reads as the
- * tab's state (`@repo/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
- */
-
 import {
   SANDBOX_STATE,
   TERMINAL_RELAY_CLOSE,
@@ -70,31 +31,22 @@ import { jsonOf } from "../http/http-effect.js";
 import { frameBytes } from "../http/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
-  /** How long a terminal stays connected past its last keystroke. */
   IDLE: Duration.minutes(5),
-  /** How often typing moves the lease on, so a keystroke is not a write. */
   LEASE_WRITE_EVERY: Duration.minutes(1),
-  /** How often a connection asks whether it has gone the idle bound untyped in. */
   IDLE_CHECK_EVERY: Duration.seconds(30),
-  /** How often a connection asks whether the GitHub token is due. */
   CREDENTIAL_CHECK_EVERY: Duration.minutes(5),
-  /** The most the desktop may send while its shell waits on its first token, a paste's largest piece; past it the shell attaches without waiting longer, so what was sent reaches it rather than piling up. */
   HELD_MAX_BYTES: 1024 * 1024,
-  /** The environment the shell's PTY starts in: a terminal that speaks color, and text that is UTF-8. */
   ENV: ["TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8"],
 } as const;
 
-/** One frame of a socket: text as text, binary as binary. */
 export type RelayFrame = { readonly text: string } | { readonly bytes: Uint8Array };
 
-/** One side of the relay: what it sends, in order and ending when it goes, and how to send to it and end it. */
 export interface RelaySocket {
   readonly frames: Stream.Stream<RelayFrame>;
   readonly send: (frame: RelayFrame) => Effect.Effect<void>;
   readonly close: (code: number, reason?: string) => Effect.Effect<void>;
 }
 
-/** What a connection asks for: whose it is, the agent and shell it names, and the terminal's size. */
 export interface RelayAsk {
   readonly userId: string;
   readonly agentId: string;
@@ -103,43 +55,32 @@ export interface RelayAsk {
   readonly rows: number;
 }
 
-/** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
 export interface RelayAgent {
-  /** The account whose agent it is, under which the launch at its sandbox's firewall is kept. */
   readonly userId: string;
   readonly conversationId: string;
   readonly sessionId: string | undefined;
-  /** A fresh credential for the agent's repository: a token minted under the deployment's GitHub App, or its starter's own. */
   readonly repositoryCredential: Effect.Effect<RepositoryCredential, unknown>;
-  /** Whether the agent's credential is its starter's own GitHub token, set at every check and taken off at the close rather than renewed. */
   readonly memberToken: boolean;
-  /** Whether a turn of the agent is under way, which keeps a member's token standing as a connection closes. */
   readonly turnUnderWay: Effect.Effect<boolean, unknown>;
 }
 
-/** What the relay stands on: the deployment's in production, a script's in a test. */
 export interface RelayDependencies {
-  /** The agent the account reaches by the one rule, standing; none for another workspace's, an archived agent, or no agent at all, and a failure where the store could not say. */
   readonly reach: (
     userId: string,
     agentId: string,
   ) => Effect.Effect<Option.Option<RelayAgent>, unknown>;
   readonly sandbox: AgentSandboxService;
-  /** Opens the PTY's socket for the connection's scope. */
   readonly connect: (
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
-  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
-  /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (
     conversationId: string,
     sandboxSessionId: string,
     now: Date,
     renewedBefore: Date,
   ) => Effect.Effect<boolean>;
-  /** Gives back a renewal claimed at the instant given that did not finish. */
   readonly releaseRenewal: (
     conversationId: string,
     sandboxSessionId: string,
@@ -147,10 +88,8 @@ export interface RelayDependencies {
   ) => Effect.Effect<void>;
 }
 
-/** How the relay ends its own socket to the PTY, whatever ended the pipe: the shell goes on in tmux. */
 const NORMAL_CLOSE = 1000;
 
-/** Why the pipe ended, which picks the close the desktop reads. */
 const PIPE_END = {
   DEVICE_LEFT: "device-left",
   UPSTREAM_LEFT: "upstream-left",
@@ -160,19 +99,16 @@ const PIPE_END = {
 
 type PipeEnd = (typeof PIPE_END)[keyof typeof PIPE_END];
 
-/** The PTY server's exit frame, the one text frame it sends of its own. */
 const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema.Int });
 
 const readResize = readEither(terminalRelayResizeSchema);
 const readPtyExit = readEither(PtyExitSchema);
 
-/** The instant the lease reaches to from a write at the instant given: the idle bound, and the minute a keystroke after this write may wait for the next. */
 function heldFrom(instant: Date): Date {
   const reach = Duration.sum(TERMINAL_RELAY_BOUNDS.IDLE, TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY);
   return new Date(instant.getTime() + Duration.toMillis(reach));
 }
 
-/** The credential set at the firewall; a set that failed is logged, and the next check tries again. */
 function setCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -183,7 +119,6 @@ function setCredential(
   );
 }
 
-/** A member's token taken off the firewall as the connection closes, unless a turn of the agent still uses it; a withdrawal that fails is logged. */
 function withdrawCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -197,7 +132,6 @@ function withdrawCredential(
   );
 }
 
-/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule, or a member's token set at every check; a renewal that failed or was cut off gives the claim back, and the next check tries again. */
 function renewCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -220,21 +154,12 @@ function renewCredential(
     );
     if (!claimed) return;
     yield* setCredential(deps, agent, session).pipe(
-      // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
       Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),
       Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
     );
   });
 }
 
-/**
- * The desktop's frames read into the relay's own queue, which ends when the
- * desktop goes. Until the shell attaches, `held` counts the bytes the queue
- * holds for it, and `overheld` is done once they pass the bound, so a mint
- * GitHub is slow to answer never has the relay hold whatever the desktop goes
- * on sending and never drops a byte of it either; once the shell attaches
- * `held` is none and the PTY takes what comes.
- */
 function readDevice(
   device: RelaySocket,
   fromDevice: Queue.Queue<RelayFrame, Cause.Done>,
@@ -255,7 +180,6 @@ function readDevice(
   return Effect.ensuring(read, Queue.end(fromDevice));
 }
 
-/** The desktop's frames to the PTY: typing as it came, noted as this connection's last and moving the lease on at most once a minute, and a resize as the PTY's own frame. */
 function deviceToPty(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -288,14 +212,12 @@ function deviceToPty(
   });
 }
 
-/** The PTY's frames to the desktop: output as it came, and its exit as the relay's own frame, which ends the pipe. */
 function ptyToDevice(device: RelaySocket, pty: RelaySocket): Effect.Effect<PipeEnd> {
   return Effect.gen(function* () {
     const exited = yield* Ref.make(false);
     yield* Stream.runForEachWhile(pty.frames, (frame) => {
       if ("bytes" in frame) return Effect.as(device.send(frame), true);
       const exit = readPtyExit(jsonOf(frame.text));
-      // A text frame that is not the exit is output the PTY server sent as text.
       if (Result.isFailure(exit)) {
         return Effect.as(device.send({ bytes: new TextEncoder().encode(frame.text) }), true);
       }
@@ -312,7 +234,6 @@ function ptyToDevice(device: RelaySocket, pty: RelaySocket): Effect.Effect<PipeE
   });
 }
 
-/** Ends once nobody has typed in this connection for the idle bound, whatever the sandbox's other terminals do. */
 function idleWatch(lastTyped: Ref.Ref<number>): Effect.Effect<PipeEnd> {
   const typedLately = Effect.gen(function* () {
     const since = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastTyped));
@@ -327,14 +248,12 @@ function idleWatch(lastTyped: Ref.Ref<number>): Effect.Effect<PipeEnd> {
   );
 }
 
-/** The close each end of the pipe is answered with; a desktop that left takes nothing. */
 const CLOSE_OF_END = {
   [PIPE_END.UPSTREAM_LEFT]: TERMINAL_RELAY_CLOSE.UNAVAILABLE,
   [PIPE_END.EXITED]: TERMINAL_RELAY_CLOSE.EXITED,
   [PIPE_END.IDLE]: TERMINAL_RELAY_CLOSE.IDLE,
 } as const satisfies Record<Exclude<PipeEnd, typeof PIPE_END.DEVICE_LEFT>, number>;
 
-/** One connection, from its reach to its close, everything it opens belonging to the scope it runs in. */
 export function relayTerminal(
   device: RelaySocket,
   ask: RelayAsk,
@@ -357,23 +276,19 @@ export function relayTerminal(
           : TERMINAL_RELAY_CLOSE.STARTING,
       );
     }
-    // An attach is the developer using the terminal: it holds the sandbox, and starts its idle bound.
     const attachedAt = yield* DateTime.nowAsDate;
     const lastTyped = yield* Ref.make(attachedAt.getTime());
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
-    // The sandbox is kept alive from the attach for as long as the connection stands, which nobody typing ends.
     const { sessionId } = agent;
     yield* Effect.forkScoped(
       Effect.repeat(deps.keepAlive(sessionId), {
         schedule: Schedule.spaced(CODER.SANDBOX_KEEP_ALIVE_EVERY),
       }),
     );
-    // Note that the desktop's frames are read from here on into a queue of the relay's own, because the first renewal waits on the desktop leaving while what it typed waits for the shell.
     const fromDevice = yield* Queue.make<RelayFrame, Cause.Done>();
     const held = yield* Ref.make<number | undefined>(0);
     const overheld = yield* Deferred.make<void>();
     const deviceLeft = yield* Effect.forkScoped(readDevice(device, fromDevice, held, overheld));
-    // Note that the withdrawal is added ahead of the renewal's fork, so the scope ends the renewal first.
     const session: FirewallSession = {
       userId: agent.userId,
       name: sandbox.sandboxName,
@@ -406,8 +321,6 @@ export function relayTerminal(
         rows: ask.rows,
       }),
     });
-    // A shell is attached once its sandbox's firewall holds a token, so a command typed at once reaches GitHub; a desktop that leaves first ends the renewal with the scope.
-    // Note that a desktop sending past the bound is attached at once instead, its renewal going on beside the pipe, because what it sent is owed to the shell.
     const leftFirst = yield* Effect.raceAll([
       Effect.as(Deferred.await(firstRenewed), false),
       Effect.as(Deferred.await(overheld), false),

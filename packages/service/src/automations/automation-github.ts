@@ -19,41 +19,6 @@ import { readEither } from "@repo/wire/effect";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { isAgentBranch } from "../agents/coder-host/bounds.js";
 
-/**
- * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
- *
- * Our GitHub App's webhook (`github-webhook-app.ts`) hands every signed
- * delivery here as well. A pull request opened or labeled, a pull request
- * ready for review opened, reopened, marked ready, or pushed to, an issue
- * opened or labeled, a check suite that completed without passing, and a
- * push to a branch are read; nothing else is. A pull request opened is
- * both its own event and an update, so it fires the automations listening
- * for either. Only what the run's history shows is
- * read off the delivery: the repository, the number, title, and address of
- * the issue or pull request, the branch, and a failed check's commit by its
- * address, never a body. The run is
- * recorded queued under GitHub's own delivery id, which a redelivery
- * carries again, so a delivery GitHub sends twice records one run per
- * automation; the sweep acts on it within the minute, since starting an
- * agent inside GitHub's ten seconds is not a promise this can keep.
- *
- * Each event is read with who sent it, people, our agents (the App's
- * own bot, or a person opening, reopening, or marking ready a pull request
- * from an agent's branch, which is a coding agent writing as its developer),
- * or another bot, and, for a pull request, the moment it is
- * (opened, marked ready, or pushed to), whether it is a draft, and whether
- * it comes from a fork; an issue an agent opened as its developer has no
- * branch to tell it by, and reads as people's; the trigger's own settings say which of those fire
- * it (`triggerMatches`), people's events alone and no draft or fork where
- * it names none. Two things fire nothing whatever a trigger says, so an
- * automation cannot fire itself in a loop: a push by our agents, to a
- * branch or to a pull request, since an agent answering its run with a
- * push would start that run again, and a failed check on an agent's branch,
- * which is where a coding agent works and where it already watches its own
- * checks.
- */
-
-/** The deliveries read, by GitHub's own event and action names. */
 const GITHUB_EVENT = {
   PULL_REQUEST: "pull_request",
   ISSUES: "issues",
@@ -67,13 +32,10 @@ const GITHUB_ACTION = {
   COMPLETED: "completed",
 } as const;
 
-/** The conclusions of a check suite that read as failed. */
 const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set(["failure", "timed_out"]);
 
-/** What a sender's type says when the sender is an App or another bot. */
 const BOT_SENDER = "Bot";
 
-/** Each pull request action an update is, as the moment a trigger chooses. */
 const UPDATE_MOMENT: ReadonlyMap<string, PullRequestMoment> = new Map([
   [GITHUB_ACTION.OPENED, PULL_REQUEST_MOMENT.OPENED],
   ["reopened", PULL_REQUEST_MOMENT.OPENED],
@@ -81,21 +43,14 @@ const UPDATE_MOMENT: ReadonlyMap<string, PullRequestMoment> = new Map([
   ["synchronize", PULL_REQUEST_MOMENT.PUSHED],
 ]);
 
-/** The ref prefix a branch's push names. */
 const BRANCH_REF = "refs/heads/";
 
-/**
- * The pull request actions a coding agent takes on its own pull request, as
- * the developer it writes as: opening it, reopening it, and marking it
- * ready. A push is never among them, since every push goes out as the App.
- */
 const AGENT_OPENING_ACTIONS: ReadonlySet<string> = new Set([
   GITHUB_ACTION.OPENED,
   "reopened",
   "ready_for_review",
 ]);
 
-/** The most automations one delivery queues runs for, of those listening for its event. */
 const MAXIMUM_AUTOMATIONS = 100;
 
 const LabelSchema = Schema.Struct({ name: Schema.String });
@@ -113,7 +68,6 @@ const PullRequestSchema = Schema.Struct({
     html_url: Schema.String,
     labels: Schema.Array(LabelSchema),
     base: Schema.Struct({ ref: Schema.String }),
-    // The head branch, and the repository it is in: a fork's, or none where the fork was deleted.
     head: Schema.optionalKey(
       Schema.Struct({
         ref: Schema.optionalKey(Schema.String),
@@ -134,7 +88,6 @@ const IssueSchema = Schema.Struct({
     title: Schema.String,
     html_url: Schema.String,
     labels: Schema.Array(LabelSchema),
-    // An issue's delivery says it is a pull request where it is one; those come as pull requests.
     pull_request: Schema.optionalKey(Schema.Unknown),
   }),
 });
@@ -157,14 +110,6 @@ const PushSchema = Schema.Struct({
   sender: SenderSchema,
 });
 
-/**
- * One delivery read as a trigger: the event, the repository, the firing the
- * history keeps, the labels a label filter is read against (the one just
- * applied, or every label of what was opened), the branch a branch filter
- * is read against, who sent it (none for a check, which names no sender),
- * the moment of a pull request's update, whether it is a push, and whether
- * a pull request is a draft or a fork's.
- */
 interface GitHubEventRead {
   readonly event: GitHubTriggerEvent;
   readonly repository: string;
@@ -178,7 +123,6 @@ interface GitHubEventRead {
   readonly fork: boolean;
 }
 
-/** Who sent a delivery: our agents where it is the App's own bot, another bot, or a person. */
 function senderOf(
   sender: { readonly type: string; readonly login: string },
   agentLogin: string | undefined,
@@ -189,16 +133,6 @@ function senderOf(
   return sender.type === BOT_SENDER ? GITHUB_SENDER.OTHER_BOTS : GITHUB_SENDER.PEOPLE;
 }
 
-/**
- * Who sent a pull request's delivery. A person who opened, reopened, or
- * marked ready a pull request from an agent's branch of the repository's own
- * counts as our agents, because a coding agent that writes as its developer
- * opens its pull request on their token, so GitHub names the developer;
- * the branch is where every coding agent works. Note that a person doing
- * the same by hand reads as our agents too, which mislabels the event
- * and grants nothing, and that a push is read by its sender alone, which
- * is the App's for every push an agent makes.
- */
 function pullRequestSender(
   read: typeof PullRequestSchema.Type,
   agentLogin: string | undefined,
@@ -211,7 +145,6 @@ function pullRequestSender(
   return sender === GITHUB_SENDER.PEOPLE && agentOpened ? GITHUB_SENDER.APP_AGENTS : sender;
 }
 
-/** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
 function readDelivery<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   payload: UnparsedWireValue,
@@ -219,7 +152,6 @@ function readDelivery<S extends Schema.ConstraintDecoder<unknown>>(
   return readEither(schema, { excess: EXCESS_KEYS.DROP })(payload);
 }
 
-/** An issue's or pull request's event, read where it is one an automation listens for. */
 function itemEvent(
   read: { readonly action: string },
   events: { readonly opened: GitHubTriggerEvent; readonly labeled: GitHubTriggerEvent },
@@ -230,12 +162,6 @@ function itemEvent(
   return undefined;
 }
 
-/**
- * The events a pull request's delivery is: opened or labeled, as
- * `itemEvent` reads them, and an update where its action is one of the
- * moments an update fires on, each read with who sent it, whether it is a
- * draft, and whether it comes from a fork, for the trigger to choose.
- */
 function pullRequestEvents(
   read: typeof PullRequestSchema.Type,
   agentLogin: string | undefined,
@@ -281,7 +207,6 @@ function pullRequestEvents(
   }));
 }
 
-/** The delivery as the triggers it is, where it is one an automation listens for; none otherwise. */
 function githubEventsOf(
   event: string,
   payload: UnparsedWireValue,
@@ -295,13 +220,11 @@ function githubEventsOf(
   return read === undefined ? [] : [read];
 }
 
-/** An issue's, a check suite's, or a push's delivery as a trigger, where it is one an automation listens for; nothing otherwise. */
 function githubEventOf(
   event: string,
   payload: UnparsedWireValue,
   agentLogin: string | undefined,
 ): GitHubEventRead | undefined {
-  // Of an issue, a check, or a push, only who sent it is read beside the event itself.
   const plain = { moment: undefined, pushed: false, draft: false, fork: false } as const;
   switch (event) {
     case GITHUB_EVENT.ISSUES: {
@@ -343,7 +266,6 @@ function githubEventOf(
         action !== GITHUB_ACTION.COMPLETED ||
         !FAILED_CONCLUSIONS.has(suite.conclusion ?? "") ||
         branch === null ||
-        // An agent already watches its own branch's checks.
         isAgentBranch(branch)
       ) {
         return undefined;
@@ -360,7 +282,6 @@ function githubEventOf(
           event: GITHUB_TRIGGER_EVENT.CHECK_FAILED,
           repository: repository.full_name,
           branch,
-          // The failed commit by its address, so the agent reads the revision that failed even after the branch moves on.
           url: `${repository.html_url}/commit/${suite.head_sha}`,
         },
       };
@@ -393,15 +314,6 @@ function githubEventOf(
   }
 }
 
-/**
- * Whether the trigger listens for this event: its event, whose events it
- * hears (people's alone where it names none), the moments of an update it
- * fires on (every one where it names none), a draft or a fork's pull
- * request only where it asks for them, and its label and branch filters
- * where it names any. Note that a push by our agents fires nothing
- * whatever the trigger says, because an agent answering its own run with
- * a push would start that run again.
- */
 function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): boolean {
   if (trigger.kind !== AUTOMATION_TRIGGER.GITHUB || trigger.event !== read.event) return false;
   if (
@@ -418,7 +330,6 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   }
   const labels = trigger.labels ?? [];
   const branches = trigger.branches ?? [];
-  // A label is matched the way GitHub folds a label's case.
   const labeled =
     labels.length === 0 ||
     labels.some((wanted) =>
@@ -429,7 +340,6 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   return labeled && branched;
 }
 
-/** Queues a run under the delivery's id for every automation listening for the one event read, answering how many it queued. */
 const queueRunsOf = Effect.fnUntraced(function* (deliveryId: string, read: GitHubEventRead) {
   const listening = (yield* githubAutomationsOn(
     read.repository,
@@ -443,15 +353,6 @@ const queueRunsOf = Effect.fnUntraced(function* (deliveryId: string, read: GitHu
   return recorded.filter(Option.isSome).length;
 });
 
-/**
- * Queues a run, under the delivery's own id, for every enabled automation
- * working in the delivery's repository whose trigger listens for one of the
- * events it is, `agentLogin` naming the App's own bot, which our agents
- * act as; answers how many it queued, none for a delivery no automation
- * listens for or one recorded before. Note that the one id
- * serves every event of the delivery, because an automation listens for
- * one event and so records at most one run of it.
- */
 export function queueGithubRuns(
   deliveryId: string,
   event: string,

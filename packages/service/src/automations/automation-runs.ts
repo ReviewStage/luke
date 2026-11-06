@@ -74,70 +74,26 @@ import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 
-/**
- * automation-runs.ts -- one queued automation run acted on: its guards read, its coding agent started as the deployment acting for the owner, and the run settled.
- *
- * A run is a Start with a prompt, on the one path a Start takes
- * (`coder-host/start.ts`), in the automation's workspace on no task: the
- * owner's membership of the workspace, the reach of the automation's
- * repository through the workspace's installation, and the model are
- * checked exactly as they are for the developer's own Start, and the agent
- * runs as the owner on the owner's keys, naming the automation it ran for. The agent is reached as the deployment acting for the
- * owner, since no request of the owner's is in hand. The run's own id is
- * the Start's key, so a run acted on twice, by two
- * sweeps or a sweep and its trigger, starts one agent. A run about one pull
- * request or issue starts its agent named by it, and any other run's agent
- * is named by the title model from the automation's prompt.
- *
- * Before the start, the guards: a run whose automation was paused after it
- * was queued is skipped, but for the owner's own "Run now"; and a run past
- * the daily cap (runs started in the last twenty-four hours) or past the
- * concurrency guard (agents its runs started that are still starting or
- * running, read as each agent's tab reads it) is skipped, never queued, as
- * is an integration's run about a subject (one Sentry issue) another run
- * started on within the trigger's cooldown. The
- * guards read what earlier runs settled, so the sweep acts on one
- * automation's runs one after another (`automation-sweep.ts`); a noisy
- * trigger costs nothing past
- * its caps. A start refused is a failed run with one fixed word for why,
- * and the next firing tries again.
- *
- * An automation that hands every run to the same agent sends the run there
- * instead, and where it holds no agent yet, or the one it holds is gone or
- * archived, the run starts one as any other run does and the automation
- * keeps it for every later run, saying on the run that it replaced the gone
- * one, so an agent let go costs the automation its memory and never its runs.
- */
-
-/** How long a claimed run counts as starting; a start runs in seconds, and one older is the sweep's to recover. */
 const CLAIM_WINDOW_MS = 10 * 60_000;
 
 const AUTOMATION_RUNS = {
-  /** The window the daily cap counts started runs over. */
   CAP_WINDOW: Duration.days(1),
 } as const;
 
-/** A run as it is acted on: a webhook's body, or an integration event's summary, beside it where the read that found it carried one. */
 type ActedRun = AutomationRun & { readonly payload?: string | null };
 
-/** The most the agent's prompt spells, the bound a message to an agent is held to. */
 const PROMPT_BOUND = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
 
-/** What a webhook body's fence and lead line spell, with room. */
 const WEBHOOK_FRAME_CHARS = 256;
 
-/** The tag each provider's event summary is fenced in, so the agent reads where the provider's text begins and ends. */
 const INTEGRATION_FENCE = {
   [TRIGGER_PROVIDER.SENTRY]: "sentry-event",
 } as const satisfies Record<TriggerProvider, string>;
 
-/** What a body cut to fit the prompt's bound ends with. */
 const CUT_MARK = "\n… (cut to fit; the full body is the caller's to send again)";
 
-/** The statuses under which an agent counts against the concurrency guard. */
 const WORKING: ReadonlySet<AgentStatus> = new Set([AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING]);
 
-/** The agents' sessions as the deployment reaches them acting for one account, or the refusal where it cannot. */
 export type SessionsForAccount = (
   userId: string,
 ) => Effect.Effect<
@@ -146,7 +102,6 @@ export type SessionsForAccount = (
   HttpClient.HttpClient | DatabaseServices
 >;
 
-/** Each GitHub event as the agent's prompt names it. */
 const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: "a pull request was opened",
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request was labeled",
@@ -157,7 +112,6 @@ const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PUSH]: "commits were pushed",
 } as const satisfies Record<GitHubTriggerEvent, string>;
 
-/** The GitHub events about one pull request or issue, whose run is named by it rather than by the model. */
 const SUBJECT_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
   GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
   GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
@@ -166,14 +120,7 @@ const SUBJECT_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
   GITHUB_TRIGGER_EVENT.ISSUE_LABELED,
 ]);
 
-/**
- * The fixed name of a run about one pull request or issue, its number and
- * title, `#2905 View commands`, which stays the same across pushes and is
- * what the subject is searched by; none for any other run, which the title
- * model names from the automation's prompt (`coder-host/title.ts`).
- */
 function subjectTitle(firing: AutomationFiring): string | undefined {
-  // An integration's event names its subject, one Sentry issue, by the title the provider gave it.
   if (firing.kind === AUTOMATION_FIRING.INTEGRATION) {
     return firing.subject.title?.slice(0, AGENT_BOUNDS.MAX_TITLE_CHARS).trim() || undefined;
   }
@@ -184,7 +131,6 @@ function subjectTitle(firing: AutomationFiring): string | undefined {
   return named.slice(0, AGENT_BOUNDS.MAX_TITLE_CHARS).trim();
 }
 
-/** Why this run was fired, in the words the agent's prompt closes with. */
 function firingSentence(automation: Automation, run: ActedRun): string {
   const { firing } = run;
   switch (firing.kind) {
@@ -203,14 +149,6 @@ function firingSentence(automation: Automation, run: ActedRun): string {
   }
 }
 
-/**
- * What the agent is told of a GitHub event beside the sentence: its
- * repository, the issue or pull request by number and address, the branch,
- * and the title, every one fenced as the event's own text, since whoever
- * pushed the branch or opened the issue chose them and the agent is to
- * read them as data under the developer's prompt, never as instructions;
- * the rest the agent reads itself with `gh`, or `gh api` on a member's token.
- */
 function githubEventLines(run: ActedRun, access: GitHubAccess): readonly string[] {
   const { firing } = run;
   if (firing.kind !== AUTOMATION_FIRING.GITHUB) return [];
@@ -228,12 +166,6 @@ function githubEventLines(run: ActedRun, access: GitHubAccess): readonly string[
   ];
 }
 
-/**
- * What the agent is told where its automation fires on GitHub's events but
- * this run came without one, such as a run its owner asked for now: that no
- * event came, so a prompt that acts on one
- * ends there rather than choosing an issue or a pull request of its own.
- */
 function missingEventLines(automation: Automation, run: ActedRun): readonly string[] {
   if (automation.trigger.kind !== AUTOMATION_TRIGGER.GITHUB) return [];
   if (run.firing.kind === AUTOMATION_FIRING.GITHUB) return [];
@@ -242,18 +174,11 @@ function missingEventLines(automation: Automation, run: ActedRun): readonly stri
   ];
 }
 
-/** What a run hands its agent: the prompt, and the run as the agent keeps it. */
 interface AutomationStart {
   readonly prompt: string;
   readonly origin: StoredAutomationOrigin;
 }
 
-/**
- * A webhook's body as its run hands it on: whole where its fenced spelling
- * fits `room`, and otherwise its longest start whose fenced spelling fits
- * with the note saying it was cut, so the agent is told and the agent keeps
- * the same words, the one fenced and the other as the caller sent them.
- */
 function handedBody(payload: string, room: number): string {
   if (fenceable(payload).length <= room) return payload;
   const budget = Math.max(0, room - CUT_MARK.length);
@@ -267,11 +192,6 @@ function handedBody(payload: string, room: number): string {
   return `${payload.slice(0, end)}${CUT_MARK}`;
 }
 
-/**
- * What the agent is told of a webhook call: its body as the caller sent it,
- * fenced as the caller's own text to read as data, never as instructions,
- * and cut with a note where it would not fit the prompt's bound.
- */
 function webhookLines(run: ActedRun, room: number): readonly string[] {
   if (run.firing.kind !== AUTOMATION_FIRING.WEBHOOK || run.payload == null) return [];
   return [
@@ -280,14 +200,6 @@ function webhookLines(run: ActedRun, room: number): readonly string[] {
   ];
 }
 
-/**
- * What the agent is told of an integration's event: the summary its trigger
- * source made of it (`triggers/`), fenced as the provider's text, which
- * whoever caused the error chose, to read as data, never as instructions,
- * and cut with a note where it would not fit; and that the rest is the
- * agent's to read through its own connection to the provider. The
- * delivery's body itself was never kept, so it never reaches the prompt.
- */
 function integrationLines(run: ActedRun, room: number): readonly string[] {
   const { firing } = run;
   if (firing.kind !== AUTOMATION_FIRING.INTEGRATION) return [];
@@ -303,19 +215,6 @@ function integrationLines(run: ActedRun, room: number): readonly string[] {
   return [...summary, `Read more of the event through your ${name} connection where you have one.`];
 }
 
-/**
- * The prompt the run's agent is handed, and the run as the agent keeps it:
- * the automation's prompt, then a line saying which automation started it
- * and why, so the agent and the developer reading its tab both know it was
- * not typed by hand, and what it is told of the event that fired it, or
- * that none came where its trigger is GitHub's; the
- * agent keeps the automation's name, the firing, the prompt alone, and a
- * webhook's body as its caller sent it, cut where the prompt cut it. An
- * MCP server its words mention is handed to the agent whatever the
- * automation switched off only where the automation's own prompt mentions
- * it (`serverWords` on the start and the steer), never where the event's
- * lines or the body do, since whoever wrote those is not its owner.
- */
 function automationStart(
   automation: Automation,
   run: ActedRun,
@@ -328,7 +227,6 @@ function automationStart(
     ...githubEventLines(run, access),
     ...missingEventLines(automation, run),
   ];
-  // Note that the body takes what room the rest leaves under the prompt's bound, less its own fence and lead line.
   const room = PROMPT_BOUND - lines.join("\n\n").length - WEBHOOK_FRAME_CHARS;
   const body = run.firing.kind === AUTOMATION_FIRING.WEBHOOK ? run.payload : null;
   return {
@@ -342,13 +240,6 @@ function automationStart(
   };
 }
 
-/**
- * The repository a run starts in: a GitHub event's own, as the automation
- * spells it among its repositories, and the first of them for any other
- * firing, null where it has none, so the run works in no repository;
- * undefined where a GitHub event names a repository the automation no
- * longer works in.
- */
 function runRepository(automation: Automation, run: ActedRun): string | null | undefined {
   const { firing } = run;
   if (firing.kind !== AUTOMATION_FIRING.GITHUB) return automation.repositories[0] ?? null;
@@ -356,12 +247,6 @@ function runRepository(automation: Automation, run: ActedRun): string | null | u
   return automation.repositories.find((repository) => repository.toLowerCase() === named);
 }
 
-/**
- * Whether a GitHub firing's repository is one its run can work in: among the
- * automation's repositories, and, where every run goes to the same agent,
- * that agent's own, since a run sent to an agent works in its checkout and
- * no other. An agent gone is the send's to refuse, as for any firing.
- */
 const firingRepositoryHeld = Effect.fnUntraced(function* (
   automation: Automation,
   run: AutomationRun,
@@ -378,7 +263,6 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   });
 });
 
-/** The fixed word for why a start was refused, so nothing a provider or GitHub said reaches the history. */
 function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): AutomationRunReason {
   if ("_tag" in refusal) return AUTOMATION_RUN_REASON.MODEL;
   switch (refusal.error) {
@@ -395,18 +279,11 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
   }
 }
 
-/** The refusals of a send that say the agent is gone for good, deleted or ended, which a fresh agent takes the place of. */
 const STEER_GONE: ReadonlySet<string> = new Set([
   HOSTED_API_ERROR.NOT_FOUND,
   HOSTED_API_ERROR.AGENT_RETIRED,
 ]);
 
-/**
- * The fixed word for why a run's line was not handed to the automation's
- * agent: one still coming up, or a service that did not take the line, is
- * unavailable, so the next firing tries again; and a repository out of
- * reach is said as a start's. An agent gone is no refusal (`STEER_GONE`).
- */
 function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
   switch (refusal.error) {
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
@@ -418,22 +295,12 @@ function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
   }
 }
 
-/** A claimed run failed for the reason given, answered as its outcome. */
 const failedRun = Effect.fnUntraced(function* (run: ActedRun, reason: AutomationRunReason) {
   yield* failClaimedRun(run.id, reason);
   const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
   return outcome;
 });
 
-/**
- * A claimed run of an automation that hands every run to the same agent:
- * the run's prompt sent to that agent as a message of the creator's, under
- * the run's own key, as the developer's own message is sent
- * (`coder-host/steer.ts`), so a run acted on twice sends it once; the run
- * settled with that agent, or failed in one fixed word. An agent gone,
- * archived, or ended for good takes no run and answers no outcome, a
- * refused send having withdrawn its line, so the run starts one in its place.
- */
 const steerClaimed = Effect.fnUntraced(function* (
   sessionsFor: SessionsForAccount,
   automation: Automation,
@@ -475,7 +342,6 @@ const steerClaimed = Effect.fnUntraced(function* (
     );
   }
   yield* attachRunAgent(run.id, agentId);
-  // The agent's own task is every run's that goes to it.
   if (found.value.taskId !== null) yield* attachRunTask(run.id, found.value.taskId);
   return Option.some<AutomationRunOutcome>({
     status: AUTOMATION_RUN_STATUS.STARTED,
@@ -483,13 +349,7 @@ const steerClaimed = Effect.fnUntraced(function* (
   });
 });
 
-/**
- * How many of the agents the automation's runs started are still at work at
- * `now`, and the agent it hands every run to among them whatever started it,
- * so a run waits on that agent's own work as on its earlier runs'.
- */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
-  // An agent's run is settled by the sweep past its bound, so a run older than that holds no agent at work.
   const since = new Date(now - TURN_ABANDON.AGENT_AFTER_MS);
   const started = yield* startedRunAgents(automation.id, since);
   const target =
@@ -524,11 +384,6 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
   ).length;
 });
 
-/**
- * Whether an integration's run is about a subject (one Sentry issue) the
- * automation started a run on within its cooldown, so a noisy issue starts
- * one agent a cooldown rather than one an alert.
- */
 const sameSubjectRecently = Effect.fnUntraced(function* (
   automation: Automation,
   run: ActedRun,
@@ -540,7 +395,6 @@ const sameSubjectRecently = Effect.fnUntraced(function* (
   return yield* subjectRunStartedSince(automation.id, run.firing.subject.id, since);
 });
 
-/** The guard that holds this run back, if one does. */
 const heldBack = Effect.fnUntraced(function* (automation: Automation, now: number) {
   const recent = yield* automationRunsSince(
     automation.id,
@@ -549,7 +403,6 @@ const heldBack = Effect.fnUntraced(function* (automation: Automation, now: numbe
   const started = recent.filter((run) => run.status === AUTOMATION_RUN_STATUS.STARTED).length;
   if (started >= automation.guards.dailyRunCap) return AUTOMATION_RUN_REASON.DAILY_CAP;
   const working = yield* workingAgents(automation, now);
-  // A run claimed and still starting holds a place as an agent at work does.
   const starting = yield* claimedRunsStarting(automation.id, new Date(now - CLAIM_WINDOW_MS));
   if (working + starting >= automation.guards.maxConcurrentRuns) {
     return AUTOMATION_RUN_REASON.CONCURRENCY;
@@ -557,7 +410,6 @@ const heldBack = Effect.fnUntraced(function* (automation: Automation, now: numbe
   return undefined;
 });
 
-/** What the locked look at a run came to: held back by a guard, claimed for its start, or settled by another act already. */
 const DECISION = {
   HELD: "held",
   REFUSED: "refused",
@@ -579,15 +431,6 @@ type Decision =
   | { readonly kind: typeof DECISION.CLAIMED; readonly automation: Automation }
   | { readonly kind: typeof DECISION.TAKEN };
 
-/**
- * The guards read and the run claimed under the automation's row lock, so
- * two acts on its runs, a sweep and a "Run now" among them, never both read
- * room for one more agent: a run held back is settled skipped there, and
- * one let through is claimed, started with no agent yet, which the next
- * act's concurrency counts. Note that the automation is read again under
- * the lock, because a pause or a task's move committed while this act
- * waited for it must hold the run back.
- */
 const decide = (automationId: string, run: ActedRun) =>
   withAutomationLocked(
     automationId,
@@ -596,7 +439,6 @@ const decide = (automationId: string, run: ActedRun) =>
       const read = yield* readAutomationToRun(automationId);
       if (Option.isNone(read)) return { kind: DECISION.TAKEN } satisfies Decision;
       const automation = read.value;
-      // A run starts as its creator, so one whose creator left the workspace fails, saying so, and the next firing tries again.
       if (!(yield* creatorStillMember(automationId))) {
         const reason = AUTOMATION_RUN_REASON.CREATOR_LEFT;
         const settled = yield* settleAutomationRun(run.id, {
@@ -607,9 +449,7 @@ const decide = (automationId: string, run: ActedRun) =>
           ? ({ kind: DECISION.REFUSED, reason, automation } satisfies Decision)
           : ({ kind: DECISION.TAKEN } satisfies Decision);
       }
-      // A run queued before its automation was paused starts nothing; the owner's own "Run now" still runs.
       const paused = !automation.enabled && run.firing.kind !== AUTOMATION_FIRING.MANUAL;
-      // A GitHub event is about the repository it named; an automation that works elsewhere since starts nothing.
       const moved =
         run.firing.kind === AUTOMATION_FIRING.GITHUB &&
         !(yield* firingRepositoryHeld(automation, run));
@@ -629,7 +469,6 @@ const decide = (automationId: string, run: ActedRun) =>
           ? ({ kind: DECISION.HELD, reason: held, automation } satisfies Decision)
           : ({ kind: DECISION.TAKEN } satisfies Decision);
       }
-      // A run handed to the same agent is claimed for that agent as it stands now, which its recovery reads.
       const claimedFor =
         automation.targetKind === AUTOMATION_TARGET.SAME_AGENT ? automation.targetAgentId : null;
       const claimed = yield* claimAutomationRun(run.id, claimedFor);
@@ -639,7 +478,6 @@ const decide = (automationId: string, run: ActedRun) =>
     }),
   );
 
-/** How a run's task names when the run fired: "Nov 4, 9:00" in its schedule's zone, and in UTC, said so, for any other trigger. */
 function runStartWords(automation: Automation, firedAt: Date): string {
   const { trigger } = automation;
   const timeZone = trigger.kind === AUTOMATION_TRIGGER.SCHEDULE ? trigger.timezone : "UTC";
@@ -657,20 +495,6 @@ function runStartWords(automation: Automation, firedAt: Date): string {
   return trigger.kind === AUTOMATION_TRIGGER.SCHEDULE ? words : `${words} UTC`;
 }
 
-/**
- * The task a run's agent starts on, recorded on the run: one made for the
- * run alone, named for the automation and when the run fired; or, where the
- * agent it starts takes every later run (`standing`), the automation's
- * standing task, named for the automation alone. Either is assigned to the
- * automation's owner, in its repository, and in progress, its description blank,
- * since the run's prompt reaches its agent as its first message. Note that the
- * task is made under an id drawn from the run's, because a run acted on
- * again must find the task it made rather than make a second, that the run
- * names the task in the transaction that inserts it, because the task list
- * reads a run's task as such when the task's own row moves
- * (`run-tasks.ts`), and that a run whose owner left the workspace meanwhile
- * makes none.
- */
 const runTaskOf = Effect.fnUntraced(function* (
   automation: Automation,
   run: ActedRun,
@@ -704,18 +528,6 @@ const runTaskOf = Effect.fnUntraced(function* (
   return yield* Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(named));
 });
 
-/**
- * A claimed run's agent started, the run settled with it, or failed with
- * the start's refusal in one fixed word. The agent starts on the run's
- * task (`runTaskOf`), in the repository a GitHub event named and the first
- * of the automation's repositories otherwise, or in none where it has none,
- * handed the run's prompt as an agent on no task is. Where
- * the run is a same-agent automation's that holds `adopting` (no agent yet,
- * or a gone one), the agent it starts is kept as the automation's from then
- * on, where no other run or edit kept another first, and the run says it
- * replaced the gone one; such an agent is named by the title model rather
- * than by the run's subject, since every later run goes to it too.
- */
 const startRunAgent = Effect.fnUntraced(function* (
   sessionsFor: SessionsForAccount,
   automation: Automation,
@@ -723,10 +535,8 @@ const startRunAgent = Effect.fnUntraced(function* (
   adopting: Option.Option<string | null>,
 ) {
   const repository = runRepository(automation, run);
-  // A GitHub event about a repository the automation no longer works in has nowhere to start.
   if (repository === undefined)
     return yield* failedRun(run, AUTOMATION_RUN_REASON.REPOSITORY_CHANGED);
-  // Note that a run that starts an agent reads through the workspace's installation alone (`start.ts`).
   const handed = automationStart(automation, run, GITHUB_ACCESS.APP);
   const taskId = yield* runTaskOf(automation, run, repository, Option.isSome(adopting));
   if (Option.isNone(taskId)) return yield* failedRun(run, AUTOMATION_RUN_REASON.CREATOR_LEFT);
@@ -736,10 +546,8 @@ const startRunAgent = Effect.fnUntraced(function* (
       ...where,
       idempotencyKey: run.id,
       choice: automation.action.choice,
-      // The servers its owner switched off for it, as a Start switches them off for its agent.
       disabledServers: automation.action.disabledServers,
       prompt: handed.prompt,
-      // Only the automation's own prompt hands servers its owner switched off, never the words an outsider wrote after it.
       serverWords: automation.action.prompt,
       automationId: automation.id,
       automationOrigin: handed.origin,
@@ -749,7 +557,6 @@ const startRunAgent = Effect.fnUntraced(function* (
   );
   if (Result.isFailure(start)) return yield* failedRun(run, reasonOfRefusal(start.failure));
   const agentId = start.success.agent.id;
-  // Note that the agent is kept before the run holds it, because a run left claimed is recovered by its key.
   const adopted = Option.isSome(adopting)
     ? yield* adoptAutomationAgent(automation.id, adopting.value, agentId)
     : false;
@@ -759,11 +566,6 @@ const startRunAgent = Effect.fnUntraced(function* (
   return outcome;
 });
 
-/**
- * A claimed run acted on: sent to the agent its automation hands every run
- * to where that agent still stands, and otherwise started, a same-agent
- * automation's start kept as its agent (`startRunAgent`).
- */
 const startClaimed = Effect.fnUntraced(function* (
   sessionsFor: SessionsForAccount,
   automation: Automation,
@@ -780,14 +582,6 @@ const startClaimed = Effect.fnUntraced(function* (
   return yield* startRunAgent(sessionsFor, automation, run, Option.some(held));
 });
 
-/**
- * The run acted on: decided under the lock and, claimed, started; nothing
- * where another act settled or claimed it first. Note that an agent found
- * under the run's key is never taken as its start here, because a run
- * still queued has made none, and one claimed may be opening an agent
- * that its own act will yet let go of; a claim whose act died is the
- * stranded sweep's to settle.
- */
 const outcomeOf = Effect.fnUntraced(function* (sessionsFor: SessionsForAccount, run: ActedRun) {
   const decision = yield* decide(run.automationId, run);
   switch (decision.kind) {
@@ -811,7 +605,6 @@ const outcomeOf = Effect.fnUntraced(function* (sessionsFor: SessionsForAccount, 
       return undefined;
     case DECISION.CLAIMED: {
       const outcome = yield* startClaimed(sessionsFor, decision.automation, run);
-      // Counted for the owner once the run has an agent, whoever or whatever fired it.
       if (outcome.status === AUTOMATION_RUN_STATUS.STARTED) {
         yield* recordServerEvent(
           SERVER_EVENT.AUTOMATION_RUN_START,
@@ -826,12 +619,6 @@ const outcomeOf = Effect.fnUntraced(function* (sessionsFor: SessionsForAccount, 
   }
 });
 
-/**
- * Acts on one queued run and settles it, answering how it came out;
- * nothing where its automation is gone. A store that fails midway is
- * logged and the run left queued, so the next sweep acts on it again under
- * the same key.
- */
 export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutomationRun")(
   function* (
     sessionsFor: SessionsForAccount,
@@ -851,14 +638,6 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
   },
 );
 
-/**
- * What a recovered start of a same-agent automation's run does as its act
- * would have: keeps the agent where the automation still holds what the run
- * was claimed for, none or the gone agent, and answers that it replaced the
- * gone one where it did so, or had already before the act died. Note that
- * the keep is no guard of its own, because the store's compare holds every
- * other automation and target to its own (`adoptAutomationAgent`).
- */
 const recoveredAdoption = Effect.fnUntraced(function* (stranded: StrandedRun, agentId: string) {
   const adopted = yield* adoptAutomationAgent(
     stranded.automationId,
@@ -876,22 +655,10 @@ const recoveredAdoption = Effect.fnUntraced(function* (stranded: StrandedRun, ag
   return kept && stranded.claimedAgentId !== null ? AUTOMATION_RUN_REASON.AGENT_REPLACED : null;
 });
 
-/**
- * A claimed run whose function died between the claim and its agent,
- * settled as the start its key made where that agent's session ran, and
- * failed as unavailable where none did, an agent made but never opened let
- * go with it, so no run is left starting for good. A run handed to the
- * same agent is settled with the agent it was claimed for, where that
- * agent holds the line it sent under its key, and otherwise read as a
- * start, since one whose agent was gone started a fresh one under its key.
- */
 export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStrandedRun")(function* (
   stranded: StrandedRun,
 ): Effect.fn.Return<void, unknown, DatabaseServices> {
-  // A run handed to the same agent is the start of the agent it was claimed for where that agent holds
-  // the line it sent under its key, and of no other agent whatever its lines hold.
   if (stranded.claimedAgentId !== null) {
-    // Read past the creator's gate, since a creator who left after the line landed still sent it.
     const agent = yield* agentConversation(stranded.claimedAgentId);
     const sent =
       Option.isSome(agent) &&
@@ -906,8 +673,6 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
     }
   }
   const started = yield* readAgentByKey(stranded.userId, stranded.id);
-  // Note that an agent made under the key whose session never ran a turn was never opened, the
-  // function gone between making it and eve taking it, so it is let go rather than taken as started.
   const opened = Option.isSome(started)
     ? (yield* latestTurnsOfReached([started.value.conversationId])).size > 0
     : false;

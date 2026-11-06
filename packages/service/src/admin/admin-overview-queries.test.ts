@@ -45,20 +45,6 @@ import { USER_ROLE } from "./admin-access.js";
 import { readAdminDaySource } from "./admin-day-queries.js";
 import { readAdminOverviewSource } from "./admin-overview-queries.js";
 
-/**
- * admin-overview-queries.test.ts -- the Overview's reads over a real dialect:
- * a meaningful action is a task, the developer's own description revision, or an
- * agent started, and nothing else makes an account active; each
- * daily count lands on its own UTC day; the funnel counts what the window's
- * new accounts ever did; reach counts the week's active developers alone;
- * the most active accounts carry their own counts; hiding admins leaves
- * an admin's rows out of every number; and the Day page reads one UTC day of
- * those same rows, naming who was active by a meaningful action.
- *
- * Synthetic accounts throughout, read on Wednesday 2026-10-21 at noon UTC over
- * a 7-day window: the recent run is 10-15 to 10-21, the prior 10-08 to 10-14.
- */
-
 const NOW = Date.UTC(2026, 9, 21, 12);
 
 const at = (iso: string) => new Date(iso);
@@ -73,7 +59,6 @@ const openAccount = (name: string, createdAt: string, role: string = USER_ROLE.U
     return id;
   });
 
-/** The numbers the tasks below take, each its own whatever its workspace. */
 let taskNumbers = 0;
 
 const createTask = (userId: string, organizationId: string, createdAt: string) =>
@@ -168,7 +153,6 @@ const answerInboxItem = (userId: string, organizationId: string, agentId: string
     });
   });
 
-/** An automation the account owns, with one run that started an agent and one a guard held back. */
 const fireAutomation = (userId: string, organizationId: string, when: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -223,12 +207,6 @@ const signIn = (userId: string, updatedAt: string) =>
     });
   });
 
-/**
- * Ada joined this week and did one of everything. Bob joined long ago, made a
- * task in the prior week, and this week only had the app's notetaker write on its
- * description, which is the app's and not a meaningful action of its own. Carol joined
- * this week and did nothing. Root is an admin who joined this week and acted.
- */
 const seedService = Effect.gen(function* () {
   const db = yield* Database;
   const ada = yield* openAccount("ada", "2026-10-16T09:00:00Z");
@@ -253,7 +231,6 @@ const seedService = Effect.gen(function* () {
     published: MERGED_PULL_REQUEST,
   });
   yield* fireAutomation(ada, adaWorkspace, "2026-10-20T02:00:00Z");
-  // Note that the agent's automation is deleted since, so its row keeps the run's origin and no id.
   yield* startAgent(ada, adaWorkspace, "2026-10-19T02:00:00Z", {
     automationOrigin: {
       name: "Synthetic automation",
@@ -276,7 +253,6 @@ const seedService = Effect.gen(function* () {
   return { ada, root };
 });
 
-/** One daily count's nonzero days, as a plain record for comparing. */
 function daysOf(
   daily: ReadonlyMap<DailyCount, ReadonlyMap<string, number>>,
   count: DailyCount,
@@ -297,7 +273,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           windowDays: ADMIN_METRICS_WINDOW.WEEK,
         });
 
-        // Bob's notetaker revision makes him no active developer this week.
         assert.deepEqual(source.activeDevelopers, { recent: 1, prior: 1 });
         assert.deepEqual(daysOf(source.daily, DAILY_COUNT.TASKS_CREATED), {
           "2026-10-10": 1,
@@ -316,7 +291,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           "2026-10-20": 1,
         });
         assert.deepEqual(daysOf(source.daily, DAILY_COUNT.INBOX_ANSWERED), { "2026-10-20": 1 });
-        // The guard's skip started nothing, so it is no run.
         assert.deepEqual(daysOf(source.daily, DAILY_COUNT.AUTOMATION_RUNS), { "2026-10-20": 1 });
         assert.deepEqual(source.prsOpened, { opened: 1, merged: 1 });
 
@@ -328,7 +302,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           [FUNNEL_STEP.OPENED_PR]: 1,
           [FUNNEL_STEP.MERGED_PR]: 1,
         });
-        // Bob's own connected integration is not reach: he was not active this week.
         assert.deepEqual(Object.fromEntries(source.reach), {
           [REACH_FEATURE.TASKS]: 1,
           [REACH_FEATURE.AGENTS]: 1,
@@ -347,7 +320,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
         assert.equal(source.accountCounts.lastSeenAt.get(ada), Date.parse("2026-10-21T09:00:00Z"));
         assert.equal(source.accountCounts.tasks.get(root), undefined);
 
-        // Ada's Sunday revision lands in her signup week; her agents in the next.
         assert.deepEqual(
           Object.fromEntries(source.retention.activeByCohortWeek.get("2026-10-12") ?? []),
           { "2026-10-12": 1, "2026-10-19": 1 },
@@ -377,7 +349,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
     Effect.gen(function* () {
       const dee = yield* openAccount("dee", "2026-09-01T09:00:00Z");
       const workspace = yield* openWorkspace(dee);
-      // Every agent here starts on 10-16, a day the shared seed leaves empty.
       const day = "2026-10-16";
       const when = `${day}T10:00:00Z`;
       const slack = { source: { kind: AGENT_SOURCE.SLACK } };
@@ -401,7 +372,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
       });
       const on = (count: DailyCount) => source.daily.get(count)?.get(day) ?? 0;
 
-      // Six started: the pilot and the plain coder by hand, the rest by the first origin that fits.
       assert.equal(on(DAILY_COUNT.AGENTS_STARTED), 6);
       assert.equal(on(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS), 1);
       assert.equal(on(DAILY_COUNT.AGENTS_FROM_SLACK), 2);
@@ -417,7 +387,6 @@ it.layer(getTestDB())("one day's reads", (it) => {
     () =>
       Effect.gen(function* () {
         const { ada, root } = yield* seedService;
-        // Note that the next day's first instant is past the day's bound.
         yield* createTask(ada, yield* openWorkspace(ada), "2026-10-21T00:00:00Z");
 
         const day = yield* readAdminDaySource({
@@ -425,7 +394,6 @@ it.layer(getTestDB())("one day's reads", (it) => {
           scope: ADMIN_METRICS_SCOPE.NON_ADMINS,
         });
 
-        // Bob's notetaker revision is in the bar, as the chart counts it, but makes him no active account.
         assert.deepEqual(day.activity.features, {
           agentsStarted: 1,
           descriptionRevisions: 1,

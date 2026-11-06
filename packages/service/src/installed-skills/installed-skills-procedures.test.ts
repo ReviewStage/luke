@@ -46,21 +46,8 @@ import {
 } from "../testing/github-app-fake.js";
 import { installedSkillsProcedures } from "./installed-skills-procedures.js";
 
-/**
- * The installed skills routes, answered by the hosted oRPC router the way
- * the web route answers them, over PGlite and a GitHub that serves a
- * repository the test lays out commit by commit as its archive: a source
- * previewed at the commit its ref stands at and installed from that
- * commit, read on the workspace's installation for a private repository
- * and anonymously for a public one; text made a one-file skill; a skill
- * refused by the one check; each scope's permissions; and one skill read
- * whole. Synthetic accounts, repositories, and words throughout.
- */
-
-/** What the routes counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The skill changes each counted for the account, in order; each is in no workspace, since a skill may be personal. */
 const skillChangesCounted = (userId: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === SERVER_EVENT.SKILL_CHANGE)
@@ -72,10 +59,8 @@ const skillChangesCounted = (userId: string) =>
 const ORIGIN = "https://app.test";
 const SKILLS = HOSTED_SERVICE_PATH.INSTALLED_SKILLS;
 
-/** One commit of a fake repository: every file by its path from the root. */
 type Commit = Readonly<Record<string, string>>;
 
-/** A repository the fake GitHub answers for, its branches moved by the test. */
 interface FakeRepository {
   readonly owner: string;
   readonly name: string;
@@ -86,7 +71,6 @@ interface FakeRepository {
 
 const sha1 = (text: string) => createHash("sha1").update(text).digest("hex");
 
-/** A commit added to the repository and the branch moved to it; its sha. */
 function commitTo(repository: FakeRepository, branch: string, files: Commit): string {
   const sha = sha1(`${repository.commits.size}:${JSON.stringify(files)}`);
   repository.commits.set(sha, files);
@@ -100,7 +84,6 @@ function skillFile(name: string, description: string, body = "Do the thing."): s
 
 const notFound = () => Response.json({ message: "Not Found" }, { status: 404 });
 
-/** The commit a ref names: a branch, `HEAD` for the default branch, or a commit's own sha. */
 function commitOf(repository: FakeRepository, ref: string): string | undefined {
   return (
     repository.branches.get(ref === "HEAD" ? "main" : ref) ??
@@ -108,7 +91,6 @@ function commitOf(repository: FakeRepository, ref: string): string | undefined {
   );
 }
 
-/** A tar header for an entry of the type and size given, as `git archive` writes one. */
 function tarHeader(name: string, type: string, size: number): Uint8Array {
   const header = new Uint8Array(512);
   const put = (offset: number, value: string) => header.set(Buffer.from(value), offset);
@@ -120,7 +102,6 @@ function tarHeader(name: string, type: string, size: number): Uint8Array {
   return header;
 }
 
-/** The commit as GitHub serves its archive: gzipped, the commit named in a pax global header, every file under one top folder. */
 function archiveOf(repository: FakeRepository, sha: string): Uint8Array<ArrayBuffer> {
   const tail = ` comment=${sha}\n`;
   let length = tail.length + 1;
@@ -147,12 +128,6 @@ function archiveOf(repository: FakeRepository, sha: string): Uint8Array<ArrayBuf
   return new Uint8Array(gzipSync(Buffer.concat([...blocks, new Uint8Array(1024)])));
 }
 
-/**
- * The repository's paths as GitHub answers them: a commit's archive, from
- * codeload with no token for a public one and through the API for a
- * private one, which answers only the installation's token; and the
- * repository itself, as an installation's reach reads it.
- */
 function repositoryScript(repository: FakeRepository) {
   return (sent: SentToGitHub): Response | undefined => {
     const url = new URL(sent.url);
@@ -194,7 +169,6 @@ function fakeRepository(owner: string, name: string, isPrivate = false): FakeRep
 
 let installationsMade = 0;
 
-/** An installation of its own for a test, on the repository's owner. */
 function installationFor(repository: FakeRepository): InstallationFixture {
   installationsMade += 1;
   return {
@@ -210,7 +184,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The procedures over the test's database and the GitHub given, every account its own bearer. */
 const routes = (github: FakeGitHub) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<
@@ -226,7 +199,6 @@ const routes = (github: FakeGitHub) =>
         ),
       ),
     );
-    // SAFETY: the procedures yield the database, the clock, GitHub, and its HTTP client alone, which is all this provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     const handle = hostedFetch({
       installedSkills: installedSkillsProcedures({
@@ -252,13 +224,11 @@ const routes = (github: FakeGitHub) =>
           ),
         );
         const text = yield* Effect.promise(() => response.text());
-        // SAFETY: the router answers JSON; the test reads it as the wire value it is.
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
   });
 
-/** The answer read through its schema, failing the test where the status or the body is not what it should be. */
 function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   status: number,
@@ -276,17 +246,14 @@ const preview = (workspaceId: string, text: string) => ({
   body: { workspaceId, text },
 });
 
-/** The source preview read from an answer, failing the test where it is another kind. */
 function sourcePreview(answer: Answer) {
   const previewed = readAnswer(installedSkillPreviewSchema, HOSTED_HTTP_STATUS.OK, answer);
   if (previewed.kind !== SKILL_PASTE_KIND.SOURCE) assert.fail(`not a source: ${previewed.kind}`);
   return previewed;
 }
 
-/** A credential-shaped literal, built at run time so no tracked file holds one (`scripts/repository-checks.sh`). */
 const FAKE_GITHUB_TOKEN = ["gh", "p_", "x".repeat(36)].join("");
 
-/** The text of a stored personal skill's file, as a session is handed it. */
 const storedText = (userId: string, id: string, path: string) =>
   Effect.map(sessionInstalledSkills(userId, null), (skills) => {
     const file = skills.find((one) => one.id === id)?.files.find((one) => one.path === path);
@@ -341,7 +308,6 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           ],
         );
 
-        // A moved branch after the preview is not read: the install reads the commit the preview pinned.
         commitTo(kit, "main", {
           ...kit.commits.get(sha),
           "skills/review/SKILL.md": skillFile("review", "Review a pull request, carefully."),
@@ -516,7 +482,6 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           `---\nname: "pr-style"\ndescription: ${JSON.stringify(description)}\n---\n\n${bare}`,
         );
 
-        // A name the text declares gives way to the one given, the rest of its frontmatter kept.
         const declared =
           "---\nname: declared\nuser-invocable: false\ndescription: >\n  Says its\n  own name.\n---\n\nBody.";
         const renamed = yield* madeText({ text: declared, name: "renamed" });
@@ -630,7 +595,6 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           (yield* ask(installedSkillPath("not-a-uuid"), owner, { method: "DELETE" })).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
-        // Only a change that was made is counted, under whoever made it.
         assert.deepEqual(skillChangesCounted(member), [SERVER_SKILL_ACTION.INSTALL]);
         assert.deepEqual(skillChangesCounted(admin), [
           SERVER_SKILL_ACTION.INSTALL,

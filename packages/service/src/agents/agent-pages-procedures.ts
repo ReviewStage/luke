@@ -1,18 +1,3 @@
-/**
- * agent-pages-procedures.ts -- the pages a coding agent on no task showed on itself, as the hosted oRPC router answers them.
- *
- * `GET /api/agents/{id}/pages` is the agent's own pages, each by its newest
- * version, `/api/agents/{id}/pages/{page}/versions/{version}` one
- * version's HTML, answered inside JSON so no page is ever a document of this
- * origin (`@repo/database/models/task-pages`), and `…/versions/{version}/frame`
- * a browser's frame of it, sent on to the sandbox's own site
- * (`../pages/page-frame.ts`). Each reads as the task's own
- * pages read under the task (`../tasks/task-files-procedures.ts`), gated on
- * the agent's rule of who may read it rather than a task's: an agent the
- * account does not reach lists no pages and answers a version as not found,
- * exactly as one that names nothing, and an id that is no UUID names none.
- */
-
 import { listPages, readPageVersion } from "@repo/database/models/task-pages";
 import { PAGE_OWNER, pageVersionNumberSchema } from "@repo/features/page-wire";
 import { unparsedWire } from "@repo/wire";
@@ -32,7 +17,6 @@ export interface AgentPagesProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The version a path names, or the invalid-request refusal where it is no whole number from one. */
 function pageVersionOf(version: string): Effect.Effect<number, HostedRefusal> {
   const read = readEither(pageVersionNumberSchema)(unparsedWire(Number(version)));
   return Result.isFailure(read)
@@ -40,7 +24,6 @@ function pageVersionOf(version: string): Effect.Effect<number, HostedRefusal> {
     : Effect.succeed(read.success);
 }
 
-/** The agent pages resource: the list and one version, to a signed-in caller resolved before its input is read. */
 export function agentPagesProcedures(seams: AgentPagesProcedureSeams) {
   const member = hosted.agentPages.use(accountMiddleware(seams.resolveUserId));
   return {

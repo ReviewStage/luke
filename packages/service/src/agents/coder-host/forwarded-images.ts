@@ -11,33 +11,10 @@ import { Effect, Option, Result } from "effect";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 
-/**
- * forwarded-images.ts -- pictures one agent hands another by their attachment ids, read as the forwarder may read them and made the files a Start or a steer carries.
- *
- * An id names a row of the one `attachment` table, and a forwarder may hand
- * on one kind of row: a picture kept beside its own conversation
- * (`conversation-pictures.ts`), such as one `show_image` kept. Any other id,
- * another conversation's picture among them, is refused alike, so a refusal
- * never says that a picture stands where the forwarder cannot read it. A video kept beside the conversation, as
- * `show_image` keeps a recording, is refused by name, since a message
- * carries pictures alone. Each picture is held to the bound one image of
- * a message is held to, and all of them to a message's bytes together
- * (`AGENT_BOUNDS`); one past them is refused rather than shrunk,
- * since a `show_image` picture may be larger than a message takes. A
- * forwarded file is named by its id and its type's extension, never by a
- * path, so nothing of where it came from travels with it. The call refused
- * hands on nothing: the first id refused refuses them all.
- */
-
-/** Why a forward handed on nothing. */
 const FORWARDED_IMAGE_REFUSAL = {
-  /** The id names no picture the forwarder may hand on. */
   UNREACHED: "unreached",
-  /** The id names a video the forwarder recorded, which no message carries as a file. */
   VIDEO: "video",
-  /** The picture is past one image's bound. */
   TOO_LARGE: "too-large",
-  /** The pictures together are past one message's bound. */
   TOO_MUCH: "too-much",
 } as const;
 
@@ -51,37 +28,27 @@ export type ForwardedImageRefusal =
     }
   | { readonly kind: typeof FORWARDED_IMAGE_REFUSAL.TOO_MUCH; readonly bytes: number };
 
-/** Who forwards: the account acting, and the conversation whose own pictures it may name, none for a caller with none. */
 export interface ImageForwarder {
   readonly userId: string;
   readonly conversationId: string | undefined;
 }
 
-/** The extension a forwarded file is named with, by its type. */
 const IMAGE_EXTENSION = {
   [AGENT_ATTACHMENT_TYPE.PNG]: "png",
   [AGENT_ATTACHMENT_TYPE.JPEG]: "jpg",
   [AGENT_ATTACHMENT_TYPE.WEBP]: "webp",
 } as const satisfies Record<InboxImageType, string>;
 
-/** Megabytes as a refusal says them, rounded up to a tenth so a picture just past a bound never reads as at it. */
 function megabytes(bytes: number): string {
   return `${Math.ceil(bytes / 100_000) / 10} MB`;
 }
 
-/** The picture under the id as the forwarder may read it: its conversation's own; nothing otherwise. */
 function pictureOf(forwarder: ImageForwarder, id: string) {
   return forwarder.conversationId === undefined
     ? Effect.succeed(Option.none())
     : readConversationPicture(forwarder.conversationId, id);
 }
 
-/**
- * The pictures under the ids, in the order named, each once, as the files
- * a Start or a steer carries; or why none is handed on: an id the forwarder
- * may not hand on, a picture past one image's bound, or pictures past one
- * message's bytes together.
- */
 export function forwardedImages(
   forwarder: ImageForwarder,
   ids: readonly string[],
@@ -123,7 +90,6 @@ export function forwardedImages(
   });
 }
 
-/** Why a forward handed on nothing, as a sentence the model can act on, after the words its tool opens a refusal with. */
 export function forwardedImageRefusalWords(refusal: ForwardedImageRefusal): string {
   switch (refusal.kind) {
     case FORWARDED_IMAGE_REFUSAL.UNREACHED:

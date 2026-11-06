@@ -11,19 +11,10 @@ import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration
 import { INTEGRATION_GRANT_HOLDER, type IntegrationGrantRef } from "./integration-token.js";
 import { readStoredTools, storeTools } from "./integration-tool-store.js";
 
-/**
- * The tools kept on a grant's row over the real migration on PGlite: a
- * list is read back for its own grant alone, a sign-in completed again
- * clears it, a list read before that sign-in completed is never kept over
- * it, and neither is one read before the list it would replace.
- */
-
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 
-/** The tools a list holds, as the provider named them. */
 const TOOLS = [{ name: "list_issues", description: "List issues." }, { name: "create_issue" }];
 
-/** A member whose Linear stands connected, and the grant it stands for. */
 const connectedMember = Effect.gen(function* () {
   const userId = yield* openGithubUser();
   yield* beginIntegrationSignIn(userId, firstIntegrationAccount(userId, LINEAR), `s-${userId}`);
@@ -68,7 +59,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the tools kept on a grant", (i
         );
         yield* completeIntegrationSignIn(member.userId, LINEAR, "again");
         const cleared = yield* readStoredTools(member.grant);
-        // A list whose read began before the sign-in completed was read on the grant it replaced.
         yield* storeTools(member.grant, TOOLS, before);
 
         assert.equal(cleared, undefined);

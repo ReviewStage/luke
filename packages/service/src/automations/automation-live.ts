@@ -16,28 +16,10 @@ import {
   sessionEndedOf,
 } from "../live/agent-standing.js";
 
-/**
- * automation-live.ts -- a workspace's automations and one automation's runs, written for Neon Realtime.
- *
- * Each is the same rows and rule of who may read them as its held read
- * (`automations-app.ts`'s list and runs, through `listAutomations` and
- * `listAutomationRuns`): every automation of the workspace the account may
- * read, each with its newest run, and an automation's newest runs, each
- * run with the agent it started and what that agent's status is read from
- * (`agent-standing.ts`), in one statement apiece, so a run and its agent
- * move together. Every column stands under the key
- * `@repo/features/automation-live` reads it by and every instant as epoch
- * milliseconds. Nothing reads the clock: an agent's status, which turns on
- * it, is the reader's, and so is the order, since Realtime keeps none.
- */
-
-/** The task an automation's row names, which is none: a typed null for the columns a released desktop still decodes. */
 const LIVE_NO_TASK = sql<null>`null::text`;
 
-/** The most runs an automation's live history holds, as its held read answers them. */
 export const AUTOMATION_RUNS_READ = 50;
 
-/** The agent a run started and what its status is read from, each under the key the wire reads it by: the agent and turn joined beside the run. */
 function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnOf>) {
   return liveSelection(
     {
@@ -59,12 +41,10 @@ function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnO
   );
 }
 
-/** The statement a workspace's automations are subscribed to live. */
 export interface AutomationsLiveStatements {
   readonly automations: LiveStatement;
 }
 
-/** Every automation of the workspace the account may read, each with its newest run and that run's agent, written for Realtime. */
 export function automationsLiveStatements(
   userId: string,
   workspaceId: string,
@@ -91,8 +71,6 @@ export function automationsLiveStatements(
       ...liveSelection(
         {
           ...columns,
-          // Note that no automation stands on a task, and the row still carries the task's columns
-          // as nulls because a released desktop decodes them as required.
           taskId: LIVE_NO_TASK,
           taskName: LIVE_NO_TASK,
           taskRepository: LIVE_NO_TASK,
@@ -119,12 +97,10 @@ export function automationsLiveStatements(
   return Option.map(liveStatementOf(statement), (automations) => ({ automations }));
 }
 
-/** The statement an automation's runs are subscribed to live. */
 export interface AutomationRunsLiveStatements {
   readonly runs: LiveStatement;
 }
 
-/** The automation's newest runs the account may read, each with its agent, written for Realtime; the reader keeps the order. */
 export function automationRunsLiveStatements(
   userId: string,
   automationId: string,
@@ -163,21 +139,12 @@ export function automationRunsLiveStatements(
   return Option.map(liveStatementOf(statement), (runs) => ({ runs }));
 }
 
-/** The most runs a workspace's live runs hold, newest first. */
 export const AUTOMATION_WORKSPACE_RUNS_READ = 100;
 
-/** The statement a workspace's runs are subscribed to live. */
 export interface AutomationWorkspaceRunsLiveStatements {
   readonly runs: LiveStatement;
 }
 
-/**
- * The newest runs of the workspace's automations the account may read, each
- * with its automation's id and name and its agent, written for Realtime; the
- * reader keeps the order. Note that the newest are chosen among the readable
- * automations' runs alone, so a teammate's busy personal automation never
- * crowds the account's own out of the window.
- */
 export function automationWorkspaceRunsLiveStatements(
   userId: string,
   workspaceId: string,

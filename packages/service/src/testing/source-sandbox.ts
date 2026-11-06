@@ -1,17 +1,3 @@
-/**
- * source-sandbox.ts -- a coding agent's sandbox at Vercel's REST boundary, as `@vercel/sandbox` reads it, its shell a real one over a git checkout on disk, for the suites that copy a source agent's work.
- *
- * The double answers Vercel Sandbox's API as the scenario has it: the
- * session's sandbox in the status given, a resume that brings it up under a
- * fresh session, a stop that stops it where it is sent as JSON and is
- * refused with 415 where not, as Vercel refuses it, a firewall policy
- * written down, and each command run in a checkout the test made by a real
- * POSIX shell with git, what it printed on stdout and stderr streamed back,
- * refused where it names any directory but the agent's checkout. The
- * checkout is the way an agent leaves one: cloned from a bare remote on
- * disk, one commit pushed, its identity set. Synthetic throughout.
- */
-
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -31,16 +17,13 @@ export const SOURCE_SANDBOX = {
   NAME: "eve-sbx-vercel-fixture",
   RUNNING: "sbs_running",
   WOKEN: "sbs_woken",
-  /** The session a stopped sandbox last ran, which Vercel's list names as its current one. */
   STOPPED: "sbs_stopped",
 } as const;
 
-/** git as the sandbox runs it, kept from the host's own configuration. */
 function gitEnvironment(home: string): NodeJS.ProcessEnv {
   return { PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" };
 }
 
-/** An unsigned token naming a fixture project and team, a year from expiring, as the deployment's OIDC token. */
 export function fixtureOidcToken(): string {
   const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
@@ -50,16 +33,13 @@ export function fixtureOidcToken(): string {
   return `${header}.${payload}.`;
 }
 
-/** A source agent's checkout and the remote it pushes to, with a command run in either. */
 export interface SourceCheckout {
   readonly root: string;
   readonly remote: string;
   readonly checkout: string;
-  /** A command run in the directory given, its stdout trimmed. */
   readonly sh: (cwd: string, command: string, ...args: string[]) => string;
 }
 
-/** A checkout in the directory given, on `main`, with two files committed and pushed to a bare remote beside it. */
 export function sourceCheckout(root: string): SourceCheckout {
   const sh = (cwd: string, command: string, ...args: string[]) =>
     execFileSync(command, args, {
@@ -85,7 +65,6 @@ export function sourceCheckout(root: string): SourceCheckout {
   return { root, remote, checkout, sh };
 }
 
-/** A request of the double as it was sent: its address, method, headers, and body as text. */
 export interface SentToSandbox {
   readonly url: string;
   readonly method: string;
@@ -93,21 +72,15 @@ export interface SentToSandbox {
   readonly body: string;
 }
 
-/** The sandbox as the double holds it, and what was asked of it. */
 export interface SourceSandbox {
   readonly state: { status: string | undefined; session: string | undefined };
-  /** The sessions it stopped, in order; a stop it refused is none of them. */
   readonly stops: string[];
-  /** Settles once a stop is first asked of it, whether it stopped or refused it. */
   readonly stopAsked: Deferred.Deferred<void>;
   readonly policies: { readonly session: string; readonly hosts: readonly string[] }[];
-  /** The session each command ran in, in order. */
   readonly ran: string[];
-  /** Vercel's answer to a request of the sandbox API, or nothing for a request of any other host. */
   readonly answer: (sent: SentToSandbox) => Response | undefined;
 }
 
-/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one. */
 export function sourceSandbox(source: SourceCheckout, status: string | undefined): SourceSandbox {
   const state: SourceSandbox["state"] = {
     status,
@@ -142,12 +115,10 @@ export function sourceSandbox(source: SourceCheckout, status: string | undefined
         stops.push(session);
         state.status = "stopped";
       }
-      // Settled once the stop is recorded, since a fiber awaiting it may resume before this returns.
       Deferred.doneUnsafe(stopAsked, Effect.void);
       return refused ?? Response.json(sessionAnswered({ id: session, status: "stopped" }));
     }
     if (parsed.pathname.endsWith("/network-policy")) {
-      // An open policy carries a credential on no host.
       policies.push({ session, hosts: Object.keys(JSON.parse(body).allow ?? {}) });
       return Response.json(sessionAnswered({ id: session, status: "running" }));
     }

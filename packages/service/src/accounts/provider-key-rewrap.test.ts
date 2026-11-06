@@ -30,21 +30,6 @@ import {
   rewrapProviderKeys,
 } from "./provider-key-rewrap.js";
 
-/**
- * The rotation's rewrap over a real dialect: every stored key wrapped under
- * an older version is moved onto the current one and opens under a ring
- * that no longer holds the old, a key already current or one the ring
- * cannot open is left as it was, and a second pass moves nothing. A
- * subscription credential moves as a key does, beside the same provider's
- * API key, and each opens only as its kind.
- *
- * A member's GitHub token, sealed under the same ring, moves in the same
- * pass.
- *
- * Synthetic accounts and keys; the key-encryption keys are fixed bytes
- * written for this file.
- */
-
 const KEK = {
   ONE: `1:${Buffer.alloc(32, 1).toString("base64")}`,
   TWO: `2:${Buffer.alloc(32, 2).toString("base64")}`,
@@ -74,7 +59,6 @@ const storeKey = (
     new Date(0),
   );
 
-/** Each of the account's credentials of the kind opened under the ring, or unreadable. */
 const openedUnder = (
   keys: KeyRing,
   userId: string,
@@ -97,7 +81,6 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        // A pass walks every account's rows, so each case starts from none.
         yield* db.delete(accountProviderKey);
         yield* db.delete(githubPersonalToken);
         const [first, second, subscriber] = [
@@ -190,9 +173,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         yield* db.delete(accountProviderKey);
         yield* db.delete(githubPersonalToken);
         const owner = `user-${randomUUID()}`;
-        yield* db
-          .insert(user)
-          .values({ id: owner, name: "Test User", email: `${owner}@app.test` });
+        yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@app.test` });
         yield* storeKey(
           ring(KEK.ONE),
           owner,

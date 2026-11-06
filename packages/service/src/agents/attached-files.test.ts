@@ -6,23 +6,14 @@ import { PICTURE_OMISSION } from "@repo/features/conversation-picture-wire";
 import { test } from "vitest";
 import { eveContent, type MessageReceivedPart, receivedMessage } from "./attached-files.js";
 
-/**
- * attached-files.test.ts -- eve is handed a message's text files, inlined, before its images and
- * PDFs, each group in the order the files were attached, which a first message's note marker counts
- * on to tell the note's files, the last of each group, from the brief's; and each image with the
- * line naming what was kept of it, which eve's receipt is matched by. Synthetic files throughout.
- */
-
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
 
-/** A text file of the name, its words its name. */
 const textFile = (name: string) => ({
   name,
   mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
   data: Buffer.from(name, "utf8").toString("base64"),
 });
 
-/** A PNG of the name. */
 const picture = (name: string) => ({
   name,
   mediaType: AGENT_ATTACHMENT_TYPE.PNG,
@@ -50,7 +41,6 @@ test("eve is handed the words, then the text files, then the images and PDFs, ea
   );
 });
 
-/** A message as eve's receipt lists it: each text part as handed, and each file staged, by its name and type with no bytes. */
 function receiptOf(handed: ReturnType<typeof eveContent>): MessageReceivedPart[] {
   assert.ok(Array.isArray(handed));
   return handed.map((part): MessageReceivedPart => {

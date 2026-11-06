@@ -12,39 +12,18 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { TestClock } from "effect/testing";
 import { GitHubBackground, githubRateGate } from "./github-rate-gate.js";
 
-/**
- * The gate over a GitHub that answers whatever the case scripts next, read
- * through the status each request comes back with: a held request answers
- * 429 even where GitHub would have answered 200, which is the request never
- * sent. The waits are GitHub's documented ones: `x-ratelimit-reset` where
- * nothing remains, else a minute, doubling as the refusals repeat; and a
- * second between the starts of two writes. The file shares one database,
- * where the gate keeps its holds for every instance, and each case starts it
- * holding nothing; two gates over it are two instances.
- */
-
 const PULL_REQUEST = "https://api.github.com/repos/octo/repo/pulls/1";
 const COMMENTS = "https://api.github.com/repos/octo/repo/issues/1/comments";
 const INSTALLATION_BEARER = "ghs_fixture-installation-token";
 
 type Answer = () => Response | Promise<Response>;
 
-/**
- * A GitHub whose next answers are the ones queued, and 200 once they run
- * out, behind a gate of its own: `Layer.fresh`, because a build of the gate
- * inside another one still open would otherwise be handed that same instance.
- */
 function scriptedGitHub(answers: Answer[]) {
   return Layer.fresh(githubRateGate).pipe(
     Layer.provide(fakeHttpClientLayer(() => (answers.shift() ?? (() => Response.json({})))())),
   );
 }
 
-/**
- * A GitHub that answers 200 and notes the method and the instant on the
- * test's clock each request reached it at; a read is answered only once
- * `readsAnswered` settles, where one is given.
- */
 function timedGitHub(
   arrivals: Array<readonly [string, number]>,
   arrived: () => void,
@@ -69,7 +48,6 @@ function timedGitHub(
   );
 }
 
-/** The case run once the database holds nothing another case was refused into. */
 const holdingNothing = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.andThen(
     Database.use((db) => db.delete(githubRateHold)),
@@ -94,7 +72,6 @@ const secondary = () =>
 it.layer(getTestDB())("the GitHub rate gate", (it) => {
   it.effect("a primary limit holds every request until GitHub's reset, however far off", () =>
     Effect.gen(function* () {
-      // The file's cases share one clock, so the reset is an hour on from where this case starts.
       const anHourOn = (yield* Clock.currentTimeMillis) / 1000 + 3600;
       const exhausted = () =>
         Response.json(
@@ -187,7 +164,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
           Effect.all([pullRequestAsked, pullRequestAsked], { concurrency: "unbounded" }),
         );
         yield* Effect.promise(() => first.promise);
-        // Note that the second request is given every chance to reach GitHub while the first is out.
         for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
         const whileFirstOut = arrivals.length;
         answered.resolve();
@@ -214,7 +190,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
           );
           yield* Effect.promise(() => first.promise);
           yield* pullRequestAsked.pipe(Effect.forkChild);
-          // Note that the member's read is given every chance to reach GitHub while the background one is out.
           for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
           const whileBackgroundOut = arrivals.length;
           answered.resolve();
@@ -243,7 +218,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
             concurrency: "unbounded",
           }),
         );
-        // Note that the second write is waiting its turn once both reads and the first write are at GitHub.
         yield* Effect.promise(() => firstThree.promise);
         yield* TestClock.adjust("1 second");
         yield* Fiber.join(all);
@@ -279,7 +253,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
         const all = yield* Effect.forkChild(
           Effect.all([pullRequestAsked, comment, comment], { concurrency: "unbounded" }),
         );
-        // Note that the read holds the identity's lane until GitHub answers it, so both writes wait past their second.
         yield* Effect.promise(() => laneTaken.promise);
         yield* TestClock.adjust("2 seconds");
         readsAnswered.resolve();
@@ -315,7 +288,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
           Effect.all([...writes, pullRequestAsked], { concurrency: "unbounded" }),
         );
         yield* Effect.promise(() => firstWrite.promise);
-        // Note that a second on, a write waiting its turn has been sent, so a read stuck behind the waiting writes is sent too.
         yield* TestClock.adjust("1 second");
         yield* Effect.promise(() => read.promise);
         yield* Fiber.interrupt(all);
@@ -329,7 +301,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
     "a write that waited its turn past the shared read's trust reads the shared hold again",
     () =>
       Effect.gen(function* () {
-        // The statuses in the order the writes were answered, and a promise per answer, the first first.
         const answered: number[] = [];
         const turns = Array.from({ length: 7 }, () => Promise.withResolvers<void>());
         yield* Effect.gen(function* () {
@@ -341,7 +312,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
               }),
             ),
           );
-          // Note that a read first leaves the instance's read of the shared hold standing, so no write waits on the database.
           yield* asked;
           const all = yield* Effect.forkChild(
             Effect.all(
@@ -354,7 +324,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
           for (const [index, turn] of later.entries()) {
             yield* TestClock.adjust("1 second");
             yield* Effect.promise(() => turn);
-            // Another instance is refused once two writes are out and the rest are waiting, holding every instance.
             if (index === 0) yield* Effect.provide(asked, scriptedGitHub([secondary]));
           }
           yield* Fiber.join(all);

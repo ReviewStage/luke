@@ -1,22 +1,3 @@
-/**
- * admin-cost.ts -- what the hosted service spends, priced at read time from the usage its own tables keep.
- *
- * Every number here is list price: the tokens a turn recorded, priced at AI
- * Gateway's catalog by the coding agent's own pricer (`costOfTurns`, behind
- * `usageOfTurns`), and
- * the seconds of dictation the service metered, priced per second at the
- * provider's published list price. No turn
- * records whose key paid for it — a coding agent's step on the account's own
- * key keeps the same usage row as one on ours — so the totals count every
- * model token whichever key paid, and say so. A model the catalog does not
- * price is never a zero: its tokens are told apart as unpriced, and every
- * dollar figure is the priced part alone.
- *
- * The answer names an account only in its most expensive accounts, by the
- * same user-row fields every admin table names, and carries counts and
- * dollars alone: nothing a turn said, no task, no repository.
- */
-
 import {
   ADMIN_COST_TOP_ACCOUNTS_LIMIT,
   type AdminCost,
@@ -45,14 +26,11 @@ import { lastNDayKeys, sum } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { unavailableSeam } from "./seam.js";
 
-/** One group of turns' summed counts: one UTC day, one account, one source, one model. */
 export interface AdminCostTokenRow {
   day: string;
   source: TokenCostSource;
   userId: string;
-  /** The catalog id the counts ran on; null for a turn that named none, which nothing prices. */
   model: string | null;
-  /** Anthropic refused a fast step, so these ran, and are priced, at the base model's speed. */
   fastRefused: boolean;
   inputTokens: number;
   outputTokens: number;
@@ -61,7 +39,6 @@ export interface AdminCostTokenRow {
   cacheWriteTokens: number;
 }
 
-/** One account's metered seconds of one kind on one UTC day. */
 export interface AdminCostSecondsRow {
   day: string;
   source: SecondsCostSource;
@@ -69,38 +46,28 @@ export interface AdminCostSecondsRow {
   seconds: number;
 }
 
-/** Pull requests an account's coding agents merged on one UTC day. */
 export interface AdminCostMergedRow {
   day: string;
   userId: string;
   merged: number;
 }
 
-/** What the queries read, over the window and the one before it. */
 export interface AdminCostUsage {
   tokens: readonly AdminCostTokenRow[];
   seconds: readonly AdminCostSecondsRow[];
   merged: readonly AdminCostMergedRow[];
 }
 
-/**
- * One group's price: dollars where every token or second of it has one, and
- * nothing where the catalog does not price its model, whose tokens are then
- * told alone.
- */
 export interface PricedCostRow {
   day: string;
   source: CostSource;
   userId: string;
-  /** The catalog id for tokens, the list price's own name for seconds; null for a turn that named none. */
   model: string | null;
   usd: number | undefined;
-  /** Input and output tokens, the cache's share and reasoning counted inside them. */
   tokens: number;
   seconds: number;
 }
 
-/** The window's day keys, oldest first, and the same number before them, which the trend compares against. */
 interface CostWindowKeys {
   window: string[];
   prior: string[];
@@ -113,7 +80,6 @@ export function costWindowKeys(now: number, windowDays: AdminMetricsWindow): Cos
   };
 }
 
-/** One token group's price, unrounded, by the coding agent's own pricer, which prices a refused fast share at its base model. */
 function priceTokenRow(row: AdminCostTokenRow, offered: readonly OfferedModel[]): PricedCostRow {
   const usd = costOfTurns(
     [
@@ -142,7 +108,6 @@ function priceTokenRow(row: AdminCostTokenRow, offered: readonly OfferedModel[])
   };
 }
 
-/** One group of seconds at its list price. */
 function priceSecondsRow(row: AdminCostSecondsRow): PricedCostRow {
   const price = SECONDS_LIST_PRICE[row.source];
   return {
@@ -156,11 +121,6 @@ function priceSecondsRow(row: AdminCostSecondsRow): PricedCostRow {
   };
 }
 
-/**
- * Every group priced: tokens at the catalog as the instance holds it, an
- * empty one where it could not be read, and seconds at their list price.
- * Exported apart from the builder so a per-account read prices the same way.
- */
 export function priceCostUsage(
   usage: AdminCostUsage,
   offered: readonly OfferedModel[],
@@ -171,7 +131,6 @@ export function priceCostUsage(
   ];
 }
 
-/** Each account's priced dollars and unpriced tokens over the days named. */
 function spendByAccount(
   priced: readonly PricedCostRow[],
   days: ReadonlySet<string>,
@@ -187,11 +146,6 @@ function spendByAccount(
   return byAccount;
 }
 
-/**
- * The accounts that spent most in the window, most first, cut at the
- * stated bound; the account id breaks a tie so a refresh keeps the order.
- * The read asks for these accounts' rows by it before the builder names them.
- */
 export function topCostAccountIds(
   priced: readonly PricedCostRow[],
   now: number,
@@ -225,7 +179,6 @@ function emptyDay(day: string): AdminCostDay {
   };
 }
 
-/** The window's days, oldest first and zero-filled, each source's priced dollars on it. */
 function dailySpend(
   priced: readonly PricedCostRow[],
   windowKeys: readonly string[],
@@ -239,7 +192,6 @@ function dailySpend(
   return [...byDay.values()];
 }
 
-/** The window's model tokens by model, the most spent first and the unpriced after them. */
 function spendByModel(
   priced: readonly PricedCostRow[],
   days: ReadonlySet<string>,
@@ -267,7 +219,6 @@ function spendByModel(
     }));
 }
 
-/** Merged pull requests per account over the days named. */
 function mergedByAccount(
   merged: readonly AdminCostMergedRow[],
   days: ReadonlySet<string>,
@@ -284,12 +235,6 @@ function pricedSum(rows: readonly PricedCostRow[], days: ReadonlySet<string>): n
   return sum(rows.filter((row) => days.has(row.day)).map((row) => row.usd ?? 0));
 }
 
-/**
- * Shapes the priced groups into the screen's answer. Every figure is folded
- * from the same zero-filled days the chart draws, so a tile can never
- * disagree with the bars under it, and the prior window is folded the same
- * way from its own days.
- */
 export function buildAdminCost(input: {
   priced: readonly PricedCostRow[];
   merged: readonly AdminCostMergedRow[];
@@ -362,11 +307,6 @@ export interface AdminCostOptions<R> {
   ) => Effect.Effect<AdminCost, unknown, R>;
 }
 
-/**
- * Answers the cost read behind the dashboard's gate: a window outside the
- * fixed set is a 400 before any seam is touched, and a seam that fails is
- * the same 503 every admin read answers.
- */
 export function handleAdminCost<R>(
   options: AdminCostOptions<R>,
 ): Effect.Effect<AdminCost, AdminRefusal, R> {

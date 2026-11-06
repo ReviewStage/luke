@@ -1,4 +1,3 @@
-// http-effect.test.ts -- the cache header hosted JSON answers carry.
 import assert from "node:assert/strict";
 import { HttpServerResponse } from "effect/http";
 import { test } from "vitest";

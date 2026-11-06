@@ -4,13 +4,6 @@ import { Redacted } from "effect";
 import { describe, it } from "vitest";
 import { hmacVerifier, integrationFiltersMatch } from "./trigger-source.js";
 
-/**
- * What every trigger source shares: an HMAC signature read in constant time
- * that fails closed, and a trigger's filters read against an event's fields,
- * any value within a field, every field named across them, case aside, and
- * an empty field keeping nothing out. Synthetic secrets and words throughout.
- */
-
 const BODY = new TextEncoder().encode('{"action":"created"}');
 
 describe("an HMAC verifier", () => {

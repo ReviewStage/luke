@@ -1,9 +1,3 @@
-/**
- * device-warm-runner.test.ts -- a local agent's runner kept warm past its turn, over a real store and the Mac's machine: its IDLE leaves it warm and the next message is written to it, but a host waiting to switch release has it retired there; a Stop with no turn under way leaves it warm; a Stop that lands as its turn ends, which the runner ends on, sends the next message to a new launch rather than to the runner on its way down; and a runner that ends on its own past its turn leaves the agent as that turn ended.
- *
- * Synthetic accounts, agents, Macs, and keys throughout.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
@@ -36,10 +30,8 @@ import { EVE_CANCEL_OUTCOME, EVE_SEND_OUTCOME } from "../eve-host/eve-sessions.j
 import { MAC_MACHINE } from "../machine/device-machine.js";
 import { runnerIdled } from "./runner-sessions.js";
 
-/** The line a retire writes to a warm runner, as its Mac takes it. */
 const RETIRE_LINE = '{"type":"retire"}\n';
 
-/** The agent's launch's IDLE, as the events route hands it on once its batch landed, driven through each wait on the runner's exit. */
 const idled = (warm: WarmLocalAgent) =>
   Effect.gen(function* () {
     const idle = runnerIdled({
@@ -50,11 +42,6 @@ const idled = (warm: WarmLocalAgent) =>
     return yield* driven(yield* forkClockDriven(idle), MAC_MACHINE.POLL);
   });
 
-/**
- * A Stop of the turn named, driven through each wait on the runner's exit.
- * Note that the sessions are made on the driven clock, because they run
- * every call on the services they were made with.
- */
 const stopped = (warm: WarmLocalAgent, turnId: string) =>
   Effect.gen(function* () {
     const cancel = Effect.flatMap(localAgentSessions(warm.userId), (sessions) =>
@@ -119,7 +106,6 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           const warm = yield* warmLocalAgent;
           const { userId, deviceId } = warm;
           yield* TestClock.adjust("1 second");
-          // The runner took the next message into a turn, which is ending as the Stop lands.
           const [ending] = yield* db
             .insert(turns)
             .values({
@@ -133,8 +119,6 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           assert.ok(ending !== undefined);
 
           const canceled = yield* stopped(warm, ending.id);
-          // The Mac took the stop, on which the idle runner ended, and has yet to settle its launch;
-          // then the turn's IDLE landed and settled it.
           const [stop] = yield* deviceAgentLinesWaiting(userId, deviceId);
           assert.ok(stop !== undefined);
           yield* claimedDeviceAgentLine(userId, deviceId, stop.id);

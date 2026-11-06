@@ -1,23 +1,3 @@
-/**
- * repository-folder.ts -- one folder of a repository as GitHub holds it on a branch, listed through the git trees API on a token the App minted for that repository alone.
- *
- * The read answers facts, never a decision: whether a folder stands at the
- * path on the branch, and each entry's name and what git holds it as, which
- * `tasks/task-tree.ts` decides on. The folder is named to GitHub as the
- * tree-ish `<branch>:<path>`, the root as `<branch>:`, so the listing is of
- * the branch as it stands at the read, as `repository-file.ts` reads a file;
- * a path GitHub would resolve outside the repository (an empty, `.`, or `..`
- * segment) is asked nothing and reads as no folder. Git trees rather than
- * the contents API, because the contents API stops a folder's listing at a
- * thousand entries without saying so, and git trees says when it cut one.
- * Asked recursively, git trees lists everything under the folder in the one
- * read, each entry by its path from the folder, and says when it cut that
- * short too (past a hundred thousand entries or seven megabytes). A blob
- * carries its size in bytes, which a caller weighing a folder reads.
- * The request composes over the App module's own kit, so the token leaves
- * this module no more than it leaves that one.
- */
-
 import { Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -29,19 +9,16 @@ import {
 } from "./github-app.js";
 import { repositorySegments } from "./repository-file.js";
 
-/** What git holds an entry of a tree as: a file or a link (a blob), a folder (a tree), or a submodule (a commit). */
 export const GIT_ENTRY = {
   BLOB: "blob",
   TREE: "tree",
   COMMIT: "commit",
 } as const;
 
-/** The mode git gives a blob that is a symbolic link rather than a file. */
 const LINK_MODE = "120000";
 
 type GitEntry = (typeof GIT_ENTRY)[keyof typeof GIT_ENTRY];
 
-/** What GitHub answers for a tree: each entry by its name within the tree, a blob's size, and whether it cut the listing short. */
 const TreeSchema = Schema.Struct({
   sha: Schema.optionalKey(Schema.String),
   tree: Schema.Array(
@@ -55,7 +32,6 @@ const TreeSchema = Schema.Struct({
   truncated: Schema.Boolean,
 });
 
-/** One entry of a folder: its name, or its path from the folder in a recursive listing, what git holds it as, whether a blob is a link, and a blob's size in bytes where GitHub said it. */
 interface RepositoryEntry {
   readonly name: string;
   readonly type: GitEntry;
@@ -63,7 +39,6 @@ interface RepositoryEntry {
   readonly size?: number;
 }
 
-/** A folder as GitHub holds it: none at the path on the branch, or its entries, whether GitHub cut them short, and its tree's sha where GitHub said it, which changes with anything under it. */
 export type RepositoryFolder =
   | { readonly found: false }
   | {
@@ -75,13 +50,6 @@ export type RepositoryFolder =
 
 const NO_FOLDER: RepositoryFolder = { found: false };
 
-/**
- * The repository's folder at the path on the branch named, the root for an
- * empty path, as the git trees API lists it: its own entries, or with
- * `recursive` everything under it, each named by its path from the folder.
- * A commit's sha names the commit as a branch's name does. Read anonymously
- * where the token is `null`.
- */
 export function readRepositoryFolder(
   token: Redacted.Redacted | null,
   repository: { readonly fullName: string; readonly defaultBranch: string },
@@ -96,8 +64,6 @@ export function readRepositoryFolder(
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const response = yield* send(request);
-        // Note that GitHub answers a path naming a file as unprocessable,
-        // since `<branch>:<file>` is a blob and no tree.
         if (
           response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
           response.status === GITHUB_HTTP_STATUS.UNPROCESSABLE

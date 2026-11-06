@@ -13,7 +13,6 @@ const PRODUCTION = {
   BETTER_AUTH_PROXY_SECRET: "shared",
 } as const;
 
-/** Whether production's Better Auth, through its own matcher, trusts the origin. */
 async function productionTrusts(origin: string): Promise<boolean> {
   const deployment = authDeployment(PRODUCTION);
   const auth = betterAuth({

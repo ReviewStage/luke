@@ -26,26 +26,8 @@ import { linkInstallation, setInstallationStatus } from "../github/github-instal
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { workspaceIntegrationsLive, workspacesLive } from "./live-queries.js";
 
-/**
- * The account's workspaces (`workspacesLive`) on the migrated capture:
- * each write that moves the account's list of workspaces, through its real
- * writer, notifies a topic the read is woken on, as the read looks its
- * topics up when it is asked for, so a window holding it hears the write
- * within a coalesce window rather than at the hold's end. That holds for a
- * workspace renamed, a teammate added to it, and a GitHub installation
- * linked to it or suspended, which notify the workspace; and for the
- * account's first workspace named its own, which notifies the account.
- * Workspaces and memberships are written by the organization plugin, as
- * our routes write them. A workspace's own integrations
- * (`workspaceIntegrationsLive`) are on a narrower topic of their own, which
- * every write to its Sentry installations or its Slack bot notifies alone.
- *
- * Synthetic accounts, workspaces, and installations throughout.
- */
-
 type WorkspacePlugin = Effect.Success<typeof openWorkspacePlugin>;
 
-/** GitHub's id for the installation linked, and for the account it is on: each test opens a database of its own. */
 const INSTALLATION_ID = 4_200_001;
 
 const openAccount = (name: string) =>
@@ -56,7 +38,6 @@ const openAccount = (name: string) =>
     return id;
   });
 
-/** A workspace the owner makes through the plugin's server-only create, under the slug given. */
 const openTeam = (plugin: WorkspacePlugin, ownerId: string, slug = `acme-${ownerId}`) =>
   Effect.map(
     Effect.promise(() =>
@@ -65,11 +46,6 @@ const openTeam = (plugin: WorkspacePlugin, ownerId: string, slug = `acme-${owner
     (made) => made.id,
   );
 
-/**
- * Runs the write, held to the topics it notifies, and fails unless one of
- * them wakes the account's workspaces, as the held read looked its topics
- * up before the write.
- */
 const wakesTheWorkspaces = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],
@@ -144,9 +120,6 @@ it.effect(
       const plugin = yield* openWorkspacePlugin;
       yield* Effect.gen(function* () {
         const userId = yield* openAccount("Ada Lovelace");
-        // Note that the workspace is made first under the account's own slug and marked personal,
-        // as a racing ensure would have made it, so the ensure held below adopts it and writes only
-        // the row naming it.
         const { id: workspaceId } = yield* plugin.seams.createOrganization({
           name: "Ada Lovelace",
           slug: "ada-lovelace",
@@ -188,7 +161,6 @@ it.effect(
             userId: owner,
           });
         const [disconnected, uninstalled] = [randomUUID(), randomUUID()];
-        /** A write that answers its transaction, which must be the one its notification carries. */
         const answersItsTransaction = (fired: {
           readonly value: Option.Option<string> | string;
           readonly txids: readonly string[];

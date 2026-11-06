@@ -1,37 +1,3 @@
-/**
- * agent-pull-request-procedures.ts -- a coding agent's pull request as its Pull request tab reads and changes it.
- *
- * Every procedure resolves the caller first, then the agent its path names,
- * one of a workspace the caller's account is a member of: an agent of any
- * other workspace answers exactly as one that names nothing. Each is about
- * the pull request the agent published, from the instance's kept answers,
- * or the one of its repository the `number` query names, read afresh
- * (`asked-pull-request.ts`).
- *
- * What the agent published (`GET /api/agents/{id}/pull-request`) is the
- * branch and pull request its own transcript names, as GitHub holds them
- * now (`coder-host/published.ts`), kept per agent for a short while so a tab
- * asking beside every held page does not ask GitHub as often. Its overview,
- * which its Pull request tab draws, is read afresh on each ask in three
- * reads the tab asks for at once and draws as each lands: the pull request
- * itself, its description, branches, mergeability, author, and the
- * reviewers it asks for (`GET /api/agents/{id}/overview/pull-request`); its
- * head's checks one by one and its deployments
- * (`GET /api/agents/{id}/overview/checks`); and its conversation and where
- * its reviewers stand (`GET /api/agents/{id}/overview/conversation`), its
- * words as GitHub renders them. A change to that pull request
- * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
- * review, submitting a review, replying on or resolving a review thread, or
- * commenting on it, is made on GitHub as the member who asks, on their own
- * GitHub sign-in and never the App's, through the one seam every such change
- * takes (`pull-request-write.ts`), and answers how GitHub took it; the
- * agent's kept published answer is let go, so the next read asks GitHub
- * afresh. Which of its files the member marked viewed on GitHub, a mark
- * GitHub keeps for each account, is read through the member's own sign-in
- * (`GET /api/agents/{id}/pull-request/viewed`), and set by two of the
- * changes.
- */
-
 import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import {
   type AgentPullRequest,
@@ -122,11 +88,9 @@ export interface AgentPullRequestProcedureSeams extends PublishedReach {
   resolveUserId: UserIdResolver;
 }
 
-/** The `number` a request names, as the query spelled it, read as the number it names. */
 const numberNamed = (number: string | undefined) =>
   pullRequestNumberOf(number === undefined ? [] : [number]);
 
-/** The agent the path names for the caller, and the pull request the tab asks about, null where there is none. */
 const askedOfAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: Effect.Effect<PublishedCache>,
   userId: string,
@@ -139,21 +103,13 @@ const askedOfAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { agent, pullRequest };
 });
 
-/** One of the overview's reads of a pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
 export type OverviewRead<A, R> = (
   token: Redacted.Redacted,
   subject: PullRequestSubject,
   pullRequest: AgentPullRequest,
-  /** The member reading, whose own reads mark what is theirs. */
   userId: string,
 ) => Effect.Effect<A | null, PullRequestReadFailure, R>;
 
-/**
- * One part of the agent's pull request's overview: the pull request asked
- * about, read from GitHub afresh on a token minted for the agent's
- * repository; none where it names no pull request yet, or the agent works in
- * no repository. Each part is a procedure of its own, so each lands on its own.
- */
 const overviewPart = <A, R>(
   agent: Agent,
   pullRequest: AgentPullRequest | null,
@@ -166,22 +122,15 @@ const overviewPart = <A, R>(
       const { token } = yield* agentPullRequestReach(userId, agent);
       return yield* read(token, agent, pullRequest, userId);
     }).pipe(githubReadRefusal);
-    // Note that a part may carry what is the reader's own, such as the reactions they gave or the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
     return { pullRequest: part };
   });
 
-/** Whether the pull request was open as last read, which is when the stack it stands in is worth a read of GitHub's open pull requests. */
 function stackable(pullRequest: AgentPullRequest): boolean {
   return (
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT
   );
 }
 
-/**
- * How the pull request may be merged, for its merge box; none where GitHub
- * would not say, logged by its kind, since the header it rides with stands
- * without it.
- */
 const mergingOrNone = (token: Redacted.Redacted, repository: string, number: number) =>
   pullRequestMerging(token, repository, number).pipe(
     Effect.catch((failure) =>
@@ -189,21 +138,11 @@ const mergingOrNone = (token: Redacted.Redacted, repository: string, number: num
     ),
   );
 
-/** Whether the member may edit the pull request's description, read on their own token; not where they hold no sign-in GitHub takes. */
 const memberCanEdit = (userId: string, repository: string, number: number) =>
   Effect.flatMap(memberReadToken(userId), (token) =>
     token === undefined ? Effect.succeed(false) : viewerCanUpdateOf(token, repository, number),
   );
 
-/**
- * The pull request itself: its description, branches, mergeability, who
- * opened it, who it asks for a review, its labels, and, while it was open as
- * last read, the stack it stands in, its people named against the
- * workspace's members and its stack by their agents (`github-people.ts`),
- * with who its row says it writes as; and, read beside it on the member's
- * own token, whether they may edit its description. None where the
- * repository no longer holds it.
- */
 export const overviewPullRequestRead = (
   token: Redacted.Redacted,
   subject: PullRequestSubject,
@@ -225,12 +164,6 @@ export const overviewPullRequestRead = (
     return Option.isNone(merging) ? named : { ...named, merging: merging.value };
   });
 
-/**
- * The checks on the pull request's head, failures first, up to the bound,
- * and its head's deployments beside them: three requests to GitHub at once
- * whatever their number, the check runs, the commit statuses, and the
- * deployments.
- */
 export const overviewChecksRead = (
   token: Redacted.Redacted,
   subject: PullRequestSubject,
@@ -247,24 +180,16 @@ export const overviewChecksRead = (
     ([checks, deployments]) => ({ checks, deployments }),
   );
 
-/** Which reactions the member gave on the pull request, read on their own token; none where they hold none GitHub takes. */
 const memberReactions = (userId: string, repository: string, number: number) =>
   Effect.flatMap(memberReadToken(userId), (token) =>
     token === undefined ? Effect.succeed(undefined) : viewerReactionsOf(token, repository, number),
   );
 
-/** The review the member holds pending on the pull request, read on their own token; none where they hold none, or no sign-in GitHub takes. */
 const memberPendingReview = (userId: string, repository: string, number: number) =>
   Effect.flatMap(memberReadToken(userId), (token) =>
     token === undefined ? Effect.succeed(null) : viewerPendingReviewOf(token, repository, number),
   );
 
-/**
- * The pull request's conversation: its comments, its reviews and their
- * threads, and where each reviewer stands by their reviews, its people
- * named against the workspace's members; and, read beside it on the
- * member's own token, which reactions are theirs.
- */
 export const overviewConversationRead = (
   token: Redacted.Redacted,
   subject: PullRequestSubject,
@@ -294,7 +219,6 @@ export const overviewConversationRead = (
       conversation === null ? null : { ...conversation, pendingReview },
   );
 
-/** The changes made by the pull request's number on GitHub's REST API, its requested reviewers and labels, which GraphQL cannot take a reviewer off of. */
 type RestActionRequest = Extract<
   PullRequestActionRequest,
   {
@@ -306,7 +230,6 @@ type RestActionRequest = Extract<
   }
 >;
 
-/** The write a change makes on the pull request, on the member's token, by the pull request's GraphQL id. */
 function writeOf(
   request: Exclude<PullRequestActionRequest, RestActionRequest>,
   token: Redacted.Redacted,
@@ -375,7 +298,6 @@ function writeOf(
   }
 }
 
-/** The change as the count words it, for the four that are counted; nothing for any other. */
 function countedAction(request: PullRequestActionRequest) {
   switch (request.action) {
     case PULL_REQUEST_ACTION.MERGE:
@@ -391,7 +313,6 @@ function countedAction(request: PullRequestActionRequest) {
   }
 }
 
-/** The write a change makes on the pull request, on the member's token. */
 export function actionWrite(
   request: PullRequestActionRequest,
 ): (
@@ -425,15 +346,6 @@ export function actionWrite(
   };
 }
 
-/**
- * One change to the pull request asked about of an agent the member
- * reached, made as the member on their own GitHub sign-in
- * (`pull-request-write.ts`), and how GitHub took it; not found where the
- * agent names no pull request yet. Whatever GitHub answered, the kept
- * answers are let go, so the reads after it ask GitHub afresh. The tab's
- * change runs it, and so does the member MCP server's
- * (`member-mcp/tools.ts`), so a change made either way is the same change.
- */
 export const agentPullRequestAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: Effect.Effect<PublishedCache>,
   userId: string,
@@ -453,7 +365,6 @@ export const agentPullRequestAction = /* @__PURE__ */ Effect.fnUntraced(function
   ).pipe(
     Effect.ensuring(Effect.flatMap(published, (kept) => forgetPublished(kept, userId, agent.id))),
   );
-  // Counted only where GitHub made the change, and under the member: an agent's own pull request work never comes through here.
   const counted = countedAction(request);
   if (counted !== undefined && written.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
     yield* recordServerEvent(
@@ -465,11 +376,9 @@ export const agentPullRequestAction = /* @__PURE__ */ Effect.fnUntraced(function
   return writeAnswerOf(written);
 });
 
-/** Which of the pull request's files the member marked viewed, read as a write is made, on their own token. */
 export const viewedRead = (member: MemberPullRequest) =>
   pullRequestViewedStates(member.token, member.repository, member.number);
 
-/** How the read of the viewed marks went, as the wire answers it. */
 export function viewedAnswerOf(
   read: MemberWritten<Effect.Success<ReturnType<typeof viewedRead>>>,
 ): PullRequestViewedAnswer {
@@ -478,29 +387,20 @@ export function viewedAnswerOf(
     : read;
 }
 
-/** The agent pull request resource: the tab's five reads and its one change, to a signed-in member of the agent's workspace. */
 export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams) {
   const published = seams.published ?? instancePublishedCache();
   const signedIn = hosted.agentPullRequests.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** What the agent published, from the instance's kept answers; or, where the request names a number, that pull request of its repository. */
     pullRequest: signedIn.pullRequest.effect(function* ({ input, context }) {
       const { agent } = yield* reachedAgentById(context.userId, input.id);
       const number = yield* numberNamed(input.number);
       return yield* askedPublished(yield* published, context.userId, agent, number);
     }),
-    /** One change to the pull request asked about, as the asking member (`agentPullRequestAction`). */
     action: signedIn.action.effect(function* ({ input, context }) {
       const { agent } = yield* reachedAgentById(context.userId, input.params.id);
       const number = yield* numberNamed(input.query?.number);
       return yield* agentPullRequestAction(published, context.userId, agent, number, input.body);
     }),
-    /**
-     * Which of the pull request's files the asking member marked viewed on
-     * GitHub, on their own GitHub sign-in, since GitHub keeps the mark for
-     * each account alone and the App sees none of it; no files where the
-     * agent names no pull request yet. Nothing is let go, as nothing changed.
-     */
     viewed: signedIn.viewed.effect(function* ({ input, context }) {
       const { agent, pullRequest } = yield* askedOfAgent(
         published,

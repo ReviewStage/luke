@@ -15,16 +15,6 @@ import {
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
 import { supportAccess } from "./support-access.js";
 
-/**
- * The desktop's sign-in on a Preview, carried end to end across the proxy's
- * two ends: a Preview and production, each a Better Auth over its own
- * in-memory database, configured as `auth.ts` configures them, with GitHub a
- * fake behind `fetch`. The OAuth App has registered production's callback
- * alone, so what this holds is that a sign-in begun on the Preview is sent
- * through that callback, that production relays it, and that the Preview
- * resumes the desktop's authorization and hands its loopback the code.
- */
-
 const PRODUCTION_URL = "https://vespin.dev";
 const PREVIEW_URL = "https://vespin-abc123-stage-review.vercel.app";
 const PROXY_SECRET = "proxy-secret-shared-by-both-ends-of-the-relay";
@@ -37,10 +27,8 @@ const GITHUB_ACCOUNT_ID = "4242";
 
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 
-/** What the OAuth start answers, as far as a browser reads it. */
 const decodeStarted = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }));
 
-/** Everything that left either end: every URL a browser was sent to, and every log line. */
 interface Trail {
   readonly urls: string[];
   readonly logs: string[];
@@ -71,8 +59,6 @@ function endFor(deployment: AuthDeployment, secret: string, trail: Trail) {
     socialProviders: {
       github: { clientId: "luke-github", clientSecret: "github-secret", scope: ["read:user"] },
     },
-    // The plugins `auth.ts` installs that this flow reaches, in its order:
-    // the support-access plugin's hooks stand at the authorization it resumes.
     plugins: [
       oAuthProxy({ productionURL: deployment.productionURL, secret: deployment.proxySecret }),
       jwt(JWT_KEY_STORAGE),
@@ -122,7 +108,6 @@ function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-/** GitHub's token endpoint and the two profile reads, as the OAuth App answers them. */
 function fakeGitHub(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : input);
   const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
@@ -145,7 +130,6 @@ function fakeGitHub(input: string | URL | Request, init?: RequestInit): Promise<
   throw new Error(`this test reaches no network: ${url.href}`);
 }
 
-/** The `name=value` pairs a browser would send back from a response's cookies. */
 function cookiesFrom(response: Response): string {
   return response.headers
     .getSetCookie()
@@ -160,7 +144,6 @@ function location(response: Response, trail: Trail): string {
   return next;
 }
 
-/** GitHub returning the browser to the registered callback, which only production answers. */
 async function githubReturns(ends: Ends, authorize: URL, query: string) {
   const callback = new URL(`${authorize.searchParams.get("redirect_uri")}?${query}`);
   callback.searchParams.set("state", authorize.searchParams.get("state") ?? "");
@@ -168,7 +151,6 @@ async function githubReturns(ends: Ends, authorize: URL, query: string) {
   return location(await ends.production.handler(new Request(callback)), ends.trail);
 }
 
-/** The browser navigating to a Preview URL, as a top-level navigation sends it. */
 async function land(ends: Ends, relayed: string, cookie?: string) {
   const navigation = { accept: "text/html", "sec-fetch-mode": "navigate" };
   return ends.preview.handler(
@@ -209,7 +191,6 @@ test("the desktop's sign-in on a Preview, proxied through production, hands the 
   const loginPage = new URL(location(toLogin, both.trail), PREVIEW_URL);
   assert.equal(loginPage.pathname, "/sign-in.html");
 
-  // What the sign-in page's provider client sends: the login page's own signed query.
   const started = await both.preview.handler(
     new Request(`${PREVIEW_URL}/api/auth/sign-in/social`, {
       method: "POST",
@@ -222,7 +203,6 @@ test("the desktop's sign-in on a Preview, proxied through production, hands the 
   const relayed = await githubReturns(both, authorize, `code=${GITHUB_CODE}`);
   const landed = await land(both, relayed, cookiesFrom(started));
 
-  // The browser follows the Preview's own redirects, carrying the session it was just given, until one leaves it.
   let next = new URL(location(landed, both.trail), PREVIEW_URL);
   const session = cookiesFrom(landed);
   for (let hop = 0; next.origin === PREVIEW_URL && hop < 3; hop += 1) {

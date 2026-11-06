@@ -1,17 +1,3 @@
-/**
- * messages-procedures.test.ts -- the held message routes' refusals as the hosted oRPC router answers them, before any row is read.
- *
- * Each case is decided before a store is reached, so the router runs on no
- * service at all: the caller is resolved before the input is read, so an
- * unsigned caller is refused as unauthenticated whatever it sent; an id
- * that is no UUID names nothing; a message whose words run past the bound
- * is refused as too long, and one that does not read, or names a key no
- * message has, as invalid; a body past its cap is too large; and a path
- * the router serves under another method is refused as such. The held
- * reads themselves, answered when something moves and let go at the hold,
- * are `agents-app.test.ts`'s, over a real dialect.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -38,7 +24,6 @@ const handle = hostedFetch({
   }),
 });
 
-/** One request's status and bytes, as the route answers it. */
 const answer = (
   path: string,
   init: {
@@ -55,7 +40,6 @@ const answer = (
     if (init.contentLength !== undefined) {
       headers.set("content-length", String(init.contentLength));
     }
-    // SAFETY: every case here is refused before a procedure yields a service, so an empty context stands in for the web runtime's.
     const services = Context.empty() as Context.Context<WebServices>;
     const response = yield* Effect.promise(() =>
       handle(
@@ -114,7 +98,6 @@ it.effect(
         }),
         refused(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.MESSAGE_TOO_LONG),
       );
-      // A message at the bound reads, and reaches the handler, which finds no agent by an id that is none.
       assert.deepEqual(
         yield* answer("/api/agents/not-an-id/messages", {
           method: "POST",

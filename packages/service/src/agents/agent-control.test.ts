@@ -26,18 +26,6 @@ import { steerAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 
-/**
- * Who controls a coding agent that runs on its starter's own GitHub token,
- * over a real dialect: a teammate whose own verified token reads its
- * repository reaches it, but its messages and a start from it, continued or
- * forked, are refused before eve, GitHub, or its sandbox is asked; a
- * teammate who keeps no token reaches nothing. And an agent the App reaches,
- * on a task on its owner's token, takes no message from a teammate who
- * reaches the agent but not the task, nor reads its pull requests. Synthetic accounts, tasks, and words
- * throughout; eve and GitHub answer nothing.
- */
-
-/** An agent on its starter's own token, with a teammate whose token reads its repository and one who keeps none. */
 const openTokenAgent = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const reader = yield* openTokenMember({ token: "fixture-reader-token" });
@@ -106,7 +94,6 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, tokenless, workspace, task } = yield* openTokenAgent;
-        // Note that a native runtime with no payer asks for no API key, so the send reaches the task's gate.
         const repository = "octo-member/app-side";
         const started = yield* createAgent(owner, {
           taskId: task.id,
@@ -131,7 +118,6 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           }),
         );
         assert.deepEqual(refused, HOSTED_REFUSAL.NOT_FOUND);
-        // The workspace's installation reaches the agent's repository, so only the task's visibility refuses the read.
         const installation: InstallationFixture = {
           id: 300,
           login: "octo-member",

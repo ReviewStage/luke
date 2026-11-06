@@ -26,30 +26,15 @@ import {
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
-/**
- * A plan's repository named on a member's own GitHub token, through the
- * hosted oRPC router as the web route answers it, over a real dialect and a
- * GitHub that answers from the test's script: the plan's owner names one
- * their token reaches where no installation does, and a teammate's own
- * token never puts another member's plan on it, since a plan on a token is
- * seen by its owner whatever the repository; an account outside the
- * workspace reaches no such plan. A child plan works where its parent
- * does, so it takes the parent's repository, and its parent
- * must be one its maker reaches. Synthetic accounts, plans, devices, and
- * tokens throughout.
- */
-
 const ORIGIN = "https://app.test";
 const SIDE = { owner: "octo-member", name: "side" } as const;
 
-/** GitHub's `GET /repos/{owner}/{repo}` on any member's token: the repository, pushable; nothing else is reached. */
 function answer(sent: SentToGitHub): Response {
   return new URL(sent.url).pathname === `/repos/${SIDE.owner}/${SIDE.name}`
     ? Response.json(memberRepositoryJson(SIDE, true))
     : Response.json({ message: "Not Found" }, { status: 404 });
 }
 
-/** The plans procedures over the test's store and GitHub, each bearer answering for the account it maps to. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const github = fakeGitHub(answer, GITHUB_APP_WITH_TOKENS);
@@ -74,7 +59,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         workspaces: yield* fakeWorkspaceSeams,
       }),
     });
-    // SAFETY: a repository change or a start yields the store, the clock, and GitHub alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     return (method: string, path: string, bearer: string, body: object) =>
       Effect.promise(async () => {
@@ -86,7 +70,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           }),
           webServices,
         );
-        // SAFETY: the router answers JSON; the test compares it as the wire value it is.
         return { status: response.status, body: JSON.parse(await response.text()) };
       });
   });
@@ -116,7 +99,6 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
           return { githubAccess, repository: summary.repository };
         });
 
-        // An account outside the workspace reaches no such plan, on its own token or any other.
         const byStranger = yield* patch(task.id, "Bearer stranger", {
           repository: "octo-member/side",
         });
@@ -227,7 +209,6 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
       const stranger = yield* openTokenMember({ token: "fixture-stranger-token" });
       const workspace = yield* openWorkspace(owner);
       yield* joinWorkspace(workspace, teammate);
-      // A plan on its owner's own token, which a teammate whose token never read its repository does not see.
       const parent = yield* createTask(owner, {
         organizationId: workspace,
         name: "Side",

@@ -1,35 +1,3 @@
-/**
- * task-files-procedures.ts -- what a plan's tabs read beside its text, and a picture kept on it, as the hosted oRPC router answers them.
- *
- * `GET /api/plans/{id}/file` is a window of one file of the task's
- * repository for the File tab, read from GitHub as it stands now, or at the
- * commit an inbox item's code reference pins, through the App, under the
- * rule a shown file is held to (`tasks/task-file.ts`);
- * `/api/plans/{id}/tree` one folder of it for the tree beside that tab,
- * listed where and as the file is read (`tasks/task-tree.ts`); and `/api/plans/{id}/skills` the skills a
- * developer may choose of that repository, read where and as the file is
- * (`tasks/task-skills.ts`). `/api/plans/{id}/pages` is the pages agents
- * wrote for the task, each by its newest version, and
- * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
- * answered inside JSON so no page is ever a document of this origin
- * (`@repo/database/models/task-pages`), and `…/versions/{version}/frame`
- * a browser's frame of it, sent on to the sandbox's own site
- * (`../pages/page-frame.ts`). `POST /api/plans/{id}/attachments`
- * keeps one picture on the description, pasted, dropped, or chosen into its text by
- * any member of its workspace, and answers the id the text then names it by
- * (201), or refuses in band where the description holds its bound of pictures
- * (200). Its bytes are served by `tasks-app.ts`, which answers bytes rather
- * than JSON.
- *
- * Every read resolves the caller before it touches a row, and every row it
- * touches is one the caller's account reaches: a task id another account
- * holds answers exactly as one that names nothing, not found, so nothing is
- * learned about tasks the caller does not reach. An id that is not a UUID
- * names no row, and answers as none. A plan the account does not reach, or
- * an archived one, which no editor is drawn on, keeps no picture and
- * answers as not found.
- */
-
 import {
   keepDescriptionAttachment,
   DESCRIPTION_ATTACHMENT_KEEP,
@@ -69,14 +37,12 @@ export interface TaskFilesProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The answer a read found, or not found where it found none. */
 const found = <A>(read: Option.Option<A>): Effect.Effect<A, HostedRefusal> =>
   Option.match(read, {
     onNone: () => Effect.fail(HOSTED_REFUSAL.NOT_FOUND),
     onSome: Effect.succeed,
   });
 
-/** The window a File tab's query names, or the invalid-request refusal where it does not read as one. */
 export function fileWindowOf(query: {
   readonly path?: string;
   readonly first?: string;
@@ -98,7 +64,6 @@ export function fileWindowOf(query: {
     : Effect.succeed(read.success);
 }
 
-/** The folder a tree's query names, the root where it names none, or the invalid-request refusal. */
 function folderOf(query: {
   readonly path?: string;
   readonly recursive?: string;
@@ -114,7 +79,6 @@ function folderOf(query: {
     : Effect.succeed(read.success);
 }
 
-/** The version number the path names; one that is not a whole number from one is refused as a request that does not read. */
 function pageVersionOf(version: string): Effect.Effect<number, HostedRefusal> {
   const read = readEither(pageVersionNumberSchema)(unparsedWire(Number(version)));
   return Result.isFailure(read)
@@ -122,7 +86,6 @@ function pageVersionOf(version: string): Effect.Effect<number, HostedRefusal> {
     : Effect.succeed(read.success);
 }
 
-/** The plan files resource: each read and the picture kept, to a signed-in caller resolved before its input is read. */
 export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
   const taskFiles = hosted.taskFiles.use(accountMiddleware(seams.resolveUserId));
   return {

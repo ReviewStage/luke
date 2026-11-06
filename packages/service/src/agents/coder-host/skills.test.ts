@@ -25,18 +25,6 @@ import {
 import { SKILL_ROOT } from "../repository-skills.js";
 import { nativeSkills } from "./skills.js";
 
-/**
- * The installed skills a native harness is handed, through `nativeSkills`
- * over the real migrations on PGlite and a GitHub answering the agent's
- * repository's skills: the workspace's, then the member's personal ones, a
- * name offered once by the earliest, less a name the repository holds where
- * the harness reads it; none while the member
- * has the Skills experiment off; and an installed read that fails offering
- * none.
- *
- * Synthetic accounts, repositories, and skills throughout.
- */
-
 const REPOSITORY = "acme/relay";
 
 const text = (value: string) => new TextEncoder().encode(value);
@@ -44,7 +32,6 @@ const text = (value: string) => new TextEncoder().encode(value);
 const skillText = (name: string, words: string) =>
   `---\nname: ${name}\ndescription: Does ${name}.\n---\n${words}\n`;
 
-/** A GitHub reaching acme/relay, whose `.agents/skills` holds one skill of each name given, its body naming it as the repository's. */
 const INSTALLATION: InstallationFixture = {
   id: 7,
   login: "acme",
@@ -93,7 +80,6 @@ const install = (
 
 const PERSONAL: InstalledSkillOwner = { scope: INSTALLED_SKILL_SCOPE.PERSONAL };
 
-/** An account with an agent on a task of its own workspace, on acme/relay or on no repository, with the Skills experiment on unless asked otherwise. */
 const startAgent = (repository: string | null, skillsOn = true) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -145,7 +131,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills, unr
   );
 });
 
-// Note that a database of its own, as the unread case has, because a second agent on the fixture's repository in one database is offered none of its skills.
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (it) => {
   it.effect(
     "hands a native harness the installed skills alone, with their SKILL.md as installed, an installed name the repository holds where the harness reads it left to the repository",
@@ -164,12 +149,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (i
           Effect.provide(repositoryWithSkills(["testing"])),
         );
 
-        // The repository's testing is in `.agents/skills`, which a harness reading it keeps.
         assert.deepEqual(
           readsAgents.map((skill) => skill.name),
           ["release-notes", "pr-style"],
         );
-        // A harness that never reads `.agents/skills` would offer no testing at all, so the installed one stays.
         assert.deepEqual(
           readsClaude.map((skill) => skill.name),
           ["release-notes", "testing", "pr-style"],

@@ -36,28 +36,16 @@ import { buildAdminWorkspaceList } from "./admin-workspaces.js";
 import { readAdminWorkspaceSource, readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 import type { AdminViewerResolver } from "./gate.js";
 
-/**
- * The deployment's real seams behind the dashboard's group: the browser
- * session the gate reads, through the auth service's own `api` the web
- * route hands in (`auth.api` on a deployment), this database, and which
- * integrations the environment has keys for. No secret value crosses into an
- * answer — only whether each key is present, and the analytics project id,
- * which names which console to open.
- */
-
-/** The part of a Better Auth `api` the dashboard's viewer read calls: the session's account, with its `role`. */
 export interface AdminSessionApi {
   readonly getSession: (input: { headers: Headers }) => Promise<{
     readonly user: { readonly id: string; readonly role?: string | null | undefined };
   } | null>;
 }
 
-/** An environment value counts as configured only when it holds a non-blank string. */
 function configured(name: string): boolean {
   return (process.env[name] ?? "").trim().length > 0;
 }
 
-/** Each account integration Vercel Connect grants, by whether its connector UID is set; one granted by the account's own sign-in has none. */
 function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], boolean> {
   const present = new Map<(typeof INTEGRATION_PROVIDER_LIST)[number], boolean>();
   for (const provider of INTEGRATION_PROVIDER_LIST) {
@@ -67,21 +55,6 @@ function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], bo
   return present;
 }
 
-/**
- * The Better Auth session an admin request rides in on, carrying that
- * account's `role`: the maintainer's own sign-in on this site, or the same
- * account's session as the signed bearer the bearer plugin reads as its
- * cookie (the Mac's own), and never the desktop's OAuth token, which names
- * no session. It is read from the request's one credential
- * (`auth/session-credential.ts`), so a junk `Authorization` beside the
- * cookie is signed out rather than read past, and a request carrying neither
- * is signed out without asking the auth service. Better Auth's `getSession`
- * is a promise of somebody else's, so it is wrapped once here, where the seam
- * is built, and the gate yields the effect on the request's own fiber. A
- * getSession failure must propagate: the gate turns a refused viewer seam
- * into a 503, where swallowing it here would misreport an auth outage as a
- * signed-out 401 and offer a sign-in that cannot succeed.
- */
 function sessionViewer(api: AdminSessionApi): AdminViewerResolver {
   return (request) => {
     const credential = sessionCredential(request.headers);
@@ -96,11 +69,8 @@ function sessionViewer(api: AdminSessionApi): AdminViewerResolver {
 }
 
 export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
-  // The sign-in clients are read as the auth service reads them, so the
-  // dashboard reports the pair a GitHub sign-in would run on.
   const socialClients = authSecrets(process.env);
   const integrations = adminIntegrations({
-    // Every variable `github/github-app.ts` builds the App from, and its webhook secret.
     githubApp: [
       GITHUB_APP_ENVIRONMENT.APP_ID,
       GITHUB_APP_ENVIRONMENT.SLUG,
@@ -122,8 +92,6 @@ export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
     connectors: connectorPresence(),
   });
 
-  // The project id names which console to open, never a secret; the key
-  // presence booleans above are still the only thing said about the keys.
   const projectId = (process.env[POSTHOG_ENVIRONMENT.PROJECT_ID] ?? "").trim();
   const analyticsConsoleUrl = projectId
     ? posthogProjectConsoleUrl(projectId, process.env[POSTHOG_ENVIRONMENT.API_HOST])

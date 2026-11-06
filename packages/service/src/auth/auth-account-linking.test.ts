@@ -10,21 +10,6 @@ import { authDatabaseHooks, withAuthCounts } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
 import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./auth-policy.js";
 
-/**
- * Linking GitHub to an account, configured as `auth.ts` configures it, over a
- * migrated PGlite database with GitHub a fake behind `fetch`. An account made
- * with Google rarely shares GitHub's address, so a signed-in account links
- * the GitHub it names whatever address GitHub holds, and comes away holding a
- * GitHub row of its own; and an account made with GitHub alone, whose
- * authorization was revoked, signs in with GitHub again as itself through
- * the row the revocation kept, though GitHub's address changed between.
- *
- * The session is an email and password one, which this deployment does not
- * offer: it stands in for the Google sign-in the account was made with,
- * since Google's own sign-in verifies an ID token this test cannot sign.
- * Synthetic accounts, secrets, and tokens throughout.
- */
-
 const BASE_URL = "http://127.0.0.1";
 const LUKE_EMAIL = "planner@app.test";
 const GITHUB_ACCOUNT_ID = 5151;
@@ -37,7 +22,6 @@ function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-/** GitHub's token endpoint and the two profile reads, for a user whose only address is the one given. */
 function githubWithAddress(email: string) {
   return async (input: string | URL | Request): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : input);
@@ -59,7 +43,6 @@ function cookiesFrom(response: Response, carried = ""): string {
   return [carried, ...fresh].filter((part) => part !== "").join("; ");
 }
 
-/** The auth service as `auth.ts` configures an account's rows and GitHub, over the database given. */
 function linkingAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
   return betterAuth({
     baseURL: BASE_URL,
@@ -90,7 +73,6 @@ async function withAuth(
   }
 }
 
-/** Signs an account up and links GitHub from its session; answers where the callback sent the browser and the account's providers. */
 async function linkGitHub(auth: Auth) {
   const signedUp = await auth.handler(
     new Request(`${BASE_URL}/api/auth/sign-up/email`, {
@@ -134,7 +116,6 @@ async function linkGitHub(auth: Auth) {
   };
 }
 
-/** Signs in with GitHub, GitHub holding the address given; answers our user the session is for. */
 async function signInWithGitHub(auth: Auth, email: string): Promise<string> {
   vi.stubGlobal("fetch", githubWithAddress(email));
   const started = await auth.handler(
@@ -170,7 +151,6 @@ test("a signed-in account links a GitHub whose address is not its own, and holds
     assert.equal(landedAt.pathname + landedAt.search, DONE_URL);
     assert.deepEqual(linked.providers, ["credential", "github"]);
     assert.equal(linked.github, String(GITHUB_ACCOUNT_ID));
-    // Counted under the account that linked, as a link and not as a sign-up.
     assert.deepEqual(linked.counts, [
       { name: "github:account_link", actor: { userId: linked.userId }, properties: {} },
     ]);

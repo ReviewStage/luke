@@ -1,20 +1,3 @@
-/**
- * native-agent-sessions.ts -- the native harnesses a web function launches and writes to, as the service the router reads (`runtime-sessions.ts`).
- *
- * Composed by the web functions that ship the runner's bundle
- * (`apps/web/server/native-agents.ts`): each harness's sessions acting for
- * an account, over the function's own services. A launch's runner posts
- * its events to the events route and calls our tools at the MCP server,
- * both under the deployment's own origin; numbers its events from one past
- * the last the store applied of its conversation (`readNativeSequence`);
- * asks the token route for the plan's token, on Codex; is handed each
- * integration its starter's conversation is handed, as an MCP server of its
- * own beside ours (`../workspace-mcp/app.ts`);
- * and runs under our coder instructions, worded for the harness, which
- * names the tools it owns by its own names (`instructions.ts`): Claude
- * Code's appended to its prompt, Codex's as its `developer_instructions`.
- */
-
 import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import { readNativeSequence } from "@repo/database/models/native-projection-store";
@@ -52,13 +35,10 @@ import type { RunnerServices, RunnerSessionsOptions } from "./runner-sessions.js
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
 export interface NativeAgentSessionsOptions {
-  /** Runs one effect on the function's runtime, which the checkout reaches the agent's machine through. */
   readonly run: SandboxRunner;
-  /** The deployment's own origin, which the runner reaches us at; none opens no harness. */
   readonly origin?: () => string | undefined;
 }
 
-/** The number the agent's task goes by in its workspace, which its link names it by; none for an agent on no task, or where it is not read, and the link names the task's id. */
 const agentTaskNumber = (userId: string, agent: Agent) =>
   agent.taskId === null
     ? Effect.succeed(undefined)
@@ -68,12 +48,6 @@ const agentTaskNumber = (userId: string, agent: Agent) =>
         Effect.orElseSucceed(() => undefined),
       );
 
-/**
- * The repositories the agent works in beside its own, each where it is
- * checked out (`extraCheckoutPaths`), as its instructions name them; none for
- * an agent in one repository. A read that fails is logged and names none,
- * as an agent in one repository is told, rather than failing its launch.
- */
 const agentExtraCheckouts = (userId: string, agent: Agent) =>
   readAgentRepositories(userId, agent.id).pipe(
     Effect.map(([, ...extras]): readonly ExtraCheckout[] => {
@@ -88,13 +62,6 @@ const agentExtraCheckouts = (userId: string, agent: Agent) =>
     Effect.orElseSucceed((): readonly ExtraCheckout[] => []),
   );
 
-/**
- * Our coder instructions for an agent on the harness given, composed on
- * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
- * its token reads the repository's CI, whose its commits are and the
- * co-author trailer where its starter's choice credits one, the workspace its links are written under, the number
- * its task goes by there, and whether its starter turned Memory and Descriptions on.
- */
 const nativeCoderInstructions = (
   userId: string,
   agent: Agent,
@@ -126,7 +93,6 @@ const nativeCoderInstructions = (
     });
   });
 
-/** The integrations an agent is handed as its launch starts, each an MCP server of its own at the service, read as its starter's conversation reads them. */
 const nativeIntegrations = (userId: string, agent: Agent, origin: string) =>
   Effect.map(
     nativeAgentConnections({
@@ -138,7 +104,6 @@ const nativeIntegrations = (userId: string, agent: Agent, origin: string) =>
     (names) => names.map((name) => ({ name, url: workspaceIntegrationMcpUrl(origin, name) })),
   );
 
-/** The native harnesses over the function's services, as above, each agent's runner on the machine its row names (`agent-machines.ts`): Vercel Sandbox, or its starter's Mac. */
 export function nativeAgentSessionsLayer(
   options: NativeAgentSessionsOptions,
 ): Layer.Layer<
@@ -151,7 +116,6 @@ export function nativeAgentSessionsLayer(
     Effect.gen(function* () {
       const context = yield* Effect.context<RunnerServices | ConnectionDoorServices>();
       const originOf = options.origin ?? deploymentOrigin;
-      /** What every harness's sessions are handed, for the account given and worded for the harness. */
       const optionsFor = (
         account: string,
         origin: string,
@@ -167,7 +131,6 @@ export function nativeAgentSessionsLayer(
           nativeCoderInstructions(account, agent, harness, place).pipe(
             Effect.provideContext(context),
           ),
-        // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
         nextSequence: (conversationId) =>
           readNativeSequence({ userId: account, conversationId }).pipe(
             Effect.map(Option.match({ onNone: () => 0, onSome: (last) => last + 1 })),

@@ -32,22 +32,10 @@ import {
 } from "../../testing/github-app-fake.js";
 import { openPullRequest } from "./pull-request.js";
 
-/**
- * A coding agent's pull request, opened by the service: as the developer it
- * writes as, on their own token, in one call on the agent's repository; as
- * the App where it writes as the App; and as the App in the developer's
- * place where GitHub refuses their token, the agent's row recording why;
- * and on its starter's own token alone where that is its credential. A
- * refusal of the pull request itself opens nothing and moves nothing.
- * GitHub is a script and the store PGlite; synthetic accounts and tokens
- * throughout.
- */
-
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const PULLS = `/repos/${RELAY_FULL_NAME}/pulls`;
 
-/** The token the developer's GitHub sign-in left on their row (`standingGithubRow`). */
 const DEVELOPER_TOKEN = "ghu_standing";
 
 const INPUT = {
@@ -56,7 +44,6 @@ const INPUT = {
   body: "Invitations now expire after a week.",
 };
 
-/** How GitHub answers an opening, by the bearer it came on. */
 type Opening = (bearer: string) => Response;
 
 const opened = () =>
@@ -65,7 +52,6 @@ const opened = () =>
     { status: 201 },
   );
 
-/** GitHub answering a pull request's opening as given, every opening written down. */
 function repository(answer: Opening) {
   const openings: SentToGitHub[] = [];
   const script = (sent: SentToGitHub): Response | undefined => {
@@ -76,7 +62,6 @@ function repository(answer: Opening) {
   return { openings, script };
 }
 
-/** An agent of a signed-in developer on the repository, its author settled as given. */
 const openAgent = (installationId: number, author: AgentAuthor | null, row?: GitHubAccountRow) =>
   Effect.gen(function* () {
     const installation: InstallationFixture = {
@@ -108,7 +93,6 @@ const openAgent = (installationId: number, author: AgentAuthor | null, row?: Git
     };
   });
 
-/** Opens the agent's pull request against the GitHub given. */
 const open = (
   opened: {
     readonly installation: InstallationFixture;
@@ -127,7 +111,6 @@ const open = (
     return { result, openings: github.openings, author: row.author, branch: row.branch };
   });
 
-/** An agent of a member who saved their own token, on the repository no installation of the plan's workspace reaches, writing on that token. */
 const openTokenAgent = Effect.gen(function* () {
   const userId = yield* openTokenMember();
   const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
@@ -152,7 +135,6 @@ const openTokenAgent = Effect.gen(function* () {
   };
 });
 
-/** Opens a token agent's pull request against a GitHub where the member's token may push to the repository and no installation reaches it. */
 const openOnToken = (
   opened: {
     readonly agent: WithRepository<Agent>;
@@ -179,7 +161,6 @@ const openOnToken = (
 const DOCS = { owner: "Acme", name: "Docs", defaultBranch: "main" } as const;
 const DOCS_FULL_NAME = `${DOCS.owner}/${DOCS.name}`;
 
-/** An agent writing as the App on the repository, working in the docs beside it, its checkout there cloned at `next`. */
 const openAgentBesideDocs = (installationId: number) =>
   Effect.gen(function* () {
     const installation: InstallationFixture = {
@@ -317,7 +298,6 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
           draft: false,
         });
         assert.equal(author, AGENT_AUTHOR.DEVELOPER);
-        // The branch stands on the row at once, so GitHub's delivery about the opening finds the agent mid-turn.
         assert.equal(branch, INPUT.head);
       }),
   );
@@ -379,7 +359,6 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent(26, AGENT_AUTHOR.DEVELOPER);
-        // The agent already stands on a branch of its own, with its pull request from it.
         yield* updateAgentBranch(agent.target.userId, agent.agent.id, "luke/ready");
         const exists = () =>
           Response.json(
@@ -418,7 +397,6 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
       Effect.gen(function* () {
         const agent = yield* openAgent(31, AGENT_AUTHOR.DEVELOPER);
         const stacked = { ...INPUT, base: "luke/teammate-invitations-store" };
-        // GitHub's own answer to a base it has no branch for: an error with a field and a code, and no message.
         const unknownBase = () =>
           Response.json(
             {

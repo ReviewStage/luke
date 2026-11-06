@@ -42,18 +42,6 @@ import {
 } from "./browser-tool.js";
 import { RECORDER_SOURCE, RECORDING_START_OUTPUT } from "./sandbox-recorder.js";
 
-/**
- * The `browser` tool over a fake Chromium behind the real CDP session and
- * the real tab store on a migrated database: a call runs its actions and
- * keeps the agent's tabs in step with the browser, an action on a tab a
- * member drives is refused with nothing after it run, a screenshot's
- * bounded copy reaches the model while its full-size copy is kept beside
- * the transcript and named by id, never as base64, a recording started and
- * stopped is kept beside the transcript as a video, and a browser that
- * cannot be reached answers why. Synthetic accounts and pages throughout.
- */
-
-/** A WebM whose one video track states 1280 by 800, with no frames: what the sandbox's recorder leaves, as far as the service reads it. */
 const RECORDED_WEBM = (() => {
   const ebml = (id: readonly number[], body: readonly number[]) => [
     ...id,
@@ -67,7 +55,6 @@ const RECORDED_WEBM = (() => {
   ]);
 })();
 
-/** The fake sandbox's browser on the peer, recording as the scenario says, and the commands its sandbox ran. */
 function recordingBrowser(
   peer: FakeCdpPeer,
   recording: NonNullable<Parameters<typeof fakeSandboxApi>[0]["recording"]>,
@@ -88,7 +75,6 @@ const LAYOUT = {
 
 const JPEG = "/9j/AAAA";
 
-/** A synthetic JPEG whose frame header states 1280 by 800, as the transcript's copy of a page answers; no real picture. */
 const KEPT_JPEG = Buffer.from([
   0xff,
   0xd8,
@@ -105,7 +91,6 @@ const KEPT_JPEG = Buffer.from([
   ...Array.from({ length: 64 }, () => 7),
 ]).toString("base64");
 
-/** A synthetic PNG whose header states the same size, larger than the JPEG, so the JPEG is kept. */
 const KEPT_PNG = Buffer.from([
   0x89,
   0x50,
@@ -134,7 +119,6 @@ const KEPT_PNG = Buffer.from([
   ...Array.from({ length: 256 }, () => 9),
 ]).toString("base64");
 
-/** The commands a page answers with nothing much, as Chrome does once they are done. */
 const PLAIN = new Set([
   "Target.detachFromTarget",
   "Target.activateTarget",
@@ -142,22 +126,12 @@ const PLAIN = new Set([
   "Input.insertText",
 ]);
 
-/** The blank page Chromium starts with, which no one opened. */
 const START_PAGE: PageTarget = { targetId: "start-page", url: "about:blank", title: "about:blank" };
 
-/** The title a page's own document gives it, once it has loaded. */
 const titleAt = (url: string) => `Page at ${url}`;
 
-/**
- * A fake Chromium whose pages move as a real one's do: a page opens titled
- * with its address, as Chromium titles one while it loads, and takes its own
- * title once it has loaded, after as many reads of its state as `loadAsks`
- * says; a page at the address `unopenable` names will not open; a navigation changes the tab's address and title, a page closes, and
- * every command it is sent is recorded.
- */
 function browser(
   pages: readonly PageTarget[] = [],
-  // Note that `unopenable` is read at each open, so a suite may let the page open later.
   options: { readonly loadAsks?: number; readonly unopenable?: string | undefined } = {},
 ) {
   return Effect.gen(function* () {
@@ -165,7 +139,6 @@ function browser(
     const sent: FakeCdpCommand[] = [];
     let opened = 0;
     const sessions = new Map<string, string>();
-    // How many more reads of its state each page still loading answers that it loads.
     const loading = new Map<string, number>();
     const readyState = (targetId: string) => {
       const left = loading.get(targetId);
@@ -240,7 +213,6 @@ function browser(
   });
 }
 
-/** The fake sandbox's browser on the peer, already started, as a browser the agent used earlier in its sandbox's life is. */
 function runningBrowser(peer: FakeCdpPeer) {
   const layer = agentBrowserTestLayer(peer, SESSION);
   const started = Effect.gen(function* () {
@@ -250,10 +222,8 @@ function runningBrowser(peer: FakeCdpPeer) {
   return Effect.as(Effect.provide(started, layer), layer);
 }
 
-/** The account each conversation the suite opened belongs to, so a call names the transcript it is written to. */
 const owners = new Map<string, string>();
 
-/** A new account and a conversation of its own, the one an agent's tabs are kept under. */
 const openConversation = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
@@ -270,7 +240,6 @@ const openConversation = Effect.gen(function* () {
   return { userId: id, conversationId: row.id };
 });
 
-/** One call of the tool, as an agent's root makes it, on the browser given. */
 function call(conversationId: string, input: unknown, browserLayer: Layer.Layer<AgentBrowser>) {
   const transcript = { userId: owners.get(conversationId) ?? "", conversationId };
   return runBrowserTool(
@@ -284,7 +253,6 @@ function ran(result: BrowserToolResult) {
   return result;
 }
 
-/** The tabs the store keeps for the conversation, as an agent's own list reads them. */
 const keptTabs = (conversationId: string) =>
   Effect.map(listAgentBrowserTabs(conversationId), (rows) =>
     rows.map(({ targetId, address, title }) => ({ targetId, address, title })),
@@ -337,7 +305,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
 
         assert.deepEqual(closed.tabs, []);
         assert.deepEqual(yield* keptTabs(conversationId), []);
-        // A tab the agent closed never comes back, however the browser is reached next.
         const listed = ran(
           yield* call(conversationId, { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] }, layer),
         );
@@ -472,7 +439,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
         assert.ok(admin);
         const now = yield* Clock.currentTimeMillis;
         yield* takeOverBrowserTab(admin.id, userId, new Date(now + 60_000), new Date(now));
-        // The sandbox resumed from its snapshot: the browser starts with none of the pages.
         const { peer } = yield* browser();
 
         const listed = ran(
@@ -532,8 +498,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
           });
         }
         const kept = yield* listAgentBrowserTabs(conversationId);
-        // The sandbox resumed and a live view's connection started the browser, then went before it
-        // reopened anything: the browser holds only the blank page it starts with.
         const { peer, held: pages } = yield* browser([START_PAGE]);
         const layer = yield* runningBrowser(peer);
 
@@ -675,7 +639,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
           at: row.cursorAt?.getTime() ?? null,
         }));
         assert.deepEqual(cursors, [
-          // The tab this call opened was kept only once the call ran, after its click.
           {
             targetId: "tab-1",
             x: null,
@@ -727,7 +690,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
           (rows) => rows[0]?.cursorX === 7,
         );
 
-        // No one watches: the call runs through without the clock moving at all.
         ran(yield* call(conversationId, click, layer));
         const pressedUnwatched = presses();
 
@@ -773,7 +735,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
             agentBrowserTestLayer(peer, SESSION),
           ),
         );
-        // The page loads over its next reads of its state, each a poll later.
         for (let reads = 1; reads <= 3; reads += 1) {
           while (asked() < reads) yield* Effect.yieldNow;
           yield* TestClock.adjust("250 millis");
@@ -885,7 +846,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
       Effect.gen(function* () {
         const { userId, conversationId } = yield* openConversation;
         const { peer } = yield* browser();
-        // No sandbox stands under the session until its door is opened, as before an agent's first sandbox call.
         let opened = false;
         const { api } = fakeSandboxApi({ status: "running", sessionId: SESSION });
         const unopened = Layer.succeed(
@@ -992,7 +952,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
         );
         assert.doesNotMatch(JSON.stringify(storedBrowserOutput(unparsedWire(stopped))), /GkXfo/u);
 
-        // A stop asked again, as after a read that failed, keeps the same video once.
         const again = ran(
           yield* call(
             conversationId,

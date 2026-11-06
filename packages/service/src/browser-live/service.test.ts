@@ -13,16 +13,6 @@ import {
   type BrowserLiveAdmission,
 } from "./service.js";
 
-/**
- * Which upgrades the live view takes, before any socket stands: only its
- * own path naming an agent and a tab, or, from a desktop built before the
- * agent was named, a task and a tab; from the desktop, which names no
- * origin, only under a bearer; from a page, only from one of the
- * deployment's own, under its session cookie; and only for an account that
- * resolves and reaches the tab. Anything else is refused with a status and
- * never upgraded.
- */
-
 const TASK = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 const AGENT = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 const TAB = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
@@ -124,7 +114,6 @@ const REACHED: ReachedBrowserTab = {
   agent: { id: AGENT, userId: "starter-1", githubAccess: GITHUB_ACCESS.APP },
 };
 
-/** An account store that answers the bearer and cookie given for their members, and a tab store reached by one member alone. */
 const admission: BrowserLiveAdmission = {
   resolveUserId: (credential: RelayCredential) =>
     Effect.succeed(

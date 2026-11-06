@@ -1,9 +1,3 @@
-/**
- * local-agent.ts -- a local agent over the test's real store, the Claude Code sessions that reach it through its Mac's lines, and one whose runner its Mac took and left warm past its first turn.
- *
- * Synthetic accounts, agents, Macs, and keys throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
@@ -32,23 +26,13 @@ import { LINK_OUTCOME } from "../github/github-installations.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "./agent-credentials.js";
 import { connectWorkspaceGitHub, type InstallationFixture, NO_GITHUB } from "./github-app-fake.js";
 
-/** How a local agent is opened: in the repository the installation given reaches, on the harness given, and on its starter's own Anthropic API key where asked. */
 export interface LocalAgentOptions {
-  /** The installation reaching the repository it works in, connected to its task's workspace; none for an agent in no repository. */
   readonly installation?: InstallationFixture;
-  /** The harness its conversation runs on, as Start records it; the store's own where none is named. */
   readonly runtime?: ConversationRuntime;
-  /** Whether its starter saved an Anthropic API key, and the agent started to run on it, as Start chooses it then. */
   readonly onApiKey?: boolean;
-  /** How its repository is reached, as Start records it; the App's where none is named. */
   readonly githubAccess?: GitHubAccess;
 }
 
-/**
- * An account with a Mac that just registered, and an agent pinned to it
- * whose conversation runs in a session: its starter, its Mac, the agent,
- * and the session.
- */
 export const openLocalAgent = (options: LocalAgentOptions = {}) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -92,18 +76,12 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
     return { userId, deviceId, agent, session };
   });
 
-/** What the sessions reach beside the store and the deployment's environment: the Mac's machine, and no GitHub or image, which a Mac's launch in no repository never asks. */
 const LOCAL_AGENT_SERVICES = Layer.mergeAll(
   Layer.effect(AgentMachine, deviceMachine),
   NO_GITHUB,
   Layer.succeed(AgentImage, { reference: Effect.die(new Error("a Mac opens no image")) }),
 );
 
-/**
- * The account's Claude Code sessions over its Macs alone, which launch a
- * local agent's runner and write its messages as lines its Mac follows,
- * each launch numbering its events from naught.
- */
 export const localAgentSessions = (userId: string) =>
   claudeCodeSessions({
     userId,
@@ -119,7 +97,6 @@ export const localAgentSessions = (userId: string) =>
     DatabaseServices | HostedEnvironment
   >;
 
-/** The deployment's environment a local agent's launch is sealed under, and its saved keys opened with: a key ring, and nothing else. */
 export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -132,19 +109,12 @@ export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   titleAnthropicApiKey: undefined,
 });
 
-/** The developer's message as the store hands it to the agent's sessions. */
 export const typedMessage = (agent: Agent, text: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
   message: text,
 });
 
-/**
- * A local agent on its starter's API key whose Start launched its runner,
- * which its Mac took, and whose first turn then settled, as its IDLE's
- * batch writes it: the agent, its sessions, the session its Start claimed,
- * and the turn that settled.
- */
 export const warmLocalAgent = Effect.gen(function* () {
   const db = yield* Database;
   const opened = yield* openLocalAgent({
@@ -156,7 +126,6 @@ export const warmLocalAgent = Effect.gen(function* () {
   const started = yield* sessions.open(typedMessage(agent, "Fix the invitations."));
   assert.ok(started.outcome === EVE_SEND_OUTCOME.ACCEPTED);
   const { sessionId } = started;
-  // The agent's record names the session, as its Start claims it.
   yield* db
     .update(conversations)
     .set({ runtimeSessionId: sessionId })
@@ -182,7 +151,6 @@ export const warmLocalAgent = Effect.gen(function* () {
 
 export type WarmLocalAgent = Effect.Success<typeof warmLocalAgent>;
 
-/** A line of the developer's that no turn took yet, written as the store writes it before it hands the line to the agent's sessions. */
 export const lineWritten = (warm: WarmLocalAgent, text: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -200,7 +168,6 @@ export const lineWritten = (warm: WarmLocalAgent, text: string) =>
     });
   });
 
-/** What the agent's Mac has yet to take, line by line: a message line by the text it carries, any other by its kind. */
 export const linesWaiting = (warm: WarmLocalAgent) =>
   Effect.map(deviceAgentLinesWaiting(warm.userId, warm.deviceId), (lines) =>
     lines.map((line) =>
@@ -208,7 +175,6 @@ export const linesWaiting = (warm: WarmLocalAgent) =>
     ),
   );
 
-/** Whether the newest launch line waiting for the agent's Mac carries the text given among its first lines, which its sealed secrets hold and its Mac's claim opens. */
 export const launchCarries = (warm: WarmLocalAgent, text: string) =>
   Effect.gen(function* () {
     const waiting = yield* deviceAgentLinesWaiting(warm.userId, warm.deviceId);

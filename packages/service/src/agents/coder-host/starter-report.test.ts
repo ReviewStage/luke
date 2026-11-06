@@ -18,20 +18,10 @@ import { githubReaching } from "../../testing/github-app-fake.js";
 import { recordingEve, sentTo } from "../../testing/recording-eve.js";
 import { reportToStarter } from "./starter-report.js";
 
-/**
- * A started agent's final message handed to its starter as the store writer
- * settles its turn, where the starter, which takes a turn only when a
- * message reaches it, would otherwise wait on a report that never comes.
- * Over a real dialect, eve a fake at the client's boundary, the writer told
- * to hand each settled turn here as the deployment's listener does.
- * Synthetic accounts and agents.
- */
-
 const T0 = new Date("2026-10-28T12:00:00Z").getTime();
 
 const REPORT = "Opened the pull request; the checks are green and auto-merge is armed.";
 
-/** A member of a fresh workspace, their orchestrating agent with its session recorded, and an agent it started, both on Claude Code. */
 const openStarted = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -73,7 +63,6 @@ const openStarted = () =>
     return { member, starter, agent, sessionId };
   });
 
-/** The writer told to hand each turn it settles to the agent's starter over the eve given, as the deployment's listener does. */
 const reporting = (eve: ReturnType<typeof recordingEve>) =>
   Layer.succeed(SettledTurnListener, {
     heard: (turn) =>
@@ -101,7 +90,6 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
         assert.ok(told.includes(`\n\n${REPORT}\n\n`), told);
         assert.ok(told.endsWith(agentMessageReplyLine(agent.id)), told);
 
-        // The settle heard again, as a retried batch or a second listener would, sends nothing twice.
         yield* reportToStarter(eve.sessionsFor, {
           userId: agent.userId,
           conversationId: agent.conversationId,

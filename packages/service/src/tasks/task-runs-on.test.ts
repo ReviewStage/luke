@@ -27,19 +27,8 @@ import { fakeGitHub, GITHUB_APP_WITH_TOKENS, openTokenMember } from "../testing/
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
-/**
- * A task holds no place to run, each agent its own, so the place a released
- * desktop still names on a task's create or change goes through the hosted
- * oRPC router as the web route answers it, over a real dialect: a change is
- * taken and changes nothing, the task answering where its newest agent runs
- * for those builds, and a create keeps it as the member's last pick; an
- * account outside the workspace reaches no such task. Synthetic accounts
- * and devices throughout.
- */
-
 const ORIGIN = "https://app.test";
 
-/** The plans procedures over the test's store, each bearer answering for the account it maps to; GitHub is never asked. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const github = fakeGitHub(() => Response.json({}, { status: 404 }), GITHUB_APP_WITH_TOKENS);
@@ -64,7 +53,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         workspaces: yield* fakeWorkspaceSeams,
       }),
     });
-    // SAFETY: setting where a task runs yields the store and the clock alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     return (method: string, path: string, bearer: string, body: object) =>
       Effect.promise(async () => {
@@ -76,12 +64,10 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           }),
           webServices,
         );
-        // SAFETY: the router answers JSON; the test compares it as the wire value it is.
         return { status: response.status, body: JSON.parse(await response.text()) };
       });
   });
 
-/** A device of the account's, registered now by the name given, the account's Anthropic key saved, so it runs some model. */
 const deviceOf = (userId: string, name: string) =>
   Effect.gen(function* () {
     const id = randomUUID();
@@ -136,7 +122,6 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         assert.equal(toDevice.status, 200, JSON.stringify(toDevice.body));
         assert.equal(toDevice.body.plan.runsOn, undefined);
 
-        // An account outside the workspace reaches no such task.
         const byStranger = yield* patch(task.id, "Bearer stranger", {
           machine: AGENT_MACHINE.VERCEL,
         });

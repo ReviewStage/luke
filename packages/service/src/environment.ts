@@ -5,39 +5,19 @@ import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
 import { POSTHOG_ENVIRONMENT } from "./providers/posthog.js";
 
-/** The variable our own key for titles is read from, an Anthropic API key spent on every title and nothing else. */
 const TITLE_MODEL_ENVIRONMENT = {
   ANTHROPIC_API_KEY: "TITLE_ANTHROPIC_API_KEY",
 } as const;
 
-/**
- * What the deployment's environment says about the hosted tier, read once as
- * the services are built rather than at each invocation's `process.env`.
- *
- * A blank value is dropped here rather than at the endpoints: an absent
- * value and a whitespace one both mean it is unset, so the endpoints see one
- * absence. The deployment holds one model provider key of its own, for
- * titles alone (`titleAnthropicApiKey`); every other model call runs on the
- * account's own key, sealed under `providerKeyEncryptionKeys`.
- */
 export interface HostedEnvironmentValues {
-  /** The analytics processor's own deletion key; absent means there is no person to erase. */
   readonly posthogPersonalApiKey: Redacted.Redacted | undefined;
-  /** The analytics project the personal key deletes from; absent means there is nothing to erase it with. */
   readonly posthogProjectId: string | undefined;
-  /** The private API host deletion is asked of, which is not the ingestion host. */
   readonly posthogApiHost: string | undefined;
-  /** The analytics project's own ingestion token, for the desktop's counted-event batch; absent means recording is off. */
   readonly posthogProjectApiKey: Redacted.Redacted | undefined;
-  /** A deployment-configured ingestion host; the shared default otherwise. */
   readonly posthogIngestHost: string | undefined;
-  /** Vercel's own bearer on every scheduled call, which the maintenance routes asked by hand take too; absent refuses every sweep. */
   readonly cronSecret: Redacted.Redacted | undefined;
-  /** The secret GitHub signs our GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
-  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call on an account's key unmade, since no key of ours stands in. */
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
-  /** our own Anthropic API key, which every title is generated on (`agents/coder-host/model.ts`) and nothing else; absent names each from its first words, with no model. */
   readonly titleAnthropicApiKey: Redacted.Redacted | undefined;
 }
 
@@ -50,11 +30,6 @@ function present(value: Option.Option<string>): string | undefined {
   return text(Option.getOrUndefined(value));
 }
 
-/**
- * A secret under the same rule as a plain value: trimmed, and a blank one is
- * dropped. The trimming is the one reveal on the way in, so every reveal on
- * the way out — a bearer, a key — sees the same bytes a compare does.
- */
 function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Redacted | undefined {
   return Option.getOrUndefined(
     Option.flatMap(value, (secret) =>
@@ -63,16 +38,6 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
   );
 }
 
-/**
- * The values as this deployment's own environment holds them. The provider is
- * named rather than inherited so the read is the process environment wherever
- * the layer is built, and read inside an `Effect.sync` rather than beside the
- * pipe so that "wherever" stays the build: `fromEnv` copies `process.env` out
- * into a record of its own, so a provider constructed as this module loads
- * would be this process's first environment forever. A key travels as a
- * `Redacted` so a log line or an error that folded a service into it still
- * says nothing.
- */
 export const hostedEnvironment = Layer.effect(
   HostedEnvironment,
   Effect.flatMap(

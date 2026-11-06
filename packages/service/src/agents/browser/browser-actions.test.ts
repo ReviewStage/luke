@@ -29,17 +29,8 @@ import {
 } from "../../testing/agent-browser-fake.js";
 import { agentBrowserOver } from "./agent-browser.js";
 
-/**
- * An agent's browser actions over a fake Chromium behind the real CDP
- * session: each action sends the browser's own commands for it on the tab's
- * flattened session, a ref a snapshot printed resolves to the middle of its
- * element, a sequence stops at its first failure and says why, every action
- * is bounded, and every result holds to its cap.
- */
-
 const SESSION = "wrun_actions_fixture";
 
-/** The commands a page answers with nothing much, as Chrome does once they are done. */
 const PLAIN = new Set([
   "Target.detachFromTarget",
   "Target.activateTarget",
@@ -60,7 +51,6 @@ const LAYOUT = {
   cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: 1280, clientHeight: 800 },
 };
 
-/** A fake Chromium that answers what a page does, then the suite's own answers, recording every command it is sent. */
 function browser(
   own: (command: FakeCdpCommand) => FakeCdpAnswer | undefined = () => undefined,
   pages?: readonly PageTarget[],
@@ -83,7 +73,6 @@ function browser(
   }));
 }
 
-/** Runs the actions on a session with the peer's browser, as the tool will, with the cursor given, keeping each screenshot's transcript copy where `keep` asks. */
 function run(
   peer: FakeCdpPeer,
   actions: readonly BrowserAgentAction[],
@@ -101,10 +90,8 @@ function run(
   );
 }
 
-/** Base64 that spells `bytes` bytes, as a capture of that size answers. */
 const base64Of = (bytes: number) => "A".repeat(Math.ceil(bytes / 3) * 4);
 
-/** A cursor that writes each move it hears into the browser's own record, so the order of moves and commands reads as one. */
 function cursorInto(sent: FakeCdpCommand[], watched: boolean) {
   const moves: BrowserCursorMove[] = [];
   const cursor: BrowserCursor = {
@@ -118,7 +105,6 @@ function cursorInto(sent: FakeCdpCommand[], watched: boolean) {
   return { cursor, moves };
 }
 
-/** The commands sent to pages and to the browser about them, without the listing a step reads along the way, and a script asked of a page by its method alone. */
 function pageCommands(sent: readonly FakeCdpCommand[]) {
   return sent
     .filter((command) => command.method !== "Target.getTargets")
@@ -234,7 +220,6 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
   }),
 );
 
-/** A shop's page as Chromium's accessibility tree has it, wrappers, ignored nodes, and text runs among it. */
 const SHOP_TREE = {
   nodes: [
     {
@@ -373,7 +358,6 @@ it.effect("a ref whose middle another element covers fails before it is clicked"
           };
         }
         if (command.method === "Runtime.callFunctionOn") {
-          // A cookie banner lies over e42; e5 is clear.
           return {
             result: { result: { value: command.params.objectId === "node-42" ? "div" : "" } },
           };
@@ -403,7 +387,6 @@ it.effect("typing where nothing that takes text has the focus fails, and sends n
     const { peer, sent } = yield* browser(
       (command) => {
         if (command.method !== "Runtime.evaluate") return undefined;
-        // The page's body has the focus, so only the check that asks whether it takes text answers no.
         const asksTakesText = String(command.params.expression).includes("isContentEditable");
         return { result: { result: { value: asksTakesText ? false : null } } };
       },
@@ -667,7 +650,6 @@ it.effect(
       const { peer } = yield* browser((command) => {
         if (command.method === "Runtime.evaluate") return { result: { result: { value: 1 } } };
         if (command.method !== "Page.captureScreenshot") return undefined;
-        // Note that the model's copy is asked for first, so the first JPEG is its own.
         if (command.params.format === "jpeg" && !shown) {
           shown = true;
           return { result: { data: "/9j/AAAA" } };
@@ -698,7 +680,6 @@ it.effect(
     }),
 );
 
-/** A console call on the session given, at the time given. */
 function consoleCall(sessionId: string, timestamp: number, type: string, text: string): CdpEvent {
   return {
     method: "Runtime.consoleAPICalled",
@@ -731,7 +712,6 @@ it.effect("the console answers the page's latest messages, oldest first, each cu
         sessionId: own,
       },
     ];
-    // Note that the browser replays what a page logged before it answers the enable, as Chrome does.
     const peer: FakeCdpPeer = {
       ...inner,
       answer: (command) =>
@@ -860,7 +840,6 @@ it.effect(
           { tab, x: 640, y: 400, kind: "move", viewport },
         ],
       );
-      // Each move is heard after its point is found and before the input that acts there.
       const order = sent
         .filter((command) =>
           ["cursor", "Input.dispatchMouseEvent", "Input.insertText"].includes(command.method),
@@ -966,23 +945,16 @@ it.effect(
     }),
 );
 
-/**
- * Moves the clock on in small steps, so a fiber still crossing the fake PTY
- * as the move begins has armed its timer before the time it waits for has
- * passed.
- */
 function advance(by: Duration.Duration) {
   const step = Duration.millis(50);
   const steps = Math.ceil(Duration.toMillis(by) / Duration.toMillis(step));
   return Effect.repeat(TestClock.adjust(step), { times: steps - 1 });
 }
 
-/** A page's tree that is only its root, named as the page is. */
 function pageTree(name: string) {
   return { nodes: [{ nodeId: "1", role: { value: "RootWebArea" }, name: { value: name } }] };
 }
 
-/** A frame event on the blank page's session, as Chromium sends it with the page's events on. */
 function frameEvent(method: string, frameId = "main"): CdpEvent {
   return { method, params: { frameId }, sessionId: "session-page-blank" };
 }
@@ -995,7 +967,6 @@ it.effect(
       const { peer } = yield* browser((command) => {
         if (command.method === "Page.enable") return { result: {} };
         if (command.method === "Accessibility.getFullAXTree") return { result: pageTree(shown) };
-        // The login page stays loaded until the next document commits.
         return command.method === "Runtime.evaluate"
           ? { result: { result: { value: "complete" } } }
           : undefined;
@@ -1175,11 +1146,6 @@ it.effect(
     }),
 );
 
-/**
- * An option of a native select as a page holds it. Note that `disabled` is
- * its own attribute alone, while `:disabled` also holds under a disabled
- * optgroup, as the DOM has it.
- */
 class PageOption {
   selected = false;
   constructor(
@@ -1193,18 +1159,11 @@ class PageOption {
   }
 }
 
-/** How an option's disabledness is set: by its own attribute, or by a disabled optgroup around it. */
 const DISABLED_BY = { ITSELF: "itself", GROUP: "group" } as const;
 
-/**
- * A native select as a page holds one, for the function the browser is
- * asked to call on it: its options, which of them is selected, and every
- * event dispatched on it with whether it bubbles and the value it carried.
- */
 class PageSelect extends EventTarget {
   readonly disabled = false;
   readonly options: PageOption[];
-  /** Whether a disabled fieldset around it disables it, which its own property does not show. */
   inDisabledFieldset = false;
   readonly heard: { readonly type: string; readonly bubbles: boolean; readonly value: string }[] =
     [];
@@ -1239,11 +1198,9 @@ class PageSelect extends EventTarget {
   }
 }
 
-/** The page's answer to `Runtime.callFunctionOn`: the function the browser was sent, called on the select, its value returned by value. */
 function callOnSelect(select: PageSelect, params: FakeCdpCommand["params"]): FakeCdpAnswer {
   const declaration = String(params.functionDeclaration);
   const args = Array.isArray(params.arguments) ? params.arguments : [];
-  // Note that the page's own class is the fake's, so the function's guard reads it as a select.
   const made: unknown = new Function("HTMLSelectElement", `return (${declaration});`)(PageSelect);
   assert.equal(typeof made, "function");
   const called = Reflect.apply(
@@ -1254,7 +1211,6 @@ function callOnSelect(select: PageSelect, params: FakeCdpCommand["params"]): Fak
   return { result: { result: { type: "object", value: called } } };
 }
 
-/** A page with a dropdown at e7 and a heading at e5, as Chromium's accessibility tree has it, its popup's wrapper among it. */
 const DROPDOWN_TREE = {
   nodes: [
     { nodeId: "1", role: { value: "RootWebArea" }, name: { value: "Dropdown" }, childIds: ["2"] },
@@ -1290,7 +1246,6 @@ const DROPDOWN_TREE = {
   ],
 };
 
-/** A fake Chromium whose page holds the select at e7, a heading at e5, and nothing at e99. */
 function dropdownBrowser(select: PageSelect) {
   return browser(
     (command) => {
@@ -1484,7 +1439,6 @@ it.effect(
         ["Basic", "basic"],
         ["Premium", "premium"],
       ]);
-      // The page's own handler takes Premium back, as a page with none left would.
       reset.addEventListener("change", () => {
         for (const option of reset.options) option.selected = option.value === "basic";
       });

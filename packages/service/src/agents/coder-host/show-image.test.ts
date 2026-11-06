@@ -21,22 +21,8 @@ import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, type ShowImageBinding } from "./show-image.js";
 
-/**
- * show-image.test.ts -- a coding agent's pictures shown from its sandbox
- * over a real dialect: each file read and kept beside the transcript the
- * call is written to, in order, and named by id; a call with a file that is
- * missing, no picture, or too large shows nothing and says why, naming the
- * path; and a transcript that keeps as many pictures as it may shows no
- * more.
- *
- * Synthetic files throughout: a picture is a PNG's signature and header,
- * which states its size, and nothing more; a video is a WebM's EBML header
- * and a track that states its size.
- */
-
 const CHECKOUT = "/vercel/sandbox/repository";
 
-/** A sandbox holding the files given by absolute path, each read as one stream. */
 function sandboxWith(files: Readonly<Record<string, Uint8Array>>): ShowImageBinding["sandbox"] {
   return () =>
     Promise.resolve({
@@ -278,8 +264,6 @@ it.layer(getTestDB())("show_image", (it) => {
     Effect.gen(function* () {
       const target = yield* openConversation;
       const db = yield* Database;
-      // Note that the row stands in for pictures kept up to the budget, because two hundred
-      // megabytes of real bytes would only slow the test.
       yield* db.insert(attachment).values({
         userId: target.userId,
         conversationId: target.conversationId,
@@ -310,8 +294,6 @@ it.layer(getTestDB())("show_image", (it) => {
       Effect.gen(function* () {
         const target = yield* openConversation;
         const db = yield* Database;
-        // Note that the row leaves room for the first picture below and not the second, so the
-        // refusal falls between them.
         yield* db.insert(attachment).values({
           userId: target.userId,
           conversationId: target.conversationId,

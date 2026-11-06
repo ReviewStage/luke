@@ -36,27 +36,10 @@ import {
   TASK_PICTURE_FILE_REFUSAL,
 } from "./description-edit.js";
 
-/**
- * A coding agent's `edit_description` adding a screenshot from its sandbox to its
- * plan, through the tool's public function against a real dialect: the
- * picture is kept as one of the plan's pictures, which every member of the
- * plan's workspace reads and nobody else does, and its line lands under its
- * section in a save that is the agent's; a recording is kept as it was
- * recorded, up to a video's bound; a file that is missing, no image,
- * or too large, a plan at its bound of pictures or of videos, and an archived plan are
- * each refused with nothing saved; and the picture's bytes never travel in
- * what the tool answers. The sandbox is the boundary, played by a double
- * holding synthetic files.
- *
- * Synthetic accounts, plans, and pictures throughout.
- */
-
-/** A screenshot's bytes: a PNG's signature and a few more, which is all the store and the sniff read of them. */
 const SCREENSHOT = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 9,
 ]);
 
-/** A sandbox holding the files given by their path from the checkout, each read as one stream. */
 function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxDoor {
   const byPath = new Map(
     Object.entries(files).map(([path, bytes]) => [posix.resolve(CODER.CHECKOUT_PATH, path), bytes]),
@@ -85,7 +68,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A plan in a workspace its owner made and a teammate joined, an agent the owner started on it, and an account in neither. */
 const openAgentTask = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -107,7 +89,6 @@ const openAgentTask = Effect.gen(function* () {
   return { owner, teammate, outsider, taskId: task.id, agentId };
 });
 
-/** A call adding the one picture at the path given under the plan's approach. */
 function pictureCall(path: string) {
   return {
     notes: [],
@@ -176,7 +157,6 @@ it.layer(getTestDB())("edit_description's pictures", (it) => {
         assert.ok(
           Option.isNone(yield* readDescriptionAttachment(outsider, taskId, named.attachmentId)),
         );
-        // The save is journaled as the agent's, the picture among the notes it took.
         assert.deepEqual(
           stored.agentEdits.map((edit) => [edit.agentId, edit.notes.length]),
           [[agentId, 2]],
@@ -197,7 +177,6 @@ it.layer(getTestDB())("edit_description's pictures", (it) => {
           "huge.png": tooLarge,
           "shots/members.png": SCREENSHOT,
         });
-        // One place left, which a call adding two takes with its first before its second is refused.
         for (let kept = 1; kept < DESCRIPTION_ATTACHMENT_BOUNDS.MAX_PER_DESCRIPTION; kept += 1) {
           const picture = { contentType: PICTURE_TYPE.PNG, bytes: SCREENSHOT };
           const answer = yield* keepDescriptionAttachment(full.owner, full.taskId, picture);

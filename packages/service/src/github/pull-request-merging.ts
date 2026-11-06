@@ -1,19 +1,3 @@
-/**
- * pull-request-merging.ts -- how an open pull request may be merged, as its merge box offers it, read from GitHub's GraphQL API on the token the overview reads on.
- *
- * One query reads what the REST pull request does not carry: the merge
- * methods the repository allows, whether it allows auto-merge, whether the
- * pull request's base is merged through a merge queue and where it stands
- * in it, whether auto-merge is on for it and by which method, its head
- * commit, what its required reviews say, and its head's checks as one word.
- * It runs on the installation token the App minted for the agent's one
- * repository (`github-app.ts`'s `repositoryPullRequestToken`), as every
- * other overview read does, over the App module's own kit (`githubPost`,
- * `send`, `readBody`). An answer GitHub gave in no shape this reads, errors
- * among it, is unreadable, which the caller answers as no merge box rather
- * than failing the header it rides with.
- */
-
 import {
   CHECK_SUMMARY,
   type CheckSummary,
@@ -76,7 +60,6 @@ const MergingAnswerSchema = Schema.Struct({
   }),
 });
 
-/** GitHub's word for each merge method, as GraphQL spells it. */
 const GITHUB_MERGE_METHOD = new Map<string, MergeMethod>([
   ["MERGE", MERGE_METHOD.MERGE],
   ["SQUASH", MERGE_METHOD.SQUASH],
@@ -89,7 +72,6 @@ const GITHUB_REVIEW_DECISION = new Map<string, ReviewDecision>([
   ["REVIEW_REQUIRED", REVIEW_DECISION.REVIEW_REQUIRED],
 ]);
 
-/** A head's status rollup as one word; one GitHub has not rolled up is none run. */
 const GITHUB_ROLLUP = new Map<string, CheckSummary>([
   ["SUCCESS", CHECK_SUMMARY.PASSING],
   ["PENDING", CHECK_SUMMARY.PENDING],
@@ -98,12 +80,6 @@ const GITHUB_ROLLUP = new Map<string, CheckSummary>([
   ["ERROR", CHECK_SUMMARY.FAILING],
 ]);
 
-/**
- * How the pull request may be merged, read on the token; none where the
- * repository or the pull request reads as none. Note that the methods are
- * the repository's own settings alone: a ruleset narrowing them on the base
- * is GitHub's to refuse, in its own words, when a merge names one.
- */
 export const pullRequestMerging = /* @__PURE__ */ Effect.fn("web/pullRequestMerging")(function* (
   token: Redacted.Redacted,
   fullName: string,
@@ -142,7 +118,6 @@ export const pullRequestMerging = /* @__PURE__ */ Effect.fn("web/pullRequestMerg
   });
 });
 
-/** The operation's name, which tells this read apart from the merge box's own. */
 export const PULL_REQUEST_QUEUED_OPERATION = "PullRequestQueued";
 
 const QUEUED_QUERY = `query ${PULL_REQUEST_QUEUED_OPERATION}($owner: String!, $name: String!, $number: Int!) {
@@ -167,14 +142,6 @@ const QueuedAnswerSchema = Schema.Struct({
   }),
 });
 
-/**
- * Whether GitHub holds the pull request in its base's merge queue now, read
- * on the token on its own, which the REST pull request does not say: what
- * the row an agent's pull request is kept on carries beside where it stands,
- * so every mark of it, the sidebar's among them, says queued as its Pull
- * request tab does. A repository or pull request reading as none is not
- * queued.
- */
 export const pullRequestQueued = /* @__PURE__ */ Effect.fn("web/pullRequestQueued")(function* (
   token: Redacted.Redacted,
   fullName: string,

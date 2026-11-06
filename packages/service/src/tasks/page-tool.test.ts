@@ -24,20 +24,10 @@ import {
   SHOW_PAGE_REFUSAL,
 } from "./page-tool.js";
 
-/**
- * `show_page`, every agent's one tool for a page, through its public
- * function against a real dialect: inline HTML makes a page the task lists,
- * a page named again takes its next version, a secret file is never read,
- * and another account's task takes no page. An agent on no task shows its
- * pages on itself, named by its own address, and revises none but its own.
- * Synthetic accounts, tasks, agents, and pages throughout.
- */
-
 const CHECKOUT = "/vercel/sandbox/repository";
 
 const FUNNEL = "<!doctype html><h1>Invite funnel</h1><script>document.title = 'é'</script>";
 
-/** A coding agent of the account's, on the task named or, in the workspace, on none, as the agent showing a page. */
 const openAgent = (userId: string, place: { taskId: string } | { organizationId: string }) =>
   Effect.map(
     createAgent(userId, {
@@ -73,7 +63,6 @@ const openTask = Effect.gen(function* () {
   };
 });
 
-/** A sandbox holding the files given by absolute path, each read as one stream, recording every path asked for. */
 function sandboxWith(files: Readonly<Record<string, string>>) {
   const reads: string[] = [];
   const sandbox: NonNullable<PageToolBinding["sandbox"]> = {
@@ -98,7 +87,6 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
   return { sandbox, reads };
 }
 
-/** A call as an agent makes it, whose `show_page` takes `path` alone. */
 const show = (binding: PageToolBinding, input: WireBoundaryInput, shownBy: PageShower) =>
   runShowPage(binding, unparsedWire(input), shownBy);
 
@@ -109,7 +97,6 @@ const readAccepted = Schema.decodeUnknownSync(
   }),
 );
 
-/** The page an accepted call answered, failing the test where it was refused. */
 const shownPage = (answer: WireRecord) => readAccepted(answer).page;
 
 const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
@@ -147,7 +134,6 @@ it.layer(getTestDB())("show_page", (it) => {
           page: {
             id: page.id,
             version: 1,
-            // The task is its workspace's first, which its link names by its number.
             mention: `[@Invite funnel](https://vespin.dev/workspace-${task.workspaceId}/task/1/page/${page.id})`,
           },
         });

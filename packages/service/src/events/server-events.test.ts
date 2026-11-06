@@ -24,7 +24,6 @@ import {
 
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
 
-/** When the workspace a group test names was made. */
 const CREATED = Date.parse("2026-03-02T09:30:00.000Z");
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
@@ -44,11 +43,9 @@ interface Posted {
   readonly body: PosthogBatch;
 }
 
-/** The deployment's analytics over a processor that records what reached it and answers `status`. */
 function analytics(environment: Partial<HostedEnvironmentValues>, status = 200) {
   const posted: Posted[] = [];
   const http = fakeHttpClientLayer((url, init) => {
-    // SAFETY: the body is the batch document the capture just serialized.
     posted.push({ url, body: JSON.parse(String(init.body)) as PosthogBatch });
     return new Response("{}", { status });
   });
@@ -60,7 +57,6 @@ function analytics(environment: Partial<HostedEnvironmentValues>, status = 200) 
   return { layer, posted };
 }
 
-/** An account the service holds, answering its id. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -68,7 +64,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An agent's start counted by the account in the workspace, which no row of the test's holds unless it opened one. */
 const agentStartIn = (userId: string, workspaceId: string) =>
   recordServerEvent(
     SERVER_EVENT.AGENT_START,
@@ -86,11 +81,9 @@ const agentStartIn = (userId: string, workspaceId: string) =>
 
 const agentStart = (userId: string) => agentStartIn(userId, "workspace-1");
 
-/** Every item the processor was posted, across its batches, in order. */
 const itemsOf = (posted: readonly Posted[]): PosthogBatchItem[] =>
   posted.flatMap((each) => [...each.body.batch]);
 
-/** A workspace the service holds, named and made as given, answering its id. */
 const openWorkspaceNamed = (id: string, name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -108,7 +101,6 @@ it.layer(getTestDB())("server events", (it) => {
   it.effect(
     "posts the event under the account's id and person, its workspace's group, its own properties, the deployment, and no location",
     () => {
-      // The layer reads the deployment's name as it is built, so it is named before.
       vi.stubEnv(DEPLOYMENT_VARIABLE, "preview");
       const processor = analytics({
         posthogProjectApiKey: Redacted.make("phc_project"),

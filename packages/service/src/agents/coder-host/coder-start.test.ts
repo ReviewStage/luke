@@ -52,24 +52,8 @@ import {
 import { type StartAsk, startAgent } from "./start.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
-/**
- * coder-start.test.ts -- an agent started in a workspace with no task, as an automation's run starts one, and one started on a task.
- *
- * The Start opens one agent on no task, in the workspace named, on the
- * repository named, handed the task, and a retry under its key is that
- * agent and opens nothing again; a member who did not make the workspace
- * starts one as well, an account outside it starts nothing, and a
- * repository the workspace's installation does not reach is refused before
- * eve is asked, and a Start whose session never opened leaves no agent. An agent started on a task moves it into progress from the
- * backlog or to do, and on a task worked in pilot mode the first is its pilot,
- * refused to an account with Pilot off. eve is a fake at the client's boundary, GitHub a script,
- * the catalog fixed, and the store PGlite. Synthetic accounts and words
- * throughout.
- */
-
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_REPOSITORY = `${RELAY.owner}/${RELAY.name}`;
-/** One installation for each test's workspace, since one installation connects to one workspace and the suite's tests share a database. */
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 10 }, (_, index) => ({
   id: 8_000 + index,
   login: RELAY.owner,
@@ -80,7 +64,6 @@ let installationsConnected = 0;
 
 const TASK = "Find the flakiest test in CI this week and fix it.";
 
-/** eve's coding-agent service, writing down the first message of every session opened. */
 function fakeEve() {
   const opened: EveMessage[] = [];
   const sessions: AgentSessions = {
@@ -96,7 +79,6 @@ function fakeEve() {
   return { opened, sessions, eve: Effect.succeed(sessions) };
 }
 
-/** The catalog every Start is checked against. */
 const catalog = modelCatalogOf([
   {
     id: AGENT_DEFAULT_CHOICE.model,
@@ -106,10 +88,8 @@ const catalog = modelCatalogOf([
   },
 ]);
 
-/** What a Start reaches beside the store: GitHub reaching the repository, and the catalog. */
 const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, catalog);
 
-/** A workspace connected to an installation reaching the repository, and its owner. */
 const openConnectedWorkspace = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   yield* connectAgentApiKeys(owner);
@@ -120,7 +100,6 @@ const openConnectedWorkspace = Effect.gen(function* () {
   return { owner, workspaceId };
 });
 
-/** A Start in the workspace with no task, under a fresh key unless one is given. */
 function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: string): StartAsk {
   return {
     taskId: null,
@@ -132,12 +111,6 @@ function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: 
   };
 }
 
-/**
- * The agent's lines once its first turn took the first message its Start
- * opened the session with, by the line's own id, as a native harness's
- * runner names it back, and whether it has heard from another account by
- * then.
- */
 const openedLineTaken = (owner: string, conversationId: string, opened: readonly EveMessage[]) =>
   Effect.gen(function* () {
     const target = { userId: owner, conversationId };
@@ -261,7 +234,6 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
             Effect.provide(services),
           ),
         );
-        // Each Start is held where it never gets past, and interrupted there.
         const cutAt = (eve: (reached: Deferred.Deferred<void>) => Effect.Effect<AgentSessions>) =>
           Effect.gen(function* () {
             const reached = yield* Deferred.make<void>();
@@ -374,7 +346,6 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 });
 
 it.layer(getTestDB())("an agent started on a task", (it) => {
-  /** A Start on the task, handed the description, under a fresh key. */
   const taskAsk = (taskId: string): StartAsk => ({
     taskId,
     prompt: undefined,
@@ -446,7 +417,6 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
       }),
   );
 
-  /** A task of the workspace worked in pilot mode, as the composer's Pilot starts one. */
   const pilotTask = (owner: string, workspaceId: string) =>
     Effect.gen(function* () {
       const made = yield* createTask(owner, {
@@ -500,7 +470,6 @@ const WEB = { owner: RELAY.owner, name: "Web" } as const;
 const DOCS = { owner: "Globex", name: "Docs" } as const;
 const SECRET = { owner: RELAY.owner, name: "Secret" } as const;
 
-/** Installations on the repository's account reaching it and its neighbor, one per test, and one on another account. */
 const SEVERAL: readonly InstallationFixture[] = Array.from({ length: 6 }, (_, index) => ({
   id: 8_100 + index,
   login: RELAY.owner,
@@ -515,7 +484,6 @@ const ELSEWHERE: InstallationFixture = {
 };
 let severalConnected = 0;
 
-/** GitHub as a member's own token reads a repository no installation reaches, which it may push to. */
 function memberReachesSecret(sent: SentToGitHub): Response | undefined {
   if (sent.headers.get("authorization") !== `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`) {
     return undefined;
@@ -525,13 +493,11 @@ function memberReachesSecret(sent: SentToGitHub): Response | undefined {
     : undefined;
 }
 
-/** What a Start in several repositories reaches: GitHub with every installation above and the member's token, and the catalog. */
 const severalServices = Layer.mergeAll(
   githubReaching([...SEVERAL, ELSEWHERE], GITHUB_APP_WITH_TOKENS, {}, memberReachesSecret).layer,
   catalog,
 );
 
-/** A workspace connected to an installation reaching the repository and its neighbor, and its owner, who saved their own token. */
 const openSeveralWorkspace = () =>
   Effect.gen(function* () {
     const owner = yield* openTokenMember();
@@ -543,7 +509,6 @@ const openSeveralWorkspace = () =>
     return { owner, workspaceId };
   });
 
-/** A Start that was refused as given, having made no agent under its key. */
 const refusedStart = (owner: string, ask: StartAsk) =>
   Effect.gen(function* () {
     const { eve, opened } = fakeEve();

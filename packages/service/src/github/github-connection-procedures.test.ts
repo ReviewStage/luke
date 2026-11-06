@@ -29,23 +29,6 @@ import type { WebServices } from "../runtime.js";
 import { githubProcedures } from "./github-procedures.js";
 import { type GitHubUnlink, githubUnlink } from "./github-unlink.js";
 
-/**
- * Connecting an account's GitHub, end to end over Better Auth as `auth.ts`
- * configures it, on a migrated PGlite the group reads too, with GitHub a
- * fake behind `fetch`. The Mac's bearer mints an intent and reads the
- * connection; the browser's real session cookie claims the intent and links
- * GitHub through Better Auth's own `link-social`, `callback/github`,
- * and `list-accounts`, none of which the deployment's disabled paths shut.
- * The Mac disconnects GitHub through the group under its own Better Auth
- * session, a signed bearer the bearer plugin reads, which the group hands to
- * Better Auth's `unlinkAccount`. The browser signs in by email and password here only
- * because a session is what linking needs and how it was made is beside the
- * point, as in `auth-account-linking.test.ts`. GitHub's address is no
- * account's here, which the deployment's `allowDifferentEmails` links.
- *
- * Synthetic accounts, bearers, secrets, and tokens throughout.
- */
-
 const ORIGIN = "https://app.test";
 const SECRET = "github-connection-test-secret-with-enough-length";
 const PASSWORD = "fixture-password-of-enough-length";
@@ -58,7 +41,6 @@ function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-/** GitHub's token endpoint, answering the GitHub App's expiring tokens, and the two profile reads, for the one GitHub user these tests link. */
 async function fakeGitHub(input: string | URL | Request): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : input);
   if (url.href === "https://github.com/login/oauth/access_token") {
@@ -88,7 +70,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A browser's cookie jar: the last value each cookie was set to. */
 class Browser {
   readonly #cookies = new Map<string, string>();
 
@@ -111,7 +92,6 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Better Auth over its own PGlite, the group over the same database, and a signed-in browser per account. */
 const openService = Effect.gen(function* () {
   const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
     Effect.promise(() => opened.close()),
@@ -134,7 +114,6 @@ const openService = Effect.gen(function* () {
   });
   const database = sqlClientOverPglite(client);
 
-  /** One request to Better Auth's own handler from the browser, its cookies kept. */
   const toAuth = (browser: Browser, path: string, body?: WireValue) =>
     Effect.promise(async () =>
       browser.keep(
@@ -148,7 +127,6 @@ const openService = Effect.gen(function* () {
       ),
     );
 
-  /** A new account signed in on a browser of its own. */
   const signUp = (name: string) =>
     Effect.gen(function* () {
       const browser = new Browser();
@@ -159,12 +137,10 @@ const openService = Effect.gen(function* () {
         name,
       });
       assert.equal(response.status, 200);
-      // SAFETY: Better Auth answers a sign-up as JSON with the user it made.
       const made = (yield* Effect.promise(() => response.json())) as { user: { id: string } };
       return { userId: made.user.id, browser };
     });
 
-  /** The page's `linkSocial` and GitHub's return to Better Auth's callback; answers where the browser lands. */
   const linkGitHub = (browser: Browser) =>
     Effect.gen(function* () {
       const started = yield* toAuth(browser, "/link-social", {
@@ -173,7 +149,6 @@ const openService = Effect.gen(function* () {
         errorCallbackURL: ERROR_URL,
       });
       assert.equal(started.status, 200);
-      // SAFETY: Better Auth answers a link's start as JSON naming GitHub's authorize URL.
       const { url } = (yield* Effect.promise(() => started.json())) as { url: string };
       const callback = new URL("/api/auth/callback/github", ORIGIN);
       callback.searchParams.set("code", "github-code-under-test");
@@ -187,7 +162,6 @@ const openService = Effect.gen(function* () {
       return landed.headers.get("location") ?? "";
     });
 
-  /** A fresh session for the account, as the signed bearer token the bearer plugin hands the Mac. */
   const sessionBearerOf = (userId: string) =>
     Effect.promise(async () => {
       const context = await auth.$context;
@@ -195,7 +169,6 @@ const openService = Effect.gen(function* () {
       return `${session.token}.${await makeSignature(session.token, SECRET)}`;
     });
 
-  /** One request to the group: the Mac's bearer where given, else the browser's cookie. */
   const ask = (
     path: string,
     init: {
@@ -203,7 +176,6 @@ const openService = Effect.gen(function* () {
       bearer?: string;
       browser?: Browser | undefined;
       body?: WireValue;
-      /** A body sent as written rather than as the JSON of a value, with the headers given. */
       text?: string;
       headers?: Readonly<Record<string, string>>;
       unlink?: GitHubUnlink;
@@ -237,7 +209,6 @@ const openService = Effect.gen(function* () {
       if (init.browser !== undefined) headers.set("cookie", init.browser.cookie);
       if (init.body !== undefined) headers.set("content-type", "application/json");
       for (const [name, value] of Object.entries(init.headers ?? {})) headers.set(name, value);
-      // SAFETY: the GitHub connection procedures yield the database alone, which is all a test provides of the web runtime's services.
       const webServices = services as Context.Context<WebServices>;
       const response = yield* Effect.promise(() =>
         handle(
@@ -249,14 +220,12 @@ const openService = Effect.gen(function* () {
           webServices,
         ),
       );
-      // SAFETY: the route answers JSON; the test compares it as the wire value it is.
       const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
       return { status: response.status, body } satisfies Answer;
     }).pipe(Effect.provide(database));
 
   const connection = (bearer: string) => ask("/api/github/connection", { method: "GET", bearer });
 
-  /** The account's GitHub row kept with its tokens nulled, as the GitHub App's authorization-revoked webhook leaves it. */
   const revokeTokens = (userId: string) =>
     Database.use((db) =>
       db
@@ -270,11 +239,9 @@ const openService = Effect.gen(function* () {
         .where(eq(account.userId, userId)),
     ).pipe(Effect.provide(database));
 
-  /** The account's providers, as Better Auth lists them to its own browser session. */
   const providers = (browser: Browser) =>
     Effect.gen(function* () {
       const listed = yield* toAuth(browser, "/list-accounts");
-      // SAFETY: Better Auth answers the account list as JSON.
       const accounts = (yield* Effect.promise(() => listed.json())) as { providerId: string }[];
       return accounts.map((row) => row.providerId).sort();
     });
@@ -292,10 +259,8 @@ const openService = Effect.gen(function* () {
   };
 });
 
-/** The intent the page's address carries, failing the test where the answer names no page. */
 function intentOf(answered: Answer): string {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-  // SAFETY: the status is OK, and the group answers a connect with the wire's `{ url }`.
   const { url } = answered.body as { url: string };
   const page = new URL(url);
   assert.equal(page.origin + page.pathname, `${ORIGIN}${GITHUB_CONNECT_PAGE.PATH}`);
@@ -363,7 +328,6 @@ it.effect(
         login: null,
       });
       const listed = yield* service.toAuth(ada.browser, "/list-accounts");
-      // SAFETY: Better Auth answers the account list as JSON.
       const accounts = (yield* Effect.promise(() => listed.json())) as { providerId: string }[];
       assert.deepEqual(accounts.map((row) => row.providerId).sort(), ["credential", "github"]);
     }),
@@ -386,7 +350,6 @@ it.effect("a GitHub account kept with its tokens revoked reads as not connected"
       login: null,
     });
     const listed = yield* service.toAuth(ada.browser, "/list-accounts");
-    // SAFETY: Better Auth answers the account list as JSON.
     const accounts = (yield* Effect.promise(() => listed.json())) as { providerId: string }[];
     assert.ok(
       accounts.some((row) => row.providerId === "github"),
@@ -404,7 +367,6 @@ it.effect(
       const bob = yield* service.signUp("Bob");
       yield* service.linkGitHub(ada.browser);
 
-      // Bob's session asks: Bob has no GitHub, so nothing of Ada's goes.
       const byBob = yield* service.ask("/api/github/disconnect", {
         method: "POST",
         bearer: yield* service.sessionBearerOf(bob.userId),
@@ -436,7 +398,6 @@ it.effect(
       const ada = yield* service.signUp("Ada");
       yield* service.linkGitHub(ada.browser);
 
-      // The test's OAuth stand-in names the account on every bearer path, but this one reads a session.
       const underToken = yield* service.ask("/api/github/disconnect", {
         method: "POST",
         bearer: ada.userId,
@@ -494,7 +455,6 @@ it.effect(
       const service = yield* openService;
       const ada = yield* service.signUp("Ada");
       yield* service.linkGitHub(ada.browser);
-      // A session the Mac has held for two days, past `unlinkAccount`'s one-day freshness.
       const aged = yield* Effect.promise(async () => {
         const context = await service.auth.$context;
         const session = await context.internalAdapter.createSession(
@@ -522,13 +482,11 @@ it.effect(
 it.effect("GitHub as an account's only way to sign in is not disconnected", () =>
   Effect.gen(function* () {
     const service = yield* openService;
-    // An account made by signing in with GitHub alone: one user, one GitHub account row.
     const browser = new Browser();
     const started = yield* service.toAuth(browser, "/sign-in/social", {
       provider: "github",
       callbackURL: DONE_URL,
     });
-    // SAFETY: Better Auth answers a social sign-in's start as JSON naming GitHub's authorize URL.
     const { url } = (yield* Effect.promise(() => started.json())) as { url: string };
     const callback = new URL("/api/auth/callback/github", ORIGIN);
     callback.searchParams.set("code", "github-code-under-test");

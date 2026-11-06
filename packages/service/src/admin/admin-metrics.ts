@@ -18,56 +18,21 @@ import { DAY_MS } from "../core.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
-/**
- * What the admin dashboard reads about the service, and only what the service's
- * own tables can answer. Every number here is an aggregate of rows the service already
- * stores for its own operation — signups, hosted-tier usage, and what
- * `admin-overview.ts` reads of tasks, agents, and calls — read by a
- * maintainer on their own service. It is not the desktop observing
- * sessions and it widens no analytics event: the product-event allowlist and
- * `PRIVACY.md` govern what leaves a user's machine, where this reads counts
- * that already landed.
- */
-
-/**
- * The trailing run each trend compares against the run immediately before it.
- * The trend keeps this length whatever window the read asked for — a 7-day
- * view still asks "up from last week?" — so the fetch, not the window, must
- * hold both runs.
- */
 export const ADMIN_TREND_DAYS = 7;
 
-/**
- * The days a source read must cover: the window itself, and both of a trend's
- * runs even when the window is shorter than they are, or `prior` would be the
- * truncated head of one and read as a fall that never happened.
- */
 export function windowFetchDays(windowDays: AdminMetricsWindow): number {
   return Math.max(windowDays, ADMIN_TREND_DAYS * 2);
 }
 
 const WEEK_MS = 7 * DAY_MS;
 
-/**
- * How many trailing UTC weeks the retention grid covers — its cohort rows and
- * its offset columns alike, so the oldest cohort is the one row whose every
- * offset the calendar has already reached.
- */
 export const ADMIN_RETENTION_WEEKS = 8;
 
-/** The provider ids the dashboard names; every other linked provider pools into `other`. */
 const SIGN_IN_PROVIDER_ID = {
   GOOGLE: "google",
   GITHUB: "github",
 } as const;
 
-/**
- * Folds the linked (account, provider) pairs the query reads into per-method
- * account counts. The dedupe lives here rather than in a grouped SQL count
- * because `other` pools every unnamed provider: an account that linked two of
- * them is still one account, which per-provider counts summed after the fact
- * would state as two.
- */
 export function countSignInMethods(
   links: readonly { userId: string; providerId: string }[],
 ): AdminSignInMethods {
@@ -82,33 +47,21 @@ export function countSignInMethods(
   return { google: google.size, github: github.size, other: other.size };
 }
 
-/**
- * The raw shape the queries produce, before the pure builder zero-fills the
- * series and folds the window totals. Split out so the shaping — the part with
- * off-by-one risk in a day window — is testable without a database.
- */
 export interface AdminMetricsSource {
   users: {
     total: number;
     signupsByDay: ReadonlyMap<string, number>;
   };
   retention: {
-    /** Accounts created per UTC week, keyed by the week's Monday. */
     cohortSizes: ReadonlyMap<string, number>;
-    /** Distinct accounts active per week, keyed by signup week then activity week. */
     activeByCohortWeek: ReadonlyMap<string, ReadonlyMap<string, number>>;
   };
 }
 
-/** The start of a UTC day key, as the instant a bound compares against. */
 export function dayStart(day: string): Date {
   return new Date(`${day}T00:00:00.000Z`);
 }
 
-/**
- * The retention grid's counts as the queries read them: each signup week's
- * cohort size, and its distinct active accounts in each activity week.
- */
 export function cohortRetention(
   sizeRows: readonly { readonly week: string; readonly value: number }[],
   activeRows: readonly {
@@ -127,12 +80,6 @@ export function cohortRetention(
   return { cohortSizes, activeByCohortWeek };
 }
 
-/**
- * The window's UTC day keys, oldest first and ending on `now`'s own day, as the
- * usage table's YYYY-MM-DD keys. The series the dashboard draws is built from
- * this rather than from the rows, so a day with no row is a zero in the line
- * rather than a gap the eye reads as continuity.
- */
 export function lastNDayKeys(now: number, days: number): string[] {
   const keys: string[] = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
@@ -141,20 +88,12 @@ export function lastNDayKeys(now: number, days: number): string[] {
   return keys;
 }
 
-/**
- * The Monday of the UTC week holding `instant`, as its YYYY-MM-DD key. Weeks
- * start on Monday because Postgres's `date_trunc('week')` lands there, and
- * the queries and this fold must name a week identically or every cohort
- * would shear against its own activity.
- */
 export function utcWeekStartKey(instant: number): string {
   const daysSinceEpoch = Math.floor(instant / DAY_MS);
-  // The epoch, 1970-01-01, was a Thursday: three days past its week's Monday.
   const daysSinceMonday = (daysSinceEpoch + 3) % 7;
   return utcDayKey((daysSinceEpoch - daysSinceMonday) * DAY_MS);
 }
 
-/** The trailing weeks' Monday keys, oldest first and ending on `now`'s own week. */
 export function lastNWeekStartKeys(now: number, weeks: number): string[] {
   const keys: string[] = [];
   for (let offset = weeks - 1; offset >= 0; offset -= 1) {
@@ -163,13 +102,6 @@ export function lastNWeekStartKeys(now: number, weeks: number): string[] {
   return keys;
 }
 
-/**
- * Folds the queried cohort counts into the grid the dashboard draws. Each
- * cohort's cells run from its own week to the current one and no further:
- * a week the calendar has not reached is absent rather than a zero, which is
- * what shapes the triangle, and the current week's cell in every row is
- * marked still accruing. Both of the grid's bases fold through it.
- */
 export function buildRetentionCohorts(
   retention: AdminMetricsSource["retention"],
   now: number,
@@ -197,7 +129,6 @@ export function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
-/** The last `days` of a windowed series beside the `days` before them. */
 export function trailingTrend(counts: readonly number[], days: number): AdminTrend {
   return {
     days,
@@ -206,20 +137,12 @@ export function trailingTrend(counts: readonly number[], days: number): AdminTre
   };
 }
 
-/**
- * Shapes the queried source into the answer, zero-filling and totaling in one
- * place. The overview is shaped beside it by `buildAdminOverview`, which reads
- * this module's day keys and trends, so the route joins the two.
- */
 export function buildAdminMetrics(
   source: AdminMetricsSource,
   now: number,
   windowDays: AdminMetricsWindow,
 ): Omit<AdminMetrics, "overview"> {
   const dayKeys = lastNDayKeys(now, windowDays);
-  // The trends read the same maps through their own trailing keys — the drawn
-  // series' own tail whenever the window holds both runs, and the wider fetch's
-  // when it does not — so a 7-day view still compares against the week before.
   const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
 
   const dailySignups = dayKeys.map((day) => ({
@@ -232,10 +155,6 @@ export function buildAdminMetrics(
     windowDays,
     users: {
       total: source.users.total,
-      // Note that the window's count is folded from the zero-filled series
-      // rather than queried beside it: a rolling `now - 30 days` count and a
-      // series of whole UTC days cover different spans, so two reads of "the
-      // last 30 days" would disagree by the part-day between them.
       newInWindow: sum(dailySignups.map((day) => day.count)),
       signupTrend: trailingTrend(
         trendKeys.map((day) => source.users.signupsByDay.get(day) ?? 0),
@@ -259,15 +178,6 @@ export interface AdminMetricsOptions {
   ) => AdminSeamEffect<AdminMetrics>;
 }
 
-/**
- * Answers the dashboard's read, gated in steps that stay distinct: an anonymous
- * request is a 401 the page answers with a sign-in, a signed-in non-admin is a
- * 403 the page answers with a plain refusal, a window outside the fixed set is
- * a 400, and metrics are read only past all three. A seam that throws — auth or
- * the database not answering — is a 503 JSON refusal rather than an unhandled
- * crash, so the page can say "try again" instead of failing to parse a platform
- * error page.
- */
 export function handleAdminMetrics(
   options: AdminMetricsOptions,
 ): Effect.Effect<AdminMetrics, AdminRefusal, DatabaseServices> {

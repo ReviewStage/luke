@@ -44,18 +44,6 @@ import { DAY_MS, TURN_FAILURE, TURN_STATUS, type TurnStatus } from "../core.js";
 import { buildAdminReliability } from "./admin-reliability.js";
 import { readAdminReliabilitySource } from "./admin-reliability-queries.js";
 
-/**
- * The Reliability read over a real dialect: ended work counted by kind
- * through the scope that hides the maintainers' own accounts, a coding
- * agent's failure classed by the coder host's reading of its turn, and the
- * accounts holding a broken key, integration, or GitHub installation listed
- * newest breakage first with their failed agents. Each suite stands on a
- * database of its own, since the read is the whole service's.
- *
- * Synthetic accounts throughout.
- */
-
-/** Noon on the window's last day; the 7-day window opens at midnight on Oct 11. */
 const NOW = Date.UTC(2026, 9, 17, 12);
 
 const at = (day: number, hour = 9) => new Date(Date.UTC(2026, 9, day, hour));
@@ -162,7 +150,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         const maintainer = yield* openAccount("admin");
         const workspace = yield* openWorkspace(developer);
 
-        // The app's own turns: two of six failed, one of them abandoned by the sweep.
         const main = yield* openConversation(developer, CONVERSATION_KIND.MAIN);
         for (const status of [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED, TURN_STATUS.SETTLED]) {
           yield* endTurn(developer, main, status, at(16));
@@ -174,13 +161,11 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(17, 3), {
           failure: TURN_FAILURE.ABANDONED,
         });
-        // Still running, and failed before the window opened: neither counts.
         yield* endTurn(developer, main, TURN_STATUS.RUNNING, null);
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(1), {
           failure: TURN_FAILURE.MODEL,
         });
 
-        // A coding agent's runs: four of five failed, to the sandbox, the model, and two Starts that never ran.
         const agent = yield* openAgent(developer, workspace, at(14));
         yield* endTurn(developer, agent, TURN_STATUS.SETTLED, at(15));
         yield* endTurn(developer, agent, TURN_STATUS.FAILED, at(15), {
@@ -192,19 +177,14 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
           failureDetail: "the provider answered 500",
         });
         yield* openAgent(developer, workspace, at(15));
-        // Started two minutes before the window opened, its grace ran out inside it, so its failed Start counts there.
         yield* openAgent(developer, workspace, new Date(Date.UTC(2026, 9, 10, 23, 58)));
-        // Started well before the window, its failed Start belongs to a window of its own.
         yield* openAgent(developer, workspace, at(9));
-        // An agent started a minute ago is still inside its grace, so no run yet.
         yield* openAgent(developer, workspace, new Date(NOW - 60_000));
-        // A subagent's turn runs inside its agent's, so it counts toward neither rate.
         const subagent = yield* openConversation(developer, CONVERSATION_KIND.CHILD, agent);
         yield* endTurn(developer, subagent, TURN_STATUS.FAILED, at(16), {
           failure: TURN_FAILURE.MODEL,
         });
 
-        // Automation runs: one of four settled failed and one was skipped; a queued one has not settled.
         const automationId = yield* Effect.map(
           Database.use((db) =>
             db
@@ -242,7 +222,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         );
         yield* settleRun(automationId, developer, QUEUED, null, null);
 
-        // The maintainer's own failed turn, which only the explicit ask for every account counts.
         const maintainerMain = yield* openConversation(maintainer, CONVERSATION_KIND.MAIN);
         yield* endTurn(maintainer, maintainerMain, TURN_STATUS.FAILED, at(16), {
           failure: TURN_FAILURE.MODEL,
@@ -347,7 +326,6 @@ it.layer(getTestDB())("the reliability read's accounts that need attention", (it
             ]),
         );
 
-        // The installer is a member of a workspace whose installation GitHub suspended.
         const owner = yield* openAccount();
         const workspace = yield* openInstallationWorkspace(owner, {
           installationId: 41,
@@ -362,7 +340,6 @@ it.layer(getTestDB())("the reliability read's accounts that need attention", (it
             .where(eq(githubInstallation.installationId, 41)),
         );
 
-        // The installer's agent failed two days ago; one that failed ten days ago is past the week.
         const recent = yield* openAgent(installer, workspace, at(14));
         yield* endTurn(installer, recent, TURN_STATUS.FAILED, new Date(NOW - 2 * DAY_MS));
         const older = yield* openAgent(installer, workspace, at(1));
@@ -410,7 +387,6 @@ it.layer(getTestDB())("the reliability read's accounts that need attention", (it
             failedAgents: 1,
           },
         );
-        // Newest breakage first: the installation's members, then the key holder.
         assert.equal(listed.at(-1)?.id, keyHolder);
         assert.ok(!listed.some((row) => row.id === healthy || row.id === maintainer));
 

@@ -8,7 +8,6 @@ import { forgetPosthogPersonEffect, type PosthogForgetOptions } from "./posthog.
 const PERSONAL_KEY = "phx_personal";
 const PROJECT_ID = "12345";
 
-/** A queued erasure, as PostHog's bulk delete answers one it took. */
 const QUEUED = {
   persons_found: 1,
   persons_deleted: 0,

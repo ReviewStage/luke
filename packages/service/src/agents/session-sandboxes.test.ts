@@ -24,17 +24,6 @@ import {
   vercelSandboxApi,
 } from "./vercel-sandbox-api.js";
 
-/**
- * A session's sandboxes stopped through `@vercel/sandbox`, as the deployment
- * asks it under its own OIDC token: the sandboxes carrying the session's tag
- * are listed in the token's project, the one up has its credential taken
- * off and then its running session stopped, one already stopped is left,
- * and a stop Vercel refused fails with its status alone. A running session
- * is kept alive by the timeout from now on the test clock, from the end its
- * listing names. The token is a synthetic one, unexpired, so nothing
- * refreshes it.
- */
-
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 const SESSION = "wrun_fixture";
@@ -44,7 +33,6 @@ interface Asked {
   readonly url: URL;
 }
 
-/** A sandbox as a test names it, its creation where it names none the epoch's. */
 interface NamedSandbox {
   readonly name: string;
   readonly status: string;
@@ -55,15 +43,12 @@ interface NamedSandbox {
 
 const listedOf = (sandbox: NamedSandbox) => ({ createdAt: 0, ...sandbox });
 
-/** The sandbox a path names, its lookup, where the sandboxes given hold it. */
 function namedIn(sandboxes: readonly NamedSandbox[], path: string): NamedSandbox | undefined {
   const name = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path)?.[1];
   return sandboxes.find((sandbox) => sandbox.name === decodeURIComponent(name ?? ""));
 }
 
-/** Vercel answering the list with the sandboxes given and every stop with the status given, keeping what it was asked. */
 function vercel(sandboxes: readonly NamedSandbox[], stopStatus = 200) {
-  // The layer asks under the deployment's own token, read where the platform hands it.
   vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const layer = Layer.provide(
@@ -95,7 +80,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The session's sandboxes stopped, the firewall's record kept in a database of the call's own. */
 const stopFor = (sessionId: string) =>
   Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.stopFor(sessionId)).pipe(
     Effect.provide(getTestDB()),
@@ -171,7 +155,6 @@ it.effect(
 
 it.effect("a stop Vercel refused fails with its status alone", () =>
   Effect.gen(function* () {
-    // Note that the refusal is one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer.
     const api = vercel(
       [{ name: "eve-sbx-vercel-up", status: "running", currentSessionId: "sbs_up" }],
       409,
@@ -184,11 +167,6 @@ it.effect("a stop Vercel refused fails with its status alone", () =>
   }),
 );
 
-/**
- * Vercel answering the list with the sandboxes given, a lookup of each by
- * name with the session its record names, and an extension of a session by
- * lengthening it, or refusing every one with the status given.
- */
 function vercelSessions(sandboxes: readonly NamedSandbox[], extendStatus?: number) {
   vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
@@ -224,7 +202,6 @@ const keepAliveFor = (sessionId: string) =>
   Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.keepAliveFor(sessionId));
 
 const MINUTE = 60_000;
-/** A running sandbox whose session ends the timeout after the test clock's start. */
 const UP = {
   name: "eve-sbx-vercel-up",
   status: "running",

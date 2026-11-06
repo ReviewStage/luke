@@ -1,13 +1,11 @@
 import { RUN_TURN_ORIGIN, type RunTurnOrigin, TURN_TRIGGER, type TurnTrigger } from "../../core.js";
 
-/** What kind of turn a message opens. */
 export const EVE_HOST_TURN = {
   TYPED: "typed",
 } as const;
 
 export type EveHostTurn = (typeof EVE_HOST_TURN)[keyof typeof EVE_HOST_TURN];
 
-/** The run stream's origin and trigger for each kind of turn a native runner's events record. */
 export const EVE_HOST_TURN_KIND = {
   [EVE_HOST_TURN.TYPED]: {
     origin: RUN_TURN_ORIGIN.TYPED,
@@ -18,7 +16,6 @@ export const EVE_HOST_TURN_KIND = {
   { readonly origin: RunTurnOrigin; readonly trigger: TurnTrigger }
 >;
 
-/** Why the host refused a request's standing, in words the model or a route can read. */
 export const EVE_HOST_REFUSAL = {
   NO_PRINCIPAL: "Not run: the session has no signed-in account.",
   NO_CONVERSATION: "Not run: the session names no conversation of this account.",

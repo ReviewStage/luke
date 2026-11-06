@@ -24,20 +24,6 @@ import {
   withinWindow,
 } from "./replay-summary.js";
 
-/**
- * replay-summary.test.ts -- the steps a replay cannot keep, summarized on a scripted model in
- * chunks sized to its window, a few at a time and then combined, the oldest chunks past the cap
- * left out and said so, and nothing written where a call fails or the whole runs past its time;
- * and the steps kept beside a summary, counted within the bound. The model is a script that keeps
- * what it was asked, at the SDK's own boundary; nothing reaches a database. Synthetic steps,
- * sized to the continues production refused as too long for their window (`PRODUCTION`).
- */
-
-/**
- * The continue Anthropic refused: a first message of about 3.03 MB that it counted at 1,368,155
- * tokens against a window of 1,000,000, continuing a source that had compacted, whose raw steps
- * came to 3.45 MB while the context it last measured was 142,000 tokens.
- */
 const PRODUCTION = {
   REFUSED_BYTES: 3_030_000,
   REFUSED_TOKENS: 1_368_155,
@@ -47,10 +33,8 @@ const PRODUCTION = {
   INSTRUCTIONS_TOKENS: 24_000,
 } as const;
 
-/** The bytes a token of that refused message took, as the provider counted them. */
 const PROVIDER_BYTES_PER_TOKEN = PRODUCTION.REFUSED_BYTES / PRODUCTION.REFUSED_TOKENS;
 
-/** A tool call whose input and result are JSON, as most of a replay is, about `size` bytes of it. */
 const jsonCall = (at: number, size = 2_500): ReplayStep =>
   toolStep({
     summary: `Ran: pnpm test --step ${at}`,
@@ -63,7 +47,6 @@ const jsonCall = (at: number, size = 2_500): ReplayStep =>
     }),
   });
 
-/** Steps of tool JSON adding up to about `bytes`. */
 const jsonSteps = (bytes: number): ReplayStep[] => {
   const steps: ReplayStep[] = [];
   let used = 0;
@@ -75,14 +58,12 @@ const jsonSteps = (bytes: number): ReplayStep[] => {
   return steps;
 };
 
-/** A step of the agent's own words, `size` characters long. */
 const said = (at: number, size = 1_000): ReplayStep => ({
   kind: REPLAY_STEP_KIND.SAID,
   summary: `Said: Step ${at}.`,
   words: `Step ${at}. ${"x".repeat(size)}`,
 });
 
-/** A model answering each call by `answer`, or never where it answers nothing, keeping each prompt it was asked. */
 function scripted(answer: (prompt: string) => string | undefined, finish = "stop") {
   const asked: string[] = [];
   const bounds: (number | undefined)[] = [];
@@ -108,7 +89,6 @@ function scripted(answer: (prompt: string) => string | undefined, finish = "stop
   return { summary, asked, bounds };
 }
 
-/** A window whose share eve compacts at leaves room for about `chunkBytes` of steps per summary call. */
 const windowFor = (chunkBytes: number) =>
   Math.ceil(
     (chunkBytes / 2 + REPLAY_FIT.SUMMARY_OUTPUT_TOKENS + REPLAY_FIT.SUMMARY_PROMPT_TOKENS) / 0.9,
@@ -227,7 +207,6 @@ it.effect(
         prompt.includes("Part 1:") ? "Whole recap." : "Part.",
       );
       const earlier = { text: "The first twenty steps built the store.", steps: 20 };
-      // Each step fills a chunk, the recap riding in the first: one chunk past the cap.
       const steps = Array.from({ length: REPLAY_FIT.MAX_CHUNKS + 1 }, (_, at) => said(at, 20_000));
       const written = yield* summarizeSteps(summary, steps, windowFor(25_000), earlier);
 
@@ -315,7 +294,6 @@ it.effect(
       );
       assert.deepEqual(folded, [earlier]);
 
-      // A new summary that cannot be written keeps the carried one beside fewer of the newest steps.
       const many = Array.from({ length: 40 }, (_, at) => said(at, 2_000));
       const fallback = yield* fitReplay(many, earlier, 60_000, () => Effect.succeed(Option.none()));
       assert.equal(fallback.summary, earlier);
@@ -376,7 +354,6 @@ it.effect(
       assert.ok(replayTokens(replayed) <= PRODUCTION.SOURCE_MEASURED_TOKENS);
       assert.ok(replayed / PROVIDER_BYTES_PER_TOKEN < PRODUCTION.WINDOW_TOKENS / 4);
 
-      // A source that never compacted, whose steps are what it last measured, is bounded by the window alone.
       const whole = jsonSteps(200_000);
       assert.equal(
         measuredBoundBytes(
@@ -385,7 +362,6 @@ it.effect(
         ),
         undefined,
       );
-      // One whose raw steps far outgrow what it last measured is bounded by that, compacted or not.
       assert.equal(
         measuredBoundBytes(
           { inputTokens: PRODUCTION.SOURCE_MEASURED_TOKENS, compacted: false },

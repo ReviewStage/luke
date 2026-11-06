@@ -18,24 +18,12 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { taskRecordLiveStatements } from "./task-record-live.js";
 
-/**
- * An open task's record as Realtime would deliver it, over the real
- * migrations on PGlite: each part's statement run as Realtime runs it and its
- * rows decoded as the desktop decodes them, beside the held reads the desktop
- * reads that part with (`listPages`, `readTranscript`). A part
- * moves exactly when its held read would answer something new.
- *
- * Synthetic accounts, pages, and words throughout.
- */
-
 const PARTS = ["description", "pages", "code"] as const;
 
 type Part = (typeof PARTS)[number];
 
-/** The parts a held read answers: the description and the pages; no desktop reads the code again. */
 const HELD_PARTS = ["description", "pages"] as const;
 
-/** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -43,11 +31,9 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** One part's statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** The task's record as Realtime would deliver it to `reader`, decoded as the desktop decodes it. */
 const liveRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskRecordLiveStatements(reader, taskId));
@@ -58,7 +44,6 @@ const liveRecordOf = (reader: string, taskId: string) =>
     });
   });
 
-/** The parts as the desktop reads them today, each as its held read answers it. */
 const heldRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     return {
@@ -67,20 +52,16 @@ const heldRecordOf = (reader: string, taskId: string) =>
     };
   });
 
-/** The record as its held reads answer it. */
 type HeldRecord = Effect.Success<ReturnType<typeof heldRecordOf>>;
 
-/** The parts whose value differs between two live readings, by their text, as the desktop compares deliveries. */
 function movedParts(before: TaskRecordLiveRows, after: TaskRecordLiveRows): readonly Part[] {
   return PARTS.filter((part) => JSON.stringify(before[part]) !== JSON.stringify(after[part]));
 }
 
-/** The parts whose value differs between two held readings: the moves a live delivery says, the code apart. */
 function movedHeld(before: HeldRecord, after: HeldRecord): readonly Part[] {
   return HELD_PARTS.filter((part) => JSON.stringify(before[part]) !== JSON.stringify(after[part]));
 }
 
-/** The moves a held reading makes for the live ones expected: the description's and the pages'. */
 function heldOf(expected: readonly Part[]): readonly Part[] {
   return expected.filter((part) => part !== "code");
 }
@@ -140,7 +121,6 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           ),
         );
 
-        // Another task's record moving moves nothing of this one's.
         yield* step(
           [],
           writePage(

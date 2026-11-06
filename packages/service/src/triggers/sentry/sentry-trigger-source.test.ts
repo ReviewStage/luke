@@ -9,16 +9,6 @@ import { TRIGGER_VERIFICATION, type TriggerDelivery } from "../trigger-source.js
 import { SentryApp, sentryAppService } from "./sentry-app-config.js";
 import { sentryTriggerSource } from "./sentry-trigger-source.js";
 
-/**
- * The Sentry integration's deliveries as its trigger source reads them: a
- * delivery signed under the client secret over its own bytes is the
- * integration's, and a tampered body, another secret, or no signature is
- * not; an issue alert and a new issue, recorded from Sentry's documented
- * payloads and scrubbed, read as the catalog's events with their subject,
- * filter fields, and a bounded summary; and a resource or action the source
- * does not read is no event. Synthetic organizations and words throughout.
- */
-
 const SECRET = "synthetic-client-secret";
 
 function fixture(name: string): string {
@@ -29,12 +19,10 @@ function signed(body: string, secret = SECRET): string {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
-/** A delivery as the ingress hands it on, under the resource and request id named. */
 function delivery(resource: string, text: string, requestId = "req-1"): TriggerDelivery {
   return {
     headers: { "sentry-hook-resource": resource, "request-id": requestId },
     body: new TextEncoder().encode(text),
-    // SAFETY: the fixture is JSON; the source's schemas hold it to a shape.
     payload: JSON.parse(text) as UnparsedWireValue,
   };
 }

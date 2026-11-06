@@ -11,29 +11,12 @@ import { Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { ModelCatalog, modelCatalogLayer, validateModelChoice } from "./model-catalog.js";
 
-/**
- * The model catalog at its HTTP boundary: AI Gateway answering its catalog
- * as a scripted table, so no test reaches the network. What each test
- * asserts is the list a caller reads, the requests that left, and the
- * verdict on a choice, never how either was built. The clock is the test's
- * own, so the cache's hour passes in one step.
- *
- * A fixture catalog throughout: the ids are the catalog's own spellings,
- * and the entries beside the offered ones are each one way an entry is left
- * out. One offered entry lists its prices and the other a price this
- * module cannot read, which costs it its price and nothing else, as it
- * does the unoffered entry spelled the same way; these are the two ways a
- * model's usage comes to be priced or told as tokens alone.
- */
-
-/** One catalog entry as AI Gateway shapes it, with only what the reader looks at and one field it does not. */
 function entry(
   id: string,
   name: string,
   options: {
     readonly tags?: readonly string[];
     readonly reasoning?: readonly JsonValue[] | null;
-    /** The entry's prices as the catalog spells them, dollars per token as strings; an entry without lists none. */
     readonly pricing?: JsonValue;
     readonly contextWindow?: number;
   } = {},
@@ -111,7 +94,6 @@ const CATALOG: JsonValue = {
   ],
 };
 
-/** The catalog layer over a gateway answering as scripted, with the requests it saw. */
 function gateway(answers: (request: RecordedRequest) => Response) {
   const http = recordingHttpClient(answers);
   const layer = modelCatalogLayer.pipe(Layer.provide(http.layer));
@@ -141,7 +123,6 @@ it.effect(
         offered.map((model) => model.id).filter((id) => id.startsWith("openai/")),
         ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol-ultrafast", "openai/gpt-6.1-sol-fast"],
       );
-      // The tier's prices, and past its 272K threshold twice the input and 1.5 times the output.
       assert.deepEqual(
         offered.find((model) => model.id === "openai/gpt-6.1-sol-ultrafast"),
         {

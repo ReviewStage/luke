@@ -1,18 +1,3 @@
-/**
- * admin-reliability.ts -- the admin Reliability screen's answer: how often the
- * service's own work failed, why, which accounts hold a broken key or
- * connection, and what the deployment is configured with.
- *
- * Every number is an aggregate of rows the service already writes for its own
- * operation — turns, coding agents, automation runs, and the
- * status words on provider keys, integration connections, and GitHub
- * installations — read by a maintainer on their own service. Failures are
- * named only by the fixed words those rows carry, never by a failed turn's
- * detail, and an account is named only by the fields the other admin tables
- * already draw. Per-request HTTP error rates are not here: they live in
- * product analytics, which the answer links to.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminAttentionAccount,
@@ -37,14 +22,8 @@ import { lastNDayKeys, sum } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
-/** How many accounts the attention list names, newest breakage first. */
 export const ADMIN_ATTENTION_LIMIT = 50;
 
-/**
- * The raw shape the queries produce, keyed by UTC day, before the builder
- * zero-fills the window and folds its totals. Split out so that shaping is
- * testable without a database.
- */
 export interface AdminReliabilitySource {
   daily: {
     appTurns: ReadonlyMap<string, AdminFailureCount>;
@@ -66,12 +45,10 @@ const NO_FAILURES: AdminFailureCount = { failed: 0, total: 0 };
 
 const NO_AUTOMATION_RUNS: AdminAutomationCount = { failed: 0, skipped: 0, total: 0 };
 
-/** A share of failed work, or none where nothing ended to take a share of. */
 function failureShare(count: AdminFailureCount): number | null {
   return count.total === 0 ? null : count.failed / count.total;
 }
 
-/** The window's counts folded from its zero-filled days, so the cards never disagree with the chart. */
 function totalOf(counts: readonly AdminFailureCount[]): AdminFailureCount {
   return {
     failed: sum(counts.map((count) => count.failed)),
@@ -79,7 +56,6 @@ function totalOf(counts: readonly AdminFailureCount[]): AdminFailureCount {
   };
 }
 
-/** Shapes the queried source into the answer, zero-filling the window and totaling in one place. */
 export function buildAdminReliability(
   source: AdminReliabilitySource,
   now: number,
@@ -132,10 +108,6 @@ export function buildAdminReliability(
   };
 }
 
-/**
- * The window a Reliability read asked for: the shared default where it named
- * none, and nothing where it named one outside the week and the month.
- */
 function adminReliabilityWindow(value: string | undefined): AdminMetricsWindow | undefined {
   const windowDays = adminMetricsWindow(value);
   return windowDays !== undefined && ADMIN_RELIABILITY_WINDOWS.includes(windowDays)
@@ -152,11 +124,6 @@ export interface AdminReliabilityOptions {
   ) => AdminSeamEffect<AdminReliability>;
 }
 
-/**
- * Answers the Reliability read behind the group's gate: a window outside the
- * week and the month is a 400 before any seam is touched, and a seam that
- * throws is the same 503 every admin read answers.
- */
 export function handleAdminReliability(
   options: AdminReliabilityOptions,
 ): Effect.Effect<AdminReliability, AdminRefusal, DatabaseServices> {

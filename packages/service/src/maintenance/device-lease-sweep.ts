@@ -1,32 +1,3 @@
-/**
- * device-lease-sweep.ts -- the scheduled sweep's end of a local agent's run once its device stopped beating.
- *
- * A device's beat is its lease on the runs it holds (`DEVICE_LEASE`), as a
- * self-hosted CI runner's is: a device that has not beaten for the lease
- * loses every launch it holds open, claimed or still waiting, loudly. Each
- * such launch is settled as its runner gone, under its agent's runner lease,
- * as every write to a local agent's lines is (`device-agent-store.ts`'s
- * header), and only while it is still open and its device still lapsed, so a
- * device that settled it or beat since keeps it. Where it was the agent's
- * newest launch, its runner's bearer is let go first, so nothing the runner
- * posts after reaches the agent again (the events intake, its tools, and its
- * token route all refuse a bearer the agent no longer records), and its turn
- * ends in words naming the device, the turn its message waits on queued
- * first where its runner never opened one (`queuedUnopenedTurn`), as a
- * launch the device settled unstarted is. A stop line follows, which a device that
- * comes back, a build from before the lease among them, takes after the
- * launch and ends the runner it no longer holds with; a follower holding no
- * runner for the agent settles it and does nothing.
- *
- * An older launch a newer one replaced is only settled: its runner ended
- * as the newer launch was taken. An agent whose runner lease another call
- * holds is passed by until the next minute rather than waited on, and a
- * launch whose writes failed is logged and the rest still run. Each launch's
- * writes are one transaction, the line's guarded settle first, since it is
- * what decides the device lost the run, so a write that fails leaves the
- * line open for the next sweep to take up again.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
 import { readAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
@@ -47,23 +18,15 @@ import { hostAwayDetail } from "../agents/coder-host/status.js";
 import { queuedUnopenedTurn } from "../agents/device-agent.js";
 
 const DEVICE_LEASE_SWEEP = {
-  /** The most launches one sweep settles; the rest wait for the next minute. */
   LIMIT: 50,
 } as const;
 
-/** What one sweep of the lapsed devices came to: runs taken from their device, agents passed by behind another call's lease, and launches whose writes failed. */
 export interface DeviceLeaseSweepOutcome {
   readonly lapsed: number;
   readonly busy: number;
   readonly failed: number;
 }
 
-/**
- * One lapsed launch taken from its device, its agent's runner lease held,
- * in one transaction, so a write that fails leaves the line open for the
- * next sweep rather than settled with its turn still running: whether this
- * sweep settled it.
- */
 const lapsedOne = (
   writer: Pick<StoreWriter, "consume" | "enqueueTurn">,
   launch: DeviceAgentLapsedLaunch,
@@ -77,8 +40,6 @@ const lapsedOne = (
         const settled = yield* settleLapsedDeviceAgentLine(userId, launch.id, seenBefore);
         if (Option.isNone(settled)) return false;
         const newest = yield* latestDeviceAgentLaunch(userId, agentId);
-        // Note that an older launch a newer one replaced is only settled, because its runner was
-        // ended as the newer launch was taken, and a stop queued for it would end the newer one.
         if (Option.isNone(newest) || newest.value.id !== launch.id) return true;
         yield* recordAgentRunnerToken(userId, agentId, null);
         const agent = yield* readAgent(userId, agentId);
@@ -103,11 +64,6 @@ const lapsedOne = (
     ),
   );
 
-/**
- * Takes every launch still open of the devices that have not beaten within
- * `DEVICE_LEASE` from them, at most `limit`, as the header says; answers
- * what it came to.
- */
 export const sweepDeviceLeases = /* @__PURE__ */ Effect.fn("web/sweepDeviceLeases")(function* (
   writer: Pick<StoreWriter, "consume" | "enqueueTurn">,
   options: { readonly now: number; readonly limit?: number | undefined },

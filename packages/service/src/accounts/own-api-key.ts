@@ -1,16 +1,3 @@
-/**
- * own-api-key.ts -- the API key one account saved for a provider, opened, and nothing where it saved none.
- *
- * Every model call we make for an account outside a coding agent's step
- * (a voice call, a dictated clip) runs on the account's own key and never on
- * ours, since we pay for no model call. The key is read afresh on every
- * call, so one saved, replaced, or removed in Settings is the next call's.
- * A row the deployment's ring cannot open (no ring, a malformed one, or one
- * that no longer holds the row's version) answers unreadable rather than
- * none, since the account did save a key and adding another would not help:
- * the call is left unmade and answered unavailable, never spent elsewhere.
- */
-
 import {
   openProviderKey,
   PROVIDER_KEY_UNREADABLE,
@@ -22,10 +9,8 @@ import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import { PROVIDER_KEY_KIND, type ProviderKeyProvider } from "@repo/features/provider-key-wire";
 import { Effect, type Redacted, Result } from "effect";
 
-/** The account's own API key, nothing where it saved none, or unreadable where it saved one the deployment cannot open. */
 export type OwnApiKey = Redacted.Redacted | ProviderKeyUnreadable | undefined;
 
-/** The account's own API key for the provider, opened under the deployment's ring. */
 export function ownApiKeyOf(
   userId: string,
   provider: ProviderKeyProvider,

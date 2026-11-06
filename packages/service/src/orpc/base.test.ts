@@ -1,24 +1,3 @@
-/**
- * base.test.ts -- the caller middlewares, as a route answers through them.
- *
- * The caller middlewares as a route answers through them: the bearer-only
- * caller is refused when only a cookie could name it, whatever the resolver
- * would have said, and the session caller is answered with the one
- * credential that carries its session on, refused as unauthenticated where
- * the auth service names nobody or the request carries no credential at
- * all, and as unavailable where the auth service could not answer. Over
- * Better Auth with the bearer plugin as `auth.ts` installs it, on a PGlite of
- * its own, a session is read from an `Authorization` alone wherever one is
- * carried, so a bearer the plugin did not sign is never read past to the
- * cookie beside it.
- *
- * Every procedure's log lines carry the trace id of the caller's
- * `traceparent`, through Sentry's tracer as the deployment runs it, even
- * where the caller did not sample the call.
- *
- * Synthetic accounts, bearers, and sessions throughout.
- */
-
 import "@orpc/experimental-effect/extensions/effect";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -45,7 +24,6 @@ const BEARER_PATH = "/api/test/bearer";
 const SESSION_PATH = "/api/test/session";
 const USER_ID = "user-1";
 
-/** The caller a procedure was handed, and every header carried on to the plugin with its session. */
 const callerSchema = Schema.Struct({
   userId: Schema.String,
   carried: Schema.Record(Schema.String, Schema.String),
@@ -64,7 +42,6 @@ const callerContract = {
 
 const callers = implement(callerContract).$context<HostedContext>();
 
-/** A resolver that names the test's account for any request at all. */
 const everyone: UserIdResolver = () => Effect.succeed(Option.some(USER_ID));
 
 function routerOver(session: SessionUserIdResolver) {
@@ -81,7 +58,6 @@ function routerOver(session: SessionUserIdResolver) {
 
 const answer = (session: SessionUserIdResolver, path: string, headers: Record<string, string>) =>
   Effect.gen(function* () {
-    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
     const services = Context.empty() as Context.Context<WebServices>;
     const response = yield* Effect.promise(() =>
       hostedFetch(routerOver(session))(new Request(`${ORIGIN}${path}`, { headers }), services),
@@ -97,11 +73,6 @@ const UNAUTHENTICATED = {
   text: '{"error":"invalid-token"}',
 } as const;
 
-/**
- * Two accounts on Better Auth over its own PGlite, each signed in on a
- * browser of its own, and Ada on her Mac too: her session as the signed
- * bearer the plugin hands the Mac.
- */
 const openSessions = Effect.gen(function* () {
   const plugin = yield* openWorkspacePlugin;
   const [ada, grace] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -163,7 +134,6 @@ it.effect(
   "a request carrying no credential, or only a blank one, is refused as unauthenticated without asking the auth service",
   () =>
     Effect.gen(function* () {
-      // A session read that names anyone, and one that is down, so a refusal is unauthenticated only where neither was asked.
       const anyone: SessionUserIdResolver = () => Effect.succeedSome(USER_ID);
       const down: SessionUserIdResolver = () =>
         Effect.fail(new Cause.UnknownError("the auth service is down"));
@@ -186,7 +156,6 @@ it.effect(
       const { plugin, ada, adaCookie } = yield* openSessions;
       const junk = "Bearer not-a-token";
 
-      // The hazard: Better Auth's bearer plugin leaves the cookie standing under a bearer it did not sign.
       assert.deepEqual(
         yield* plugin.resolveSessionUserId({
           headers: new Headers({ authorization: junk, cookie: adaCookie }),
@@ -251,7 +220,6 @@ it.effect("a procedure's log lines carry the trace id of the caller's unsampled 
         }),
       },
     };
-    // SAFETY: the procedure yields no service, so the tracer and the logger stand in for the web runtime's.
     const services = (yield* Effect.context().pipe(
       Effect.provide(Layer.merge(sentryReportingLayer, Logger.layer([recorded]))),
     )) as Context.Context<WebServices>;

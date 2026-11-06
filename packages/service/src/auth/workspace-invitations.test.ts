@@ -9,17 +9,6 @@ import { authOrganizationHooks, withAuthCounts } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
 
-/**
- * Workspace invitations on our own organization policy over a migrated
- * PGlite: made, listed, and canceled through the server-only calls under the
- * inviter's session, as our routes make them for the Mac, and read and
- * accepted over HTTP, as the accept page reaches them from a browser
- * session. Email and password sign-up stands in for the Google or GitHub
- * sign-in, whose provider verifies the address, so an account is marked
- * verified the way a provider's sign-in would mark it. Synthetic accounts
- * throughout.
- */
-
 const BASE_URL = "http://127.0.0.1";
 
 const InvitationSchema = Schema.Struct({
@@ -70,7 +59,6 @@ async function withAuth(body: (auth: Auth) => Promise<void>): Promise<void> {
   }
 }
 
-/** An account signed up and signed in; verified unless asked otherwise, as a provider's sign-in leaves it. */
 async function signUp(auth: Auth, name: string, verified = true): Promise<Account> {
   const email = `${name}@example.com`;
   const { headers, response } = await auth.api.signUpEmail({
@@ -78,7 +66,6 @@ async function signUp(auth: Auth, name: string, verified = true): Promise<Accoun
     returnHeaders: true,
   });
   if (verified) await verify(auth, response.user.id);
-  // A browser sends back each cookie's name and value, and none of its attributes.
   const cookie = headers
     .getSetCookie()
     .map((line) => line.split(";")[0])
@@ -91,7 +78,6 @@ async function verify(auth: Auth, userId: string): Promise<void> {
   await context.internalAdapter.updateUser(userId, { emailVerified: true });
 }
 
-/** A workspace the server made for its owner, as our own routes make one. */
 async function workspaceOf(auth: Auth, owner: Account): Promise<string> {
   const created = await auth.api.createOrganization({
     body: { name: "Acme", slug: "acme", userId: owner.id },
@@ -100,7 +86,6 @@ async function workspaceOf(auth: Auth, owner: Account): Promise<string> {
   return created.id;
 }
 
-/** A browser's request to the auth service under the account's cookie. */
 async function call(
   auth: Auth,
   account: Account,
@@ -119,12 +104,10 @@ async function call(
   return auth.handler(request);
 }
 
-/** The session an account's cookie carries, as headers a server-only call takes. */
 function sessionOf(account: Account): Headers {
   return new Headers({ cookie: account.cookie });
 }
 
-/** An invitation made through the server-only call our route makes, answered as the plugin answers it. */
 async function invite(auth: Auth, inviter: Account, workspaceId: string, email: string) {
   return auth.api.createInvitation({
     headers: sessionOf(inviter),
@@ -133,7 +116,6 @@ async function invite(auth: Auth, inviter: Account, workspaceId: string, email: 
   });
 }
 
-/** A workspace's invitations listed through the server-only call. */
 async function listInvitations(auth: Auth, account: Account, workspaceId: string) {
   return auth.api.listInvitations({
     headers: sessionOf(account),
@@ -142,7 +124,6 @@ async function listInvitations(auth: Auth, account: Account, workspaceId: string
   });
 }
 
-/** An invitation canceled through the server-only call. */
 async function cancelInvitation(auth: Auth, account: Account, invitationId: string) {
   return auth.api.cancelInvitation({
     headers: sessionOf(account),
@@ -187,7 +168,6 @@ test("an admin invites by address, and the invitee reads the invitation and acce
       call(auth, invitee, "/organization/accept-invitation", { invitationId: invitation.id }),
     );
     assert.equal(accepted.status, 200);
-    // Note that the acceptance is counted under the invitee, and the inviter's own send is the procedure's to count.
     assert.deepEqual(counts, [
       {
         name: "workspace:invite_accept",
@@ -205,7 +185,6 @@ test("an admin invites by address, and the invitee reads the invitation and acce
       { id: workspaceId },
     ]);
 
-    // Note that a used invitation reads as no invitation, which is how the page knows to say so.
     const reread = await call(auth, invitee, `/organization/get-invitation?id=${invitation.id}`);
     assert.equal(reread.status, 400);
   });

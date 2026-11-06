@@ -1,27 +1,3 @@
-/**
- * github-people.ts -- who a pull request names, as an agent's changes carry them: each GitHub account by its login and avatar, and a member of the agent's workspace named by the user account their GitHub account is linked to.
- *
- * GitHub names everyone by an account of its own, so a login alone would
- * draw a teammate as a stranger. A user account that signed in with GitHub
- * keeps a provider row whose `account_id` is GitHub's id for them, and a
- * pull request names that same id, so the two meet by id rather than by a
- * login a person may change. An account is named only where its holder is a
- * member of the agent's own workspace, so the answer never says which app
- * account stands behind someone outside it. Our own App's bot is named
- * as any other App's bot is: by its login, as GitHub names it.
- *
- * Who a pull request names rides beside its files and is never what the
- * files wait on: a read of the people that fails is said once in the log and
- * leaves them out, as a service before them did. A pull request's overview
- * is named the same way, where naming its people is never what it waits
- * on either: a naming that fails names everyone as themself on GitHub. The
- * overview's two reads that name anyone, the pull request itself and its
- * conversation, are each named on their own, so neither waits on the other.
- * The pull requests of the stack the overview's pull request stands in are
- * named by the agent of its workspace that published each, read from the
- * agents' own rows, so naming them asks GitHub nothing.
- */
-
 import { Database, type DatabaseServices } from "@repo/database/core/query";
 import { listAgentsOnPullRequest } from "@repo/database/models/agent-store";
 import { account, member } from "@repo/database/schemas/auth";
@@ -52,7 +28,6 @@ import {
   type ViewerPendingReview,
 } from "./pull-requests.js";
 
-/** What an agent's changes say of who their pull request names; every key absent where the people could not be read. */
 type ChangesPeople = AgentChangesPeople;
 
 const findLinkedMembers = SqlSchema.findAll({
@@ -77,12 +52,10 @@ const findLinkedMembers = SqlSchema.findAll({
     ),
 });
 
-/** Every GitHub id the accounts name, each once. */
 function idsOf(accounts: readonly GitHubAccount[]): readonly number[] {
   return [...new Set(accounts.map((each) => each.id))];
 }
 
-/** Every account the people name. */
 function accountsOfPeople(people: PullRequestPeople): readonly GitHubAccount[] {
   return [
     ...(people.author === undefined ? [] : [people.author]),
@@ -91,7 +64,6 @@ function accountsOfPeople(people: PullRequestPeople): readonly GitHubAccount[] {
   ];
 }
 
-/** The workspace's members whose linked GitHub account is one of the ids given, by GitHub's id. */
 const linkedMembers = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   githubIds: readonly number[],
@@ -101,7 +73,6 @@ const linkedMembers = /* @__PURE__ */ Effect.fnUntraced(function* (
   return new Map(rows.map((row) => [Number(row.githubId), row.userId]));
 });
 
-/** A person as the wire names them, while what is known of them is added. */
 interface PersonBeingNamed {
   login: string;
   bot: boolean;
@@ -109,14 +80,12 @@ interface PersonBeingNamed {
   userId?: string;
 }
 
-/** The people as the wire carries them, while who opened the pull request is added where GitHub names them. */
 interface PeopleBeingNamed {
   author?: GitHubPerson;
   reviewers: NonNullable<ChangesPeople["reviewers"]>;
   comments: NonNullable<ChangesPeople["comments"]>;
 }
 
-/** One account as the wire names it, and the member it is linked to. */
 function personOf(held: GitHubAccount, linked: ReadonlyMap<number, string>): GitHubPerson {
   const person: PersonBeingNamed = {
     login: held.login,
@@ -128,7 +97,6 @@ function personOf(held: GitHubAccount, linked: ReadonlyMap<number, string>): Git
   return person;
 }
 
-/** The people as the wire carries them. */
 function changesPeopleOf(
   people: PullRequestPeople,
   linked: ReadonlyMap<number, string>,
@@ -147,11 +115,6 @@ function changesPeopleOf(
   return answer;
 }
 
-/**
- * Who the agent's pull request names, read on the token minted for its
- * repository and named against its workspace's members; nothing, said once
- * in the log, where any part of the read fails.
- */
 export const changesPeople = /* @__PURE__ */ Effect.fn("web/changesPeople")(function* (
   token: Redacted.Redacted,
   agent: { readonly repository: string; readonly organizationId: string },
@@ -171,18 +134,11 @@ export const changesPeople = /* @__PURE__ */ Effect.fn("web/changesPeople")(func
   );
 });
 
-/** How an overview's read names a GitHub account: as the wire carries a person. */
 type Namer = (held: GitHubAccount) => GitHubPerson;
 
-/**
- * How the accounts given are named, against the agent's workspace's
- * members; where linking them fails, said once in the log, each is named as
- * themself on GitHub.
- */
 const overviewNamer = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   accounts: readonly GitHubAccount[],
-  /** What names the accounts, as the log says it: "pull request 7". */
   about: string,
 ): Effect.fn.Return<Namer, never, DatabaseServices> {
   const linked = yield* linkedMembers(organizationId, idsOf(accounts)).pipe(
@@ -196,18 +152,10 @@ const overviewNamer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return (held) => personOf(held, linked);
 });
 
-/** How many agents are read for each pull request of a stack: enough that one of another workspace, or archived, leaves room for the one that names it. */
 const AGENTS_PER_STACK_ENTRY = 4;
 
-/** How many of a stack's pull requests are looked up at once. */
 const STACK_LOOKUPS = 4;
 
-/**
- * The agent of the workspace whose pull request, as GitHub last answered
- * it, is the one numbered: the newest not archived; none where no such
- * agent stands. Note that a lookup that fails names none, said once in the
- * log, because the pull request still opens on GitHub.
- */
 const stackOwnerOf = (
   agent: { readonly organizationId: string; readonly repository: string },
   number: number,
@@ -230,11 +178,6 @@ const stackOwnerOf = (
     ),
   );
 
-/**
- * The stack's pull requests as the wire carries them, each named by the
- * agent of the workspace that published it (`stackOwnerOf`), so a press on
- * one opens the tab that draws that very pull request.
- */
 const namedStack = (
   agent: { readonly organizationId: string; readonly repository: string },
   stack: readonly StackEntry[],
@@ -250,11 +193,6 @@ const namedStack = (
     { concurrency: STACK_LOOKUPS },
   );
 
-/**
- * A pull request itself as the wire carries it for its overview, who opened
- * it and who it asks for a review named as `overviewNamer` names them, the
- * stack it stands in named by its agents, with who the agent writes as.
- */
 export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOverviewPullRequest")(
   function* (
     agent: {
@@ -287,7 +225,6 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
   },
 );
 
-/** Every account a conversation names. */
 function accountsOfConversation(read: GitHubOverviewConversation): readonly GitHubAccount[] {
   return [
     ...read.reviewers.map((reviewer) => reviewer.account),
@@ -305,12 +242,10 @@ function accountsOfConversation(read: GitHubOverviewConversation): readonly GitH
   ];
 }
 
-/** Everyone the reactions name. */
 function accountsOfReactions(reactions: readonly GitHubReaction[]): readonly GitHubAccount[] {
   return reactions.flatMap((reaction) => reaction.accounts ?? []);
 }
 
-/** The reactions as the wire carries them, each who it names named; none where nothing was given. */
 function namedReactions(
   reactions: readonly GitHubReaction[],
   person: (held: GitHubAccount) => GitHubPerson,
@@ -324,11 +259,6 @@ function namedReactions(
   }));
 }
 
-/**
- * A pull request's conversation as the wire carries it for its overview,
- * where each reviewer stands and every comment, review, and thread comment
- * named as `overviewNamer` names them.
- */
 export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOverviewConversation")(
   function* (
     agent: { readonly organizationId: string },
@@ -340,7 +270,6 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
       accountsOfConversation(read),
       `pull request ${number}`,
     );
-    // Note that a reaction key stands only where something was given, so a read before reactions and one with none read alike.
     const reacted = (given: readonly GitHubReaction[], subject: string | undefined) => {
       const named = namedReactions(given, person);
       return {
@@ -382,15 +311,8 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
   },
 );
 
-/** The member's own pending review as the conversation carries it beside its read. */
 type NamedPendingReview = NonNullable<AgentOverviewConversation["pendingReview"]>;
 
-/**
- * The member's own pending review as the wire carries it: how many
- * comments it holds, and each comment with who wrote it named as
- * `overviewNamer` names them, the member themself; none where they hold
- * none.
- */
 export const namedPendingReview = /* @__PURE__ */ Effect.fn("web/namedPendingReview")(function* (
   agent: { readonly organizationId: string },
   number: number,
@@ -412,11 +334,6 @@ export const namedPendingReview = /* @__PURE__ */ Effect.fn("web/namedPendingRev
   };
 });
 
-/**
- * What the reviewer and label pickers offer as the wire carries it, each
- * user named as `overviewNamer` names them, so a teammate is offered as the
- * member they are.
- */
 export const namedReviewOptions = /* @__PURE__ */ Effect.fn("web/namedReviewOptions")(function* (
   agent: { readonly organizationId: string },
   read: GitHubReviewOptions,

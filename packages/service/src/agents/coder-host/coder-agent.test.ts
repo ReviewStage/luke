@@ -15,14 +15,12 @@ import { INBOX_TOOLS } from "./inbox.js";
 import { CODER_HARNESS, coderInstructions, type OwnTask } from "./instructions.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-/** The task an agent on one works on, its link and its id, as its instructions are handed them. */
 const TASK_ADDRESS = {
   link: "https://vespin.dev/acme/task/42",
   id: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
 } as const;
 
 test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered", () => {
-  // The tools Claude Code owns in place of ours, as eve's instructions name ours.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -51,14 +49,12 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
           label,
         );
         assert.deepEqual(
-          // An agent with no repository is offered no skills.
           CLAUDE_CODES.filter(
             (tool) => !claudeCode.includes(tool) && (repository !== null || tool !== "Skill tool"),
           ),
           [],
           label,
         );
-        // The tools that touch the app stay ours, under their own names.
         for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
           assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
@@ -146,7 +142,6 @@ test("a local agent is told its folders on its machine, and no browser", () => {
     false,
     MAC,
   );
-  // Codex is pointed at the skills its member installed where the Mac keeps them.
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
 });
 
@@ -158,7 +153,6 @@ test("a local agent is told it runs straight on its machine with full access to 
     sharedFiles: "/home/vespin-host/.vespin/agents/a1/tmp",
   };
   const told = ["straight on one of the developer's own machines", "full access"];
-  // Note that its worktree shares the machine's one clone, whose branches another agent's worktree may hold.
   const toldWithRepository = [
     "`git switch --detach origin/<branch>`",
     "`git push origin HEAD:<branch>`",
@@ -184,14 +178,12 @@ test("a local agent is told it runs straight on its machine with full access to 
     for (const each of toldWithRepository) {
       assert.equal(words.includes(each), repository !== null, `${label}: ${each}`);
     }
-    // The machine reads back only inside the agent's folder, never its own `/tmp`.
     assert.ok(words.includes(`under \`${HOST.sharedFiles}/\``), label);
     assert.ok(!words.includes(SHARED_FILES_DIRECTORY), label);
   }
 });
 
 test("a Codex agent is told of Codex's own tools and never of Vespin's it is not offered, nor of Claude Code's", () => {
-  // Our tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -242,7 +234,6 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
           [],
           label,
         );
-        // An agent with a repository is pointed at its skills where Codex keeps them.
         assert.equal(codex.includes("`.agents/skills`"), repository !== null, label);
         for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
           assert.ok(codex.includes(`\`${kept}\``), `${label}: ${kept}`);
@@ -384,7 +375,6 @@ test("the session sends whatever is ready for the developer to look at or review
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
-      // An agent another coding agent started reports to it, and is not told to keep off the threads.
       assert.ok(
         inbox?.includes(
           "Where another agent started you, as your first message says, your final message reaches it by itself as your report",
@@ -489,12 +479,10 @@ test("every agent is told to reply on an inbox thread to a question or a request
         brief,
       );
       assert.ok(instructions.includes("never answer them in your message alone"), brief);
-      // Note that a request acted on in silence leaves the member asking again, so its end is said on the thread.
       assert.ok(
         instructions.includes("once a request is done, say in a line or two what you did"),
         brief,
       );
-      // Note that a progress note on a thread is noise the developer must acknowledge, so none is asked for.
       assert.ok(
         instructions.includes("Never post on a thread to say how the work is going"),
         brief,
@@ -523,18 +511,15 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
   }
 });
 
-/** The task the golden's on-task prompts were composed with: its link, by its number, and its id. */
 const TASK_LINK = {
   link: "https://vespin.dev/acme/task/42",
   id: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
 } as const;
 
-/** A coding agent's instructions, recorded for each brief, on a task and on none, byte for byte. */
 const CODER_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/coder.json", import.meta.url),
 );
 
-/** The instructions for each brief, on a task and on none, as the golden records them. */
 function briefInstructions(): Record<string, { onTask: string; taskless: string }> {
   return Object.fromEntries(
     Object.values(AGENT_BRIEF).map((brief) => [
@@ -547,7 +532,6 @@ function briefInstructions(): Record<string, { onTask: string; taskless: string 
   );
 }
 
-// Note that the golden is written again only under APP_UPDATE_FIXTURES=1, and the diff explained in the PR.
 if (process.env.APP_UPDATE_FIXTURES === "1") {
   writeFileSync(CODER_PATH, `${JSON.stringify(briefInstructions(), null, 2)}\n`);
 }
@@ -638,12 +622,10 @@ test("with Task descriptions off the instructions say nothing of a description: 
   );
 });
 
-/** A pilot's instructions, recorded byte for byte: an agent of kind pilot, handed a prompt, on a task and a repository. */
 const PILOT_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/pilot.json", import.meta.url),
 );
 
-/** A pilot's instructions as its session composes them. */
 function pilotInstructions(): string {
   return coderInstructions(
     "Acme/Relay",
@@ -658,7 +640,6 @@ function pilotInstructions(): string {
   );
 }
 
-// Note that the golden is written again only under APP_UPDATE_FIXTURES=1, and the diff explained in the PR.
 if (process.env.APP_UPDATE_FIXTURES === "1") {
   writeFileSync(PILOT_PATH, `${JSON.stringify({ pilot: pilotInstructions() }, null, 2)}\n`);
 }

@@ -20,15 +20,6 @@ import {
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
 import { supportAccess } from "./support-access.js";
 
-/**
- * The Mac's session beside its OAuth token, end to end on one Better Auth
- * configured as `auth.ts` configures it, over an in-memory database, with
- * GitHub a fake behind `fetch`. The Mac signs in through its OAuth
- * authorization; the signed-in browser then asks the Electron plugin to
- * transfer the user, and the Mac exchanges the code with its verifier for a
- * session it carries as a signed bearer token. Synthetic accounts throughout.
- */
-
 const SERVICE_URL = "https://vespin.dev";
 const LOOPBACK = "http://127.0.0.1:54698/callback";
 
@@ -38,7 +29,6 @@ const GITHUB_EMAIL = "octo@github.test";
 
 const NOW = new Date("2026-10-14T12:00:00.000Z");
 
-/** RFC 7636's example pair, standing in for a verifier the Mac drew. */
 const PKCE = {
   verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
@@ -82,7 +72,6 @@ function desktopAuth() {
     socialProviders: {
       github: { clientId: "luke-github", clientSecret: "github-secret", scope: ["read:user"] },
     },
-    // The plugins `auth.ts` installs that this flow reaches, in its order.
     plugins: [
       jwt(JWT_KEY_STORAGE),
       oauthProvider({
@@ -106,7 +95,6 @@ function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-/** GitHub's token endpoint and the two profile reads. */
 function fakeGitHub(input: string | URL | Request): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : input);
   if (url.href === "https://github.com/login/oauth/access_token") {
@@ -121,7 +109,6 @@ function fakeGitHub(input: string | URL | Request): Promise<Response> {
   throw new Error(`this test reaches no network: ${url.href}`);
 }
 
-/** The `name=value` pairs a browser would send back from a response's cookies. */
 function cookiesFrom(response: Response): string {
   return response.headers
     .getSetCookie()
@@ -157,11 +144,6 @@ function post(
   );
 }
 
-/**
- * The Mac's OAuth sign-in as today: authorize, the sign-in page's social
- * start, GitHub's return, and the redirects back to the loopback. Answers the
- * browser's session cookie and the Mac's OAuth access token.
- */
 async function desktopSignsIn(auth: Auth): Promise<{ browser: string; accessToken: string }> {
   const authorizeQuery = new URLSearchParams({
     response_type: "code",
@@ -208,7 +190,6 @@ async function desktopSignsIn(auth: Auth): Promise<{ browser: string; accessToke
   return { browser, accessToken: decodeTokens(await tokens.json()).access_token };
 }
 
-/** The hand-off page asking the plugin to transfer the browser's user, on the Mac's challenge and state. */
 async function transfer(auth: Auth, browser: string, state: string): Promise<string> {
   const query = new URLSearchParams({
     client_id: DESKTOP_SESSION_CLIENT_ID,
@@ -225,7 +206,6 @@ async function transfer(auth: Auth, browser: string, state: string): Promise<str
   return decodeTransfer(await answered.json()).electron_authorization_code;
 }
 
-/** The Mac's exchange at `/electron/token`, from its main process: no cookie, no origin. */
 function exchange(auth: Auth, token: string, state: string, verifier: string): Promise<Response> {
   return post(auth, "/electron/token", { token, state, code_verifier: verifier });
 }
@@ -271,7 +251,6 @@ test("after its OAuth sign-in the Mac holds a session of its own, carried as a s
 
   const session = await sessionFor(auth, { authorization: `Bearer ${signed}` });
   assert.equal(session?.user.email, GITHUB_EMAIL);
-  // Our own routes still read the OAuth token through userinfo, beside the bearer plugin.
   assert.equal(await userInfoSubject(auth, accessToken), session?.user.id);
 });
 

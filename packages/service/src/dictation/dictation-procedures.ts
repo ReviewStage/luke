@@ -1,26 +1,3 @@
-/**
- * dictation-procedures.ts -- a clip the developer dictated into a message box, answered with its words.
- *
- * `POST /api/dictation` takes one clip (`@repo/features/dictation-wire`),
- * holds it to two minutes and a megabyte, hands it to OpenAI's transcription
- * model on the caller's own OpenAI API key (`../accounts/own-api-key.ts`),
- * never ours, with the words the desktop says it is likely to hold
- * (`dictation/transcription.ts`), and answers the text. Nothing of the clip or
- * the text is stored, logged, or traced, and an event counts only that a
- * clip was dictated and which length bucket it fell in: the clip lives in
- * this request's memory and goes when it ends.
- *
- * What is kept is the meter: one call and the clip's seconds on the
- * account's day (`@repo/database/models/quota`), the seconds OpenAI billed where it says
- * and the desktop's own timing otherwise, which the bound above holds to two
- * minutes. A meter the database refused is logged and the text still
- * answered, since the transcription was had and paid for. An account that
- * saved no OpenAI API key is refused as missing one, which the desktop
- * answers by pointing at Settings; a model that did not answer answers
- * unavailable, which the desktop shows and the developer may try again. The
- * key is looked for before the clip is read.
- */
-
 import { PROVIDER_KEY_UNREADABLE } from "@repo/database/models/provider-key-seal";
 import { spendDictationMeter } from "@repo/database/models/quota";
 import { base64Bytes } from "@repo/features/agent-wire";
@@ -42,7 +19,6 @@ export interface DictationProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The caller's own OpenAI API key, or refused as missing where it saved none; unavailable where the store did not answer or the deployment cannot open the key it saved. */
 const openAiKeyMiddleware = middlewareGen<
   HostedContext & HostedCaller,
   { readonly openAiKey: Redacted.Redacted<string> }
@@ -61,12 +37,10 @@ const openAiKeyMiddleware = middlewareGen<
   return yield* next({ context: { openAiKey: key } });
 });
 
-/** The clip's bytes out of their base64, whose spelling the wire already held to the alphabet. */
 function clipBytes(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
-/** The dictation resource: one clip's words, to a signed-in caller. */
 export function dictationProcedures(seams: DictationProcedureSeams) {
   const dictation = hosted.dictation
     .use(accountMiddleware(seams.resolveUserId))
@@ -74,7 +48,6 @@ export function dictationProcedures(seams: DictationProcedureSeams) {
   return {
     transcribe: dictation.transcribe.effect(function* ({ input, context }) {
       const { audio, durationMs, keywords } = input;
-      // Note that both bounds answer too large, because either is the clip being longer than a message.
       if (
         durationMs > DICTATION_BOUNDS.MAX_DURATION_MS ||
         base64Bytes(audio) > DICTATION_BOUNDS.MAX_AUDIO_BYTES

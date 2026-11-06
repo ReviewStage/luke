@@ -43,18 +43,6 @@ import { hostedAnswer } from "../testing/hosted-route.js";
 import { CODEX_DEVICE_OAUTH } from "./chatgpt-credentials.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
-/**
- * The account's own provider keys, answered by the procedures the way the
- * hosted oRPC route answers them, over a real dialect and a provider faked at its HTTP door:
- * a key is kept only once its provider accepts it, kept sealed, answered
- * only as a hint, and never logged, an Anthropic key with whether its
- * organization may run fast mode; the bearer names the account and
- * nothing else does.
- *
- * Synthetic accounts, bearers, and keys throughout; the key-encryption keys
- * are fixed bytes written for this file.
- */
-
 const ORIGIN = "https://app.test";
 const KEYS_PATH = "/api/account/provider-keys";
 
@@ -73,13 +61,11 @@ const PROVIDER_URL = {
   [PROVIDER_KEY_PROVIDER.OPENAI]: "https://api.openai.com/v1/models",
 } as const;
 
-/** OpenAI's authorization server, which a ChatGPT plan's login and removal reach. */
 const AUTH_ORIGIN = "https://auth.openai.com";
 const REVOCATION_URL = `${AUTH_ORIGIN}/oauth/revoke`;
 const DISCOVERY_URL = `${AUTH_ORIGIN}/.well-known/openid-configuration`;
 const JWKS_URL = `${AUTH_ORIGIN}/.well-known/jwks.json`;
 
-/** A signing key of the fake OpenAI's, generated for this file: its id, its private half, and its public half as a JWK. */
 function signingKey(kid: string) {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const { kty = "", n = "", e = "" } = publicKey.export({ format: "jwk" });
@@ -88,7 +74,6 @@ function signingKey(kid: string) {
 
 const OPENAI_KEY = signingKey("openai-key-1");
 
-/** An RS256 JWT of the claims, signed by the key given and naming its id. */
 function signedJwt(
   claims: Record<string, WireBoundaryInput>,
   key: { kid: string; privateKey: KeyObject },
@@ -99,7 +84,6 @@ function signedJwt(
   return `${signed}.${sign("RSA-SHA256", Buffer.from(signed), key.privateKey).toString("base64url")}`;
 }
 
-/** OpenAI's authorization server as a login and a removal reach it: discovery, the published keys, and a revocation that succeeds. */
 const openAiAuth =
   () =>
   (request: RecordedRequest): Response => {
@@ -110,10 +94,8 @@ const openAiAuth =
     return new Response(null, { status: HTTP_STATUS.OK });
   };
 
-/** Where Anthropic is asked whether a key's organization may run fast mode. */
 const FAST_CHECK_URL = "https://api.anthropic.com/v1/messages";
 
-/** Anthropic's refusal of a fast request for an organization fast mode was never enabled for, as production met it. */
 const FAST_LIMIT_ZERO = {
   type: "error",
   error: {
@@ -138,11 +120,9 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
 interface Answer {
   readonly status: number;
   readonly body: WireBoundaryInput;
-  /** The answer's bytes as they crossed, for what must never be in them. */
   readonly text: string;
 }
 
-/** What the fake provider answers a check with, per key; a key it does not know is refused. */
 type ProviderAnswers = ReadonlyMap<string, number>;
 
 const ACCEPTING: ProviderAnswers = new Map([
@@ -150,26 +130,21 @@ const ACCEPTING: ProviderAnswers = new Map([
   [KEY.OPENAI, HTTP_STATUS.OK],
 ]);
 
-/** The key a recorded check carried, read from whichever header its provider reads. */
 function keyOf(headers: Headers): string {
   return headers.get("x-api-key") ?? headers.get("authorization")?.replace(/^Bearer /u, "") ?? "";
 }
 
-/** What a fast check asks Anthropic for: the model, at fast speed, for one token. */
 const readFastCheck = Schema.decodeUnknownSync(
   Schema.Struct({ model: Schema.String, max_tokens: Schema.Number, speed: Schema.String }),
 );
 
-/** How the fake Anthropic answers a fast request, per key: run where the key is not named here. */
 type FastAnswers = ReadonlyMap<string, Response>;
 
-/** Two accounts behind their own bearers, a provider, and the procedures answering under the ring given. */
 const openAccounts = (
   options: {
     ring?: string;
     provider?: ProviderAnswers;
     fast?: FastAnswers;
-    /** OpenAI's authorization server, where a test reaches it. */
     auth?: (request: RecordedRequest) => Response;
   } = {},
 ) =>
@@ -218,11 +193,9 @@ const answer = (
       ...NO_ENVIRONMENT,
       providerKeyEncryptionKeys: seams.ring === undefined ? undefined : Redacted.make(seams.ring),
     };
-    // Every line the handler logs is kept, so the test can read what it says.
     const recorder = Logger.make(({ message, cause }) => {
       seams.logged.push(`${JSON.stringify(message)} ${Cause.pretty(cause)}`);
     });
-    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -234,7 +207,6 @@ const answer = (
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body, text } satisfies Answer;
   });
@@ -274,7 +246,6 @@ const turnForAgents = (
     body: { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind, forAgents },
   });
 
-/** A Claude setup-token as `claude setup-token` prints one: an OAuth token's prefix, synthetic throughout. */
 const SETUP_TOKEN = "sk-ant-oat01-test-setup-token-000000000000000000000000tokn";
 
 const saveToken = (userId: string, provider: ProviderKeyProvider, key: string) =>
@@ -283,7 +254,6 @@ const saveToken = (userId: string, provider: ProviderKeyProvider, key: string) =
     body: { provider, key, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN },
   });
 
-/** An ID token's claims as OpenAI issues them for Codex's client, expiring long after any test's clock. */
 const ID_CLAIMS = {
   iss: AUTH_ORIGIN,
   aud: CODEX_DEVICE_OAUTH.CLIENT_ID,
@@ -291,7 +261,6 @@ const ID_CLAIMS = {
   exp: 4_000_000_000,
 } as const;
 
-/** A JWT of the claims with a signature nothing checks, as the service reads an access token's claims unsigned. */
 function unsignedJwt(claims: Record<string, WireBoundaryInput>) {
   const part = (value: WireBoundaryInput) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -304,7 +273,6 @@ const DEVICE_PATH = {
   CANCEL: "/api/account/chatgpt/device/cancel",
 } as const;
 
-/** What the fake OpenAI holds of Codex's device-code login, synthetic throughout. */
 const DEVICE = {
   AUTH_ID: "deviceauth-test-0000000000000000000000did",
   USER_CODE: "ABCD-1234",
@@ -314,7 +282,6 @@ const DEVICE = {
   WORKSPACE: "chatgpt-workspace-0000",
 } as const;
 
-/** The tokens Codex's exchange answers: an access token whose own expiry says when it lapses, and an ID token for Codex's client naming the workspace. */
 const DEVICE_TOKENS = {
   access_token: unsignedJwt({
     iss: AUTH_ORIGIN,
@@ -334,7 +301,6 @@ const DEVICE_TOKENS = {
   ),
 } as const;
 
-/** What a device login must never answer, log, or store in the clear. */
 const DEVICE_SECRETS = [
   DEVICE.AUTH_ID,
   DEVICE.AUTHORIZATION_CODE,
@@ -344,13 +310,6 @@ const DEVICE_SECRETS = [
   DEVICE_TOKENS.id_token,
 ];
 
-/**
- * OpenAI's device-code endpoints as Codex reaches them: a user code issued
- * with its interval as a string, a code poll answering whatever the test
- * sets (403 until the code is entered), and a token endpoint that exchanges
- * the one authorization code it issued; discovery and the published keys
- * beside them.
- */
 function fakeDeviceAuth() {
   const state = { codePollStatus: HTTP_STATUS.FORBIDDEN as number };
   const auth = (request: RecordedRequest): Response => {
@@ -387,7 +346,6 @@ const cancelDevice = (userId: string, loginId: string) =>
 const removePlan = (userId: string) =>
   remove(userId, PROVIDER_KEY_PROVIDER.OPENAI, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
 
-/** A device start's answer as the wire reads it. */
 function startOf(answered: Answer): ChatGptDeviceStartAnswer {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(chatGptDeviceStartAnswerSchema)(unparsedWire(answered.body));
@@ -395,7 +353,6 @@ function startOf(answered: Answer): ChatGptDeviceStartAnswer {
   return read.success;
 }
 
-/** A device poll's or cancel's answer as the wire reads it. */
 function pollOf(answered: Answer): ChatGptDevicePollAnswer {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(chatGptDevicePollAnswerSchema)(unparsedWire(answered.body));
@@ -403,7 +360,6 @@ function pollOf(answered: Answer): ChatGptDevicePollAnswer {
   return read.success;
 }
 
-/** The account's plan connected through a device-code login, against a fake OpenAI whose code was entered. */
 const connectPlan = <E, R>(
   ask: (request: Request) => Effect.Effect<Answer, E, R>,
   userId: string,
@@ -413,7 +369,6 @@ const connectPlan = <E, R>(
     return pollOf(yield* ask(pollDevice(userId, loginId)));
   });
 
-/** The answer as the wire reads it, failing the test where it is not the wire's. */
 function keysOf(answered: Answer): ProviderKeysAnswer {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(providerKeysAnswerSchema)(unparsedWire(answered.body));
@@ -423,10 +378,8 @@ function keysOf(answered: Answer): ProviderKeysAnswer {
 
 const refusal = (status: number, error: string) => ({ status, body: { error } });
 
-/** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The providers the account was counted for saving a credential of, in order. */
 const countedProviders = (userId: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === SERVER_EVENT.PROVIDER_KEY_CREATE)
@@ -802,7 +755,6 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         const forOpenAi = keysOf(
           yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.OPENAI, SETUP_TOKEN)),
         );
-        // Note that `claude setup-token` wraps its token at the terminal's width, so a copy carries a line break and indent.
         const wrapped = keysOf(
           yield* ask(
             saveToken(
@@ -1014,7 +966,6 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         assert.deepEqual(again, { outcome: CHATGPT_DEVICE_LOGIN.CONNECTED, keys: connected.keys });
         assert.deepEqual(countedProviders(owner), [{ provider: PROVIDER_KEY_PROVIDER.OPENAI }]);
 
-        // The calls Codex makes, in Codex's own bodies.
         const bodyOf = (url: string) =>
           Effect.promise(() =>
             new Response(checks.find((check) => check.url === url)?.init.body).text(),
@@ -1076,7 +1027,6 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         const refusing = startOf(yield* ask(startDevice(other)));
         device.state.codePollStatus = HTTP_STATUS.BAD_REQUEST;
         const refused = pollOf(yield* ask(pollDevice(other, refusing.loginId)));
-        // A refused login stays refused, though OpenAI would now answer the code.
         device.state.codePollStatus = HTTP_STATUS.OK;
         const stillRefused = pollOf(yield* ask(pollDevice(other, refusing.loginId)));
 
@@ -1117,7 +1067,6 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         );
         assert.equal(keysOf(yield* ask(request(other))).subscriptions, undefined);
 
-        // The owner's login stood through both, and its own cancel drops it.
         device.state.codePollStatus = HTTP_STATUS.FORBIDDEN;
         assert.equal(
           pollOf(yield* ask(pollDevice(owner, loginId))).outcome,

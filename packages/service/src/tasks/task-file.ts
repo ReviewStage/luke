@@ -26,58 +26,22 @@ import {
   shownLine,
 } from "./shown-file.js";
 
-/**
- * task-file.ts -- a whole file of a task's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.
- *
- * The File tab opens a whole file of the task's repository. Outside an
- * agent's turn there is no handle on its sandbox, so the file is read from
- * GitHub, at the head of the repository's default branch, through the same
- * reach a checkout is made through: the task is read under
- * the account first, so a task another account owns reads as no task, then
- * our GitHub App confirms the installation of the task's workspace
- * reaches the task's repository and mints a token for that one repository
- * with contents read (`github-app.ts`'s `repositoryReadToken`). The token is used for the one
- * read and goes nowhere else: not into the answer, a log line, or a trace.
- * What is shown is decided by the rule a shown file is held to
- * (`shown-file.ts`), so a secret file is refused before anything is asked of
- * GitHub, and a link, a directory, a file too large, or one that is not text
- * reads as refused; each line travels cut to that rule's bound. A raw
- * read, which a copy or a download of the file asks, carries the file's
- * whole text instead, its lines uncut, held to the same rule and the same
- * bound on the file's size.
- *
- * Note that GitHub's head may differ from an agent's checkout, whose clone
- * is the branch as it stood when the agent first read the repository: the
- * window is the file as it is now, and a file gone since reads as missing, naming the branch GitHub found nothing on. A read
- * that names a commit, as an inbox item's code reference does so that the
- * lines it points at never move, is read at that commit instead, through the
- * same reach, and names the commit where it would name the branch.
- */
-
-/** Each reason the shared rule refuses a file, as the File tab hears it. */
 const FILE_REFUSAL_OF = {
   [SHOWN_FILE_REFUSAL.SECRET]: TASK_FILE_REFUSAL.SECRET,
   [SHOWN_FILE_REFUSAL.MISSING]: TASK_FILE_REFUSAL.MISSING,
   [SHOWN_FILE_REFUSAL.NOT_TEXT]: TASK_FILE_REFUSAL.NOT_TEXT,
 } as const satisfies Record<ShownFileRefusal, TaskFileRefusal>;
 
-/** Why the File tab's file is not shown, or its tree's folder not listed. */
 export type TaskFileRefused = Extract<TaskFileAnswer, { readonly refusal: TaskFileRefusal }>;
 
 export function refused(refusal: TaskFileRefusal): TaskFileRefused {
   return { refusal };
 }
 
-/** A failed reach as the File tab hears it: an outage, written down by its kind alone. */
 function reachRefusal(failure: GitHubWorkspaceReadFailure): Effect.Effect<TaskFileRefused> {
   return Effect.as(logWorkspaceReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE));
 }
 
-/**
- * The window of the file the request names, of the task's repository as
- * GitHub holds it now or at the commit it names, or why it is not shown; nothing where the account
- * owns no such task.
- */
 export function readTaskFile(
   userId: string,
   taskId: string,
@@ -98,14 +62,6 @@ export function readTaskFile(
   });
 }
 
-/**
- * The window of the file the request names, of a repository the
- * workspace's installation reaches, as GitHub holds it now or at the commit
- * it names, or why it is not shown: a task's file read by the place its
- * task names, and the read of a place no task names, such as an agent with
- * no task, whose caller has already confirmed the account is a member of
- * the workspace.
- */
 export function readRepositoryFileWindow(
   workspaceId: string,
   repository: string,
@@ -120,19 +76,10 @@ export function readRepositoryFileWindow(
   );
 }
 
-/** The App's reach of a task's repository: its token and the repository as GitHub confirmed it, or why it was not reached. */
 type TaskRepositoryReach =
   | { readonly reached: GitHubRepositoryToken }
   | { readonly refused: TaskFileRefused };
 
-/**
- * Our GitHub App's reach of the task's repository through the
- * installation of the task's workspace: a token for that one repository
- * with contents read, and the repository as GitHub confirmed it, or the
- * refusal a failed reach answers; or, where no installation reaches it,
- * the member's own token. The File tab's file and its tree's folders are
- * both read through it.
- */
 export const reachTaskRepository = /* @__PURE__ */ Effect.fn("web/reachTaskRepository")(function* (
   organizationId: string,
   repository: string,
@@ -154,11 +101,6 @@ export const reachTaskRepository = /* @__PURE__ */ Effect.fn("web/reachTaskRepos
   );
 });
 
-/**
- * A file's bytes as text that writes back to the same bytes: a leading
- * byte-order mark kept, and nothing where the bytes are not UTF-8, since a
- * decoder's replacement would save a file other than the one GitHub holds.
- */
 function rawText(content: Uint8Array): string | undefined {
   try {
     return new TextDecoder("utf-8", { ignoreBOM: true, fatal: true }).decode(content);
@@ -167,7 +109,6 @@ function rawText(content: Uint8Array): string | undefined {
   }
 }
 
-/** The window read through the App's reach, or the refusal the reach or the rule answers. */
 const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
   organizationId: string,
   repository: string,
@@ -178,10 +119,6 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed, access } = reach.reached;
   const branch = request.ref ?? confirmed.defaultBranch;
-  // Note that a read of the default branch reads at the commit its head
-  // stands at, and names it, so lines picked from the read are pinned to the
-  // commit they were read at; a head GitHub did not name leaves the read on
-  // the branch, naming none, since the file is still worth showing.
   const commit =
     request.ref ??
     (yield* readBranchHead(token, confirmed, confirmed.defaultBranch).pipe(
@@ -198,16 +135,10 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
     bytes: file.regular ? file.bytes : 0,
     binary: content === undefined || holdsNul(content),
   });
-  // Note that a file GitHub found nothing at names the branch or the commit
-  // it was looked for at, because the snippet's checkout may hold a file that
-  // branch no longer does; a link or a directory there is missing on no branch.
   if (refusal === SHOWN_FILE_REFUSAL.MISSING && !file.regular && file.notFound) {
     return { refusal: TASK_FILE_REFUSAL.MISSING, branch } satisfies TaskFileAnswer;
   }
   if (refusal !== undefined) return refused(FILE_REFUSAL_OF[refusal]);
-  // A regular file GitHub carried no bytes of is past the bound, which the rule refused above.
-  // Note that a raw read carries the file as it is, its lines uncut, because
-  // a copy or a download of it must not lose what the screen cuts.
   if (request.raw === true) {
     const raw = content === undefined ? undefined : rawText(content);
     if (raw === undefined) return refused(TASK_FILE_REFUSAL.NOT_TEXT);

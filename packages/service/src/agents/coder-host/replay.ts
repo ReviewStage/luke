@@ -73,76 +73,20 @@ import { copySourceWork, type SnapshotOutcome, type SourceCopyServices } from ".
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
 
-/**
- * replay.ts -- what an agent started from another agent of its plan is handed: that agent's brief, its transcript replayed, and where it left its work.
- *
- * eve opens a session with a user message and keeps no history seeded
- * beside it, so the transcript goes inside the first message, in the format
- * `@repo/features/agent-replay` writes and the desktop reads back. The
- * source is read as the account asking, on the plan the Start names and no
- * other, and its transcript under the member who started it, whose
- * conversation it is. A continue replays every step; a fork stops at the
- * assistant message named, its turn's journal included, and a message that
- * is none of the source's own journals is refused. A fork of a reply still
- * being written names where it was seen to end as Fork was pressed, by its
- * steps and the words and calls of the last of them, and keeps those alone,
- * as they stand when the Start reads them, so what the source wrote after
- * the press stays out of it. The source's first
- * message is its brief and is not replayed: the new agent is handed the
- * description as it stands now, or the source's prompt with the text files
- * attached to it and the images kept beside its conversation (`filesOf`),
- * an automation run's prompt as it was handed, without the
- * replay or note the source's own first message carried. A note the source
- * was handed behind its marker, or after a replay, is its first step
- * instead. A source that was itself started
- * from another hands on the steps its own replay kept ahead of its own, so
- * a chain reads as one transcript, and the Start fits it once, as a whole,
- * to the new agent's window, the oldest steps going first, summarized
- * where a summary can be written (`replay-summary.ts`, `replayOf`). Each
- * line sent to the agent, each of its words, and each tool call's input
- * and result is replayed whole, as it once fit in the agent's own context;
- * reasoning is left out, as a model does not read its earlier reasoning in
- * later turns either. The preamble
- * names where the source's work now stands: the branch its checkout was
- * copied to as the Start was made (`snapshot.ts`), what it had not pushed
- * included, or, where it could not be copied, the branch and pull request
- * it left, read from its row rather than from GitHub, so the new agent
- * checks that branch out and goes on there. A fork's copy is the code as it
- * stands now, which may be ahead of the message it was forked at, so its
- * preamble names the files the source's own file tools edited after that
- * message, for the new agent to undo where its direction needs it. A source
- * that made no branch of its own, as one that failed or never ended a turn,
- * is read back through the agents it was started from (`lineageOf`), and
- * the preamble names the work it carried, the copy made for it or the
- * branch and pull request of the agent it took up, rather than sending the
- * new agent to the default branch.
- */
-
 export const REPLAY_BOUNDS = {
-  /** The most characters of a step's one-line summary drawn from words; the step's words themselves are replayed whole. */
   SUMMARY_CHARS: 160,
-  /** The most rows of the source's transcript read, the newest at or before where it is cut, besides its brief, and the most read after a fork's cut for the files it edited. */
   MAX_ROWS: 10_000,
-  /** The most files a fork's preamble names as edited after its message; the rest are counted. */
   EDITED_FILES: 50,
-  /** The most agents a chain is read back through for the work a source that made no branch of its own carried. */
   CHAIN_DEPTH: 8,
 } as const;
 
-/** The widest page the store answers. */
 const PAGE_ROWS = 200;
 
-/** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
 interface CallWords {
   readonly verb: string;
   readonly key: string;
 }
 
-/**
- * Each coding tool's words, eve's and those a native harness calls under its
- * own names (`../native-events/`); a patch, and a Codex file change, name
- * their files in their own input and stand apart.
- */
 const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
   [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
@@ -164,14 +108,12 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CLAUDE_CODE_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [CODEX_TOOL.COMMAND_EXECUTION, { verb: "Ran", key: "command" }],
   [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
-  // Note that its verb is the transcript's own, which the replay card reads back as the pull request's line.
   [
     CODER_TOOL.OPEN_PULL_REQUEST,
     { verb: ROW_CALL_WORDS[CALL_KIND.OPEN_PULL_REQUEST].verb, key: "title" },
   ],
 ]);
 
-/** The tools that edit the one file their input names: eve's own, and Claude Code's. */
 const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
   CODER_TOOL.WRITE_FILE,
   CLAUDE_CODE_TOOL.WRITE,
@@ -179,7 +121,6 @@ const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
   CLAUDE_CODE_TOOL.NOTEBOOK_EDIT,
 ]);
 
-/** A patch header naming a file, as `apply_patch` spells one: a file added, updated, or deleted, or where an update moves it to. */
 const PATCH_FILE_HEADER = /^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/u;
 
 const CALL_ENTRY_WORDS = {
@@ -197,7 +138,6 @@ const REPLAY_WORDS = {
   ATTACHED: "Attached file",
 } as const;
 
-/** Whose note the source was handed, as its step names the speaker. */
 const NOTE_SPEAKER: ReadonlyMap<StartNoteHeading, string> = new Map([
   [START_NOTE_HEADING.DEVELOPER, REPLAY_WORDS.DEVELOPER],
   [START_NOTE_HEADING.AGENT, REPLAY_WORDS.STARTING_AGENT],
@@ -205,32 +145,26 @@ const NOTE_SPEAKER: ReadonlyMap<StartNoteHeading, string> = new Map([
 
 const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(AGENT_ATTACHMENT_TYPE));
 
-/** What a source that left no branch, carried none, and could not be copied is taken up from. */
 const NO_BRANCH_WORDS =
   "It left no branch to build on, and its work could not be copied from its sandbox, so start from the repository's default branch.";
 
-/** A text cut to the bound on one line, ending in an ellipsis where it was cut. */
 function cutLine(text: string, maximumChars: number): string {
   return cutText(text.replace(/\s+/gu, " ").trim(), maximumChars);
 }
 
-/** A text cut to the bound as it stands, never inside a surrogate pair, ending in an ellipsis where it was cut. */
 function cutText(text: string, maximumChars: number): string {
   if (text.length <= maximumChars) return text;
   const end = maximumChars - 1;
   const code = text.charCodeAt(end - 1);
-  // Note that a high surrogate left alone would be no character a store keeps.
   const safe = code >= 0xd800 && code <= 0xdbff ? end - 1 : end;
   return `${text.slice(0, safe)}…`;
 }
 
-/** The files a patch names in its own headers, in order. */
 function patchFiles(input: UnparsedWireValue): readonly string[] {
   const patch = isRecord(input) && isWireString(input.patchText) ? input.patchText : "";
   return patch.split("\n").flatMap((line) => PATCH_FILE_HEADER.exec(line.trimEnd())?.[1] ?? []);
 }
 
-/** The files a Codex file change names, each change's path and where an update moves it to, in the order written. */
 function changedFiles(input: UnparsedWireValue): readonly string[] {
   const changes = isRecord(input) && Array.isArray(input.changes) ? input.changes : [];
   return changes.flatMap((change: UnparsedWireValue) => {
@@ -240,14 +174,12 @@ function changedFiles(input: UnparsedWireValue): readonly string[] {
   });
 }
 
-/** The files a patch or a Codex file change edits; none for any other call. */
 function patchedFiles(name: string, input: UnparsedWireValue): readonly string[] {
   if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
   if (name === CODEX_TOOL.FILE_CHANGE) return changedFiles(input);
   return [];
 }
 
-/** What a call was done to, read from its input alone. */
 function subjectOf(name: string, input: UnparsedWireValue): string {
   if (name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
     return patchedFiles(name, input).join(", ");
@@ -258,32 +190,26 @@ function subjectOf(name: string, input: UnparsedWireValue): string {
   return isWireString(subject) ? subject : "";
 }
 
-/** One call said in a line: its verb, its subject, and whether it still runs. */
 export function callEntry(part: StoredToolPart): string {
   const name = part.type.slice("tool-".length);
   const verb =
     name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
       ? CALL_ENTRY_WORDS.EDITED
       : (CALL_WORDS.get(name)?.verb ?? CALL_ENTRY_WORDS.USED);
-  // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
   const subject = subjectOf(name, part.input as UnparsedWireValue) || name;
   const running = isSettledToolPartState(part.state) ? "" : ` ${CALL_ENTRY_WORDS.RUNNING}`;
   return `${verb}: ${subject}${running}`;
 }
 
-/** A call's input or result as words: a string as it is, anything else as its JSON. */
 function wordsOf(value: UnparsedWireValue): string {
   return isWireString(value) ? value : (JSON.stringify(value) ?? "");
 }
 
-/** How `wordsOf` spells a value, so a reader parses only what was JSON and keeps a text that merely looks like it. */
 function formOf(value: UnparsedWireValue) {
   return isWireString(value) ? REPLAY_VALUE_FORM.TEXT : REPLAY_VALUE_FORM.JSON;
 }
 
-/** One call as a step: its line, the tool it called, where it stood, and its input and its output whole, its result or its error, none while it ran. */
 function callStep(part: StoredToolPart): ReplayStep {
-  // SAFETY: a stored part's input is the JSON the row carried, and it is only said, never read into.
   const given = part.input as UnparsedWireValue;
   const call = {
     summary: callEntry(part),
@@ -292,7 +218,6 @@ function callStep(part: StoredToolPart): ReplayStep {
     inputForm: formOf(given),
   };
   if (part.state === "output-available") {
-    // SAFETY: a stored part's output is the JSON the row carried, and it is only said, never read into.
     const answer = part.output as UnparsedWireValue;
     const output = wordsOf(answer);
     return toolStep({ ...call, state: REPLAY_TOOL_STATE.DONE, output, outputForm: formOf(answer) });
@@ -308,7 +233,6 @@ function callStep(part: StoredToolPart): ReplayStep {
   return toolStep({ ...call, state: REPLAY_TOOL_STATE.RUNNING });
 }
 
-/** Who sent a line, as the replay's marker names them: a member with their account, or the kind of sender, the developer where the row kept none. */
 function senderOf(sent: LineSent | undefined): NonNullable<ReplayStep["sender"]> {
   switch (sent?.kind) {
     case undefined:
@@ -328,7 +252,6 @@ function senderOf(sent: LineSent | undefined): NonNullable<ReplayStep["sender"]>
   }
 }
 
-/** Who sent a line, by the name a reader knows them by; the developer where the row kept no sender. */
 function senderName(sent: LineSent | undefined): string {
   switch (sent?.kind) {
     case undefined:
@@ -346,7 +269,6 @@ function senderName(sent: LineSent | undefined): string {
   }
 }
 
-/** A line sent to the agent as a step, under who sent it, by name and as the marker names them, and when it was sent where that is known. */
 function lineStep(
   speaker: string,
   sender: NonNullable<ReplayStep["sender"]>,
@@ -362,7 +284,6 @@ function lineStep(
   };
 }
 
-/** One row as its steps: a line's words and the names of its files, or a journal's words and calls in order, its reasoning left out. */
 function rowSteps(record: StoredMessageRecord, sent: LineSent | undefined): readonly ReplayStep[] {
   const { parts, role } = record.message;
   if (role === MESSAGE_ROLE.USER) {
@@ -391,21 +312,12 @@ function rowSteps(record: StoredMessageRecord, sent: LineSent | undefined): read
   });
 }
 
-/** A source's own first message as the new agent takes it up: its brief, the replay it carried where it was started from another, and its note as a step. */
 interface HandedBrief {
   readonly brief: string;
   readonly carried: Replay | undefined;
   readonly note: ReplayStep | undefined;
 }
 
-/**
- * A source's own first message split as the format reads it: its note is
- * told apart only behind its marker, or after a replay, which fixes where
- * it starts. Note that a source handed an unmarked note with no replay, as
- * agents started before the marker were, keeps that note inside its brief,
- * because a heading in prose cannot be told from one that opens a note,
- * and the brief whole is what that agent was asked.
- */
 function briefOf(handed: string, sentAt: Date | undefined): HandedBrief {
   const read = firstMessageParts(handed);
   const note =
@@ -413,7 +325,6 @@ function briefOf(handed: string, sentAt: Date | undefined): HandedBrief {
   return { brief: read.brief, carried: read.replay, note };
 }
 
-/** The note a source was handed as the step it opens on, sent when its first message was. */
 function noteStep(heading: StartNoteHeading, text: string, sentAt: Date | undefined): ReplayStep {
   const sender =
     heading === START_NOTE_HEADING.AGENT
@@ -422,11 +333,9 @@ function noteStep(heading: StartNoteHeading, text: string, sentAt: Date | undefi
   return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, sender, text, sentAt);
 }
 
-/** A file the source's prompt carried, as a Start attaches one again; nothing where eve kept no bytes of it. */
 function attachmentOf(url: string, mediaType: string, name: string): AgentAttachment | undefined {
   const prefix = `data:${mediaType};base64,`;
   if (!url.startsWith(prefix) || !ATTACHMENT_TYPES.has(mediaType)) return undefined;
-  // SAFETY: the type was checked against the vocabulary just above.
   return {
     name,
     mediaType: mediaType as AgentAttachmentType,
@@ -434,30 +343,21 @@ function attachmentOf(url: string, mediaType: string, name: string): AgentAttach
   };
 }
 
-/** The files a source's prompt carried, as the new agent takes them up: those attached again, and the names of those that cannot be. */
 interface SourceFiles {
   readonly attachments: readonly AgentAttachment[];
   readonly unkept: readonly string[];
 }
 
-/** The bytes a message's files hold together, as the wire bounds them. */
 function filesBytes(files: readonly AgentAttachment[]): number {
   return files.reduce((sum, file) => sum + base64Bytes(file.data), 0);
 }
 
-/**
- * A file of the source's first message as a Start attaches it again: its
- * bytes where the row keeps them, or else the picture it was kept as beside
- * the source's conversation, which a row names by id with no bytes once it
- * was kept (`attached-file-parts.ts`); nothing where neither stands.
- */
 const sourceFileOf = (source: Agent, file: FileUIPart, name: string) =>
   Effect.gen(function* () {
     const inline = attachmentOf(file.url, file.mediaType, name);
     const kept = keptImageOf(file);
     if (inline !== undefined || kept === undefined || !("id" in kept)) return inline;
     const picture = yield* readConversationPicture(source.conversationId, kept.id);
-    // A video an agent showed is no file a message carries, so a Start names it as not attached.
     if (Option.isNone(picture) || isVideoType(picture.value.contentType)) return undefined;
     return {
       name,
@@ -466,13 +366,6 @@ const sourceFileOf = (source: Agent, file: FileUIPart, name: string) =>
     } satisfies AgentAttachment;
   });
 
-/**
- * The files the source's first message carried: those whose bytes stand,
- * in the row or kept beside the source's conversation, and that fit beside
- * the note's own files within one message's bounds, attached again, and the
- * names of the rest. Note that the note's files are kept first, because
- * they are what the developer attached now.
- */
 const filesOf = (
   source: Agent,
   first: StoredMessageRecord | undefined,
@@ -501,24 +394,11 @@ const filesOf = (
     return { attachments, unkept } satisfies SourceFiles;
   });
 
-/** The source's rows a replay reads: its brief and the newest rows at or before the cut, oldest first, and the cut's sequence for a fork. */
 interface SourceRecords {
   readonly records: readonly StoredMessageRecord[];
   readonly cutSeq: number | undefined;
 }
 
-/**
- * The source's brief and the newest rows of its conversation at or before
- * the message a fork is cut at, at most `REPLAY_BOUNDS.MAX_ROWS` of them,
- * oldest first, each as it now stands, read under the member who started
- * it. Note that the rows are read back from the end, or from the fork's
- * message, found by its id without reading the rows after it, because the
- * replay keeps the newest steps and a long transcript read from its start
- * would keep its oldest. A fork's message that is none of the source's own
- * leaves the brief alone, which the Start refuses as invalid. Nothing where
- * a page does not read, which the Start answers as unavailable, because a
- * replay missing rows would pass for the whole.
- */
 const recordsOf = (source: Agent, messageId: string | undefined) =>
   Effect.gen(function* () {
     const { userId, conversationId } = source;
@@ -556,13 +436,11 @@ const recordsOf = (source: Agent, messageId: string | undefined) =>
     return { records, cutSeq } satisfies SourceRecords;
   });
 
-/** The words that check a branch out in the new agent's checkout, which was cloned with the default branch alone. */
 function fetchWords(branch: string): string {
   const quoted = shellQuoted(branch);
   return `fetch and check that branch out with \`git remote set-branches --add origin ${quoted} && git fetch origin ${quoted} && git switch ${quoted}\`, since your checkout was cloned with the default branch alone`;
 }
 
-/** A word quoted for a POSIX shell, so a branch name git allows but a shell reads, such as one with `;` or `$`, stays one word. */
 function shellQuoted(word: string): string {
   return `'${word.replaceAll("'", "'\\''")}'`;
 }
@@ -571,19 +449,16 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: as its tab does (`agentName`), and its id. */
 function agentNamedWithId(agent: Agent): string {
   return `"${agentName(agent)}" (agent id ${agent.id})`;
 }
 
-/** A pull request as it follows the branch it is from; nothing where there is none. */
 function pullWords(published: AgentPullRequest | null): string {
   return published === null
     ? ""
     : `, with its pull request ${mentionMarkdownLink(`#${published.number}`, published.url)}`;
 }
 
-/** Whether a pull request is still open, a draft among them, so work that goes on goes on in it. */
 function stillOpen(published: AgentPullRequest | null): boolean {
   return (
     published !== null &&
@@ -591,13 +466,6 @@ function stillOpen(published: AgentPullRequest | null): boolean {
   );
 }
 
-/**
- * Whether a continue goes on in its source's pull request: one its row last
- * read open, read again on GitHub now, since one merged or closed since the
- * row was written must not take the work. A read that fails is logged and
- * answered no, so the continue opens a pull request of its own rather than
- * pushing to a branch that may be done.
- */
 const goesOnInPullRequest = (userId: string, source: Agent, stored: AgentPullRequest | null) =>
   source.branch === null || !stillOpen(stored)
     ? Effect.succeed(false)
@@ -613,7 +481,6 @@ const goesOnInPullRequest = (userId: string, source: Agent, stored: AgentPullReq
         ),
       );
 
-/** How a continue is told to carry the copy onto its source's pull request, still open, rather than open a second one. */
 function carryOntoWords(copied: string, branch: string): string {
   return (
     ` Its pull request is still open, so carry on in it rather than open a second one; this takes the place of your instructions' own branch and pull request steps for this work: once the copy is fetched, ${fetchWords(branch)}, ` +
@@ -623,15 +490,12 @@ function carryOntoWords(copied: string, branch: string): string {
   );
 }
 
-/** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
 interface CarriedWork {
-  /** None where that agent can no longer be read, and only the copy made of its work stands. */
   readonly agent: Agent | undefined;
   readonly published: AgentPullRequest | null;
   readonly copiedBranch: string | undefined;
 }
 
-/** Where the work a source carried stands, for a source that made no branch of its own: the copy made for it of the agent it took up, or that agent's own branch and pull request. */
 function carriedWhere(carried: CarriedWork): string {
   const { agent, copiedBranch } = carried;
   const named = agent === undefined ? "another agent" : `the agent ${agentNamedWithId(agent)}`;
@@ -654,11 +518,6 @@ function carriedWhere(carried: CarriedWork): string {
   );
 }
 
-/**
- * Where the source's work stands for the new agent. Note that a continue
- * whose source's pull request is still open goes on in it, so the work does
- * not split across two (`goesOnInPullRequest`); a fork opens its own.
- */
 function whereOf(
   source: Agent,
   published: AgentPullRequest | null,
@@ -698,15 +557,6 @@ function whereOf(
   );
 }
 
-/**
- * What the new agent is told of the repositories its source worked in
- * beside its own, which it works in too, checked out again at the branches
- * they started on: that only the source's own checkout was copied (`snapshot.ts`),
- * so nothing it had not pushed in them came along, and where it pushed a
- * branch and opened a pull request in one, that branch to go on from;
- * nothing for a source in one repository, whose preamble is then the text
- * it always was.
- */
 function extrasWords(extras: readonly AgentRepositoryEntry[]): string {
   if (extras.length === 0) return "";
   const named = extras.map((each) => `\`${each.repository}\``).join(", ");
@@ -723,7 +573,6 @@ function extrasWords(extras: readonly AgentRepositoryEntry[]): string {
   );
 }
 
-/** A fork's warning that the code may be ahead of its message, naming the files the source edited after it, or saying they could not be read; nothing for a continue. */
 function forkCaveat(forked: boolean, edited: readonly string[] | undefined): string {
   if (!forked) return "";
   const lead =
@@ -742,7 +591,6 @@ function forkCaveat(forked: boolean, edited: readonly string[] | undefined): str
   );
 }
 
-/** What the new agent is told before the steps: whose work it takes up and how, where that work stands, and what was left out. */
 function preambleOf(
   source: Agent,
   published: AgentPullRequest | null,
@@ -761,7 +609,6 @@ function preambleOf(
   const where = `${whereOf(source, published, copy, carried, inPullRequest)}${extrasWords(extras)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;
-  // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.
   const summarized =
     counts.summarized === 0
       ? ""
@@ -783,56 +630,37 @@ function preambleOf(
   );
 }
 
-/** What a Start from another agent is handed and runs on. */
 export interface StartFrom {
   readonly source: Agent;
-  /** The agents the source's work came down through, the source first, read back while one made no branch of its own (`lineageOf`); whose context the replay is bounded by is read from the first that measured one. */
   readonly lineage: readonly Agent[];
-  /** The source's prompt as the new agent's prompt; none where the source was handed the description, which the new agent is handed as it stands now. */
   readonly prompt: string | undefined;
   readonly attachments: readonly AgentAttachment[];
-  /** Every step the replay could hand on, oldest first, its chain's carried ahead of its own, before any bound; and how many there were. */
   readonly steps: readonly ReplayStep[];
   readonly totalSteps: number;
-  /** The summary the source's own replay carried of the steps before those, which the new replay keeps ahead of them; none where it carried none. */
   readonly carriedSummary: ReplaySummary | undefined;
   readonly choice: ModelChoice;
   readonly disabledServers: readonly string[];
-  /** An automation run's own prompt, the words its servers are read from; none for a source started by hand. */
   readonly serverWords: string | undefined;
-  /** What the replay's preamble and the new agent's row are written from once the steps are bounded (`replayOf`). */
   readonly told: ReplayTold;
 }
 
-/** What a replay says of where it came from, beside its steps. */
 interface ReplayTold {
   readonly published: AgentPullRequest | null;
   readonly copy: SnapshotOutcome;
-  /** The work a source that made no branch of its own carried, where an agent before it left a branch. */
   readonly carried: CarriedWork | undefined;
   readonly forked: { readonly at: boolean; readonly edited: readonly string[] | undefined };
   readonly unkept: readonly string[];
-  /** Whether a continue goes on in its source's pull request, which GitHub says is still open; never a fork. */
   readonly inPullRequest: boolean;
-  /** The repositories the source works in beside its own, with the branch and pull request it left in each; none for a source in one. */
   readonly extras: readonly AgentRepositoryEntry[];
   readonly messageId: string | undefined;
-  /** Where the fork cut that message, where it was of a reply still being written; none where it kept the message whole. */
   readonly cut?: StepCut | undefined;
 }
 
-/** A replay fitted to the new agent's window, and what the new agent's row keeps of where it came from. */
 export interface FittedReplay {
   readonly replay: Replay;
   readonly startedFrom: StoredStartedFrom;
 }
 
-/**
- * The replay a Start hands on, and what the new agent's row keeps of where
- * it came from: the steps kept, the newest, with the summary of the ones
- * before them where one was written, and how many were left out told in the
- * preamble.
- */
 export function replayOf(
   from: StartFrom,
   kept: readonly ReplayStep[],
@@ -873,11 +701,9 @@ export function replayOf(
   };
 }
 
-/** The files a call edited through the agent's own file tools, or a native harness's: a patch's or a file change's, or the one file written or edited; none for a call that failed, which edited nothing. */
 function editedFiles(part: StoredToolPart): readonly string[] {
   if (part.state === "output-error") return [];
   const name = part.type.slice("tool-".length);
-  // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
   const input = part.input as UnparsedWireValue;
   const patched = patchedFiles(name, input);
   if (patched.length > 0) return patched;
@@ -886,19 +712,9 @@ function editedFiles(part: StoredToolPart): readonly string[] {
   return file === "" ? [] : [file];
 }
 
-/**
- * The files the source's file tools edited after the point a fork is taken
- * at, each once, in the order first edited: the steps of the cut message the
- * fork left out, then the rows read forward from the cut's sequence up to
- * `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
- * does not read, or rows past the cap, answer nothing rather than refusing
- * the fork or naming some of the files as all of them, because the fork
- * replays none of those rows and only its caveat names them.
- */
 const editedAfter = (source: Agent, cutSeq: number, rest: Parts) =>
   Effect.gen(function* () {
     const files = new Set(rest.filter(isStoredToolPart).flatMap(editedFiles));
-    // A cursor past every revision reads the rows after the cut alone, never one amended before it.
     let cursor = { seq: cutSeq, revision: Number.MAX_SAFE_INTEGER };
     for (let read = 0; read < REPLAY_BOUNDS.MAX_ROWS; read += PAGE_ROWS) {
       const past = yield* listMessagesPast(
@@ -918,7 +734,6 @@ const editedAfter = (source: Agent, cutSeq: number, rest: Parts) =>
       if (past.read.value.length < PAGE_ROWS) return [...files];
       cursor = { seq: past.cursor.seq, revision: Number.MAX_SAFE_INTEGER };
     }
-    // Note that a row past the cap makes the files named some of them only, so one more is looked for.
     const past = yield* listMessagesPast(
       source.userId,
       source.conversationId,
@@ -929,24 +744,10 @@ const editedAfter = (source: Agent, cutSeq: number, rest: Parts) =>
     return past.read.ok && past.read.value.length === 0 ? [...files] : undefined;
   });
 
-/** Whether two repositories are one, as GitHub names them whatever their case. */
 function sameRepository(one: string | null, other: string | null): boolean {
   return one !== null && other !== null && one.toLowerCase() === other.toLowerCase();
 }
 
-/**
- * The agents a source's work came down through, the source first: each
- * one it was started from, read on while the newest read made no branch of
- * its own, as one that failed or never ended a turn did not, up to
- * `REPLAY_BOUNDS.CHAIN_DEPTH`, on the source's plan and in `repository`,
- * the one the new agent clones, alone; and the work it carried, the nearest
- * branch one of them left, its own or the copy of its work made for the
- * agent after it, even where that agent can no longer be read. Note that a
- * source with no branch of its own is read past, because the new agent sent
- * to the default branch would lose the work the source only carried, and
- * that the walk goes on past the work it found, because the context that
- * bounds the replay is that of the first agent that measured one.
- */
 const lineageOf = (userId: string, source: Agent, repository: string | null) =>
   Effect.gen(function* () {
     const lineage: Agent[] = [source];
@@ -960,7 +761,6 @@ const lineageOf = (userId: string, source: Agent, repository: string | null) =>
         found !== undefined &&
         found.agent.taskId === source.taskId &&
         sameRepository(found.agent.repository, repository);
-      // A copy made for an agent was pushed to the repository that agent cloned, which was checked above.
       const branch = reached ? found.agent.branch : null;
       if (carried === undefined && (link.branch !== undefined || branch !== null)) {
         carried = {
@@ -978,45 +778,30 @@ const lineageOf = (userId: string, source: Agent, repository: string | null) =>
 
 type Parts = StoredMessageRecord["message"]["parts"];
 
-/** A message's parts as a fork cuts them: those it keeps, and those it leaves out. */
 interface CutParts {
   readonly kept: Parts;
   readonly rest: Parts;
 }
 
-/** A source's records with the cut message's parts as a fork keeps them, and the parts of it left out. */
 interface PinnedRecords {
   readonly records: readonly StoredMessageRecord[];
   readonly rest: Parts;
 }
 
-/** Where a fork of a reply still being written cuts it: after its first `steps` steps, and within the last of them after its first `stepParts` words and calls, where that is named. */
 interface StepCut {
   readonly steps: number;
   readonly stepParts: number | undefined;
 }
 
-/** Whether a part is one the replay hands on, a step's words or a call, which a fork's cut within a step counts. */
 function isReplayedPart(part: Parts[number]): boolean {
   return isTextUIPart(part) || isStoredToolPart(part);
 }
 
-/**
- * A message's parts as a fork of a reply still being written keeps them,
- * and the parts it leaves out: its first `steps` steps, the last of them
- * only up to its first `stepParts` words and calls where those are named,
- * and nothing after. Parts ahead of the first boundary are kept with the
- * first step; a message of no more than that is kept whole. Note that a
- * kept step's words and calls are kept as they stand when the Start reads
- * them, so words still being drafted at the press, or a call's result that
- * landed after it, come with them.
- */
 function cutAtStep(parts: Parts, cut: StepCut): CutParts {
   const boundaries = parts.flatMap((part, index) =>
     part.type === UI_PART_TYPE.STEP_START ? [index] : [],
   );
   const stepStart = boundaries[cut.steps - 1];
-  // A message holding fewer steps than the press saw is not the one it saw, so it is kept whole.
   if (stepStart === undefined) return { kept: parts, rest: [] };
   const stepEnd = boundaries[cut.steps] ?? parts.length;
   const counted = parts.flatMap((part, index) =>
@@ -1026,7 +811,6 @@ function cutAtStep(parts: Parts, cut: StepCut): CutParts {
   return { kept: parts.slice(0, end), rest: parts.slice(end) };
 }
 
-/** The records with the cut message's parts cut where a fork names, and the parts left out; the records as read where it names no cut. */
 function pinnedRecords(
   records: readonly StoredMessageRecord[],
   messageId: string | undefined,
@@ -1042,7 +826,6 @@ function pinnedRecords(
   return { records: records.with(at, pinned), rest };
 }
 
-/** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */
 function transcriptSteps(
   records: readonly StoredMessageRecord[],
   senders: ReadonlyMap<string, LineSent>,
@@ -1055,23 +838,15 @@ function transcriptSteps(
           (record) => record.id === messageId && record.message.role === MESSAGE_ROLE.ASSISTANT,
         ) + 1;
   if (messageId !== undefined && end === 0) return undefined;
-  // The first row is the brief the source was handed, which goes ahead of the replay rather than in it.
   const first = records[0]?.message.role === MESSAGE_ROLE.USER ? 1 : 0;
   return records.slice(first, end).flatMap((record) => rowSteps(record, senders.get(record.id)));
 }
 
-/**
- * Where a Start puts its agent: a task, or a workspace with no task and the
- * repository the agent clones there, or none, where any coder handed words
- * alone stands (`start.ts`'s `landingOf`); an
- * agent it is started from must stand in the same place.
- */
 export type StartWhere =
   | { readonly taskId: string }
   | { readonly taskId: null; readonly organizationId: string; readonly repository: string }
   | { readonly taskId: null; readonly organizationId: string; readonly repository: null };
 
-/** The repository the new agent clones in the place: the task's as it stands now, or the workspace place's own; none where the task names none. */
 const placeRepository = (userId: string, place: StartWhere) =>
   Effect.gen(function* () {
     if (place.taskId === null) return place.repository;
@@ -1079,13 +854,6 @@ const placeRepository = (userId: string, place: StartWhere) =>
     return Option.isSome(task) ? task.value.repository : null;
   });
 
-/**
- * What a Start from another agent of the place is handed and runs on, read
- * as the account, the source's files held to what fits beside `noteFiles`.
- * Note that a source the account reaches in no such place is refused as
- * naming nothing, so a source on another plan is never dropped and started
- * afresh; a message that is none of its journals is invalid.
- */
 export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   place: StartWhere,
@@ -1102,7 +870,6 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
-  // An agent on its starter's own GitHub token is continued or forked by its starter alone, before its work is copied.
   if (!controlsAgent(userId, source)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const repository = yield* placeRepository(userId, place);
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
@@ -1125,16 +892,13 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const own = transcriptSteps(records, senders, from.messageId);
   if (own === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  // Note that the source's first row, a line, is its first message, which its note was a part of.
   const opened = records[0]?.message.role === MESSAGE_ROLE.USER ? records[0].placedAt : undefined;
   const handed = briefOf(source.prompt ?? source.descriptionSnapshot ?? "", opened);
   const mine = handed.note === undefined ? own : [handed.note, ...own];
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
-  // A source handed the description carries files only where its own note did, so its first message is read either way.
   const files = yield* hostedStoreOrUnavailable(filesOf(source, records[0], noteFiles));
   const forked = from.messageId !== undefined;
-  // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
   const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
   const [, ...extras] = yield* hostedStoreOrUnavailable(readAgentRepositories(userId, source.id));

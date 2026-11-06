@@ -21,34 +21,12 @@ import {
   type NativeWakeup,
 } from "./native-moments.js";
 
-/**
- * runner-moments.ts -- what every harness's reader reads alike: the runner's own events, and a tool's answer as the transcript settles its call.
- *
- * The runner posts its own events (`@repo/agent-runner/protocol`) among its
- * harness's messages, the same for Claude Code and Codex: a line we handed
- * the harness, the launch waiting on work in flight, the agent's turn over
- * with the launch kept warm, and the launch's end. A
- * tool's answer is settled the same way whichever harness ran it: our own
- * tool's as the JSON it answered, any other's as the text the model read.
- */
-
-/** How long the turn's record keeps a failure the harness reported, inside the writer's own bound. */
 export const FAILURE_CHARS = 300;
 
-/** How long the turn's record keeps the launch's own words for its end, long enough for a provider's whole JSON error, inside the writer's own bound. */
 const END_DETAIL_CHARS = 1000;
 
-/**
- * OpenAI's codes for a refusal of a ChatGPT plan, such as
- * `subscription_sharing_unsupported_capability`, each whole: its own words,
- * never a secret, though a run that long reads as one to `redactCredentials`.
- * Note that a code stands alone only between whitespace or quotes, or a
- * `,` or `;` after it, as a JSON error and a turn's failure words set it,
- * since any other character beside it could be part of a credential's value.
- */
 const PLAN_CODE_SPLIT = /((?<![^\s"'])(?:subscription_sharing|chatpass_v2)_[a-z_]+(?![^\s"',;]))/;
 
-/** What a picture in a tool's answer is kept as: the bytes went to the model once, and a transcript carries every byte it holds into each read. */
 export const PICTURE_STAND_IN = "[image]";
 
 const readType = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String }));
@@ -63,18 +41,15 @@ const readEnd = Schema.decodeUnknownOption(
   }),
 );
 
-/** How each of the runner's endings reads on the turn. */
 const ENDING_OF_RUNNER_END = {
   [RUNNER_END.TURN_ENDED]: NATIVE_ENDING.DONE,
   [RUNNER_END.RELEASED]: NATIVE_ENDING.DONE,
   [RUNNER_END.STOPPED]: NATIVE_ENDING.STOPPED,
   [RUNNER_END.INPUT_CLOSED]: NATIVE_ENDING.FAILED,
   [RUNNER_END.FAILED]: NATIVE_ENDING.FAILED,
-  // A warm launch's turn already ended at its IDLE, so this end finds none to settle.
   [RUNNER_END.IDLED]: NATIVE_ENDING.DONE,
 } as const satisfies Record<RunnerEnd, (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING]>;
 
-/** The ends that are no failure, which carry no detail. */
 const QUIET_ENDS: ReadonlySet<RunnerEnd> = new Set([
   RUNNER_END.TURN_ENDED,
   RUNNER_END.RELEASED,
@@ -82,11 +57,6 @@ const QUIET_ENDS: ReadonlySet<RunnerEnd> = new Set([
   RUNNER_END.IDLED,
 ]);
 
-/**
- * The wakeups an end leaves the agent: a released wait's, each whose
- * instant reads, or none for a Stop; nothing for any other end, which
- * leaves the agent's wakeups as they stood.
- */
 function wakeupsOf(
   reason: RunnerEnd,
   wakeups: readonly { readonly at: string; readonly prompt: string }[] | undefined,
@@ -118,26 +88,13 @@ function endMoments(message: WireValue): readonly NativeMoment[] {
   ];
 }
 
-/**
- * Text as a failed turn's record and its report keep it: every
- * credential-shaped run replaced (`redactCredentials`), but OpenAI's plan
- * codes word for word, so what refused a plan stays readable. Note that a
- * code is set apart only where nothing a credential is spelled with touches
- * it, so no credential's head or tail is left unredacted beside one.
- */
 export function redactKeepingPlanCodes(text: string): string {
-  // Note that `split` puts each code its group caught at an odd index.
   return text
     .split(PLAN_CODE_SPLIT)
     .map((part, index) => (index % 2 === 1 ? part : redactCredentials(part)))
     .join("");
 }
 
-/**
- * One of the runner's own events as the moments of the run, or nothing
- * where the message is no event of the runner's, so the harness's reader
- * reads it.
- */
 export function runnerMoments(message: WireValue): Option.Option<readonly NativeMoment[]> {
   const type = Option.map(readType(message), (read) => read.type);
   if (Option.isNone(type)) return Option.none();
@@ -153,7 +110,6 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
       );
     case RUNNER_EVENT.WAITING:
       return Option.some([{ kind: NATIVE_MOMENT.WAITING }]);
-    // The agent's turn is over, as a `turn_ended` END says, though the launch stays warm.
     case RUNNER_EVENT.IDLE:
       return Option.some([{ kind: NATIVE_MOMENT.ENDED, ending: NATIVE_ENDING.DONE, warm: true }]);
     case RUNNER_EVENT.END:
@@ -163,13 +119,6 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
   }
 }
 
-/**
- * A tool's answer as the transcript settles its call: an error the harness
- * flagged is a refusal carrying the text, and any other answer is available.
- * Our own tool's answer is read as the JSON it answers, so its status word
- * counts as the eve relay counts it; any other tool's is kept as `output`,
- * the text the model read or what the harness reported of the call.
- */
 export function toolAnswerSettlement(
   answer:
     | { readonly workspaceTool: true; readonly text: string }

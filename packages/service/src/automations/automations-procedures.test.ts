@@ -90,34 +90,14 @@ import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake
 import { automationRunsLiveStatements, automationsLiveStatements } from "./automation-live.js";
 import { automationsProcedures } from "./automations-procedures.js";
 
-/** An automation's "Run now" (POST). */
 const automationRunPath = (automationId: string): string => `${automationPath(automationId)}/run`;
 
-/** An automation's runs, newest first (GET). */
 const automationRunsPath = (automationId: string): string => `${automationPath(automationId)}/runs`;
 
-/**
- * The automation routes, answered by the hosted oRPC router the way the web
- * route answers them, over a real dialect: an automation is made on the account's task
- * with its schedule's first due instant, refused where its schedule, model,
- * or task will not do, read and changed by its own account alone, paused
- * and resumed with its due instant cleared and computed again, a webhook's
- * secret answered once and kept only as its hash, and a "Run now" one run
- * per key that starts its agent. eve is a fake at the client's boundary,
- * GitHub a script, the catalog fixed, and the store PGlite. Synthetic
- * accounts, bearers, tasks, and words throughout.
- */
-
-/** What the routes counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-/**
- * The installations reaching the repository, one for each owner's workspace,
- * since one installation connects to one workspace and the suite's tests
- * share a database.
- */
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 24 }, (_, index) => ({
   id: 7_000 + index,
   login: RELAY.owner,
@@ -142,16 +122,13 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
 function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** The automation procedures over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const opened: string[] = [];
-    /** Who opened each session, in order: the request's bearer, or the deployment acting for an account. */
     const openedAs: string[] = [];
     const sessionsAs = (caller: string): AgentSessions => ({
       open: (message) =>
@@ -164,7 +141,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
       reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
     });
-    // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
     const sessions = new Map(
       [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
     );
@@ -183,11 +159,9 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         ),
       ),
     );
-    // SAFETY: the automation procedures yield the database, the clock, GitHub, its HTTP client, and the catalog alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     const handle = hostedFetch({
       automations: automationsProcedures({
-        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
         resolveUserId: (incoming: Request) =>
           requestUserId(
             incoming,
@@ -206,7 +180,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       init: {
         readonly method?: string;
         readonly body?: unknown;
-        /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
         readonly cookie?: string;
       } = {},
     ) =>
@@ -215,7 +188,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
         if (init.cookie !== undefined) headers.set("cookie", init.cookie);
         const sent = init.body === undefined ? undefined : JSON.stringify(init.body);
-        // The length the platform hands a function with every body.
         if (sent !== undefined) {
           headers.set("content-length", String(new TextEncoder().encode(sent).byteLength));
         }
@@ -230,14 +202,12 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           ),
         );
         const text = yield* Effect.promise(() => response.text());
-        // SAFETY: the router answers JSON; the test reads it as the wire value it is.
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
     return { ask, opened, openedAs };
   });
 
-/** The answer read through its schema, failing the test where the status or the body is not what it should be. */
 function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   status: number,
@@ -249,7 +219,6 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** An owner with a task on the repository of its workspace's installation, another account beside them, and the group. */
 const openAccounts = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   yield* connectAgentApiKeys(owner);
@@ -271,7 +240,6 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other, task, ask, opened, openedAs };
 });
 
-/** The weekday triage made on a workspace with the repositories named, the workspace's installed one where it names none. */
 const weekdays = (
   workspaceId: string,
   repositories: readonly string[] = [`${RELAY.owner}/${RELAY.name}`],
@@ -287,7 +255,6 @@ const weekdays = (
   action: { kind: AUTOMATION_ACTION.AGENT, prompt: PROMPT },
 });
 
-/** A row an older build paused after its failed starts, as its pause stands now its reason column is gone: turned off. */
 const pausedByAnOlderBuild = (id: string) =>
   Database.use((db) =>
     db
@@ -362,7 +329,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body });
 
         const outside = yield* post(other, weekdays(task.workspaceId, [relay]));
-        // Note that a released desktop may still name the plan it made an automation on, on which none stands now.
         const onPlan = yield* post(owner, {
           ...weekdays(task.workspaceId, [relay]),
           planId: task.id,
@@ -456,7 +422,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(automation.guards, AUTOMATION_DEFAULT_GUARDS);
         assert.equal(automation.lastRun, null);
         assert.ok(automation.nextRunAt !== null && automation.nextRunAt > now);
-        // Nine in New York is 13:00 or 14:00 UTC, whichever side of daylight saving it falls.
         assert.ok([13, 14].includes(new Date(automation.nextRunAt).getUTCHours()));
 
         const listed = readAnswer(
@@ -468,7 +433,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           listed.automations.map((each) => each.id),
           [automation.id],
         );
-        // Note that a released desktop may still list a plan's automations, of which there are none now.
         const onPlan = readAnswer(
           automationListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -691,7 +655,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           );
         const refused = yield* runOnce();
         const agent = Option.getOrThrow(yield* readAgent(owner, refused.agent?.id ?? ""));
-        // Its turn failed on the model call, GitHub's refusal in its detail.
         yield* Database.use((db) =>
           db.insert(turns).values({
             userId: owner,
@@ -703,8 +666,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           }),
         );
         yield* runOnce();
-        // A run whose agent's session ended for good, a line written after it, and one whose
-        // settled turn a line of the developer's still awaits.
         const turnThenLine = (name: string, status: TurnStatus, failure: string | null) =>
           Effect.gen(function* () {
             const automation = yield* made(name);
@@ -724,7 +685,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
               db.insert(messages).values({
                 userId: owner,
                 conversationId: each.conversationId,
-                // After the run's own prompt, which its Start wrote first.
                 seq: 2,
                 clientId: randomUUID(),
                 role: MESSAGE_ROLE.USER,
@@ -776,13 +736,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(runs, history.runs);
         assert.deepEqual(
           runs.map((each) => `${each.agent?.status}:${each.agent?.failureReason ?? ""}`).toSorted(),
-          [
-            `${AGENT_STATUS.FAILED}:${AGENT_FAILURE.GITHUB}`,
-            // A run with no turn yet reads running, its prompt awaiting the turn eve opens on it.
-            `${AGENT_STATUS.RUNNING}:`,
-          ],
+          [`${AGENT_STATUS.FAILED}:${AGENT_FAILURE.GITHUB}`, `${AGENT_STATUS.RUNNING}:`],
         );
-        // A line after a session that ended for good awaits nothing; one after a settled turn awaits it.
         for (const [automationId, said] of [
           [ended, `${AGENT_STATUS.FAILED}:${AGENT_FAILURE.SESSION_ENDED}`],
           [awaiting, `${AGENT_STATUS.RUNNING}:`],
@@ -829,7 +784,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           }),
         );
         const agent = Option.getOrThrow(yield* readAgent(owner, run.agent?.id ?? ""));
-        // Its one turn ran past its bound, and the sweep settled it.
         yield* Database.use((db) =>
           db.insert(turns).values({
             userId: owner,
@@ -847,7 +801,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
         );
         assert.deepEqual(history.runs[0]?.agent, {
           id: agent.id,
-          // The run names its agent as the agent goes by: its title.
           title: agent.title,
           status: AGENT_STATUS.FAILED,
           ownKey: true,
@@ -895,7 +848,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         assert.equal(first.run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
-        // The run's prompt, which its Start wrote, awaits the first turn eve opens on it.
         assert.equal(first.run.agent?.status, AGENT_STATUS.RUNNING);
         assert.deepEqual(again.run, first.run, "the same key answers the run it made");
         assert.equal(opened.length, 1, "and starts nothing again");
@@ -911,7 +863,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openAccounts;
-        /** The transaction that last wrote the automation's row, as Postgres keeps it. */
         const writtenIn = (id: string) =>
           Effect.map(
             Database.use((db) =>
@@ -1168,7 +1119,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
             .insert(personalWorkspace)
             .values({ userId: owner, organizationId: personal, createdAt: new Date(0) }),
         );
-        // The personal workspace reaches the repository, so its scope alone is what refuses it.
         const installation = INSTALLATIONS[installationsConnected++];
         assert.ok(installation);
         yield* connectWorkspaceGitHub(personal, installation);
@@ -1218,7 +1168,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
         yield* connectAgentApiKeys(admin);
         yield* joinWorkspace(task.workspaceId, member, WORKSPACE_ROLE.MEMBER);
         yield* joinWorkspace(task.workspaceId, admin, WORKSPACE_ROLE.MEMBER);
-        // The plugin's role text may name several roles; this admin is one only among them.
         yield* Database.use((db) =>
           db
             .update(memberTable)
@@ -1358,7 +1307,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(yield* minesListed(owner), { [owners.id]: true, [members.id]: false });
         assert.deepEqual(yield* minesListed(member), { [owners.id]: false, [members.id]: true });
         assert.equal(readByMember.mine, false);
-        // Each names who made it to every member alike, which their page lists it under.
         assert.deepEqual([readByMember.creatorId, members.creatorId], [owner, member]);
       }),
   );
@@ -1376,7 +1324,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
             body: weekdays(task.workspaceId),
           }),
         );
-        // The due instant as the sweep leaves it once it has moved a schedule on.
         const later = new Date((automation.nextRunAt ?? 0) + 7 * 24 * 60 * 60_000);
         yield* Database.use((db) =>
           db

@@ -59,22 +59,9 @@ import { canceledTurn } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
 
-/**
- * An agent's queue over the agents routes: a message queued while a turn
- * runs waits for the turn's end and opens the next turn, one at a time; a
- * member's change (add, edit, hold, reorder, delete, steer, resume) moves the
- * queue's revision and is answered with the queue; Stop and every other
- * cancel pause it; a refused hand-off keeps the message and pauses with why;
- * and only the agent's starter may change it. Over the harness the agents
- * routes' tests share (`testing/agents-app.ts`). Synthetic accounts, tasks,
- * and words throughout.
- */
-
 it.layer(getTestDB())("an agent's queue", (it) => {
-  /** Where a change to an agent's queue lands. */
   const AGENT_QUEUE = "/api/agents/queue";
 
-  /** One change to the agent's queue as its owner asks it, and the queue it answers. */
   const queueChanged = (
     ask: (request: Request) => Effect.Effect<Answer>,
     owner: string,
@@ -136,7 +123,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       }),
   );
 
-  /** An image and a PDF a queued message may carry. */
   const SHOT = {
     name: "flow.png",
     mediaType: AGENT_ATTACHMENT_TYPE.PNG,
@@ -148,13 +134,11 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     data: Buffer.from("%PDF-1.4").toString("base64"),
   };
 
-  /** The names of the files eve was last handed, in order. */
   const handedFiles = (eve: ReturnType<typeof fakeEve>) =>
     receiptOf(eve.sent.at(-1)?.message.message).flatMap((part) =>
       part.type === "file" ? [part.filename] : [],
     );
 
-  /** A message queued with an image behind the running turn, and held for an edit. */
   const heldWithImage = (eve: ReturnType<typeof fakeEve>) =>
     Effect.gen(function* () {
       const started = yield* messagedAgent(eve, { running: true });
@@ -288,7 +272,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         assert.ok(queued !== undefined);
         yield* changed({ change: QUEUE_CHANGE.EDIT, messageId: queued.id, text: "Run the tests" });
         yield* changed({ change: QUEUE_CHANGE.REORDER, order: [queued.id] });
-        // Held, so the Resume after the Stop hands nothing on.
         yield* changed({ change: QUEUE_CHANGE.HOLD, messageId: queued.id, held: true });
         yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
         yield* changed({ change: QUEUE_CHANGE.RESUME });
@@ -371,7 +354,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
 
       assert.deepEqual(queue.messages, []);
       assert.equal(yield* sentLineStands(owner, target.conversationId, sentLineId(id)), true);
-      // Counted once, as it went, and as a message that waited in the queue.
       assert.deepEqual(countedWith(owner, SERVER_EVENT.MESSAGE_SEND).slice(countedBefore), [
         {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -384,11 +366,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     }),
   );
 
-  /**
-   * An agent whose turn ran while the owner queued `texts`, then ended: the
-   * queue at that end as the runner's events route hands it on (with GitHub
-   * and no network), and the queue as the owner reads it on the transcript.
-   */
   const queuedBehindEndedTurn = (
     eve: ReturnType<typeof fakeEve>,
     texts: readonly string[],
@@ -418,14 +395,11 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       const sessionsFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
       const reach = Layer.mergeAll(github.layer, noNetwork);
       const turnEnded = queueAtTurnEnd(sessionsFor, stored).pipe(Effect.provide(reach));
-      /** One queued message handed on, as a hand-off does once it read the queue's head. */
       const handedOn = (message: QueuedMessageRow) =>
         sendQueued(sessionsFor, stored, message).pipe(Effect.provide(reach));
-      // Note that the read at once says whether it would have held, and when the clock alone moves it, which the page itself does not carry.
       const queued = Effect.map(
         ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" })),
         (answered) => {
-          // SAFETY: the route answers a page as a JSON object.
           const {
             holds: _holds,
             wakeIn: _wakeIn,
@@ -437,7 +411,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           }).queue;
         },
       );
-      /** One queued message sent as a hand-off sends it, the hand-off cut off before the message left the queue. */
       const sentAlone = (message: QueuedMessageRow) =>
         Effect.flatMap(sessionsFor(message.userId), (eveAs) =>
           steerAgentWritten(eveAs, storeWriter({ tools: CODER_TOOL_SET }), message.userId, stored, {
@@ -446,12 +419,10 @@ it.layer(getTestDB())("an agent's queue", (it) => {
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
           }),
         ).pipe(Effect.provide(reach));
-      /** The maintenance sweep's pass over the queues standing unpaused. */
       const swept = sweepAgentQueues(sessionsFor).pipe(Effect.provide(reach));
       return { agent, ask, owner, turnEnded, handedOn, sentAlone, swept, queued, stored };
     });
 
-  /** How many times eve was handed words holding `text`. */
   const handedCount = (eve: ReturnType<typeof fakeEve>, text: string) =>
     eve.sent.filter((each) => JSON.stringify(each.message.message).includes(text)).length;
 
@@ -560,7 +531,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { handedOn, queued, stored } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
-        // Both hand-offs read the head before either sent it, as two racing at one end do.
         const head = Option.getOrThrow(yield* claimQueueHead(stored.id));
 
         yield* handedOn(head);
@@ -618,7 +588,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         );
         assert.equal(eve.sent.length, sentBefore, "nothing goes while the agent starts");
 
-        // The first turn opens, takes the Start's line, and ends.
         const turnId = randomUUID();
         yield* writer.enqueueTurn(target, {
           turnId,
@@ -701,7 +670,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           id: randomUUID(),
         })).messages;
         assert.ok(queued !== undefined);
-        // Held by an edit, so the Resume hands nothing on and the queue's pause alone is at stake.
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.HOLD,
           messageId: queued.id,
@@ -854,7 +822,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
         const sessionsFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        // The runner ends the turn as stopped, and its events hand on the queue, before eve answers the cancel.
         const database = yield* Effect.context<DatabaseServices>();
         racing = Effect.andThen(
           writer.consume(target, {
@@ -917,7 +884,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        // The turn ended with a message still queued, which the turn's end has not handed on yet.
         const { agent, ask, owner, queued, swept } = yield* queuedBehindEndedTurn(eve, [
           "Open the pull request.",
         ]);

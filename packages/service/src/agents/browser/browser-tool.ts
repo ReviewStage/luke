@@ -1,51 +1,3 @@
-/**
- * browser-tool.ts -- `browser`, an agent's one tool for a real browser: its input, the one place a call is routed to a browser, a member's takeover heeded, the tab store kept in step, and the result as the model and the stored conversation each see it.
- *
- * The app and a coding agent are offered the same tool, and neither's workers,
- * which read and change nothing. A
- * call names one to ten actions of the shared vocabulary
- * (`@repo/features/browser-agent-actions`) and runs them in order on the
- * Chromium in the agent's own sandbox (`agent-browser.ts`,
- * `browser-actions.ts`). Every call is routed to its browser here alone
- * (`browserFor`).
- *
- * The agent's tabs are kept in the service under the conversation whose
- * agent's browser holds them (`@repo/database/models/agent-browser-tabs`):
- * a coding agent's own, the task's for the app. Before a
- * call runs, the action on a tab a member drives is refused, with words that
- * say so, and nothing after it runs, so the agent waits for the tab to be
- * handed back or asks; what ran before it stands. After it runs, the store
- * follows what the browser now holds: a tab opened or acted on is written
- * with its address and title, a `list` writes every page the browser
- * holds, and only a tab the agent closed is dropped. A tab a member opened
- * in the agent's browser, as one does to sign in somewhere for it
- * (`agent-browser-tabs-procedures.ts`), is answered among the tabs as one
- * they opened, so the agent knows to use it once it is handed back.
- *
- * While it runs, the agent's pointer is written to the tab it points at
- * (`pointBrowserTab`), one write just before each click, type, or wheel
- * turn reaches the page, so a member's window draws it gliding there
- * (`@repo/features/browser-agent-cdp`'s `BrowserCursor`). Where someone is
- * watching, each such input then waits the cursor's beat, so the glide lands
- * with the action. Someone is watching while the agent's sandbox lease
- * stands (`sandbox-terminal-lease.ts`), which the live view moves on while a
- * panel has one of its tabs open; a Terminal tab in use holds it too, and
- * counts as watching. An agent no one watches is never slowed. The point
- * and its kind are no page content and are never logged.
- *
- * A browser that cannot be reached answers `not-run` and why, never a throw.
- * A screenshot is taken twice over: the model's copy, small
- * (`BROWSER_SCREENSHOT`), reaches the model as an image
- * (`browserModelOutput`) and its base64 is left out of the stored
- * conversation (`storedBrowserOutput`); the transcript's copy, the page at
- * its own size and good quality (`BROWSER_KEPT_SCREENSHOT`), is kept beside
- * the transcript the call is written to as `show_image`'s pictures are
- * (`@repo/database/models/conversation-pictures`), deleted with that
- * conversation, and the step names it by id (`picture`), or says why it was
- * not kept (`omitted`). Nothing a page holds is logged or traced here: a
- * failure to keep the store is logged by its kind alone.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type AgentBrowserTabRow,
@@ -104,7 +56,6 @@ const BROWSER_INPUT = Schema.Struct({
 
 const readInput = readEither(BROWSER_INPUT);
 
-/** The tool as every agent is offered it, the app, a coding agent, and either's workers alike: its name, its words, and its input schema. */
 export const BROWSER_TOOL = {
   name: AGENT_TOOL.BROWSER,
   description:
@@ -139,7 +90,6 @@ export const BROWSER_TOOL_STATUS = {
   NOT_RUN: "not-run",
 } as const;
 
-/** A tab as a result names it: its id, address, and title, and that a member opened it, where one did. */
 type ShownTab = {
   readonly tab: string;
   readonly url: string;
@@ -147,37 +97,30 @@ type ShownTab = {
   readonly openedBy?: typeof AGENT_BROWSER_TAB_OPENER.MEMBER;
 };
 
-/** A screenshot step as the runner answers it, the transcript's copy beside the model's where it fit. */
 type ScreenshotStep = Extract<
   BrowserAgentStep,
   { readonly action: typeof BROWSER_AGENT_ACTION.SCREENSHOT; readonly status: "done" }
 >;
 
-/** What the transcript kept of a screenshot: the picture by id, or why it was not kept and its size. */
 type KeptNote =
   | { readonly picture: { readonly [Key in keyof KeptPicture]: KeptPicture[Key] } }
   | { readonly omitted: PictureOmission; readonly byteCount: number };
 
-/** A step as the tool answers it: a screenshot's transcript copy replaced by what was kept of it, every other step as it ran. */
 type BrowserToolStep =
   | Exclude<BrowserAgentStep, ScreenshotStep>
   | (Omit<ScreenshotStep, "kept"> & (KeptNote | Record<never, never>));
 
-// A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type BrowserToolResult =
   | {
       readonly status: typeof BROWSER_TOOL_STATUS.RAN;
       readonly steps: readonly BrowserToolStep[];
       readonly skipped: number;
-      /** The tabs the call acted on and still open, as they stand once it ran. */
       readonly tabs: readonly ShownTab[];
     }
   | { readonly status: typeof BROWSER_TOOL_STATUS.NOT_RUN; readonly reason: string };
 
-/** The address of a page that holds nothing: Chromium's own first page, which a call never sees. */
 const BLANK_ADDRESS = "about:blank";
 
-/** The actions that may move a tab's page, whose title is settled before the call ends. */
 const MOVING_ACTIONS: ReadonlySet<string> = new Set([
   BROWSER_AGENT_ACTION.OPEN,
   BROWSER_AGENT_ACTION.NAVIGATE,
@@ -188,34 +131,25 @@ const MOVING_ACTIONS: ReadonlySet<string> = new Set([
   BROWSER_AGENT_ACTION.KEY,
 ]);
 
-/** How long, in all, a call's end waits on the pages it moved to finish loading, so their titles are kept as they settled. */
 const TITLE_SETTLE_MS = 5_000;
 
-/** Why a call ran nothing, or an action was refused, in words the model can act on. */
 export const BROWSER_TOOL_REFUSAL = {
   UNREACHABLE: "Not run: your browser could not be reached:",
   UNAVAILABLE: "Not run: the browser could not be reached just now. The call may be made again.",
   NO_SANDBOX: "Not run: your sandbox could not be opened. The call may be made again.",
 } as const;
 
-/** What a call runs under: the session whose sandbox its browser is in, the conversation its tabs belong to, and the transcript its screenshots are kept beside. */
 export interface BrowserCall {
-  /** The eve session whose sandbox the browser runs in: the root's own (`browserSessionOf`). */
   readonly browserSession: string;
-  /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for the app. */
   readonly conversationId: string;
-  /** The transcript the call is written to, which keeps its screenshots: the agent's own, since no worker is offered the tool. */
   readonly transcript: ConversationTarget;
-  /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it; one already open is answered as it stands. */
   readonly openSandbox: () => PromiseLike<unknown>;
 }
 
-/** A call that ran nothing, and why. */
 export function browserNotRun(reason: string): BrowserToolResult {
   return { status: BROWSER_TOOL_STATUS.NOT_RUN, reason };
 }
 
-/** The words a refused action answers: a member drives its tab. */
 function drivenWords(tab: string): string {
   return (
     `Not done: a member is driving tab ${tab} in the Browser tab beside the description. ` +
@@ -223,17 +157,10 @@ function drivenWords(tab: string): string {
   );
 }
 
-/**
- * The first action that acts on a tab a member drives, and that tab, read
- * ahead of the run as the run itself names tabs: a tab left out is the one
- * the action before acted on, a tab just opened is driven by no one, and a
- * closed one leaves the next to name its own.
- */
 function firstDriven(
   actions: readonly BrowserAgentAction[],
   driven: ReadonlySet<string>,
 ): { readonly index: number; readonly tab: string } | undefined {
-  // Note that `null` is a tab this call opened, whose id is not known until it runs.
   let tab: string | null | undefined;
   for (const [index, action] of actions.entries()) {
     if (action.action === BROWSER_AGENT_ACTION.LIST || isRecordingAction(action)) continue;
@@ -248,14 +175,12 @@ function firstDriven(
   return undefined;
 }
 
-/** The tabs a member drives now, by the browser's own id for each. */
 function drivenTabs(rows: readonly AgentBrowserTabRow[], now: Date): ReadonlySet<string> {
   return new Set(
     rows.filter((row) => browserTabDriver(row, now) !== null).map((row) => row.targetId),
   );
 }
 
-/** A tab as a result shows it, its address and title cut to the shown cap. */
 function shownTab(page: PageTarget): ShownTab {
   return {
     tab: page.targetId,
@@ -264,7 +189,6 @@ function shownTab(page: PageTarget): ShownTab {
   };
 }
 
-/** The tabs shown, each a member opened, as one opens a tab to sign in for the agent, saying so. */
 function withOpeners(
   tabs: readonly ShownTab[],
   rows: readonly AgentBrowserTabRow[],
@@ -279,7 +203,6 @@ function withOpeners(
   );
 }
 
-/** The tabs the steps acted on, every tab a list named among them, in the order first acted on, a closed one left out. */
 function tabsActedOn(steps: readonly BrowserAgentStep[]): readonly string[] {
   const acted: string[] = [];
   for (const step of steps) {
@@ -299,11 +222,6 @@ function tabsActedOn(steps: readonly BrowserAgentStep[]): readonly string[] {
   return acted;
 }
 
-/**
- * The tabs whose page the steps may have moved, an open's, a navigation's, a
- * click's, or a key's, and that still stand: the ones whose title may not
- * have settled yet as the call ends.
- */
 function tabsMoved(steps: readonly BrowserAgentStep[]): readonly string[] {
   const moved = new Set<string>();
   for (const step of steps) {
@@ -314,15 +232,6 @@ function tabsMoved(steps: readonly BrowserAgentStep[]): readonly string[] {
   return [...moved];
 }
 
-/**
- * Keeps the store in step with what the browser now holds once a call ran:
- * every tab acted on written with its page as it stands, and after a
- * `list`, every page the browser holds; a tab the agent closed is dropped.
- * Note that a kept tab the browser does not hold is never dropped here,
- * because it is one the connection could not reopen just now
- * (`restore-tabs.ts`), which the next connection tries again; only the
- * agent's own `close` ends a tab.
- */
 function keepTabs(
   conversationId: string,
   steps: readonly BrowserAgentStep[],
@@ -355,22 +264,10 @@ function keepTabs(
   });
 }
 
-/**
- * The browser a call is routed to: the Chromium in the agent's own sandbox,
- * connected for the caller's scope, its kept tabs reopened where it started
- * afresh (`restore-tabs.ts`).
- */
 function browserFor(call: BrowserCall) {
   return connectRestoring(call.browserSession, call.conversationId);
 }
 
-/**
- * The browser as a call sees it: without the blank page Chromium starts
- * with, so that page is never listed, kept, or reopened. Note that it is
- * told apart as a blank page the store does not keep and this call did not
- * open, since the browser marks no page as its first, and that a tab this
- * call opened may still read as blank before its address commits.
- */
 function withoutStartPage(cdp: CdpSession, kept: ReadonlySet<string>): CdpSession {
   const opened = new Set<string>();
   return {
@@ -386,12 +283,6 @@ function withoutStartPage(cdp: CdpSession, kept: ReadonlySet<string>): CdpSessio
   };
 }
 
-/**
- * Waits, within `TITLE_SETTLE_MS` in all, for each page the steps moved to
- * finish loading, so the title kept for it is its page's own rather than the
- * address Chromium shows while it loads; a page that does not is kept as it
- * then stands.
- */
 function settleTitles(cdp: CdpSession, steps: readonly BrowserAgentStep[]) {
   const moved = tabsMoved(steps);
   const waits = moved.map((tab) =>
@@ -405,18 +296,10 @@ function settleTitles(cdp: CdpSession, steps: readonly BrowserAgentStep[]) {
   );
 }
 
-/**
- * The steps with each tab a `list` named titled as its page settled
- * (`settleTitles`), where the call moved it before that list and never
- * after, and it still stands at the address listed: so a step never names a
- * tab by the title it showed while loading where the result's `tabs` names
- * it by its own, and a list before a later move keeps what it saw.
- */
 function withSettledTitles(
   steps: readonly BrowserAgentStep[],
   byId: ReadonlyMap<string, PageTarget>,
 ): readonly BrowserAgentStep[] {
-  // Each tab still standing that the call moved, by the step that last moved it.
   const lastMoved = new Map<string, number>();
   for (const tab of tabsMoved(steps)) {
     lastMoved.set(
@@ -445,12 +328,6 @@ function withSettledTitles(
   });
 }
 
-/**
- * The agent's pointer as the tab store keeps it: each move written to its
- * tab's row, and held for the beat while the sandbox's lease says someone
- * watches. Note that a write the store refuses is logged by its kind alone
- * and lets the action go on, since a pointer not drawn breaks nothing.
- */
 function storedCursor(conversationId: string, now: Date) {
   return Effect.gen(function* () {
     const watched = yield* sandboxHeld(conversationId, now).pipe(
@@ -465,7 +342,6 @@ function storedCursor(conversationId: string, now: Date) {
   });
 }
 
-/** Why a recording did not start or stop, in words the model can act on. */
 const RECORDING_REFUSAL = {
   RUNNING: "a recording already runs: stop it with stop_recording first",
   NO_ENCODER: "your sandbox carries no video encoder, so the browser cannot be recorded",
@@ -479,11 +355,6 @@ const RECORDING_REFUSAL = {
   UNKEPT: "the recording could not be kept just now; call stop_recording again",
 } as const;
 
-/**
- * The run's recorder: a recording of the browser in the agent's sandbox
- * (`sandbox-recorder.ts`), kept as a video beside the transcript the call is
- * written to, as its screenshots are, under a picture's bounds.
- */
 function sandboxRecorder(call: BrowserCall): BrowserRecorder<AgentBrowser | DatabaseServices> {
   const unreachable = (failure: BrowserUnreachable) => failure.message;
   return {
@@ -544,7 +415,6 @@ function sandboxRecorder(call: BrowserCall): BrowserRecorder<AgentBrowser | Data
   };
 }
 
-/** Runs the actions on the browser, the store kept in step after; a failure to keep it is logged and leaves the run as it ran. */
 function runOn(
   cdp: CdpSession,
   call: BrowserCall,
@@ -573,11 +443,6 @@ function runOn(
   });
 }
 
-/**
- * What the transcript keeps of one screenshot's copy: the picture, sniffed
- * and measured from its own bytes, kept beside the transcript; why not
- * where its bytes are no picture or the transcript has no room left.
- */
 function keepScreenshot(
   transcript: ConversationTarget,
   kept: BrowserKeptScreenshot,
@@ -600,12 +465,6 @@ function keepScreenshot(
   });
 }
 
-/**
- * The steps with each screenshot's transcript copy kept and named by what
- * was kept of it, never carried on. Note that a copy the store could not
- * keep is logged by its kind alone and named by nothing, since the model
- * saw its own copy all the same and the call stands.
- */
 function keptSteps(
   transcript: ConversationTarget,
   steps: readonly BrowserAgentStep[],
@@ -623,13 +482,6 @@ function keptSteps(
   });
 }
 
-/**
- * One `browser` call made for an agent, whichever agent made it: its input
- * read against the tool's schema, the action on a tab a member drives
- * refused with nothing after it run, the rest run on the agent's browser,
- * and the store kept in step. It never fails: a browser that cannot be
- * reached, or a store that cannot be read, answers `not-run` and why.
- */
 export function runBrowserTool(
   call: BrowserCall,
   input: UnparsedWireValue,
@@ -646,14 +498,10 @@ export function runBrowserTool(
   }
   const { actions } = read.success;
   return Effect.gen(function* () {
-    // Note that the sandbox is opened first, as eve opens it for a shell call, because the browser
-    // is found by the sandbox its session is tagged with, and an agent's first call may be this one.
     const opened = yield* Effect.result(
       Effect.tryPromise({ try: async () => call.openSandbox(), catch: () => "not opened" }),
     );
     if (Result.isFailure(opened)) return browserNotRun(BROWSER_TOOL_REFUSAL.NO_SANDBOX);
-    // Note that the browser is reached before the takeovers are read, because a browser that
-    // started afresh reopens the kept tabs on new targets, which the takeovers then name.
     const ran = yield* Effect.result(
       Effect.scoped(
         Effect.gen(function* () {
@@ -705,7 +553,6 @@ export function runBrowserTool(
   );
 }
 
-/** A screenshot as a stored or shown result carries it, read leniently: only its picture is wanted. */
 const isScreenshotted = Schema.is(
   Schema.Struct({
     action: Schema.Literal(BROWSER_AGENT_ACTION.SCREENSHOT),
@@ -714,7 +561,6 @@ const isScreenshotted = Schema.is(
   }),
 );
 
-/** Whether a result is a call that ran, as either view reads it. */
 const isRan = Schema.is(
   Schema.Struct({
     status: Schema.Literal(BROWSER_TOOL_STATUS.RAN),
@@ -722,14 +568,8 @@ const isRan = Schema.is(
   }),
 );
 
-/** What the transcript's view of a step names of what was kept, which the model's view leaves out. */
 const KEPT_NOTE_KEYS: readonly string[] = ["picture", "omitted", "byteCount"];
 
-/**
- * A result with every screenshot's picture taken out, its size and kind
- * left; where `forModel`, without what the transcript kept of it too, which
- * is no business of the model's; any other result as it is.
- */
 function withoutPictures(output: UnparsedWireValue, forModel: boolean): UnparsedWireValue {
   if (!isRecord(output) || !isRan(output) || !Array.isArray(output.steps)) return output;
   const steps: readonly UnparsedWireValue[] = output.steps;
@@ -746,7 +586,6 @@ function withoutPictures(output: UnparsedWireValue, forModel: boolean): Unparsed
   });
 }
 
-/** One part of what the model is shown: words, or a picture's base64 and its type. */
 type BrowserModelPart =
   | { readonly type: "text"; readonly text: string }
   | {
@@ -755,16 +594,10 @@ type BrowserModelPart =
       readonly mediaType: string;
     };
 
-/** What the model is shown of a call's result: the JSON it is, or its parts in order. */
 type BrowserModelOutput =
   | { readonly type: "json"; readonly value: UnparsedWireValue }
   | { readonly type: "content"; readonly value: readonly BrowserModelPart[] };
 
-/**
- * What the model is shown of a call's result: the result as JSON with each
- * screenshot's picture beside it as an image, never its base64 spelled out
- * as text; anything else as the JSON it is.
- */
 export function browserModelOutput(output: UnparsedWireValue): BrowserModelOutput {
   if (!isRecord(output) || !isRan(output) || !Array.isArray(output.steps)) {
     return { type: "json", value: output };
@@ -786,7 +619,6 @@ export function browserModelOutput(output: UnparsedWireValue): BrowserModelOutpu
   };
 }
 
-/** A call's result as the conversation keeps it: every screenshot without the model's copy, naming the transcript's copy kept beside it by id. */
 export function storedBrowserOutput(output: UnparsedWireValue): UnparsedWireValue {
   return withoutPictures(output, false);
 }

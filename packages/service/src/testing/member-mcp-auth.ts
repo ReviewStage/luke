@@ -1,20 +1,3 @@
-/**
- * member-mcp-auth.ts -- the member MCP server and the auth service it admits tokens of, stood up over a test's own PGlite, with a client's sign-in driven step by step.
- *
- * Better Auth is configured as `auth.ts` configures what the server and an
- * outside client reach: the key set, the provider with the resource, open
- * registration under the member MCP server's scopes, metadata-document
- * discovery over the fetch the test hands in, and the limiter on its
- * database storage; email sign-up stands in for the social providers. The
- * rows a deployment's seeder writes are seeded, and a test client linked to
- * the resource beside them. The key set the admission verifies against is
- * fetched from the auth service over HTTP, as on a deployment: here the
- * in-process handler, and nothing else answers. GitHub is the layer a test
- * hands in, by default one nobody reaches; an agent's harness is a recording
- * one that takes every message (`heard`), and the model catalog offers
- * nothing. Synthetic accounts.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { cimd } from "@better-auth/cimd";
@@ -64,29 +47,23 @@ import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-confi
 import { NO_GITHUB } from "./github-app-fake.js";
 import { recordingHarness } from "./native-harness-fake.js";
 
-/** The deployment the test stands at: its origin, the resource and the auth service under it. */
 export const MEMBER_MCP_TEST = {
   ORIGIN: "https://app.test",
-  /** The page the provider sends a consent to, as `auth.ts` names it. */
   CONSENT_PAGE: "/consent",
-  /** The loopback redirect every client under test registers. */
   LOOPBACK: "http://127.0.0.1/callback",
 } as const;
 
 export const RESOURCE = memberMcpResourceUrl(MEMBER_MCP_TEST.ORIGIN);
 
-/** Another resource the auth service mints tokens for, whose tokens name the server no more than the desktop's do. */
 export const OTHER_RESOURCE = `${MEMBER_MCP_TEST.ORIGIN}/api/other`;
 
 const SECRET = "member-mcp-test-secret-with-enough-length";
 
-/** RFC 7636's example pair, standing in for a verifier the client drew. */
 const PKCE = {
   verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 } as const;
 
-/** An outside MCP client as a deployment held one before the doors opened: seeded public, PKCE, consent skipped, linked to both resources. */
 export const MCP_CLIENT: OAuthClient = {
   id: "mcp-test",
   name: "An MCP client under test",
@@ -98,7 +75,6 @@ export const MCP_CLIENT: OAuthClient = {
   type: "web",
 };
 
-/** The deployment's environment with no key of its own, which no call here reads. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -111,7 +87,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The protocol revisions the server serves, as the SDK's client is told to speak each. */
 export const REVISION = { MODERN: "2026-07-28", LEGACY: "2025-11-25" } as const;
 
 const decodeTokens = Schema.decodeUnknownSync(
@@ -121,11 +96,9 @@ const decodeConsentAnswer = Schema.decodeUnknownSync(
   Schema.Struct({ redirect: Schema.Boolean, url: Schema.String }),
 );
 
-/** A transport no metadata document is fetched through: the test that discovers no client. */
 const noMetadataDocument: ClientMetadataResourceFetch = (input) =>
   Promise.reject(new Error(`this test fetches no metadata document: ${String(input)}`));
 
-/** Better Auth as `auth.ts` configures what the server and a client reach, its metadata documents fetched through the transport given. */
 export function memberMcpTestAuth(
   client: Awaited<ReturnType<typeof openMigratedPglite>>,
   fetchClientMetadataResource: ClientMetadataResourceFetch = noMetadataDocument,
@@ -155,7 +128,6 @@ export function memberMcpTestAuth(
 
 export type MemberMcpTestAuth = ReturnType<typeof memberMcpTestAuth>;
 
-/** The rows a deployment's seeder writes, the desktop's client and the server's resource, a second resource beside it, and the MCP client linked to both resources. */
 const seedRows = Effect.gen(function* () {
   const db = yield* Database;
   const now = new Date();
@@ -189,18 +161,11 @@ const seedRows = Effect.gen(function* () {
   );
 });
 
-/** What a test stands the server up over: the transport its metadata documents are fetched through, and the GitHub its tools reach. */
 export interface MemberMcpStandingOptions {
   readonly fetchClientMetadataResource?: ClientMetadataResourceFetch;
   readonly github?: Layer.Layer<GitHubApp | HttpClient.HttpClient>;
 }
 
-/**
- * The server's group over a migrated PGlite, the auth service, the clock,
- * and the GitHub given, as a fetch a client is handed, with the rows seeded
- * and the key set reachable. The `fetch` spy it installs is restored by the
- * test's `afterEach`.
- */
 export function memberMcpStanding(options: MemberMcpStandingOptions = {}) {
   return Effect.gen(function* () {
     const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
@@ -218,7 +183,6 @@ export function memberMcpStanding(options: MemberMcpStandingOptions = {}) {
       Layer.succeed(SentryApp, sentryAppService(undefined, [])),
     );
     yield* seedRows.pipe(Effect.provide(services));
-    // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const request = new Request(input, init);
       if (!request.url.startsWith(`${MEMBER_MCP_TEST.ORIGIN}${AUTH_BASE_PATH}/`)) {
@@ -240,7 +204,6 @@ export function memberMcpStanding(options: MemberMcpStandingOptions = {}) {
   });
 }
 
-/** A signed-up account, and the cookie its browser carries. */
 export async function signUp(auth: MemberMcpTestAuth): Promise<{ userId: string; cookie: string }> {
   const name = `member-${randomUUID()}`;
   const { headers, response } = await auth.api.signUpEmail({
@@ -254,7 +217,6 @@ export async function signUp(auth: MemberMcpTestAuth): Promise<{ userId: string;
   return { userId: response.user.id, cookie };
 }
 
-/** What a client registers by RFC 7591 as Cursor and its kind do: public, PKCE, a loopback redirect, the scopes given. */
 export function registration(scope: readonly string[]) {
   return {
     client_name: "A client registered dynamically",
@@ -267,7 +229,6 @@ export function registration(scope: readonly string[]) {
   };
 }
 
-/** One registration as a client posts it, answered as the provider answers it. */
 export async function register(auth: MemberMcpTestAuth, body: object): Promise<Response> {
   return auth.handler(
     new Request(`${MEMBER_MCP_TEST.ORIGIN}${AUTH_BASE_PATH}/oauth2/register`, {
@@ -278,14 +239,12 @@ export async function register(auth: MemberMcpTestAuth, body: object): Promise<R
   );
 }
 
-/** What a token is minted for: its client, the scopes asked, and the resource it names, or none for the desktop's opaque one. */
 export interface Grant {
   readonly clientId: string;
   readonly scope: readonly string[];
   readonly resource?: string;
 }
 
-/** The auth service's answer to the signed-in browser's authorization for the grant. */
 export async function authorizeAnswer(
   auth: MemberMcpTestAuth,
   cookie: string,
@@ -308,7 +267,6 @@ export async function authorizeAnswer(
   );
 }
 
-/** Where the signed-in browser's authorization lands: the client's redirect with a code, or the consent page. */
 export async function authorize(
   auth: MemberMcpTestAuth,
   cookie: string,
@@ -320,7 +278,6 @@ export async function authorize(
   return new URL(location, MEMBER_MCP_TEST.ORIGIN);
 }
 
-/** The member's Allow on the consent page the authorization landed on, as the page sends it: where the client's answer then goes. */
 export async function allowConsent(
   auth: MemberMcpTestAuth,
   cookie: string,
@@ -337,7 +294,6 @@ export async function allowConsent(
   return new URL(decodeConsentAnswer(await answered.json()).url);
 }
 
-/** The client's exchange of the code it landed with, under its verifier, for the access token. */
 export async function exchangeCode(
   auth: MemberMcpTestAuth,
   grant: Grant,
@@ -346,7 +302,6 @@ export async function exchangeCode(
   return (await exchangeTokens(auth, grant, landed)).access_token;
 }
 
-/** The client's exchange of the code it landed with, under its verifier, for its tokens: the access token, and a refresh token where it asked `offline_access`. */
 export async function exchangeTokens(auth: MemberMcpTestAuth, grant: Grant, landed: URL) {
   assert.equal(`${landed.origin}${landed.pathname}`, MEMBER_MCP_TEST.LOOPBACK, landed.href);
   assert.ok(landed.searchParams.has("code"), `${grant.clientId} ${grant.scope}: ${landed.search}`);
@@ -368,7 +323,6 @@ export async function exchangeTokens(auth: MemberMcpTestAuth, grant: Grant, land
   return decodeTokens(await exchanged.json());
 }
 
-/** An access token minted by the auth service as a trusted client's sign-in mints one: the signed-in browser authorizes the client straight to its redirect, which exchanges the code. */
 export async function mintedToken(
   auth: MemberMcpTestAuth,
   cookie: string,
@@ -377,7 +331,6 @@ export async function mintedToken(
   return exchangeCode(auth, grant, await authorize(auth, cookie, grant));
 }
 
-/** One JSON-RPC POST to the server as a client sends it, under the bearer given or none. */
 export function post(fetch: typeof globalThis.fetch, bearer: string | undefined, origin?: string) {
   return Effect.promise(async () => {
     const headers = new Headers({
@@ -395,7 +348,6 @@ export function post(fetch: typeof globalThis.fetch, bearer: string | undefined,
   });
 }
 
-/** An SDK client connected under the bearer, speaking the revision given: its `initialize` is the server's admission of the token. */
 export function connected(fetch: typeof globalThis.fetch, bearer: string, revision: string) {
   return Effect.promise(async () => {
     const client = new Client(

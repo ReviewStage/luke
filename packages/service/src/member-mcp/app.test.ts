@@ -100,24 +100,6 @@ import { MEMBER_MCP_METADATA_ROUTE, memberMcpIssuer } from "./app.js";
 import { MEMBER_MCP_PATH, MEMBER_MCP_SCOPE } from "./resource.js";
 import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools.js";
 
-/**
- * The member MCP server, answered by its group the way a function answers
- * it, over the auth service and the migrated PGlite the tools read too. The tokens are the
- * provider's own, minted through a seeded test client linked to the
- * resource: a signed-up account authorizes it, as a client's sign-in will,
- * and the client exchanges its code (`../testing/member-mcp-auth.ts`, the
- * harness the sign-in test shares). The SDK's own client
- * drives the server at both revisions it serves. GitHub is reached by no
- * call here but a change to a pull request's, which answers from a script
- * as the Pull request tab's own tests script it, an agent's harness is a
- * recording one that takes every message, and the model catalog offers
- * nothing. An answer's hand-off to the agent that asked is driven apart,
- * over the agents' own test world (`../testing/agents-app-support.ts`): a
- * started agent on a fake eve, its server admitted on the world's bearers.
- * Synthetic accounts and tokens.
- */
-
-/** The member's own GitHub token, as their sign-in through the App left it. */
 const MEMBER_GITHUB_TOKEN = "ghu_member";
 
 const decodeMetadata = Schema.decodeUnknownSync(
@@ -128,10 +110,8 @@ const decodeMetadata = Schema.decodeUnknownSync(
     bearer_methods_supported: Schema.Array(Schema.String),
   }),
 );
-/** The rows of a list read by their ids alone. */
 const IdsSchema = Schema.Array(Schema.Struct({ id: Schema.String }));
 const decodeTasks = Schema.decodeUnknownSync(Schema.Struct({ tasks: IdsSchema }));
-/** The inbox read, each thread by its id, the ask it holds open, and its messages' asks by their options. */
 const decodeInbox = Schema.decodeUnknownSync(
   Schema.Struct({
     threads: Schema.Array(
@@ -154,7 +134,6 @@ const decodeInbox = Schema.decodeUnknownSync(
     ),
   }),
 );
-/** A write's answer: the thread as it then stands. */
 const decodeWritten = Schema.decodeUnknownSync(
   Schema.Struct({ thread: Schema.Struct({ status: Schema.String }) }),
 );
@@ -179,7 +158,6 @@ const decodeAutomation = Schema.decodeUnknownSync(
   Schema.Struct({ automation: Schema.Struct({ id: Schema.String }) }),
 );
 
-/** A weekly schedule, as an automation's trigger. */
 const WEEKLY = {
   kind: AUTOMATION_TRIGGER.SCHEDULE,
   cron: "0 9 * * 1",
@@ -207,18 +185,14 @@ const decodeFound = Schema.decodeUnknownSync(
   Schema.Struct({ memories: Schema.Array(Schema.Struct({ id: Schema.String })) }),
 );
 
-/** The description a stranger's task and a member's both hold, and the words a thread stands on in it. */
 const DESCRIPTION_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
 
-/** Descriptions turned on or off for the account, as Settings › Experimental turns it. */
 const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
-/** Memory turned on for the account, as Settings › Experimental turns it on. */
 const memoryOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
 
-/** An agent on the task, on Claude Code, its session standing, so a comment handed to it is taken by the recording harness. */
 const standingAgent = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const { agent } = Option.getOrThrow(
@@ -243,23 +217,19 @@ const standingAgent = (userId: string, taskId: string) =>
     return agent.id;
   });
 
-/** The JSON Schema goldens of the server's tools, where a tool's input a model is shown is recorded. */
 const GOLDEN_ROOT = path.join(
   fileURLToPath(import.meta.url),
   "../../../fixtures/json-schema/member-mcp",
 );
 
-/** The golden a tool's input is recorded under: its name, hyphenated, as the package's goldens are named. */
 function goldenOf(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}-input`;
 }
 
-/** The head commit a changes read answers its pull request at. */
 const decodeHead = Schema.decodeUnknownSync(
   Schema.Struct({ pullRequest: Schema.Struct({ headSha: Schema.String }) }),
 );
 
-/** A tool's answer as the agent reads it: whether it is the tool's error, and its JSON text read. */
 const decodeAnswer = Schema.decodeUnknownSync(
   Schema.Struct({
     isError: Schema.optionalKey(Schema.Boolean),
@@ -273,10 +243,8 @@ afterEach(() => {
 
 const ORIGIN = MEMBER_MCP_TEST.ORIGIN;
 
-/** The server over its seeded rows and a GitHub nobody reaches, as most tests here stand it up. */
 const standing = memberMcpStanding();
 
-/** The metadata document's address a challenge must name for the resource (RFC 9728). */
 const METADATA_URL = `${ORIGIN}/.well-known/oauth-protected-resource${MEMBER_MCP_PATH}`;
 
 it.effect(
@@ -482,7 +450,6 @@ it.effect(
       );
       yield* Effect.promise(() => client.close());
 
-      // A list that names no workspace is refused where the member has two, naming both and no other.
       assert.equal(unnamed.refused, true);
       assert.ok(
         unnamed.text.includes(slugOf(rows.own)) && unnamed.text.includes(slugOf(rows.second)),
@@ -507,7 +474,6 @@ it.effect(
         );
       }
       for (const read of owns) assert.equal(read.refused, false, read.text);
-      // The stranger's thread stands as it was, its ask open and its thread its agent's alone.
       const after = yield* readInboxItem(stranger.userId, rows.strangerItem).pipe(
         Effect.map((stored) => Option.getOrThrow(stored).item),
         Effect.provide(services),
@@ -623,7 +589,6 @@ it.effect(
           [MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread: threadId, resolved: true }],
           [MEMBER_MCP_TOOL.SEARCH_MEMORY, { workspace }],
           [MEMBER_MCP_TOOL.SAVE_MEMORY, { workspace, text: "Planted." }],
-          // Note that the member's own workspace holds no memory of that id, so a correction of it is refused.
           [
             MEMBER_MCP_TOOL.SAVE_MEMORY,
             { workspace: `workspace-${rows.own}`, text: "Planted.", replaces: memoryId },
@@ -645,7 +610,6 @@ it.effect(
             return { name, refused: answer.isError === true, text: answer.content[0].text };
           }),
       );
-      // A forget in the member's own workspace of a memory of another's forgets nothing there.
       yield* Effect.promise(() =>
         client.callTool({
           name: MEMBER_MCP_TOOL.FORGET_MEMORY,
@@ -666,7 +630,6 @@ it.effect(
         };
       }).pipe(Effect.provide(services));
 
-      // A delete of a section the member keeps none of is deleted as nothing, as the sidebar's is.
       for (const answer of answers) {
         const deletes = answer.name === MEMBER_MCP_TOOL.DELETE_SECTION;
         assert.equal(answer.refused, !deletes, `${answer.name}: ${answer.text}`);
@@ -740,7 +703,6 @@ it.effect(
           assert.equal(answer.isError, true, name);
           return answer.content[0].text;
         });
-      // A client that listed the tools before the rename is told what each is called now, and nothing is written.
       assert.match(
         yield* refused("edit_plan", {
           taskId,
@@ -791,7 +753,6 @@ it.effect(
       assert.equal(after.task.ownerId, member.userId);
       assert.equal(after.task.task.status, TASK_STATUS.IN_PROGRESS);
       assert.equal(after.task.text, "## Problem\n\nSeats drift.\n\nInvoices lag too.");
-      // The description's first text and the note are the member's own, as their window writes it, and no agent's.
       assert.deepEqual(
         [...new Set(after.revisions.revisions.map(({ lastEdit }) => lastEdit.actor))],
         [DESCRIPTION_ACTOR.DEVELOPER],
@@ -801,7 +762,6 @@ it.effect(
         userId: member.userId,
         reason: "Done.",
       });
-      // The automation is the member's, in no repository since they work in none, and its run is their Run now.
       assert.deepEqual(
         [automations.made.userId, automations.made.name, automations.made.repositories],
         [member.userId, "Monday sweep", []],
@@ -848,7 +808,6 @@ it.effect(
           name: "Teammate invitations",
         });
         const id = yield* openTaskAgent(member.userId, workspaceId, task.id);
-        // The agent pushed its branch to the repository the installation reaches, from which its draft stands open.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -982,7 +941,6 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
           decodeWritten(JSON.parse(answered.content[0].text)).thread.status,
           INBOX_STATUS.ANSWERED,
         );
-        // The answer is handed to the session the agent runs in, as the member's message its next turn opens on.
         assert.deepEqual(
           eve.sent.slice(before).map((each) => [each.authorization, each.sessionId]),
           [[harnessFor(owner), sessionId]],
@@ -1076,7 +1034,6 @@ it.effect(
       assert.equal(resolved.state, DESCRIPTION_COMMENT_STATUS.RESOLVED);
       assert.equal(planless.isError, true);
       assert.match(planless.content[0].text, /has Task descriptions off/u);
-      // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
       assert.deepEqual(
         lines.map(({ words }) => words),
         [`${mention} do seats still drift?`, "Invoices too."],

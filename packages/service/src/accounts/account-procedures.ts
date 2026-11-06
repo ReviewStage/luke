@@ -1,42 +1,3 @@
-/**
- * account-procedures.ts -- the signed-in account's own procedures: its deletion, its preferences, its access, and its provider keys.
- *
- * Each resolves the caller before touching anything, and answers nothing
- * about any account but the one the caller is: root AGENTS.md pins that no
- * credential or account secret ever travels in an answer, so what each
- * answers is a boolean or the caller's own stored value, never a token or
- * a session id. The caller is resolved on the resource itself, before any
- * input is read, so an unsigned caller is refused as unsigned whatever it
- * sent.
- *
- * The preferences snapshot is six parts: the settings preferences the
- * desktop syncs, where the account's app links open and what Enter does in
- * an agent's box while it works, synced settings each of its own part so a
- * build that predates it neither refuses the snapshot nor clears the choice
- * by writing the shared part back whole, the coding
- * agents' default model, effort, and context window, which Settings alone
- * writes and which reads, until it does, as the fallback a Start naming no
- * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters
- * runs on, one of a fixed set (`@repo/features/chapters-model-choice`), and the experiments the account turned on in
- * Settings › Experimental. A write carries any of them, a coding-agent
- * choice is accepted only as the catalog accepts it
- * (`packages/service/src/providers/model-catalog.ts`), and moved only to a
- * model a credential of the account's pays for, so what is stored is a
- * choice a Start could run unless its credential has since gone, and the
- * experiments are a patch read
- * as tolerantly as they are answered: a key this deployment does not list
- * is passed over rather than refused, because it is an older or newer
- * build's experiment and refusing it would refuse the build's every other
- * choice too.
- *
- * The access is whether the caller is an admin, read off its own role, so a
- * client can offer the admin dashboard to the account that may open it. It
- * says nothing of any other account and authorizes nothing: the dashboard's
- * own gate (`admin/gate.ts`) decides every admin read on its own.
- *
- * The provider keys are `provider-keys-procedures.ts`'s.
- */
-
 import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AccountAccessRow,
@@ -90,25 +51,19 @@ import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 export interface AccountProcedureSeams {
   resolveUserId: UserIdResolver;
-  /** The eve sessions the account's standing conversations run in, which the delete retires first. */
   standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
-  /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
-  /** The role and the grant of support access on the account's own row, as Better Auth stores them. */
   readAccess: (userId: string) => AccountSeamEffect<AccountAccessRow>;
-  /** Which fast versions the account is offered, by which its coding-agent choice may name one (`offeredToAccount`). */
   accountFastOffer: (
     userId: string,
   ) => Effect.Effect<AccountFastOffer, TaskStoreFailure, DatabaseServices | ModelCatalog>;
-  /** Writes each part the write carries and answers the snapshot as it then stands, with the transaction it committed in. */
   writePreferences: (
     userId: string,
     write: AccountPreferencesWrite,
   ) => AccountSeamEffect<AccountPreferencesWritten>;
 }
 
-/** A coding-agent choice as a write names it; the catalog decides whether it is one. */
 const ModelChoiceSchema = Schema.Struct({
   model: Schema.String,
   effort: Schema.String,
@@ -117,14 +72,6 @@ const ModelChoiceSchema = Schema.Struct({
 
 const readModelChoice = readEither(ModelChoiceSchema);
 
-/**
- * The coding-agent default the snapshot answers: the account's stored one,
- * or where it stored none the fallback a Start naming no model runs on
- * (`accountModelChoices`), so Settings and every chip draw what that Start
- * would run. Note that a catalog or a store that cannot be read meanwhile
- * answers Anthropic's fallback rather than refusing the settings beside it,
- * because a Start is refused as unavailable then anyway.
- */
 const snapshotAgent = (
   userId: string,
   row: AccountPreferencesRow | undefined,
@@ -136,12 +83,6 @@ const snapshotAgent = (
       )
     : Effect.succeed(row.agent);
 
-/**
- * The snapshot as the account answers it, the coding-agent default as
- * `snapshotAgent` reads it, the preferences' instant beside it where the
- * preferences were ever written, and the link choice as a part of its own
- * where the account made one.
- */
 function snapshotAnswer(row: AccountPreferencesRow | undefined, agent: ModelChoice) {
   const updatedAt = row?.updatedAt;
   return {
@@ -153,10 +94,6 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined, agent: ModelChoi
   };
 }
 
-/**
- * Without both halves of the analytics configuration there is no person to
- * erase and nothing to erase it with, so the erasure is simply skipped.
- */
 const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(function* (
   userId: string,
 ): Effect.fn.Return<void, never, HostedEnvironment | HttpClient.HttpClient> {
@@ -178,17 +115,6 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
   );
 });
 
-/**
- * The write's coding-agent part, as the catalog accepts it for the
- * account (`offeredToAccount`): a choice it does not offer is a bad request,
- * as is one that moves the default to a model of a provider no credential
- * of the account's pays for (`unconnectedProviders`), and a catalog the
- * instance cannot read is an outage the caller may retry. A write that keeps
- * the model the default names now, as an Effort or a Context does, is taken
- * whatever pays for it, because the default it changes was already that
- * model: the fallback a new account reads, or a default whose credential
- * has since gone. A Fast flip names another model, so it is checked.
- */
 const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountProcedureSeams,
   userId: string,
@@ -208,7 +134,6 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = yield* hostedStoreOrUnavailable(seams.readPreferences(userId));
   const standing = yield* snapshotAgent(userId, row);
   if (accepted.model === standing.model) return accepted;
-  // Note that the default never moves to a model nothing pays for, because every Start on it would be refused.
   const unconnected = yield* hostedStoreOrUnavailable(unconnectedProviders(userId));
   const provider = providerModelOf(accepted.model)?.provider;
   if (provider !== undefined && unconnected.has(provider)) {
@@ -217,52 +142,26 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   return accepted;
 });
 
-/** The account resource: every procedure but the provider keys' own, which are `provider-keys-procedures.ts`'s. */
 export function accountProcedures(seams: AccountProcedureSeams) {
   const signedIn = hosted.account.use(accountMiddleware(seams.resolveUserId));
   return {
-    /**
-     * Erases the signed-in account. The caller's bearer, or for a request
-     * that carries none the browser's session cookie, is the whole
-     * authority, so nothing a caller sends can choose a different account
-     * to erase. Where the deployment can, the analytics person is asked to
-     * be erased first, because nothing after the delete would still name
-     * it; a refusal or an outage there must not hold up the delete, so it
-     * is logged as a status and the delete proceeds. Every session the
-     * account's standing conversations run in is retired before anything is
-     * deleted, for the account the request resolved to, while those
-     * conversations still stand (`retire-sessions.ts`); a session not
-     * retired is logged and the delete proceeds. The delete itself queues the sandbox of
-     * every session the account ran for the sweep. Every grant the
-     * account's integration rows name is revoked at Vercel Connect once the
-     * rows are gone, as a Disconnect revokes one, so no grant outlives the
-     * account; a revoke that fails is logged by its word and the account is
-     * deleted all the same.
-     */
     delete: signedIn.delete.effect(function* ({ context }) {
       const { userId } = context;
       const retiring = yield* retiringReach(userId);
       const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
       yield* retireSessions(retiring, sessions);
       yield* forgetAnalytics(userId);
-      // Note that the grants are read before the delete, because an added account's subject is no id the account still names after it.
       const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));
       yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
       yield* revokeIntegrationGrants(userId, grants);
       return { deleted: true } as const;
     }),
 
-    /** The caller's own stored snapshot, or the defaults for a user with none stored, the coding agents' the one its credentials pay for. */
     preferences: signedIn.preferences.effect(function* ({ context }) {
       const row = yield* hostedStoreOrUnavailable(seams.readPreferences(context.userId));
       return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
-    /**
-     * Whether the caller's own account is an admin, any role but the admin
-     * role not; and when its member's grant of support access runs out, null
-     * where none stands or it has run out.
-     */
     access: signedIn.access.effect(function* ({ context }) {
       const access = yield* hostedStoreOrUnavailable(seams.readAccess(context.userId));
       const now = yield* Clock.currentTimeMillis;
@@ -272,19 +171,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       };
     }),
 
-    /**
-     * Writes each part the body carries — `preferences`, a validated
-     * settings snapshot that replaces the stored one whole, `linkOpen`,
-     * where the account's links open, `agentEnter`, what Enter does in an
-     * agent's box while it works, `commitAuthor`, who authors an agent's
-     * commits, `setupFinished`, whether the account
-     * finished setup, `setupPlace`, where it stands in setup, `agent`, a choice the catalog
-     * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
-     * what stood — and answers the snapshot as it then stands. A body
-     * carrying none of them asks for nothing and is refused.
-     */
     writePreferences: signedIn.writePreferences.effect(function* ({ context, input }) {
-      // SAFETY: Request JSON is untrusted boundary data; each part's reader validates it before use.
       const body = input as Readonly<Record<keyof typeof input, UnparsedWireValue>>;
       if (
         body.preferences === undefined &&

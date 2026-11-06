@@ -43,22 +43,6 @@ import {
   taskRecordLive,
 } from "./live-queries.js";
 
-/**
- * An open task's live reads on the migrated capture: its record, pages,
- * history, comments, and Browser tabs (`taskRecordLive` and its neighbors), and an
- * agent's own pages on no task (`agentPagesLive`). Each write that moves
- * one, through its real writer, notifies a topic the read is woken on, so a
- * window holding it hears it within a coalesce window rather than at the
- * hold's end: the description saved, a page shown on the task and a comment left
- * on it, a page an agent
- * on no task shows, an agent's tab opened, pointed at, taken over, handed
- * back, and closed, an agent renamed, and what admits the reader to the
- * task. Note that an editor renamed wakes no history, which reads the name
- * at the hold's end, so no case here writes one.
- *
- * Synthetic accounts, workspaces, tasks, pages, and tabs throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -66,7 +50,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Runs the write, held to the topics it notifies, and fails unless one of them wakes each read, named by the topics it is woken on. */
 const wakes = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],
@@ -93,7 +76,6 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
         const params = { userId: owner, taskId: task.id };
         const onTask: readonly SyncTopic[] = [[TOPIC.TASK, task.id]];
 
-        // A save is stamped at the clock's instant, which has moved on since the task was made.
         yield* TestClock.adjust(Duration.seconds(1));
         yield* wakes(
           saveNotes({ userId: owner, taskId: task.id }, [

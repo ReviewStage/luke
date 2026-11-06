@@ -61,16 +61,6 @@ import {
 
 export type AdminQueryFailure = QueryError | Schema.SchemaError;
 
-/**
- * An aggregate as a row carries it. `count` and `sum` answer a bigint, which
- * `@effect/sql-pg` reads as a JS `bigint` and the `pg` driver before it read
- * as a string, each because a 64-bit value need not fit a JS number, while
- * PGlite parses it to one; the builder's own aggregate helpers then read a
- * count as a number and a sum as a string on top of that. Every aggregate
- * here counts rows or sums a day's calls, well inside the safe integer
- * range, so every one of those readings decodes to the same number. A `sum`
- * over no rows is null, which is the zero the dashboard shows.
- */
 export const AggregateColumnSchema = Schema.Union([
   Schema.Number,
   Schema.NumberFromString,
@@ -78,10 +68,8 @@ export const AggregateColumnSchema = Schema.Union([
 ]);
 export const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
-/** The `role` column as the auth plugin writes it: one of the roles this build knows, or none yet. */
 const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
 
-/** The fields an account is drawn by wherever the dashboard names one: who it is, its picture, and its role. */
 export const ACCOUNT_FACE_FIELDS = {
   id: Schema.String,
   name: Schema.String,
@@ -90,7 +78,6 @@ export const ACCOUNT_FACE_FIELDS = {
   role: UserRoleSchema,
 };
 
-/** The `user` columns those fields are read from. */
 export const ACCOUNT_FACE_COLUMNS = {
   id: user.id,
   name: user.name,
@@ -99,7 +86,6 @@ export const ACCOUNT_FACE_COLUMNS = {
   role: user.role,
 };
 
-/** The faces of the accounts named, in no order. */
 export const findAccountFaces = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
   Result: Schema.Struct(ACCOUNT_FACE_FIELDS),
@@ -119,20 +105,12 @@ export const AdminMetricsScopeSchema = Schema.Literals([
   ADMIN_METRICS_SCOPE.ALL,
 ]);
 
-/**
- * The accounts a scope keeps. The default keeps every account whose role is not
- * admin — a null role predates the column's default and is an ordinary user, so
- * it stays — and `all` filters nothing, which is the absent condition the
- * builder's `and` drops. Every joined query below counts through a user row,
- * so this one condition is the whole filter.
- */
 export function keptByScope(scope: AdminMetricsScope) {
   return scope === ADMIN_METRICS_SCOPE.ALL
     ? undefined
     : or(ne(user.role, USER_ROLE.ADMIN), isNull(user.role));
 }
 
-/** A `count` row a query always answers with, or the zero an absent row means. */
 const countOf = Option.match({ onNone: () => 0, onSome: (row: { value: number }) => row.value });
 
 const findUserTotal = SqlSchema.findOneOption({
@@ -147,11 +125,6 @@ const SignInLinkRowSchema = Schema.Struct({
   providerId: Schema.String,
 });
 
-/**
- * Distinct pairs rather than a count of linked rows: the chart states
- * accounts per method, and an account can hold several rows of one provider.
- * The per-method counting itself lives in the fold below.
- */
 const findSignInLinks = SqlSchema.findAll({
   Request: AdminMetricsScopeSchema,
   Result: SignInLinkRowSchema,
@@ -167,7 +140,6 @@ const findSignInLinks = SqlSchema.findAll({
 
 const DayCountRowSchema = Schema.Struct({ day: Schema.String, value: AggregateColumnSchema });
 
-/** The UTC day an account was created on, which the builder has no operator for. */
 const SIGNUP_DAY = sql<string>`to_char(${user.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`;
 
 const findSignupsByDay = SqlSchema.findAll({
@@ -198,12 +170,6 @@ const readUserMetrics = /* @__PURE__ */ Effect.fn("web/readUserMetrics")(functio
   return { total: countOf(total), signupsByDay };
 });
 
-/**
- * Both week expressions truncate with Postgres's `date_trunc('week')`, which
- * lands on Monday — the same Monday `utcWeekStartKey` derives — so the SQL
- * and the fold name a week identically. A signup instant is a timestamp and
- * a usage day a YYYY-MM-DD string, hence the two shapes of the same cast.
- */
 export const SIGNUP_WEEK = sql<string>`to_char(date_trunc('week', ${user.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
 const ACTIVITY_WEEK = sql<string>`to_char(date_trunc('week', ${hostedUsage.day}::date), 'YYYY-MM-DD')`;
 
@@ -231,10 +197,6 @@ const CohortActivityRowSchema = Schema.Struct({
   value: AggregateColumnSchema,
 });
 
-/**
- * Distinct accounts per (signup week, activity week) pair: a cohort member
- * with several active days in one week is retained once, not once per day.
- */
 const findCohortActivity = SqlSchema.findAll({
   Request: Schema.Struct({
     oldestWeekStart: Schema.Date,
@@ -282,7 +244,6 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics
   return cohortRetention(sizeRows, activeRows);
 });
 
-/** Reads every aggregate the overview shows beside its own, from the service's own tables. */
 export function readAdminMetricsSource(input: {
   now: number;
   scope: AdminMetricsScope;
@@ -368,12 +329,6 @@ const findAllTimeUsage = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * One account's meaningful actions since `since`, counted per UTC day and
- * kind: a single grouped read, whose filter on the account Postgres pushes
- * into each arm of the union, so a year of one account is never a scan of
- * everyone's tasks or agents, or a round trip per day.
- */
 const findActionsByDay = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
   Result: Schema.Struct({
@@ -435,12 +390,6 @@ const findDayTotals = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The accounts a search keeps: every word of it a case-insensitive substring
- * of the name or the email, the two fields a roster row is found by. The
- * words travel as bound parameters — never interpolated into the SQL — with
- * their own wildcards escaped, so they can only ever name characters to find.
- */
 function keptBySearch(search: string | null) {
   if (search === null) return undefined;
   return and(
@@ -450,7 +399,6 @@ function keptBySearch(search: string | null) {
   );
 }
 
-/** The scope and the search as one condition, which is the whole roster filter. */
 function keptByRoster(request: RosterFilter) {
   return and(keptByScope(request.scope), keptBySearch(request.search));
 }
@@ -462,7 +410,6 @@ const RosterFilterSchema = Schema.Struct({
 
 type RosterFilter = typeof RosterFilterSchema.Type;
 
-/** A search nobody asked for is the absent one, which no `ilike` stands for. */
 function nullableSearch(search: string | undefined): string | null {
   return search === undefined ? null : search;
 }
@@ -499,12 +446,6 @@ const RosterRowSchema = Schema.Struct({
   favorite: Schema.Boolean,
 });
 
-/**
- * Each account's meaningful actions since the lookback, folded to one row:
- * the UTC days inside the window that hold one, and the instant of its latest.
- * Folding before the join keeps the roster's own read one row per account, so
- * the star's join cannot fan anything out.
- */
 function rosterActivity(lookbackStart: Date, windowStart: Date) {
   const actions = meaningfulActions(lookbackStart);
   const inWindow = sql`${actions.at} >= ${windowStart.toISOString()}::timestamptz`;
@@ -532,9 +473,6 @@ const findRosterRows = SqlSchema.findAll({
   Result: RosterRowSchema,
   execute: (request) => {
     const activity = rosterActivity(request.lookbackStart, request.windowStart);
-    // Note that the ordering spells the modifier out, because Postgres puts
-    // a descending null first by default and an account with no action inside
-    // the lookback belongs at the tail. The builder has no spelling for it.
     const mostRecentlyActiveFirst = sql`${activity.lastActionAt} desc nulls last`;
     return Database.use((db) =>
       db
@@ -594,24 +532,14 @@ const deleteFavorite = SqlSchema.void({
     ),
 });
 
-/**
- * Reads everything one account's page shows, or nothing when no user row
- * carries the id. No probe and no empty fallback here: the detail page has no
- * health card to report an outage on, so a database that does not answer is
- * left to throw and become the handler's 503, where the Reliability read instead
- * degrades to a page that can say so.
- */
 export function readAdminUserSource(input: {
   userId: string;
   now: number;
   windowDays: AdminMetricsWindow;
 }): Effect.Effect<AdminUserSource | undefined, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    // The daily rows read from the wider bound so the builder's trends hold both runs.
     const fetchStartDay =
       lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
-    // The calendar keeps a trailing-year bound of its own, apart from the
-    // window, so switching windows never redraws the year.
     const calendarStartDay = calendarDayKeys(input.now)[0] ?? utcDayKey(input.now);
 
     const [account, signInMethods, actionRows, windowRows, calendarRows, allTime] =
@@ -681,17 +609,6 @@ export function readAdminUserSource(input: {
   });
 }
 
-/**
- * Reads one UTC day's hosted-tier accounts with the day's totals, for the
- * Day page's retired sections; `admin-day-queries.ts` reads its live ones
- * beside this. The usage table holds one row per account per day, so each
- * bounded row is already the account's whole day and needs no aggregation;
- * the totals ride their own aggregate read because the rows are cut at the
- * bound. Busiest first, with the account id breaking ties so equally busy
- * accounts keep a stable order across refreshes.
- * Like the account detail, this has no probe and no empty fallback: a
- * database that does not answer throws into the handler's 503.
- */
 export function readAdminDayHostedSource(input: {
   day: string;
   scope: AdminMetricsScope;
@@ -719,23 +636,6 @@ export function readAdminDayHostedSource(input: {
   });
 }
 
-/**
- * Reads the whole account roster with each account's meaningful-action
- * aggregates. The actions arrive folded per account through a left join, so an
- * account that never created a task, wrote a description, or started an agent is
- * still a row — with zero active days and no last-active day — instead of
- * vanishing the way it does from every inner-joined aggregate above. Active
- * days count the window; the last-active day reads back the wider lookback,
- * so an account quiet for the window still says when it last worked. Most
- * recently active first, the never-active tail ordered by youngest account,
- * and the roster cut at the stated bound while `total` still counts everyone.
- * A search narrows the rows and the total alike, so a truncated answer still
- * states how many accounts match. Last seen is the freshest session write,
- * read on its own because a one-to-many join would fan the roster's rows out
- * across each account's sessions. The sign-in methods count every account the
- * scope keeps, searched or not, because the chart they draw describes the
- * population rather than the rows listed.
- */
 export function readAdminUsersSource(input: {
   now: number;
   scope: AdminMetricsScope;
@@ -787,12 +687,6 @@ export function readAdminUsersSource(input: {
   });
 }
 
-/**
- * Sets whether one admin favorites one account, answering whether the account
- * exists at all: a press on a roster the account has since left should read as
- * the account being gone, not the write landing nowhere. Both writes land
- * twice without complaint — the star's presence is the whole state.
- */
 export function writeAdminFavorite(input: {
   adminId: string;
   userId: string;

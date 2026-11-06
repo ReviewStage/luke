@@ -1,7 +1,3 @@
-/**
- * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill still runs, and gone after a fill that failed.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
@@ -33,14 +29,12 @@ const RELAY: BaseDriveOf = {
 };
 const CREDENTIAL = { token: Redacted.make(TOKEN), access: { kind: GITHUB_ACCESS.APP } } as const;
 
-/** The fake Vercel and the API over it. */
 const fixture = Effect.gen(function* () {
   const fake = runnerSandboxApi();
   const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(Effect.provide(fake.layer));
   return { fake, api };
 });
 
-/** The fill's sandbox as the clone reaches it: each run straight to the API, and each policy composed from the sources its write names. */
 function opener(api: VercelSandboxApi) {
   return ({ name, running }: { name: string; running: string }): RepositorySandbox => {
     const session = sessionOnFirstUse(api, { name, sessionId: running });
@@ -66,10 +60,8 @@ function opener(api: VercelSandboxApi) {
   };
 }
 
-/** The base drive filled for the repository given. */
 const filled = (api: VercelSandboxApi) => fillBaseDrive(api, RELAY, IMAGE, CREDENTIAL, opener(api));
 
-/** Whether a run the fake took was the install. */
 const isInstall = (args: readonly string[]) => args.some((arg) => arg.includes("pnpm install"));
 
 it.effect(
@@ -94,7 +86,6 @@ it.effect(
       );
       const install = fake.runs.findIndex((run) => isInstall(run.args));
       assert.ok(clone !== -1 && install > clone);
-      // The token stood at the firewall for the clone, and came off before the install.
       assert.ok(JSON.stringify(fake.policies[0]?.policy).includes("Basic "));
       assert.deepEqual(fake.policies.at(-1)?.policy, { mode: "allow-all" });
       assert.equal(JSON.stringify([fake.runs, fake.sandboxes]).includes(TOKEN), false);

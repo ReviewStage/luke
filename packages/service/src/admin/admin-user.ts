@@ -21,54 +21,27 @@ import { ADMIN_TREND_DAYS, dayStart, lastNDayKeys, sum, trailingTrend } from "./
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
-/**
- * One account's own page behind the overview's table, answering the question
- * the aggregates cannot: is this person living in the app daily, or did one heavy
- * afternoon put them on the board? It reads the same rows the overview already
- * aggregates — the user row, its linked provider rows, its meaningful actions,
- * and the retired hosted-usage days — behind the same admin gate, and it
- * widens no analytics event: every day-level signal here is a row the service
- * already keeps, never anything read off the user's machine.
- */
-
-/** How many complete weeks the account calendar reaches back past the current one. */
 const CALENDAR_COMPLETE_WEEKS = 52;
 
 const DAYS_PER_WEEK = 7;
 
 const ACTION_KINDS = Object.values(MEANINGFUL_ACTION);
 
-/**
- * The account calendar's UTC day keys, oldest first: the last 52 complete
- * weeks plus the current partial one, ending on `now`'s own day — a trailing
- * year that stands apart from the page's window. The calendar's weeks open
- * on Sunday, its own requested convention, unlike the retention grid's
- * Monday-keyed weeks, which follow Postgres's `date_trunc('week')`. The
- * epoch, 1970-01-01, was a Thursday: four days past its week's Sunday.
- */
 export function calendarDayKeys(now: number): string[] {
   const daysIntoWeek = ((Math.floor(now / DAY_MS) + 4) % DAYS_PER_WEEK) + 1;
   return lastNDayKeys(now, CALENDAR_COMPLETE_WEEKS * DAYS_PER_WEEK + daysIntoWeek);
 }
 
-/**
- * The raw shape the queries produce for one account, before the pure builder
- * zero-fills the series and reads the streak off it — split out, like the
- * overview's source, so the day arithmetic is testable without a database.
- */
 export interface AdminUserSource {
   account: AdminUserAccount;
-  /** Each UTC day of the calendar's trailing year with an action, by kind: the one series the activity folds. */
   actionsByDay: ReadonlyMap<string, ReadonlyMap<MeaningfulAction, number>>;
   usage: {
     byDay: ReadonlyMap<string, number>;
-    /** The calendar's own rows, read at the trailing-year bound. */
     calendarByDay: ReadonlyMap<string, number>;
     allTime: AdminUserAllTime;
   };
 }
 
-/** Consecutive active days ending today or yesterday, since today may simply not have started yet. */
 function currentStreak(activeFlags: readonly boolean[]): number {
   let streakEnd = activeFlags.length - 1;
   if (!activeFlags[streakEnd]) streakEnd -= 1;
@@ -81,12 +54,6 @@ function actionTotal(day: AdminActionDay): number {
   return sum(ACTION_KINDS.map((kind) => day[kind]));
 }
 
-/**
- * Folds the account's meaningful actions into the page's live activity. The
- * trailing year is zero-filled once, and the window, the trends, the streak,
- * and the first and last active days are all read off it; the widest window
- * and both trend runs sit inside the year.
- */
 function buildAdminUserActions(
   actionsByDay: AdminUserSource["actionsByDay"],
   now: number,
@@ -122,7 +89,6 @@ function buildAdminUserActions(
   };
 }
 
-/** Shapes one account's queried source, and its support rows, into the page's answer. */
 export function buildAdminUserDetail(
   source: AdminUserSource,
   support: AdminAccountSource,
@@ -130,8 +96,6 @@ export function buildAdminUserDetail(
   windowDays: AdminMetricsWindow,
 ): AdminUserDetail {
   const dayKeys = lastNDayKeys(now, windowDays);
-  // The trends read the byDay map through their own trailing keys, like the
-  // overview's, so a 7-day view still compares against the week before it.
   const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
   const trendTotals = trendKeys.map((day) => source.usage.byDay.get(day) ?? 0);
 
@@ -175,7 +139,6 @@ export function buildAdminUserDetail(
 
 export interface AdminUserOptions {
   query: AdminUserQuery;
-  /** The named account's detail, or nothing when no user row carries that id. */
   readUser: (
     userId: string,
     now: number,
@@ -183,14 +146,6 @@ export interface AdminUserOptions {
   ) => AdminSeamEffect<AdminUserDetail | undefined>;
 }
 
-/**
- * Answers one account's read behind the same gate the overview's metrics
- * stand behind, with the same distinct refusals, plus the two of its own: a
- * request that named no account, like one naming a window outside the fixed
- * set, is a 400 before any seam is touched, and an id no user row carries is
- * a 404 the page can word as the account being gone rather than the service
- * being down.
- */
 export function handleAdminUser(
   options: AdminUserOptions,
 ): Effect.Effect<AdminUserDetail, AdminRefusal, DatabaseServices> {

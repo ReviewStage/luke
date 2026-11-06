@@ -54,13 +54,10 @@ const MemberRowSchema = Schema.Struct({ user_id: Schema.String, role: Schema.Str
 
 const SlugRowSchema = Schema.Struct({ slug: Schema.String });
 
-/** What Better Auth answers when a call is refused: its error code, on the body. */
 const RefusalSchema = Schema.Struct({ body: Schema.Struct({ code: Schema.String }) });
 
-/** What a browser posts to an organization endpoint: flat fields, and `update`'s nested `data`. */
 type OrganizationWriteBody = Readonly<Record<string, string | Readonly<Record<string, string>>>>;
 
-/** Every organization write a signed-in browser could ask for over HTTP, with a body it would send. */
 const ORGANIZATION_WRITES: ReadonlyArray<{
   readonly path: string;
   readonly body: OrganizationWriteBody;
@@ -75,19 +72,11 @@ const ORGANIZATION_WRITES: ReadonlyArray<{
   { path: "/organization/leave", body: {} },
 ];
 
-/** An account signed up through the server API, and the cookie its sign-up set. */
 interface SignedUpAccount {
   readonly id: string;
   readonly cookie: string;
 }
 
-/**
- * Our own organization policy over a migrated PGlite. Email and password
- * sign-up is on in this instance alone: it is Better Auth's documented
- * server call that both saves an account and signs it in, which is all the
- * test needs of an account, and our own instance signs in through its
- * social providers instead.
- */
 function organizationAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
   return betterAuth({
     database: authDatabaseAdapter(drizzle({ client })),
@@ -107,7 +96,6 @@ async function signUp(
     body: { name, email: `${name}@example.com`, password: "a-password-long-enough" },
     returnHeaders: true,
   });
-  // A browser sends back each cookie's name and value, and none of its attributes.
   const cookie = headers
     .getSetCookie()
     .map((line) => line.split(";")[0])
@@ -146,11 +134,6 @@ function postAuth(path: string, cookie: string, body: OrganizationWriteBody): Re
   });
 }
 
-/**
- * The organization plugin over the migrated schema, reached the two
- * server-only ways a hosted route writes a workspace: created for an account
- * named by id, with no session, and joined by a second account.
- */
 test("Better Auth's organization plugin creates a workspace and adds a member in the migrated schema from the server", async () => {
   await withOrganizationAuth(async ({ auth, readRows }) => {
     const owner = await signUp(auth, "owner");
@@ -178,13 +161,6 @@ test("Better Auth's organization plugin creates a workspace and adds a member in
   });
 });
 
-/**
- * A slug is what a workspace is adopted by, so a signed-in browser that
- * could create an organization, or rename its own, could take a team's slug
- * before the team arrives. The owner of a workspace of their own, signed in,
- * reaches no organization write over HTTP, and is refused the create even
- * through the server API when the call carries their session.
- */
 test("a signed-in account creates, renames, and joins no organization over HTTP, and creates none with its session", async () => {
   await withOrganizationAuth(async ({ auth, readRows }) => {
     const intruder = await signUp(auth, "intruder");

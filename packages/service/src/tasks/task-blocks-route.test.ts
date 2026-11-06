@@ -22,19 +22,6 @@ import { fakeGitHub, GITHUB_APP_WITH_TOKENS, openTokenMember } from "../testing/
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
-/**
- * A member adding and taking away a task's blocks, setting and clearing its
- * parent, and moving one relation of it to another kind through the hosted
- * oRPC router, as the web route answers it, over a real dialect: a block is
- * written on the side the change names and answered on the task the path
- * names; a task the member does not reach, on either side, is not found,
- * one of another workspace is invalid, and a block closing a cycle is
- * refused by name, each writing nothing. A parent is set under the rules a
- * child is made under, and a relation moved lands whole or not at all.
- * Synthetic accounts and tasks throughout.
- */
-
-/** The writes of one plan the router answers: its blocks, its parent, and a relation moved. */
 const PLAN_WRITE = {
   BLOCKS: "blocks",
   PARENT: "parent",
@@ -45,7 +32,6 @@ type PlanWrite = (typeof PLAN_WRITE)[keyof typeof PLAN_WRITE];
 
 const ORIGIN = "https://app.test";
 
-/** The plans procedures over the test's store, each bearer answering for the account it maps to; GitHub is never asked. */
 const blocking = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const github = fakeGitHub(() => Response.json({}, { status: 404 }), GITHUB_APP_WITH_TOKENS);
@@ -70,7 +56,6 @@ const blocking = (bearers: ReadonlyMap<string, string>) =>
         workspaces: yield* fakeWorkspaceSeams,
       }),
     });
-    // SAFETY: a block's write yields the store and the clock alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     return (
       taskId: string,
@@ -87,7 +72,6 @@ const blocking = (bearers: ReadonlyMap<string, string>) =>
           }),
           webServices,
         );
-        // SAFETY: the router answers JSON; the test compares it as the wire value it is.
         return { status: response.status, body: JSON.parse(await response.text()) };
       });
   });
@@ -194,7 +178,6 @@ it.layer(getTestDB())("a member's blocks on a task", (it) => {
   );
 });
 
-/** The task's parent as the account reads it, which the test expects it to reach. */
 const parentOf = (userId: string, taskId: string) =>
   Effect.map(
     readTaskHeader(userId, taskId),
@@ -271,13 +254,11 @@ it.layer(getTestDB())("a member's parent and relations on a task", (it) => {
         yield* send(panel, "Bearer owner", add(TASK_BLOCK_RELATION.BLOCKED_BY, schema));
         yield* send(panel, "Bearer owner", add(TASK_BLOCK_RELATION.BLOCKS, apart));
 
-        // Blocked by schema becomes a sub-task of it: the block goes and the parent lands together.
         const toParent = yield* move({
           taskId: schema,
           from: TASK_RELATION_KIND.BLOCKED_BY,
           to: TASK_RELATION_KIND.PARENT,
         });
-        // A task it blocks cannot become its sub-task from another repository, so the block it would have given up stands.
         const refused = yield* move({
           taskId: apart,
           from: TASK_RELATION_KIND.BLOCKS,

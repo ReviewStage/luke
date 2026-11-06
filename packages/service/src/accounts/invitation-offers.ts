@@ -11,22 +11,6 @@ import { and, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
-/**
- * invitation-offers.ts -- one invitation as its recipient is offered it on the accept page, read off the organization plugin's own rows.
- *
- * An invitation is the workspace's, not its inviter's, so it stays good
- * after whoever made it left: this read makes the plugin's own checks on it
- * (still pending, not expired, made for the reading account's address, and
- * that address verified, as `requireEmailVerificationOnInvitation` asks)
- * and leaves out the one the plugin's `getInvitation` adds, that the inviter
- * is still a member, which would turn a teammate's leaving into a dead link.
- * The inviter is named only while they are still a member; the plugin's
- * `acceptInvitation`, which the page calls next, asks nothing of the inviter.
- * The workspace is named as its members read it (`WORKSPACE_NAME`), an
- * account's first workspace by its owner's name as it stands now.
- */
-
-/** The plugin's status for an invitation still waiting on its recipient. */
 const PENDING = "pending";
 
 const findInvitation = SqlSchema.findOneOption({
@@ -74,7 +58,6 @@ const findAddress = SqlSchema.findOneOption({
     ),
 });
 
-/** The account `userId` as a member of the workspace, by its name and address: an inviter still in it, or a reader already in it. */
 const findMember = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ name: Schema.String, email: Schema.String }),
@@ -89,18 +72,10 @@ const findMember = SqlSchema.findOneOption({
     ),
 });
 
-/** The role an invitation's row holds, as the offer says it; the plugin writes none for a member. */
 function roleOfRow(role: string | null): WorkspaceInvitation["role"] {
   return role === INVITATION_ROLE.ADMIN ? INVITATION_ROLE.ADMIN : INVITATION_ROLE.MEMBER;
 }
 
-/**
- * The invitation `id` as `userId` is offered it at `now`: the offer, naming
- * the inviter while they are a member; that the reader is already a member of
- * its workspace, as someone opening their link again after joining is,
- * whatever the invitation's state; or why there is none, an invitation that is
- * unknown, used, canceled, or expired said alike as spent.
- */
 export const invitationOffer = Effect.fn("web/invitationOffer")(function* (
   userId: string,
   id: string,

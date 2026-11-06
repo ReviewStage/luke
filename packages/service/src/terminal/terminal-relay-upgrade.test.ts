@@ -4,15 +4,6 @@ import { test } from "vitest";
 import { RELAY_UPGRADE_STATUS } from "../http/relay-upgrade.js";
 import { admitRelayUpgrade } from "./service.js";
 
-/**
- * Which upgrades the terminal relay takes, before any socket stands: only
- * its own path; from the desktop, which names no origin, only under a
- * bearer, as it always was; from a page, only from one of the deployment's
- * own origins and under its session cookie, read alone, so another site's
- * page carrying the member's cookie is refused whatever else it carries;
- * and only one naming an agent, a shell, and a size it can read.
- */
-
 const AGENT = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const SHELL = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 const OWN_ORIGIN = "https://app.example.test";

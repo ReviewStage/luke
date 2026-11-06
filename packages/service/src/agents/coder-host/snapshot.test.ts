@@ -25,30 +25,10 @@ import type { RepositoryCredential } from "../sandbox-firewall.js";
 import { vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from "./snapshot.js";
 
-/**
- * The source agent's work copied for an agent started from it, over Vercel
- * Sandbox's REST API answering from a script and the sandbox's shell standing
- * as a real POSIX shell with git, in a checkout and a remote the test made
- * (`testing/source-sandbox.ts`): what it committed, changed, staged, and
- * made, bar what git ignores and files named like credentials, lands as one commit on the branch asked for,
- * and the source's own index and working tree are as they were; a checkout
- * with nothing uncommitted pushes its `HEAD`; a retry pushes over its own
- * branch; a stopped sandbox is woken and stopped again unless it must stay
- * up, by a stop sent as JSON that the copy never waits on, and a running one
- * is left running; and a sandbox gone, a failed copy, or one past its bound
- * is a miss, a sandbox it was waking stopped again all the same, and a failed
- * copy logs the end of its stderr, bounded and redacted. A member's own
- * token stands for the push alone where nothing else uses the sandbox. The
- * firewall's record is kept in the test's own database, under the source's
- * account and a key ring of the suite's.
- */
-
 const SESSION = "wrun_fixture";
-/** The account whose agent the source is. */
 const SOURCE_OWNER = "user-snapshot-source";
 const BRANCH = "luke/fix-invites-continued-0a1b2c3d";
 const MESSAGE = "Snapshot of Fix invites for continued agent";
-/** The repository's credential as the App mints it, and as a member's own token stands. */
 const CREDENTIAL = {
   APP: {
     token: Redacted.make("ghs_fixture_installation_token"),
@@ -67,11 +47,9 @@ const CREDENTIAL = {
   },
 } as const;
 
-/** A checkout of this test's own. */
 const checkoutFor = (t: TestContext) =>
   Effect.promise(async () => sourceCheckout(await temporaryDirectory(t, "snapshot-")));
 
-/** What the source's own checkout stands at, which the copy must leave alone. */
 function standing({ checkout, sh }: SourceCheckout) {
   return {
     head: sh(checkout, "git", "rev-parse", "HEAD"),
@@ -80,7 +58,6 @@ function standing({ checkout, sh }: SourceCheckout) {
   };
 }
 
-/** The copy asked of the sandbox over the responder given, through the credential given, the sandbox left up where `keepUp` says so. */
 function copyOver(
   respond: Parameters<typeof sandboxFetchOver>[0],
   keepUp: Effect.Effect<boolean> = Effect.succeed(false),
@@ -105,7 +82,6 @@ function copyOver(
   }).pipe(Effect.provide(Layer.merge(sandboxFetchOver(respond), LOCAL_AGENT_ENVIRONMENT)));
 }
 
-/** A request as the double reads it. */
 async function sentOf(url: string, init: RequestInit): Promise<SentToSandbox> {
   return {
     url,
@@ -115,17 +91,14 @@ async function sentOf(url: string, init: RequestInit): Promise<SentToSandbox> {
   };
 }
 
-/** The double's answer to a request, failing the test on one it has none for. */
 async function answerOf(sandbox: SourceSandbox, url: string, init: RequestInit): Promise<Response> {
   return sandbox.answer(await sentOf(url, init)) ?? assert.fail(`no Vercel answer for ${url}`);
 }
 
-/** The copy asked of the double. */
 function copy(sandbox: SourceSandbox, keepUp = false, credential?: RepositoryCredential) {
   return copyOver((url, init) => answerOf(sandbox, url, init), Effect.succeed(keepUp), credential);
 }
 
-/** Every warning logged while the effect runs, its words joined, the fibers it forked included. */
 function logging(logged: string[]) {
   return Effect.provide(
     Logger.layer([
@@ -136,7 +109,6 @@ function logging(logged: string[]) {
   );
 }
 
-/** The pushed branch's commit, as the remote holds it. */
 function pushed({ remote, sh }: SourceCheckout): string {
   return sh(remote, "git", "rev-parse", `refs/heads/${BRANCH}`);
 }
@@ -274,7 +246,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
           [sandbox.state.status, sandbox.stops],
           ["stopped", [SOURCE_SANDBOX.WOKEN]],
         );
-        // A stopped sandbox keeps its policy and a resume wears it again, so the stop leaves it open.
         assert.deepEqual(sandbox.policies, [
           { session: SOURCE_SANDBOX.WOKEN, hosts: ["*", "github.com", "api.github.com"] },
           { session: SOURCE_SANDBOX.WOKEN, hosts: [] },
@@ -302,7 +273,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
         const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
         const askedAgain = Deferred.makeUnsafe<void>();
         let asked = 0;
-        // Free as the copy ends; held by the time the stop behind it has listed the sandbox.
         const keepUp = Effect.sync(() => {
           asked += 1;
           if (asked > 1) Deferred.doneUnsafe(askedAgain, Effect.void);
@@ -401,7 +371,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
 
         const outcome = yield* copyOver(async (url, init) => {
           if (!new URL(url).pathname.endsWith("/stop")) return answerOf(sandbox, url, init);
-          // Vercel took the stop, and never answered it.
           stopSent();
           return new Promise<Response>((_, reject) => {
             init.signal?.addEventListener("abort", () => {
@@ -445,7 +414,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
               const sent = await sentOf(url, init);
               const open = url.includes("/network-policy") && sent.body.includes("allow-all");
               if (!open) return sandbox.answer(sent) ?? assert.fail(`no Vercel answer for ${url}`);
-              // Vercel took the withdrawal, and never answered it.
               withdrawalSent();
               return new Promise<Response>((_, reject) => {
                 init.signal?.addEventListener("abort", () => {
@@ -485,7 +453,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
             if (new URL(url).searchParams.get("resume") !== "true") {
               return answerOf(sandbox, url, init);
             }
-            // Vercel began bringing the sandbox up, and never answered the wake.
             sandbox.state.status = "pending";
             sandbox.state.session = SOURCE_SANDBOX.WOKEN;
             wakeStarted();

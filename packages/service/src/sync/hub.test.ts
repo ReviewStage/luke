@@ -32,33 +32,14 @@ import { announcingClock, driven } from "../testing/clock-driven.js";
 import { syncFromEnvironment, syncHub } from "./hub.js";
 import { NO_TOPICS, Sync, type SyncWatch } from "./watch.js";
 
-/**
- * Sync's hub, on the test database's own listener: what a committed
- * write on a synced table wakes, how the listener is shared and proved, and
- * what waits on the clock instead. The tests run on a clock that announces
- * each wait, and move it only once something waits on it, so a write the
- * database is still delivering is never outrun. The listener is the test
- * database's, behind a probe that counts its connections and can end one,
- * as a closed socket does, or deafen it, as a connection that died without
- * a word is. The hub is handed a pool that refuses every statement, since
- * what it sends goes over its listener's own connection: a heartbeat that
- * went through the pool would leave the listener's session idle, and
- * Postgres reaps an idle listener's session (`LISTENER.REAPED`).
- */
-
-/** A wait nothing in these tests reaches, so a watch that wakes was woken. */
 const NEVER_REACHED = Duration.hours(1);
 
-/** Longer than the 100 ms a woken `next` gathers for, and shorter than the 15 s heartbeat. */
 const STEP = Duration.seconds(1);
 
-/** The listener's heartbeat, every 15 s and back within 15 s. */
 const HEARTBEAT = Duration.seconds(15);
 
-/** Longer than a confirming round trip may take, and shorter than the heartbeat that would otherwise catch the same dead connection. */
 const UNDER_A_HEARTBEAT = Duration.seconds(10);
 
-/** A caller's own poll. */
 const FALLBACK = Duration.minutes(1);
 
 const PROBE = pgTable("sync_hub_probe", {
@@ -75,7 +56,6 @@ const probeSync = defineSyncTable(PROBE, {
   ignore: [],
 });
 
-/** The test database with the probe table created and its capture installed, as a migration would. */
 const probeDB = Layer.provideMerge(
   Layer.effectDiscard(
     Effect.gen(function* () {
@@ -89,7 +69,6 @@ const probeDB = Layer.provideMerge(
   getTestDB(),
 );
 
-/** A row on a workspace and a task of its own, and its topics. */
 function probeRow() {
   const row = { id: randomUUID(), workspaceId: randomUUID(), taskId: randomUUID() };
   const task: SyncTopic = [TOPIC.TASK, row.taskId];
@@ -97,13 +76,11 @@ function probeRow() {
   return { row, task, workspace };
 }
 
-/** Commits the row, answering its transaction's id. */
 const written = (row: typeof PROBE.$inferInsert) =>
   Effect.flatMap(Database, (db) =>
     db.insert(PROBE).values(row).returning({ txid: sql<string>`pg_current_xact_id()::text` }),
   ).pipe(Effect.map(([inserted]) => inserted?.txid));
 
-/** A connection ending as a closed socket's does. */
 const CLOSED = new SqlError({
   reason: new ConnectionError({
     cause: new Error("closed"),
@@ -112,22 +89,15 @@ const CLOSED = new SqlError({
   }),
 });
 
-/** The test's hold on the hub's listener. */
 interface Probe {
-  /** How many connections the hub has opened. */
   readonly opened: Effect.Effect<number>;
-  /** Ends the standing connection, as a closed socket does. */
   readonly drop: Effect.Effect<void>;
-  /** The standing connection hears nothing more, as one that died without a word. */
   readonly deafen: Effect.Effect<void>;
-  /** Holds every `LISTEN` unacknowledged until `release`. */
   readonly stall: Effect.Effect<void>;
   readonly release: Effect.Effect<void>;
-  /** Announced each time anything waits on the clock. */
   readonly asleep: Queue.Dequeue<void>;
 }
 
-/** The test database's listener, behind a probe. */
 const probedListener = Effect.gen(function* () {
   const underlying = yield* SyncListener;
   const opened = yield* Ref.make(0);
@@ -163,7 +133,6 @@ const probedListener = Effect.gen(function* () {
   };
 });
 
-/** Runs the test on a hub over the probed listener, on a clock that announces each wait. */
 const onHub = <A, E, R>(test: (probe: Probe) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const { clock, asleep } = yield* announcingClock;
@@ -179,10 +148,8 @@ const onHub = <A, E, R>(test: (probe: Probe) => Effect.Effect<A, E, R>) =>
     );
   });
 
-/** The watch's `next`, started now. */
 const nextOf = (watch: SyncWatch) => Effect.forkChild(watch.next, { startImmediately: true });
 
-/** Opens a watch on the scope the test stands in, as its own fiber, so the test can move the clock while it opens. */
 const opening = (topics: readonly SyncTopic[], fallback: Duration.Duration, scope: Scope.Scope) =>
   Effect.forkChild(
     Effect.flatMap(Sync, (sync) => sync.watch(topics, fallback)).pipe(
@@ -191,7 +158,6 @@ const opening = (topics: readonly SyncTopic[], fallback: Duration.Duration, scop
     { startImmediately: true },
   );
 
-/** Whether the fiber is still waiting. */
 const waiting = <A, E>(fiber: Fiber.Fiber<A, E>) => fiber.pollUnsafe() === undefined;
 
 it.layer(probeDB)("Vespin Sync's hub", (it) => {
@@ -222,7 +188,6 @@ it.layer(probeDB)("Vespin Sync's hub", (it) => {
         Effect.gen(function* () {
           const sync = yield* Sync;
           const { row, task } = probeRow();
-          // Note that a second watch on the topic shows the hub has handed the write on before the first read ends.
           const witness = yield* nextOf(yield* sync.watch([task], NEVER_REACHED));
           const reads = yield* Ref.make(0);
           let txid: string | undefined;
@@ -336,7 +301,6 @@ it.layer(probeDB)("Vespin Sync's hub", (it) => {
           yield* driven({ fiber: onWorkspace, asleep: probe.asleep }, HEARTBEAT),
           [],
         );
-        // Note that the reconnect may wake the watch once more, so the write is looked for until it is heard.
         let heard: readonly string[] = [];
         const txid = yield* written(row);
         while (!heard.includes(txid ?? "")) {

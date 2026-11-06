@@ -166,38 +166,21 @@ import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-confi
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
 
-/**
- * The reads the desktop follows, answered by the procedure the way the
- * hosted oRPC route answers it: refused without a bearer, and otherwise
- * every part answered polled for the bearer's own account, its rows inline
- * at the poll address; a task's record, pages, Browser tabs, and history
- * for an account that reaches the task and not found for one that does not; a poll past
- * the digest the reader saw held until the rows move; and a plan's inbox,
- * or an agent's, for an account that reaches it and not found for one that
- * does not. Whose rows each statement reads is held by its builder's own
- * tests (`task-list-live.test.ts`, `task-record-live.test.ts`, and the rest).
- *
- * Synthetic accounts and bearers throughout, over the test's own database.
- */
-
 const ORIGIN = "https://app.test";
 const LIVE_INBOX = "/api/live/inbox";
 
-/** A live read's address, naming the account it is for where one is named (`LIVE_USER_QUERY`). */
 function readOf(path: string, forUser: string | undefined): URL {
   const url = new URL(path, ORIGIN);
   if (forUser !== undefined) url.searchParams.set(LIVE_USER_QUERY, forUser);
   return url;
 }
 
-/** A deployment that offers every provider but Granola, Notion alone taking several accounts, and asks Connect nothing. */
 const INTEGRATION_CONNECT = integrationConnectOf((provider) => ({
   ...CONNECTOR_ASKED_NOTHING,
   configured: provider !== INTEGRATION_PROVIDER.GRANOLA,
   multipleAccounts: provider === INTEGRATION_PROVIDER.NOTION,
 }));
 
-/** A deployment that holds our Sentry integration, under synthetic settings, and no Slack bot. */
 const SENTRY_HELD_SLACK_NOT = Layer.mergeAll(
   Layer.succeed(
     SentryApp,
@@ -213,13 +196,10 @@ const SENTRY_HELD_SLACK_NOT = Layer.mergeAll(
   Layer.succeed(SlackBot, slackBotOver(undefined)),
 );
 
-/** The procedures answering one request as `bearer`, over the test's database, `INTEGRATION_CONNECT`, and `SENTRY_HELD_SLACK_NOT`. */
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
-  /** The live read asked; the account inbox where left out. */
   readonly path?: string;
-  /** The account the read names; the bearer's own where left out. */
   readonly forUser?: string;
 }) =>
   Effect.gen(function* () {
@@ -247,12 +227,10 @@ const ask = (options: {
       }),
     );
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
 
-/** Whether the transaction `txid` is visible in `snapshot`, as Postgres reads the two. */
 const visibleIn = (txid: string, snapshot: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -263,7 +241,6 @@ const visibleIn = (txid: string, snapshot: string) =>
     return read?.visible === true;
   });
 
-/** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -298,7 +275,6 @@ it.layer(getTestDB())("the account's live reads", (it) => {
           timeoutSeconds: 60,
         };
         yield* queueMacCommand(dana, shell);
-        // A row of a kind this service no longer queues, as an older build left one waiting.
         const queuedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
         yield* db.execute(
           sql`INSERT INTO mac_command (id, user_id, kind, timeout_seconds, queued_at)
@@ -369,7 +345,6 @@ it.layer(getTestDB())("the account's live reads", (it) => {
   it.effect("every part of the account inbox is answered polled, each with its rows inline", () =>
     Effect.gen(function* () {
       const dana = yield* openUser;
-      // A task started in a workspace Dana is not in, so every part of hers stays empty.
       const eli = yield* openUser;
       const { txid } = yield* createTaskCommitted(eli, {
         organizationId: yield* openWorkspace(eli),
@@ -423,26 +398,20 @@ it.layer(getTestDB())("the account's live reads", (it) => {
   );
 });
 
-/** The procedures answering a task's live read as `bearer`, its record's unless `path` names another, over the store. */
 const askTask = (options: {
   readonly bearer: string;
-  /** The account the read names; the bearer's own where left out. */
   readonly forUser?: string;
   readonly taskId?: string;
   readonly path?: string;
-  /** The page of the task a comments read names; the description's own threads where left out. */
   readonly page?: string;
   readonly poll?: boolean;
-  /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
-  /** The client the live statements run on; the test's database's own where left out. */
   readonly sql?: SqlClient.SqlClient;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, options.sql ?? (yield* SqlClient.SqlClient)),
       Layer.succeed(Database, yield* Database),
-      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({
@@ -463,7 +432,6 @@ const askTask = (options: {
       new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
     );
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
@@ -731,14 +699,8 @@ it.layer(getTestDB())("a task's live reads", (it) => {
   );
 });
 
-/** A row a statement answered, column by column. */
 type KeptRow = Readonly<Record<string, unknown>>;
 
-/**
- * The test's database client, keeping every row a statement run on it as
- * text (`unsafe`, which a poll's sealer reads through) answers, so a test
- * sees what left the database rather than how often it was asked.
- */
 function keepingRows(sql: SqlClient.SqlClient, kept: KeptRow[]): SqlClient.SqlClient {
   return new Proxy(sql, {
     get: (target, key, receiver) =>
@@ -751,17 +713,14 @@ function keepingRows(sql: SqlClient.SqlClient, kept: KeptRow[]): SqlClient.SqlCl
   });
 }
 
-/** The columns a look at a read's digest answers, none of them the read's own. */
 const LOOK_COLUMNS: ReadonlySet<string> = new Set(["digest", "snapshot"]);
 
-/** The rows kept that carry a column of the read's own, rather than a look's digest and snapshot alone. */
 const rowsOfTheRead = (kept: readonly KeptRow[]) =>
   kept.filter((row) => Object.keys(row).some((column) => !LOOK_COLUMNS.has(column)));
 
 it.layer(getTestDB())("a held live read's looks", (it) => {
   const path = "/api/live/task-pages";
 
-  /** One page shown on the task, so its pages read has a row to carry. */
   const showPage = (userId: string, taskId: string) =>
     Effect.map(
       writePage(
@@ -858,7 +817,6 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         const { agents: _, ...kept } = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(
           first.body,
         ).queries;
-        // As v0.22.0 sends it: its schema keeps five parts and strips `agents`, which it never knew.
         const after = liveDigestOf(kept);
         assert.ok(after !== undefined);
 
@@ -913,7 +871,6 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
         const after = liveDigestOn(seen.queries, ACCOUNT_INBOX_ITEMS.HELD_ON);
         assert.ok(after !== undefined);
 
-        // The reader holds every item now, so it asks only for those changed from here on.
         yield* TestClock.adjust(Duration.seconds(1));
         const since = String(yield* Clock.currentTimeMillis);
         const poll = yield* Effect.forkChild(
@@ -929,7 +886,6 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
         assert.equal(held.queries.stamps.rows, undefined, "the poll was held to its end");
         assert.equal(liveDigestOn(held.queries, ACCOUNT_INBOX_ITEMS.HELD_ON), after);
 
-        // A read mark changes nothing of the item but whether it is unread, which its stamp carries.
         const itemId = Result.getOrThrow(posted).id;
         assert.ok((yield* markInboxItemRead(dana, itemId)) !== false);
         const again = yield* Effect.forkChild(
@@ -955,26 +911,20 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
   );
 });
 
-/** The procedures answering an agent's transcript's live read as `bearer`, the worker's where `call` names one. */
 const askTranscript = (options: {
   readonly bearer: string;
   readonly agentId: string;
   readonly call?: string;
-  /** The read asked, an agent's transcript where none is named. */
   readonly path?: string;
-  /** The account the read names, the bearer's own where none is named. */
   readonly forUser?: string;
   readonly poll?: boolean;
-  /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
-  /** Where the reader holds the newest messages, past which its cursor parts are answered. */
   readonly cursor?: string;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
-      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({
@@ -996,7 +946,6 @@ const askTranscript = (options: {
       new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
     );
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
@@ -1044,7 +993,6 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         assert.deepEqual(idsOf(answer.queries.conversation.rows), [agent.conversationId]);
         assert.deepEqual(idsOf(answer.queries.agent.rows), [agent.id]);
 
-        // Note that the call's conversation is not opened yet, so the worker's reads under it find none, beside its agent.
         const worker = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
           (yield* askTranscript({ bearer: owner, agentId: agent.id, call: "call-7" })).body,
         );
@@ -1092,7 +1040,6 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         );
         const cursor = first.queries.window.cursor?.next;
         assert.ok(cursor !== undefined);
-        // As the host sends it (`transcript-follow.ts`'s `followedRead`): its read without the count of its messages.
         const { messages: _, ...followed } = first.queries;
         const after = liveDigestOf(followed);
         assert.ok(after !== undefined);
@@ -1206,12 +1153,10 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
   );
 });
 
-/** The procedures answering a plan's or an agent's inbox read as `bearer`, over the store. */
 const askScope = (options: {
   readonly bearer: string;
   readonly path: string;
   readonly id: string;
-  /** The account the read names; the bearer's own unless a test names another. */
   readonly userId?: string;
 }) =>
   Effect.gen(function* () {
@@ -1232,7 +1177,6 @@ const askScope = (options: {
       new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
     );
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
@@ -1324,7 +1268,6 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
           status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
           body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
         });
-        // A read started for another account, as a page left open under a changed session asks, is signed out.
         assert.deepEqual(yield* ask({ bearer: dana, forUser: "user-erin", path }), {
           status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
           body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
@@ -1377,7 +1320,6 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
-        // A read started for another account is signed out, before the workspace is looked at.
         assert.equal(
           (yield* ask({ bearer: owner, forUser: outsider, path })).status,
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
@@ -1730,14 +1672,12 @@ it.layer(getTestDB())("the account's sidebar's live read", (it) => {
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** The one installation the chapters' read reaches the repository through. */
 const RELAY_INSTALLATION: InstallationFixture = {
   id: 9_300,
   login: RELAY.owner,
   repositories: [RELAY],
 };
 
-/** A deployment that seals members' API keys under the fixture ring and holds nothing else. */
 const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -1750,7 +1690,6 @@ const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The procedures answering an agent's pull request's chapters as `bearer`, over the store and GitHub. */
 const askChapters = (options: {
   readonly bearer: string;
   readonly agentId: string;
@@ -1778,7 +1717,6 @@ const askChapters = (options: {
       new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
     );
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
@@ -1791,7 +1729,6 @@ it.layer(getTestDB())("the account's integrations' live read", (it) => {
         const { LINEAR, NOTION, POSTHOG } = INTEGRATION_PROVIDER;
         const dana = yield* openUser;
         const eli = yield* openUser;
-        // A first sign-in begun sixteen minutes before the read, past its window, never completed; and one begun five minutes before it, within it.
         yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, POSTHOG), "state-lapsed");
         yield* TestClock.adjust(Duration.minutes(11));
         yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, LINEAR), "state-linear");
@@ -1869,7 +1806,6 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
             now: new Date(at),
           });
         yield* claimed(task.workspaceId, owner, "c0ffee1", 1_000);
-        // The stranger's own workspace claims the same pull request later, which no read through the agent may answer.
         yield* claimed(yield* openWorkspace(stranger), stranger, "dec0de2", 2_000);
         const github = githubReaching([RELAY_INSTALLATION]);
 
@@ -1898,13 +1834,11 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
   );
 });
 
-/** A live read at `path` asked as `bearer`, polled, in delta mode past `sync` where it names one ("" for none yet), on the test's clock and on `hub` where one is named; its answer's body. */
 const askLive = (bearer: string, path: string, sync?: string, hub?: SyncShape) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
-      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       hub === undefined ? Layer.empty : Layer.succeed(Sync, hub),
     );
@@ -1925,18 +1859,12 @@ const askLive = (bearer: string, path: string, sync?: string, hub?: SyncShape) =
     return body;
   });
 
-/** The task list asked as `bearer`, in delta mode past `sync` where it names one, on `hub` where one is named, its parts decoded. */
 const askTasks = (bearer: string, sync?: string, hub?: SyncShape) =>
   Effect.map(
     askLive(bearer, "/api/live/tasks", sync, hub),
     (body) => Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries,
   );
 
-/**
- * Sync with no hub, each held read's watch waiting on the clock alone, and
- * each wait announced on `looking` once the clock holds it, so a test moves
- * the clock only once the look before it found nothing moved.
- */
 const lookingOn = (looking: Queue.Queue<void>): SyncShape => ({
   watch: (_topics, fallback) => {
     const watch = clockWatch(fallback);
@@ -1951,11 +1879,9 @@ const lookingOn = (looking: Queue.Queue<void>): SyncShape => ({
   },
 });
 
-/** Each part's row ids, as a delta answers its rows. */
 const idsOf = (part: { readonly rows?: readonly unknown[] }) =>
   (part.rows ?? []).map((row) => (row as { readonly id: string }).id).toSorted();
 
-/** The agent's conversation. */
 const conversationOf = (agentId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -1966,7 +1892,6 @@ const conversationOf = (agentId: string) =>
     return agent?.conversationId ?? assert.fail("no such agent");
   });
 
-/** A turn of the agent's starting, as the writer opens one. */
 const startTurn = (userId: string, agentId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -1979,7 +1904,6 @@ const startTurn = (userId: string, agentId: string) =>
     });
   });
 
-/** A line of the developer's to the agent no turn has taken yet, as a send queues one; its id. */
 const queueLine = (userId: string, agentId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -2000,7 +1924,6 @@ const queueLine = (userId: string, agentId: string) =>
     return line?.id ?? assert.fail("the line was not queued");
   });
 
-/** The agent's row among a part's rows, as the task list reads its awaiting line. */
 const agentRowOf = (part: { readonly rows?: readonly unknown[] }, agentId: string) =>
   (part.rows ?? []).find((row) => (row as { readonly id: string }).id === agentId) as
     | { readonly awaitingLineAt: number | null }
@@ -2067,7 +1990,6 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
         yield* Effect.flatMap(Database, (db) =>
           db.update(messages).set({ withdrawnAt: new Date() }).where(eq(messages.id, lineId)),
         );
-        // Note that the hold is let run to its end, so a withdrawal no log row records answers nothing moved rather than holding the test.
         const asked = yield* Effect.forkChild(askTasks(dana, past));
         yield* TestClock.adjust(Duration.seconds(25));
         const moved = yield* Fiber.join(asked);
@@ -2083,7 +2005,6 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
       Effect.gen(function* () {
         const dana = yield* openUser;
         const erin = yield* openUser;
-        // Note that dana's workspace stands first, since the membership that makes it answers her whole.
         yield* startTask(dana, { name: "Teammate invitations" });
         const erins = yield* startTask(erin, { name: "Billing" });
         const erinsAgent = yield* openTaskAgent(erin, erins.workspaceId, erins.id);
@@ -2133,14 +2054,12 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
   );
 });
 
-/** The account's inbox items asked as `bearer` in delta mode past `sync` ("" for none yet), its parts decoded. */
 const askItems = (bearer: string, sync: string) =>
   Effect.map(
     askLive(bearer, "/api/live/inbox-items", sync),
     (body) => Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(body).queries,
   );
 
-/** An item of an agent of the member's on a task of theirs, the agent's message opening its thread; the item's id. */
 const openItem = (userId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -2157,7 +2076,6 @@ const openItem = (userId: string) =>
     return Result.getOrThrow(posted).id;
   });
 
-/** The client keys of a messages part's rows, as the reader's own messages carry them. */
 const clientKeysOf = (part: { readonly rows?: readonly unknown[] }) =>
   (part.rows ?? []).map((row) => (row as { readonly clientKey: string | null }).clientKey);
 
@@ -2181,7 +2099,6 @@ it.layer(getTestDB())("the account's inbox items' live read in delta mode", (it)
 
         yield* withdrawInboxMessage(dana, itemId, clientKey);
         yield* markInboxItemRead(erin, erinsItem);
-        // Note that the hold is let run to its end, so a withdrawal no row the read takes records answers nothing moved rather than holding the test.
         const asked = yield* Effect.forkChild(askItems(dana, past));
         yield* TestClock.adjust(Duration.seconds(25));
         const moved = yield* Fiber.join(asked);

@@ -25,24 +25,6 @@ import { taskFilesProcedures } from "../tasks/task-files-procedures.js";
 import { PAGE_LINK_ROUTE, PageLinks, type PageSandbox } from "./page-links.js";
 import { pageSandboxApp } from "./page-sandbox-app.js";
 
-/**
- * A page framed on the web, over a real dialect: the frame's same-origin
- * address answers a member with a redirect to a minute's link on the
- * sandbox's own site, which no cache keeps and no referrer carries on, and
- * the sandbox serves that link the version it names, as a document sealed
- * off from the app, framed by the app's own origins alone, on its own host
- * alone, with no cookie set; while an account the page's task does not
- * reach is minted no link, one that loses the task within the link's minute
- * is served nothing, a link is served nothing once its minute has passed,
- * neither the mint nor the link answers a load that is not a frame's, and a
- * deployment with no sandbox sends every frame to the page saying pages open
- * in the Mac app.
- *
- * Synthetic accounts, bearers, workspaces, tasks, agents, pages, and keys
- * throughout.
- */
-
-/** The app's own origin, which alone may frame a page. */
 const APP_ORIGIN = "https://tryluke.dev";
 
 const SANDBOX: PageSandbox = {
@@ -53,12 +35,10 @@ const SANDBOX: PageSandbox = {
 
 const CHART = { title: "Invite funnel", html: "<!doctype html><p>Invites by week</p>" } as const;
 
-/** What a browser names its load as (`Sec-Fetch-Dest`): a frame's, a whole tab's, or nothing, where the header is not sent. */
 const LOAD = { FRAME: "iframe", TAB: "document", UNNAMED: "unnamed" } as const;
 
 type Load = (typeof LOAD)[keyof typeof LOAD];
 
-/** A request's headers as a browser sends them for the load named. */
 const loadHeaders = (load: Load): Record<string, string> =>
   load === LOAD.UNNAMED ? {} : { "sec-fetch-dest": load };
 
@@ -70,7 +50,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A task in a fresh workspace with one page on it, and a teammate in that workspace. */
 const pageOnTask = Effect.gen(function* () {
   const starter = yield* openAccount;
   const teammate = yield* openAccount;
@@ -82,11 +61,6 @@ const pageOnTask = Effect.gen(function* () {
   return { starter, teammate, task, page };
 });
 
-/**
- * The page frame procedures and the sandbox's page route over the test's own
- * database and clock, under the sandbox given or none, a bearer naming its
- * account directly.
- */
 const standing = (sandbox: PageSandbox | undefined) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -100,7 +74,6 @@ const standing = (sandbox: PageSandbox | undefined) =>
       { disableLogger: true },
     );
     yield* Effect.addFinalizer(() => Effect.promise(() => route.dispose()));
-    // SAFETY: the procedures yield the database, the clock, and the page links alone, which is all a test provides of the web runtime's services.
     const context = (yield* Effect.context<DatabaseServices | PageLinks>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
@@ -112,7 +85,6 @@ const standing = (sandbox: PageSandbox | undefined) =>
       agentPages: agentPagesProcedures({ resolveUserId }),
       taskFiles: taskFilesProcedures({ resolveUserId }),
     });
-    /** A load of a page's version's frame address, as the account names it, a frame's unless named. */
     const frame = (userId: string, path: string, load: Load = LOAD.FRAME) =>
       Effect.promise(() =>
         procedures(
@@ -122,7 +94,6 @@ const standing = (sandbox: PageSandbox | undefined) =>
           context,
         ),
       );
-    /** A link followed as the routing hands it to the page route, a frame's load on the link's own host unless named. */
     const follow = (link: string, host = new URL(link).host, load: Load = LOAD.FRAME) => {
       const token = new URL(link).pathname.slice(`/${PAGE_LINK_ROUTE.STEP}/`.length);
       const address = `https://${host}${PAGE_LINK_ROUTE.PATH}?${PAGE_LINK_ROUTE.TOKEN_QUERY}=${token}`;
@@ -136,13 +107,11 @@ const standing = (sandbox: PageSandbox | undefined) =>
 const framePath = (taskId: string, pageId: string, version: number) =>
   `/api/plans/${taskId}/pages/${pageId}/versions/${version}/frame`;
 
-/** The link a frame's answer sends it on to, where it is a redirect. */
 function linkOf(answer: Response): string {
   assert.equal(answer.status, PAGE_FRAME_STATUS);
   return answer.headers.get("location") ?? "";
 }
 
-/** A policy's directives by name, each with its sources. */
 function directivesOf(policy: string): ReadonlyMap<string, string> {
   return new Map(
     policy.split(";").map((directive) => {
@@ -200,7 +169,6 @@ it.layer(getTestDB())("a page framed on the web", (it) => {
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.ok((yield* Effect.promise(() => served.text())).endsWith("<p>Invites by week</p>"));
         assert.equal(served.headers.get("content-type"), "text/html; charset=utf-8");
-        // Scripts alone: no same origin, so the page holds an opaque origin and reaches nothing of the app's.
         assert.equal(policy.get("sandbox"), "allow-scripts");
         assert.equal(policy.get("connect-src"), "'none'");
         assert.equal(policy.get("frame-ancestors"), APP_ORIGIN);

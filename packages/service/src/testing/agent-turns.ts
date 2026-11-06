@@ -1,7 +1,3 @@
-/**
- * agent-turns.ts -- one coding agent turn written through the store writer from its start to its end, as a test of what hears its settle drives it.
- */
-
 import { randomUUID } from "node:crypto";
 import type { Agent } from "@repo/database/models/agent-store";
 import { storeWriter } from "@repo/database/models/writer";
@@ -19,7 +15,6 @@ import { TURN_ORIGIN } from "@repo/wire";
 import { Effect } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 
-/** One turn of the agent's, begun just before `at`, answered with the words given where some are, and ended in the run status given at `at`; its id. */
 export const endedAt = (agent: Agent, status: RunStatus, at: number, said?: string) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });

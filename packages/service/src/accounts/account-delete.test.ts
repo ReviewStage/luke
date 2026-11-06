@@ -1,4 +1,3 @@
-// account-delete.test.ts -- an account's deletion retires its agents' sessions, over a bearer or a browser's session cookie, then erases it.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -33,22 +32,6 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integr
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { accountProcedures } from "./account-procedures.js";
 
-/**
- * An account's deletion, answered by the account procedures the way the
- * hosted oRPC route answers it, over a real dialect, with the request's account resolved as
- * `resolveHostedUserId` resolves it and the auth service faked. Before
- * anything is erased, every session the account's standing agents'
- * conversations run in is retired through its harness, acting for the
- * account the request named, over its bearer or, where only a browser's
- * session cookie names the account, as the deployment acting for it, which
- * a deployment with no secret of its own cannot be. The account a cookie
- * names is the only one it erases, and the only one whose sessions it
- * retires.
- *
- * The harness is a fake that writes down each retire with whom it acted
- * for. Synthetic accounts, bearers, sessions, and session ids throughout.
- */
-
 const ORIGIN = "https://app.test";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
@@ -68,12 +51,10 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The cookie a browser signed in to the account sends, as the fake auth service reads it. */
 function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** A harness as a deletion reaches it: every retire written down with whom it acted for, and nothing else a deletion asks. */
 function retiringEve() {
   const retired: (readonly [string, string])[] = [];
   const asked = (caller: string): AgentSessions => ({
@@ -99,7 +80,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A standing conversation of the account, of the kind given, recorded as running in a Claude Code session of its own: the session's id. */
 const sessionOf = (
   userId: string,
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND],
@@ -111,11 +91,6 @@ const sessionOf = (
     return sessionId;
   });
 
-/**
- * Two accounts, each behind its bearer and its browser's session cookie, and
- * the procedures answering on the test's database and clock over the harness
- * given.
- */
 const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -160,7 +135,6 @@ const answer = (
   harness: Layer.Layer<NativeAgentSessions> | Layer.Layer<never>,
 ) =>
   Effect.gen(function* () {
-    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
@@ -169,12 +143,10 @@ const answer = (
       harness,
       noNetwork,
       modelCatalogOf([]),
-      // A delete revokes each provider's first grant whatever the account holds, which Connect takes; nothing else is asked.
       integrationConnectOf(() => ({ ...CONNECTOR_ASKED_NOTHING, revoke: () => Effect.void })),
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });

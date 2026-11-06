@@ -56,18 +56,6 @@ import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
 import { LINK_OUTCOME } from "./github-installations.js";
 import { githubWebhookApp } from "./github-webhook-app.js";
 
-/**
- * Our GitHub App's webhook, answered by its group the way a function
- * answers it, over a real dialect and a GitHub the test scripts: nothing of
- * a delivery is read before its signature over the body's own bytes holds
- * under the deployment's secret, a deployment with no secret refuses every
- * delivery, and a delivery about a pull request or its checks reads what the
- * agents on that branch published again through the installation connected
- * to the task's workspace, which the agent's row keeps for the task list.
- *
- * Synthetic accounts, secrets, repositories, and deliveries throughout.
- */
-
 const ORIGIN = "https://app.test";
 const WEBHOOK = "/api/github/webhook";
 const SECRET = "whsec-fixture-luke";
@@ -78,24 +66,19 @@ afterEach(() => {
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-/** The installation on the repository's owner; each agent's workspace connects one of its own, since one installation connects to one workspace and the tests share the database. */
 const installationOfRelay = () => {
   const id = 700_000 + Math.floor(Math.random() * 90_000);
   return { id, accountId: id + 1, login: RELAY.owner, repositories: [RELAY] };
 };
-/** The head's commit; each test cuts a branch of its own, since the agents of every test share the database. */
 const HEAD_SHA = "0123abcd";
 
-/** The pull request as the test's GitHub holds it, changed by the test between deliveries. */
 interface PullRequestFixture {
   state: "open" | "closed";
   merged: boolean;
   conclusion: string;
-  /** Whether the base's merge queue holds it, as GitHub's GraphQL API answers; held by none where absent. */
   queued?: boolean;
 }
 
-/** The repository's pull request from the agent's branch, read by number or by its head, with its head's one check run. */
 function relayRepository(pull: PullRequestFixture, ref: string) {
   const base = `/repos/${RELAY.owner}/${RELAY.name}`;
   const pullJson = () => ({
@@ -133,7 +116,6 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
   };
 }
 
-/** The environment a deployment holds, with the webhook's secret or without it. */
 function environment(secret: string | undefined): HostedEnvironmentValues {
   return {
     posthogPersonalApiKey: undefined,
@@ -153,10 +135,8 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The native harnesses the webhook's wakes reach, writing down each with the account it acted for. */
 const HARNESS = recordingHarness();
 
-/** The group over the test's database, the GitHub given, and the secret given (and any other values held), answering one request. */
 const answer = (
   github: FakeGitHub,
   secret: string | undefined,
@@ -178,13 +158,11 @@ const answer = (
       { disableLogger: true },
     );
     const response = yield* Effect.promise(() => handler(request));
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     yield* Effect.promise(() => dispose());
     return { status: response.status, body } satisfies Answer;
   });
 
-/** A delivery of the event given, signed under the secret given, or carrying the signature given. */
 function delivery(
   event: string,
   payload: WireBoundaryInput,
@@ -210,12 +188,10 @@ function delivery(
 
 const repository = { full_name: RELAY_FULL_NAME, private: true };
 
-/** GitHub's delivery of a pull request's action, as much of it as matters and a little that does not. */
 function pullRequestDelivery(action: string, ref: string) {
   return { action, repository, pull_request: { number: 41, title: "Ignored", head: { ref } } };
 }
 
-/** An account whose task's workspace reaches the repository, with one agent on a task about it, its row on the pull request's branch. */
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -246,7 +222,6 @@ const openAgent = (pull: PullRequestFixture) =>
     const ref = `luke/teammate-invitations-${randomUUID()}`;
     yield* updateAgentBranch(owner, agent.id, ref);
     const github = githubReaching([installation], undefined, undefined, relayRepository(pull, ref));
-    /** What the agent's row keeps of its pull request now. */
     const kept = (): Effect.Effect<
       AgentPullRequest | null | undefined,
       unknown,
@@ -628,7 +603,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         });
         assert.equal((yield* listAutomationRuns(owner, greet.id)).length, 1);
 
-        // Its owner gone from the workspace, the automation hears nothing more.
         yield* leaveWorkspace(task.workspaceId, owner);
         assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0, told: 0 });
       }),
@@ -711,14 +685,14 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         }
 
         assert.deepEqual(counts, [
-          [1, 1], // a person opens it: both
-          [1, 2], // marked ready: not a moment the review chose
-          [2, 3], // a person's push: both
-          [3, 4], // our agent opens one: both hear our agents
-          [3, 4], // our agent pushes: never, whatever a trigger says
-          [3, 5], // another bot: only the trigger that hears other bots
-          [3, 6], // a draft: only the trigger that asks for drafts
-          [3, 7], // a fork's: only the trigger that asks for forks
+          [1, 1],
+          [1, 2],
+          [2, 3],
+          [3, 4],
+          [3, 4],
+          [3, 5],
+          [3, 6],
+          [3, 7],
         ]);
       }),
   );
@@ -790,13 +764,13 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         }
 
         assert.deepEqual(counts, [
-          [0, 1], // an agent opens its pull request as its developer
-          [0, 2], // and marks it ready
-          [0, 3], // and reopens it
-          [0, 3], // its push is the App's, which fires nothing
-          [1, 3], // the developer's own push to the agent's branch is a person's
-          [2, 3], // a fork's luke/ branch is no agent's
-          [3, 3], // any other branch is a person's
+          [0, 1],
+          [0, 2],
+          [0, 3],
+          [0, 3],
+          [1, 3],
+          [2, 3],
+          [3, 3],
         ]);
       }),
   );
@@ -993,7 +967,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           `wrun_${randomUUID()}`,
           yield* DateTime.nowAsDate,
         );
-        // The service reached the repository under its old name before GitHub renamed it, as a start does.
         yield* Effect.flatMap(GitHubApp, (app) =>
           app.repositoryReach(task.workspaceId, RELAY_FULL_NAME, undefined),
         ).pipe(Effect.provide(before.layer));

@@ -13,17 +13,6 @@ import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "../core.js";
 import { type MemoryCall, runRecall, runRemember } from "./memory-tools.js";
 
-/**
- * The coding agent's `remember` and `recall` through their public
- * functions, over a real dialect: a memory kept is recalled by the words it
- * holds, best match first, a correction leaves only the corrected words to
- * recall, words that look like a credential are never kept, an input that
- * does not read keeps and recalls nothing, and a store that cannot be
- * reached answers the model rather than failing the turn.
- *
- * Synthetic accounts, workspaces, and words throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -31,7 +20,6 @@ const openAccount = Effect.gen(function* () {
   return userId;
 });
 
-/** A call in a workspace of its own, as the member who owns it. */
 const openCall = Effect.gen(function* () {
   const userId = yield* openAccount;
   const call: MemoryCall = {
@@ -45,14 +33,12 @@ const TESTS_RUN = "The web server's store tests run on PGlite through test:store
 const DEPLOYS = "Deployments go out from the main branch through Vercel.";
 const DEPLOYS_CORRECTED = "Deployments go out from the release branch through Vercel.";
 
-/** A recall's answer, the memories it names by their words. */
 function recalledWords(answer: WireRecord): readonly unknown[] {
   assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.ok(Array.isArray(answer.memories));
   return answer.memories.map((memory) => (isRecord(memory) ? memory.text : memory));
 }
 
-/** The id of the memory a remember answer kept. */
 function keptId(answer: WireRecord): string {
   assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
   const kept = answer.memory;
@@ -74,7 +60,6 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         assert.deepEqual(recalledWords(yield* runRecall(call, { query: "how do tests run" })), [
           TESTS_RUN,
         ]);
-        // A query word finds the memory words it begins.
         assert.deepEqual(recalledWords(yield* runRecall(call, { query: "deploy" })), [DEPLOYS]);
         assert.deepEqual(recalledWords(yield* runRecall(call, { query: "kubernetes" })), []);
         const recent = yield* runRecall(call, {});
@@ -106,7 +91,6 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         const gone = randomUUID();
 
         const late = yield* runRemember(call, { text: DEPLOYS, replaces: gone });
-        // Note that the workspace is filled in one insert, because a remember per memory reads every memory kept so far.
         const db = yield* Database;
         const now = new Date(0);
         yield* db.insert(memory).values(
@@ -131,7 +115,6 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
     Effect.gen(function* () {
       const call = yield* openCall;
       const credentials = [
-        // Note that the token-shaped samples are built here rather than written whole, so no tracked line holds a credential's shape.
         `The staging key is ${["sk", "proj", "AbCdEfGh1234567890IjKlMnOp"].join("-")}.`,
         `CI pushes with ${["ghp", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"].join("_")}.`,
         "The database is postgres://deploy:hunter2hunter2@db.internal:5432/app.",

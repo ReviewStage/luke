@@ -1,31 +1,3 @@
-/**
- * token-pull-request-sweep.ts -- the scheduled sweep's poll of the pull requests of agents on a member's own GitHub token, which no webhook reaches.
- *
- * An agent on its starter's personal access token works on a repository no
- * installation of our GitHub App reaches, so GitHub sends no delivery
- * of a review, a comment, or a check on its pull request. Each minute the
- * sweep claims a batch of those pull requests still open
- * (`token-pull-request-poll.ts`) and reads each on its owner's token, with
- * the REST calls the webhook path's deliveries stand for: the pull request,
- * its reviews, its conversation comments, and the check runs and combined
- * status of its head. Every read is conditional on the ETag GitHub last
- * answered it with, and a 304 is the whole answer: GitHub counts no 304
- * against the rate limit
- * (https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#use-conditional-requests-if-appropriate).
- *
- * What changed is handed to the webhook path's own functions: the pull
- * request read again onto the agent's row (`agentPublished`), and each new
- * review, comment, and failed check told to the agent (`wakeAgents`) under a
- * key of its own in place of a delivery's id, so a poll that reads it again
- * tells it once; and where the head's check runs or statuses moved, that
- * its checks may all have finished, which `wakeAgents` tells the agent at
- * work only where GitHub says they did, as a check delivery is told. The agent writes on GitHub as its member, so a review or a
- * comment by the member's login is told only where the agent was not at work
- * when it was made, as one by the App's login is on the webhook path. A 401
- * marks the member's token invalid, which leaves the agent unpolled until a
- * token is saved again. Each listing is read as its first hundred.
- */
-
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   type Agent,
@@ -65,26 +37,20 @@ import { type MemberGitHubToken, openMemberGitHubToken } from "./github-token.js
 import { type HeadChecks, repositoryPath } from "./pull-requests.js";
 
 const TOKEN_PULL_REQUEST_SWEEP = {
-  /** How often each pull request is polled. */
   EVERY: Duration.minutes(1),
-  /** The most pull requests one sweep polls; the rest wait for the next minute. */
   MAX_POLLS: 20,
   CONCURRENCY: 5,
 } as const;
 
-/** What one sweep came to: pull requests polled, and agents told of something. */
 export interface TokenPullRequestSweepOutcome {
   polled: number;
   told: number;
 }
 
-/** What GitHub answers a conditional read whose ETag still matches (https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#use-conditional-requests-if-appropriate). */
 const NOT_MODIFIED = 304;
 
-/** GitHub's most items to a page. */
 const FIRST_HUNDRED = { per_page: "100" } as const;
 
-/** A check run's conclusions and a commit status's states told as failed, as the webhook path tells them. */
 const GITHUB_CHECK = {
   COMPLETED: "completed",
   FAILURE: "failure",
@@ -97,7 +63,6 @@ const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set([
 ]);
 const FAILED_STATES: ReadonlySet<string> = new Set([GITHUB_CHECK.FAILURE, GITHUB_CHECK.ERROR]);
 
-/** What a wake's key names, in place of a delivery's id. */
 const WAKE_KEY = {
   REVIEW: "review",
   COMMENT: "comment",
@@ -106,16 +71,12 @@ const WAKE_KEY = {
   CHECKS_MOVED: "checks-moved",
 } as const;
 
-/** A review its author has not submitted, which no one else sees. */
 const PENDING_REVIEW = "PENDING";
 
-/** Who GitHub names for an account since deleted. */
 const GHOST = "ghost";
 
-/** Who a head's checks finishing is drawn by, where no one check is its cause: GitHub, as the webhook path names a check whose App it does not know. */
 const GITHUB_BOT = "github[bot]";
 
-/** GitHub refused the member's token. */
 class TokenRefused extends Data.TaggedError("TokenRefused") {}
 
 type PollFailure = GitHubUnavailable | TokenRefused | QueryError | Schema.SchemaError;
@@ -179,28 +140,18 @@ const StatusSchema = Schema.Struct({
   ),
 });
 
-/** A conditional read's answer: none where GitHub answered 304, else what it read and the ETag it answered with. */
 type Changed<A> = Option.Option<{ readonly body: A; readonly etag: string | undefined }>;
 
-/** One pull request's poll: the agent, its owner's token, its number, and what the last poll read. */
 interface Poll {
   readonly agent: WithRepository<Agent>;
   readonly member: MemberGitHubToken;
   readonly number: number;
   readonly claimed: ClaimedTokenPullRequest;
   readonly sessionsFor: SessionsForAccount;
-  /** The sweep's instant, in epoch milliseconds. */
   readonly now: number;
-  /** How the failed checks it tells read the head's checks: once for all of them (`failedChecksReadOnce`). */
   readonly readFailedChecks: HeadChecksRead;
 }
 
-/**
- * The head's checks read once for every failed check one poll tells, which
- * all name its one head, so a poll that tells several failed statuses reads
- * them once to name what failed. A read that failed, or that its wake's bound
- * cut short, keeps nothing, so the next wake reads again.
- */
 const failedChecksReadOnce = Effect.map(
   Ref.make(Option.none<HeadChecks>()),
   (kept): HeadChecksRead =>
@@ -212,7 +163,6 @@ const failedChecksReadOnce = Effect.map(
       ),
 );
 
-/** One read on the member's token, conditional on the ETag given where there is one. */
 function readIfChanged<A>(
   poll: Poll,
   path: string,
@@ -238,7 +188,6 @@ function readIfChanged<A>(
   );
 }
 
-/** A wake's key, its kind and GitHub's ids encoded so no part can run into the next. */
 function wakeKey(
   kind: (typeof WAKE_KEY)[keyof typeof WAKE_KEY],
   ...ids: readonly string[]
@@ -246,13 +195,11 @@ function wakeKey(
   return JSON.stringify([kind, ...ids]);
 }
 
-/** An instant GitHub wrote, in epoch milliseconds, or the poll's own where it wrote none it can read. */
 function instantOf(poll: Poll, written: string | null | undefined): number {
   const at = written == null ? Number.NaN : Date.parse(written);
   return Number.isNaN(at) ? poll.now : at;
 }
 
-/** Tells the agents on the pull request of one wake under its key, the member's login standing where the webhook path stands the App's; answers how many were told. */
 function tell(
   poll: Poll,
   wake: Omit<AgentWake, "repository" | "branches" | "pullRequest">,
@@ -265,21 +212,14 @@ function tell(
     { ...wake, repository: agent.repository, branches, pullRequest: number },
     key,
     poll.member.githubLogin,
-    // Note that every check finished reads the checks afresh, because it must judge them as they stand after both listings this poll read.
     wake.kind === AGENT_WAKE.CHECK_FAILED ? poll.readFailedChecks : headChecksFor,
   );
 }
 
-/** The page of a head's checks, as the webhook path names a failed one. */
 function checksUrl(poll: Poll, sha: string): string {
   return `https://github.com/${poll.agent.repository}/commit/${sha}/checks`;
 }
 
-/**
- * A listing of the pull request, reviews or comments, read where it changed
- * and each item past the newest seen told; answers its ETag, the newest id
- * now seen, and how many agents were told.
- */
 const pollListing = /* @__PURE__ */ Effect.fnUntraced(function* <A extends { readonly id: number }>(
   poll: Poll,
   read: { readonly path: string; readonly etag: string | undefined; readonly seen: number | null },
@@ -294,7 +234,6 @@ const pollListing = /* @__PURE__ */ Effect.fnUntraced(function* <A extends { rea
 > {
   const changed = yield* readIfChanged(poll, read.path, read.etag, schema, FIRST_HUNDRED);
   if (Option.isNone(changed)) return { etag: read.etag, seen: read.seen, told: 0 };
-  // Note that an item told of nothing, a review its author has not submitted, is not seen, so its submission is told.
   const wakes = changed.value.body.flatMap((item) => {
     const wake = wakeOf(item);
     return wake === undefined ? [] : [{ id: item.id, wake }];
@@ -309,11 +248,6 @@ const pollListing = /* @__PURE__ */ Effect.fnUntraced(function* <A extends { rea
   };
 });
 
-/**
- * The head's check runs, read where they changed, and the first that failed
- * told where the head or its conclusion moved since; answers the ETag, the
- * failed conclusion now seen, and how many agents were told.
- */
 const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
   poll: Poll,
   sha: string,
@@ -354,7 +288,6 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { etag, conclusion, told, changed: true };
 });
 
-/** The head's commit statuses, read where they changed, each failed one told; answers the ETag and how many agents were told. */
 const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
   poll: Poll,
   sha: string,
@@ -389,11 +322,6 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/**
- * That the head's checks may all have finished, where its check runs or
- * statuses moved since the last poll, told as a check delivery is: to the
- * agent at work, only where GitHub says every one finished (`wakeAgents`).
- */
 function tellChecksMoved(poll: Poll, sha: string) {
   return tell(
     poll,
@@ -408,7 +336,6 @@ function tellChecksMoved(poll: Poll, sha: string) {
   );
 }
 
-/** The pull request read again onto the agent's row, as a delivery about its branch reads it; a failure is logged by its kind and the poll goes on. */
 function republish(poll: Poll) {
   return agentPublished(poll.agent.userId, poll.agent).pipe(
     Effect.catch((failure) =>
@@ -419,7 +346,6 @@ function republish(poll: Poll) {
   );
 }
 
-/** One pull request polled, every read in turn and what they read written back; answers how many agents were told. */
 const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
   poll: Poll,
 ): Effect.fn.Return<number, PollFailure, PollServices> {
@@ -473,7 +399,6 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
       wakeKey(WAKE_KEY.COMMENT, String(comment.id)),
     ],
   );
-  // The checks' ETags and conclusion stand for the head they were read on, so another head reads afresh.
   const sameHead = headSha !== null && headSha === kept?.headSha;
   const checkRuns =
     headSha === null
@@ -506,12 +431,6 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reviews.told + comments.told + checkRuns.told + statuses.told + checksMoved;
 });
 
-/**
- * One claimed pull request polled on its owner's token: none where the
- * agent or a token GitHub accepts is gone, the token marked invalid where
- * GitHub answers 401, and any other failure logged by its kind and left for
- * the next minute. Answers how many agents were told.
- */
 const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
   claimed: ClaimedTokenPullRequest,
   ring: Redacted.Redacted | undefined,
@@ -520,7 +439,6 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<number, never, PollServices> {
   return yield* Effect.gen(function* () {
     const agent = yield* readAgent(claimed.userId, claimed.agentId);
-    // An agent with no repository has no pull request to poll.
     if (Option.isNone(agent) || !hasRepository(agent.value)) return 0;
     const held = yield* openMemberGitHubToken(ring, claimed.userId);
     if (Result.isFailure(held)) return 0;
@@ -538,7 +456,6 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
       Effect.catchTag("TokenRefused", () => Effect.as(member.markInvalid, 0)),
     );
   }).pipe(
-    // The kind alone: nothing of the pull request or the token rides the line.
     Effect.catch((failure) =>
       Effect.as(
         Effect.logWarning("token poll: a pull request was not polled", { failure: failure._tag }),
@@ -548,7 +465,6 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** Claims the next batch of token agents' pull requests due a poll at `now` and polls each, `CONCURRENCY` at a time. */
 export const sweepTokenPullRequests = /* @__PURE__ */ Effect.fn("web/sweepTokenPullRequests")(
   function* (
     sessionsFor: SessionsForAccount,

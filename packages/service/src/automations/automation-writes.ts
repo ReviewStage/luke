@@ -57,39 +57,18 @@ import {
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { executeAutomationRun, type SessionsForAccount } from "./automation-runs.js";
 
-/**
- * automation-writes.ts -- an automation made, changed, and deleted as an account asks, and read for the wire: one implementation for the automations routes and the agents' automation tools.
- *
- * The routes (`automations-procedures.ts`) and a coding agent's
- * `create_automation`, `update_automation`, and `delete_automation`
- * (`../agents/automation-tools.ts`) write through these alike, so what a
- * write checks is checked once: a schedule must read (five-field cron in a
- * known zone, no more often than every fifteen minutes), a model choice
- * must be one the catalog offers the account, an automation stands on a
- * workspace with the repositories its runs work in, each one its
- * installation reaches, or none, and a GitHub trigger has at least one
- * whose events fire it. A schedule's next due instant is computed whenever
- * the automation is made, resumed, or given a new trigger, and cleared
- * while it is paused. A webhook trigger's secret is minted here, kept only
- * as its SHA-256, and answered once, on the write that made it.
- */
-
-/** The bytes of randomness in a webhook trigger's secret. */
 const WEBHOOK_SECRET_BYTES = 32;
 
-/** A webhook trigger's secret, answered once, and the hash the store keeps of it. */
 interface WebhookSecret {
   readonly secret: string;
   readonly hash: string;
 }
 
-/** A fresh webhook secret and its hash. */
 function mintWebhookSecret(): WebhookSecret {
   const secret = randomBytes(WEBHOOK_SECRET_BYTES).toString("base64url");
   return { secret, hash: createHash("sha256").update(secret).digest("hex") };
 }
 
-/** When a trigger is first due from `now`: a schedule's next instant, nothing for any other, and the refusal for a schedule that does not read. */
 const firstDue = /* @__PURE__ */ Effect.fnUntraced(function* (
   trigger: AutomationTrigger,
   now: number,
@@ -101,7 +80,6 @@ const firstDue = /* @__PURE__ */ Effect.fnUntraced(function* (
   return nextScheduledRun(trigger, new Date(now)) ?? null;
 });
 
-/** The action as the catalog takes it: a named model must be one offered the account, refused as an invalid request otherwise. */
 const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   action: AutomationAction,
@@ -113,7 +91,6 @@ const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   return action;
 });
 
-/** A run's agent for the wire: its status read from its standing, and why it failed where it did. */
 function agentOf(
   id: string,
   title: string | null,
@@ -137,7 +114,6 @@ function agentOf(
   };
 }
 
-/** One run for the wire, its agent's status read from the standing given. */
 function runSummaryOf(
   run: AutomationRunInHistory,
   standingOf: (conversationId: string) => AgentTurnStanding,
@@ -166,7 +142,6 @@ function runSummaryOf(
   };
 }
 
-/** The runs given summarized, their agents' standings read in one pass. */
 export const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   readerId: string,
   runs: readonly AutomationRunInHistory[],
@@ -179,7 +154,6 @@ export const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   return runs.map((run) => runSummaryOf(run, standingOf, now, readerId));
 });
 
-/** One automation for the wire as the account reads it, with its newest run, whether the account made it, and who did. */
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   automation: Automation,
@@ -188,7 +162,6 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const [lastRun] = yield* runSummaries(userId, newest);
   return {
     id: automation.id,
-    // Note that no automation stands on a task, and the wire still names one because a released desktop reads it.
     planId: null,
     planName: null,
     workspaceId: automation.organizationId,
@@ -214,19 +187,11 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** Where a run lands, as the store keeps it. */
 interface TargetColumns {
   readonly targetKind: AutomationTarget["kind"];
   readonly targetAgentId: string | null;
 }
 
-/**
- * A target the account may aim runs at: a new agent each run, the same
- * agent with none named yet, which the first run starts and the automation
- * keeps, or an agent the account may read (`readVisibleAgent`), its task
- * included; an agent it cannot read is refused as no request at all, the
- * same as a malformed one.
- */
 const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   target: AutomationTarget,
@@ -241,7 +206,6 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
 });
 
-/** Refuses a workspace scope in the account's personal workspace, where everything is the account's own. */
 const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   organizationId: string,
@@ -255,7 +219,6 @@ const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   return scope;
 });
 
-/** Refuses a GitHub trigger on no repository, since only its repositories' events fire one. */
 function checkTriggerRepositories(
   trigger: AutomationTrigger,
   repositories: readonly string[],
@@ -265,11 +228,6 @@ function checkTriggerRepositories(
     : Effect.void;
 }
 
-/**
- * The repositories an automation's runs work in, each as GitHub spells it,
- * where the workspace's installation reaches every one; refused as the
- * first it does not reach is refused.
- */
 const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   repositories: readonly string[],
@@ -278,30 +236,21 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
-  // Note that an automation reaches through the workspace's installation alone, so it asks as no member.
   const reached = yield* Effect.forEach(repositories, (repository) =>
     workspaceRepository(organizationId, repository, undefined),
   );
   return reached.map((one) => one.repository.fullName);
 });
 
-/** Where a new automation stands: a workspace and the repositories named, each reached through it. */
 interface Standing {
   readonly organizationId: string;
   readonly repositories: readonly string[];
 }
 
-/**
- * Where the request puts a new automation, read as the account: on a
- * workspace the account is a member of with the repositories its
- * installation reaches, none among them; a request naming a task, or no
- * workspace, or not naming its repositories, is refused as no request at all.
- */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   made: typeof automationCreateRequestSchema.Type,
 ): Effect.fn.Return<Standing, HostedRefusal, DatabaseServices | GitHubApp | HttpClient.HttpClient> {
-  // Note that a released desktop may still name a task, on which no automation stands any more.
   if (made.planId !== undefined || made.workspaceId === undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
@@ -312,15 +261,6 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { organizationId: made.workspaceId, repositories };
 });
 
-/**
- * The store's changes for a request against the automation as it stands:
- * the trigger and model checked, the due instant computed afresh whenever
- * the automation ends up enabled with a schedule and either was resumed or
- * given a new trigger, cleared while paused, and the owner's pause or resume
- * clearing why the service paused it. A webhook sent again is no change; a
- * trigger becoming a webhook mints its secret, and a hash the caller sends
- * replaces a webhook's secret with the one it minted.
- */
 const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   standing: Automation,
@@ -331,8 +271,6 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient
 > {
   const now = yield* Clock.currentTimeMillis;
-  // A webhook sent again is no change, since a webhook names nothing but its kind, so its secret
-  // survives a form that sends the whole automation back.
   const newTrigger =
     asked.trigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK
@@ -341,8 +279,6 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const trigger = newTrigger ?? standing.trigger;
   const enabled = asked.enabled ?? standing.enabled;
   const due = yield* firstDue(trigger, now);
-  // Note that an action sent without its servers keeps the ones saved, because a desktop from before
-  // them sends the whole action back on a prompt's edit, and would otherwise switch every one back on.
   const kept =
     asked.action === undefined ||
     asked.action.disabledServers !== undefined ||
@@ -353,11 +289,9 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const becameWebhook =
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
-  // A secret is replaced on a webhook alone: there is none to replace on any other trigger.
   if (asked.webhookSecretHash !== undefined && trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  // A secret the caller minted stands in place of one minted here, so no secret is answered that would not hold.
   const webhook =
     becameWebhook && asked.webhookSecretHash === undefined ? mintWebhookSecret() : undefined;
   const secretHash = asked.webhookSecretHash ?? webhook?.hash;
@@ -368,12 +302,10 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const target =
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
   yield* checkTriggerRepositories(trigger, asked.repositories ?? standing.repositories);
-  // Note that new repositories are read through the automation's own workspace, as its runs will reach them.
   const repositories =
     asked.repositories === undefined
       ? undefined
       : yield* reachedRepositories(standing.organizationId, asked.repositories);
-  // Note that only a resume or a pause moves the due instant, so a form that sends `enabled` as it stands skips no firing.
   const reschedules =
     newTrigger !== undefined || (asked.enabled !== undefined && asked.enabled !== standing.enabled);
   const changes: AutomationChanges = {
@@ -395,23 +327,12 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { changes, webhookSecret: webhook?.secret };
 });
 
-/** A write as it answers: the automation as it then stands, a webhook secret the write minted, and the transaction it committed in; none where a make under an id the caller named found it already made. */
 export interface AutomationWritten {
   readonly automation: AutomationSummary;
   readonly webhookSecret: string | undefined;
   readonly txid: string | undefined;
 }
 
-/**
- * An automation made for the account as the request asks, on a workspace
- * of its with the repositories its runs work in, under the id the request
- * names where it names one. Made under that id already, by the request sent
- * again, it is answered as the account reads it, with no transaction and no
- * webhook secret; an id an automation the account does not read stands
- * under is refused as a workspace it is not in is, naming nothing of that
- * automation. Who made it, the member or one of their agents, is what its
- * count says, so an agent's automation is not counted as theirs.
- */
 export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   made: typeof automationCreateRequestSchema.Type,
@@ -453,7 +374,6 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (Option.isNone(created)) {
-    // A make run again under the id it named, beside or after the one that wrote, answers the automation it made.
     const standing =
       id === undefined
         ? Option.none()
@@ -480,11 +400,6 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/**
- * One automation the account reads changed as the request asks, answered as
- * it then stands; one it reads but may not change, or turn on or off where
- * the request names `enabled` alone, is refused as not permitted.
- */
 export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   standing: Automation,
@@ -496,7 +411,6 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient
 > {
   const { changes, webhookSecret } = yield* changesOf(userId, standing, asked);
-  // Turning it on or off alone is the toggle, which more of the workspace may do than change it.
   const access = Object.keys(asked).every((field) => field === "enabled")
     ? AUTOMATION_ACCESS.TOGGLE
     : AUTOMATION_ACCESS.CHANGE;
@@ -516,7 +430,6 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** One automation the account reads deleted with its history, counted as its member's or its agent's, answering the transaction it went in; one it may not delete is refused as not permitted. */
 export const removeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   standing: Automation,
@@ -532,21 +445,12 @@ export const removeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   return deleted.value.txid;
 });
 
-/** A "Run now" as it answers: the run its key names, whether this call made it, and the transaction it was recorded in where it did. */
 export interface AutomationRanNow {
   readonly run: AutomationRunSummary;
   readonly made: boolean;
   readonly txid: string | undefined;
 }
 
-/**
- * The automation run now, as the account asks, under the caller's key: a
- * manual firing recorded once per key and acted on at once, through the
- * same guards and the same start a scheduled run takes
- * (`automation-runs.ts`), reaching the agent's sessions as `sessionsFor` reaches them; the same key
- * again answers the run it made. The caller has read the automation as one
- * the account may run.
- */
 export const runAutomationNowAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   automation: Automation,

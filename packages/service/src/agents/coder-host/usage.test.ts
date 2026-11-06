@@ -3,11 +3,6 @@ import { test } from "vitest";
 import type { OfferedModel } from "../../providers/model-catalog.js";
 import { usageOfTurns } from "./usage.js";
 
-/**
- * usage.test.ts -- what an agent's turns cost: a fast turn at its fast version's rate, and one Anthropic refused fast at the base model's standard rate.
- */
-
-/** Opus 5.5 and its fast version as the catalog prices them, per token. */
 const PRICED: readonly OfferedModel[] = [
   {
     id: "anthropic/claude-opus-5.5",

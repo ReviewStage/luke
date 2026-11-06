@@ -54,56 +54,31 @@ import {
   deepenCheckoutWith,
 } from "./checkout.js";
 
-/**
- * A coding agent's checkout: the repository cloned one commit deep into its
- * sandbox as it opens, through the firewall on a read token minted for that
- * one repository, with nothing left standing; then deepened to its whole
- * history on the first write, on a write token, which the sandbox's
- * commands and output never carry, and handed back for the session's own
- * `gh` and `git`; no developer's own token ever is.
- * Who the agent writes as: the developer who started it, on their GitHub
- * account with the App's bot as co-author, where their sign-in may push to
- * the repository; the App's bot otherwise, and always for an agent an
- * automation started, its row saying why; and the account a member's own
- * token belongs to, read on it, where that token is the agent's credential.
- * The repository is reached through the installation connected to the
- * plan's workspace, or the member's token where none reaches it. The sandbox is a
- * double at eve's boundary, GitHub a script, and the store PGlite.
- * Synthetic accounts, repositories, and tokens throughout.
- */
-
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** The installation reaching the repository; each test connects its own, since one installation stands for one workspace. */
 const installationOf = (id: number): InstallationFixture => ({
   id,
   login: RELAY.owner,
   repositories: [RELAY],
 });
 
-/** The App's bot as the checkout sets it: its login at the noreply address GitHub links to it. */
 const BOT_IDENTITY = {
   name: GITHUB_FIXTURE_BOT.login,
   email: `${GITHUB_FIXTURE_BOT.id}+${GITHUB_FIXTURE_BOT.login}@users.noreply.github.com`,
 } as const;
 
-/** The trailer crediting the App's bot as co-author. */
 const BOT_TRAILER = `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`;
 
-/** The developer's own GitHub account, as `GET /user` answers on their token. */
 const DEVELOPER = { id: 7_001, login: "ada", name: "Ada Lovelace" } as const;
 
-/** The developer's account as their commits name it. */
 const DEVELOPER_IDENTITY = {
   name: DEVELOPER.name,
   email: `${DEVELOPER.id}+${DEVELOPER.login}@users.noreply.github.com`,
 } as const;
 
-/** The token the developer's GitHub sign-in left on their row (`standingGithubRow`). */
 const DEVELOPER_TOKEN = "ghu_standing";
 
-/** The token as `git` carries it at the firewall: GitHub's Basic header over the token user. */
 const TOKEN_HEADER = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
 
 function carriesToken(text: string): boolean {
@@ -112,7 +87,6 @@ function carriesToken(text: string): boolean {
   );
 }
 
-/** GitHub as the developer's token reads it: their account, and the repository with whether they may push to it. */
 function developerReach(pushes: boolean) {
   return (sent: SentToGitHub): Response | undefined => {
     if (sent.headers.get("authorization") !== `Bearer ${DEVELOPER_TOKEN}`) return undefined;
@@ -125,14 +99,12 @@ function developerReach(pushes: boolean) {
   };
 }
 
-/** The member's own GitHub account, as `GET /user` answers on their token. */
 const MEMBER = {
   id: Number(GITHUB_FIXTURE_MEMBER.ID),
   login: GITHUB_FIXTURE_MEMBER.LOGIN,
   name: "Octo Member",
 } as const;
 
-/** GitHub as the member's own token reads it: their account, and the repository, which it may push to. */
 function memberTokenReach(sent: SentToGitHub): Response | undefined {
   if (sent.headers.get("authorization") !== `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`)
     return undefined;
@@ -144,7 +116,6 @@ function memberTokenReach(sent: SentToGitHub): Response | undefined {
   return undefined;
 }
 
-/** A member who saved their own token, with one agent on a plan of the repository, which no installation of the plan's workspace reaches. */
 const openTokenAgent = Effect.gen(function* () {
   const userId = yield* openTokenMember();
   const task = yield* startTask(userId, {
@@ -168,7 +139,6 @@ const openTokenAgent = Effect.gen(function* () {
   return { agent, target: { userId, conversationId: agent.conversationId } };
 });
 
-/** An account with no GitHub sign-in, as one made with Google stands. */
 const openGoogleUser = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
@@ -177,12 +147,6 @@ const openGoogleUser = Effect.gen(function* () {
   return id;
 });
 
-/**
- * An account with one agent on a plan of the repository given, the
- * installation given connected to the plan's workspace; the account signed
- * in with GitHub unless it is handed one, and the agent started by an
- * automation of the account's where asked.
- */
 const openAgent = (
   installation: InstallationFixture,
   options: {
@@ -250,14 +214,12 @@ const openAgent = (
     return { agent, target: { userId, conversationId: agent.conversationId } };
   });
 
-/** Who the agent's row says it writes as now. */
 const authorOf = (userId: string, agent: Agent) =>
   Effect.map(
     readAgent(userId, agent.id),
     (read): AgentAuthor | null => Option.getOrThrow(read).author,
   );
 
-/** The sandbox's checkout as a launch opens it: the repository read, then cloned shallow. */
 const checkOut = (
   target: { readonly userId: string; readonly conversationId: string },
   agent: Parameters<typeof agentRepositoryRead>[1],
@@ -267,7 +229,6 @@ const checkOut = (
     cloneAgentRepository(agent, sandbox, read),
   );
 
-/** The sandbox's checkout as a launch leaves it: opened shallow, then deepened on the plan read for it; answers the policy standing at the firewall after. */
 const checkOutAndDeepen = (
   target: { readonly userId: string; readonly conversationId: string },
   agent: Parameters<typeof agentRepositoryRead>[1],
@@ -279,13 +240,11 @@ const checkOutAndDeepen = (
     return sandbox.policies.at(-1);
   });
 
-/** A rule that sets the authorization given, on every request to its host or on those whose path matches. */
 const authorizing = (authorization: string, path?: object) =>
   path === undefined
     ? { transform: [{ headers: { authorization } }] }
     : { match: { path }, transform: [{ headers: { authorization } }] };
 
-/** The App's installation token for the repository, as the session's firewall carries it: on GitHub's two hosts, as Basic credentials, every other host open. */
 const APP_AUTHORIZATION = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
 const APP_CREDENTIAL = {
   allow: {
@@ -295,7 +254,6 @@ const APP_CREDENTIAL = {
   },
 };
 
-/** The mints sent to GitHub for one repository, by the permissions each asked for. */
 const repositoryMints = (sent: readonly SentToGitHub[]) =>
   sent
     .filter((one) => one.url.endsWith("/access_tokens") && "repositories" in JSON.parse(one.body))
@@ -330,7 +288,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
-        // Nothing about who the agent writes as is read until a write needs it.
         assert.equal(yield* authorOf(target.userId, agent), null);
       }),
   );
@@ -355,7 +312,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
-        // The identity is the checkout's own, set once its history is whole, under the App's bot.
         assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
         const stepAt = (step: string) =>
           sandbox.runs.findIndex(
@@ -366,7 +322,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         );
         assert.ok(stepAt(DEEPEN_STEP.FETCH) >= 0 && identity > stepAt(DEEPEN_STEP.FETCH));
         assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.APP_NO_PUSH);
-        // The write mint asked for exactly what a push and a pull request need.
         assert.deepEqual(repositoryMints(github.sent).at(-1), {
           repositories: [RELAY.name],
           permissions: { contents: "write", pull_requests: "write" },
@@ -508,7 +463,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         );
         const authorship = yield* agentAuthorship(target, agent).pipe(Effect.provide(github.layer));
 
-        // The member's own token, on the repository's own paths, as theirs.
         const basic = `Basic ${Buffer.from(`${GITHUB_FIXTURE_MEMBER.LOGIN}:${GITHUB_FIXTURE_MEMBER.TOKEN}`).toString("base64")}`;
         const bearer = `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`;
         assert.deepEqual(standing, {

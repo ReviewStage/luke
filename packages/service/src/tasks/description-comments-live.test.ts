@@ -37,23 +37,9 @@ import {
   taskCommentsLiveStatements,
 } from "./description-comments-live.js";
 
-/**
- * One subject of a task's comments as Realtime would deliver it, over the
- * real migrations on PGlite: the statements run as Realtime runs them,
- * their rows decoded and joined as the desktop does, beside
- * `readDescriptionCommentThreads`, the held read a surface read them with. The two
- * agree for the description's own threads and for a page's, as threads are
- * started, answered by a member and an agent, sent to the app, edited,
- * resolved, reopened, and deleted, files among them, and for an account
- * that does not reach the task.
- *
- * Synthetic accounts, tasks, and words throughout.
- */
-
 const DESCRIPTION_TEXT =
   "## Goal\n\nAn admin invites a teammate by email, and the invite lands as a single-use link that expires in seven days.\n";
 
-/** A new account under `name`, as the store holds one. */
 const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -67,7 +53,6 @@ const member = (userId: string): DescriptionCommentWriterRef => ({
   userId,
 });
 
-/** The thread an outcome answered, failing the test where it answered none. */
 function threadOf(outcome: DescriptionCommentOutcome): DescriptionCommentThread {
   assert.ok(
     outcome.status === DESCRIPTION_COMMENT_OUTCOME.DONE && "thread" in outcome.answer,
@@ -76,11 +61,9 @@ function threadOf(outcome: DescriptionCommentOutcome): DescriptionCommentThread 
   return outcome.answer.thread;
 }
 
-/** The statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** One subject's threads as Realtime would deliver them to `reader`, as the desktop reads them. */
 const liveThreadsOf = (reader: string, subject: TaskCommentsSubject) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskCommentsLiveStatements(reader, subject));
@@ -156,7 +139,6 @@ it.layer(getTestDB())("a task's comments followed live", (it) => {
             ],
           }),
         );
-        // Note that these start in the millisecond the description's thread did, so the threads are ordered by their ids.
         const onElement = threadOf(
           yield* startDescriptionCommentThread(member(teammate), taskId, {
             clientKey: randomUUID(),

@@ -1,7 +1,3 @@
-/**
- * agents-app-pull-request.test.ts -- an agent's pull request through the hosted router: its changes, its reviews and labels, and the kept pull request, over a faked GitHub.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
@@ -57,7 +53,6 @@ import {
 } from "../testing/github-app-fake.js";
 import { CODER } from "./coder-host/bounds.js";
 
-/** A change to the agent's pull request as the bearer given, with the fields beside its action given. */
 function actionAs(
   bearer: string,
   agentId: string,
@@ -71,7 +66,6 @@ function actionAs(
   });
 }
 
-/** How the published pull request may be merged, as GitHub's GraphQL answers the merge box's read. */
 const MERGING_ANSWER = {
   data: {
     repository: {
@@ -91,7 +85,6 @@ const MERGING_ANSWER = {
   },
 } as const;
 
-/** A review submitted on the agent's pull request as the bearer given. */
 function reviewAs(
   bearer: string,
   agentId: string,
@@ -104,18 +97,12 @@ function reviewAs(
   });
 }
 
-/** One of the pull request's pending reviews as GitHub answers it: its id, whether the asker wrote it, and the commit it was started on where told. */
 interface PendingNode {
   readonly id: string;
   readonly viewerDidAuthor: boolean;
   readonly commit?: { readonly oid: string };
 }
 
-/**
- * GitHub answering a review's calls: the pull request's id, the pending
- * reviews given for its read of them, and each mutation as `mutation`
- * says, an empty answer by default.
- */
 function reviewsAnswering(
   pending: readonly PendingNode[],
   mutation: (call: GraphqlCall) => Response = () => Response.json({ data: {} }),
@@ -129,7 +116,6 @@ function reviewsAnswering(
   };
 }
 
-/** The review mutations GitHub was sent, each as which (a new review, or a pending one submitted) and its variables. */
 function reviewMutations(calls: readonly GraphqlCall[]) {
   return calls
     .filter((call) => call.query.includes("mutation"))
@@ -139,16 +125,10 @@ function reviewMutations(calls: readonly GraphqlCall[]) {
     ]);
 }
 
-/** A change to one of the pull request's review threads as the bearer given. */
 function threadActionAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
   return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
 }
 
-/**
- * GitHub answering the viewed read a page at a time, the first page's
- * cursor naming the second, and the pull request's id and an empty answer
- * to each mutation.
- */
 function viewedAnswering(call: GraphqlCall): Response {
   if (call.query.includes("mutation")) return Response.json({ data: {} });
   if (!call.query.includes("viewerViewedState")) {
@@ -175,7 +155,6 @@ function viewedAnswering(call: GraphqlCall): Response {
   });
 }
 
-/** GitHub answering a thread's calls: the pull request's id, every thread named as one of the pull request given, and an empty answer to each mutation. */
 function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => Response {
   return (call) => {
     if (call.query.includes("mutation")) return Response.json({ data: {} });
@@ -186,18 +165,10 @@ function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => R
   };
 }
 
-/** The GitHub mutation a document makes, by the name its first field spells. */
 function mutationName(query: string): string {
   return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
 }
 
-/**
- * The pull request's threads as the member's own token reads them for their
- * pending review: a published thread they replied on in it, a thread their
- * pending review starts on a range of the old side, a published thread
- * whose last comments are all their pending replies, a thread another's
- * pending review starts, and one whose comments are all published.
- */
 const PENDING_THREADS = [
   {
     id: "PRRT_published",
@@ -293,10 +264,8 @@ const PENDING_THREADS = [
   },
 ];
 
-/** The head a line comment names, as GitHub spells a commit. */
 const LINE_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
 
-/** A comment on lines of the agent's pull request as the bearer given, on `src/invite.ts` line 12 on the new side unless the fields say otherwise. */
 function lineCommentAs(
   bearer: string,
   agentId: string,
@@ -317,13 +286,11 @@ function lineCommentAs(
   });
 }
 
-/** GitHub answering a line comment's and a discard's calls: the member's pending reviews as given, and an empty answer to every mutation. */
 function linesAnswering(pending: readonly PendingNode[]): (call: GraphqlCall) => Response {
   return reviewsAnswering(pending);
 }
 
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
-  /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
   const published = (options: {
     readonly answer?: (call: GraphqlCall) => Response;
     readonly repository?: RepositoryScript;
@@ -412,7 +379,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
             ["dequeuePullRequest", { id }],
           ],
         );
-        // Only the merge and each auto-merge turned on are counted, under the member; turning it off and leaving the queue are not.
         assert.deepEqual(countedWith(other, SERVER_EVENT.PULL_REQUEST_ACTION), [
           { action: "merge" },
           { action: "auto_merge" },
@@ -467,7 +433,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
     "a member's edit of the description is written on their own token where GitHub's still reads as the one they opened, line endings aside, and refused as changed with nothing written where it moved on GitHub",
     () =>
       Effect.gen(function* () {
-        // GitHub holds the description as github.com saves it, with Windows line endings.
         const onGitHub = "Invitations expire.\r\n\r\n- weekly";
         const { other, agent, calls, ask } = yield* published({
           otherToken: "ghu_teammate",
@@ -716,7 +681,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           review: "review-required",
           checks: "pending",
         });
-        // Note that whether the member may edit the description is read on their own token, beside the App's reads.
         assert.ok(
           calls
             .filter((call) => !call.query.includes("ViewerCanUpdate"))
@@ -830,7 +794,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
     "a change to a pull request lets go of what the agent's changes read had kept, so the next changes read asks GitHub afresh",
     () =>
       Effect.gen(function* () {
-        // The agent's branch has no pull request until the change, which a member makes on the one the request numbers.
         let opened = false;
         const pulls = `/repos/${RELAY.owner}/${RELAY.name}/pulls`;
         const headed = publishedPullRequestDrafted(() => false, LINE_HEAD);
@@ -942,7 +905,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           ],
           ["add", { id: PULL_REQUEST_NODE_ID, event: "APPROVE" }],
         ]);
-        // The review GitHub took is counted, and the one it refused is not.
         assert.deepEqual(countedWith(other, SERVER_EVENT.PULL_REQUEST_ACTION), [
           { action: "review" },
         ]);
@@ -1408,7 +1370,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
     "a member edits and deletes a comment of their own pending review on this pull request, and is refused in words for another's, a published one, or one on another pull request",
     () =>
       Effect.gen(function* () {
-        // The comments GitHub answers for, by id, as the member's token reads them.
         const commentNode = (viewerDidAuthor: boolean, state: string, pullRequest: string) => ({
           viewerDidAuthor,
           state,
@@ -1790,7 +1751,6 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 });
 
-/** One REST write as GitHub saw it: the bearer, the method, the path, and the body. */
 interface RestWrite {
   readonly authorization: string | null;
   readonly method: string;
@@ -1798,7 +1758,6 @@ interface RestWrite {
   readonly body: unknown;
 }
 
-/** The published pull request's repository, writing down every write to its requested reviewers or labels and answering it as `answer` says. */
 function peopleAndLabelsAnswering(
   writes: RestWrite[],
   answer: (write: RestWrite) => Response = () => Response.json({}, { status: 201 }),
@@ -1818,7 +1777,6 @@ function peopleAndLabelsAnswering(
   };
 }
 
-/** A change naming a reviewer or a label, as the bearer given. */
 function changeAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
   return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
 }
@@ -1947,7 +1905,6 @@ it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
             switch (path) {
               case `${repository}/labels`:
                 return Response.json([{ name: "bug", color: "d73a4a" }]);
-              // Note that GitHub lists an installation token no collaborator whose access comes through the organization, so it answers none.
               case `${repository}/collaborators`:
                 return Response.json([]);
               case `${repository}/assignees`:
@@ -2018,7 +1975,6 @@ it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
 });
 
 it.layer(getTestDB())("an agent's kept pull request", (it) => {
-  /** Where the published pull request stands on GitHub as a test moves it: when it merged, none while open, and whether GitHub refuses every read for its rate limit. */
   interface Standing {
     mergedAt: string | null;
     limited?: boolean;
@@ -2027,7 +1983,6 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
 
   const MERGED_AT = "2026-10-17T09:00:00Z";
 
-  /** The repository answering the published pull request as `standing` holds it. */
   const standingPullRequest =
     (standing: Standing): RepositoryScript =>
     async (sent) => {
@@ -2048,7 +2003,6 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
       });
     };
 
-  /** The owner's agent on the published branch, its pull request answered as `standing` holds it, and a read of it the time given after the last, by default once its row no longer answers for being fresh. */
   const publishedAs = (standing: Standing) =>
     Effect.gen(function* () {
       const { owner, task, ask } = yield* openTask({ github: standingPullRequest(standing) });
@@ -2105,7 +2059,6 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         assert.equal((yield* kept)?.mergedAt, undefined);
 
         standing.mergedAt = MERGED_AT;
-        // A read within a minute of the last answers from the row, the instance's kept answer gone or not.
         assert.deepEqual(yield* readAfter(CODER.PUBLISHED_TTL), open);
         assert.equal((yield* kept)?.mergedAt, undefined);
         yield* read;
@@ -2134,7 +2087,6 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
       Effect.gen(function* () {
         const standing: Standing = { mergedAt: null, closed: true };
         const { readAfter } = yield* publishedAs(standing);
-        // Long enough after its Start that the agent, which never ran a turn, has ended.
         const stateAfter = (wait: Duration.Duration) =>
           Effect.map(
             readAfter(wait),

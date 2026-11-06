@@ -1,4 +1,3 @@
-// admin-workspaces.test.ts -- the Workspaces tab's read: shared workspaces counted, listed by the week's activity, under the scope, kind, and search asked for.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -37,18 +36,10 @@ import {
 } from "./admin-workspaces.js";
 import { readAdminWorkspaceSource, readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 
-/**
- * The read's builder over hand-made sources, its handler's refusal, and its
- * queries over a real dialect with a small world of synthetic accounts and
- * workspaces written straight over the plugin's tables. Every instant is
- * fixed against `NOW`, so the week the counts cover is the same on every run.
- */
-
 const NOW = Date.UTC(2026, 9, 14, 12);
 
 const DAY_MS = 86_400_000;
 
-/** An instant `days` whole days before `NOW`; inside the week up to six. */
 const daysAgo = (days: number) => new Date(NOW - days * DAY_MS);
 
 const EMPTY_SUMMARY: AdminWorkspaceListSource["summary"] = {
@@ -163,12 +154,9 @@ describe("the workspaces builder", () => {
   });
 });
 
-/* ----- The queries, over a real dialect ----- */
-
 const insertAccount = (id: string, name: string, role: string = USER_ROLE.USER) =>
   Database.use((db) => db.insert(user).values({ id, name, email: `${id}@example.test`, role }));
 
-/** A workspace with its members, the first its owner; answers its id. */
 const insertWorkspace = (
   name: string,
   members: readonly string[],
@@ -197,10 +185,8 @@ const insertWorkspace = (
     return id;
   });
 
-/** The numbers the tasks below take, each its own whatever its workspace. */
 let taskNumbers = 0;
 
-/** A task in the workspace, its name and description words no admin read may carry; answers its id. */
 const insertTask = (organizationId: string, userId: string, createdAt: Date) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -233,7 +219,6 @@ const insertRevision = (taskId: string, userId: string, at: Date) =>
     }),
   );
 
-/** A coding agent in the workspace, started at the instant, with the pull request it merged where one is given. */
 const insertAgent = (
   organizationId: string,
   userId: string,
@@ -311,11 +296,6 @@ const insertInvitation = (
     }),
   );
 
-/**
- * Three shared workspaces of ordinary accounts, busiest to idle; one only
- * admins share; and the workspaces that are not shared: a personal one with
- * a guest in it, an admin's personal one, and a team of one.
- */
 const seedWorld = Effect.gen(function* () {
   yield* insertAccount("grace", "Grace Hopper");
   yield* insertAccount("linus", "Linus Torvalds");
@@ -328,7 +308,6 @@ const seedWorld = Effect.gen(function* () {
   yield* insertTask(northwind, "linus", daysAgo(6));
   yield* insertTask(northwind, "grace", daysAgo(40));
   yield* insertAgent(northwind, "grace", daysAgo(1), { number: 7, at: daysAgo(1) });
-  // A continued agent publishes the same pull request, which counts once.
   yield* insertAgent(northwind, "grace", daysAgo(1), { number: 7, at: daysAgo(1) });
   yield* insertAgent(northwind, "linus", daysAgo(2), { number: 8, at: daysAgo(0) });
   yield* insertAgent(northwind, "linus", daysAgo(30), { number: 3, at: daysAgo(29) });
@@ -338,7 +317,6 @@ const seedWorld = Effect.gen(function* () {
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.PENDING, daysAgo(-3));
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.PENDING, daysAgo(2));
 
-  // Only a description revised this week, on a task from long ago.
   const feldspar = yield* insertWorkspace("Feldspar", ["linus", "grace"]);
   const oldTask = yield* insertTask(feldspar, "linus", daysAgo(50));
   yield* insertRevision(oldTask, "linus", daysAgo(3));
@@ -368,10 +346,6 @@ const read = (
     buildAdminWorkspaceList(listed, NOW, kind, search),
   );
 
-/**
- * One test against a world of its own: each opens its own database, so it
- * passes alone and in any order.
- */
 function inSeededWorld(name: string, check: Effect.Effect<void, unknown, DatabaseServices>): void {
   it.layer(getTestDB())(name, (it) => {
     it.effect("reads the seeded world", () => Effect.andThen(seedWorld, check));
@@ -405,7 +379,6 @@ inSeededWorld(
       github: { sharedWithActive: 1, sharedWithSuspended: 1, activeShare: 1 / 3 },
     });
 
-    // Names of workspaces and accounts are the read's; what members wrote never is.
     const answered = JSON.stringify(list);
     for (const written of ["Secret launch plan", "Confidential", "prompt", "title"]) {
       assert.equal(answered.includes(written), false, written);
@@ -436,7 +409,6 @@ inSeededWorld(
     const personal = all.rows.find((row) => row.personal);
     assert.equal(personal?.name, "Grace Hopper");
     assert.ok(all.rows.some((row) => row.name === "Solo"));
-    // The headline counts read shared workspaces whatever the table lists.
     assert.equal(all.summary.shared, 3);
   }),
 );
@@ -492,7 +464,6 @@ it.layer(getTestDB())("one workspace's page", (it) => {
         yield* insertAccount("linus", "Linus Torvalds");
         yield* insertAccount("margaret", "Margaret Hamilton");
         const feldspar = yield* insertWorkspace("Feldspar", ["grace", "linus"]);
-        // The plugin's role text may list several roles; here the owner joined second.
         yield* Database.use((db) =>
           db
             .update(member)

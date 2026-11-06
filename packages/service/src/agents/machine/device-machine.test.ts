@@ -1,9 +1,3 @@
-/**
- * device-machine.test.ts -- a local agent's machine over a real dialect: its launch laid out under the agents folder its Mac registered, its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, over the sync hub, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
- *
- * Synthetic accounts, agents, Macs, bearers, and keys throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -100,7 +94,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** The repository an agent works in where a test gives it one, and the installation reaching it. */
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_INSTALLATION: InstallationFixture = {
   id: 31,
@@ -108,7 +101,6 @@ const RELAY_INSTALLATION: InstallationFixture = {
   repositories: [RELAY],
 };
 
-/** The runner launched in the agent's place, found by its session as a relaunch finds it. */
 const launched = (opened: Effect.Success<ReturnType<typeof openLocalAgent>>) =>
   Effect.gen(function* () {
     const machine = yield* deviceMachine;
@@ -125,7 +117,6 @@ const launched = (opened: Effect.Success<ReturnType<typeof openLocalAgent>>) =>
     });
   });
 
-/** Lets a forked read's statements run until its request waits for the Mac. */
 const untilAsked = (userId: string, deviceId: string) =>
   Effect.gen(function* () {
     while ((yield* deviceAgentRequestsWaiting(userId, deviceId)).length === 0)
@@ -142,7 +133,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       () =>
         Effect.gen(function* () {
           const { userId, deviceId, agent } = yield* openLocalAgent();
-          // The Mac the agent is pinned to is enrolled and removed, as Settings › Hosts removes one.
           yield* enrollOwnDevice(userId, {
             id: deviceId,
             version: "0.1.0",
@@ -172,7 +162,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       () =>
         Effect.gen(function* () {
           const opened = yield* openLocalAgent();
-          // The Mac registers again, as a host whose release moved its agents' root would.
           yield* registerDevice(opened.userId, {
             id: opened.deviceId,
             name: "Studio",
@@ -242,7 +231,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             .from(deviceAgentLine)
             .where(eq(deviceAgentLine.id, handle.command));
           const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
-          // The same agent's checkout in a cloud sandbox, deepened as its launch deepens it.
           const { agent } = opened;
           assert.ok(hasRepository(agent));
           const target = { userId: opened.userId, conversationId: agent.conversationId };
@@ -252,7 +240,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
           }).pipe(Effect.provide(github.layer));
 
-          // A member with no GitHub sign-in writes as the App's bot, at the noreply address GitHub links to it.
           const bot = {
             name: GITHUB_FIXTURE_BOT.login,
             email: `${GITHUB_FIXTURE_BOT.id}+${GITHUB_FIXTURE_BOT.login}@users.noreply.github.com`,
@@ -266,7 +253,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "a launch of an agent on its starter's own token to a host from before it works in one on its own GitHub sign-in is refused, queuing nothing",
       () =>
         Effect.gen(function* () {
-          // Note that an installation of its own is linked, since another test linked the first.
           const installation = { ...RELAY_INSTALLATION, id: RELAY_INSTALLATION.id + 1 };
           const opened = yield* openLocalAgent({
             installation,
@@ -450,13 +436,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
-    /**
-     * A local agent's launch claimed, then settled unstarted by its device,
-     * past the step it reported where one is: the agent, and its turn as the
-     * store reads it after. No turn is queued first, because a native turn is
-     * queued by its harness's first event, which a runner that never started
-     * never posts.
-     */
     const unstartedTurn = (step?: DeviceLaunchStep, unstarted?: DeviceLaunchUnstarted) =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent();
@@ -528,7 +507,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             ]),
           );
           const launch = yield* Effect.flip(launched(opened));
-          // The Mac is enrolled and removed, as Settings › Hosts removes one.
           yield* enrollOwnDevice(opened.userId, {
             id: opened.deviceId,
             version: "0.1.0",
@@ -596,7 +574,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             lapsedTurn?.failureDetail,
             "Studio went away during this turn. Send a message to carry on once it's back.",
           );
-          // Note that the agent reads as its host lost, naming it, rather than as the model's failure.
           assert.equal(agentFailureOf(lapsedTurn), AGENT_FAILURE.OTHER);
           assert.deepEqual(hostLostOf(lapsedTurn), { host: "Studio" });
           assert.equal(bearer?.hash, null, "nothing the lapsed runner posts reaches the agent");
@@ -632,7 +609,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           const opened = yield* openLocalAgent();
           const { userId, deviceId, agent } = opened;
           const launch = yield* launched(opened);
-          // The Mac took the launch and went quiet while preparing it, before its runner posted anything.
           yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
           const writer = yield* storeWriter({ tools: {} });
           yield* TestClock.adjust("6 minutes");
@@ -670,8 +646,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             );
           yield* TestClock.adjust("6 minutes");
 
-          // The sweep takes the oldest lapsed launch first, so one at a time reaches the older
-          // launch before the newer, whatever other tests left lapsed ahead of it.
           for (let swept = 0; !(yield* settledNow(older.handle)); swept += 1) {
             assert.ok(swept < 50, "the older launch is taken within a few sweeps");
             yield* sweepAt(1);

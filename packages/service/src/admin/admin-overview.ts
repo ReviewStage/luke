@@ -1,21 +1,3 @@
-/**
- * admin-overview.ts -- what the Overview measures of the product as it is
- * today: tasks, descriptions, coding agents, pull requests, the inbox, and
- * automations, shaped from the rows the queries read.
- *
- * Everything here is an aggregate or a per-account count of rows the service already
- * keeps for its own operation. No title, description text, prompt, message, workspace
- * name, or repository name is read, so none can reach the answer. The queries
- * live in `admin-overview-queries.ts`; this module is the pure fold, so the
- * part with off-by-one risk in a day window is tested without a database.
- *
- * A *meaningful action* is one of three things an account does: creates a
- * task, writes a description revision as the developer, or starts a coding agent. An
- * *active developer* is an account with at least one in the
- * run being counted. `meaningfulActions` in the queries module is the one
- * definition every read here that says "active" counts through.
- */
-
 import type {
   AdminActivityDay,
   AdminOverview,
@@ -44,10 +26,8 @@ import {
   trailingTrend,
 } from "./admin-metrics.js";
 
-/** How many of the most active accounts the overview names. */
 export const ADMIN_OVERVIEW_ACCOUNTS_LIMIT = 10;
 
-/** One ranked account as the query reads it, before its per-feature counts join it. */
 interface AdminActiveAccountSource {
   id: string;
   name: string;
@@ -57,28 +37,22 @@ interface AdminActiveAccountSource {
   activeDays: number;
 }
 
-/** The raw shape the overview's queries produce. */
 export interface AdminOverviewSource {
   activeDevelopers: { recent: number; prior: number };
-  /** Each daily count by UTC day, read from the fetch bound so both trend runs are held. */
   daily: ReadonlyMap<DailyCount, ReadonlyMap<string, number>>;
   prsOpened: { opened: number; merged: number };
   funnel: ReadonlyMap<FunnelStep, number>;
   reach: ReadonlyMap<ReachFeature, number>;
-  /** The most active accounts, already ranked and cut at the bound. */
   topAccounts: readonly AdminActiveAccountSource[];
-  /** Per-account counts for the ranked accounts alone, by account id; an absent id is a zero. */
   accountCounts: {
     tasks: ReadonlyMap<string, number>;
     agents: ReadonlyMap<string, number>;
     prsMerged: ReadonlyMap<string, number>;
     lastSeenAt: ReadonlyMap<string, number>;
   };
-  /** Cohort sizes, and the cohorts' accounts with a meaningful action per week. */
   retention: AdminMetricsSource["retention"];
 }
 
-/** The source a database that did not answer stands in with: nothing counted, nobody named. */
 export function emptyOverviewSource(): AdminOverviewSource {
   return {
     activeDevelopers: { recent: 0, prior: 0 },
@@ -101,7 +75,6 @@ function shareOf(part: number, whole: number): number | null {
   return whole === 0 ? null : part / whole;
 }
 
-/** One daily count over the given day keys, a missing day a zero. */
 function countsOn(
   daily: AdminOverviewSource["daily"],
   count: DailyCount,
@@ -111,7 +84,6 @@ function countsOn(
   return days.map((day) => byDay?.get(day) ?? 0);
 }
 
-/** The chart's days: each feature's count on each window day. */
 function buildActivityDays(
   daily: AdminOverviewSource["daily"],
   dayKeys: readonly string[],
@@ -126,24 +98,17 @@ function buildActivityDays(
   }));
 }
 
-/** Every chart feature summed per day over the given keys. */
 function activityTotals(daily: AdminOverviewSource["daily"], days: readonly string[]): number[] {
   const features = Object.values(ACTIVITY_FEATURE);
   return days.map((day) => sum(features.map((feature) => daily.get(feature)?.get(day) ?? 0)));
 }
 
-/** The daily count each origin but by hand is read under; by hand is what they leave. */
 const ORIGIN_COUNT = {
   [AGENT_ORIGIN.AUTOMATION]: DAILY_COUNT.AGENTS_FROM_AUTOMATIONS,
   [AGENT_ORIGIN.SLACK]: DAILY_COUNT.AGENTS_FROM_SLACK,
   [AGENT_ORIGIN.AGENT]: DAILY_COUNT.AGENTS_FROM_AGENTS,
 } as const satisfies Record<Exclude<AgentOrigin, typeof AGENT_ORIGIN.HAND>, DailyCount>;
 
-/**
- * The recent run's agents started, split by origin. The queries count each
- * origin but by hand with the ones before it left out, so by hand is the rest
- * of every agent started, and the origins sum to the whole by construction.
- */
 function buildAgentOrigins(
   daily: AdminOverviewSource["daily"],
   recentKeys: readonly string[],
@@ -163,7 +128,6 @@ function buildAgentOrigins(
   };
 }
 
-/** The ranked accounts with their counts joined, in the rank the query read them in. */
 function buildTopAccounts(source: AdminOverviewSource): AdminOverviewAccount[] {
   const counts = source.accountCounts;
   return source.topAccounts.map((account) => ({
@@ -175,12 +139,6 @@ function buildTopAccounts(source: AdminOverviewSource): AdminOverviewAccount[] {
   }));
 }
 
-/**
- * Shapes the queried source into the overview. Every series is zero-filled
- * over the window's own day keys, and every trend is folded from the same
- * maps over the last two trend runs, so a 7-day view still compares against
- * the week before and a tile can never disagree with the bars under it.
- */
 export function buildAdminOverview(
   source: AdminOverviewSource,
   now: number,

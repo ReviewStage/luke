@@ -17,16 +17,6 @@ import { TestClock } from "effect/testing";
 import type { RelayFrame, RelaySocket } from "../terminal/relay.js";
 import { relayTunnel, type TunnelDependencies } from "./relay.js";
 
-/**
- * One tunnel as the relay pipes it, over sockets and a sandbox that answer
- * from a script, on the test clock: a stopped sandbox is never woken and
- * the tunnel closes as not running, but for a mirror that asks to wake,
- * which resumes it and starts its bridge; a running one starts the port bridge,
- * and once it is ready frames cross both ways, holding the sandbox as they
- * do, until twenty minutes without a byte close the tunnel as idle and end
- * its keep-alive.
- */
-
 const CONVERSATION = "conversation-1";
 const ASK = {
   userId: "user-1",
@@ -38,7 +28,6 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const OPEN = JSON.stringify({ type: "open", channel: 1 });
 const DATA = JSON.stringify({ type: "data", channel: 1, data: "aGk=" });
 
-/** One side of the relay as a test drives it: frames pushed in, what the relay sent, and how it closed, kept. */
 const scriptedSocket = Effect.gen(function* () {
   const inbound = yield* Queue.make<RelayFrame, Cause.Done>();
   const sent: RelayFrame[] = [];
@@ -57,7 +46,6 @@ const scriptedSocket = Effect.gen(function* () {
 
 type Scripted = Effect.Success<typeof scriptedSocket>;
 
-/** The relay's world: the agent reached, its sandbox standing as given until a resume wakes it, the lease, and every keep-alive asked. */
 function world(pty: Scripted, standing: SandboxState = SANDBOX_STATE.RUNNING) {
   let heldUntil = 0;
   let sandbox = standing;
@@ -93,7 +81,6 @@ function world(pty: Scripted, standing: SandboxState = SANDBOX_STATE.RUNNING) {
   return { deps, asked, heldUntil: () => heldUntil };
 }
 
-/** Lets every fiber the last step woke run to its next wait. */
 const settle = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, {
   discard: true,
 });
@@ -149,7 +136,6 @@ it.effect(
 
       const relay = yield* Effect.forkChild(Effect.scoped(relayTunnel(device.socket, ASK, deps)));
       yield* settle;
-      // Sent before the bridge is ready, so it waits rather than reaching a PTY that would echo it.
       yield* device.push({ text: OPEN });
       yield* settle;
       const startFrame = JSON.parse("text" in pty.sent[0]! ? pty.sent[0].text : "{}");
@@ -163,7 +149,6 @@ it.effect(
       assert.deepEqual(lines(pty.sent), [`${OPEN}\n`]);
       assert.deepEqual(device.sent, [{ text: DATA }]);
 
-      // Traffic ten minutes on moves the lease on and the idle bound with it.
       yield* TestClock.adjust(Duration.minutes(10));
       yield* device.push({ text: DATA });
       yield* settle;

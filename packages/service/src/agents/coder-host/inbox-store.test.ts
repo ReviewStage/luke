@@ -92,23 +92,6 @@ import {
 import { wokenOnHub } from "../../testing/sync-woken.js";
 import { accountInboxPast, agentInboxPast, taskInboxPast } from "./inbox-page.js";
 
-/**
- * The developer's inbox as the store keeps it, through its public functions
- * against a real dialect: a post under a key is one item, a post under the
- * same key writes it again and opens it, a close takes it back, an answer
- * is taken only at the revision it names while the item is open and can be
- * withdrawn under its key, a read keeps every open item however many others
- * changed, every member of the task's workspace reads and answers the items
- * of an agent any of them started, an agent with no task posts to its
- * workspace's members as one on a task does to its task's, a member writes
- * on an item's thread whatever its status, which moves the item's last
- * change and nothing else of it, and nothing of a workspace the account is
- * not in is read or written. Over the sync hub, a task's, an agent's, and the account's held reads
- * each answer an agent's post within a coalesce window.
- *
- * Synthetic accounts, tasks, and words throughout.
- */
-
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -116,7 +99,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one task and one agent started on it, and the workspace the task is in. */
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -137,10 +119,8 @@ const openAgentIn = Effect.gen(function* () {
 
 const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
 
-/** A post as the agent's tool hands one to the store. */
 type InboxThreadPost = Parameters<typeof postInboxThread>[1];
 
-/** A post that asks the developer to do something by hand, and waits on no word back. */
 const SETTINGS = {
   key: "branch-protection",
   title: "Require a review on main",
@@ -149,26 +129,18 @@ const SETTINGS = {
   needsReply: false,
 } as const satisfies InboxThreadPost;
 
-/** A post that asks nothing: a notice, which waits on the developer's nod alone. */
 const NOTICE = {
   key: "heads-up",
   title: "Main is protected now",
   body: "Pushes to `main` need a review from here on.",
 } as const satisfies InboxThreadPost;
 
-/** The agent's post written, the item it stands as. */
 const post = (agent: InboxAgent, write: InboxThreadPost = SETTINGS) =>
   Effect.map(postInboxThread(agent, write), Result.getOrThrow);
 
-/** The message whose ask the item holds open, by id; none where it holds none open. */
 const openAskOf = (item: Pick<InboxItem, "thread">) =>
   item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
 
-/**
- * A member's Done on the ask the item, as it was last shown to them, holds
- * open, under the key given: the item as the answer leaves it, with the
- * transaction it was taken in; nothing where the answer was not taken.
- */
 const answerDone = (
   userId: string,
   item: Pick<InboxItem, "id" | "thread">,
@@ -189,19 +161,15 @@ const answerDone = (
     ),
   );
 
-/** The member's messages on an item's thread, oldest first: the agent's left out. */
 const memberMessages = (item: Pick<InboxItem, "thread">) =>
   (item.thread ?? []).filter((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER);
 
-/** Messages as a reader who wrote none of them is handed them: none carrying the key it was sent under. */
 const unkeyed = (messages: readonly InboxMessage[] | undefined) =>
   messages?.map(({ clientKey: _clientKey, ...message }) => message);
 
-/** The member's message on an item's thread that carries an answer. */
 const answeringOf = (item: Pick<InboxItem, "thread">) =>
   item.thread?.find((message) => message.answers !== undefined);
 
-/** A file as an answer carries it: its name, its type, and its bytes in base64. */
 const attached = (
   name: string,
   mediaType: AgentAttachment["mediaType"],
@@ -211,7 +179,6 @@ const attached = (
 const TRACE = new TextEncoder().encode("TypeError: invite is undefined\n");
 const SHOT = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
-/** A workspace automation of the account's on a task of the workspace, which its runs start agents beside. */
 const openAutomation = (userId: string, workspaceId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Flaky tests" });
@@ -230,7 +197,6 @@ const openAutomation = (userId: string, workspaceId: string) =>
     return Option.getOrThrow(made).id;
   });
 
-/** An account's workspace with one agent started in it on no task, as an automation's run starts one, by an automation of the account's where asked. */
 const openTasklessAgentOf = (byAutomation: boolean) =>
   Effect.gen(function* () {
     const userId = yield* openUser;
@@ -255,7 +221,6 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
 
 const openTasklessAgent = openTasklessAgentOf(false);
 
-/** A live statement run as Realtime runs it, its SQL and its values as they are, and its rows read back under the schema the desktop decodes them with. */
 const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Row, Encoded>) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -263,7 +228,6 @@ const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Ro
     return yield* Schema.decodeUnknownEffect(Schema.Array(schema))(rows);
   });
 
-/** What waits across the account as the desktop builds it from the live rows, at the instant the held read was read. */
 const liveAnswerOf = (userId: string, readAt: number) =>
   Effect.gen(function* () {
     const parts = Option.getOrThrow(accountInboxLiveStatements(userId, true));
@@ -281,7 +245,6 @@ const liveAnswerOf = (userId: string, readAt: number) =>
     );
   });
 
-/** The ids the account's items read carries as the desktop decodes its rows: those it stamps, and those it carries whole, read since the instants given. */
 const accountItemIdsOf = (userId: string, since: number, settledSince: number) =>
   Effect.gen(function* () {
     const parts = Option.getOrThrow(
@@ -338,7 +301,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "stale", "Not needed after all")));
         const reminded = yield* post(agent, { ...SETTINGS, key: "reminded" });
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "reminded", "Done another way")));
-        // The reminder is weighed on the database's clock, so it stands come due by the read.
         yield* remindInboxItem(agent.userId, reminded.id, new Date("2001-01-01T09:00:00Z"));
         const waiting = yield* post(agent, { ...SETTINGS, key: "waiting" });
         const notice = yield* post(agent, { key: "merged", title: "Merged", body: "On main." });
@@ -384,7 +346,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
           ),
         );
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
-        // The teammate's message on the open item, with a file, leaves it read for them and unread for its starter.
         yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(
           Option.isSome(
@@ -455,9 +416,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const first = yield* post(onTask.agent);
         yield* post(onTask.agent, { ...SETTINGS, key: "second" });
         yield* post(taskless);
-        // Read by the agent's starter and not by the teammate, so the two read it apart.
         assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.id));
-        // A second task of the starter's, settled, whose agent asks on it after, which the Inbox lists like any other.
         const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
         const shelvedAgent = yield* createAgent(onTask.agent.userId, {
           taskId: shelved.id,
@@ -481,7 +440,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
         for (const reader of [owner, taskless.userId, teammate, outsider]) {
           const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
-          // Each read keeps a cursor of its own, which the other never reads.
           assert.deepEqual({ ...live, cursor: held.cursor }, held);
         }
         const shelvedRead = yield* liveAnswerOf(onTask.agent.userId, 0);
@@ -545,10 +503,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
           text: "Which is cheaper?",
           clientKey: randomUUID(),
         });
-        // The agent writes on the thread again, asking nothing, under the asking item's key.
         yield* thread("deploy-region");
 
-        // A run of each of two of the owner's automations failed: one now, one past the last week.
         const failedRun = (name: string) =>
           Effect.gen(function* () {
             const made = Option.getOrThrow(
@@ -647,7 +603,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(!theirs.items.some((entry) => entry.id === posted.id));
         assert.deepEqual([others.planless, others.automations, others.agents], [[], [], []]);
 
-        // Made personal, the automation's runs stay the workspace's, and which automation it is its creator's.
         yield* Database.use((db) =>
           db
             .update(automationTable)
@@ -673,7 +628,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
           [[automationId, "Flaky-test sweep"]],
         );
 
-        // Settled, the item waits no longer, and its agent is still listed as holding it, named as its open item was, to every member who may read it.
         assert.ok(Option.isSome(yield* answerDone(agent.userId, posted)));
         const settled = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.deepEqual(settled.planless, []);
@@ -799,7 +753,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const posted = yield* post(agent);
-        // Past the picture bound, inside a PDF's.
         const spec = new Uint8Array(2_000_000).fill(0x25);
         const answered = yield* answerDone(agent.userId, posted, randomUUID(), [
           attached("spec.pdf", AGENT_ATTACHMENT_TYPE.PDF, spec),
@@ -1017,7 +970,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
 
         const posted2 = yield* post(agent, { ...SETTINGS, key: "still-open" });
-        // The first item stands open again since its answer was withdrawn.
         assert.deepEqual(
           (yield* accountWaitingItems(teammate)).map((each) => each.id).sort(),
           [id, posted2.id].sort(),
@@ -1052,7 +1004,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
           githubAccess: GITHUB_ACCESS.APP,
         });
         yield* joinWorkspace(task.workspaceId, teammate);
-        // The App reaches the agent for every member, so only its task's visibility keeps it from the teammate.
         const started = yield* createAgent(teammate, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
@@ -1064,7 +1015,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
-        // The task moves onto its owner's own token, which the teammate keeps none to read through.
         yield* Database.use((db) =>
           db
             .update(taskTable)
@@ -1086,7 +1036,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
           Result.fail(INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE),
           "an ask is addressed to no one who cannot see its thread",
         );
-        // Addressed to nobody on a task assigned to nobody, the ask waits on its starter all the same.
         const posted = yield* post(agent);
         assert.deepEqual(
           (yield* agentInboxItems(agent)).map((each) => each.id),
@@ -1194,7 +1143,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.deepEqual(teammateThread, onSettled.item.thread);
         assert.deepEqual(unkeyed(starterThread), unkeyed(onSettled.item.thread));
-        // Note that the key a message was sent under is handed to its writer alone.
         assert.deepEqual(
           starterThread
             ?.filter((message) => message.clientKey !== undefined)
@@ -1259,7 +1207,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(new Uint8Array(Option.getOrThrow(served).bytes), TRACE);
 
         const askedAgain = yield* post(agent, { ...SETTINGS, title: "Require two reviews" });
-        // Note that the agent is handed no member's key.
         assert.deepEqual(memberMessages(askedAgain), unkeyed(memberMessages(first.item)));
         assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
 
@@ -1303,7 +1250,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
           closed.updatedAt < (closed.settledAt ?? 0),
           "an agent's close leaves its last change",
         );
-        // As an item settled before the stamp was kept stands.
         yield* Database.use((db) =>
           db.update(inboxItem).set({ settledAt: null }).where(eq(inboxItem.id, closed.id)),
         );
@@ -1324,7 +1270,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 });
 
-/** Whether the item is unread for the reader, as their read of it says. */
 it.layer(getTestDB())("the inbox's held reads on Vespin Sync", (it) => {
   it.effect(
     "a task's, an agent's, and the account's held reads each answer an agent's post within a coalesce window of it",
@@ -1364,10 +1309,8 @@ it.layer(getTestDB())("the inbox's held reads on Vespin Sync", (it) => {
 const unreadFor = (reader: string, itemId: string) =>
   Effect.map(readInboxItem(reader, itemId), (found) => Option.getOrThrow(found).item.unread);
 
-/** An agent's item posted under the key given. */
 const postedItem = (agent: InboxAgent, key: string) => post(agent, { ...SETTINGS, key });
 
-/** An agent's item posted under the key given, its id. */
 const postedId = (agent: InboxAgent, key: string) =>
   Effect.map(postedItem(agent, key), (posted) => posted.id);
 
@@ -1397,7 +1340,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [[id, true]],
         );
 
-        // The read answers the transaction that wrote it, and one already standing writes none.
         const read = yield* markInboxItemRead(agent.userId, id);
         assert.match(read === false ? "" : (read.txid ?? ""), /^\d+$/u);
         assert.deepEqual(
@@ -1411,7 +1353,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           "one member's read leaves another's unread",
         );
 
-        // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a post under its key.
         const changes = [
           replyInboxItem(agent, SETTINGS.key, "Still needed."),
           answerDone(teammate, posted),
@@ -1425,7 +1366,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           assert.equal(yield* unreadFor(agent.userId, id), true);
         }
 
-        // The agent withdrawing its ask asks nothing of the reader, so it leaves the item read.
         yield* markInboxItemRead(agent.userId, id);
         yield* TestClock.adjust(Duration.seconds(1));
         yield* closeInboxItem(agent, SETTINGS.key, "Done another way.");
@@ -1542,7 +1482,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
             taskInboxItems(userId, taskId),
             (items) => items.find((item) => item.id === id)?.remindAt,
           );
-        // The store's clock is the test's, while the reminder is weighed on the database's, so ahead is far off and due is long past.
         const ahead = new Date("2999-01-01T09:00:00Z");
         const due = new Date("2001-01-01T09:00:00Z");
         assert.equal(yield* unreadFor(agent.userId, id), true);
@@ -1654,7 +1593,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
       Effect.gen(function* () {
         const { agent } = yield* openAgentIn;
         const id = yield* postedId(agent, SETTINGS.key);
-        // As the member's own answer leaves the marker when it lands while a read that selected the older change waits on its lock.
         yield* markInboxItemRead(agent.userId, id);
         const ahead = new Date(
           (yield* DateTime.nowAsDate).getTime() + Duration.toMillis("5 seconds"),
@@ -1690,7 +1628,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
         const id = yield* postedId(agent, SETTINGS.key);
-        // As the migration that added the column stamped every item standing at the instant it ran.
         yield* TestClock.adjust(Duration.seconds(1));
         const released = yield* DateTime.nowAsDate;
         yield* Database.use((db) =>
@@ -1729,7 +1666,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         yield* markInboxItemRead(agent.userId, id);
 
-        // A held read past the old cursor answers at once, since the reader's own items moved.
         const woken = yield* taskInboxPast(agent.userId, taskId, task.cursor);
         assert.notEqual(woken.cursor, task.cursor);
         assert.deepEqual(
@@ -1777,10 +1713,8 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const shelved = yield* startTask(owner, { name: "Shelved work" });
         const shelvedAgent = yield* agentOn(owner, shelved.id);
 
-        // The owner's open ask counts; their open notice, unread, asks nothing.
         yield* postedId(agent, "ask");
         yield* post(agent, { ...NOTICE, key: "notice" });
-        // A thread they answered, which its agent writes on again, unread, and one they answered and read: neither is a question now.
         const followedItem = yield* postedItem(agent, "followed");
         const followed = followedItem.id;
         for (const item of [followedItem, yield* postedItem(agent, "seen")]) {
@@ -1788,7 +1722,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         }
         yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "One more thing.")));
-        // A teammate's agent asks on the same task, and the owner's agent asks on a task settled before.
         yield* postedId(teammates, "theirs");
         yield* updateTask(owner, shelved.id, { status: TASK_STATUS.DONE });
         yield* postedId(shelvedAgent, "shelved");
@@ -1816,7 +1749,6 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         );
         assert.deepEqual((yield* accountInboxPast(stranger, INBOX_CURSOR_START)).plans, []);
 
-        // Reading the settled thread still wakes the held read, and moves no count.
         yield* markInboxItemRead(owner, followed);
         const read = yield* accountInboxPast(owner, held.cursor);
         assert.notEqual(read.cursor, held.cursor);
@@ -1860,7 +1792,6 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
         const first = yield* post(agent, NOTICE);
-        // The agent posts the notice again, which moves its revision on.
         const notice = yield* post(agent, NOTICE);
         assert.notEqual(notice.revision, first.revision);
         const asking = yield* post(agent);
@@ -1910,7 +1841,6 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
 });
 
 it.layer(getTestDB())("who an inbox item waits on", (it) => {
-  /** A plan's inbox as the desktop builds it from the live rows. */
   const liveTaskInbox = (readerId: string, taskId: string) =>
     Effect.gen(function* () {
       const statements = Option.getOrThrow(taskInboxLiveStatements(readerId, taskId));
@@ -2012,7 +1942,6 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
         yield* updateTask(owner, taskId, { assigneeId: null });
         const settled = yield* postedItem(agent, "settled");
         const itemId = settled.id;
-        // The owner's answer leaves it read for them and unread for the teammate.
         assert.ok(Option.isSome(yield* answerDone(owner, settled)));
         const counted = (readerId: string) =>
           Effect.map(accountWaitingStamps(readerId), (stamps) =>
@@ -2049,7 +1978,6 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
         const owner = agent.userId;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        // Each answered by the owner, then written on again by its agent: settled, and unread for the owner.
         const settledOf = (of: InboxAgent) =>
           Effect.gen(function* () {
             const item = yield* postedItem(of, "settled");

@@ -50,19 +50,6 @@ import {
 import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-token-app.js";
 
-/**
- * The token route, answered by its group the way a function answers it, over
- * a real store and a fake of OpenAI's token endpoint: a Codex agent on its
- * starter's ChatGPT plan is handed the plan's access token under its runner's
- * bearer, renewed first where less than the margin is left of it; a missing,
- * unknown or retired bearer, or one whose agent is not on Codex on the plan,
- * is handed nothing; one agent asking too often is braked; a sign-in OpenAI
- * signed out is refused by name; and the token is never logged. A host, on
- * its device secret, is handed an installation token for its own member's
- * agent that runs on it, over a fake GitHub, and nothing for any other
- * agent or caller, nor before the host has registered. Synthetic accounts and tokens throughout.
- */
-
 const ORIGIN = "https://app.test";
 const KEK = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 const MINUTE = 60 * 1000;
@@ -85,7 +72,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   titleAnthropicApiKey: undefined,
 };
 
-/** OpenAI's token endpoint, in Codex's JSON: each renewal rotates the refresh token and answers the next access token, good for an hour. */
 function openAi() {
   const state = { renewals: 0 };
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
@@ -104,7 +90,6 @@ function openAi() {
   return { state, respond };
 }
 
-/** The route's group over the test's store, OpenAI's fake, and a log the test reads, as a fetch. */
 const standing = Effect.gen(function* () {
   const openai = openAi();
   const logged: string[] = [];
@@ -141,7 +126,6 @@ const standing = Effect.gen(function* () {
   return { ask, openai, logged };
 });
 
-/** A coding agent on the runtime and payer given, its runner's bearer recorded: on its member's host, or in a cloud sandbox where `machine` names one. */
 const agentOn = (
   runtime: ConversationRuntime,
   payer: AgentPayer,
@@ -175,7 +159,6 @@ const agentOn = (
 
 const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.CHATGPT_SUBSCRIPTION);
 
-/** The account's ChatGPT plan, its access token `access-0` good for the minutes given. */
 const signIn = (userId: string, minutesLeft: number) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -217,7 +200,6 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         });
         assert.equal(openai.state.renewals, 0);
 
-        // Sixteen minutes on, forty-four are left: renewed, though a launch margin of fifteen would not have.
         yield* TestClock.adjust("16 minutes");
         const renewed = yield* ask(agent.bearer);
         assert.deepEqual(renewed.body, { accessToken: "access-1" });
@@ -226,7 +208,6 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         const now = (yield* DateTime.nowAsDate).getTime();
         assert.equal(row?.accessExpiresAt?.getTime(), now + 60 * MINUTE);
 
-        // And held until it is due again.
         yield* TestClock.adjust("5 minutes");
         assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-1" });
         assert.equal(openai.state.renewals, 1);
@@ -263,7 +244,6 @@ it.layer(getTestDB())("the runner's token route", (it) => {
             "anthropic/claude-opus-5.5",
           ),
           agentOn(CONVERSATION_RUNTIME.CLAUDE_CODE, AGENT_PAYER.CHATGPT_SUBSCRIPTION),
-          // Its token stands at its sandbox's firewall, so its command asks for none.
           agentOn(
             CONVERSATION_RUNTIME.CODEX,
             AGENT_PAYER.CHATGPT_SUBSCRIPTION,
@@ -325,7 +305,6 @@ it.layer(getTestDB())("the runner's token route", (it) => {
       const braked = yield* ask(agent.bearer);
       assert.equal(braked.status, HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS);
       assert.deepEqual(braked.body, { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED });
-      // Another agent is not braked by the first.
       assert.equal((yield* ask(other.bearer)).status, HOSTED_HTTP_STATUS.OK);
 
       yield* TestClock.adjust("10 minutes");
@@ -358,17 +337,14 @@ it.layer(getTestDB())("the runner's token route", (it) => {
 });
 
 const RELAY = { owner: "acme", name: "relay" } as const;
-/** The installation reaching the repository under the id given; each member connects their own, since one installation stands for one workspace. */
 const installationOf = (id: number): InstallationFixture => ({
   id,
   login: RELAY.owner,
   repositories: [RELAY],
 });
-/** The installations the fake GitHub holds, one taken by each member a test opens, since the suite's store links each to one workspace for good. */
 const INSTALLATIONS = Array.from({ length: 8 }, (_, index) => installationOf(31 + index));
 let installationsTaken = 0;
 
-/** The route's group over the test's store, a GitHub on which the App reaches the repository, and a log the test reads, as a fetch a host makes. */
 const hostStanding = Effect.gen(function* () {
   const github = githubReaching(INSTALLATIONS);
   const logged: string[] = [];
@@ -405,7 +381,6 @@ const hostStanding = Effect.gen(function* () {
   return { ask, logged };
 });
 
-/** A member whose task's workspace reaches the repository through an installation of its own. */
 const openMember = Effect.gen(function* () {
   const installation = INSTALLATIONS[installationsTaken++];
   assert.ok(installation !== undefined, "more members than installations");
@@ -420,7 +395,6 @@ const openMember = Effect.gen(function* () {
   return { userId, taskId: task.id };
 });
 
-/** A host enrolled under the member that has not registered yet, as a host stands between its enroll and its first start: its device id and its secret. */
 const enrolledDevice = (userId: string) =>
   Effect.gen(function* () {
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
@@ -435,7 +409,6 @@ const enrolledDevice = (userId: string) =>
     return { deviceId, secret: secret.secret };
   });
 
-/** The host given registered, as a host does once it starts. */
 const registered = (userId: string, deviceId: string) =>
   registerDevice(userId, {
     id: deviceId,
@@ -444,7 +417,6 @@ const registered = (userId: string, deviceId: string) =>
     platform: DEVICE_PLATFORM.LINUX,
   });
 
-/** A host enrolled under the member, and registered: its device id and its secret. */
 const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
     const host = yield* enrolledDevice(userId);
@@ -452,7 +424,6 @@ const enrolledHost = (userId: string) =>
     return host;
   });
 
-/** A Claude Code agent of the member's on the repository, run on the device given. */
 const agentOnDevice = (
   member: { readonly userId: string; readonly taskId: string },
   deviceId: string,
@@ -510,7 +481,6 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
           body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
         };
 
-        // The member's agent on another of their hosts, and on a device of theirs never enrolled.
         const otherHost = yield* enrolledHost(member.userId);
         const onOtherHost = yield* agentOnDevice(member, otherHost.deviceId);
         assert.deepEqual(yield* ask(host.secret, onOtherHost), forbidden);
@@ -523,13 +493,11 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
         const onUnenrolled = yield* agentOnDevice(member, unenrolledId);
         assert.deepEqual(yield* ask(host.secret, onUnenrolled), forbidden);
 
-        // Another member's agent on that member's own host.
         const other = yield* openMember;
         const theirHost = yield* enrolledHost(other.userId);
         const theirs = yield* agentOnDevice(other, theirHost.deviceId);
         assert.deepEqual(yield* ask(host.secret, theirs), forbidden);
 
-        // A bearer that is no device secret is no host, and no runner either.
         const stranger = yield* ask("session-token", own);
         assert.equal(stranger.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
         assert.deepEqual(stranger.body, { error: HOSTED_API_ERROR.INVALID_TOKEN });

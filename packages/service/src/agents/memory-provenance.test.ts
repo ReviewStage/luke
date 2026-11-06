@@ -28,22 +28,8 @@ import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";
 
-/**
- * memory-provenance.test.ts -- a coding agent's `save_memory` refused on a turn whose words are no member's.
- *
- * Through `runAgentRemember`, over a real dialect, with the turn under way
- * written as the relay writes it: a turn an automation's run opened keeps
- * nothing, an eve agent an automation started included, whose first line
- * the relay wrote with no sender, nor a
- * turn whose journal already holds a web read, eve's or Claude Code's; a
- * turn a member's own line opened, which read nothing of the web, keeps the
- * memory; and a turn that settled refuses nothing. Synthetic accounts,
- * workspaces, and words throughout.
- */
-
 const FACT = "The web server's store tests run on PGlite through test:store.";
 
-/** A member with Memory on, in a workspace of their own, and an agent there. */
 const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -67,16 +53,11 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
     return { agent: started.value.agent, workspaceId };
   });
 
-/** What sent a turn's opening line, as its row keeps it. */
 type Opener =
   | { readonly sender: undefined }
   | { readonly sender: typeof MESSAGE_SENDER.MEMBER }
   | { readonly sender: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
 
-/**
- * A turn of the agent's, as the relay writes one: its row, the line that
- * opened it, and its journal holding a call of each tool named.
- */
 const writeTurn = (
   agent: Agent,
   opener: Opener,
@@ -114,7 +95,6 @@ const writeTurn = (
       turnId: turn.id,
       clientId: turn.id,
       role: MESSAGE_ROLE.ASSISTANT,
-      // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
       parts: called.map((tool, index) => ({
         type: `tool-${tool}`,
         toolCallId: `call-${index}`,
@@ -127,7 +107,6 @@ const writeTurn = (
     });
   });
 
-/** A `remember` from the agent, as its tool door calls it. */
 const remember = (agent: Agent) => {
   const { sessions } = recordingEve();
   const call: AgentCall = {

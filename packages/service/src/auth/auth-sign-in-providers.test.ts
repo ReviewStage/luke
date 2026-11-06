@@ -7,17 +7,6 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { authDatabaseAdapter } from "./auth-database.js";
 import { authSecrets } from "./auth-deployment.js";
 
-/**
- * The deployment's ways in, the providers `auth.ts` hands Better Auth, stood
- * up over a migrated PGlite database: a Google press and a GitHub press each
- * start their own provider's authorization. Workspaces come from GitHub, and
- * an account made with Google links GitHub to itself rather than losing the
- * sign-in it was made with.
- *
- * Synthetic client ids and secrets; nothing leaves the process, since starting
- * a sign-in only builds the provider's authorize URL.
- */
-
 const BASE_URL = "http://127.0.0.1";
 
 const decodeStarted = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }));
@@ -30,7 +19,6 @@ const REGISTERED = {
 } as const;
 
 beforeEach(() => {
-  // The module builds the deployment's own service as it loads, which reads these.
   vi.stubEnv("DATABASE_URL", "postgresql://auth:providers@127.0.0.1:5432/luke");
   vi.stubEnv("BETTER_AUTH_SECRET", "fixture-session-secret-of-enough-length");
 });

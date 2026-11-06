@@ -1,28 +1,3 @@
-/**
- * mirror-bridge.ts -- the mirror's bridge: the Node script a `MIRROR` tunnel runs in the sandbox's PTY, which tells the Mac what the agent's checkout holds and sends each file as it changes.
- *
- * It speaks the tunnel's channel frames as the port bridge does
- * (`bridge.ts`), and on the one channel the Mac opens it speaks the
- * mirror's messages (`@repo/features/sandbox-mirror-wire`), each one
- * `data` frame. The open sends the header and the manifest of the checkout
- * as git lists it, and from then on a watch on each folder that listing
- * holds is only a trigger: once the checkout has been quiet for a moment,
- * or at most a second after it first stirred, it is listed again and
- * compared by size, modified time, and executable bit with the last
- * listing, held in memory and nowhere else, each file new or changed is
- * sent, each one gone is deleted, and the folders watched follow the new
- * listing. Note that we
- * watch the listed folders rather than the checkout recursively, because
- * Node on Linux watches a recursive tree file by file, ignored folders such
- * as `node_modules` included, which costs seconds and hundreds of megabytes.
- * A missed watch event costs nothing, since the next listing catches it,
- * and whatever the bridge cannot do, such as a listing git refuses or a
- * base it cannot find, ends it, which the Mac answers by connecting again.
- * A request is answered only for a path the last listing holds, so the Mac
- * can never read outside it. The bridge writes nothing but
- * frames, and git's own words go nowhere.
- */
-
 import {
   MIRROR_BOUNDS,
   MIRROR_FILE_MODE,
@@ -30,10 +5,8 @@ import {
   MIRROR_HASH,
 } from "@repo/features/sandbox-mirror-wire";
 
-/** How long the checkout must be quiet before it is listed again, and the longest a stir waits for that. */
 const SETTLE = { QUIET_MS: 200, LONGEST_MS: 1000 } as const;
 
-/** The mirror bridge, as Node runs it with the checkout's path as its one argument. */
 export const MIRROR_BRIDGE_SOURCE = `"use strict";
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");

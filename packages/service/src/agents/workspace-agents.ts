@@ -15,31 +15,8 @@ import type { StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { assigneeIdOf, memberLinkWrittenSchema } from "./task-assignee.js";
 
-/**
- * workspace-agents.ts -- the coding agents of one workspace as an agent's tools read them: on any task or none, by any member, one task's alone where asked, each with its task's name.
- *
- * The agent tools every coding agent is offered
- * (`agent-tools.ts`) list and find the agents here. A list names the archived
- * agents too, each marked, since an agent may need to know one stands, and
- * names each agent's task by its name, read once
- * for the lot; it is narrowed to one task by the id a listed agent's task
- * answered, or to the caller's own, searched by words of an agent's title
- * or its task's name, and narrowed by whether an agent is archived, who
- * started it, whether an automation (or which) started it, and where its
- * task stands, each in the query so a page is never cut short. The agents the caller works beside come first,
- * the agent that started it and the agents it started, then those on its
- * task, as the store orders them (`agent-store.ts`'s `around`), and the
- * rest newest first, a page at a time: a list cut at its bound says so with
- * the offset of the next page, so a caller is never left with a silent cut.
- * Every read is on the account's own
- * standing: a workspace it is not in has no agents, and an agent of another
- * workspace, even one the account is also in, is none of these.
- */
-
-/** The most agents a list answers at once, the caller's own first and then the newest started first. */
 export const WORKSPACE_AGENTS_LIST_LIMIT = 50;
 
-/** Why a list's filter read as nothing to list by, in words the model can act on. */
 export const AGENT_LIST_FILTER_REFUSAL = {
   UNREADABLE:
     "Not run: narrow the list by a taskId, by thisTask, by words of an agent's title or its " +
@@ -54,7 +31,6 @@ export const AGENT_LIST_FILTER_REFUSAL = {
     "`[@Name](…/person/<id>)`, or its address alone.",
 } as const;
 
-/** The filters a list takes: one task by its id, or the caller's own task, words to search by, and the page to read. */
 export const AGENT_LIST_INPUT = Schema.Struct({
   taskId: Schema.optionalKey(
     describeWire(
@@ -125,32 +101,27 @@ export const AGENT_LIST_INPUT = Schema.Struct({
 
 const readFilter = Schema.decodeUnknownResult(AGENT_LIST_INPUT);
 
-/** An agent's task as a list names it; null for an agent on none, or on a task the reader cannot read. */
 export interface AgentTask {
   readonly id: string;
   readonly name: string;
 }
 
-/** A page of a workspace's agents, the task each stands on, and the offset of the next page where the list was cut. */
 export interface WorkspaceAgents {
   readonly agents: readonly Agent[];
   readonly taskOf: (agent: Agent) => AgentTask | null;
   readonly nextOffset: number | null;
 }
 
-/** The ways a list names whose agents it keeps. */
 export const AGENT_LIST_STARTER = {
   MINE: "mine",
   MEMBER: "member",
 } as const;
 
-/** Whose agents a list keeps: the caller's developer's own, one member's by their account's id, or every member's. */
 export type AgentListStarter =
   | { readonly kind: typeof AGENT_LIST_STARTER.MINE }
   | { readonly kind: typeof AGENT_LIST_STARTER.MEMBER; readonly userId: string }
   | undefined;
 
-/** What a list's input narrows it to: one task where it names one, words to search by, the agents' archive, starter, automation and task's status where named, and the page to read. */
 export interface AgentListFilter {
   readonly taskId: string | undefined;
   readonly words: string | undefined;
@@ -162,7 +133,6 @@ export interface AgentListFilter {
   readonly offset: number;
 }
 
-/** Whose agents the input keeps, or a refusal where it names a starter both ways or a link that names no person. */
 function starterOf(mine: boolean | undefined, startedBy: string | undefined) {
   if (mine === true && startedBy !== undefined) {
     return Result.fail(AGENT_LIST_FILTER_REFUSAL.BOTH_STARTERS);
@@ -175,12 +145,6 @@ function starterOf(mine: boolean | undefined, startedBy: string | undefined) {
     : Result.succeed<AgentListStarter>({ kind: AGENT_LIST_STARTER.MEMBER, userId });
 }
 
-/**
- * What a list's input narrows it to, given the task the caller works on:
- * the whole workspace where it names nothing, or a refusal where the input
- * does not read, names a task or a starter both ways, asks for an own task
- * the caller has not got, or names a starter by a link that is no person's.
- */
 export function listedFilter(
   input: UnparsedWireValue,
   ownTask: string | null,
@@ -208,11 +172,9 @@ export function listedFilter(
   });
 }
 
-/** The store's narrowing for a list's archive, starter, automation and task's status, each left out where the filter names none. */
 function storeNarrowingOf(filter: AgentListFilter) {
   const { archived, starter, automation, automationId, taskStatus } = filter;
   return {
-    // An archived agent is listed unless the filter asks for only those not archived.
     includeArchived: archived !== false,
     ...(archived === true ? { archivedOnly: true } : undefined),
     ...(starter?.kind === AGENT_LIST_STARTER.MINE ? { ownOnly: true } : undefined),
@@ -223,17 +185,11 @@ function storeNarrowingOf(filter: AgentListFilter) {
   };
 }
 
-/** A page cut from a list read one past its bound, and the next page's offset where that one past stood; null where the list ended. */
 export interface ListedPage<A> {
   readonly page: readonly A[];
   readonly nextOffset: number | null;
 }
 
-/**
- * A page of a list the store read from `offset` at one past `bound`, so a
- * next page is known to stand without a count of its own: the agent tools'
- * list and the hosted list (`agents-procedures.ts`) cut their pages here.
- */
 export function listedPage<A>(listed: readonly A[], offset: number, bound: number): ListedPage<A> {
   return {
     page: listed.slice(0, bound),
@@ -241,14 +197,6 @@ export function listedPage<A>(listed: readonly A[], offset: number, bound: numbe
   };
 }
 
-/**
- * A page of the workspace's agents, archived ones among them unless the
- * filter leaves them out, narrowed as the filter asks, the calling agent left out: its starter and the agents
- * it started first, then those on its task, then the rest, each newest
- * first, at most the list's bound from the filter's offset, and the next
- * page's offset where more stand. A caller that is no agent, a member,
- * leaves no one out and reads the whole list newest first.
- */
 export const workspaceAgentsOf = (
   userId: string,
   workspaceId: string,
@@ -271,7 +219,6 @@ export const workspaceAgentsOf = (
             },
           }),
       offset: filter.offset,
-      // One past the bound tells whether a next page stands, without a count of its own.
       limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
     });
     const { page: agents, nextOffset } = listedPage(
@@ -290,15 +237,6 @@ export const workspaceAgentsOf = (
     return { agents, taskOf, nextOffset };
   });
 
-/**
- * The agent under the id where it is one of the workspace's, archived or
- * not, as the caller's tools name it; nothing for an agent of another
- * workspace or none. Another agent is read as a member may read it
- * (`readVisibleAgent`), and a calling agent itself as it reads itself
- * (`readAgent`), so its own tools never lose it when its starter
- * loses sight of its task; a caller that is no agent, a member, names no
- * `callerId`.
- */
 export const workspaceAgent = (
   userId: string,
   workspaceId: string,
@@ -310,7 +248,6 @@ export const workspaceAgent = (
     (found) => Option.filter(found, (agent) => agent.organizationId === workspaceId),
   );
 
-/** The task one agent stands on, read as the account; null for an agent on none or on one the account cannot read. */
 export const agentTaskOf = (
   userId: string,
   agent: Agent,
@@ -320,13 +257,11 @@ export const agentTaskOf = (
     return agent.taskId === null || named === undefined ? null : { id: agent.taskId, ...named };
   });
 
-/** One agent's task as the model reads it, and whether it is the task of whoever is asking. */
 export interface AgentTaskReading {
   readonly task: AgentTask | null;
   readonly onYourTask: boolean;
 }
 
-/** One agent's task as the model reads it, beside the task of whoever is asking. */
 export function taskReading(task: AgentTask | null, ownTask: string | null): AgentTaskReading {
   return { task, onYourTask: task !== null && task.id === ownTask };
 }

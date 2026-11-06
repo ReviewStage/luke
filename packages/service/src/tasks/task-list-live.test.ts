@@ -84,16 +84,6 @@ import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TURN_FAILURE } from "../core.js";
 import { taskListLiveStatements } from "./task-list-live.js";
 
-/**
- * The plan list's live statements against the held read it stands in for:
- * run as raw SQL as Realtime runs them, decoded as the desktop decodes the
- * rows, and built into the list at the instant the held read was read, they
- * answer what the held read answers, for every member and for no one else.
- *
- * Synthetic accounts, plans, and words throughout.
- */
-
-/** The instant the list is read at. */
 const NOW = Date.parse("2026-10-15T09:00:00Z");
 
 const openUser = Effect.gen(function* () {
@@ -103,7 +93,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An agent the account starts on the plan, or with no plan in the workspace, started `ago` before the list is read. */
 const openAgent = (
   userId: string,
   place: { readonly taskId: string; readonly blank?: boolean } | { readonly workspaceId: string },
@@ -143,7 +132,6 @@ const openAgent = (
     return agent;
   });
 
-/** A turn of the agent's conversation, queued `ago` before the list is read. */
 const turnOf = (
   agent: { readonly userId: string; readonly conversationId: string },
   status: TurnStatus,
@@ -173,7 +161,6 @@ const turnOf = (
     return row?.id ?? "";
   });
 
-/** A line of the developer's to the agent, taken into the turn named or awaiting one, written `ago` before the list is read. */
 const lineOf = (
   agent: { readonly userId: string; readonly conversationId: string },
   seq: number,
@@ -199,7 +186,6 @@ const lineOf = (
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** The rows the live statements deliver to the account, decoded as the desktop decodes them. */
 const liveRowsOf = (userId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskListLiveStatements(userId));
@@ -209,15 +195,12 @@ const liveRowsOf = (userId: string) =>
     });
   });
 
-/** An agent on a plan as the plan's own list names it, the workspace and repository the live list keeps beside it left out. */
 const summaryOf = ({ workspaceId: _workspaceId, repository: _repository, ...agent }: ListedAgent) =>
   agent;
 
-/** The list as the desktop builds it from the live rows, at `now`. */
 const liveListOf = (userId: string, now: number) =>
   Effect.map(liveRowsOf(userId), (rows) => taskListOfLiveRows(rows, now));
 
-/** A plan's agents as its own list answers them at `now`, archived ones among them, as the service's endpoint builds them. */
 const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
   Effect.gen(function* () {
     const agents = yield* listAgents(userId, taskId, { includeArchived: true });
@@ -242,11 +225,6 @@ const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
     );
   });
 
-/**
- * A clock reading `now` for the held read alone, sleeping as the test's own
- * does. Note that the test's clock is not moved there, because a store test
- * on Postgres shares its connection pool with that clock.
- */
 const clockAt = (now: number) =>
   Effect.map(
     Clock.Clock,
@@ -261,7 +239,6 @@ const clockAt = (now: number) =>
     }),
   );
 
-/** The list as the service's collection answers it to the desktop at `now`, archived agents among them. */
 const heldListOf = (userId: string, now: number) =>
   Effect.gen(function* () {
     const clock = yield* clockAt(now);
@@ -407,7 +384,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const shelved = yield* startTask(owner, { name: "Billing export" });
         yield* joinWorkspace(plan.workspaceId, teammate);
 
-        // A plan's agents in every standing the list says.
         const done = yield* openAgent(owner, { taskId: plan.id }, 60 * 60_000);
         yield* turnOf(done, TURN_STATUS.SETTLED, 50 * 60_000, { settled: true });
         yield* recordAgentPublished(owner, done.id, PUBLISHED);
@@ -422,7 +398,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const archived = yield* openAgent(owner, { taskId: plan.id }, 90 * 60_000);
         yield* turnOf(archived, TURN_STATUS.FAILED, 80 * 60_000, { settled: true });
         yield* archiveAgent(owner, archived.id, true);
-        // A line no turn took past its grace, and a line after a turn whose session ended for good.
         const unanswered = yield* openAgent(owner, { taskId: plan.id }, 45 * 60_000);
         const answered = yield* turnOf(unanswered, TURN_STATUS.SETTLED, 44 * 60_000, {
           settled: true,
@@ -436,8 +411,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         });
         yield* lineOf(orphaned, 1, "Try again.", null, 60_000);
 
-        // A settled plan the owner pinned, and an agent with no plan, pinned and archived.
-        // An agent started blank, long past the starting grace: it reads completed, not failed.
         yield* openAgent(owner, { taskId: shelved.id, blank: true }, STARTING_GRACE_MILLIS * 3);
         yield* updateTask(owner, plan.id, { assigneeId: teammate });
         yield* updateTask(owner, shelved.id, { pinned: true });
@@ -447,7 +420,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* pinAgent(owner, loose.id, true);
         const gone = yield* openAgent(teammate, { workspaceId: plan.workspaceId }, 2 * 60_000);
         yield* archiveAgent(owner, gone.id, true);
-        // An agent a run made, and one that agent started on no task.
         const triage = Option.getOrThrow(
           yield* createAutomation(owner, {
             organizationId: plan.workspaceId,
@@ -474,7 +446,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           automationRunId: triageRun.id,
           startedByAgentId: runAgent.id,
         });
-        // A local agent on the owner's Mac running Claude Code, continued and forked on a plan of its own.
         const runs = yield* startTask(owner, { name: "Local runs" });
         const deviceId = randomUUID();
         yield* registerDevice(owner, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
@@ -489,7 +460,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* openAgent(owner, { taskId: runs.id }, 10 * 60_000, {
           startedFrom: { agentId: local.id, messageId: randomUUID(), steps: 1, totalSteps: 2 },
         });
-        // Tasks made for the owner by a coding agent, and by the notetaker on their call.
         const followUp = yield* startTask(owner, {
           name: "Invite emails",
           origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: done.id },
@@ -498,16 +468,12 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           name: "Audit log export",
           origin: { actor: DESCRIPTION_ACTOR.NOTETAKER },
         });
-        // The follow-up made a child of the first plan.
         const db = yield* Database;
         yield* db.update(task).set({ parentTaskId: plan.id }).where(eq(task.id, followUp.id));
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
-        // Each agent's owner, as the requirement names it: a run's agent and the child it started
-        // belong to the run, whose automation the agent itself does not name; one with no task and
-        // no run to none.
         const { planlessAgents } = yield* heldListOf(owner, NOW);
         const ownerOf = (agentId: string) =>
           planlessAgents.find((agent) => agent.id === agentId)?.owner;
@@ -515,12 +481,8 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.deepEqual(ownerOf(runAgent.id), ownedByRun);
         assert.deepEqual(ownerOf(runChild.id), ownedByRun);
         assert.equal(ownerOf(loose.id), undefined);
-        // Every plan's agents, the archived among them, as each plan's own list names them, for its
-        // tabs, their harness, Mac, and continues among it; the live rows come in the order they
-        // were started across the plans.
         const byId = (agents: readonly { readonly id: string }[]) =>
           agents.toSorted((a, b) => a.id.localeCompare(b.id));
-        // The live row names a Mac and not its last beat, which wakes nothing.
         const withoutBeat = (agent: AgentSummary): AgentSummary => {
           if (agent.mac === undefined) return agent;
           const { seenAt: _seenAt, ...mac } = agent.mac;
@@ -749,7 +711,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const plan = yield* startTask(owner, { name: "Teammate invitations" });
         yield* joinWorkspace(plan.workspaceId, teammate);
 
-        // An agent with no task that opened a pull request, and one continuing it, archived as it left a task.
         const loose = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 20 * 60_000);
         yield* recordAgentPublished(owner, loose.id, PUBLISHED);
         const continued = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 10 * 60_000);
@@ -762,7 +723,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           })
           .where(eq(agentTable.id, continued.id));
 
-        // A line a call spoke after the agent's turn settled, which opens no turn of its own.
         const spoken = yield* openAgent(owner, { taskId: plan.id }, 30 * 60_000);
         const settled = yield* turnOf(spoken, TURN_STATUS.SETTLED, 25 * 60_000, { settled: true });
         yield* lineOf(spoken, 1, "Fix the flaky test.", settled);
@@ -778,7 +738,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           createdAt: new Date(NOW - 1000),
           turnId: null,
         });
-        // And a line typed into the agent's call, which the call answers without a turn of the agent's.
         yield* db.insert(messages).values({
           userId: owner,
           conversationId: spoken.conversationId,
@@ -795,7 +754,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           turnId: null,
         });
 
-        // An agent on the shared task working through its starter's own token, which the teammate does not see.
         const hidden = yield* openAgent(owner, { taskId: plan.id }, 5 * 60_000);
         yield* db
           .update(agentTable)
@@ -832,7 +790,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const owner = yield* openUser;
         const plan = yield* startTask(owner, { name: "Teammate invitations" });
         const child = yield* startTask(owner, { name: "Invitation emails" });
-        /** An agent of the kind given on the task, started by the agent named, or by the member where none is. */
         const started = (
           taskId: string,
           kind: typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT,

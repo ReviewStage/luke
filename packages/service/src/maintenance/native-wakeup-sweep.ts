@@ -1,24 +1,3 @@
-/**
- * native-wakeup-sweep.ts -- the scheduled sweep's delivery of the wakeups a native agent's released wait left.
- *
- * A Claude Code agent that waited on one-shot wakeups alone was released:
- * its runner ended the launch, so its sandbox stopped, and named each wakeup
- * with the instant it comes due (`@repo/agent-runner/protocol`'s
- * `RUNNER_RELEASE`), which the events route kept
- * (`@repo/database/models/agent-wakeups`). Once a wakeup is due, the
- * sweep hands its prompt to the agent as a message sent by the agent itself,
- * since the words are its own, the one way a message reaches an agent
- * (`steerAgent`), which relaunches the CLI on the session it resumes, as the
- * wakeup would have started a turn in the CLI that waited. The message goes under a key of the wakeup's own, so a
- * delivery repeated after one that landed is told once.
- *
- * A delivery sends only a wakeup that still stands, so one a Stop or a
- * launch deleted since the claim is never sent, and deletes it once sent;
- * one refused or failed, or cut off mid-send, is said in the log by its kind
- * where it can be and claimed again `RETRY` later, at most `MAX_ATTEMPTS`
- * times, under the same key, so a send that did land is told once. Each call is bounded so the sweep's minute holds.
- */
-
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import { readAgent } from "@repo/database/models/agent-store";
 import {
@@ -36,31 +15,24 @@ import type { SessionsForAccount } from "../automations/automation-runs.js";
 import type { GitHubApp } from "../github/github-app.js";
 
 export const NATIVE_WAKEUP_SWEEP = {
-  /** The most wakeups one sweep delivers; the rest wait for the next minute. */
   MAX_DELIVERIES: 20,
   CONCURRENCY: 5,
-  /** How long after a delivery that failed the wakeup is claimed again. */
   RETRY: Duration.minutes(5),
-  /** How many deliveries of one wakeup are tried before it is given up. */
   MAX_ATTEMPTS: 3,
 } as const;
 
-/** What one sweep of the wakeups due came to: delivered, and not delivered this time. */
 export interface NativeWakeupSweepOutcome {
   delivered: number;
   failed: number;
 }
 
-/** The key a wakeup's message is sent under, so a delivery repeated is told once. */
 function wakeupKey(wakeup: ClaimedAgentWakeup): string {
   return `native-wakeup:${wakeup.id}`;
 }
 
-/** One wakeup handed to its agent as a message of its own, as the header says; whether it landed. */
 const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
   Effect.gen(function* () {
     const agent = yield* readAgent(wakeup.userId, wakeup.agentId);
-    // An agent gone since is no one's to tell, and its wakeups went with it.
     if (Option.isNone(agent)) return true;
     if (!(yield* agentWakeupStands(wakeup.id))) return true;
     const eve = yield* sessionsFor(wakeup.userId);
@@ -73,7 +45,6 @@ const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
     yield* deleteAgentWakeup(wakeup.id);
     return true;
   }).pipe(
-    // The failure's kind alone: nothing of the prompt or the agent rides the line.
     Effect.catch((failure) =>
       Effect.as(
         Effect.logWarning("native wakeups: a wakeup was not delivered", {
@@ -84,11 +55,6 @@ const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
     ),
   );
 
-/**
- * Delivers the native agents' wakeups due at `now`, a sweep's worth,
- * `CONCURRENCY` at a time. A claim the store refused delivers nothing this
- * minute rather than failing the sweeps after it.
- */
 export const sweepNativeWakeups = /* @__PURE__ */ Effect.fn("web/sweepNativeWakeups")(function* (
   sessionsFor: SessionsForAccount,
   now: Date,

@@ -22,16 +22,6 @@ import {
 } from "./sandbox-firewall.js";
 import { vercelSandboxApi } from "./vercel-sandbox-api.js";
 
-/**
- * A sandbox session's firewall as the service writes it, over Vercel's
- * network-policy write answering from a script and a database of the
- * test's own: each write carries what its writer names beside the swaps the
- * session's launch keeps, the kept launch holds no value in the clear, its
- * end and a clear take the swaps off, a renewal's token is what every later
- * write sends, and a placeholder swap matches its header at the placeholder.
- * Synthetic accounts, sessions, agents, and tokens throughout.
- */
-
 const REPOSITORY = "Acme/Relay";
 const WRITE_TOKEN = "ghs_write_fixture";
 const READ_TOKEN = "ghs_read_fixture";
@@ -39,11 +29,9 @@ const BEARER = "Bearer runner-bearer-fixture";
 const APP = { kind: GITHUB_ACCESS.APP } as const;
 const SERVICE_HOST = "app.service.test";
 
-/** Git's Basic credentials for an installation token, as GitHub takes them. */
 const basic = (token: string) =>
   `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
 
-/** The runner's bearer swapped in on our host for the placeholder its launch holds. */
 const BEARER_RULE = {
   match: {
     headers: [
@@ -53,10 +41,8 @@ const BEARER_RULE = {
   transform: [{ headers: { authorization: BEARER } }],
 };
 
-/** The write token on GitHub's two hosts. */
 const WRITE_RULE = { transform: [{ headers: { authorization: basic(WRITE_TOKEN) } }] };
 
-/** The clone's read token on the repository's git endpoint alone. */
 const CLONE_RULE = {
   match: { path: { startsWith: `/${REPOSITORY}.git/` } },
   transform: [{ headers: { authorization: basic(READ_TOKEN) } }],
@@ -65,7 +51,6 @@ const CLONE_RULE = {
 const write = { token: Redacted.make(WRITE_TOKEN), fullName: REPOSITORY, access: APP };
 const read = { token: Redacted.make(READ_TOKEN), fullName: REPOSITORY, access: APP };
 
-/** A swap on the host given, its placeholder and value as named. */
 const swapOf = (domain: string, placeholder: string, value: string) =>
   placeholderSwap({
     domain,
@@ -74,7 +59,6 @@ const swapOf = (domain: string, placeholder: string, value: string) =>
     value: Redacted.make(value),
   });
 
-/** A launch of the fixture agent holding the runner's bearer alone. */
 const bearerLaunch = {
   agentId: "agent-fixture",
   swaps: new Map([
@@ -82,7 +66,6 @@ const bearerLaunch = {
   ]),
 };
 
-/** A sandbox session of its own, in a sandbox of its own, under an account of its own. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
@@ -91,7 +74,6 @@ const ownSession = Effect.gen(function* () {
   return { userId, name: `sandbox-${randomUUID()}`, sandboxSessionId: `sbs_${randomUUID()}` };
 });
 
-/** Vercel as the scenario has it: the session's sandbox found running it, and each policy kept as it lands, in that order. */
 function vercel(session: Effect.Success<typeof ownSession>) {
   const landed: unknown[] = [];
   const layer = sandboxFetchOver(async (url, init) => {
@@ -117,7 +99,6 @@ function vercel(session: Effect.Success<typeof ownSession>) {
   return { layer, landed };
 }
 
-/** The firewall over the scripted Vercel, and its services: the scripted Vercel, and the suite's key ring. */
 const firewallOver = (layer: Layer.Layer<never>) =>
   Effect.map(vercelSandboxApi(async () => fixtureToken()).pipe(Effect.provide(layer)), (api) => ({
     firewall: sandboxFirewall(api),
