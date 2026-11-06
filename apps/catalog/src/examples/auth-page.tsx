@@ -82,7 +82,7 @@ function TeamFields(): React.JSX.Element {
       <FormField label="Name">
         {(control) => <TextField field={control} value={name} onChange={setName} />}
       </FormField>
-      <FormField label="Invite your team" optional>
+      <FormField label="Invite your team" optional description="2 to invite">
         {(control) => (
           <EmailChipsField
             field={control}

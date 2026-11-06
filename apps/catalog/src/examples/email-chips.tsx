@@ -36,6 +36,36 @@ const EVERY_STATE: readonly EmailChip[] = [
   },
 ];
 
+/** A long paste with many addresses wrong, two ways, as a list from a spreadsheet lands. */
+const MANY_WRONG: readonly EmailChip[] = [
+  "dana@acme.dev",
+  "theo",
+  "priya@acme.dev",
+  "sam@gmail",
+  "lee@acme.dev",
+  "kim@",
+  "ana@acme.dev",
+  "ravi",
+  "mo@acme.dev",
+  "jo@acme",
+  "ida@acme.dev",
+  "max",
+  "zoe@acme.dev",
+  "eli@acme.dev",
+  "noor@acme.dev",
+  "ben",
+].map((one) => ({
+  id: one,
+  words: one,
+  typed: one,
+  state:
+    one.includes("@") && one.split("@")[1]?.includes(".")
+      ? EMAIL_CHIP_STATE.DRAFT
+      : EMAIL_CHIP_STATE.BAD,
+  reason:
+    one.includes("@") && one.split("@")[1]?.includes(".") ? undefined : "Not an email address",
+}));
+
 /** A field the example holds the chips of, reading what is typed into addresses as the panel does. */
 function Held({
   start,
@@ -80,6 +110,7 @@ function EmailChips(): React.JSX.Element {
         <Stack gap={GAP.CONTROL}>
           <Held start={[]} />
           <Held start={EVERY_STATE} />
+          <Held start={MANY_WRONG} />
           <Held start={EVERY_STATE.slice(0, 3)} disabled />
         </Stack>
       </CatalogSection>
