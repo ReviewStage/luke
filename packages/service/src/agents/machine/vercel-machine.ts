@@ -251,6 +251,15 @@ const SHARE_WAIT = Duration.minutes(2);
 /** Why checkouts cloned under a running runner were not shared with its user. */
 const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
 
+/** What a place holds where it holds the agent's own checkout: its repository's git folder. */
+const CHECKOUT_GIT_PATH = `${CODER.CHECKOUT_PATH}/.git`;
+
+/** Where a finished checkout's commit identity stands (`finishCheckoutWith`): its repository's own config, read as a file so no ownership check stands in the way. */
+const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
+
+/** Why a checkout cloned before a relaunch was not finished: the store did not answer for its commit identity. */
+const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
+
 /**
  * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
  * member's installed skills, where the sandbox's opening uploaded them,
@@ -815,6 +824,52 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       return yield* gotOn(agent, sessionId, drive, checkout);
     });
 
+  /**
+   * The agent's own checkout made whole in a place about to be relaunched:
+   * cloned where the place holds none, and finished as an opening finishes
+   * it (`finishCheckoutWith`) where it holds no commit identity, as after a
+   * restore whose finish failed; nothing where it holds a finished one. Note
+   * that a place can stand without one, because a launch whose checkout
+   * failed leaves its sandbox and its drive for the next message, which
+   * resumes them as kept and checks nothing out, so its runner would start
+   * in a folder that is not there.
+   */
+  const ownCheckoutRestored = (
+    place: OpenedPlace,
+    target: ConversationTarget,
+    agent: WithRepository<Agent>,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* api.session(sessionOfPlace(place));
+      const finished = yield* session.run({
+        command: "git",
+        args: ["config", "--file", CHECKOUT_CONFIG_PATH, "--get", "user.email"],
+      });
+      if (finished.exitCode === 0) return;
+      const holds = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
+      const [read, plan] = yield* Effect.all(
+        [
+          agentRepositoryRead(target, agent),
+          agentCheckoutPlan(target, agent).pipe(
+            Effect.mapError((failure) =>
+              failure instanceof CheckoutRefused
+                ? failure
+                : new CheckoutRefused({ reason: RESTORE_PLAN_UNREAD }),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const sandbox = yield* checkoutIn(place, agent.userId);
+      if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
+      yield* finishCheckoutWith(sandbox, plan);
+      yield* Effect.logWarning(
+        holds.exitCode === 0
+          ? "A relaunch found its agent's checkout unfinished and finished it"
+          : "A relaunch found no checkout of its agent's repository and cloned it",
+      );
+    });
+
   return {
     ...vercelLifecycle(api),
 
@@ -892,9 +947,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
     // so only a repository added since the place opened is cloned here. A runner already running
     // keeps its repository credential through the clone, minted afresh, since each write is whole.
-    checkOutExtras: (place, target, agent, shared) =>
+    // Before a relaunch (not `shared`), the agent's own checkout is cloned first where the place
+    // holds none (`ownCheckoutRestored`).
+    checkOutMissing: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
+        if (!shared) yield* ownCheckoutRestored(place, target, agent);
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
         const beside = shared ? yield* agentFirewallSources(target, agent) : {};

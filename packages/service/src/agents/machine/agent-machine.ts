@@ -376,14 +376,16 @@ export interface AgentMachineService {
     files: readonly SandboxFile[],
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /**
-   * The repositories the agent works in beside its own that the running
-   * place does not hold yet cloned into their folders, on the token minted
-   * for each, the ones it holds left as they stand; where the runner already
-   * runs (`shared`), each folder is then shared with the runner's user as a
-   * launch shares it, which a launch to come does itself. Nothing on a
-   * machine that clones no extras, a device's, nor for an agent with none.
+   * What the running place does not hold yet of the agent's repositories
+   * cloned: before a relaunch (not `shared`), its own checkout where the
+   * place holds none; then the repositories it works in beside its own,
+   * into their folders, on the token minted for each, the ones it holds
+   * left as they stand; where the runner already runs (`shared`), each
+   * folder is then shared with the runner's user as a launch shares it,
+   * which a launch to come does itself. Nothing on a machine that clones
+   * nothing for a launch, a device's, nor for an agent with no repository.
    */
-  readonly checkOutExtras: (
+  readonly checkOutMissing: (
     place: MachinePlace,
     target: ConversationTarget,
     agent: Agent,
@@ -444,10 +446,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what it clones beside the agent's own, handing a runner its credentials, and launching a runner in it. */
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what the place does not hold yet, handing a runner its credentials, and launching a runner in it. */
 export type MachineLifecycle = Omit<
   AgentMachineService,
-  "layout" | "open" | "resume" | "checkOutExtras" | "deliverCredentials" | "launchRunner"
+  "layout" | "open" | "resume" | "checkOutMissing" | "deliverCredentials" | "launchRunner"
 >;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(

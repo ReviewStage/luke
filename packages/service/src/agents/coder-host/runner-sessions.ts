@@ -1176,10 +1176,11 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const target = { userId, conversationId: agent.conversationId };
-        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares.
+        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares,
+        // as is the agent's own where the place holds no checkout of it, as a launch whose checkout failed leaves it.
         const [, routing, credential] = yield* Effect.all(
           [
-            machine.checkOutExtras(running, target, agent, false),
+            machine.checkOutMissing(running, target, agent, false),
             readAgentRouting(userId, agent.id),
             harness.launch(agent),
           ],
@@ -1580,7 +1581,7 @@ export const runnerSessions = <
      * A repository added beside the agent's own handed to the place it runs
      * in now, under the agent's runner lease: the credential set afresh for
      * the whole set, and every extra the place does not hold cloned and
-     * shared with the runner's user (`checkOutExtras`). Nothing where no place
+     * shared with the runner's user (`checkOutMissing`). Nothing where no place
      * runs, since the next launch clones it, a fresh place's with the rest
      * and a resumed one's as it relaunches (`relaunched`).
      */
@@ -1595,7 +1596,7 @@ export const runnerSessions = <
         }
         const target = { userId, conversationId: agent.conversationId };
         yield* renewCredential(target, agent, running);
-        yield* machine.checkOutExtras(running, target, agent, true);
+        yield* machine.checkOutMissing(running, target, agent, true);
         return RUNNER_CHECKOUT.CHECKED_OUT;
       });
 
