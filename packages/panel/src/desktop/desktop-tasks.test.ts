@@ -56,12 +56,7 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
-import {
-  type FixedSidePanelTab,
-  PULL_REQUEST_VIEW,
-  SIDE_PANEL_TAB,
-  type SidePanelTab,
-} from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
@@ -75,6 +70,7 @@ import { askKept } from "../act.js";
 import { handHostReads, handMembers, handState, registryWith } from "../testing/app-state.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
+import type { SummaryPin } from "./task-summary.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -94,10 +90,18 @@ afterEach(() => {
 });
 
 /** The side panel shown on the plan's comments beside it. */
+/** A File tab of the task, which the panel draws in these tests. */
+const NOTES = { file: "docs/notes.md" };
+
+/** The file the File tab shows, opened on the task. */
+const NOTES_OPENED = { path: NOTES.file, range: undefined, opened: 0, browsedOn: TASK.id };
+
 const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
   ...tasksControl().sidePanel,
   open: true,
-  tab: SIDE_PANEL_TAB.COMMENTS,
+  strip: [NOTES],
+  files: [NOTES_OPENED],
+  tab: NOTES,
 };
 
 test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
@@ -297,7 +301,7 @@ test("a wide task's details with no agent offer New agent at their head, which o
 const DRAFT_TAB = { draft: "draft" };
 
 /** The task's page with the side panel open on `tab`, as markup. */
-function panelTab(tab: FixedSidePanelTab): HTMLElement {
+function panelTab(): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -312,7 +316,7 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
           tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
           tab: DRAFT_TAB,
         },
-        sidePanel: { ...tasksControl().sidePanel, open: true, tab },
+        sidePanel: DOCUMENT_PANEL,
       }),
     }),
   );
@@ -322,7 +326,7 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
 }
 
 test("the panel's tab panel is labeled by its chosen tab, which controls it", () => {
-  const side = panelTab(SIDE_PANEL_TAB.COMMENTS).querySelector("aside[aria-label='Panel']");
+  const side = panelTab().querySelector("aside[aria-label='Panel']");
   const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
   const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
   assert.ok(panel && chosen, "the panel shows its chosen tab");
@@ -852,7 +856,11 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 });
 
 /** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
-function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
+function panelPage(
+  tab: SidePanelTab,
+  overrides: Partial<TasksControl> = {},
+  summary: SummaryPin = UNPINNED_SUMMARY,
+) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
@@ -861,7 +869,7 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
         onRegistry(
           registryWith(experimentsOn(EXPERIMENT.PLANS)),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
+            summary,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -896,16 +904,16 @@ test("the plan stays drawn, hidden, while an agent's tab of the column is shown,
       openAgents: [agentId],
     },
   });
-  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
+  const page = panelPage(NOTES, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
   assert.ok(document, "the plan is drawn on Overview");
   assert.equal(document.hasAttribute("hidden"), false);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS, column({ agent: agentId }));
+  page.draw(NOTES, column({ agent: agentId }));
   assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
   assert.equal(document.hasAttribute("hidden"), true);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
+  page.draw(NOTES, column(MAIN_TAB.OVERVIEW));
   assert.equal(page.container.querySelector(".desktop-document"), document);
   assert.equal(document.hasAttribute("hidden"), false);
   page.unmount();
@@ -917,20 +925,26 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   );
   const closed: string[] = [];
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, {
-    mainTabs: {
-      ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
-      tab: { agent: agentId },
-      onClose: () => closed.push("column"),
+  const page = panelPage(
+    NOTES,
+    {
+      mainTabs: {
+        ...tasksControl().mainTabs,
+        tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+        tab: { agent: agentId },
+        onClose: () => closed.push("column"),
+      },
+      sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
+      pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
     },
-    sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
-  });
+    // The summary stands pinned beside the document, since the rail draws the panel's kinds alone.
+    { ...UNPINNED_SUMMARY, pinned: true },
+  );
   act(() => relayout());
-  const row = [
-    ...page.container.querySelectorAll<HTMLButtonElement>(".task-summary li button"),
-  ].find((each) => each.getAttribute("aria-label") === "Comments");
-  assert.ok(row, "the summary offers the Comments tab");
+  const row = [...document.querySelectorAll<HTMLButtonElement>("li button")].find((each) =>
+    each.textContent?.includes("Invite funnel"),
+  );
+  assert.ok(row, "the summary offers the page's tab");
   act(() => row.click());
   act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
 

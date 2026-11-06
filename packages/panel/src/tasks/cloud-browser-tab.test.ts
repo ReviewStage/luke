@@ -44,7 +44,6 @@ import {
 } from "./cloud-browser-tabs.js";
 import {
   type OpenTask,
-  SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   type SidePanelControl,
   useSidePanel,
@@ -139,11 +138,7 @@ test("a listed cloud Browser tab stands in the strip only once opened in this wi
   assert.notDeepEqual(current().tab, { cloudBrowser: TAB });
 
   panel.rerender(createElement(Probe, { listed: [] }));
-  assert.equal(
-    current().tab,
-    SIDE_PANEL_TAB.COMMENTS,
-    "a tab the service no longer lists gives way",
-  );
+  assert.equal(current().tab, undefined, "a tab the service no longer lists gives way");
 });
 
 test("a cloud Browser tab's pane spins while it waits for the page, draws it once a frame arrives, and takes the tab over and hands it back", async () => {

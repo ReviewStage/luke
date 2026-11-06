@@ -26,7 +26,6 @@ import {
   Tooltip,
   usePressAway,
 } from "@repo/ui";
-import { openThread, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
@@ -46,16 +45,15 @@ import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
-import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { openPlanStanding, TAB_KIND } from "../tasks/tab-look.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { ArchivedAgents, SUMMARY_GLYPH } from "./agent-archive.js";
-import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry, ROW_COUNT } from "./main-tabs.js";
+import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
 import { type CountNoun, foldedCount, sidebarFold } from "./sidebar-fold.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
@@ -411,7 +409,7 @@ function withCards(
  * settled, and opens the window's Inbox narrowed to the plan; then the
  * panel's kinds and what they hold, then the agents.
  */
-function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
+function summaryRows(tasks: TasksControl, inbox: InboxBoardView) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
   const taskId = tasks.activeTaskId;
@@ -419,25 +417,11 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
     taskId !== undefined && inbox.open.length + inbox.settled.length > 0
       ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length)]
       : [];
-  // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
-  const commented = openComments !== undefined && openComments > 0;
-  const commentsRow =
-    commented || sidePanel.used.includes(SIDE_PANEL_TAB.COMMENTS)
-      ? [
-          countedEntry(
-            SIDE_PANEL_TAB.COMMENTS,
-            () => sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS),
-            openComments ?? 0,
-          ),
-        ]
-      : [];
   const rows = [
     ...inboxRow,
-    ...commentsRow,
     ...panelEntries({
       panel: sidePanel,
-      // Comments stand above with their count.
-      kinds: sidePanel.used.filter((kind) => kind !== SIDE_PANEL_TAB.COMMENTS),
+      kinds: sidePanel.used,
       changes,
       pages: tasks.pages ?? [],
       plan: openPlanStanding(tasks),
@@ -445,17 +429,6 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
     ...agentEntries(mainTabs, agents),
   ];
   return { rows, changes };
-}
-
-/** A panel kind's row with how many of its things it counts at its end, as the Inbox's row counts what waits. */
-function countedEntry(
-  tab: typeof SIDE_PANEL_TAB.COMMENTS,
-  onPick: () => void,
-  count: number,
-): AddEntry {
-  const row = { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab }) };
-  const endMark = count === 0 ? undefined : <span className={ROW_COUNT}>{count}</span>;
-  return { row, endMark, onPick };
 }
 
 /** `entries` under their headings in their order, each heading only where it has a row. */
@@ -478,20 +451,15 @@ function summarySections(
   inbox: InboxBoardView,
   held: HeldTranscripts,
   onOpenAgent: (agentId: string) => void,
-  openComments: number | undefined,
 ): SummarySection[] {
-  const { rows, changes } = summaryRows(tasks, inbox, openComments);
+  const { rows, changes } = summaryRows(tasks, inbox);
   const entries = withCards(rows, { tasks, inbox, held, changes, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
 
 /** Whether the plan's summary lists anything, which is whether it and its toolbar button are drawn at all. */
-export function summaryHolds(
-  tasks: TasksControl,
-  inbox: InboxBoardView,
-  openComments?: number,
-): boolean {
-  return sectionsOf(summaryRows(tasks, inbox, openComments).rows, tasks.agents).length > 0;
+export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolean {
+  return sectionsOf(summaryRows(tasks, inbox).rows, tasks.agents).length > 0;
 }
 
 /**
@@ -914,14 +882,7 @@ export function TaskSummary({
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const comments = usePlanCommentsControl();
-  const sections = summarySections(
-    tasks,
-    inbox,
-    held,
-    onOpenAgent,
-    comments?.threads.filter(openThread).length,
-  );
+  const sections = summarySections(tasks, inbox, held, onOpenAgent);
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,

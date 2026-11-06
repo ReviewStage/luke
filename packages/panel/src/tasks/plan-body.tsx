@@ -64,7 +64,12 @@ import {
   useEditReader,
 } from "./edit-ref.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
-import { PlanCommentLayer, useCommentFocus, useEditorComment } from "./plan-comments.js";
+import {
+  CommentsToggle,
+  PlanCommentLayer,
+  useCommentFocus,
+  useEditorComment,
+} from "./plan-comments.js";
 import {
   DocumentBlock,
   EditableTitle,
@@ -300,6 +305,7 @@ function PlanByline({
   place,
   saves,
   onShowHistory,
+  comments,
 }: {
   task: Task;
   /** The plan's last edit, said after who created the task; none while nothing changed, or while Plans is off and there is no plan to have edited. */
@@ -308,6 +314,8 @@ function PlanByline({
   /** How many of the reader's saves of this plan landed, which its Saved tick confirms; none while Plans is off, which saves nothing. */
   saves: number | undefined;
   onShowHistory: ShowHistory | undefined;
+  /** Whether the plan's comments are drawn here, whose toggle ends the line. */
+  comments: boolean;
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
   const creator = useCreator(task, place.reader.readerId);
@@ -333,6 +341,7 @@ function PlanByline({
         )
       }
       saved={saves === undefined ? undefined : <SavedTick saves={saves} />}
+      end={comments ? <CommentsToggle /> : undefined}
     />
   );
 }
@@ -1355,6 +1364,7 @@ export const PlanBody = memo(function PlanBody({
             place={place}
             saves={documented ? editing.saves : undefined}
             onShowHistory={onShowHistory}
+            comments={documented && commentsHere}
           />
           {documented ? <ChangedLine looks={looks} marks={marks} /> : null}
           <Fragment key={HEAD_KEY}>{head}</Fragment>

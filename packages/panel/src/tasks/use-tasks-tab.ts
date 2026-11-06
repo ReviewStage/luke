@@ -195,7 +195,7 @@ import {
   usePlanHistory,
 } from "./use-plan-history.js";
 import {
-  drawnKinds,
+  DRAWN_KINDS,
   drawsChanges,
   drawsSubagent,
   drawsTerminal,
@@ -731,7 +731,7 @@ export interface TasksControl {
   commentReveal:
     | { readonly planId: string; readonly thread: string; readonly ask: number }
     | undefined;
-  /** The task's page took the ask, so a later visit to the task neither opens the thread nor its Comments tab again. */
+  /** The task's page took the ask, so a later visit to the task opens the thread neither beside its words nor in its list again. */
   onCommentRevealed: (ask: number) => void;
   /** Opens the window's Inbox narrowed to one task's items, on the item named, or on nothing chosen: what a task's "needs you" count, or an agent's waiting threads, ask. */
   onShowInbox: (narrowed: { readonly taskId: string; readonly itemId?: string }) => void;
@@ -1690,7 +1690,7 @@ export function useTasksTab(input: {
           : { agentId: panelPagesAgent },
     [panelTaskId, panelPagesAgent],
   );
-  // The account's experiments, which hold what the panel reopens and where a link to the plan's parts lands.
+  // The account's experiments, which hold where a link to the plan's parts lands.
   const experiments = useExperimentChoices();
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
@@ -3468,11 +3468,11 @@ export function useTasksTab(input: {
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
-  // known before its task opens: the Inbox's of old and Comments with Plans off draw on none.
+  // known before its task opens: the retired Inbox and Comments draw on none.
   const drawsOnAnyTask = (closed: ClosedTab): boolean =>
     closed.strip !== CLOSED_TAB_STRIP.SIDE_PANEL ||
     typeof closed.tab !== "string" ||
-    drawnKinds(experiments).some((kind) => kind === closed.tab);
+    DRAWN_KINDS.some((kind) => kind === closed.tab);
   const drawsAgain = (closed: ClosedTab): boolean => {
     const { tab } = closed;
     const agentIds = agents.agentIds;
@@ -3632,9 +3632,7 @@ export function useTasksTab(input: {
       return;
     }
     // Note that the plan's and the Inbox's kinds of old stand nowhere in the panel now, nor a kind whose experiment is off, so they are passed over.
-    const closedKind = sidePanel.closedTabs.findLast((tab) =>
-      drawnKinds(experiments).includes(tab),
-    );
+    const closedKind = sidePanel.closedTabs.findLast((tab) => DRAWN_KINDS.includes(tab));
     if (closedKind === undefined) sidePanel.onToggle();
     else sidePanel.onChoose(closedKind);
   };

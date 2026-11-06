@@ -10,16 +10,22 @@ import {
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
 } from "@repo/features/plan-comment-wire";
+import type { Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
+import { registryWith } from "../testing/app-state.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
+import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { PlanBody } from "./plan-body.js";
+import { CommentFocusScope } from "./plan-comments.js";
 
 /**
  * A plan comment the service refuses goes back to its box above whatever
@@ -53,6 +59,13 @@ const THREAD: PlanCommentThread = {
   createdAt: 1,
   updatedAt: 1,
   revision: 1,
+};
+
+/** The plan the thread stands on, its words under Goal. */
+const PLAN: Task = {
+  ...DOCUMENT_TASK,
+  id: "plan-1",
+  document: { body: "## Goal\n\nAn invite is a single-use link.", assumptions: [] },
 };
 
 const roots: Root[] = [];
@@ -92,7 +105,7 @@ function SignedIn({ account }: { account: Identity }): null {
 function drawn(
   landing: () => Promise<boolean>,
   asked: PlanCommentActionRequest[] = [],
-  registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
+  registry: AtomRegistry.AtomRegistry = registryWith(experimentsOn(EXPERIMENT.PLANS)),
   account: Identity = DEAN,
 ): HTMLElement {
   const control: PlanCommentsControl = {
@@ -113,9 +126,11 @@ function drawn(
   const root = createRoot(container);
   roots.push(root);
   const draw = (reader: Identity) => {
-    const tab = createElement(PlanCommentsTab, {
-      doors: { agents: undefined, me: reader.id },
-      onShowDocument: () => undefined,
+    // Note that the thread is drawn whole, its reply field open, in the plan's comments list.
+    const tab = createElement(PlanBody, {
+      task: PLAN,
+      reader: { readerId: reader.id },
+      sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
     });
     const tree = createElement(
       Fragment,
@@ -130,6 +145,7 @@ function drawn(
     act(() => root.render(onRegistry(registry, tree)));
   };
   draw(account);
+  act(() => container.querySelector<HTMLButtonElement>(".comments-toggle button")?.click());
   redrawAs = draw;
   return (
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${THREAD_ID}"]`) ??
@@ -207,7 +223,7 @@ test("a refused reply's files go back before the files pasted while it was out",
 async function refusedBesideNewer(refused: string, newer: string, account: Identity = DEAN) {
   const answer = Promise.withResolvers<boolean>();
   const asked: PlanCommentActionRequest[] = [];
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
   const card = drawn(landing, asked, registry, account);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
@@ -298,7 +314,9 @@ test("a reply refused while only the reader's address was known stands with its 
   const answer = Promise.withResolvers<boolean>();
   const asked: PlanCommentActionRequest[] = [];
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
-  const card = drawn(landing, asked, AtomRegistry.make(), { email: DEAN.email });
+  const card = drawn(landing, asked, registryWith(experimentsOn(EXPERIMENT.PLANS)), {
+    email: DEAN.email,
+  });
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
   await pastePicture(field, "invite.png");
   typeInto(field, TOO_LONG.REFUSED);

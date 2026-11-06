@@ -19,7 +19,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { useStageRoom } from "../stage-room.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
+import { useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, registryWith } from "../testing/app-state.js";
@@ -80,8 +80,11 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The task open in the window, holding a comment, so its panel has a tab to show. */
-const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: { [SIDE_PANEL_TAB.COMMENTS]: true } };
+/** The task open in the window. */
+const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: {} };
+
+/** The task's agent, whose Pull request tab the panel was left open on, so it has a tab to show. */
+const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** The desktop's window at its usual width. */
 const WIDE = 1280;
@@ -102,8 +105,11 @@ beforeEach(() => {
     JSON.stringify({
       open: true,
       tabs: ["plan", "inbox", "comments"],
-      tab: "comments",
+      tab: { changes: AGENT },
       width: 400,
+      tasks: {
+        [DOCUMENT_TASK.id]: { opened: [], closed: [], changes: [{ changes: AGENT }] },
+      },
     }),
   );
   fakeAppPlatform(QUIET_PANEL);
@@ -136,7 +142,7 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const sidebar = useSidebarCollapse(false, stage.compact);
-  const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], undefined, room);
+  const sidePanel = useSidePanel(undefined, OPEN_TASK, [AGENT], [], [], [AGENT], room);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
   const shell = createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, onCancelSignIn: ignore },
