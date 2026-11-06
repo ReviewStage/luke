@@ -26,7 +26,8 @@ import type { AppHostRead, AppStateDelivery } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload } from "@repo/host/contract";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { SettingsPage, timeRuntime } from "@repo/ui";
+import { SettingsPage } from "@repo/ui";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -307,11 +308,9 @@ function ownRegistry(): AtomRegistry.AtomRegistry {
 
 /** A registry whose atoms wait on this clock, as the window's would on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  serveEffectsOn(Context.make(Clock.Clock, clock));
   const registry = AtomRegistry.make({
-    initialValues: [
-      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-    ],
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
   registries.push(registry);
   return registry;
