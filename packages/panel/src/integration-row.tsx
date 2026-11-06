@@ -642,8 +642,10 @@ export function IntegrationRow({
           ) : !granting ? null : (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
+              // Note that the name starts with the words the button shows, so a voice command that says them finds it, and names the row, since several rows may offer the same words.
+              label={`${grantLabel(status, signIn)} ${name}`}
               busy={connecting}
-              busyLabel="Connecting"
+              busyLabel={`Connecting ${name}`}
               onClick={connect}
             >
               {grantLabel(status, signIn)}
