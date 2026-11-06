@@ -673,6 +673,8 @@ const FIRST_LAUNCH: SidePanelState = {
 export interface SidePanelControl {
   /** Whether the panel is drawn: open, and its strip holding a tab; never with nothing in it. */
   open: boolean;
+  /** The stop the panel belongs to: a task, an agent's page, or an Inbox item, two items of one task being two stops; none while no task stands. */
+  stop: string | undefined;
   /** Whether the toggle or ⌘T asked, with nothing to show, for the "+" menu, which hangs from the toggle rather than an empty panel. */
   toggleAsked: boolean;
   /** Whether the open panel fills the work column in the document's place: asked for, or the only way a narrow room holds it. */
@@ -2430,6 +2432,7 @@ export function useSidePanel(
   );
   return {
     open: shown,
+    stop,
     tabs,
     strip,
     order: orderOn(state, taskId),

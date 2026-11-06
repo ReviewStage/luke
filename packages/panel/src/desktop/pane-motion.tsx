@@ -34,7 +34,9 @@
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
- * frame with nothing easing behind it.
+ * frame with nothing easing behind it. Nor does the window going to another
+ * place, since navigation does not travel (docs/DESIGN.md): a panel the new
+ * place stands open, or shut, lands there at once, as the window opens.
  */
 
 import { MOTION_TOKEN, tokenTiming } from "@repo/ui";
@@ -130,6 +132,8 @@ type SheetMotions = WeakMap<Element, SheetMotion>;
 interface PaneGlideProps {
   root: RefObject<HTMLElement | null>;
   layout: PaneLayout;
+  /** Where the window stands, the side panel's stop: a change to it lands the panes at once rather than playing them. */
+  place?: string | undefined;
 }
 
 /** It holds no state of its own. */
@@ -387,6 +391,7 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
    * it stood.
    */
   readonly #land = (): void => {
+    if (!("getAnimations" in document)) return;
     for (const motion of document.getAnimations()) {
       if (motion.id === PANE_MOTION) motion.finish();
     }
@@ -398,8 +403,8 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
    * waiting on its column's width among it, and none of that is a change
    * anyone asked for: the window opens as it stands.
    */
-  override componentDidMount(): void {
-    window.addEventListener("resize", this.#land);
+  #open(): void {
+    if (this.#opening !== undefined) cancelAnimationFrame(this.#opening);
     this.#opening = requestAnimationFrame(() => {
       this.#opening = requestAnimationFrame(() => {
         this.#opening = undefined;
@@ -407,13 +412,29 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
     });
   }
 
+  override componentDidMount(): void {
+    window.addEventListener("resize", this.#land);
+    this.#open();
+  }
+
   override componentWillUnmount(): void {
     window.removeEventListener("resize", this.#land);
     if (this.#opening !== undefined) cancelAnimationFrame(this.#opening);
   }
 
+  /**
+   * Note that a place arrived at opens as the window does, every motion
+   * under way landed where it was going and nothing played over its first
+   * frames, because the panel the window left, or the one the place stands,
+   * is no change anyone asked for there.
+   */
   override getSnapshotBeforeUpdate(previous: PaneGlideProps): Snapshot | null {
     const root = this.props.root.current;
+    if (previous.place !== this.props.place) {
+      this.#land();
+      this.#open();
+      return null;
+    }
     if (root === null || this.#opening !== undefined) return null;
     if (sameLayout(previous.layout, this.props.layout)) return null;
     return measure(root, this.#sheets);

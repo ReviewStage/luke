@@ -527,6 +527,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     sidePanel: {
       open: false,
+      stop: undefined,
       fullScreen: false,
       fullScreenOnly: false,
       newTabAsked: false,
