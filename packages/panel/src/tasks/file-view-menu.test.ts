@@ -7,11 +7,12 @@
 import assert from "node:assert/strict";
 import type { TaskFileRequest } from "@repo/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, readingFiles } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -108,6 +109,14 @@ function press(container: HTMLElement, name: string): void {
   act(() => button.click());
 }
 
+/** Answers the view's file reads through `read`, and its tree's listings as unanswered. */
+function answerFileReads(read: (request: TaskFileRequest) => Promise<TasksFileAnswer>): void {
+  fakeActPort({
+    ...readingFiles(read),
+    [ACT_KIND.TASKS_TREE]: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+  });
+}
+
 test("View settings on a File tab offers its lines' wrap, numbers, syntax theme, and type, and each is drawn on its lines at once", async () => {
   const container = mount();
   await wholeFileDrawn(container);
@@ -194,6 +203,7 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
       text: { path: PATH, repository: "acme/relay", branch: "main", text },
     });
   };
+  answerFileReads(readFile);
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -202,12 +212,9 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
       onRegistry(
         AtomRegistry.make(),
         createElement(FileView, {
-          taskId: "task-1",
+          place: { taskId: "task-1" },
           repository: null,
           file: { path: PATH, range: undefined, opened: 1 },
-          readFile,
-          readFolder: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-          readWhole: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
           openGitHub: () => undefined,
           treeOpen: false,
           onToggleTree: () => undefined,
@@ -249,14 +256,12 @@ test("on a phone a File tab draws no bar, and the task's header's ⋯ offers eve
             },
           },
     );
+  answerFileReads(readFile);
   const { element, handed } = onPhone(
     createElement(FileView, {
-      taskId: "task-1",
+      place: { taskId: "task-1" },
       repository: "acme/relay",
       file: { path: PATH, range: undefined, opened: 1 },
-      readFile,
-      readFolder: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-      readWhole: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
       openGitHub: (url) => opened.push(url),
       treeOpen: false,
       onToggleTree: () => undefined,

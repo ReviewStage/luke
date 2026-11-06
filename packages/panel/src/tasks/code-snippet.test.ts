@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { getSharedHighlighter } from "@pierre/diffs";
 import type { InboxCodeBlock } from "@repo/features/inbox-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
-import { getSharedHighlighter } from "@pierre/diffs";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -12,6 +13,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -56,11 +58,12 @@ const ANSWER: TasksFileAnswer = {
 
 /** The item's code card, reading the file's lines through `ANSWER`. */
 function inboxCode(): ReactElement {
+  fakeActPort({ [ACT_KIND.TASKS_FILE]: () => Promise.resolve(ANSWER) });
   return createElement(InboxCodeCard, {
     block: BLOCK,
     code: {
       repository: "acme/relay",
-      readFile: () => Promise.resolve(ANSWER),
+      place: { taskId: "task-1" },
       onOpenFile: () => {},
     },
   });
