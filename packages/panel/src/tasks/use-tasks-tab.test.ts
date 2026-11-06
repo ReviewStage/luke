@@ -64,7 +64,6 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
-import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
@@ -86,7 +85,7 @@ import {
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { listedAgent } from "../testing/tasks-control.js";
+import { ADMIN_AWAY, listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
@@ -226,11 +225,8 @@ function mount(
     windowHistory = useWindowHistory({
       known: true,
       link: undefined,
-      tab: PANEL_TAB.TASKS,
-      onTabChange: () => undefined,
-      settingsView: SETTINGS_VIEW.ACCOUNT,
-      onSettingsViewChange: () => undefined,
-      settingsListed: true,
+      routed: undefined,
+      settingsList: undefined,
       onSettingsList: () => undefined,
       room,
       tasks,
@@ -292,6 +288,7 @@ function mount(
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
       room: held.room,
+      adminView: ADMIN_AWAY,
     });
     return held.history
       ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
@@ -1653,35 +1650,6 @@ test("a Vespin link to a person opens their page in the workspace its slug names
   assert.equal(tab.control().inboxView.open, false);
   assert.equal(tab.control().personView.userId, "user-charles");
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
-});
-
-test("a Vespin link to the Admin place opens it on its Overview, and one to a view opens that view, in the place of the Inbox, listing no other workspace", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const listed = tab.control().workspace?.id;
-  act(() => tab.control().inboxView.onOpen());
-
-  act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.ADMIN } }));
-  assert.equal(tab.control().inboxView.open, false);
-  assert.equal(tab.control().adminView.open, true);
-  assert.deepEqual(tab.control().adminView.view, { kind: "dashboard" });
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.ADMIN, userId: "user-charles" },
-    }),
-  );
-  assert.deepEqual(tab.control().adminView.view, { kind: "account", id: "user-charles" });
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.ADMIN, section: "workspaces" },
-    }),
-  );
-  assert.deepEqual(tab.control().adminView.view, { kind: "workspaces" });
-  // The place reads every workspace's accounts, so its link's workspace lists none.
-  assert.equal(tab.control().workspace?.id, listed);
 });
 
 test("a Vespin link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {

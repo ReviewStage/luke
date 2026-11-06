@@ -435,7 +435,8 @@ test("a Return pressed before the rows are ranked for the words typed chooses th
   await act(() => Promise.resolve());
 
   assert.deepEqual(before, { tabs: [], views: [] }, "nothing chosen from the earlier rows");
-  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+  // Note that choosing the page is what opens Settings on it (`settings-link.ts`).
+  assert.deepEqual(sent, { tabs: [], views: [SETTINGS_VIEW.INTEGRATIONS] });
 });
 
 test("a Return held for its words is let go once other words are typed before they are ranked, choosing nothing", async () => {
@@ -469,7 +470,8 @@ test("choosing a page opens Settings on that page", () => {
 
   press("Integrations");
 
-  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+  // Note that choosing the page is what opens Settings on it (`settings-link.ts`).
+  assert.deepEqual(sent, { tabs: [], views: [SETTINGS_VIEW.INTEGRATIONS] });
   assert.equal(paletteShown(), false, "the palette closed");
 });
 
@@ -2076,7 +2078,8 @@ test("People lists the listed workspace's members as every people menu does, the
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Charles Pan");
   act(() => row.click());
   assert.deepEqual(opened, ["user-charles"]);
-  assert.deepEqual(sent.tabs, []);
+  // A routed place standing, Settings or Admin, is left for the page.
+  assert.deepEqual(sent.tabs, [PANEL_TAB.TASKS]);
 });
 
 /** What the list says where no row stands: its notice, or "No results match". */

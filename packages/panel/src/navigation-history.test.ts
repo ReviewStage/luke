@@ -4,14 +4,16 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { isAgentTab, isDraftTab, isFileTab, isPageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { createMemoryHistory } from "@tanstack/react-router";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { useAdminRoute } from "./admin/admin-route.js";
+import type { AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { stepTitle } from "./history-titles.js";
 import { useCopyLink } from "./links-at-hand.js";
@@ -22,14 +24,15 @@ import {
   savesStep,
   throughHistory,
   useHistoryMouseButtons,
+  useRoutedStanding,
   useWindowHistory,
   type WindowHistoryLists,
 } from "./navigation-history.js";
-import { PANEL_TAB } from "./panel-tabs.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { chooseInboxTask, leaveInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
+  type AdminViewControl,
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
   type LeaveAsk,
@@ -91,18 +94,27 @@ function mount(
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;
+  let admin: AdminViewControl | undefined;
   function Probe() {
     const [tasks, setTasks] = useState(initial);
     restand = setTasks;
-    const copyLink = useCopyLink(tasks, undefined, true);
+    // Admin stands where the router does, as the window's root reads it.
+    admin = useAdminRoute({
+      listedSlug: () => tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug,
+      onClose: () => undefined,
+    });
+    const copyLink = useCopyLink(
+      tasks,
+      undefined,
+      true,
+      SHELL_ROOM.WIDE,
+      admin.open ? admin.view : undefined,
+    );
     history = useWindowHistory({
       known: true,
-      link: copyLink.standing,
-      tab: PANEL_TAB.TASKS,
-      onTabChange: () => undefined,
-      settingsView: SETTINGS_VIEW.ACCOUNT,
-      onSettingsViewChange: () => undefined,
-      settingsListed: true,
+      link: copyLink.placed,
+      routed: useRoutedStanding(),
+      settingsList: undefined,
       onSettingsList: () => undefined,
       room: SHELL_ROOM.WIDE,
       title: titled?.(tasks),
@@ -125,6 +137,8 @@ function mount(
       return history;
     },
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
+    /** Opens an Admin view by the router, as Admin's own doors do. */
+    openAdmin: (view: AdminView) => act(() => admin?.onOpen(view)),
     /** Presses Escape where it reaches the Tasks tab, as the window's own listener hands it on. */
     escape: () => act(() => void shown?.back()),
     /** The address of every entry the router's history holds, oldest first. */
@@ -296,7 +310,10 @@ test("a move landing where the history no longer holds the window's step, while 
 
 test("a move landing on an entry holding no step opens Home, as a page loaded there does, and Home writes its step on it", () => {
   const homes: string[] = [];
-  const held = windowRouter();
+  // An entry no window wrote, as one the page first loaded on, behind the one the window opens on.
+  const loaded = () =>
+    createMemoryHistory({ initialEntries: ["/acme/automations", "/app"], initialIndex: 1 });
+  const held = windowRouter(loaded());
   const window = mount(tasksControl(), held);
   window.stand(
     tasksControl({
@@ -307,14 +324,15 @@ test("a move landing on an entry holding no step opens Home, as a page loaded th
     }),
   );
 
-  // An entry no window wrote, as one the page first loaded on.
-  act(() => held.history.push("/acme/automations"));
+  window.moveHistory(-2);
   assert.deepEqual(homes, ["home"], "the plan is left for Home");
+  unmountAll();
 
-  window.stand(tasksControl());
-  act(() => held.history.push("/acme/automations"));
-  assert.equal(held.history.location.href, "/app", "the window on Home writes its step there");
-  assert.ok(savesStep(held.history.location));
+  const home = windowRouter(loaded());
+  mount(tasksControl(), home);
+  act(() => home.history.go(-1));
+  assert.equal(home.history.location.href, "/app", "the window on Home writes its step there");
+  assert.ok(savesStep(home.history.location));
 });
 
 /** The window on the Inbox, or on the task `onTask` stands, each Inbox opened recorded in `inboxes` and each task left in `left`. */
@@ -670,14 +688,10 @@ test("the Admin place stands at its workspace's /admin though a task stands unde
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const task = onTask([ACME]);
-  const admin = (view: TasksControl["adminView"]["view"]): TasksControl => ({
-    ...task,
-    adminView: { ...task.adminView, open: true, view },
-  });
   const window = mount(task);
-  window.stand(admin({ kind: "dashboard" }));
-  window.stand(admin({ kind: "cost" }));
-  window.stand(admin({ kind: "account", id: "user-ada" }));
+  window.openAdmin({ kind: "dashboard" });
+  window.openAdmin({ kind: "cost" });
+  window.openAdmin({ kind: "account", id: "user-ada" });
   act(() => runAppCommand(APP_COMMAND.COPY_LINK));
   await settle();
 
@@ -828,8 +842,7 @@ function onTabs(input: {
 }
 
 /** Each step named as the window's root names the one it stands on (`stepTitle`). */
-const namedAsShown = (tasks: TasksControl): StepTitle | undefined =>
-  stepTitle(PANEL_TAB.TASKS, tasks);
+const namedAsShown = (tasks: TasksControl): StepTitle | undefined => stepTitle(undefined, tasks);
 
 /** The task the window lists, under `name`, its row naming agent A under `agentTitle` where one is given. */
 function listedTask(name: string, agentTitle?: string): TaskSummary {
@@ -1189,7 +1202,7 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
 
 /** Each step named as the window's root names the one it stands on. */
 function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
-  return stepTitle(PANEL_TAB.TASKS, tasks);
+  return stepTitle(undefined, tasks);
 }
 
 test("a task the Inbox is narrowed to is a step linked by it, which Back leaves for the Inbox and Forward narrows to again", async () => {

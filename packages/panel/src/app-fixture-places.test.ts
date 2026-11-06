@@ -8,16 +8,15 @@ import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@repo/host/app-st
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { Effect } from "effect";
-import { act, createElement } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach } from "vitest";
-import { App } from "./app.js";
 // Note that the places are loaded as the window loads them, on first use
-// (`pages-on-demand.ts`), so each module is read here first and its load
+// (`pages-on-demand.ts`, and the router's lazy routes), so each module is read here first and its load
 // settles within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/automations-page.js";
-import "./desktop/desktop-admin.js";
-import "./desktop/desktop-settings.js";
+import "./desktop/admin-route.lazy.js";
+import "./desktop/settings-route.lazy.js";
 import "./desktop/person-page.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
@@ -114,9 +113,7 @@ function drawWindow(profile: string): Effect.Effect<void> {
     yield* Effect.orDie(appStateFirstRead);
     yield* Effect.promise(loadTasksFixture);
     root = createRoot(document.body.appendChild(document.createElement("div")));
-    act(() =>
-      root?.render(windowRouter().provide(onRegistry(rendererRegistry, createElement(App)))),
-    );
+    act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
     yield* Effect.promise(settle);
   });
 }

@@ -32,12 +32,12 @@ import type { DuplicateGatewayMethod, HostTag } from "@repo/host/effect";
 import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
-import { createPanelRouter } from "@repo/panel/panel-router";
+import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
-import { createBrowserHistory, RouterProvider } from "@tanstack/react-router";
+import { createBrowserHistory } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -164,7 +164,7 @@ export async function mountWebApp(
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
           <WebAppearance />
-          <RouterProvider router={router} />
+          <PanelRouterProvider router={router} />
         </QueryProvider>
       </RegistryContext.Provider>
     </ErrorBoundary>,

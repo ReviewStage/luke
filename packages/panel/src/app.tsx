@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@repo/features/feedback";
-import type { AccountLink, ReadLink } from "@repo/features/link-grammar";
+import { type AccountLink, LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import type { ModelProvider } from "@repo/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -24,6 +24,7 @@ import {
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
+  type SettingsView,
 } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { cssCustomProperties, RetryOffered } from "@repo/ui";
@@ -31,11 +32,12 @@ import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { forgetPictures } from "@repo/ui/picture-cache";
-import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
+import { useAdminRoute } from "./admin/admin-route.js";
+import { adminViewOfLink } from "./admin/routing.js";
 import { appBridge } from "./app-bridge.js";
 import {
   runAppCommand,
@@ -62,16 +64,23 @@ import { useLastSignIn } from "./last-sign-in.js";
 import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
-import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
+import {
+  throughHistory,
+  useHistoryMouseButtons,
+  useRoutedStanding,
+  useWindowHistory,
+} from "./navigation-history.js";
 import { useOfflineRefusedToast } from "./offline-refused-toast.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { ROUTED_PLACE } from "./route-gates.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
-import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
+import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
+import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
@@ -244,16 +253,15 @@ function AppWindow(): React.JSX.Element {
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
-  const [launched] = useState(() => {
-    const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
-    return place !== undefined && "settings" in place ? place.settings : undefined;
-  });
-  const [tab, setTab] = useStateWithRef<PanelTab>(
-    launched === undefined ? PANEL_TAB.TASKS : PANEL_TAB.SETTINGS,
-  );
-  const settingsPlace = useSettingsPlace(launched?.page);
-  const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
+  // A fixture run's profile may open the window on a page of Settings, or on Admin, at launch (`tasks-fixture.ts`).
+  const [launched] = useState(() => loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN));
+  // Settings and Admin are the router's places (`panel-router.tsx`), read from where it stands and moved by navigation;
+  // Settings is the tab the window stands on while it stands, the Tasks tab otherwise.
+  const settingsRoute = useRef<SettingsRoute | undefined>(undefined);
+  const routedHere = useRoutedStanding();
+  const tab = routedHere?.place === ROUTED_PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.TASKS;
+  // Leaves the routed place standing for the place the window's state says, once the history is read below.
+  const leaveRouted = useRef<() => void>(() => undefined);
   /** The note being written to the people who make the app, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /** The experiment that note is about, where an experiment's row opened it. */
@@ -274,43 +282,46 @@ function AppWindow(): React.JSX.Element {
     appPlatform().unsavedPlanWords?.(planWordsUnsaved);
   }, [planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
+  // Opens Settings at the place a link names (`settings-link.ts`), counted as the tab changed where it was not standing.
+  const goSettings = useCallback((link: SettingsLink) => {
+    const route = settingsRoute.current;
+    if (route === undefined) return;
+    if (!route.standing) {
+      appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        panel_tab: PANEL_TAB.SETTINGS,
+      });
+    }
+    route.open(link);
+  }, []);
+  const routedStanding = routedHere !== undefined;
+  // Arriving at Settings is arriving at its page list and its first page, Profile; the Tasks tab is the place the window's
+  // state says, which a routed place standing is left for. Note that `PanelTab` and the counted tab are the same union:
+  // both are `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
   const changeTab = useCallback(
-    (next: PanelTab) =>
-      guardLeave((tab: PanelTab) => {
-        setTab(tab);
-        // Arriving at the tab is arriving at its page list and its first page, Profile: a page
-        // left open behind a tab switch would greet the next visit with a
-        // corner of the settings rather than the settings. A flow that needs
-        // another page sets it right after this reset.
-        enterSettings();
-        // `PanelTab` and the counted tab are the same union: both are
-        // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
+    (next: PanelTab) => {
+      if (next === PANEL_TAB.SETTINGS) {
+        guardLeave(() => goSettings({ page: SETTINGS_VIEW.ACCOUNT, listed: true }))();
+        return;
+      }
+      if (!routedStanding) return;
+      guardLeave(() => {
+        leaveRouted.current();
         appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
-          panel_tab: tab,
+          panel_tab: PANEL_TAB.TASKS,
         });
-      })(next),
-    [guardLeave, enterSettings, setTab],
-  );
-  // Where a link's workspace is handed, read through a ref, because the
-  // workspace Settings shows is held beside the Tasks tab, built after the opener.
-  const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
-  const settingsLinkDoors = useMemo(
-    () => ({
-      changeTab,
-      changeView: chooseSettingsView,
-      chooseWorkspace: (workspaceId: string) => linkWorkspace.current(workspaceId),
-    }),
-    [changeTab, chooseSettingsView],
+      })();
+    },
+    [guardLeave, goSettings, routedStanding],
   );
   /**
    * Opens Settings at the place a link names: the workspace it names, which
    * the Workspace page shows while Settings stays open; its page; and its
    * section, which is looked for once drawn and given up on by itself.
    */
-  // Note that the link asks once, as a whole, so its page, workspace, and section all wait on the ask with its tab.
+  // Note that the link asks once, as a whole, so its page, workspace, and section all wait on the ask.
   const openSettings = useCallback(
-    (link: SettingsLink) => guardLeave(() => followSettingsLink(link, settingsLinkDoors))(),
-    [guardLeave, settingsLinkDoors],
+    (link: SettingsLink) => guardLeave(() => goSettings(link))(),
+    [guardLeave, goSettings],
   );
   // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
   // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
@@ -326,7 +337,7 @@ function AppWindow(): React.JSX.Element {
     // Note that the code is handed only once the leave is let go, so a page kept for a draft is not asked over later.
     guardLeave(() => {
       openHostConnect(place.code);
-      followSettingsLink({ page: SETTINGS_VIEW.HOSTS }, settingsLinkDoors);
+      goSettings({ page: SETTINGS_VIEW.HOSTS });
     })();
   });
 
@@ -386,6 +397,12 @@ function AppWindow(): React.JSX.Element {
   // folds. Only crossing a line draws the shell again, never a pixel's drag.
   const stage = useStageRoom();
   const room = stage.room;
+  // The workspace the sidebar lists, by its address's slug, which Admin opens under; read as it is pressed, since the tasks are built below.
+  const listedSlug = useRef<string | undefined>(undefined);
+  const adminView = useAdminRoute({
+    listedSlug: () => listedSlug.current,
+    onClose: () => leaveRouted.current(),
+  });
   const tasks = useTasksTab({
     acts: { act, press, tell },
     tasks: planning ?? IDLE_TASKS_VIEW,
@@ -405,7 +422,9 @@ function AppWindow(): React.JSX.Element {
     onOpenApiKeys: openApiKeys,
     leaveGuard,
     room,
+    adminView,
   });
+  listedSlug.current = tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug;
   // An account leaving, signed out, deleted, or switched, takes the window's place with it, so the
   // next account lands on Home rather than on the Settings page the last one left from. Note that
   // the leave passes the guard, because the unsaved work it would ask about was the account's that left.
@@ -417,21 +436,19 @@ function AppWindow(): React.JSX.Element {
     placeOwner.current = accountKey;
     if (owner === undefined || owner === accountKey) return;
     passLeave(() => {
-      setTab(PANEL_TAB.TASKS);
-      enterSettings();
+      leaveRouted.current();
       onGoHome();
     });
-  }, [accountKey, passLeave, setTab, enterSettings, onGoHome]);
+  }, [accountKey, passLeave, onGoHome]);
   // Session replay starts once the renderer is idle, filed under the workspace the sidebar lists.
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY), tasks.workspace?.id);
-  // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
-  const settingsWorkspace = useSettingsWorkspace({
-    listedId: tasks.workspace?.id,
+  // Settings as the router stands it: its page, its list, and the workspace its address names, else the sidebar's.
+  const settingsPlace = useSettingsRoute({
     workspaces: tasks.workspaces,
-    settingsShown: tab === PANEL_TAB.SETTINGS,
-    launched: launched?.workspaceId,
+    listedId: tasks.workspace?.id,
+    narrow: room === SHELL_ROOM.NARROW,
   });
-  linkWorkspace.current = settingsWorkspace.link;
+  settingsRoute.current = settingsPlace;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
   const experiments = useExperimentChoices();
   const shownView = shownSettingsView(
@@ -439,19 +456,29 @@ function AppWindow(): React.JSX.Element {
     run?.capabilities ?? NO_CAPABILITIES,
     experiments,
   );
+  const chooseSettingsView = useSteadyDoor((view: SettingsView) => goSettings({ page: view }));
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
-    tab === PANEL_TAB.SETTINGS
+    settingsPlace.standing
       ? {
           view: shownView,
-          workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
+          workspace: tasks.workspaces.find((each) => each.id === settingsPlace.workspaceId),
           listed: settingsPlace.listed,
         }
       : undefined,
     !accountGated,
     room,
+    adminView.open ? adminView.view : undefined,
   );
+  // A fixture run's profile opens the window on its place once, as a link to it would.
+  const launchedOnce = useRef(false);
+  useEffect(() => {
+    if (launchedOnce.current || launched === undefined) return;
+    launchedOnce.current = true;
+    if ("settings" in launched) goSettings(launched.settings);
+    else if ("admin" in launched) adminView.onOpen();
+  }, [launched, goSettings, adminView]);
   // An app link, handed by the system or pressed in the window, opens where its place stands (`@repo/ui/link-route`).
   // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
@@ -468,8 +495,12 @@ function AppWindow(): React.JSX.Element {
       adminOn: adminOn || adminPending,
     });
     if (route.kind === LINK_ROUTE.NOT_PERMITTED) return;
+    const { place } = link;
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
+    } else if (place.kind === LINK_PLACE.ADMIN) {
+      // Admin is the router's place, which its link opens as a navigation from wherever the window stands.
+      guardLeave(() => adminView.onOpen(adminViewOfLink(place)))();
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
@@ -493,17 +524,15 @@ function AppWindow(): React.JSX.Element {
   // knows where it stands.
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
-    link: copyLink.standing,
-    title: stepTitle(tab, tasks),
-    tab,
-    onTabChange: changeTab,
-    settingsView: shownView,
-    onSettingsViewChange: chooseSettingsView,
-    settingsListed: settingsPlace.listed,
-    onSettingsList: settingsPlace.onList,
+    link: copyLink.placed,
+    title: stepTitle(routedHere?.place, tasks),
+    routed: routedHere,
+    settingsList: settingsPlace.listAddress,
+    onSettingsList: settingsPlace.list,
     room,
     tasks,
   });
+  leaveRouted.current = history.onLeaveRouted;
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = useSteadyDoors(
     useMemo(() => throughHistory(tasks, history.lists), [tasks, history.lists]),
@@ -599,7 +628,7 @@ function AppWindow(): React.JSX.Element {
   const workspace = useMemo(
     () => ({
       workspaces: tasks.workspaces,
-      workspaceId: settingsWorkspace.shownId,
+      workspaceId: settingsPlace.workspaceId,
       // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
       onLeft: leftWorkspace,
       // Note that the workspaces are followed apart from the tasks, so a task list that read says nothing of them.
@@ -608,7 +637,7 @@ function AppWindow(): React.JSX.Element {
     }),
     [
       tasks.workspaces,
-      settingsWorkspace.shownId,
+      settingsPlace.workspaceId,
       leftWorkspace,
       tasks.workspacesFailed,
       tasks.onRetryWorkspaces,

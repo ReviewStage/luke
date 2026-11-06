@@ -10,20 +10,15 @@ import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@repo/host/
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { initialAppState } from "@repo/host/client";
 import { PUSH_METHOD } from "@repo/host/contract";
-import { App } from "@repo/panel/app";
 import { installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
-import { createPanelRouter } from "@repo/panel/panel-router";
+import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
 import { onRegistry } from "@repo/panel/testing/copy-feedback";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
 import { QueryClient } from "@tanstack/react-query";
-import {
-  createBrowserHistory,
-  RouterContextProvider,
-  type RouterHistory,
-} from "@tanstack/react-router";
+import { createBrowserHistory, type RouterHistory } from "@tanstack/react-router";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { withLoadLink } from "../../src/app/load-link";
@@ -138,12 +133,7 @@ export async function drawPanel() {
   assert.ok(tabHistory !== undefined, "the tab's doors are installed");
   const router = createPanelRouter(tabHistory, new QueryClient());
   await act(async () =>
-    root.render(
-      createElement(RouterContextProvider, {
-        router,
-        children: onRegistry(rendererRegistry, createElement(App)),
-      }),
-    ),
+    root.render(onRegistry(rendererRegistry, createElement(PanelRouterProvider, { router }))),
   );
   await settle();
   const buttonOf = (label: string) =>

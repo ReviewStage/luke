@@ -3,19 +3,20 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
-import { followSettingsLink, useSettingsWorkspace } from "./settings-link.js";
+import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { windowRouter } from "./testing/window-router.js";
 
 /**
- * A Settings link followed as the window follows it: Settings, then the
- * page, the workspace the Workspace page shows, and the section, which is
- * the anchor its group wears on the page drawn.
+ * A Settings link followed as the window follows it: one navigation to the
+ * address naming its workspace and its page, which the Workspace page shows
+ * while Settings stands, and its section, the anchor its group wears on the
+ * page drawn.
  */
 
 const ACME: Workspace = {
@@ -26,10 +27,7 @@ const ACME: Workspace = {
   github: { login: "acme", active: true },
 };
 
-/** Where a link's section landed, once it did. */
-interface Landing {
-  on: Element | null;
-}
+const PERSONAL: Workspace = { ...ACME, id: "workspace-personal", name: "personal", slug: "me" };
 
 const roots: Root[] = [];
 
@@ -42,10 +40,32 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("a link lists its workspace, turns to Settings and its page, and lands on its section's group as the page draws it", () => {
-  const turned: (PanelTab | SettingsView | string)[] = [];
-  const container = document.createElement("div");
-  document.body.append(container);
+test("a link's workspace is named in Settings' address, which the Workspace page shows while the sidebar lists another, and a page turned keeps it in the link's step", () => {
+  const held = windowRouter();
+  let settings: SettingsRoute | undefined;
+  function Probe() {
+    settings = useSettingsRoute({
+      workspaces: [PERSONAL, ACME],
+      listedId: PERSONAL.id,
+      narrow: false,
+    });
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  act(() => root.render(held.provide(createElement(Probe))));
+
+  act(() => void settings?.open({ page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id }));
+  const linked = [held.history.location.href, settings?.workspaceId, settings?.view];
+  act(() => void settings?.open({ page: SETTINGS_VIEW.APPEARANCE }));
+
+  assert.deepEqual(linked, ["/acme/settings/workspace", ACME.id, SETTINGS_VIEW.WORKSPACE]);
+  assert.deepEqual(held.addresses(), ["/app", "/acme/settings/appearance"]);
+  assert.equal(settings?.workspaceId, ACME.id);
+});
+
+test("an old link's GitHub repositories section lands on the Workspace page's connections group, which holds GitHub's row", () => {
+  const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() =>
@@ -62,84 +82,15 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
       }),
     ),
   );
-  const landed: Landing = { on: null };
-
-  followSettingsLink(
-    {
-      page: SETTINGS_VIEW.WORKSPACE,
-      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-      workspaceId: ACME.id,
-    },
-    {
-      changeTab: (tab) => turned.push(tab),
-      changeView: (view) => turned.push(view),
-      chooseWorkspace: (workspaceId) => turned.push(workspaceId),
-      land: (anchor) => {
-        landed.on = document.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${anchor}"]`);
-        return () => undefined;
-      },
-    },
+  const landed = document.querySelector(
+    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.GITHUB_REPOSITORIES}"]`,
   );
 
-  assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
-  assert.equal(landed.on?.querySelector("h2")?.textContent, "Workspace connections");
+  assert.equal(landed?.querySelector("h2")?.textContent, "Workspace connections");
   assert.ok(
-    [...(landed.on?.querySelectorAll('.ui-settings-row [id$="label"]') ?? [])].some(
+    [...(landed?.querySelectorAll('.ui-settings-row [id$="label"]') ?? [])].some(
       (name) => name.textContent === "GitHub",
     ),
     "the group the old GitHub repositories link names holds GitHub's row",
-  );
-});
-
-test("a link naming no section or workspace lands on the page's head, and leaves the sidebar's workspace listed", () => {
-  const turned: (PanelTab | SettingsView | string)[] = [];
-  let landings = 0;
-
-  followSettingsLink(
-    { page: SETTINGS_VIEW.WORKSPACE },
-    {
-      changeTab: (tab) => turned.push(tab),
-      changeView: (view) => turned.push(view),
-      chooseWorkspace: (workspaceId) => turned.push(workspaceId),
-      land: () => {
-        landings += 1;
-        return () => undefined;
-      },
-    },
-  );
-
-  assert.deepEqual(turned, [PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
-  assert.equal(landings, 0);
-});
-
-test("a link's workspace stands on the Workspace page while Settings stays open, the sidebar's listing untouched, and gives way once Settings is left or the sidebar lists another", () => {
-  const workspaces = [
-    { id: "workspace-personal" },
-    { id: "workspace-acme" },
-    { id: "workspace-platform" },
-  ];
-  let shown: ReturnType<typeof useSettingsWorkspace> | undefined;
-  function Probe(props: { listedId: string; settingsShown: boolean }) {
-    shown = useSettingsWorkspace({ ...props, workspaces });
-    return null;
-  }
-  const root = createRoot(document.createElement("div"));
-  const draw = (listedId: string, settingsShown: boolean) =>
-    act(() => root.render(createElement(Probe, { listedId, settingsShown })));
-
-  draw("workspace-personal", true);
-  act(() => shown?.link("workspace-acme"));
-  const linked = shown?.shownId;
-  draw("workspace-personal", false);
-  const left = shown?.shownId;
-  draw("workspace-personal", true);
-  act(() => shown?.link("workspace-acme"));
-  draw("workspace-platform", true);
-  const switched = shown?.shownId;
-  act(() => root.unmount());
-
-  assert.deepEqual(
-    [linked, left, switched],
-    ["workspace-acme", "workspace-personal", "workspace-platform"],
   );
 });
