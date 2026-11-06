@@ -46,9 +46,6 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
-  BLOCK_LIST_ELEMENT,
-  BlockList,
-  BlockListItem,
   BUTTON_VARIANT,
   Button,
   ButtonLink,
@@ -1433,40 +1430,36 @@ function ThreadComment({
   );
 }
 
-/** The member's pending comments as the Review panel lists them: each one's file and lines, then the comment, Edit and Delete with it. */
-function PendingList({
-  drafts,
+/** One of the member's pending comments as the Review panel lists it: its file and lines, then the comment, its ⋯ with it. */
+function PendingDraft({
+  draft,
   now,
   picture,
 }: {
-  drafts: readonly PendingReviewComment[];
+  draft: PendingReviewComment;
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   return (
-    <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
-      {drafts.map((draft) => (
-        <BlockListItem key={draft.id}>
-          <Text
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.INHERIT}
-            font={TEXT_FONT.MONO}
-            truncate
-            className="pull-request-pending-where text-muted-foreground"
-          >
-            {draft.path}
-            {draft.line === null
-              ? ""
-              : ` · ${threadLines({ ...draft, originalLine: draft.line, originalStartLine: draft.startLine })}`}
-          </Text>
-          <PendingComment
-            draft={draft}
-            head={{ person: draft.by, at: draft.at, now }}
-            words={<EntryWords entry={draft} picture={picture} />}
-          />
-        </BlockListItem>
-      ))}
-    </BlockList>
+    <>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        font={TEXT_FONT.MONO}
+        truncate
+        className="pull-request-pending-where text-muted-foreground"
+      >
+        {draft.path}
+        {draft.line === null
+          ? ""
+          : ` · ${threadLines({ ...draft, originalLine: draft.line, originalStartLine: draft.startLine })}`}
+      </Text>
+      <PendingComment
+        draft={draft}
+        head={{ person: draft.by, at: draft.at, now }}
+        words={<EntryWords entry={draft} picture={picture} />}
+      />
+    </>
   );
 }
 
@@ -3604,11 +3597,10 @@ function PullRequestTabBody({
                       <PullRequestReview
                         writes={review}
                         pending={pendingReview}
-                        pendingList={
-                          drafts === undefined || drafts.length === 0 ? null : (
-                            <PendingList drafts={drafts} now={now} picture={picture} />
-                          )
-                        }
+                        pendingItems={drafts?.map((draft) => ({
+                          key: draft.id,
+                          comment: <PendingDraft draft={draft} now={now} picture={picture} />,
+                        }))}
                       />
                     ) : null
                   }
