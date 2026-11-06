@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { Address } from "../route.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { onQueryClient } from "../testing/copy-feedback.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { OpenAddressesHere } from "./use-open-link.js";
 
@@ -53,21 +54,23 @@ function drawn(output: WireRecord | undefined) {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        OpenAddressesHere,
-        {
-          value: (address: Address) => {
-            if (address.href !== undefined) links.push(address.href);
-            return true;
+      onQueryClient(
+        createElement(
+          OpenAddressesHere,
+          {
+            value: (address: Address) => {
+              if (address.href !== undefined) links.push(address.href);
+              return true;
+            },
           },
-        },
-        createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving: false,
-          delegation: { models: [], onOpenTarget: () => undefined },
-        }),
+          createElement(AgentMessage, {
+            message,
+            plan: false,
+            lead: AGENT_LEAD,
+            moving: false,
+            delegation: { models: [], onOpenTarget: () => undefined },
+          }),
+        ),
       ),
     ),
   );

@@ -296,7 +296,8 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
       // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again,
       // and the change stays out until that read lands, so the press never draws the pull request as it stood.
       if (!("failure" in answer)) await Promise.resolve(onWritten()).catch(() => undefined);
-      return answer;
+      // Note that the note is made once, so what the press answers and what the tab draws are the same object.
+      return { answer, note: noteOf(answer) };
     },
   });
   const { mutateAsync, reset } = change;
@@ -306,18 +307,18 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
     async (request: PullRequestActionRequest, onDone?: () => void) => {
       if (out.current) return NOT_SENT;
       out.current = true;
-      const answer = await mutateAsync(request).finally(() => {
+      const { answer, note } = await mutateAsync(request).finally(() => {
         out.current = false;
       });
       if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
         onDone?.();
       }
-      return outcomeOf(noteOf(answer));
+      return outcomeOf(note);
     },
     [mutateAsync],
   );
   const pending = change.isPending ? change.variables.action : undefined;
-  const note = change.data === undefined ? undefined : noteOf(change.data);
+  const note = change.data?.note;
   return { pending, note, write, dismiss: reset };
 }
 

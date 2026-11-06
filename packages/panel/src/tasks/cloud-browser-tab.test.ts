@@ -517,10 +517,13 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
 
   await pressEnter();
   assert.deepEqual(asked, [{ agentId: AGENT_ID, address: "http://localhost:3000/" }]);
-  assert.equal(
-    document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
-    "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
-    "a refusal is an alert, said once",
+  // Note that the refusal is drawn once the open's mutation hears it, a few steps after the press.
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
+      "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
+      "a refusal is an alert, said once",
+    ),
   );
   assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(

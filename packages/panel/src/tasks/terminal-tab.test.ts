@@ -784,10 +784,13 @@ test("a port that answers no attach in line is closed without losing the tab its
 test("a tab taken down with an attach still out lets its shell go, and closes the port that lands after it", async () => {
   await mount();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  assert.deepEqual(main.sent.at(-1), {
-    kind: ACT_KIND.TERMINAL_DETACH,
-    payload: { agentId: AGENT.id, terminalId: OLDEST },
-  });
+  // Note that the detach reaches the act port a few steps after the tab goes, as its mutation sends it.
+  await vi.waitFor(() =>
+    assert.deepEqual(main.sent.at(-1), {
+      kind: ACT_KIND.TERMINAL_DETACH,
+      payload: { agentId: AGENT.id, terminalId: OLDEST },
+    }),
+  );
   assert.equal(main.post(OLDEST).closed(), true);
 });
 
@@ -1340,8 +1343,15 @@ test("a new shell asked for while a shell is connected starts at once, and shows
   act(() => {
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
-  await settle();
-  assert.deepEqual(tab.kinds(before), ["terminal.create", "terminal.attach", "terminal.list"]);
+  // Note that the relist is a read sent beside the attach's mutation, so the two reach the port in either order.
+  await vi.waitFor(() =>
+    assert.deepEqual([...tab.kinds(before)].sort(), [
+      "terminal.attach",
+      "terminal.create",
+      "terminal.list",
+    ]),
+  );
+  assert.equal(tab.kinds(before)[0], "terminal.create");
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
 });
 

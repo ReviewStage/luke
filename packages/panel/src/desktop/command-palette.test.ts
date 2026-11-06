@@ -224,7 +224,7 @@ function markRows(): string[] {
   );
 }
 
-test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", () => {
+test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", async () => {
   const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
@@ -242,8 +242,9 @@ test("⌘K marks the task on screen unread, and offers no mark for a task Settin
   draw(DOCUMENT_TASK);
   assert.deepEqual(markRows(), ["Mark as unread"]);
   press("Mark as unread");
-  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked.
-  assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`);
+  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked,
+  // which reaches the act port a few steps after the press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`));
 });
 
 /** Whether the palette stands where a reader meets it: its card drawn, and hidden by nothing around it. */
@@ -2385,7 +2386,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
-test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", () => {
+test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", async () => {
   const agent = {
     id: "agent-8",
     planId: null,
@@ -2427,7 +2428,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark
   assert.deepEqual(draw(undefined), []);
   assert.deepEqual(draw(agent.id), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(marks, [`unread:${agent.id}`]);
+  await vi.waitFor(() => assert.deepEqual(marks, [`unread:${agent.id}`]));
 });
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */

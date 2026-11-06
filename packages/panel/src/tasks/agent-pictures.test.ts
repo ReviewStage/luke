@@ -12,6 +12,7 @@ import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { onQueryClient } from "../testing/copy-feedback.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 import {
   type AgentPictureDoor,
@@ -114,16 +115,18 @@ async function drawn(
   roots.push(root);
   await act(async () =>
     root.render(
-      createElement(
-        AgentPicturesProvider,
-        { value: door },
-        createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving,
-          delegation: { models: [] },
-        }),
+      onQueryClient(
+        createElement(
+          AgentPicturesProvider,
+          { value: door },
+          createElement(AgentMessage, {
+            message,
+            plan: false,
+            lead: AGENT_LEAD,
+            moving,
+            delegation: { models: [] },
+          }),
+        ),
       ),
     ),
   );
@@ -866,7 +869,7 @@ test("a line still on its way draws its files going up with no share, each takin
   const root = createRoot(host);
   roots.push(root);
   const draw = (sending: boolean) =>
-    act(() => root.render(createElement(MessageFileChips, { message, sending })));
+    act(() => root.render(onQueryClient(createElement(MessageFileChips, { message, sending }))));
   draw(true);
   const meter = host.querySelector('[role="progressbar"]') ?? assert.fail("a file going up");
   assert.equal(meter.getAttribute("aria-label"), "Uploading spec.pdf");
