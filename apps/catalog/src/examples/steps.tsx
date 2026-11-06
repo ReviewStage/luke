@@ -2,12 +2,6 @@ import { COPY_FIELD_PROMPT, COPY_FIELD_WIDTH, CopyField, STEP_STATE, Step, Steps
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * steps.tsx -- a setup told as numbered steps: one to do now beside one still
- * to come, and the first done, its number turned to the check, the second
- * the one to do now.
- */
-
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
 
 function StepsExample(): React.JSX.Element {

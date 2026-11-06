@@ -4,13 +4,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * command-ask.tsx -- a command an agent asks to run on this Mac, put to the
- * developer over the window: a short one, a long one that scrolls
- * inside its card, and one carrying a base64 payload, each opened from its button and put away by any of its
- * answers, Escape, or a press on the dimmed window, fading out as it goes.
- */
-
 const SHORT_COMMAND = "git -C ~/code/app status --short";
 
 const LONG_COMMAND = [
@@ -21,14 +14,12 @@ const LONG_COMMAND = [
   `tail -n 200 ~/Library/Logs/${PRODUCT_NAME}/main.log`,
 ].join(" && \\\n  ");
 
-/** A script shipped as base64, as an agent writes a file to the Mac in one command. */
 const PAYLOAD_COMMAND = [
   'd=$(mktemp -d) && cd "$d" && git init -q',
   `echo '${"H4sICCUi3moCA3NwbGl0LnBhdGNo".padEnd(4800, "AMVyTomQwK860JbsX0cp5JNjpWKdCoPsjYEgSGJCAS4GFCXV")}' | base64 -d | gunzip | git apply`,
   "pnpm exec vitest run packages/service",
 ].join(" && ");
 
-/** A button that puts `command` to the developer, whose answers put it away. */
 function Asking({ label, command }: { label: string; command: string }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);

@@ -1,24 +1,4 @@
 #!/usr/bin/env node
-// Shared surface vocabulary — the single source for the tokens, marks, labels,
-// and window-layout sizes both the desktop renderer and the marketing mock
-// draw from.
-//
-//   node packages/brand/scripts/generate-surface-shared.mjs
-//
-// It writes three committed outputs into packages/brand/src/generated, and
-// two into @repo/ui's tokens, all from the tables further down:
-//
-//   src/motion-tokens.ts        the same durations and sizes, as numbers
-//   src/provider-mark-paths.ts  SVG path data for the sign-in provider marks
-//   src/brand-palette.ts        the brand's colors as plain values
-//   ui/src/tokens/motion-tokens.css  the --ui-* motion tokens the shared
-//                               components read, imported by @repo/ui/tokens.css
-//   ui/src/tokens/brand.css     the brand's colors on the --ui-color-* roles
-//
-// The React that traces the marks, and the rules that consume the tokens, stay
-// in each app: a shared component would pull desktop-only code into the web
-// bundle. Emitting the data from here keeps the second copy from being a
-// second source. `--check` reports drift when run by hand.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -29,17 +9,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SURFACE = join(HERE, "..", "src", "generated");
 const UI_TOKENS = join(HERE, "..", "..", "ui", "src", "tokens");
 
-// ---------- Motion tokens ----------
-// Sampled damped springs, one duration. A real spring's motion is a property
-// of the spring, not of how far it is asked to travel, which is why the same
-// samples serve a short travel and a long one.
 const SPRING = [
   0, 0.0285, 0.0993, 0.1943, 0.3005, 0.4083, 0.5115, 0.6061, 0.69, 0.7623, 0.8229, 0.8727, 0.9125,
   0.9437, 0.9674, 0.9848, 0.9972, 1.0056, 1.0109, 1.0138, 1.015, 1.015, 1.0142, 1.0129, 1.0114,
   1.0098, 1,
 ];
-// The same damping ratio; only the frequency changes, which is what a smaller
-// and lighter element wants.
 const SPRING_FAST = [
   0, 0.0288, 0.1002, 0.1961, 0.3029, 0.4113, 0.5149, 0.6097, 0.6935, 0.7656, 0.826, 0.8755, 0.9149,
   0.9457, 0.969, 0.9861, 0.9982, 1.0063, 1.0113, 1.014, 1.0151, 1.015, 1.0141, 1.0127, 1.0112,
@@ -56,42 +30,16 @@ const MOTION_DURATION_MS = {
 };
 const MOTION_DELAY_MS = {
   ROW_STAGGER: 32,
-  // How long a pointer rests on a control before its hover hint shows.
   HINT: 500,
-  // How long a state that often heals at once (a dropped connection being
-  // made again) holds before it is shown, so a blip is never seen.
   LATE: 1000,
-  // How long a confirmation that a write landed (an autosave's Saved)
-  // stands before it fades.
   CONFIRM: 1200,
-  // How long a flash over a video answering a key (an arrow's jump, a
-  // speed change) stands before it fades: shorter than a confirmation,
-  // because keys pressed in a run each start it over.
   FLASH: 800,
-  // A beat to see whether a state settles before it is acted on: a hover
-  // card standing after the pointer leaves it, a spinner's ring waiting to see
-  // whether a read lands at once.
   SETTLE: 180,
 };
 const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
-// The desktop window's panes (the sidebar, the side panel) open and close on
-// a plain ease-out rather than the spring: a pane stands on the window's own
-// edge, and a spring's overshoot would part the two for a frame.
 const MOTION_PANE = "cubic-bezier(0.2, 0, 0, 1)";
 
-// ---------- Brand palette ----------
-// The brand's colors live in brand-palette.mjs, which the asset generator
-// reads too; this script writes them onto @repo/ui's roles and as values.
-
-// ---------- Provider mark paths ----------
-// Each is the provider's own mark, reproduced rather than redrawn. Attribution
-// lives with the React that traces them; this table is only the geometry.
 const MARK_PATHS = {
-  /*
-   * GitHub's Octocat mark, verbatim from the invertocat GitHub publishes, on
-   * its 16-unit canvas. Drawn wherever a GitHub sign-in names itself: the
-   * account row and the loopback landing page.
-   */
   GITHUB:
     "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z",
 };
@@ -115,7 +63,6 @@ const GOOGLE_MARK_LAYERS = [
   },
 ];
 
-// ---------- Emission ----------
 const CHECK_ONLY = process.argv.includes("--check");
 const written = [];
 const stale = [];
@@ -138,18 +85,8 @@ function ms(value) {
   return `${value}ms`;
 }
 
-// Note that the motion vocabulary is @repo/ui's alone, under its --ui-*
-// names: every app that loads its tokens moves a spring, a duration, or a
-// delay alike, and there is no second set beside it.
 function uiMotionTokensCss() {
-  return `/* Generated by packages/brand/scripts/generate-surface-shared.mjs. Do not edit by hand: change
-   the tables in that script and re-run it.
-
-   The motion every surface reads: brand's springs, durations, and
-   delays under @repo/ui's names, so every app that imports
-   @repo/ui/tokens.css moves them alike. motion.css answers reduced motion. */
-
-:root {
+  return `:root {
   --ui-spring: ${linearCss(SPRING)};
   --ui-spring-fast: ${linearCss(SPRING_FAST)};
   --ui-duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
@@ -175,14 +112,7 @@ function tsRecord(entries, indent = "  ") {
 }
 
 function motionTokensTs() {
-  return `// Generated by packages/brand/scripts/generate-surface-shared.mjs. Do not edit by hand: change
-// the tables in that script and re-run it.
-//
-// Millisecond mirrors of the CSS duration tokens in motion-tokens.css, from the
-// same table. A main-process constant that waits on a CSS total names these
-// rather than restating the numbers.
-
-export const MOTION_DURATION_MS = {
+  return `export const MOTION_DURATION_MS = {
 ${tsRecord(Object.entries(MOTION_DURATION_MS).map(([key, value]) => [key, value]))}
 } as const;
 
@@ -201,29 +131,17 @@ function providerMarkPathsTs() {
   const pathConsts = Object.entries(MARK_PATHS)
     .map(([name, path]) => tsStringConst(`${name}_PATH`, path))
     .join("\n\n");
-  // One property per line, matching the shape Biome would format these to —
-  // the emitted file is committed and linted, so the two must agree exactly.
   const google = GOOGLE_MARK_LAYERS.map(
     (layer) => `  {\n    fill: "${layer.fill}",\n    path: "${layer.path}",\n  },`,
   ).join("\n");
-  return `// Generated by packages/brand/scripts/generate-surface-shared.mjs. Do not edit by hand: change
-// the tables in that script and re-run it.
-//
-// SVG path data for the marks a sign-in names itself by. The React that traces
-// them stays in each app.
+  return `${pathConsts}
 
-${pathConsts}
-
-// Google's "G" sign-in mark, drawn as filled layers in an 18×18 box.
 export const GOOGLE_MARK_LAYERS: readonly { fill: string; path: string }[] = [
 ${google}
 ];
 `;
 }
 
-// The brand's roles under their --ui-color-* names: the desktop writes each
-// once as light-dark(), as palettes.css does, and the site a block per theme,
-// for browsers older than light-dark().
 const roleName = (key) => `--ui-color-${key.toLowerCase().replaceAll("_", "-")}`;
 
 function uiBrandCss() {
@@ -233,13 +151,7 @@ function uiBrandCss() {
       ? BRAND.LIGHT[key]
       : `light-dark(${BRAND.LIGHT[key]}, ${BRAND.DARK[key]})`;
   const block = (value) => keys.map((key) => `  ${roleName(key)}: ${value(key)};`).join("\n");
-  return `/* Generated by packages/brand/scripts/generate-surface-shared.mjs. Do not edit by hand: change
-   the tables in that script and re-run it.
-
-   The brand's colors on @repo/ui's roles, both profiles, both themes. The
-   roles no brand changes are palettes.css's. */
-
-[data-ui-profile="desktop"] {
+  return `[data-ui-profile="desktop"] {
 ${block(pair)}
 }
 
@@ -252,9 +164,6 @@ ${block((key) => BRAND.LIGHT[key])}
 ${block((key) => BRAND.DARK[key])}
 }
 
-/* The accent over a ground no theme chooses, someone else's page, where the
-   agent's pointer is drawn: the light theme's over a light page and the dark
-   theme's over a dark one, whatever the window's own theme. */
 [data-ui-profile] {
   --ui-color-accent-on-light: ${BRAND.LIGHT.ACCENT};
   --ui-color-accent-on-dark: ${BRAND.DARK.ACCENT};
@@ -268,14 +177,7 @@ function brandPaletteTs() {
       Object.entries(values).map(([key, value]) => [key, `"${value}"`]),
       "    ",
     );
-  return `// Generated by packages/brand/scripts/generate-surface-shared.mjs. Do not edit by hand: change
-// the tables in that script and re-run it.
-//
-// The brand's colors as plain values, from the table @repo/ui's brand.css
-// is written from, for what reads no custom property: an email, a check of
-// the palette's contrast.
-
-export const BRAND_PALETTE = {
+  return `export const BRAND_PALETTE = {
   LIGHT: {
 ${theme(BRAND.LIGHT)}
   },

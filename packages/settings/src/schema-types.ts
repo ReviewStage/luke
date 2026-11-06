@@ -5,68 +5,35 @@ import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
 
 export const SETTINGS_PAGE = {
-  /** Who is signed in and the ways out, the page Settings opens on. */
   ACCOUNT: "account",
   APPEARANCE: "appearance",
-  /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
-  /** What the workspace's coding agents remember, shared by its members, which is the workspace's on the service rather than a stored setting. */
   MEMORY: "memory",
-  /**
-   * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
-   * the service rather than stored settings.
-   */
   AGENTS: "agents",
-  /** The member's own machines that run their local agents, Linux servers and Macs alike, each the service's rather than a stored setting. */
   HOSTS: "hosts",
-  /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
-  /** The outside agents the account lets into its MCP server and how to connect one, each the account's on the service rather than a stored setting. */
   MCP: "mcp",
-  /** The `vespin` command: how to install it, and its sign-in, each the account's on the service rather than a stored setting. */
   CLI: "cli",
-  /** The skills the account installs into the app for its agents, its own and its workspace's, each the service's rather than a stored setting. */
   SKILLS: "skills",
-  /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */
   WORKSPACE: "workspace",
-  /** What this Mac lets agents do on it, the stored switch for running commands here, and whether the app opens as it starts. */
   THIS_MAC: "this-mac",
-  /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */
   EXPERIMENTAL: "experimental",
-  /** The running version, its updates, and the changelog. */
   ABOUT: "about",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
 
-/**
- * Which run of rows inside a page draws a setting. A page is not always one
- * list: This Mac draws its microphone's route under the permission that lets
- * the app listen, and a setting has to say which run it stands in rather than
- * leave the section to pick its own members.
- */
 export const SETTING_SECTION = {
-  /** The page's own plain run of rows, for a page that has only one. */
   MAIN: "main",
-  /** What a diff marks, the first group of how code and diffs are drawn under Appearance's own rows: its layout, changed words, indicators, and backgrounds. */
   DIFF: "diff",
-  /** How lines run, the second: wrap, numbers, and minimized comments. */
   LINES: "lines",
-  /** How code looks, the third: the syntax themes, the type, its size and line height, and ligatures. */
   TEXT: "text",
-  /** Where the account's app links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
-  /** What New task does once a task starts, a group of its own on Account, under Links. */
   TASKS: "tasks",
-  /** Whether this copy of the app counts how its features are used, a group of its own on Account, under Tasks. */
   PRIVACY: "privacy",
-  /** Whether the app opens as this Mac starts, a group of its own on This Mac, under its own rows. */
   STARTUP: "startup",
-  /** The microphone dictation listens on, a group of its own on This Mac, under the permission that lets the app listen. */
   MICROPHONE: "microphone",
-  /** How an agent's message box sends while its turn runs, a group of its own on Agents, under the default model. */
   COMPOSER: "composer",
-  /** Who authors an agent's commits, a group of its own on Account, under the message box. */
   COMMITS: "commits",
 } as const;
 
@@ -78,11 +45,6 @@ export const SETTINGS_RESET_SCOPE = {
 
 export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETTINGS_RESET_SCOPE];
 
-/**
- * Which side effect a write to a setting runs. It names an effect rather than
- * holding one: the host and the client each keep a table over the whole of this
- * set, so an id added here does not build until both sides say what it does.
- */
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   LOGIN_ITEM: "login-item",
@@ -91,20 +53,15 @@ export const SETTING_SIDE_EFFECT = {
 
 export type SettingSideEffectId = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
 
-/** Who draws a field's row. */
 export const SETTING_ROWS = {
-  /** `SchemaSettingRows` draws it, from this entry alone. */
   SCHEMA: "schema",
-  /** A named component draws it, because its control is not a switch or a pop-up. */
   BESPOKE: "bespoke",
 } as const;
 
 type SettingRows = (typeof SETTING_ROWS)[keyof typeof SETTING_ROWS];
 
-/** The concrete runtime families a stored setting may use after its schema guard. */
 export type StoredSettingValue = string | number | boolean | undefined;
 
-/** How a description reads the settings as they stand, field by field. */
 export type AppSettingReader = (field: string) => StoredSettingValue;
 
 export interface SettingGuardResult<Value> {
@@ -112,54 +69,24 @@ export interface SettingGuardResult<Value> {
   value: Value;
 }
 
-/**
- * What a row's visibility and its dynamic options may be judged from: the
- * settings themselves, and the few facts about the surface around them that
- * decide whether a row stands at all. One record, read by the panel to decide
- * what to draw and by the settings search to decide what to offer, so a result
- * can no longer lead to a page without its row.
- */
 export interface SettingsVisibility {
-  /** The experiments the account has on, which a gated feature's row stands on. */
   settings: { experiments: ExperimentChoices };
-  /** Whether the Account section stands. */
   accountDrawn: boolean;
-  /** What the platform offers, which a platform feature's row stands on. */
   capabilities: readonly HostCapability[];
 }
 
-/** One option a row's control draws: the token it stores by, and the words it shows. */
 export interface SettingOption {
   value: string;
   label: string;
 }
 
-/**
- * What a choice row's control offers, for a choice its own values cannot
- * stand in for: options observed rather than fixed by the build, or a
- * token for no choice at all that no stored value could collide with. The three
- * halves are one declaration because they are one statement about one row — a
- * token the options offered is a token the parse has to answer for.
- */
 export interface SettingControl<Value> {
-  /** The token the control draws for the value stored now. */
   value: (stored: Value) => string;
-  /** The words the control's search field holds while empty, for a list long enough to search; none draws no search. */
   search?: string | undefined;
   options: (view: SettingsVisibility) => readonly SettingOption[];
-  /** What one of those tokens means as a stored value; nothing means cleared. */
   stored: (token: string, view: SettingsVisibility) => Value | undefined;
 }
 
-/**
- * One stored setting, declared once. Everything about it that any consumer
- * needs is here: the store reads `default` and `guard`, the panel reads `page`,
- * `section`, `order`, `rows`, `visible`, `control`, and `describe`, the
- * settings search reads `ids` and `describe`, the host's and the client's
- * side-effect tables are keyed by `sideEffect`, and the counter reads
- * `analytics`. There is no second record of any of it, and no `switch`
- * anywhere over which setting this is.
- */
 export interface AppSettingSchemaEntry<
   Field extends string = string,
   Value = unknown,
@@ -171,27 +98,15 @@ export interface AppSettingSchemaEntry<
   readonly guard: (value: UnparsedWireValue) => SettingGuardResult<Value>;
   readonly page: SettingsPage;
   readonly section: SettingSection;
-  /**
-   * Where in its section it stands, ascending. An explicit number because the
-   * order rows are drawn in was the order of an object literal, which a
-   * formatter, a merge, or an alphabetizing lint rule can silently change.
-   */
   readonly order: number;
   readonly resetScope?: SettingsResetScope | undefined;
   readonly sideEffect: SettingSideEffectId;
   readonly rows: SettingRows;
-  /** The setting ids this one field is named by. */
   readonly ids: readonly Id[];
-  /** The descriptions it builds, or none for a field whose row is drawn by hand. */
   readonly describe: (
     settings: AppSettingReader,
   ) => DescribedSetting | readonly DescribedSetting[] | undefined;
-  /** Whether its row is drawn right now. Absent means always drawn. */
   readonly visible?: ((view: SettingsVisibility) => boolean) | undefined;
   readonly control?: SettingControl<Value> | undefined;
-  /**
-   * How a change to it is counted. The id is derived: a change rides one
-   * stored write, and `ids[0]` is the id that write is counted under.
-   */
   readonly analytics?: { readonly value: (value: StoredSettingValue) => ProductSettingValue };
 }

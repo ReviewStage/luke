@@ -1,14 +1,6 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
-/**
- * eslint-plugin-drizzle's `enforce-delete-with-where` and
- * `enforce-update-with-where`, ported rather than installed: the package
- * peers the whole of ESLint and imports `@typescript-eslint/utils` it does
- * not declare, which is a dependency tree for two checks this size. The
- * handles are the names a statement is built on here: `db`, the one shared
- * handle (`@repo/database/core/query`), and `authDatabase`, Better Auth's.
- */
 const DRIZZLE_HANDLES: ReadonlySet<string> = new Set(["db", "authDatabase"]);
 
 function isHandleMethod(callee: ESTree.Expression, method: string): boolean {
@@ -17,7 +9,6 @@ function isHandleMethod(callee: ESTree.Expression, method: string): boolean {
   return callee.object.type === "Identifier" && DRIZZLE_HANDLES.has(callee.object.name);
 }
 
-/** Whether a later link of the builder chain the call starts is `.where(...)`. */
 function chainHasWhere(call: ESTree.Node): boolean {
   let link: ESTree.Node = call;
   let parent = link.parent;
@@ -33,7 +24,6 @@ function chainHasWhere(call: ESTree.Node): boolean {
   return false;
 }
 
-/** The rule for one builder write: `delete` or `update`. */
 export function writeWithWhereRule(method: "delete" | "update") {
   return defineRule({
     meta: {

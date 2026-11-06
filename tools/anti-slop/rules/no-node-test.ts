@@ -7,10 +7,6 @@ function isNodeTestLiteral(node: ESTree.Node | undefined): boolean {
   return node !== undefined && node.type === "Literal" && node.value === "node:test";
 }
 
-/**
- * Every TypeScript test in the repository runs on vitest; `node:test` is
- * retired. An `.mjs` file is exempt by extension alone, never by path.
- */
 export const noNodeTestRule = defineRule({
   meta: {
     type: "problem",

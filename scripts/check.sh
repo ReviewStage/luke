@@ -9,13 +9,7 @@ app_require_node
 "$SCRIPT_DIRECTORY/repository-checks.sh"
 
 cd "$APP_REPO_ROOT"
-# Two branches' migrations that do not commute pass every other check and
-# fail on the deploy that applies the second, so drizzle-kit reads the
-# folders' snapshot graph before anything else runs.
 pnpm --filter @repo/database check:migrations
-# A schema module changed without its migration is caught by asking
-# drizzle-kit for one: `generate` merges every leaf snapshot itself, so a
-# branch beside main's newer migration passes when the two commute.
 MIGRATIONS="$APP_REPO_ROOT/packages/database/migrations"
 migrations_before=$(ls "$MIGRATIONS")
 pnpm --filter @repo/database db:generate --name=unmigrated_schema </dev/null

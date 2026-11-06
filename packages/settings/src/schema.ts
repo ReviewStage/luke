@@ -67,17 +67,8 @@ export {
   type SettingsPage,
   type SettingsResetScope,
 } from "./schema-types.js";
-// The ids themselves live in core, because the product-event vocabulary names
-// the same set and may not depend on anything here.
 export { APP_SETTING_ID, isAppSettingId };
 
-/**
- * The groups every setting of how code and diffs are drawn stands in, each
- * with the name it is drawn under, in the order both surfaces draw them:
- * Settings › Appearance and the Files changed View options popover. Kept
- * here once, so the two surfaces read one list and cannot name or order a
- * group apart.
- */
 export const DIFF_SETTING_GROUPS = [
   { section: SETTING_SECTION.DIFF, title: "Diff" },
   { section: SETTING_SECTION.LINES, title: "Lines" },
@@ -86,12 +77,10 @@ export const DIFF_SETTING_GROUPS = [
 
 export type DiffSettingSection = (typeof DIFF_SETTING_GROUPS)[number]["section"];
 
-/* A theme is stored in lowercase; on a control it reads as a name. */
 function themeOptionLabel(theme: Theme): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
 }
 
-/** One of a fixed set of words, as a diff setting's guard reads a value arriving from storage or IPC. */
 function oneOf<Value extends string>(values: readonly Value[]) {
   const reads = Schema.is(Schema.Literals(values));
   return (value: UnparsedWireValue): value is Value => reads(value);
@@ -105,31 +94,22 @@ const DIFF_LINE_HEIGHT_LIST = Object.values(DIFF_LINE_HEIGHT);
 const DIFF_DARK_THEME_LIST = DIFF_THEMES.DARK.map((theme) => theme.id);
 const DIFF_LIGHT_THEME_LIST = DIFF_THEMES.LIGHT.map((theme) => theme.id);
 
-/** A syntax theme's own name, by its id among those of its appearance. */
 function themeLabel(themes: readonly { readonly id: string; readonly label: string }[]) {
   return (id: string): string => themes.find((theme) => theme.id === id)?.label ?? id;
 }
 
-/**
- * The Mac command mode a stored value names. The switch an earlier build
- * stored is read as a mode: on, which ran every command without asking,
- * as Ask, and off as Never.
- */
 function macCommandModeGuard(value: UnparsedWireValue) {
   if (value === true) return optional(MAC_COMMAND_MODE.ASK, isMacCommandMode);
   if (value === false) return optional(MAC_COMMAND_MODE.NEVER, isMacCommandMode);
   return optional(value, isMacCommandMode);
 }
 
-/** A platform that asks for the microphone and routes it itself, as dictation listens on it. */
 const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
   view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
-/** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
 const desktopAppDrawn = (view: SettingsVisibility): boolean =>
   view.capabilities.includes(HOST_CAPABILITY.DESKTOP_APP);
 
-/** Signed in: a choice the account carries is drawn only while there is an account to carry it. */
 const accountDrawn = (view: SettingsVisibility): boolean => view.accountDrawn;
 
 export const APP_SETTING_SCHEMA = {
@@ -145,8 +125,6 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 5,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    // Nothing to run per write: main steers the app from every settings
-    // snapshot it publishes, so a write that failed steers nothing.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   zoom: choiceSetting({
@@ -162,10 +140,7 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 7,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    // A browser zooms its tab itself, by its own keys.
     visible: desktopAppDrawn,
-    // Nothing to run per write, as for the theme: main zooms the windows
-    // from every settings snapshot it publishes.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   openAtLogin: toggleSetting({
@@ -173,9 +148,6 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.OPEN_AT_LOGIN,
     label: `Open ${PRODUCT_NAME} at login`,
     default: true,
-    // Note that the Mac starts the app, so the switch stands on This Mac and
-    // under no page's reset: Appearance's Reset to defaults once flipped it.
-    // The field and its id are unmoved, so a choice already made is kept.
     page: SETTINGS_PAGE.THIS_MAC,
     section: SETTING_SECTION.STARTUP,
     order: 1,
@@ -193,16 +165,8 @@ export const APP_SETTING_SCHEMA = {
     default: MAC_COMMAND_MODE.ASK,
     page: SETTINGS_PAGE.THIS_MAC,
     order: 2,
-    // Nothing to run per write: the host reads the setting before each read for commands and as each command is about to run.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
-  /*
-   * Where an app link opened in a browser goes: it stays on the web, or the
-   * web hands it to the Mac app (`@repo/features/link-open`). The account's,
-   * so the web reads it on a signed-in load; it rides the preferences
-   * snapshot as a part of its own rather than the shared one, so a build
-   * that predates it neither refuses the snapshot nor clears the choice.
-   */
   linkOpen: choiceSetting({
     field: "linkOpen",
     id: APP_SETTING_ID.LINK_OPEN,
@@ -215,15 +179,9 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.ACCOUNT,
     section: SETTING_SECTION.LINKS,
     order: 300,
-    // Nothing to run per write: a web page reads the choice as it loads.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
   }),
-  /*
-   * Whether a task New task starts opens, as it always did, or the window
-   * stays on the page it was on and a toast says the task started, with
-   * Open. Kept on this device, as how the window moves is the device's.
-   */
   openNewTask: toggleSetting({
     field: "openNewTask",
     id: APP_SETTING_ID.OPEN_NEW_TASK,
@@ -233,16 +191,8 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.TASKS,
     order: 305,
     visible: accountDrawn,
-    // Nothing to run per write: New task reads the setting as a task starts.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
-  /*
-   * Whether this copy of the app sends its counts of how features are used. On by
-   * default in a packaged build, the app people download, and off in a
-   * development one, so a run from source counts nothing until its
-   * developer turns it on. Kept on this device rather than with the account,
-   * since which build runs is the device's.
-   */
   usageData: buildToggleSetting({
     field: "usageData",
     id: APP_SETTING_ID.USAGE_DATA,
@@ -260,20 +210,12 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
     label: "Prefer the Mac's microphone",
     default: true,
-    // Note that it stands on This Mac, under no page's reset, as the switch to
-    // open at login does; the field and its id are unmoved, so a choice already made is kept.
     page: SETTINGS_PAGE.THIS_MAC,
     section: SETTING_SECTION.MICROPHONE,
     order: 110,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: microphoneRouteDrawn,
   }),
-  /*
-   * What Enter does in an agent's message box while its turn runs: steer it,
-   * as every message did before queueing, or queue the message behind it.
-   * An account preference, as the link choice is: the account carries it to
-   * every Mac and the web, riding a part of the snapshot of its own.
-   */
   agentEnter: choiceSetting({
     field: "agentEnter",
     id: APP_SETTING_ID.AGENT_ENTER,
@@ -290,17 +232,9 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.ACCOUNT,
     section: SETTING_SECTION.COMPOSER,
     order: 400,
-    // Nothing to run per write: the message box reads the choice as a key is pressed.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
   }),
-  /*
-   * Who authors an agent's commits and opens its pull request, the
-   * developer or our App's bot, and whether the other is credited as
-   * co-author. An account preference riding a part of the snapshot of its
-   * own, as Enter's choice does, since the service reads it as an agent
-   * starts wherever it was chosen.
-   */
   commitAuthor: choiceSetting({
     field: "commitAuthor",
     id: APP_SETTING_ID.COMMIT_AUTHOR,
@@ -317,16 +251,9 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.ACCOUNT,
     section: SETTING_SECTION.COMMITS,
     order: 450,
-    // Nothing to run per write: an agent reads the choice as its first session starts.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
   }),
-  /*
-   * Whether the account finished its setup after sign-in, so setup stands
-   * once for the account rather than once on each device. An account
-   * preference riding a part of the snapshot of its own, as Enter's choice
-   * does; drawn nowhere, since only setup's Finish writes it.
-   */
   setupFinished: accountToggleSetting({
     field: "setupFinished",
     id: APP_SETTING_ID.SETUP_FINISHED,
@@ -334,22 +261,14 @@ export const APP_SETTING_SCHEMA = {
     default: false,
     page: SETTINGS_PAGE.ACCOUNT,
     order: 900,
-    // Nothing to run per write: the window reads it as it decides whether setup stands.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: () => false,
   }),
-  /*
-   * Where the account stands in setup, as its JSON (`setup-place.ts`), so
-   * setup left partway resumes at the same step on every machine. An account
-   * preference riding a part of the snapshot of its own, as setup finished
-   * does; drawn nowhere, since only setup's steps write it.
-   */
   setupPlace: accountHiddenSetting({
     field: "setupPlace",
     id: APP_SETTING_ID.SETUP_PLACE,
     page: SETTINGS_PAGE.ACCOUNT,
     order: 910,
-    // Nothing to run per write: the window reads it as it draws setup.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     guard: isSetupPlaceJson,
   }),
@@ -362,7 +281,6 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.LINES,
     order: 225,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    // Nothing to run per write: the panel draws code from every settings snapshot.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   wordWrap: toggleSetting({

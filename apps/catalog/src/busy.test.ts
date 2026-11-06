@@ -6,23 +6,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { EXAMPLES } from "./examples.js";
 
-/**
- * busy.test.ts -- every button the catalog draws busy is busy one way. Each
- * example is drawn afresh, and each button it draws that says it is busy
- * (`aria-busy`) is named by what it is doing, refuses its press at once, shows
- * no ring until the press has been out the settle delay, and shows exactly one
- * after it: whatever its kind, a Button, an IconButton, a SplitButton's
- * main part, a FoldingButton, a ProviderButton, or a Chip. A new kind of
- * button whose busy look differs from these fails here.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** An observer of what jsdom never lays out, which tells nothing. */
 class StillObserver {
   observe(): void {}
   unobserve(): void {}
@@ -37,7 +26,6 @@ const roots: Root[] = [];
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StillObserver);
   vi.stubGlobal("IntersectionObserver", StillObserver);
-  // Note that a list bringing its lit row into view scrolls nothing here, and that only the settle delay's timer is held, so an example's own clocks run as they do.
   Element.prototype.scrollIntoView ??= () => undefined;
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 });
@@ -49,22 +37,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The ring a busy button turns, which every kind draws as the one spinner. */
 const RING = ".ui-spinner-ring";
 
-/**
- * The busy buttons an example draws: what a reader is told is busy and a
- * person presses. Note that a Chip is no button kind of this shape, since it
- * is a filter that stands unavailable while its count loads, with no act to wait on.
- */
 const BUSY_BUTTON = "button[aria-busy='true']:not(.ui-chip)";
 
-/** What a button is called, by its label or its words. */
 function nameOf(button: HTMLElement): string {
   return (button.getAttribute("aria-label") ?? button.textContent ?? "").trim();
 }
 
-/** The kinds of button that take `busy`, each with the shared class its own markup wears. */
 const KINDS = [
   ["SplitButton", ".ui-split-button"],
   ["FoldingButton", ".ui-folding-button"],
@@ -72,12 +52,10 @@ const KINDS = [
   ["Button", ".ui-button"],
 ] as const;
 
-/** Which kind of button `button` is, by the shared class on it or around it. */
 function kindOf(button: HTMLElement): string {
   return KINDS.find(([, selector]) => button.closest(selector) !== null)?.[0] ?? "other";
 }
 
-/** The busy buttons of `example`, drawn afresh into the page. */
 function drawn(Render: () => React.JSX.Element): HTMLElement[] {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -86,17 +64,14 @@ function drawn(Render: () => React.JSX.Element): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>(BUSY_BUTTON)];
 }
 
-/** Every busy button the catalog draws, each with the example that draws it. */
 function busyButtons(): ReadonlyArray<{ example: string; button: HTMLElement }> {
   return EXAMPLES.flatMap((example) =>
     drawn(example.Render).map((button) => ({ example: example.id, button })),
   );
 }
 
-/** The longest a ring may wait, in milliseconds, before the test calls it never shown. */
 const RING_WAIT_LIMIT_MS = 1000;
 
-/** How long a test that draws every example may take: the catalog grows with each component, and a CI runner is slower than a laptop. */
 const EVERY_EXAMPLE_TIMEOUT_MS = 30_000;
 
 test(
@@ -111,7 +86,6 @@ test(
       if (!button.matches(":disabled, [aria-disabled='true']")) odd.push(`${where} takes a press`);
       if (button.querySelector(RING) !== null) shownAt.set(button, 0);
     }
-    // Note that the wait is read off the page a millisecond at a time rather than named here, so it is whatever the one shared delay is.
     for (let elapsed = 1; elapsed <= RING_WAIT_LIMIT_MS; elapsed += 1) {
       act(() => vi.advanceTimersByTime(1));
       for (const { button } of found) {

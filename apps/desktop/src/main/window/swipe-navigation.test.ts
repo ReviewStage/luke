@@ -8,24 +8,14 @@ import { test } from "vitest";
 import { followSwipes } from "./swipe-navigation";
 import { windowPushes } from "./window-pushes";
 
-/** An app link to a task, as the system hands one to the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
 
-/**
- * A panel window's swipes as its page meets them: the swipe Logi Options+
- * sends for an MX Master's back and forward buttons arrives as the menu
- * bar's Back or Forward, and a swipe up or down sends the page nothing.
- */
-
-/** A window that swipes as Electron's does, its page's push stream open. */
 function swipedWindow() {
-  // SAFETY: the page is only the key its pushes are published under, which nothing here reads further.
   const webContents = {} as WebContents;
   const window = Object.assign(new EventEmitter(), { webContents });
   followSwipes(window);
   const stream = windowPushes.stream(webContents, undefined);
   const swipe = (direction: string) => window.emit("swipe", {}, direction);
-  /** Everything pushed to the page so far, the stream then ended. */
   const sent = async (): Promise<PushEvent[]> => {
     windowPushes.push(webContents, PUSH.SHOW_LINK, LINK);
     const pushed: PushEvent[] = [];

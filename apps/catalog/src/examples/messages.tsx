@@ -1,7 +1,3 @@
-/**
- * messages.tsx -- a turn of a conversation, the line over a received one naming who sent it and what they did, and the line under every one: when, then its actions, or, where a sent one did not go, Not delivered before when and a red alert beside it, flush with an agent's words where they stand on no bubble, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
- */
-
 import {
   AVATAR_SIZE,
   Avatar,
@@ -26,10 +22,8 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** Oct 14, 2026, 3:42 PM, on the viewer's own clock. */
 const SENT_AT = new Date(2026, 9, 14, 15, 42).getTime();
 
-/** A sender as the transcript names one: their face and name, one wash target. */
 const ADA = (
   <InlineRef
     look={INLINE_REF_LOOK.WASH}

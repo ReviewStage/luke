@@ -3,13 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * checkboxes.tsx -- a box unchecked, checked, mixed, and unavailable, one
- * with long words in a narrow column, and boxes named by a label of their
- * own, drawn without words, as a task list's markers, and one holding a
- * detail under its words, as a to-do's step holds its command.
- */
-
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
 
 function WithDetail(): React.JSX.Element {

@@ -13,17 +13,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
-/**
- * admin-dashboard.test.ts -- the Overview states its sections under their
- * own headings, loading or loaded, and reads every metric and every health
- * check in words: each headline tile's figure under its name with its move
- * against the week before, the funnel's and reach's rows with their counts
- * and shares, the retention grid on the basis chosen, the most active
- * accounts with their per-feature counts. A failed read,
- * first or refreshing, says so with Retry, and the header's window and
- * hide-admins controls hand their choice up.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const SECTIONS = [
@@ -36,7 +25,6 @@ const SECTIONS = [
   "Retention by any hosted call · retired",
 ];
 
-/** One cohort week, its accounts, and the share of them retained in the week itself. */
 function cohort(size: number, activeAccounts: number) {
   return {
     weekStart: "2026-10-12",
@@ -45,7 +33,6 @@ function cohort(size: number, activeAccounts: number) {
   };
 }
 
-/** A synthetic week of the product: a dozen active developers, and what they did. */
 function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
   return {
     headline: {
@@ -114,7 +101,6 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
   };
 }
 
-/** A synthetic week, read at noon on its last day. */
 function metrics(overrides: Partial<AdminMetrics> = {}): AdminMetrics {
   return {
     generatedAt: Date.UTC(2026, 9, 17, 12),
@@ -131,14 +117,12 @@ function metrics(overrides: Partial<AdminMetrics> = {}): AdminMetrics {
   };
 }
 
-/** What one read of the overview is answered with, beside the metrics themselves. */
 const REPLY = { FAILS: "fails", HANGS: "hangs" } as const;
 
 type Reply = AdminMetrics | (typeof REPLY)[keyof typeof REPLY];
 
 let root: Root | undefined;
 
-/** How many times the overview was read. */
 let reads = 0;
 
 afterEach(() => {
@@ -160,11 +144,6 @@ function answer(reply: Reply): Promise<Response> {
   );
 }
 
-/**
- * The dashboard, signed in, opened once per reply, each opening reading the
- * overview again and answered by its reply, so a later reply lands over the
- * answer an earlier one left; what its controls hand up goes into `heard`.
- */
 async function render(replies: readonly Reply[], heard: string[] = []): Promise<HTMLElement> {
   window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const queue = [...replies];
@@ -195,7 +174,6 @@ async function render(replies: readonly Reply[], heard: string[] = []): Promise<
         ),
       ),
     );
-    // Note that a failure over a shown answer draws no skeleton to wait out, so it waits for the failure itself.
     if (reply === REPLY.FAILS) {
       await vi.waitFor(() => expect(container.querySelector('[role="alert"]')).not.toBeNull());
     } else if (reply !== REPLY.HANGS) await readLanded(container);
@@ -207,7 +185,6 @@ function sectionHeadings(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("h2"), (heading) => heading.textContent ?? "");
 }
 
-/** The words of the smallest element holding `text`, with what follows it in its card. */
 function cardOf(page: HTMLElement, label: string): string {
   const name = Array.from(page.querySelectorAll("div")).find(
     (element) => element.children.length === 0 && element.textContent === label,
@@ -223,7 +200,6 @@ test("the loading dashboard stands its sections under the same headings, saying 
   expect(page.querySelector('[role="status"]')?.textContent).toContain("Reading this page");
 });
 
-/** Each region the page draws, by the words of the heading that names it, and the words it holds. */
 function regions(page: HTMLElement): { name: string; words: string }[] {
   return Array.from(page.querySelectorAll("section[aria-labelledby]"), (region) => ({
     name: page.querySelector(`[id="${region.getAttribute("aria-labelledby")}"]`)?.textContent ?? "",
@@ -283,7 +259,6 @@ test("a quiet week's tiles state their figures without a share of nothing", asyn
   expect(cardOf(page, "PRs merged · 7 days")).toBe("PRs merged · 7 days9−25% vs the 7 days before");
 });
 
-/** Each row of the list named `label`, its words joined by a bar. */
 function listRows(page: HTMLElement, label: string): string[] {
   const list = page.querySelector(`ul[aria-label="${label}"]`);
   return Array.from(list?.querySelectorAll("li") ?? [], (row) =>
@@ -349,7 +324,6 @@ test("the most active accounts read each one's days and per-feature counts", asy
   expect(cells.slice(1)).toEqual(["6 of 7", "4", "1,234", "3", "—"]);
 });
 
-/** The button whose words are `words`. */
 function button(page: HTMLElement, words: string): HTMLButtonElement {
   const found = Array.from(page.querySelectorAll("button")).find(
     (candidate) => candidate.textContent === words,

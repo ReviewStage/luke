@@ -16,18 +16,8 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * layout.tsx -- Stack and Inline at every gap role, along and across their
- * room, an Inline of long labels in a narrow column, wrapping and held, a
- * list of rows and a wrapping list of labels, each a `ul`, lists keeping
- * room inside their edge at each inset, and a Fill taking
- * the room a pane's head leaves, down the pane and across it, clipping what
- * stands past its edge.
- */
-
 const LABELS = ["Repository", "Model", "A label long enough to need its own line", "Effort"];
 
-/** A sample block, its words standing for whatever an arrangement holds. */
 function Swatch({ children }: { children: string }): React.JSX.Element {
   return <span className="catalog-swatch">{children}</span>;
 }

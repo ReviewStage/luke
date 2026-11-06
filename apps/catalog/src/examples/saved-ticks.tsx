@@ -3,13 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * saved-ticks.tsx -- a setting written on change, whose Saved tick springs
- * in on its name's line each time a write lands, stands a moment, and fades;
- * a write landing while it stands starts it over.
- */
-
-/** A switch whose every change lands at once, as an accepted write does. */
 function SavedSwitch(): React.JSX.Element {
   const [on, setOn] = useState(false);
   const [saves, setSaves] = useState(0);

@@ -1,15 +1,3 @@
-/**
- * task.ts -- `vespin task list`, `view`, `create`, and `update`: the workspace's tasks, one task with its agents, pull requests, and open asks, a new task, and a task changed.
- *
- * Each reads the workspace a command acts in (`../workspace.js`) and names a
- * task by its id, its number, or its key (`../tasks.js`). `create` takes its
- * repository from the working folder's `origin` unless `-R` names one, and
- * with `--start` or `--prompt` starts an agent on the new task, the one-shot
- * every peer leads with: in the create's own request where there is no plan
- * to write first, else created, then planned through `plans.editDescription`, then
- * started, so the agent reads the plan it was given.
- */
-
 import { CLI_EXIT } from "@repo/features/cli-exit";
 import { HOSTED_DEADLINE } from "@repo/features/hosted-link";
 import { INBOX_STATUS, type InboxItem, openAskOf } from "@repo/features/inbox-wire";
@@ -32,10 +20,8 @@ import { resolveWorkspace } from "../workspace.js";
 import { agentLines, startAgent, startedLines } from "./agent.js";
 import { writeDescription } from "./description.js";
 
-/** What `--assignee` takes to assign the task to nobody, and to the signed-in member. */
 const ASSIGNEE_WORD = { NONE: "none", ME: "me" } as const;
 
-/** The fields of a task every answer prints, its key beside them where it has a number. */
 function taskJson(task: Omit<TaskSummary, "agents">, workspaceName: string | undefined) {
   const { id, number, name, status, priority, repository, assignee, workspaceId } = task;
   return {
@@ -54,12 +40,10 @@ function taskJson(task: Omit<TaskSummary, "agents">, workspaceName: string | und
   };
 }
 
-/** How a task is named to a person: its key where it has one, else its id. */
 function taskLabel(task: ReturnType<typeof taskJson>): string {
   return task.key ?? task.id;
 }
 
-/** A pull request's line: its number, where it stands, its checks, and its title and address. */
 function pullRequestLine(pullRequest: TaskPullRequestLine): string[] {
   return [
     `#${pullRequest.number}`,
@@ -69,7 +53,6 @@ function pullRequestLine(pullRequest: TaskPullRequestLine): string[] {
   ];
 }
 
-/** An open ask's line: the thread's title and the words that ask, on their first line. */
 function askLine(item: InboxItem): string | undefined {
   const asking = openAskOf(item.thread ?? []);
   if (item.status !== INBOX_STATUS.OPEN || asking === undefined) return undefined;
@@ -77,7 +60,6 @@ function askLine(item: InboxItem): string | undefined {
   return `  ${item.title}${words.length === 0 ? "" : `: ${words}`}  (${item.id})`;
 }
 
-/** The workspace of the member's a task belongs to, by its id, for its key. */
 function workspaceNamed(workspaces: readonly Workspace[], id: string): string | undefined {
   return workspaces.find((workspace) => workspace.id === id)?.name;
 }
@@ -256,7 +238,6 @@ const createCommand = Command.make(
       const repository = Option.isSome(repo) ? repo.value : yield* originRepository;
       const { workspace } = yield* resolveWorkspace;
       const { hosted } = yield* session;
-      // Note that an agent goes in the create's own request only where no plan is written first, since it would read the plan empty.
       const together = starting && descriptionText === undefined;
       const created = yield* askService(
         hosted.plans.create,
@@ -382,7 +363,6 @@ const updateCommand = Command.make(
   ]),
 );
 
-/** The account id `--assignee` names among the task's workspace's members: none for nobody, or a usage failure where it names no one, or several. */
 function memberIdOf(taskId: string, named: string) {
   return Effect.gen(function* () {
     if (named === ASSIGNEE_WORD.NONE) return null;
@@ -415,7 +395,6 @@ function memberIdOf(taskId: string, named: string) {
   });
 }
 
-/** The task group: list, view, create, and update. */
 export const taskCommand = Command.make("task").pipe(
   Command.withDescription("List, view, create, and change tasks"),
   Command.withSubcommands([listCommand, viewCommand, createCommand, updateCommand]),

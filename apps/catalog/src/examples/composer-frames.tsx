@@ -18,16 +18,8 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * composer-frames.tsx -- a composer's frame at each look: the window's
- * message box on the sidebar's ground, a field in a card's well, and bare,
- * where the card around it is the frame; then a box with files dragged over
- * it, its edge brightened.
- */
-
 const ignore = () => undefined;
 
-/** A box's words over its foot: the + at its left and Send at its right. */
 function Box({
   look,
   dropping = false,

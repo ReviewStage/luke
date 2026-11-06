@@ -7,7 +7,6 @@ import { checkApiCallers, PATHS_MODULE, RESOLUTION } from "../server/api-callers
 
 const WEB = join(import.meta.dirname, "..");
 
-/** A repository holding one client file and a paths module, read against this app's own table and the hosted contract. */
 async function repositoryWith(root: string, client: string): Promise<void> {
   const files = new Map([
     [join("apps", "desktop", "src", "client.ts"), client],
@@ -21,7 +20,6 @@ async function repositoryWith(root: string, client: string): Promise<void> {
   }
 }
 
-/** An interpolated id as a client's template literal spells it. */
 const HOLE = ["$", "{id}"].join("");
 
 test("a client path resolves to an exception's rewrite first, then a hosted procedure, and one that matches neither is refused even though the fallback would take it", async (t) => {

@@ -18,22 +18,10 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * scroll-area.tsx -- a pane's body under a pinned bar at each fade, up and
- * down; a short list as tall as it holds and a long one shrinking to the
- * room; a log whose groups' bands stick at its top, its fade beginning
- * beneath them; a short page keeping its scroll bar's room beside a long
- * one; a row of columns that scrolls sideways; a table that scrolls both
- * ways; and a short list that holds a swipe past its end beside one that
- * hands it on to the page. Each room is a fixed size so the area has
- * something to scroll.
- */
-
 const ROWS = Array.from({ length: 24 }, (_, index) => `Review pull request #${3600 + index}`);
 
 const COLUMNS = ["Backlog", "Todo", "In progress", "In review", "Done", "Canceled", "Duplicate"];
 
-/** The area's rows, each on a line of its own, inside the caller's padded element. */
 function Rows({ count }: { count: number }): React.JSX.Element {
   return (
     <div className="catalog-scroll-body">
@@ -48,7 +36,6 @@ function Rows({ count }: { count: number }): React.JSX.Element {
   );
 }
 
-/** A pane with a pinned bar over an area that fills the rest, fading as `fade` says. */
 function Pane({ fade }: { fade: ScrollFade }): React.JSX.Element {
   return (
     <div className="catalog-scroll-room">
@@ -64,7 +51,6 @@ function Pane({ fade }: { fade: ScrollFade }): React.JSX.Element {
   );
 }
 
-/** A log of groups, each opening on a band stuck to the area's top, which stands whole while its fade begins beneath. */
 function Banded(): React.JSX.Element {
   return (
     <div className="catalog-scroll-room">
@@ -92,7 +78,6 @@ function Banded(): React.JSX.Element {
   );
 }
 
-/** A row of columns, or a grid of cells, wider than its room, scrolling on `axis`. */
 function Board({ axis }: { axis: ScrollAxis }): React.JSX.Element {
   return (
     <div className="catalog-scroll-room catalog-scroll-room-wide">

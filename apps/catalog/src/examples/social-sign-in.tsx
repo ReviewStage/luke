@@ -3,11 +3,6 @@ import { GAP, SocialProviderButton, SocialSignInChoices, Stack } from "@repo/ui"
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * social-sign-in.tsx -- a button for every social provider, one opening
- * while the others stand unavailable, and one provider's button on its own.
- */
-
 function SocialSignIn(): React.JSX.Element {
   return (
     <>

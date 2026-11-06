@@ -3,14 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * markdown.tsx -- a note's Markdown as the window draws a description, a comment,
- * or a file's note: headings drawn as paragraphs a step above the words,
- * emphasis and code, a list with a nested one, task items read-only and
- * tickable, a table, a fence, a quote, and a rule, and the same words in a
- * narrow column. Every name and line is made up.
- */
-
 const NOTE = `## Goal
 
 Invite a teammate by **email**, with \`inviteMember\` sending the link. See [the spec](https://example.com/spec).
@@ -38,13 +30,11 @@ const invite = await inviteMember({ email });
 
 Raw <b>HTML</b> stays as the words it is.`;
 
-/** A task item's box whose tick is always saved, as a description the developer can edit answers one. */
 function SavedTaskBox({ label, checked }: TaskBoxItem): React.JSX.Element {
   const [asked, setAsked] = useState<boolean | undefined>(undefined);
   return <TaskBox label={label} checked={checked} write={{ run: setAsked, asked }} />;
 }
 
-/** Draws each task item's box as one whose tick is always saved. */
 const savedTaskBox = (item: TaskBoxItem) => <SavedTaskBox {...item} />;
 
 function MarkdownExamples(): React.JSX.Element {

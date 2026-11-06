@@ -1,21 +1,7 @@
-/* The utility vocabulary the AI Elements components (../ai-elements/) are
-   written in, compiled by scripts/tailwind.mjs as the stylesheet is built.
-   Tailwind's theme and utilities alone: its preflight is left out, because
-   base.css is this renderer's reset and a second one would restyle every
-   element the panel already draws. The utilities sit in a cascade layer, so a
-   hand-written rule beside them always wins, except base.css's element resets,
-   which sit in a `base` layer under this one as the preflight would, so that a
-   utility a component spells on a button or a textarea wins over the reset. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @import "@repo/panel/sources.css";
 @import "@repo/ui/tailwind/sources.css";
-/* shadcn/ui's vocabulary, each token an alias of a shared role, so a utility
-   and a hand-written rule read one vocabulary (`@repo/ui`'s theme). */
 @import "@repo/ui/tailwind/theme.css";
 
-/* Where the utilities are gathered from: every renderer module, the panel's
-   own sources and the markdown renderer it draws a reply with, which
-   `@repo/panel/sources.css` names, and `@repo/ui`'s components, which
-   `@repo/ui/tailwind/sources.css` names. */
 @source "../";

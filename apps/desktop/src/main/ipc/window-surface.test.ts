@@ -9,17 +9,6 @@ import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { windowSurfaceProcedures } from "./window-surface";
 
-/**
- * What a window asks of the system it is drawn on, called on the act port as
- * a window calls it: the microphone asked for and counted, its route probed
- * afresh, the panel focused and a file saved from a panel alone, words and
- * a picture copied, a mail and the notification settings opened, the test
- * notification posted, and feedback carried. A sender this build does not
- * trust, a key a payload does not name, and a payload sent to a kind that
- * takes none are each refused in the kind's own words. Synthetic values
- * throughout.
- */
-
 const KIND = WINDOW_SURFACE_ACT_KIND;
 
 const DISPLAY = 7;
@@ -36,25 +25,19 @@ const SUBMISSION = {
   images: [],
 } satisfies FeedbackSubmission;
 
-/** A picture's bytes in base64, synthetic; the system draws one, and refuses `UNDRAWN_PNG`. */
 const PNG = "iVBORw0KGgo=";
 const UNDRAWN_PNG = "AAAA";
 
-/** A still as the system answers one, synthetic. */
 const STILL = "data:image/jpeg;base64,AAAA";
 
-/** Every act port a fixture opened, closed once its test is done. */
 const ports: TestActPort<WebContents>[] = [];
 
 afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** The system as the test scripts it, writing down everything it was asked. */
 function fixture() {
-  // SAFETY: the procedures read a sender by identity alone; one inert object is one window.
   const panelContents = {} as WebContents;
-  // SAFETY: as above, a second window.
   const otherContents = {} as WebContents;
   const heard: string[] = [];
   const events: unknown[] = [];

@@ -17,27 +17,10 @@ import {
 } from "../shared/retired.ts";
 import { isClassList } from "../shared/style-guard.ts";
 
-/**
- * What phase 2 retired stays retired: a class name in a class list, a glyph
- * imported from `@repo/ui/icons`, a JSX prop, or an import, each refused
- * outside the paths its retired file allows, past the baseline that file
- * gives it. The list is data, one JSON file per kind under
- * `tools/anti-slop/retired/` (`shared/retired.ts` reads it and says how a
- * kind adds its own); the style guard holds the same classes in CSS selectors.
- */
-
-/** The attributes whose strings are class lists. */
 const CLASS_ATTRIBUTES: ReadonlySet<string> = new Set(["className", "class"]);
 
-/** Operators whose string operand is compared against, never drawn. */
 const COMPARISONS: ReadonlySet<string> = new Set(["===", "!==", "==", "!="]);
 
-/**
- * Whether a string literal stands where it could become a class: anywhere
- * in a module, so a class kept in a constant or an object counts, but not as
- * a module's source, a value compared against, a switch case, an object key,
- * a literal type, or the value of a JSX attribute other than `className`.
- */
 function couldBeClass(node: ESTree.Node): boolean {
   const parent = (node as { parent?: ESTree.Node }).parent;
   if (parent === undefined) return true;
@@ -58,7 +41,6 @@ function couldBeClass(node: ESTree.Node): boolean {
     case "JSXAttribute":
       return CLASS_ATTRIBUTES.has(attributeName(parent));
     case "JSXExpressionContainer":
-      // Note that we look past the braces, so `data-kind={"x"}` is read as `data-kind="x"` is.
       return couldBeClass(parent);
     case "CallExpression":
       return parent.callee.type !== "Identifier" || parent.callee.name !== "require";
@@ -72,7 +54,6 @@ function specifierName(node: ESTree.Node): string {
   return node.type === "Literal" ? String(node.value) : "";
 }
 
-/** The rule over a given list of retirements; the plugin's own reads `tools/anti-slop/retired/`. */
 export function retiredRuleFor(retirements: readonly Retirement[]) {
   return defineRule({
     meta: {
@@ -91,7 +72,6 @@ export function retiredRuleFor(retirements: readonly Retirement[]) {
       let file = "";
       let standing: readonly Retirement[] = [];
       let places = new Map<Retirement, ESTree.Node[]>();
-      // The names this file binds to the door's registry, and to a module as a whole by its specifier.
       let registries = new Set<string>();
       let namespaces = new Map<string, string>();
 
@@ -105,7 +85,6 @@ export function retiredRuleFor(retirements: readonly Retirement[]) {
         }
       }
 
-      /** A class list's tokens, each retired class among them a place. */
       function noteClasses(text: string, node: ESTree.Node): void {
         if (!isClassList(text) || !couldBeClass(node)) return;
         for (const token of text.split(/\s+/u)) {
@@ -115,11 +94,6 @@ export function retiredRuleFor(retirements: readonly Retirement[]) {
         }
       }
 
-      /**
-       * An import or re-export of `specifier`, binding `imported` names. A
-       * `whole` one (`export *`, `import()`, `require`) takes every name at
-       * once, so it counts against a retirement of only some of them too.
-       */
       function noteModule(
         specifier: string,
         imported: readonly ESTree.Node[],
@@ -137,7 +111,6 @@ export function retiredRuleFor(retirements: readonly Retirement[]) {
         for (const name of imported) noteGlyph(specifierName(name), name);
       }
 
-      /** `object.key`, read or drawn as `<object.key />`, off the registry or a module bound whole. */
       function noteMember(object: string, key: string, node: ESTree.Node): void {
         if (registries.has(object)) noteGlyph(`${GLYPH_REGISTRY}.${key}`, node);
         const specifier = namespaces.get(object);
@@ -229,7 +202,6 @@ export function retiredRuleFor(retirements: readonly Retirement[]) {
                 });
                 continue;
               }
-              // Note that the places past the baseline's count are the ones reported, since the ones before it were already there.
               for (const node of found.slice(allowed ?? 0)) {
                 context.report({
                   node,

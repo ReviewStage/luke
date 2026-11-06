@@ -13,22 +13,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";
 import { appTab, closeAppTabs } from "./support/connect-app-tab";
 
-/**
- * integration-connected.test.ts -- an integration's landing says how its
- * sign-in settled and how to go on: a connection says the tab can go, every
- * other ending says how to try again, and the provider's name is said only
- * where the address named one. A landing nothing answered offers the Open link
- * for the Mac app on a Mac, and nothing elsewhere. A sign-in the web app's tab
- * handed off is answered by that tab, and by no other, and the page closes
- * where it connected and stays to say why where it did not, unless the
- * sign-in was abandoned; a same-tab sign-in is offered the address it left
- * from, unless it was abandoned. The page runs as it does in the browser,
- * mounted on its own `#root`.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** The page at `address`. */
 async function openPage(address: string): Promise<HTMLElement> {
   window.history.replaceState(null, "", address);
   const root = document.createElement("div");
@@ -41,7 +27,6 @@ async function openPage(address: string): Promise<HTMLElement> {
   return root;
 }
 
-/** The page for one settled sign-in, as the service's callback addresses it. */
 function landing(
   provider: IntegrationProvider | undefined,
   status: IntegrationLandingStatus,
@@ -49,14 +34,12 @@ function landing(
   return openPage(integrationLandingPath(provider, status));
 }
 
-/** What the card says, one line per element: its title and description. */
 function said(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("p, h1"))
     .map((element) => element.textContent ?? "")
     .filter((words) => words !== "");
 }
 
-/** The way back the card offers, as its words and the address it goes to. */
 function wayBack(page: HTMLElement): { readonly words: string; readonly href: string }[] {
   return Array.from(page.querySelectorAll("a")).map((link) => ({
     words: link.textContent ?? "",
@@ -64,7 +47,6 @@ function wayBack(page: HTMLElement): { readonly words: string; readonly href: st
   }));
 }
 
-/** The browser saying it runs on a Mac, until `vi.unstubAllGlobals()`. */
 function onMac(): void {
   vi.stubGlobal("navigator", {
     userAgent:
@@ -132,7 +114,6 @@ test("an address with no status it knows reads as an expired link", async () => 
   }
 });
 
-/** The page, once the app's tab answered it and it offers the way back to the app. */
 async function answered(page: HTMLElement): Promise<void> {
   await vi.waitFor(async () => {
     await act(() => new Promise((resolve) => setImmediate(resolve)));
@@ -140,7 +121,6 @@ async function answered(page: HTMLElement): Promise<void> {
   });
 }
 
-/** Gives the channel turns enough for any app tab to answer a landing, as one that answers would by then. */
 async function channelTurns(): Promise<void> {
   for (let turn = 0; turn < 10; turn += 1) {
     await act(() => new Promise((resolve) => setImmediate(resolve)));
@@ -174,7 +154,6 @@ test("a landing no app tab handed off offers nothing to press off a Mac, though 
   await appTab(1);
 
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
-  // The channel is given turns to answer, which no tab takes.
   await channelTurns();
 
   expect(said(page)).toEqual(["Linear is connected", "You can close this tab."]);

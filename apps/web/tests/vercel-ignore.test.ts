@@ -10,31 +10,17 @@ const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SCRIPT = "scripts/vercel-ignore.sh";
 const SCRIPTS = [SCRIPT, "scripts/vercel-deployed-paths.mjs"];
 
-/**
- * The Vercel project's Ignored Build Step, as set in its Git settings: the
- * script where the branch has it, and a build where it does not, since
- * Vercel fails a deployment whose step exits anything but 0 or 1.
- */
 const IGNORED_BUILD_STEP =
   "[ -f scripts/vercel-ignore.sh ] && bash scripts/vercel-ignore.sh || exit 1";
 
-/** What Vercel makes of the step's exit: 0 skips the deployment, 1 builds it, and anything else fails it. */
 const VERDICT = { SKIP: "skip", BUILD: "build", FAIL: "fail" } as const;
 type Verdict = (typeof VERDICT)[keyof typeof VERDICT];
 
-/** A commit no remote holds, so the step cannot fetch it. */
 const UNKNOWN_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
-/** What Vercel names a build of `main` itself, the production deployment. */
 const PRODUCTION = { VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main" } as const;
-/** What Vercel names a build of any other branch. */
 const PREVIEW = { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "feat/branch" } as const;
 
-/**
- * A workspace shaped like the repository's: the two services `vercel.json`
- * names, the web one reaching `service` and, through its devDependencies,
- * `wire`; and a desktop app reaching `host`, which no service does.
- */
 const WORKSPACE: Readonly<Record<string, unknown>> = {
   "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n  - "packages/*"\n\ncatalog:\n  effect: 4.0.4\n',
   "vercel.json": { services: { web: { root: "apps/web" }, dev: { root: "apps/dev" } } },
@@ -77,7 +63,6 @@ function git(root: string, ...args: string[]): string {
   return ran.stdout.trim();
 }
 
-/** A repository holding the ignore step and the workspace, so its first commit has the step to run. */
 async function repository(t: TestContext, withScript = true): Promise<string> {
   const root = await temporaryDirectory(t, "vercel-ignore-");
   if (withScript) {
@@ -97,7 +82,6 @@ async function repository(t: TestContext, withScript = true): Promise<string> {
   return root;
 }
 
-/** A clone of `origin`, at the branch given where one is, shallow where a depth is given, as Vercel's is. */
 async function cloneOf(
   t: TestContext,
   origin: string,
@@ -119,7 +103,6 @@ async function cloneOf(
 
 let edits = 0;
 
-/** Commits a change to one file, to `content` where given, and answers the commit. */
 function commit(root: string, path: string, content?: string): string {
   edits += 1;
   mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -129,7 +112,6 @@ function commit(root: string, path: string, content?: string): string {
   return git(root, "rev-parse", "HEAD");
 }
 
-/** Runs the project's Ignored Build Step at the head, as Vercel does, from the repository's root. */
 function decide(
   root: string,
   previous?: string,
@@ -143,7 +125,6 @@ function decide(
       PATH: path,
       HOME: root,
       GIT_CONFIG_NOSYSTEM: "1",
-      // Note that a branch with no successful deployment yet carries the variable empty.
       VERCEL_GIT_PREVIOUS_SHA: previous ?? "",
       ...vercel,
     },
@@ -235,7 +216,6 @@ test("every commit since the branch's last successful deployment counts, not the
   assert.equal(decide(root, service), VERDICT.SKIP);
 });
 
-/** An origin whose `main` moved on, past the branch's fork, with a web change of its own, as `main` does. */
 async function forkedOrigin(t: TestContext, branchPaths: readonly string[]): Promise<string> {
   const origin = await repository(t);
   commit(origin, "README.md");
@@ -287,7 +267,6 @@ test("a branch whose last deployment cannot be fetched is built where a commit s
   git(origin, "checkout", "-q", "main");
   const root = await cloneOf(t, origin, PREVIEW.VERCEL_GIT_COMMIT_REF);
   assert.equal(decide(root, UNKNOWN_COMMIT, process.env.PATH, PREVIEW), VERDICT.BUILD);
-  // Note that with no deployment to have served v1, the branch is main's tree and is skipped.
   assert.equal(decide(root, undefined, process.env.PATH, PREVIEW), VERDICT.SKIP);
 });
 
@@ -313,7 +292,6 @@ test("a rebased branch whose deployed tree is the one already deployed is skippe
   commit(origin, "README.md");
   const clone = await temporaryDirectory(t, "vercel-ignore-clone-");
   git(clone, "clone", "-q", `file://${origin}`, ".");
-  // Note that the deployment is pushed to the origin after the clone, so the clone does not hold it.
   const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
   commit(clone, "apps/desktop/src/main/main.ts");
   commit(clone, "apps/web/src/main.tsx", "web v1\n");
@@ -330,7 +308,6 @@ test("a host whose `timeout` is missing still fetches the last deployment by sha
   const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
   commit(clone, "apps/desktop/src/main/main.ts");
   commit(clone, "apps/web/src/main.tsx", "web v1\n");
-  // Note that a `timeout` answering 127 first on the PATH is the shell's own "command not found".
   const bin = await temporaryDirectory(t, "vercel-ignore-bin-");
   writeFileSync(join(bin, "timeout"), "#!/bin/sh\nexit 127\n");
   chmodSync(join(bin, "timeout"), 0o755);
@@ -347,7 +324,6 @@ test("a checkout with no usable origin fetches the last deployment from the repo
   commit(clone, "apps/desktop/src/main/main.ts");
   commit(clone, "apps/web/src/main.tsx", "web v1\n");
   assert.equal(decide(clone, deployed), VERDICT.BUILD);
-  // Note that git's own URL rewriting stands the origin in for GitHub, so the test reaches no network.
   const vercel = {
     VERCEL_GIT_PROVIDER: "github",
     VERCEL_GIT_REPO_OWNER: "ReviewStage",

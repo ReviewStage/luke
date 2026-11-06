@@ -7,20 +7,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { EXAMPLES } from "./examples.js";
 
-/**
- * example-chords.test.ts -- a chord an example prints is one the window has:
- * the menu's and the settings-row examples read theirs from the shortcut
- * table (`@repo/settings/shortcuts`), so an example can never show a key the
- * app does not answer, as ⌘R for Rename once did.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** An observer of what jsdom never lays out, which tells nothing. */
 class StillObserver {
   observe(): void {}
   unobserve(): void {}
@@ -41,7 +33,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The example `id` drawn into the page, whose menus hang from the document's body. */
 function draw(id: string): HTMLElement {
   const example = EXAMPLES.find((each) => each.id === id);
   assert.ok(example, `the catalog has an example ${id}`);
@@ -52,7 +43,6 @@ function draw(id: string): HTMLElement {
   return document.body;
 }
 
-/** Every chord the window answers, as it draws one. */
 const WINDOW_CHORDS: ReadonlySet<string> = new Set(
   Object.values(APP_SHORTCUTS).map((shortcut) =>
     shortcutGlyphs(shortcutAccelerator(shortcut.chord)).join(""),

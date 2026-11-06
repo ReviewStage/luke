@@ -6,14 +6,6 @@ import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
 
-/**
- * The web app's root in a browser that blocks the site's storage, where
- * reading `localStorage` or `sessionStorage` throws a `SecurityError`: the
- * host keeps its files in memory, a connect keeps nothing in the tab, and the
- * panel still draws its sign-in, rather than a blank tab.
- * One mount per file, because the panel's state read is the tab's once.
- */
-
 let app: WebApp | undefined;
 
 afterEach(async () => {

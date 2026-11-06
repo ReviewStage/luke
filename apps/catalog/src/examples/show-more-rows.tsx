@@ -3,12 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * show-more-rows.tsx -- a capped list's foot: "Show 4 more" under its first
- * three rows, and "Show less" once its press shows them all; a list whose
- * rows all fit under its cap draws none.
- */
-
 const CAP = 3;
 
 const TASKS = [
@@ -21,7 +15,6 @@ const TASKS = [
   "Guard the stored choices",
 ] as const;
 
-/** Tasks capped at three rows, ending in the foot that shows the rest. */
 function CappedTasks({ tasks }: { tasks: readonly string[] }): React.JSX.Element {
   const [shown, setShown] = useState(false);
   return (

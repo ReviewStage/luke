@@ -32,22 +32,6 @@ import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 
-/**
- * An account's workspaces over a real dialect: its first one is made the
- * first time it is asked for and never again, a workspace a racing ensure
- * made and named the account's is adopted rather than doubled, one anyone
- * else made under the account's slug is never adopted, and a list puts the
- * account's own first workspace first and no teammate's. A workspace's
- * photo is listed as a digest of it and read as its bytes by a member alone,
- * and the account's own first workspace with none lists the account's sign-in
- * picture where the renderer may draw it.
- *
- * The plugin's write is a fake over the same tables (`@repo/database/testing`'s `workspaces.ts`),
- * refusing a slug that is taken as the plugin does, on both dialects, and Better Auth's own plugin
- * over PGlite in the last case. Synthetic accounts throughout.
- */
-
-/** The row naming the workspace the account's first one, as a racing ensure writes it. */
 const insertPersonalRow = (userId: string, organizationId: string) =>
   Effect.gen(function* () {
     const createdAt = yield* DateTime.nowAsDate;
@@ -65,7 +49,6 @@ const openUser = (name: string) =>
     return userId;
   });
 
-/** A shared workspace the owner made through the plugin, joined by each teammate. */
 const openSharedWorkspace = (
   seams: WorkspaceSeams,
   name: string,
@@ -79,22 +62,18 @@ const openSharedWorkspace = (
     return { id, slug };
   });
 
-/** A one-pixel photo's bytes, and another's, each as a `data:` URL of its type keeps them. */
 const PNG_BYTES = "iVBORw0KGgo=";
 const JPEG_BYTES = "/9j/4AAQSkZJRg==";
 const photoUrl = (type: string, base64: string) => `data:${type};base64,${base64}`;
 
-/** The workspace's `logo`, as an upload would write it. */
 const keepLogo = (organizationId: string, logo: string | null) =>
   Database.use((db) =>
     db.update(organization).set({ logo }).where(eq(organization.id, organizationId)),
   );
 
-/** The account's sign-in picture, as its provider handed it over. */
 const keepImage = (userId: string, image: string | null) =>
   Database.use((db) => db.update(user).set({ image }).where(eq(user.id, userId)));
 
-/** The account's workspaces as the desktop builds them from the live statements' rows, run as Realtime runs them. */
 const liveWorkspacesOf = (userId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -106,7 +85,6 @@ const liveWorkspacesOf = (userId: string) =>
     return workspacesOfLiveRows(yield* Schema.decodeUnknownEffect(workspacesLiveRowsSchema)(rows));
   });
 
-/** An installation connected to the workspace, linked at the instant given. */
 const connectInstallation = (
   organizationId: string,
   installationId: number,
@@ -126,7 +104,6 @@ const connectInstallation = (
     }),
   );
 
-/** What one listed workspace shows of its face: its photo's version and its picture's address, where it lists them. */
 const faceIn = (
   listed: readonly { id: string; photoVersion?: string; pictureUrl?: string }[],
   id: string,
@@ -261,7 +238,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* workspaceGitHubAccountId(teammate, acme.id), Option.some(902));
         assert.deepEqual(yield* workspaceGitHubAccountId(outsider, acme.id), Option.none());
 
-        // A logo the held read refuses as a photo lists none live either, so the owner's own first workspace keeps the sign-in picture.
         const own = Option.getOrThrow(yield* personalWorkspaceOf(owner));
         for (const logo of [
           photoUrl(WORKSPACE_PHOTO_TYPE.PNG, JPEG_BYTES),
@@ -332,7 +308,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         yield* Database.use((db) =>
           db.update(user).set({ name: "Ada King" }).where(eq(user.id, owner)),
         );
-        // The name an account's first workspace was made under between 2026-10-15 and its revert.
         yield* Database.use((db) =>
           db
             .update(organization)
@@ -382,7 +357,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
       const database = yield* Database;
       const userId = yield* openUser("Grace Hopper");
       const raced: string[] = [];
-      // The racing ensure makes the workspace and names it the account's while this one asks the plugin, which then refuses the slug.
       const racing: WorkspaceSeams = {
         createOrganization: (creation) =>
           Effect.gen(function* () {
@@ -421,7 +395,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         const plugin = yield* fakeWorkspaceSeams;
         const userId = yield* openUser("Katherine Johnson");
         const raced: string[] = [];
-        // The racing ensure has made the workspace, the account its owner, and not yet written the row naming it.
         const racing: WorkspaceSeams = {
           createOrganization: (creation) =>
             Effect.gen(function* () {

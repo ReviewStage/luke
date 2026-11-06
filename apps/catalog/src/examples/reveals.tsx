@@ -12,15 +12,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * reveals.tsx -- a settings page whose switch brings rows of its own, which
- * unroll in under it as it turns on, the rows and section under them
- * gliding down, and roll up as it turns off; and a choice whose every value
- * brings rows of its own, the rows of the value left rolling up as those of
- * the one picked unroll.
- */
-
-/** How a sample automation is started, each way with rows of its own. */
 const TRIGGER = {
   SCHEDULE: "schedule",
   WEBHOOK: "webhook",
@@ -33,7 +24,6 @@ const TRIGGERS = [
   { value: TRIGGER.WEBHOOK, label: "Webhook" },
 ] as const;
 
-/** A row of words alone, a sample setting's. */
 function Line({ label, description }: { label: string; description: string }) {
   return <SettingsRow label={label} description={description} />;
 }

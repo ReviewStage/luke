@@ -12,49 +12,24 @@ import { DISPATCH_QUERY, ORPC_ROUTE_KEY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
 
-/**
- * The `/api/` entries of the web service's `routes` in `vercel.json`, and the
- * few public paths outside `/api/` a route answers, generated from the
- * function table so a client path lands on the function that groups its
- * route. A route with no rewrite would 404 on production
- * while every check stayed green, so the generation is committed and checked
- * in two steps: the table itself, `server/api-rewrites.json`, must be what
- * the routes generate, and the web service's generated entries must be the
- * table, in its order. The table is its own file so the configuration can
- * one day be assembled by a `vercel.ts` that imports it: Vercel bundles a
- * config module's relative imports and evaluates it in plain Node, which can
- * take a JSON table and cannot take this module's dependencies.
- */
 export interface Rewrite {
   readonly src: string;
   readonly dest: string;
   readonly transforms?: readonly Transform[];
 }
 
-/** A change Vercel makes to a request it passes on: here only a request header taken off it. */
 export interface Transform {
   readonly type: "request.headers";
   readonly op: "delete";
   readonly target: { readonly key: string };
 }
 
-/**
- * The routes that stay off the hosted oRPC router whose public paths carry a
- * segment: each rewrite reads the segment into the route's query, so a route
- * sees `?id=` as it was written to, and the auth catch-all's carries its
- * whole path in `route-path`, which the dispatcher restores, as the one oRPC
- * path that needs a function of its own, a pull request's chapters, does. Every other
- * route file is reached by an exact rule of its key; every path that is no
- * route file's goes to the oRPC route through the fallback, and the router
- * matches its own public paths.
- */
 export interface SegmentRewrite {
   readonly src: string;
   readonly route: string;
   readonly query: string;
 }
 
-/** The auth catch-all's route key, which the segment rewrite below and the authorization server's public metadata paths land on. */
 const AUTH_ROUTE = "auth/[...all]";
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
@@ -75,7 +50,6 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&picture=$2",
   },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
-  // A pull request's chapters, through an agent and by the repository and number, are the oRPC router's, reached through route files of their own so a Generate runs in the long function (`function-durations.ts`); the dispatcher restores their public path from `route-path`.
   {
     src: "/api/agents/([^/]+)/chapters",
     route: "agents/chapters",
@@ -93,8 +67,6 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
-  // Each integration's MCP server is a path of our MCP route, in its function, named by its connection; the dispatcher restores its public path from `route-path`.
-  // Note that a route a segment rule names gets no exact rule of its own, so our own server's path is spelled here beside it.
   { src: "/api/agents/mcp", route: "agents/mcp", query: `${DISPATCH_QUERY.PATH}=agents/mcp` },
   {
     src: "/api/agents/mcp/integrations/([^/]+)",
@@ -103,26 +75,10 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
 ];
 
-/** The characters a route key may spell for its exact rewrite to be its own regular expression. */
 const LITERAL_ROUTE_KEY = /^[a-z0-9/-]+$/;
 
 const API_ROUTE_PREFIX = "/api/";
 
-/**
- * The routes answered at a public path outside `/api/` as well as at their
- * own, each by an exact rule onto its route: the host's install script, which
- * a member's install command fetches from `/install.sh` at whichever address
- * of the deployment Settings showed it on, so the route can name that address
- * as the script's origin; the member MCP server's protected resource
- * metadata, which an MCP client reads under `/.well-known/` (RFC 9728) at the
- * path it derives from the resource's address and at the well-known root; and
- * the authorization server's own metadata (RFC 8414), which the same client
- * reads at the well-known name ahead of the issuer's path, carried to the
- * auth catch-all as the issuer-path form its handler answers (`query`, as
- * the segment rewrites carry a path). Vercel runs these rules before it looks
- * at the built site's files, and the build writes no file at such a path
- * besides.
- */
 interface PublicRewrite {
   readonly path: string;
   readonly route: string;
@@ -149,15 +105,6 @@ const PUBLIC_REWRITES: readonly PublicRewrite[] = [
   })),
 ];
 
-/**
- * PostHog's traffic, passed on from a path of our own origin
- * (`@repo/features/posthog-proxy`) as PostHog's Vercel proxy guide lays it
- * out: its scripts and its configuration to its assets host, and everything
- * else under the path to its ingestion host. Each takes the request's
- * cookies off on the way, because Vercel passes on every header of a request
- * it rewrites elsewhere, and this origin's cookies carry the visitor's
- * session, which PostHog never sees.
- */
 const WITHOUT_COOKIES: readonly Transform[] = [
   { type: "request.headers", op: "delete", target: { key: "cookie" } },
 ];
@@ -177,10 +124,8 @@ const POSTHOG_REWRITES: readonly Rewrite[] = [
   },
 ];
 
-/** The fallback's pattern: every `/api/` path no rule above it took, its path after `/api/` captured. */
 export const ORPC_FALLBACK_SRC = `${API_ROUTE_PREFIX}(.*)`;
 
-/** A public path as a pattern that matches it alone: its dots and other specials escaped. */
 function exactPattern(path: string): string {
   return path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -190,15 +135,6 @@ function dest(definition: FunctionDefinition, route: string, query?: string): st
   return `/${functionPublicPath(definition)}?${parameters}`;
 }
 
-/**
- * Every public path a function answers by its own name rather than through
- * a dispatcher: each standalone function and each hand-written one, at its
- * file's name and at the extensionless alias the Build Output serves it at.
- * Vercel runs the web service's `routes` before it looks at the filesystem
- * and stops at the first that matches, so without a rule of its own each
- * would be taken by the fallback; this rule rewrites it onto itself, which
- * the filesystem then serves as it did before the fallback stood.
- */
 function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly string[] {
   const own = [
     ...definitions
@@ -209,15 +145,6 @@ function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly 
   return own.flatMap((path) => [`/${functionAliasPath(path)}`, `/${path}`]).sort();
 }
 
-/**
- * The generated rewrites onto functions, in the order they must stand: the
- * public paths outside `/api/`, the segment rewrites,
- * one exact rule per route file a dispatcher holds, the pass-through rules of
- * the functions that answer by their own name, and last the fallback, which
- * lands every other `/api/` path on the hosted oRPC route with its path in
- * `route-path`. Vercel stops at the first rule that matches, so nothing ahead
- * of the fallback is shadowed by it.
- */
 export function apiRewrites(
   definitions: readonly FunctionDefinition[],
   segments: readonly SegmentRewrite[] = SEGMENT_REWRITES,
@@ -263,14 +190,11 @@ export function apiRewrites(
   return rewrites;
 }
 
-/** The whole generated table: PostHog's rewrites, which land on no function of ours, ahead of the functions' own. */
 export function generatedRewrites(definitions: readonly FunctionDefinition[]): readonly Rewrite[] {
   return [...POSTHOG_REWRITES, ...apiRewrites(definitions)];
 }
 
-/** The deployment's configuration, at the repository root two steps above the web app. */
 export const VERCEL_CONFIG_FILE = join("..", "..", "vercel.json");
-/** The committed generation of the `/api/` rewrites, which the web service's routes are assembled from. */
 export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
 const TransformSchema = Schema.Struct({
@@ -289,35 +213,13 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Array(RewriteSchema)),
 );
 
-/**
- * A condition that a request was made to one host, as a pattern held to its
- * whole value, which names each spelling a browser may send of it, the one
- * with a trailing dot among them: what holds the sandbox's host to the page
- * route (`@repo/features/page-frame`). Note that it is written `re` and
- * anchored, because a bare string is a pattern Vercel may match anywhere in
- * the host, and a list of spellings would be reflowed by the formatter that
- * runs on commit, against the generation this file holds the file to.
- */
 const HostConditionSchema = Schema.Struct({
   type: Schema.Literal("host"),
   value: Schema.Struct({ re: Schema.String }),
 });
 
-/** The status a host's refused path is answered with. */
 const NOT_FOUND_STATUS = 404;
 
-/**
- * A route of the web service as `vercel.json` writes it: a rewrite, and the
- * response headers a page route sends beside it, as the app's routes send
- * its Content Security Policy, or, held to one host, the status every other
- * path of that host is answered with, or the request headers it takes off,
- * as PostHog's rewrites take its cookies; a redirect, its status and its
- * `Location` header, as the app's built file name sends the browser to
- * `/app`; or headers alone, which routing carries on past (`continue`) to
- * whichever later route or built file answers, as every page of the site
- * wears its security headers. A generated `/api/` rewrite carries none of
- * them.
- */
 const WebRouteSchema = Schema.Union([
   Schema.Struct({
     src: Schema.String,
@@ -339,32 +241,14 @@ const WebRouteSchema = Schema.Union([
   }),
 ]);
 
-/** The table as committed. */
 export async function readApiRewritesTable(web: string): Promise<readonly Rewrite[]> {
   return decodeApiRewrites(await readFile(join(web, API_REWRITES_FILE), "utf8"));
 }
 
-/** The table's text, stable under regeneration. */
 export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
   return `${JSON.stringify(rewrites, null, 2)}\n`;
 }
 
-/**
- * The whole of `vercel.json`, so a key this build does not know refuses the
- * generation rather than being carried or dropped unread. The file is a
- * services deployment: the web service owns the build, the install, the
- * ignore rule, and the `routes` the `/api/` rewrites are generated into,
- * because Vercel evaluates a service's routes only once a request has
- * entered it and ignores a `routes` key left at the top level; and the
- * top-level `rewrites` are the public routing that sends every path to the
- * web service. The `git` key turns off deployment of GitHub's merge-queue
- * branches (`gh-readonly-queue/<base>/pr-<n>-<sha>`): CI gates the queue, and
- * the squash it lands on `main` deploys on its own. It turns off, too, the
- * branches that hold pictures alone and share no history with `main`: PR
- * media (`pr-assets`, and the `pr-assets-<topic>` AGENTS.md warns against)
- * and screenshot evidence (`evidence/<topic>`). A glob is `**` where a `*`
- * would not cross the branch name's `/`.
- */
 const WebService = Schema.Struct({
   root: Schema.String,
   framework: Schema.String,
@@ -374,7 +258,6 @@ const WebService = Schema.Struct({
   routes: Schema.Array(WebRouteSchema),
 });
 
-/** A top-level rewrite: the service a path enters, where one host's alone, that host's. */
 const ServiceRewriteSchema = Schema.Struct({
   source: Schema.String,
   has: Schema.optionalKey(Schema.Array(HostConditionSchema)),
@@ -398,11 +281,9 @@ const decodeVercelConfig = Schema.decodeUnknownSync(Schema.fromJsonString(Vercel
   onExcessProperty: "error",
 });
 
-/** Whether the file carries both keys, by their presence: a `routes` key that is merely undefined-valued is still the wrong shape. */
 function hasTopLevelRoutesBesideServices(source: string): boolean {
   let parsed: WireBoundaryInput;
   try {
-    // SAFETY: the file is this app's own vercel.json; the strict decode that follows is what holds it to a shape.
     parsed = JSON.parse(source) as WireBoundaryInput;
   } catch {
     return false;
@@ -411,13 +292,6 @@ function hasTopLevelRoutesBesideServices(source: string): boolean {
   return isRecord(value) && "services" in value && "routes" in value;
 }
 
-/**
- * Vercel ignores a `routes` key at the top level of a services deployment
- * rather than refusing it, so a file generated into that location would pass
- * every check and answer 404 on every `/api/` route in production. The
- * generator refuses the shape by name, ahead of the schema, so the refusal
- * says where the routes belong rather than which key was unknown.
- */
 class TopLevelRoutesBesideServicesError extends Error {
   override readonly name = "TopLevelRoutesBesideServicesError";
   constructor() {
@@ -427,7 +301,6 @@ class TopLevelRoutesBesideServicesError extends Error {
   }
 }
 
-/** `vercel.json` as committed, refused unless it is exactly the shape this build knows. */
 export async function readVercelConfig(web: string): Promise<VercelConfig> {
   const source = await readFile(join(web, VERCEL_CONFIG_FILE), "utf8");
   if (hasTopLevelRoutesBesideServices(source)) throw new TopLevelRoutesBesideServicesError();
@@ -438,7 +311,6 @@ const PUBLIC_REWRITE_SOURCES: ReadonlySet<string> = new Set(
   PUBLIC_REWRITES.map(({ path }) => exactPattern(path)),
 );
 
-/** Whether a route of the web service is one the table generates: an `/api/` rewrite, PostHog's, or a public path's. */
 const isTableRewrite = (rewrite: { readonly src: string }) =>
   rewrite.src.startsWith(API_ROUTE_PREFIX) ||
   rewrite.src.startsWith(POSTHOG_PROXY_PREFIX) ||
@@ -447,30 +319,15 @@ const isTableRewrite = (rewrite: { readonly src: string }) =>
 const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrite[]) =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/**
- * Whether either committed half has drifted: the table from what the routes
- * generate, or the web service's `/api/` entries from the table. Both are
- * read, so a table regenerated without the file assembled from it, or the
- * reverse, is drift and not a pass.
- */
 export async function rewritesDrifted(web: string): Promise<boolean> {
-  // The file's shape is refused ahead of anything else being read, so the refusal names where the routes belong.
   const committed = (await readVercelConfig(web)).services.web.routes.filter(isTableRewrite);
   const table = await readApiRewritesTable(web);
   const generated = generatedRewrites(await webFunctions(web));
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 
-/** Whether a route or a top-level rewrite is held to one host, as the sandbox's are. */
 const isHostLocked = (route: object): boolean => "has" in route;
 
-/**
- * `vercel.json` with the web service's generated rewrites replaced by the
- * committed table, ahead of every other route of that service but those held
- * to one host. Those stand first, because Vercel stops at the first route
- * that matches, so a table rule ahead of them would answer an `/api/` path on
- * the sandbox's host that they refuse.
- */
 export async function vercelConfigSource(web: string): Promise<string> {
   const config = await readVercelConfig(web);
   const others = config.services.web.routes.filter((rewrite) => !isTableRewrite(rewrite));

@@ -146,15 +146,6 @@ import { VIDEO_PLAYER_EXAMPLE } from "./examples/video-player";
 import { WRITING_GLYPHS_EXAMPLE } from "./examples/writing-glyphs";
 import { ZOOM_IMAGES_EXAMPLE } from "./examples/zoom-images";
 
-/**
- * examples.ts -- every example the catalog draws, in the order its index lists them.
- *
- * An example is one component, or one family, drawn on synthetic data in
- * each state a reader or a test needs to see. The PR that adds a shared
- * component adds its example here in the same change.
- */
-
-/** One entry of the index: its address, its heading, and what it draws. */
 export interface Example {
   readonly id: string;
   readonly title: string;

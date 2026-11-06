@@ -26,19 +26,8 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * auth-page.tsx -- the sign-in page with its provider choices, a landing's
- * ringed mark on its way, settled, and failed, with and
- * without its Open link, and a form with an error on a phone's width, each in a
- * frame the size of the screen it stands for, a step of several with its
- * foot, on its first step and on one it can skip, and an MCP client's
- * consent, asking, with Allow out, and failed. Every name and address is made up.
- */
-
-/** The Open link as a page offers it; the catalog goes nowhere. */
 const OPEN_APP = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 
-/** A press the catalog answers with nothing. */
 const IGNORE = () => undefined;
 
 function Mark(): React.JSX.Element {
@@ -58,7 +47,6 @@ function ProviderChoices(): React.JSX.Element {
   );
 }
 
-/** Setup's team fields as the step draws them, an address typed wrong among those to invite, left unsent. */
 function TeamFields(): React.JSX.Element {
   const [name, setName] = useState("Acme");
   const [typed, setTyped] = useState("");

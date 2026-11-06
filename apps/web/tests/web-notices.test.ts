@@ -3,16 +3,8 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { onTabShownChanged, webNoticeDoors } from "../src/app/web-notices";
 
-/**
- * A browser tab's notices: the tab said shown or hidden, and the count before
- * the tab's title or on the installed app's own badge. The tab's visibility
- * and the badge are the operating system's, so both are faked at that
- * boundary.
- */
-
 let visibility: DocumentVisibilityState;
 
-/** Stands the installed app's badge in the browser, recording each count it is set to, and the display mode the site runs in. */
 function fakeAppBadge(displayMode: "standalone" | "browser"): number[] {
   const counts: number[] = [];
   vi.stubGlobal("navigator", {

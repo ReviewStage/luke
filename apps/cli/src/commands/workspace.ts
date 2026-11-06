@@ -1,14 +1,3 @@
-/**
- * workspace.ts -- `vespin workspace list` and `use`: the member's workspaces, and the one a command acts in where nothing else names one.
- *
- * `list` reads them through `workspaces.list` and marks the default the
- * config keeps for the service. `use` takes a slug, a slug the workspace
- * stood under before, or an id, checks it is one of the member's, and keeps
- * the workspace's id as the default (`keepWorkspace`), so a later change of
- * slug still names it. `-w` and `VESPIN_WORKSPACE` stand over it
- * (`../workspace.js`).
- */
-
 import { CLI_EXIT } from "@repo/features/cli-exit";
 import { workspaceOfSlug } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
@@ -17,12 +6,10 @@ import { configuredWorkspace, keepWorkspace } from "../config-store.js";
 import { answer, CommandFailed } from "../output.js";
 import { askService, session } from "../session.js";
 
-/** A config file this version could not read or write, as the command's failure. */
 function configFailed(failed: { readonly message: string }): CommandFailed {
   return new CommandFailed({ exit: CLI_EXIT.REFUSED, message: failed.message });
 }
 
-/** The member's workspaces on the service this run calls, and the one the config keeps as the default, where it names one of them. */
 const workspacesRead = Effect.gen(function* () {
   const { origin, hosted } = yield* session;
   const { workspaces } = yield* askService(hosted.workspaces.list, undefined);

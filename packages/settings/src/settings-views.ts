@@ -7,20 +7,8 @@ import {
 import { EXPERIMENT_ANCHOR, SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 
 export type { SettingsView };
-/**
- * Which page of the Settings tab is showing. App state rather than panel state
- * for the same reason the tab is — a shortcut or a button elsewhere in the
- * window turns it from outside the panel.
- */
 export { SETTINGS_VIEW };
 
-/**
- * The pages in the order the command palette and the settings search list
- * them, and the Settings sidebar within each of its groups, Account first
- * since Settings opens on it. Every option has one home among them;
- * Experimental follows This Mac, so About and Keyboard shortcuts, which only
- * lists the window's own chords, stay last.
- */
 export const SETTINGS_PAGE_LIST = [
   SETTINGS_VIEW.ACCOUNT,
   SETTINGS_VIEW.WORKSPACE,
@@ -38,12 +26,6 @@ export const SETTINGS_PAGE_LIST = [
   SETTINGS_VIEW.SHORTCUTS,
 ] as const satisfies readonly SettingsView[];
 
-/**
- * The headings the Settings sidebar groups its pages under, in the order it
- * draws them, as Linear and Notion group theirs: the workspace the sidebar
- * lists, what is the account's whichever workspace is listed, and what is
- * this Mac's alone.
- */
 export const SETTINGS_PAGE_GROUP = {
   WORKSPACE: "workspace",
   ACCOUNT: "account",
@@ -52,10 +34,6 @@ export const SETTINGS_PAGE_GROUP = {
 
 export type SettingsPageGroup = (typeof SETTINGS_PAGE_GROUP)[keyof typeof SETTINGS_PAGE_GROUP];
 
-/**
- * The heading each page stands under. Experiments are the account's choice,
- * carried to every window, so Experimental stands under Account.
- */
 const GROUP_OF_PAGE = {
   [SETTINGS_VIEW.ACCOUNT]: SETTINGS_PAGE_GROUP.ACCOUNT,
   [SETTINGS_VIEW.WORKSPACE]: SETTINGS_PAGE_GROUP.WORKSPACE,
@@ -73,7 +51,6 @@ const GROUP_OF_PAGE = {
   [SETTINGS_VIEW.SHORTCUTS]: SETTINGS_PAGE_GROUP.THIS_MAC,
 } as const satisfies Record<SettingsView, SettingsPageGroup>;
 
-/** The Settings sidebar's groups in the order it draws them, each with its pages in the list's own order. */
 export const SETTINGS_PAGE_GROUPS: readonly {
   readonly group: SettingsPageGroup;
   readonly pages: readonly SettingsView[];
@@ -82,58 +59,31 @@ export const SETTINGS_PAGE_GROUPS: readonly {
   pages: SETTINGS_PAGE_LIST.filter((page) => GROUP_OF_PAGE[page] === group),
 }));
 
-/**
- * A section of a Settings page a link lands on. Each is the anchor its group
- * wears, the same anchor a search result lands on, so a link and a result
- * reach a section the one way, and a section keeps its name whatever page it
- * stands on.
- */
 export const SETTINGS_SECTION = {
-  /** A workspace's members. */
   MEMBERS: "workspace-members",
-  /** A workspace's invite and the invitations still pending, an owner's or an admin's. */
   INVITATIONS: "workspace-invitations",
-  /** The way out of a workspace, for anyone but its owner. */
   LEAVE: "workspace-leave",
-  /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: the GitHub accounts connected, and Connect or Manage on GitHub, where accounts are added and repositories chosen. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
-  /** Claude's row on Agents: the account's Claude plan and Anthropic key, anchored as its search result is. */
   CLAUDE: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
-  /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which dictation runs on too. */
   CODEX: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
-  /** The account's GitHub personal access token row, where a member saves the token that adds repositories to a workspace. */
   GITHUB_TOKEN: SETTINGS_SEARCH_ROW.GITHUB_ACCESS,
-  /** Bring your own host's row on Experimental, which a pairing's link lands on while the account has it off. */
   BRING_YOUR_OWN_HOST: EXPERIMENT_ANCHOR[EXPERIMENT.BRING_YOUR_OWN_HOST],
 } as const;
 
 type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];
 
-/**
- * Where an Open Settings press lands: a page, a section on it, and a
- * workspace, which the sidebar lists before the page is drawn, so the
- * Workspace page, which shows the listed one, shows it; the sidebar's
- * stays listed where none is named. Every way into Settings at a place
- * takes one of these.
- */
 export interface SettingsLink {
   readonly page: SettingsView;
   readonly section?: SettingsSection;
   readonly workspaceId?: string;
-  /** Lands on the page list rather than the page, as a link naming no page this window knows does; a narrow room draws the two apart. */
   readonly listed?: true;
 }
 
-/** Each provider's harness row on Agents, where its plan and key are kept. */
 const HARNESS_SECTION = {
   [MODEL_PROVIDER.ANTHROPIC]: SETTINGS_SECTION.CLAUDE,
   [MODEL_PROVIDER.OPENAI]: SETTINGS_SECTION.CODEX,
 } as const satisfies Record<ModelProvider, SettingsSection>;
 
-/**
- * Where a press that connects an agent's credential lands: the provider's
- * harness row on Agents, or the top of Agents where no provider is known.
- */
 export function agentKeyLink(provider: ModelProvider | undefined): SettingsLink {
   if (provider === undefined) return { page: SETTINGS_VIEW.AGENTS };
   return { page: SETTINGS_VIEW.AGENTS, section: HARNESS_SECTION[provider] };

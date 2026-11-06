@@ -1,11 +1,6 @@
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
 import type { ReactNode } from "react";
 
-/**
- * section.tsx -- one titled group of samples within an example. Its heading
- * wears a class of its own, so the catalog's page rules never reach a shared
- * component an example draws as a heading.
- */
 export function CatalogSection({
   id,
   title,

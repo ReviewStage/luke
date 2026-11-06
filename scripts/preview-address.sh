@@ -1,50 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prints the address of the Vercel Preview built from one commit, or exits
-# without one.
-#
-#   scripts/preview-address.sh [--repo OWNER/NAME]
-#
-# The preview is found the way the deployed-shape probe finds it (`apps/web/server/preview-deployment.ts`):
-# through the GitHub deployment record Vercel writes for the head commit, since
-# a branch alias keeps serving the previous build until the new one is
-# promoted. The newest Preview record's newest status is read as one of four
-# states: a pending, queued, or in-progress status is waited on; `inactive`
-# is waited through unless Vercel's own "Skipped - Not affected" says the
-# `ignoreCommand` built nothing; a failure or error exits NOT_BUILT; and
-# `success` names the address. A skipped commit serves the same server as an
-# earlier one, so the lookup walks back along first parents to the nearest
-# commit whose deployed tree matches the head's and that has a record of its
-# own: a commit pushed under a later one has none and is passed over rather
-# than waited on, and so is one whose deployed tree differs. The walk exits
-# NOT_AFFECTED when no ancestor within reach built what this commit would
-# serve. Before that walk, a skipped head's branch is asked for the heads it
-# was pushed at before (GitHub's repository activity, `GET
-# /repos/{owner}/{repo}/activity`), newest first, because the ignore step
-# skips against the branch's last deployment that succeeded, and after a
-# rebase that commit is no ancestor of the head: the first earlier head whose
-# deployed tree matches and that has a record of its own is the build serving
-# it. The commit is the checkout's head and the branch the checkout's own; a
-# detached head asks no branch. That address is then asked
-# for one page, because a preview behind Vercel Authentication redirects every
-# stranger to `vercel.com/sso-api`, and a Mac's own requests carry no Vercel
-# session, so such a preview is PROTECTED and useless to point a build at.
-# Every read goes through `gh` and `curl`, so the test puts fakes on PATH.
-# Note that the parameters ride in the query string, because `gh api -f`
-# turns the call into a POST and GitHub answers 403 to a deployment create.
-#
-# stdout carries the address alone on success; stderr carries progress.
-# Exit codes:
-#
-#   0  the address was printed
-#   3  NOT_AFFECTED: no preview was built from this commit's deployed tree
-#   4  NOT_BUILT: the build failed, or ended without an address
-#   5  PROTECTED: the preview answers only to a Vercel session
-#   6  NOT_READY: no record settled within the wait
-#   7  UNREADABLE: gh, git, or curl would not answer
-#   8  NOT_REQUESTED: an agent's branch no preview was asked for
-
 EXIT_NOT_AFFECTED=3
 EXIT_NOT_BUILT=4
 EXIT_PROTECTED=5
@@ -52,36 +8,19 @@ EXIT_NOT_READY=6
 EXIT_UNREADABLE=7
 EXIT_NOT_REQUESTED=8
 
-# Vercel's own words on a build its ignoreCommand skipped, compared whole.
 SKIPPED_DESCRIPTION="Skipped - Not affected"
-# The project's Ignored Build Step (`scripts/vercel-ignore.sh`) writes no
-# deployment record for a commit it skips, only this commit status.
 IGNORED_STATUS="success: Canceled by Ignored Build Step"
 PREVIEW_ENVIRONMENT=Preview
 SSO_HOST=vercel.com
 SSO_PATH=/sso-api
-# An agent's branch builds no preview on a push (`vercel.json`'s
-# `git.deploymentEnabled`); one is built only when asked for, through Vercel.
-# Note that `luke/` is the prefix agents' branches had before `agent/`, kept
-# in both places until no branch under it is still open.
 AGENT_BRANCH_PREFIX=agent/
 LEGACY_AGENT_BRANCH_PREFIX=luke/
-# The deployed tree is whatever the deployment's ignoreCommand diffs, read
-# from its script so the two cannot drift apart.
 VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/vercel-ignore.sh"
 
-# Twenty minutes by default, on the probe's own observation that a record
-# appears within about 25 s of the push and settles 85–115 s later.
 interval_seconds=${PREVIEW_ADDRESS_INTERVAL_SECONDS:-15}
 attempts=${PREVIEW_ADDRESS_ATTEMPTS:-80}
-# An agent's branch Vercel says nothing of for this many reads in a row, about
-# a minute, was never asked for a preview: one just asked for may take a few
-# seconds to show its pending status, so a single quiet read is not enough.
 quiet_attempts=${PREVIEW_ADDRESS_QUIET_ATTEMPTS:-4}
 ancestors=${PREVIEW_ADDRESS_ANCESTORS:-50}
-# One page of the branch's activity, GitHub's largest: a branch pushed more
-# often than that since its last build is a doubt, and the ancestor walk is
-# still tried after it.
 PUSHED_HEADS_PAGE=100
 
 repo=
@@ -110,16 +49,11 @@ if [[ -z $repo ]]; then
     fi
 fi
 
-# The newest Preview record for the commit, as "id", or nothing.
 read_record() {
     gh api "repos/$repo/deployments?sha=$sha&environment=$PREVIEW_ENVIRONMENT&per_page=10" \
         --jq 'sort_by(.created_at) | reverse | .[0].id // empty'
 }
 
-# The record's newest status as one JSON object, or nothing. Note that the
-# fields are read out of it one at a time, because a `read` of a delimited row
-# folds an empty description into the field beside it and `$(...)` drops the
-# blank lines a line-per-field answer would end in.
 read_status() {
     gh api "repos/$repo/deployments/$1/statuses?per_page=10" \
         --jq 'sort_by(.created_at) | reverse | .[0] | select(. != null) | {state, description: (.description // ""), address: (.environment_url // .target_url // "")}'
@@ -129,7 +63,6 @@ field() {
     printf '%s' "$1" | jq -r ".$2"
 }
 
-# Whether the address redirects a stranger to Vercel's SSO.
 protected_by_vercel() {
     local location
     if ! location=$(curl -sS -o /dev/null -w '%{redirect_url}' "$1/"); then
@@ -139,10 +72,6 @@ protected_by_vercel() {
     [[ $location == "https://$SSO_HOST$SSO_PATH"* ]]
 }
 
-# Prints the address of the preview built from `$sha` and exits, or returns
-# when the commit has no build of its own: Vercel skipped it, or it is not
-# the head and has no record. `$1` is the commit's role: the `head` or an
-# `ancestor` of it. Every other ending exits with its own code.
 read_preview() {
     local role=$1 attempt record status state description address vercel_status quiet=0
     for ((attempt = 1; attempt <= attempts; attempt++)); do
@@ -191,11 +120,6 @@ read_preview() {
         elif [[ $role != head ]]; then
             return
         else
-            # No record means Vercel has not started the build; its commit status
-            # says whether it knows of the commit at all, so a queued build reads
-            # as a queue rather than as nothing.
-            # Note that a read that failed says nothing either way, so it is
-            # waited through rather than counted as Vercel saying nothing.
             if vercel_status=$(gh api "repos/$repo/commits/$sha/status" \
                 --jq '[.statuses[] | select(.context == "Vercel")][0] | select(. != null) | "\(.state): \(.description)"' 2>/dev/null); then
                 if [[ -z $vercel_status ]]; then
@@ -233,24 +157,16 @@ while IFS= read -r path; do
     deployed_paths+=("$path")
 done <<<"$deployed"
 
-# The commits the branch's head was pushed at, newest first, one a line: the
-# heads a deployment of the branch was built from, rebased ones among them.
 read_pushed_heads() {
     gh api "repos/$repo/activity?ref=refs/heads/$branch&per_page=$PUSHED_HEADS_PAGE" \
         --jq '.[] | select(.activity_type == "push" or .activity_type == "force_push" or .activity_type == "branch_creation") | .after'
 }
 
-# Every Preview record for the commit, newest first, one id a line.
 read_records() {
     gh api "repos/$repo/deployments?sha=$sha&environment=$PREVIEW_ENVIRONMENT&per_page=10" \
         --jq 'sort_by(.created_at) | reverse | .[].id'
 }
 
-# Prints the address of the newest build of `$sha`, an earlier head of the
-# branch, that succeeded, and exits; or returns where none did. Note that
-# every record is read and nothing is waited on, because the build serving a
-# skipped head had succeeded before the head was pushed: a record of the same
-# commit that failed, or is still on its way, is a redeployment beside it.
 read_earlier_preview() {
     local records record status address
     if ! records=$(read_records); then
@@ -276,8 +192,6 @@ read_earlier_preview() {
     printf 'preview: no build of %s succeeded; passing over it\n' "$sha" >&2
 }
 
-# Whether the commit `$1` deploys what the head does, fetched by its sha where
-# the checkout lacks it, as a rebased branch's earlier head is lacked.
 deploys_the_head() {
     if ! git cat-file -e "$1^{commit}" 2>/dev/null &&
         ! GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 origin "$1" >/dev/null 2>&1; then
@@ -289,10 +203,6 @@ deploys_the_head() {
 
 head=$sha
 read_preview head
-# Note that a branch whose pushes cannot be read ends the lookup rather than
-# going on to the ancestor walk alone: after a rebase, the walk cannot tell
-# the branch's own build from that of the branch it was rebased onto, whose
-# preview runs on that branch's own database.
 pushed=
 if [[ -n $branch ]] && ! pushed=$(read_pushed_heads); then
     printf 'UNREADABLE: gh could not read the pushes to %s\n' "$branch" >&2
@@ -314,10 +224,6 @@ fi
 
 walked=0
 while true; do
-    # Note that the walk passes over an ancestor whose deployed tree differs
-    # from the head's rather than stopping there, because the ignore step
-    # skips against the branch's last deployment, which a push that changes
-    # a service and then restores it leaves further back than the parent.
     while true; do
         if ((walked >= ancestors)); then
             printf 'NOT_AFFECTED: no preview of the deployed tree of %s within %s commits; run without --preview, or pass --preview URL\n' "$head" "$ancestors" >&2

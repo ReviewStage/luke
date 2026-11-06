@@ -13,16 +13,6 @@ import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provide
 import { Redacted, Result } from "effect";
 import { test } from "vitest";
 
-/**
- * An account's own provider key sealed and opened as the database holds it:
- * a seal opens for the account and provider it was made for and for no
- * other, under the ring that made it or one still holding its version, and
- * every failure to open is the one answer, unreadable.
- *
- * Synthetic keys and accounts throughout; the key-encryption keys are fixed
- * bytes written for this file and nothing else.
- */
-
 const KEK = {
   ONE: Buffer.alloc(32, 1).toString("base64"),
   TWO: Buffer.alloc(32, 2).toString("base64"),

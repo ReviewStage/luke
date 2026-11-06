@@ -6,14 +6,6 @@ import { TASK_CALL_FAILURE, type TasksPageParams } from "@repo/features/tasks-vi
 import { Effect } from "effect";
 import { pageResponse } from "./page-protocol";
 
-/**
- * The `app-page:` scheme as a frame meets it: the version its address names,
- * served under a policy that leaves the page no network and no reach outside
- * its sandbox, and not found for anything else. A page a coding agent on no
- * task showed is read by the agent's address on the same terms. The service
- * is a table of synthetic versions.
- */
-
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const AGENT_ID = "0c9e8d7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f";
@@ -26,7 +18,6 @@ const CHART: PageVersion = {
   html: "<!doctype html><script>document.body.textContent = 'sent'</script>",
 };
 
-/** The service as the host reads it for a frame: the one version above, of the one plan. */
 const readPage = (page: TasksPageParams) =>
   Effect.succeed(
     ("taskId" in page ? page.taskId === TASK_ID : page.agentId === AGENT_ID) &&
@@ -36,7 +27,6 @@ const readPage = (page: TasksPageParams) =>
       : { failure: TASK_CALL_FAILURE.UNANSWERED },
   );
 
-/** The policy's directives by name, each with its sources. */
 function directivesOf(response: Response): ReadonlyMap<string, string> {
   const policy = response.headers.get("content-security-policy") ?? "";
   return new Map(
@@ -61,7 +51,6 @@ it.effect(
       assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
       assert.equal(response.headers.get("cache-control"), "no-store");
       assert.equal(response.headers.get("x-content-type-options"), "nosniff");
-      // The find served after the page is `page-find.test.ts`'s.
       assert.ok(
         (yield* Effect.promise(() => response.text())).endsWith(
           CHART.html.slice("<!doctype html>".length),
@@ -88,7 +77,6 @@ it.effect(
 
       assert.equal(agentUrl, `app-page://page/agent/${AGENT_ID}/${CHART.id}/2`);
       assert.equal(yield* served(agentUrl), 200);
-      // The agent's id read as a task's, or an agent's address missing its version or bearing an extra step, names nothing.
       assert.equal(yield* served(`app-page://page/${AGENT_ID}/${CHART.id}/2`), 404);
       assert.equal(yield* served(`app-page://page/agent/${AGENT_ID}/${CHART.id}`), 404);
       assert.equal(yield* served(`app-page://page/agent/${AGENT_ID}/${CHART.id}/2/x`), 404);

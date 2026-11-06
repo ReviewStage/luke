@@ -13,13 +13,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * account-words.tsx -- an account's name beside its provider's: two accounts
- * at one provider, a lone named one, a long address cut short, an expired
- * one mended on its line, and a provider that names none, as Settings › Integrations draws
- * them, at a settings page's measure and narrower than 380px.
- */
-
 type Provider = (typeof INTEGRATION_PROVIDER)[keyof typeof INTEGRATION_PROVIDER];
 
 interface Account {

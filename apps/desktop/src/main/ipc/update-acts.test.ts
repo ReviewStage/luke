@@ -7,14 +7,6 @@ import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import type { WebContents } from "electron";
 import { updateProcedures } from "./update-acts";
 
-/**
- * The updater's acts on the act port, over an update service that writes
- * down what it was asked: a check answers where the updater then stands,
- * and the install, the move, and the two pages are carried; a sender this build does
- * not trust and a payload sent to a kind that takes none are refused in the
- * kind's own words.
- */
-
 const KIND = UPDATE_ACT_KIND;
 
 const SNAPSHOT: UpdateSnapshot = {
@@ -25,7 +17,6 @@ const SNAPSHOT: UpdateSnapshot = {
   progress: { percent: 40, transferredBytes: 400, totalBytes: 1_000 },
 };
 
-// SAFETY: no procedure here reads the sender; one inert object is one window.
 const PANEL: ActSender<WebContents> = {
   sender: {} as WebContents,
   panel: true,
@@ -81,7 +72,6 @@ it("a sender this build does not trust, and a payload a kind takes none of, are 
 });
 
 it("a check whose answer is no state of the updater is refused", async () => {
-  // SAFETY: a forged answer, as an updater a newer build wrote might give it; no state is spelled so.
   const { port } = fixture({ ...SNAPSHOT, status: "paused" } as unknown as UpdateSnapshot);
 
   assert.deepEqual(await port.call(PANEL, KIND.UPDATE_CHECK), {

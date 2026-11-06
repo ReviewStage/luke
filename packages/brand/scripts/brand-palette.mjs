@@ -1,37 +1,8 @@
-// brand-palette.mjs -- the brand's colors, the one table both generators read.
-//
-// generate-surface-shared.mjs writes these onto @repo/ui's roles (brand.css)
-// and as plain values (BRAND_PALETTE); generate-brand-assets.mjs draws the
-// icons, the cards, and the buttons in them.
-
-// The brand's colors: every --ui-color-* role a change of brand changes,
-// in the light theme and the dark, for the desktop and the site alike. The
-// roles a brand leaves alone (the fills and edges drawn as alphas of the ink,
-// shadows, the identity and chart hues, find's yellows) stay in @repo/ui's
-// palettes.css. Each entry is one brand; `BRAND` names the one the product
-// wears, so a rebrand is a new entry and that one name, and a second theme
-// is a second entry the generator writes under a selector of its own.
-//
-// Copper: warm graphite neutrals and one copper accent at 60 degrees of
-// OKLCH hue, held there in the dark rather than lightened toward peach. Every
-// ink holds its contrast pair on the grounds it is drawn on, which
-// @repo/ui's brand-contrast.test.ts asserts.
-//
-// Note that there is one copper, and it means you: the brand, what you can
-// act on, and what waits on you (attention) are the same ink, so attention
-// names the accent's values rather than a second copper a step away. Work
-// under way is the one status that would otherwise share it, so it is a blue
-// of its own at 250 degrees, at the other status inks' lightness, and a
-// running agent reads apart from one that needs you.
 const COPPER = {
   LIGHT: { FILL: "#a7611b", INK: "#8e5323" },
   DARK: { FILL: "#cf7b26", INK: "#f19a4b" },
 };
 
-// The product's avatar as GitHub shows the App's bot, cut as
-// assets/avatar/avatar-dark.svg: copper on the night tile. It is a picture
-// of something else's, so it is the same in either theme, and the window
-// draws it from these where it shows how a commit reads on GitHub.
 const AVATAR = { TILE: "#171412", INK: COPPER.DARK.FILL };
 
 export const BRAND_PALETTES = {
@@ -97,8 +68,6 @@ export const BRAND_PALETTES = {
       DANGER_TEXT: "#fe908d",
       DANGER_FILL: "#db3643",
       ATTENTION: COPPER.DARK.INK,
-      // White words sit on attention's fill in either theme, and the dark
-      // accent is too light to hold them, so the fill is the light one.
       ATTENTION_FILL: COPPER.LIGHT.FILL,
       WORKING: "#76bafe",
       COMPLETE: "#56d089",

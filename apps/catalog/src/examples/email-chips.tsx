@@ -4,13 +4,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * email-chips.tsx -- the field of email addresses empty, holding an address
- * in every state (to be sent, no address, on its way, sent, and refused),
- * and unavailable, a long list of wrong ones among them.
- */
-
-/** Every state an address stands in, as an invitation's run leaves them. */
 const EVERY_STATE: readonly EmailChip[] = [
   {
     id: "dana@acme.dev",
@@ -46,7 +39,6 @@ const EVERY_STATE: readonly EmailChip[] = [
   },
 ];
 
-/** A long paste with many addresses wrong, two ways, as a list from a spreadsheet lands. */
 const MANY_WRONG: readonly EmailChip[] = [
   "dana@acme.dev",
   "theo",
@@ -76,7 +68,6 @@ const MANY_WRONG: readonly EmailChip[] = [
     one.includes("@") && one.split("@")[1]?.includes(".") ? undefined : "Not an email address",
 }));
 
-/** A field the example holds the chips of, reading what is typed into addresses as the panel does. */
 function Held({
   start,
   disabled,

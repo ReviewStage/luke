@@ -23,20 +23,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * selection.tsx -- a list whose rows are chosen at once: ⌘-click one in or
- * out, ⇧-click a run, ⇧↑↓ grow the run, ⌘A every row, Esc none, a plain
- * click still opening its row; one row unavailable, which nothing chooses;
- * and the bar over it while any is chosen, its count, its acts, and Clear.
- * Then cards of the app's own under two heads, chosen the same way across
- * both in one region, each with the box at its start that the pointer
- * chooses it by, shown under the pointer and on every card while any is
- * chosen, and X choosing the card in hand. Last, a list of mail whose
- * head says how many are chosen in its name's place, led by a box choosing
- * every row or none, its acts as glyphs, each row's box coming in over its
- * unread dot under the pointer, as the Inbox's list draws it.
- */
-
 const TASKS = [
   { id: "sign-in", title: "Fix the sign-in loop", status: "Working" },
   { id: "release", title: "Ship the spring release", status: "Ready" },
@@ -86,7 +72,6 @@ function ChoosingTasks(): React.JSX.Element {
   );
 }
 
-/** The cards of the region, under the head each stands under. */
 const GROUPS = [
   { head: "Working", tasks: TASKS.slice(0, 2) },
   { head: "Ready", tasks: TASKS.slice(2) },

@@ -19,28 +19,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
-/**
- * admin-account.test.ts -- one account's page names the account, marks an
- * admin in words, says when it joined, was last seen, and how it signs in,
- * leads with its activity by meaningful actions, keeps the retired hosted
- * tier's daily use and volume last, lays out
- * what a maintainer supports it from (its work, agents, workspaces, keys and
- * connections, defaults, and failures), and leads its toolbar with the way
- * back to the users, which moves in place, loading or loaded; and offers
- * Impersonate only where the page can sign in as a member, to a non-admin
- * whose grant of support access stands. The network,
- * the HTTP boundary to the service, is a fake that answers the account's read.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ID = "account-ada";
 
-/**
- * The account's trailing year of actions, as the read folds it: one task on
- * Jan 7, then a task and an agent on each of the last nine days, ending on
- * the fixed day. Every figure below is worked from it by hand.
- */
 const ACTIONS_YEAR: AdminActionDay[] = Array.from({ length: 371 }, (_, index) => {
   const day = new Date(Date.UTC(2026, 9, 14 - 370 + index)).toISOString().slice(0, 10);
   const streak = index >= 362;
@@ -52,7 +34,6 @@ const ACTIONS_YEAR: AdminActionDay[] = Array.from({ length: 371 }, (_, index) =>
   };
 });
 
-/** A synthetic admin account read on a fixed day, with two days of actions and of hosted use. */
 function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserDetail {
   return {
     generatedAt: Date.UTC(2026, 9, 14, 12),
@@ -106,7 +87,6 @@ function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserD
   };
 }
 
-/** The account's support sections: a week of work, two agents, two workspaces, a broken key, and two failures. */
 function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUserDetail["support"] {
   return {
     lastSeenAt: Date.UTC(2026, 9, 14, 9, 30),
@@ -205,7 +185,6 @@ interface Opened {
 
 let root: Root | undefined;
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks; the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -225,7 +204,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The doors above with the sign-in as a member answered by `impersonate`, or left out, as the app's mount leaves it. */
 function WithImpersonate({
   impersonate,
   children,
@@ -241,11 +219,6 @@ function WithImpersonate({
   );
 }
 
-/**
- * The account's page, signed in, with its read answered by `response`, or
- * left hanging without one; under `doors`, the sign-in as a member is
- * answered by the test's own door, or left out.
- */
 async function openAccount(
   response: Response | undefined,
   doors: { impersonate: AdminDoors["impersonate"] } | undefined = undefined,
@@ -292,7 +265,6 @@ function headings(page: HTMLElement, level: string): string[] {
   return Array.from(page.querySelectorAll(level), (heading) => heading.textContent ?? "");
 }
 
-/** Each body row of the table `label` names, its cells' words joined by a bar. */
 function rows(page: HTMLElement, label: string): string[] {
   const table = page.querySelector(`table[aria-label="${label}"]`);
   if (table === null) throw new Error(`no table named ${label}`);
@@ -301,14 +273,12 @@ function rows(page: HTMLElement, label: string): string[] {
   );
 }
 
-/** The toolbar's way back, the button its path leads with. */
 function wayBack(page: HTMLElement): HTMLButtonElement {
   const found = page.querySelector<HTMLButtonElement>('header nav[aria-label="Path"] button');
   if (found === null) throw new Error("no way back");
   return found;
 }
 
-/** The page the path says the reader stands on. */
 function current(page: HTMLElement): string | undefined {
   return page.querySelector('header [aria-current="page"]')?.textContent ?? undefined;
 }
@@ -325,14 +295,12 @@ test("a loaded account names itself, marks an admin in words, and says how it si
   );
 });
 
-/** The toolbar's Impersonate, where it stands. */
 function impersonateButton(page: HTMLElement): HTMLButtonElement | undefined {
   return Array.from(page.querySelectorAll("button")).find(
     (button) => button.textContent === "Impersonate",
   );
 }
 
-/** A grant of support access that runs out after the account was read (Oct 14, noon). */
 const GRANT_STANDS = Date.UTC(2026, 9, 20, 12);
 
 test.each([
@@ -385,7 +353,6 @@ test("an account that is no admin and links no provider says neither", async () 
   expect(page.textContent).toContain("Joined Jan 5, 2026");
 });
 
-/** The section the heading `title` names. */
 function section(page: HTMLElement, title: string): HTMLElement {
   const found = Array.from(page.querySelectorAll("section")).find(
     (candidate) => candidate.querySelector("h2")?.textContent === title,

@@ -25,13 +25,9 @@ function panel(code: string): { code: string; filename: string } {
 
 tester.run("no-placeholder-ellipsis", noPlaceholderEllipsisRule, {
   valid: [
-    // An instruction ends on its last word.
     panel('function A() { return <SearchField placeholder="Search workspaces" />; }'),
-    // A value's shape keeps its elided rest.
     panel('function A() { return <SecretField placeholder="ghp_…" />; }'),
-    // Words that are no placeholder are another rule's.
     panel('function A() { return <Button label="Delete task…" />; }'),
-    // A value read off a name cannot be told.
     panel("function A() { return <TextField placeholder={WORDS.SEARCH} />; }"),
   ],
   invalid: [
@@ -40,7 +36,6 @@ tester.run("no-placeholder-ellipsis", noPlaceholderEllipsisRule, {
       filename: PANEL_FILE,
       errors: [{ messageId: "trailingEllipsis", data: { words: "Assign to…" } }],
     },
-    // Three dots, an object's property, a built template's tail, either side of an `||`, and a destructured default are refused alike.
     {
       code: [
         'const COPY = { placeholder: "Search by name or email..." };',

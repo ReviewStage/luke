@@ -13,7 +13,6 @@ import { useMutation } from "@tanstack/react-query";
 import { authClient, stopImpersonating } from "../../auth-client";
 import { useSocialSignIn } from "../../sign-in-choices";
 
-/** The app's mark at the head of the gate's cards. */
 function AdminMark(): React.JSX.Element {
   return (
     <span className="inline-flex w-13">
@@ -38,10 +37,6 @@ export function SignInCard(): React.JSX.Element {
   );
 }
 
-/**
- * A card standing alone on the page: `title`, what it means, and the one act
- * that leads on from it.
- */
 function Centered({
   title,
   description,
@@ -60,12 +55,6 @@ function Centered({
   );
 }
 
-/**
- * The gate's one non-admin refusal, worded the same on both views. A
- * maintainer signed in as a member is refused here as any non-admin is, so
- * the Viewing as strip stands over it then, whose Stop takes them back to
- * that member's page as themselves.
- */
 export function ForbiddenCard({
   email,
   onSignOut,
@@ -74,7 +63,6 @@ export function ForbiddenCard({
   onSignOut: () => void;
 }): React.JSX.Element {
   const session = authClient.useSession().data;
-  // Note that the stop answers the service's words where it refused, rather than throwing them.
   const stopping = useMutation({ mutationFn: stopImpersonating });
   const card = (
     <Centered

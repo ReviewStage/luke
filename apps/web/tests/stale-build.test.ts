@@ -4,13 +4,6 @@ import { expect } from "vitest";
 import { pageLeave } from "../src/app/page-leave";
 import { failedChunkAnswer, type StaleBuildTab } from "../src/app/stale-build";
 
-/**
- * stale-build.test.ts -- a tab whose chunk failed to load asks once to
- * reload and never reloads unasked, asks nothing offline, and its Reload
- * goes through the panel's own question while work stands.
- */
-
-/** A tab online or not, its reloads, asks, and each ask's dismissal kept. */
 function tabWith(options: { online?: boolean } = {}) {
   const leave = pageLeave(new EventTarget());
   const seen = { reloads: 0, asks: [] as (() => void)[], dismisses: [] as (() => void)[] };
@@ -77,7 +70,6 @@ it.effect(
 
       yield* tab.answer();
       tab.seen.asks[0]?.();
-      // The browser asked about the description's words before reloading, and the developer stayed.
       expect(tab.seen.reloads).toBe(1);
 
       yield* tab.answer();

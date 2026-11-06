@@ -22,17 +22,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * cards.tsx -- a card at each padding: a chart's regular inset, a figure's
- * compact one, a band's snug one, and a flush card a list fills to its
- * edge; then long words in a narrow column; then cards set among lines,
- * at a control's corner: tinted, on the code's ground, and outlined; one
- * leaving its room to what it holds; a dashed one for what is missing; one
- * standing in running words; a well, and one marked as the drop target a
- * dragged row is carried over; and one standing over the page as a menu does.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 const ROWS = ["Ada Lovelace", "Grace Hopper", "Katherine Johnson"] as const;

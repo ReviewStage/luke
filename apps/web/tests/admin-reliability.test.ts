@@ -15,18 +15,6 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
-/**
- * admin-reliability.test.ts -- the Reliability screen states its sections
- * under their own headings, loading or loaded; reads each failure rate as a
- * share with what it is a share of, and none at all where the database did
- * not answer, since its silence is no count; names an account that needs attention
- * by what broke and its status alone, a press on it opening its account
- * page; reads every provider's configuration in words; links product
- * analytics only where the deployment names its console; and offers the two
- * windows it reads. The network, the HTTP boundary to the service, is a fake that
- * answers the read.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const SECTIONS = [
@@ -39,7 +27,6 @@ const SECTIONS = [
 
 const CONSOLE_URL = "https://analytics.example.test/project/1";
 
-/** A synthetic week, read at noon on its last day. */
 function reliability(overrides: Partial<AdminReliability> = {}): AdminReliability {
   return {
     generatedAt: Date.UTC(2026, 9, 17, 12),
@@ -105,7 +92,6 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
 
 let root: Root | undefined;
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks; a list row measures its title with one, and the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -130,7 +116,6 @@ interface Opened {
   heard: string[];
 }
 
-/** The screen, signed in, with its read answered by `body`, or left hanging without one. */
 async function openReliability(body: AdminReliability | undefined): Promise<Opened> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     body === undefined
@@ -171,7 +156,6 @@ function sectionHeadings(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("h2"), (heading) => heading.textContent ?? "");
 }
 
-/** The words of the smallest element holding `label`, with what follows it in its card. */
 function cardOf(page: HTMLElement, label: string): string {
   const name = Array.from(page.querySelectorAll("div")).find(
     (element) => element.children.length === 0 && element.textContent === label,
@@ -257,7 +241,6 @@ test("product analytics is a link only where the deployment names its console", 
   act(() => root?.unmount());
 
   const unnamed = await openReliability(reliability({ analyticsConsoleUrl: undefined }));
-  // Note that the first page's answer stands until the second read lands.
   await vi.waitFor(() =>
     expect(
       Array.from(unnamed.page.querySelectorAll("a")).some(

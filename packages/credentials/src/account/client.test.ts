@@ -35,7 +35,6 @@ test("the authorization URL carries the native public-client contract", () => {
   assert.equal(url.searchParams.get("prompt"), "login");
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 it.effect("the code exchange sends the verifier and redirect as form fields", () =>
   Effect.gen(function* () {
     let request: Request | undefined;
@@ -149,7 +148,6 @@ it.effect("a failed account completion revokes every issued refresh token", () =
   }),
 );
 
-/** A client over a fake service that records the one request it was sent. */
 function recordingClient(answer: () => Response) {
   let request: Request | undefined;
   const fetch: FakeResponder = async (input, init) => {

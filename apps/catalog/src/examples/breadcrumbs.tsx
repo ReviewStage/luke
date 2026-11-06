@@ -14,19 +14,10 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * breadcrumbs.tsx -- a bar's path at a wide, a narrow, and the narrowest
- * width, its middle folders and then every folder standing as one "…",
- * each crumb's press marking it open; a long path cut short; a path whose
- * crumbs wear a glyph before their words; and a toolbar's heading, its way
- * back then the page's name, folded and not.
- */
-
 const REPOSITORY = "acme/relay";
 const FOLDERS = ["packages", "db", "src"] as const;
 const FILE = "accept-invite.ts";
 
-/** A bar's path to `FILE`, the crumb pressed last marked open. */
 function FilePath(): React.JSX.Element {
   const [open, setOpen] = useState<number | undefined>(undefined);
   const press = (at: number) => () => setOpen(open === at ? undefined : at);

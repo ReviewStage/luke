@@ -2,22 +2,12 @@
 <html lang="en" data-ui-profile="web" data-ui-theme="light" data-ui-density="compact">
   <head>
     <meta charset="UTF-8" />
-    <!-- viewport-fit=cover draws the page under a phone's notch and home
-         indicator, which the stage keeps off through the safe-area insets
-         (packages/panel/src/styles/desktop.css). interactive-widget has
-         Android shrink the layout viewport for the keyboard, as iOS's
-         visual viewport already does; the stage, measured by the visual
-         viewport (use-visual-viewport.ts), reads a keyboard inset of zero
-         then, so the two never count the keyboard twice. -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="robots" content="noindex" />
-    <!-- The light ground, as the landing page names it, so mobile browser chrome blends into it;
-         the account's theme, dark included, rewrites it (`public/app-theme.js`). -->
     <meta name="theme-color" content="#fffcfa" />
-    <!-- The theme the account last chose here, worn before the first frame; after the meta it tints. -->
     <script src="/app-theme.js"></script>
     <title>Vespin</title>
 
@@ -26,16 +16,6 @@
       content="Vespin is an inbox for all your coding agents."
     />
 
-    <!-- What Slack, iMessage, X, and every other unfurler shows for a pasted
-         Vespin link, which this page is served at: the site's own card, the
-         same for every link. An unfurler fetches the link signed out, so
-         whatever these tags say, anyone holding the link reads; they carry
-         nothing of the thing it opens, not even the workspace its address
-         names, and nothing here is written per link. The tag set is the
-         landing page's, documented in index.html, but for og:url, which is
-         left out: a static one could only name the site, and a service that
-         takes og:url as where its card leads would send the link's reader to
-         the landing page, so each unfurler keeps the link it was handed. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Vespin" />
     <meta property="og:title" content="Vespin" />
@@ -63,18 +43,10 @@
       content="The Vespin logo — a disc cut by a V, beside the name — on a near-black ground."
     />
 
-    <!-- Vespin's app icon, the same icons the landing page carries — the tag set
-         is documented there, in index.html. -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Installable: added to a phone's Home Screen, the app opens at /app
-         full screen. It posts no notifications on a phone, installed or not:
-         Android's Chrome and iOS show one only through a service worker,
-         which the app has none of (`src/app/web-notices.ts`). The status bar stays default (dark text on a light
-         bar), because a translucent one would draw white text over the
-         light ground. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -82,15 +54,6 @@
     <meta name="apple-mobile-web-app-title" content="Vespin" />
   </head>
   <body>
-    <!-- The loading frame, drawn the moment the page and its stylesheet land,
-         while the host stands in the tab and reads the session, which only
-         then draws the panel (`src/app/web-root.tsx`). It is the product's
-         mark alone, in the middle of the screen at one size on a phone and a
-         desktop alike, and it comes up only should the wait run on
-         (`src/app/app.css`). The script after it draws the mark as copper
-         dots that appear in place, a light moving through them, and fade out
-         as the panel draws (`public/boot-mark.js`); where it cannot, this
-         SVG stands still, and React's first render replaces it. -->
     <div id="root">
       <div class="boot-frame" aria-hidden="true">
         <span class="boot-frame-mark">

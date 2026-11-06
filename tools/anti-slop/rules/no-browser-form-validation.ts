@@ -2,15 +2,6 @@ import { defineRule } from "@oxlint/plugins";
 
 import { attributeName, intrinsicTagOf } from "../shared/jsx.ts";
 
-/**
- * A `<form>` is never checked by the browser: it carries `noValidate`,
- * because the browser's own bubble ("Please fill out this field.") is drawn
- * outside the design system, in the system's face rather than the app's.
- * The form's owner checks what it holds on submit and says what is wrong in
- * the field's `ErrorLine` (`FormField`'s `error`). `Stack` and `Inline` as a
- * form, and `ComposerFrame` as one, set it themselves; this rule holds every
- * form written as JSX, `@repo/ui`'s own included.
- */
 export const noBrowserFormValidationRule = defineRule({
   meta: {
     type: "problem",

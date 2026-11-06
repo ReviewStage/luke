@@ -1,17 +1,3 @@
-/**
- * mcp.ts -- `vespin mcp install <client>`: a coding agent connected to our MCP server on the service this run calls, as Settings › our MCP's connect step would.
- *
- * The commands and the address are `@repo/features/mcp-connect`'s, the
- * ones Settings shows. Claude Code, Codex, and VS Code are connected by
- * their own command (`claude mcp add`, `codex mcp add`, `code --add-mcp`),
- * run where it is on the PATH; Cursor by its entry merged into
- * `~/.cursor/mcp.json`, every other server and key in it kept. Where the
- * agent's command is missing, or the file is no config this could add to,
- * the exact command or entry is printed for the person to run or paste,
- * and the command ends refused, since nothing was connected. The agent's
- * own output goes to stderr, so stdout stays the answer.
- */
-
 import os from "node:os";
 import path from "node:path";
 import { CLI_EXIT } from "@repo/features/cli-exit";
@@ -34,7 +20,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { answer, CommandFailed, note } from "../output.js";
 import { serviceOrigin } from "../session.js";
 
-/** The clients `mcp install` connects, as the command line names them. */
 const MCP_CLIENT = {
   CLAUDE_CODE: "claude-code",
   CODEX: "codex",
@@ -44,14 +29,12 @@ const MCP_CLIENT = {
 
 type McpClientName = (typeof MCP_CLIENT)[keyof typeof MCP_CLIENT];
 
-/** The connect step's agent each command-run client is. */
 const COMMAND_AGENT_OF = {
   [MCP_CLIENT.CLAUDE_CODE]: MCP_COMMAND_AGENT.CLAUDE_CODE,
   [MCP_CLIENT.CODEX]: MCP_COMMAND_AGENT.CODEX,
   [MCP_CLIENT.VS_CODE]: MCP_COMMAND_AGENT.VS_CODE,
 } as const satisfies Record<Exclude<McpClientName, typeof MCP_CLIENT.CURSOR>, McpCommandAgent>;
 
-/** What to do next in each client to sign in, as Settings says it. */
 const SIGN_IN_NEXT = {
   [MCP_CLIENT.CLAUDE_CODE]: `Then type /mcp in Claude Code, choose ${MCP_SERVER_NAME}, and sign in.`,
   [MCP_CLIENT.CODEX]: `If your browser did not open to sign in, run codex mcp login ${MCP_SERVER_NAME}.`,
@@ -59,13 +42,11 @@ const SIGN_IN_NEXT = {
   [MCP_CLIENT.VS_CODE]: `Then start ${MCP_SERVER_NAME} from VS Code's MCP servers and sign in.`,
 } as const satisfies Record<McpClientName, string>;
 
-/** How a client was connected, or why it was not. */
 const CONNECTED = {
   RAN: "ran",
   WROTE: "wrote",
 } as const;
 
-/** A client that could not be connected here: what to run or paste instead, and the refusal it ends with. */
 function connectByHand(why: string, byHand: string): Effect.Effect<never, CommandFailed> {
   return Effect.andThen(
     note(`${why} Run or paste this yourself:\n\n${byHand}\n`),
@@ -73,7 +54,6 @@ function connectByHand(why: string, byHand: string): Effect.Effect<never, Comman
   );
 }
 
-/** The client's own command run, its output on stderr; the exit code it ended with, or none where it could not start. */
 const ran = Effect.fnUntraced(function* (command: McpCommand) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const [program, ...args] = command;
@@ -87,7 +67,6 @@ const ran = Effect.fnUntraced(function* (command: McpCommand) {
     );
 });
 
-/** A client connected by its own command, or the command printed where it is not on the PATH. */
 const installByCommand = Effect.fnUntraced(function* (
   client: keyof typeof COMMAND_AGENT_OF,
   serverUrl: string,
@@ -105,7 +84,6 @@ const installByCommand = Effect.fnUntraced(function* (
   return { connected: CONNECTED.RAN, command: shellLine(command) };
 });
 
-/** Cursor connected by its entry merged into its config, or the entry printed where the file is no config this could add to. */
 const installInCursor = Effect.fnUntraced(function* (serverUrl: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const file = path.join(os.homedir(), ...CURSOR_CONFIG_PATH);

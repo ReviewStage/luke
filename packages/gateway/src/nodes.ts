@@ -2,7 +2,6 @@ import type { WireRecord } from "@repo/wire";
 import { Effect } from "effect";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 
-/** A node on the other side of a connection: what it offers, and the one connection its asks travel on. */
 export type RemoteNodeInvoker = (
   capability: string,
   params: WireRecord,
@@ -17,7 +16,6 @@ export interface RemoteNodeRegistration {
 interface HeldNode {
   nodeId: string;
   capabilities: readonly string[];
-  /** Asks the connection the node registered on to perform one capability. */
   perform: (capability: string, params: WireRecord) => Effect.Effect<NodeCapabilityResult>;
   connected: boolean;
 }
@@ -30,27 +28,10 @@ export interface NodeSnapshot {
 
 export type NodeRegistryListener = (nodes: readonly NodeSnapshot[]) => void;
 
-/**
- * The nodes connected to the host and what each can do. A native capability
- * — opening an address on this machine, carrying an action to a panel — is the
- * client's to perform and the host's to ask for, and the host asks here by
- * name. A capability no connected node offers answers a typed unavailable,
- * never a success and never a throw, so the action that needed it is left undone
- * and recorded as such. A node that disconnects keeps its registration and
- * loses its availability, so its capabilities read unavailable rather than
- * unknown until it comes back.
- */
 export class NodeRegistry {
   readonly #nodes = new Map<string, HeldNode>();
   readonly #listeners = new Set<NodeRegistryListener>();
 
-  /**
-   * Registers a node whose capabilities are performed on the connection that
-   * offered them. A registration under an id already held replaces the
-   * invoker whole — the client reconnected — so an ask made after this
-   * reaches the new connection, and one made before it was answered by the
-   * old connection's own closing, never by the new one.
-   */
   registerRemote(registration: RemoteNodeRegistration): void {
     this.#nodes.set(registration.nodeId, {
       nodeId: registration.nodeId,
@@ -70,7 +51,6 @@ export class NodeRegistry {
     return removed;
   }
 
-  /** Whether a node of that id is registered, connected or not. */
   has(nodeId: string): boolean {
     return this.#nodes.has(nodeId);
   }
@@ -87,7 +67,6 @@ export class NodeRegistry {
     return this.#nodes.get(nodeId)?.connected === true;
   }
 
-  /** Whether some connected node offers the capability now. */
   available(capability: string): boolean {
     return this.#provider(capability) !== undefined;
   }
@@ -100,11 +79,6 @@ export class NodeRegistry {
     }));
   }
 
-  /**
-   * Asks for one capability by name. Which node answers is decided when the
-   * effect runs and not when it is described, so an ask held and run later
-   * reaches whatever is connected then.
-   */
   invoke(capability: string, params: WireRecord = {}): Effect.Effect<NodeCapabilityResult> {
     return Effect.suspend(() => {
       const provider = this.#provider(capability);

@@ -11,13 +11,6 @@ import {
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/**
- * Everything the repository compiles, and the canary pair beside it. The
- * workspaces have tsconfigs of their own, but one program over all of them
- * costs a single bind rather than twenty-six, and this check reads no
- * diagnostic, so the differences between those tsconfigs — which `@types`
- * package each pulls in — change nothing about which values are Effects.
- */
 const SOURCE_GLOBS = [
   "apps/*/src/**/*.ts",
   "apps/*/src/**/*.tsx",

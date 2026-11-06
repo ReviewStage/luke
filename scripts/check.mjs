@@ -2,27 +2,6 @@ import { spawn, spawnSync } from "node:child_process";
 
 import { ROOT_TASKS, TEST_TASK, turboInvocation, WORKSPACE_TASKS } from "./lib/turbo.mjs";
 
-// The checks run through Turborepo (`turbo.json`), which hashes each task's
-// inputs and replays a task whose hash it has already seen pass, from the
-// local cache or, given a TURBO_TOKEN, from the remote one CI and every other
-// machine share. The checks are independent of one another, so they run at
-// once. `discarded-effect` builds a program of its own rather than reading
-// typecheck's, which is why it is a check beside it rather than a step after
-// it. No build runs here: Vercel builds web and the eve services on every
-// deploy and the release workflow builds the desktop app, and knip and
-// biome's formatter are for running by hand (`pnpm knip`, `pnpm format`) or
-// on commit (lint-staged), never a check.
-//
-// Note that the tests run one task at a time beside the other checks rather
-// than as more tasks among them, because two vitest processes on one machine
-// starve each other's workers: a suite that passes alone times out in a hook
-// beside another, as the whole suite in one process did at its tail. Each
-// run's output is held and printed whole when it ends, so no two interleave.
-//
-// CI runs the tests in its own jobs beside this one, so it asks for
-// everything but them with `--without test`. `--affected` runs a workspace's
-// tasks only where that workspace, or one it depends on, changed since the
-// merge base with origin/main; the root checks always run (`lib/turbo.mjs`).
 const CHECKS = [...ROOT_TASKS, ...WORKSPACE_TASKS, "test"];
 const WITHOUT_FLAG = "--without";
 const AFFECTED_FLAG = "--affected";
@@ -48,10 +27,6 @@ function parseArguments(argv) {
   return { without, affected };
 }
 
-// Turbo compares against a local `main` unless told otherwise, and a
-// worktree's `main` is whatever it was when the clone was made; origin/main
-// is the base CI merges into. A stale one only makes more files count as
-// changed, which runs more, never less.
 function affectedBase(env) {
   if (env.TURBO_SCM_BASE) return env.TURBO_SCM_BASE;
   const known = spawnSync("git", ["rev-parse", "--verify", "--quiet", AFFECTED_BASE]);
@@ -67,10 +42,6 @@ function listWorkspaces(args, env) {
   return JSON.parse(listed.stdout).packages.items;
 }
 
-// The `--filter`s that select every affected workspace with its dependents,
-// or none when nothing changed. Note that we do not hand turbo `--affected`
-// itself: turbo intersects `--affected` with a `--filter` rather than adding
-// to it, so the whole scope is filters.
 function affectedFilters() {
   const base = affectedBase(process.env);
   const env = base ? { ...process.env, TURBO_SCM_BASE: base } : process.env;
@@ -124,9 +95,6 @@ if (anyWorkspace && !parsed.without.includes("test")) {
   runs.push({ label: "test", args: [TEST_TASK, "--concurrency=1", ...scope] });
 }
 
-// Note that we set exitCode rather than call process.exit, because on macOS a
-// piped stdout is asynchronous and an exit drops whatever a failing check's
-// output has not yet flushed, which is the part that names the failure.
 const results = await Promise.all(runs.map((run) => runTurbo(run.label, run.args, { held: true })));
 const failed = runs.filter((_, index) => !results[index]);
 if (failed.length > 0) {

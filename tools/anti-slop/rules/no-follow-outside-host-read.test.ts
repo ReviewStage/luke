@@ -26,11 +26,8 @@ const tester = new RuleTester();
 
 tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
   valid: [
-    // The hook's own module opens what it reads.
     { code: STREAM, filename: HOOK_FILE },
-    // The live reads' module opens what their queries hold.
     { code: STREAM, filename: LIVE_READS_FILE },
-    // The hook's door opens and polls what the hook holds.
     {
       code: [
         "const next = Effect.tryPromise({ try: () => stream.next(), catch: unheard });",
@@ -39,10 +36,8 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       ].join("\n"),
       filename: DOOR_FILE,
     },
-    // A write and a fetch read nothing a surface shows.
     { code: "act(ACT_KIND.TASKS_RENAME, { taskId, name });", filename: NEW_FILE },
     { code: "act(ACT_KIND.TASKS_FILE, { taskId, path });", filename: NEW_FILE },
-    // A read kind a fixture answers, tells apart, or types, rather than reads.
     {
       code: [
         "const answers = { [ACT_KIND.AUTOMATIONS_FOLLOW]: () => pushed };",
@@ -51,21 +46,17 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       ].join("\n"),
       filename: NEW_FILE,
     },
-    // A clock's tick repeats an effect, but no promise.
     {
       code: "Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(wait));",
       filename: NEW_UI_FILE,
     },
-    // A test stands in for the host.
     {
       code: STREAM,
       filename: path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/use-automations.test.ts"),
     },
-    // Code outside the panel is no business of the rule's.
     { code: STREAM, filename: path.join(REPOSITORY_ROOT, "packages/host/src/example.ts") },
   ],
   invalid: [
-    // A follow opened through either helper, and an act of a read kind however it is sent.
     {
       code: STREAM,
       filename: NEW_FILE,
@@ -86,7 +77,6 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },
-    // A one-shot read, and a read kind kept in a local to send later.
     {
       code: "askAct(ACT_KIND.AGENTS_LIST, { taskId });",
       filename: NEW_FILE,
@@ -97,13 +87,11 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },
-    // A design-system loop over a reader a panel file hands it.
     {
       code: "const once = Effect.tryPromise(read);\nEffect.forever(once);",
       filename: NEW_UI_FILE,
       errors: [{ messageId: "newPoll" }],
     },
-    // The hook's door reached from anywhere else: under an alias, re-exported, imported late, or required.
     {
       code: [
         'import { streamFrom as hold } from "../act-stream.js";',

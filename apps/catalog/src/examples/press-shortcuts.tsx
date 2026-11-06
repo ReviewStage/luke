@@ -26,17 +26,8 @@ import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * press-shortcuts.tsx -- the second ways in a press offers beside a control's
- * own: Back held, or right-clicked, listing the steps behind it; a split
- * button that hears every press of its main part, a refused one too; a hidden
- * rail's strip of marks, pressed to show the rail; and a title a ⌘-click
- * opens. Each says what it last did, since the catalog has nowhere to go.
- */
-
 const STEPS = ["Auth refactor · Code", "Auth refactor · Description", "Inbox"] as const;
 
-/** Back: a press takes a step, and a press held or a right-click lists the steps behind. */
 function HeldBack({ onDone }: { onDone: (what: string) => void }): React.JSX.Element {
   const menu = useMenu(true);
   const button = useRef<HTMLButtonElement>(null);
@@ -74,7 +65,6 @@ function HeldBack({ onDone }: { onDone: (what: string) => void }): React.JSX.Ele
   );
 }
 
-/** Start, busy, whose refused press is still heard. */
 function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.Element {
   const menu = useMenu(true);
   return (
@@ -100,7 +90,6 @@ const MARKS: readonly StripMark[] = [
   {},
 ];
 
-/** A changed file's bar for each of a pull request's files, a renamed one in the working tone, the file shown standing wider. */
 const BARS: readonly StripMark[] = [
   { tone: STATUS_TONE.COMPLETE, viewed: true },
   { tone: STATUS_TONE.ATTENTION },

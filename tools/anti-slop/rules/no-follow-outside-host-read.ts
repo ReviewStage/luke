@@ -11,31 +11,15 @@ import {
 } from "../shared/host-read-guard.ts";
 import { literalText } from "../shared/test-guard.ts";
 
-/**
- * Server data reaches a surface only through `useHostRead`
- * (`packages/panel/src/use-host-read.ts`), or a live read's query
- * (`packages/panel/src/live-reads.ts`), over the app-state slice the host
- * fills for each read. Outside those modules, the panel's and the design
- * system's code reads none of its own: no call of `streamFrom` or
- * `followStream`, no act kind `@repo/host`'s `PORT_ACT_USE` declares a READ,
- * however it is spelled, but as a fixture's answer or a comparison, and no
- * poll of a promise. The hook holds its reads open through one door,
- * `act-stream.ts`, which opens and polls on the hook's behalf and so is
- * excused all three; no module but those two imports it, in any form.
- */
-
-/** The Effect and Stream members that run an effect again and again: a poll, where what they run is a promise. */
 const REPEATERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["Effect", new Set(["forever", "repeat"])],
   ["Stream", new Set(["fromEffectSchedule"])],
 ]);
 
-/** The Effect members that run a promise, such as an act sent on the port. */
 const PROMISE_RUNNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["Effect", new Set(["tryPromise", "promise"])],
 ]);
 
-/** The object and member a member expression spells, as `ACT_KIND.TASKS_COMMENTS_FOLLOW` or `Effect.forever`, where it spells both by name. */
 function memberNamed(
   node: ESTree.MemberExpression,
 ): { readonly object: string; readonly name: string } | undefined {
@@ -46,12 +30,6 @@ function memberNamed(
   return { object: object.name, name: property.name };
 }
 
-/**
- * Whether a read kind stands where it reads nothing: an object literal's
- * computed key, as a fixture answers a kind, or one side of `===` or `!==`,
- * as a fixture tells which kind it was asked. Anywhere else, a call's
- * argument, the port's member, or a local it is kept in, it reads.
- */
 function answersRead(node: ESTree.MemberExpression): boolean {
   const parent = (node as { parent?: ESTree.Node }).parent;
   if (parent?.type === "Property") return parent.computed && parent.key === node;
@@ -128,7 +106,6 @@ export const noFollowOutsideHostReadRule = defineRule({
       },
       "Program:exit"() {
         if (door) return;
-        // Note that a repeat counts only beside a promise, because a clock's tick repeats too.
         const polls = runsPromise ? repeats : [];
         for (const { node, what } of reads) {
           context.report({ node, messageId: "newRead", data: { what } });

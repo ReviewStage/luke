@@ -1,13 +1,5 @@
 import type { ESTree } from "@oxlint/plugins";
 
-/**
- * jsx.ts -- what the design system's guards read off a JSX element: the
- * intrinsic tag it renders, an attribute's name, and the literal strings an
- * attribute's value can be, and off a handler's body: whether a value is a
- * node or a function, and the name a call is made by.
- */
-
-/** Whether `value` is an AST node, which is what a walk descends into. */
 export function isNode(value: unknown): value is ESTree.Node {
   return typeof value === "object" && value !== null && "type" in value;
 }
@@ -20,25 +12,16 @@ export function isFunction(node: ESTree.Node): boolean {
   );
 }
 
-/** The name a call is made by: `press` in `press(x)` and in `act.press(x)`. */
 export function calleeName(callee: ESTree.Node): string | undefined {
   if (callee.type === "Identifier") return callee.name;
   if (callee.type !== "MemberExpression" || callee.computed) return undefined;
   return callee.property.type === "Identifier" ? callee.property.name : undefined;
 }
 
-/** The name a member tag hangs from: `motion` for `motion.button`. */
 function rootOf(name: ESTree.JSXMemberExpression): string {
   return name.object.type === "JSXIdentifier" ? name.object.name : rootOf(name.object);
 }
 
-/**
- * The tag an intrinsic element renders, or undefined for a component. A
- * lowercase name is an intrinsic, and so is a lowercase member of a
- * lowercase factory such as `motion.button`, which renders the element it
- * names; a member of a capitalized namespace (`Controls.button`) is a
- * component.
- */
 export function intrinsicTagOf(name: ESTree.JSXElementName): string | undefined {
   const lowercase = /^[a-z]/u;
   const tag =
@@ -56,11 +39,6 @@ export function attributeName(attribute: ESTree.JSXAttribute): string {
     : `${attribute.name.namespace.name}:${attribute.name.name.name}`;
 }
 
-/**
- * The strings an attribute's value can be, or undefined where some branch of
- * it is no literal, so the rule cannot tell. `undefined` and `null` are no
- * value at all, as an attribute left off is.
- */
 export function literalValuesOf(
   node: ESTree.Node | null | undefined,
 ): readonly string[] | undefined {

@@ -5,13 +5,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * secret-fields.tsx -- a secret pasted for the first time, masked until its
- * press shows it; one already kept, which says Saved and never shows it; one
- * the service refused; and one that may be left empty.
- */
-
-/** A secret field holding what the catalog types into it. */
 function Sample({
   label,
   saved = false,

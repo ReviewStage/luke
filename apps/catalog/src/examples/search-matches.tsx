@@ -2,8 +2,6 @@ import { SearchMatch } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** search-matches.tsx -- the words a search's query landed on, marked in a line. */
-
 function SearchMatches(): React.JSX.Element {
   return (
     <CatalogSection id="search-match" title="In a line">

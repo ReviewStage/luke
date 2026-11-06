@@ -1,15 +1,12 @@
 import type { ClientSettingSideEffects } from "@repo/host/act-port";
 import { SETTING_SIDE_EFFECT } from "@repo/settings";
 
-/** An effect this side has nothing to do about, whichever side owns it. */
 const noClientSettingSideEffect = () => {};
 
-/** What the client's own side effects have hands on. */
 export interface ClientSettingSideEffectDependencies {
   applyLoginItem: (openAtLogin: boolean) => void;
 }
 
-/** The side effects this process has hands on; the host applied its own before answering. */
 export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDependencies) {
   const { applyLoginItem } = dependencies;
   return {

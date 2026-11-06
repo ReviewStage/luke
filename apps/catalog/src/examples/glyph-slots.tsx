@@ -20,16 +20,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * glyph-slots.tsx -- a glyph's seat before a line's words in each ink: a
- * call's muted glyph, the full ink of the one item in progress, the ink its
- * holder sets, and the product's mark in its blue; a to-do's seat as tall as its
- * first line before words that wrap; a slot its container sizes larger;
- * a page's outline inset a step inside its slot beside a person's; and a
- * to-do's glyph arriving as a press moves the step on.
- */
-
-/** A step a press moves on, its glyph arriving on each change: taken up, then done. */
 function ArrivingStep(): React.JSX.Element {
   const [done, setDone] = useState(false);
   const [moved, setMoved] = useState(false);

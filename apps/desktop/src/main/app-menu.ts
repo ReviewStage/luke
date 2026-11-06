@@ -1,19 +1,3 @@
-/**
- * app-menu.ts -- the menu bar: the system's own menus, and the window's commands with their shortcuts beside them.
- *
- * A command item does nothing of its own. Its click hands the command to the
- * window it was chosen over, which runs it as its shortcut would and only
- * where it can run. What the menu keeps of the window is which commands the
- * focused panel offers now, as it tells them (`offered`): an item handing a
- * command no control offers stands dimmed, as a Mac app's does, rather than
- * taking a click that does nothing. The chord beside each item is the shortcut table's, so the menu
- * says the key the window answers; the window's keymap is what answers it.
- * What it does hold is the drawer's: the update item, the account's
- * experiments, and a development build's developer tools, each told on its
- * own clock, since a gated feature's items stand only while its experiment
- * is on.
- */
-
 import { PUSH } from "@repo/host/contract";
 import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@repo/settings";
 import {
@@ -35,38 +19,18 @@ import { windowPushes } from "./window/window-pushes";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
-/**
- * The developer tools' chord, ⌥⌘J, which opens Chrome's DevTools on its
- * console. Note that it is not ⌥⌘I, Chrome's other chord for them, because
- * Insert image holds ⌥⌘I, and a key reaching the menu runs the first item
- * that names it, which would be Edit's. It is no entry of the shortcut
- * table, since no window command answers it and the Keyboard shortcuts page
- * lists what every build offers.
- */
 const DEVELOPER_TOOLS_CHORD: ShortcutChord = { key: SHORTCUT_KEY.J, option: true };
 
-/** The update item's one act in each state, as the Updates row words it. */
 export const UPDATE_MENU_ACT = {
-  /** Ask for the latest build, with Settings brought forward, where the answer is drawn. */
   CHECK: "check",
-  /** Nothing to choose: a check is already out. */
   CHECKING: "checking",
-  /** Nothing to choose: a newer build is downloading itself. */
   DOWNLOADING: "downloading",
-  /** Restart into the downloaded release. */
   RESTART: "restart",
-  /** Open the latest release's page, for a build that cannot install one itself. */
   GET: "get",
 } as const;
 
 export type UpdateMenuAct = (typeof UPDATE_MENU_ACT)[keyof typeof UPDATE_MENU_ACT];
 
-/**
- * The item's name for each act, in the title case a Mac menu writes. Note
- * that an act to choose carries no ellipsis, since it opens nothing and asks
- * nothing, while the two that stand disabled say the work under way as a
- * status does.
- */
 const UPDATE_MENU_LABELS = {
   [UPDATE_MENU_ACT.CHECK]: "Check for Updates",
   [UPDATE_MENU_ACT.CHECKING]: "Checking for Updates…",
@@ -75,7 +39,6 @@ const UPDATE_MENU_LABELS = {
   [UPDATE_MENU_ACT.GET]: "Download Latest Version",
 } as const satisfies Record<UpdateMenuAct, string>;
 
-/** What the app menu's update item does, and the presses it hands on. */
 export interface UpdateMenu {
   act: UpdateMenuAct;
   onCheck: () => void;
@@ -83,32 +46,22 @@ export interface UpdateMenu {
   onOpenLatest: () => void;
 }
 
-/**
- * What the menu reaches of the panel window beyond the window chosen over:
- * whether that window is the panel, and the panel brought back, on the
- * command chosen where there is one, for a press while it stands closed or
- * behind another of the app's windows.
- */
 export interface PanelMenu {
   isPanel: (window: BaseWindow) => boolean;
   onReopen: (command?: AppCommand) => void;
 }
 
-/** What the menu's Reload hands main: the window chosen over, to reload once nothing its page holds would be lost. */
 export interface ReloadMenu {
   onReload: (window: BaseWindow) => void;
 }
 
-/** A development build's label, the branch it was cut from, as Developer's item shows it: drawn or not, and the press that turns it the other way. */
 export interface BuildLabelMenu {
   shown: boolean;
   onShow: (shown: boolean) => void;
 }
 
-/** The short words a title leaves lower case after its first. */
 const TITLE_LOWER_WORDS = new Set(["a", "and", "in", "of", "on", "or", "the", "to"]);
 
-/** The window's sentence-case name, in the title case a Mac menu writes its items in. */
 function menuTitle(label: string): string {
   return label
     .split(" ")
@@ -120,23 +73,15 @@ function menuTitle(label: string): string {
     .join(" ");
 }
 
-/** The command each item that only hands one to the window hands, by its click, so the gate can dim an item whose command nothing offers. */
 const HANDED = new WeakMap<NonNullable<MenuItemConstructorOptions["click"]>, AppCommand>();
 
-/** Hands a chosen item's command to the window it was chosen over. */
 function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOptions["click"]> {
   const hand: NonNullable<MenuItemConstructorOptions["click"]> = (
     _item,
     window: BaseWindow | undefined,
     event,
   ) => {
-    // Note that a key reaching the menu is one the window chose not to
-    // claim: nothing offered its command, a text field kept its own ⌘⌫,
-    // or it was the window's layered Escape. The keymap is the one reader
-    // of keys, so only a click runs an item.
     if (event.triggeredByAccelerator) return;
-    // The window arrives as the base type, and only a browser window has a
-    // page to hand the command to.
     if (window instanceof BrowserWindow) {
       windowPushes.push(window.webContents, PUSH.MENU_COMMAND, command);
     }
@@ -148,7 +93,6 @@ function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOption
 function commandItem(command: KeyedCommand): MenuItemConstructorOptions {
   const shortcut = APP_SHORTCUTS[command];
   return {
-    // The command names its item, so the menu's gate can find a gated feature's item by it.
     id: command,
     label: menuTitle(shortcut.label),
     accelerator: shortcutAccelerator(shortcut.chord),
@@ -156,13 +100,6 @@ function commandItem(command: KeyedCommand): MenuItemConstructorOptions {
   };
 }
 
-/**
- * Close Window, which main runs itself rather than handing the window: it
- * closes the window chosen over, which hides it as every close does
- * (`panel-manager.ts`). Note that its key runs it too, unlike a command
- * item's, because the window's keymap claims no ⇧⌘W, so a key reaching it
- * is the one press it will see; ⌘W is the window's own, closing its tab.
- */
 function closeWindowItem(): MenuItemConstructorOptions {
   const shortcut = APP_SHORTCUTS[APP_COMMAND.CLOSE_WINDOW];
   return {
@@ -172,12 +109,6 @@ function closeWindowItem(): MenuItemConstructorOptions {
   };
 }
 
-/**
- * Close Tab, handed to the window on a click as any command is. Note that a
- * ⌘W reaching the menu is one the window had no tab to close for, so it
- * closes the window instead, as Safari and Chrome close a window with its
- * last tab.
- */
 function closeTabItem(): MenuItemConstructorOptions {
   const handOn = sendCommand(APP_COMMAND.CLOSE_TAB);
   return {
@@ -189,13 +120,6 @@ function closeTabItem(): MenuItemConstructorOptions {
   };
 }
 
-/**
- * New Task, handed to the panel on a click as any command is while the
- * panel is in front. Note that with it closed, its key runs it too, unlike
- * a command item's: no window's keymap stands to answer ⌘N then, so the
- * press brings the window back on a new task, as a Mac app's ⌘N opens a
- * window when none is open.
- */
 function newTaskItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
   const handOn = sendCommand(APP_COMMAND.NEW_TASK);
   return {
@@ -210,14 +134,6 @@ function newTaskItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
   };
 }
 
-/**
- * Actual Size, handed to the window on a click as any command is. Note that
- * a ⌘0 reaching the menu while the panel is closed or behind another of the
- * app's windows brings the panel back instead, as the Window menu's item
- * named for the app does: no window's keymap stands to answer ⌘0 then, and
- * ⌘0 is the key a Mac app's main window comes back on, as Messages' does.
- * The zoom is left as it stood.
- */
 function actualSizeItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
   const handOn = sendCommand(APP_COMMAND.ACTUAL_SIZE);
   return {
@@ -230,13 +146,6 @@ function actualSizeItem(panel: PanelMenu | undefined): MenuItemConstructorOption
   };
 }
 
-/**
- * The Window menu's item named for the app, which brings the panel back,
- * closed or behind, as Messages' own item does. It shows Actual Size's ⌘0,
- * the key that brings the panel back from the menu (`actualSizeItem`), since
- * a key reaching the menu runs the first item that names it, and View's
- * stands before Window's.
- */
 function mainWindowItem(appName: string, panel: PanelMenu): MenuItemConstructorOptions {
   return {
     label: appName,
@@ -245,13 +154,6 @@ function mainWindowItem(appName: string, panel: PanelMenu): MenuItemConstructorO
   };
 }
 
-/**
- * Reload, which main runs itself rather than handing the window, on its key
- * as on a click, since no window's keymap claims ⌘R. It reloads the window
- * chosen over, the panel or the call card, once `reload` has asked about
- * edits the page would lose; the system's own reload stands until it is
- * told, while no page has loaded to hold any.
- */
 function reloadItem(reload: ReloadMenu | undefined): MenuItemConstructorOptions {
   if (reload === undefined) return roleItem("reload", APP_COMMAND.RELOAD);
   const shortcut = APP_SHORTCUTS[APP_COMMAND.RELOAD];
@@ -264,7 +166,6 @@ function reloadItem(reload: ReloadMenu | undefined): MenuItemConstructorOptions 
   };
 }
 
-/** One of the system's own items, answering the chord the shortcut table gives it. */
 function roleItem(
   role: NonNullable<MenuItemConstructorOptions["role"]>,
   command: KeyedCommand,
@@ -272,26 +173,14 @@ function roleItem(
   return { role, accelerator: shortcutAccelerator(APP_SHORTCUTS[command].chord) };
 }
 
-/**
- * An item that opens a window or asks before it acts, named with the "…" a
- * Mac menu gives such an item. Note that the ellipsis belongs to the menu
- * bar alone: ⌘K and the shortcuts page name the same commands bare, so it is
- * added here and not to their shared labels.
- */
 function opening(item: MenuItemConstructorOptions): MenuItemConstructorOptions {
   return { ...item, label: `${item.label}…` };
 }
 
-/** A command with no key, named as the window names it. */
 function menuItem(command: MenuCommand): MenuItemConstructorOptions {
   return { label: menuTitle(MENU_COMMAND_LABELS[command]), click: sendCommand(command) };
 }
 
-/**
- * The update item's act for where the updater stands, or none for a
- * development build, which no release is newer than. A packaged build that
- * cannot install in place offers the releases page, as its Updates row does.
- */
 export function updateMenuAct(
   update: UpdateSnapshot,
   packaged: boolean,
@@ -309,13 +198,6 @@ export function updateMenuAct(
   }
 }
 
-/**
- * The app menu's update item, under About as a Mac app keeps it. Its presses
- * are main's own rather than the window's, because the menu stands while no
- * window does; a check brings the window forward on Settings itself
- * (`update-service-host.ts`), since a check that answers "nothing newer"
- * would otherwise say nothing at all.
- */
 function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
   const label = UPDATE_MENU_LABELS[menu.act];
   switch (menu.act) {
@@ -330,12 +212,6 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
   }
 }
 
-/**
- * View's Developer submenu: the window chosen over's own tools, toggled by
- * the system's role, docked as Chrome docks them; and, where `buildLabel` is
- * given, Show Build Label, which hides the build's sidebar row and Dock band
- * for a demo and brings them back, ticked while they are drawn.
- */
 function developerItem(buildLabel: BuildLabelMenu | undefined): MenuItemConstructorOptions {
   const tools: MenuItemConstructorOptions = {
     role: "toggleDevTools",
@@ -352,27 +228,6 @@ function developerItem(buildLabel: BuildLabelMenu | undefined): MenuItemConstruc
   return { label: "Developer", submenu: [tools, SEPARATOR, label] };
 }
 
-/**
- * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
- * own menu as macOS puts it, under the update item while there is one; the task's commands are File's, with New Tab,
- * Close Tab, and Close Window as Chrome's File keeps them, and Reopen Closed
- * Tab beside New Tab; Edit is the
- * system's own, spelt out so its Find submenu can hold the window's find as
- * every Mac app's Edit does; the system's reload, the window's
- * columns, the system's full screen, and its zoom are View's, reload first
- * as Safari's View keeps it, the zoom in
- * the order Chrome's View keeps it, the command palette, the places, back
- * and forward (as Finder and Safari keep them) and the tab moves are Go's, the
- * window's own are macOS's Window menu, and the shortcuts and the notes to
- * the people who make the app are Help's. A gated feature's item stands only
- * while `shown` says its command does (`shortcutShown`), a command item is
- * called what `named` says, which an experiment may rename (`shortcutLabel`), and View's
- * Developer submenu only where `developerTools` is true, with Show Build
- * Label in it only where `buildLabel` is given. New Task and ⌘0
- * bring a closed window back, and the Window menu holds an item named for
- * the app that does, only where `panel` is given, and Reload asks before it
- * loses unsaved edits only where `reload` is.
- */
 export function appMenuTemplate(
   appName: string,
   update?: UpdateMenu,
@@ -392,14 +247,12 @@ export function appMenuTemplate(
   );
 }
 
-/** Whether a command is offered, by the commands the focused panel told; every one, while none has told. */
 function offeredBy(commands: readonly AppCommand[] | undefined): (command: AppCommand) => boolean {
   if (commands === undefined) return () => true;
   const held = new Set(commands);
   return (command) => held.has(command);
 }
 
-/** An item that only hands a command to the window, dimmed while nothing there offers it, so a click on it is never one that does nothing. */
 function dimmedItem(
   item: MenuItemConstructorOptions,
   offered: (command: AppCommand) => boolean,
@@ -408,7 +261,6 @@ function dimmedItem(
   return handed === undefined || offered(handed) ? item : { ...item, enabled: false };
 }
 
-/** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
 function gatedOut(
   item: MenuItemConstructorOptions,
   shown: (command: KeyedCommand) => boolean,
@@ -420,13 +272,11 @@ function isKeyedCommandItem(id: string): id is KeyedCommand {
   return id in APP_SHORTCUTS;
 }
 
-/** A separator left with nothing to separate: first, last, or beside another. */
 function strandedSeparator(items: readonly MenuItemConstructorOptions[], at: number): boolean {
   if (items[at]?.type !== "separator") return false;
   return at === 0 || at === items.length - 1 || items[at + 1]?.type === "separator";
 }
 
-/** A command item called what `named` says where that is not its own name, as an experiment renames one. */
 function renamedItem(
   item: MenuItemConstructorOptions,
   named: (command: KeyedCommand) => string,
@@ -436,13 +286,6 @@ function renamedItem(
   return label === APP_SHORTCUTS[item.id].label ? item : { ...item, label: menuTitle(label) };
 }
 
-/**
- * The menus with a gated feature's items taken out while its experiment is
- * off, every submenu walked, and a separator the removal stranded taken out
- * with them, so an off experiment leaves no gap where its item stood; a
- * command item an experiment renames called as it says; and an item handing
- * the window a command nothing there offers dimmed.
- */
 function gated(
   items: readonly MenuItemConstructorOptions[],
   shown: (command: KeyedCommand) => boolean,
@@ -459,7 +302,6 @@ function gated(
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
 
-/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, the developer tools, the panel window, the reload, and the build's label. */
 interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
@@ -471,7 +313,6 @@ interface MenuBarState {
   readonly offered: readonly AppCommand[] | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the developer tools offered, the panel window, the reload, or the build's label. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
   | {
@@ -482,20 +323,8 @@ export type MenuBarChange =
   | { readonly panel: PanelMenu }
   | { readonly reload: ReloadMenu }
   | { readonly buildLabel: BuildLabelMenu }
-  /** The commands the focused panel offers now; none known while no panel has told it, which dims nothing. */
   | { readonly offered: readonly AppCommand[] | undefined };
 
-/**
- * The menu bar's one drawer: it draws the menus from what it was last told,
- * and draws again only when a change moves them, since the updater and the
- * account's experiments each tell it on their own clocks and neither knows
- * the other's state. Called with nothing, it draws what it holds.
- *
- * Note that a packaged build never draws the developer tools, whoever tells
- * it of them: a build someone installed offers no way into a window's
- * insides, and the gate stands here, at the one drawer, so no caller has to
- * remember it.
- */
 export function menuBarDrawer(
   build: { readonly appName: string; readonly packaged: boolean },
   draw: (template: MenuItemConstructorOptions[]) => void,
@@ -541,7 +370,6 @@ export function menuBarDrawer(
   };
 }
 
-/** Every menu and item, before the gate takes a gated feature's out. */
 function fullMenuTemplate(
   appName: string,
   update: UpdateMenu | undefined,
@@ -628,8 +456,6 @@ function fullMenuTemplate(
         roleItem("togglefullscreen", APP_COMMAND.FULL_SCREEN),
         SEPARATOR,
         actualSizeItem(panel),
-        // "In" is a particle here rather than the preposition a title leaves
-        // lower case, so the item reads as every Mac app's Zoom In.
         { ...commandItem(APP_COMMAND.ZOOM_IN), label: "Zoom In" },
         commandItem(APP_COMMAND.ZOOM_OUT),
         ...(developerTools ? [SEPARATOR, developerItem(buildLabel)] : []),
@@ -653,8 +479,6 @@ function fullMenuTemplate(
       ],
     },
     {
-      // The role makes this macOS's own Window menu, which adds the window
-      // list and, on macOS 15, its tiling items; ⌘` cycles the windows.
       role: "windowMenu",
       submenu: [
         roleItem("minimize", APP_COMMAND.MINIMIZE),

@@ -48,27 +48,8 @@ import { type ReactNode, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * task-rows.tsx -- a task's related tasks as a list of their own: each row
- * as the Tasks page's List draws it, led by the relation's kind in words so
- * it reads as a sentence, an open blocker's in the attention tone, then its
- * priority, key, and status before its name, its assignee and its open pull
- * requests after it, and its ⋯; a blocked task wearing its stop sign beside
- * its name and a parent its count of finished sub-tasks; one row nested
- * under another that folds it, rows chosen by their box, ⌘-click, and
- * ⇧-click, and a menu their ⋯, a right-click, and the menu key open; a
- * composer's dock of related tasks, bare of a box's gutter and a ⋯, its
- * rows' kinds leading and their × at their ends; and a quick add's draft
- * raised as a card over a row, its chips in their cells; the same related
- * tasks drawn only near the view of the scroller they stand in, each row
- * placed out of the list's grid at its columns' widths; and a list never
- * chosen still being read, its rows' blocks in their cells. Synthetic tasks.
- */
-
-/** Does nothing: the catalog's menus act on nothing. */
 function ignore(): void {}
 
-/** How a related task stands to the list's task, by its words and its icon. */
 const RELATION_KIND = {
   BLOCKED_BY: { words: "Blocked by", icon: <OctagonMinusIcon aria-hidden="true" /> },
   BLOCKS: { words: "Blocks", icon: <HandIcon aria-hidden="true" /> },
@@ -76,7 +57,6 @@ const RELATION_KIND = {
 
 type RelationKind = (typeof RELATION_KIND)[keyof typeof RELATION_KIND];
 
-/** One synthetic task, as a row draws it. */
 interface CatalogTask {
   readonly id: string;
   readonly name: string;
@@ -85,11 +65,8 @@ interface CatalogTask {
   readonly status: TaskStatus;
   readonly assignee: string | undefined;
   readonly pullRequests: readonly number[];
-  /** How it stands to the list's task; none for a row nested under another, which stands to its parent. */
   readonly kind?: RelationKind;
-  /** Whether another task it waits on is still open. */
   readonly blocked?: boolean;
-  /** How many of its sub-tasks are finished, of all of them. */
   readonly subTasks?: { readonly finished: number; readonly total: number };
 }
 
@@ -127,7 +104,6 @@ const RELATED: CatalogTask = {
   kind: RELATION_KIND.BLOCKS,
 };
 
-/** A task's own menu. */
 function taskMenu(name: string): readonly (readonly MenuEntry[])[] {
   return [
     [{ label: `Rename ${name}`, icon: <PencilIcon />, onSelect: ignore }],
@@ -135,7 +111,6 @@ function taskMenu(name: string): readonly (readonly MenuEntry[])[] {
   ];
 }
 
-/** A mark as the toolbar's compact chip, named by its words. */
 function MarkChip({ mark, words }: { mark: React.JSX.Element; words: string }): React.JSX.Element {
   return (
     <Chip
@@ -151,7 +126,6 @@ function MarkChip({ mark, words }: { mark: React.JSX.Element; words: string }): 
   );
 }
 
-/** One open pull request as its compact chip. */
 function PullRequest({ number }: { number: number }): React.JSX.Element {
   const Glyph = PULL_REQUEST_GLYPH[PULL_REQUEST_STATE.OPEN];
   return (
@@ -162,7 +136,6 @@ function PullRequest({ number }: { number: number }): React.JSX.Element {
   );
 }
 
-/** A relation's kind as the compact pill that leads its row, by its icon, its words, and a chevron; in the attention tone for a blocker still open. */
 function RelationPill({
   kind,
   open = false,
@@ -185,7 +158,6 @@ function RelationPill({
   );
 }
 
-/** A task's key, in the caption's muted ink. */
 function Key({ task }: { task: CatalogTask }): React.JSX.Element {
   return (
     <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -194,7 +166,6 @@ function Key({ task }: { task: CatalogTask }): React.JSX.Element {
   );
 }
 
-/** One task's row, nested and folding as said, and read at its place among its siblings. */
 function CatalogTaskRow({
   task,
   depth,
@@ -206,7 +177,6 @@ function CatalogTaskRow({
   depth?: number;
   nest?: ListRowNest;
   fold?: { open: boolean; onOpenChange: (open: boolean) => void };
-  /** Where it stands in a run drawing only the rows near the view; none where its list draws every row. */
   place?: VirtualRowPlace;
 }): React.JSX.Element {
   return (
@@ -255,11 +225,6 @@ function CatalogTaskRow({
   );
 }
 
-/**
- * Three related tasks, the second nested under the first, which folds it: a
- * reader hears the first and the third at level 1, 1 and 2 of 2, and the
- * second at level 2, 1 of 1, though the three stand flat in one list.
- */
 function RelatedTasks(): React.JSX.Element {
   const [open, setOpen] = useState(true);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
@@ -276,14 +241,8 @@ function RelatedTasks(): React.JSX.Element {
   );
 }
 
-/** The related tasks a run draws, flat. */
 const RUN_TASKS = [PARENT, CHILD, RELATED] as const;
 
-/**
- * The same related tasks in a scroller of their own, drawing only the rows
- * near its view, each row placed out of the list's grid and laying its
- * columns out at the widths every task says there (`taskRowFit`).
- */
 function RelatedTasksRun(): React.JSX.Element {
   const scroller = useRef<HTMLDivElement | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
@@ -316,7 +275,6 @@ function RelatedTasksRun(): React.JSX.Element {
   );
 }
 
-/** The cells a composer's dock draws of each related task: its relation, key, status, name, and the × that takes it away. */
 const DOCK_CELLS = [
   TASK_ROW_CELL.RELATION,
   TASK_ROW_CELL.KEY,
@@ -324,7 +282,6 @@ const DOCK_CELLS = [
   TASK_ROW_CELL.END,
 ] as const;
 
-/** One related task in a composer's dock: bare of a box and a ⋯, its kind leading and its × at its end. */
 function DockRow({ task, remove }: { task: CatalogTask; remove: ReactNode }): React.JSX.Element {
   return (
     <TaskRow
@@ -346,7 +303,6 @@ function DockRow({ task, remove }: { task: CatalogTask; remove: ReactNode }): Re
   );
 }
 
-/** A composer's dock of the tasks a new task will be related to, each row bare, its first cell at its inset and its × at its end. */
 function ComposerDock(): React.JSX.Element {
   const [docked, setDocked] = useState<readonly CatalogTask[]>([PARENT, RELATED]);
   return (
@@ -369,7 +325,6 @@ function ComposerDock(): React.JSX.Element {
   );
 }
 
-/** A quick add's draft over a row, its chips standing in their cells. */
 function DraftOverRow(): React.JSX.Element {
   return (
     <TaskRows label="Child tasks">
@@ -393,7 +348,6 @@ function DraftOverRow(): React.JSX.Element {
   );
 }
 
-/** The cells a glance at a task draws, as Home's Recent does. */
 const GLANCE_CELLS = [
   TASK_ROW_CELL.STATUS,
   TASK_ROW_CELL.REPOSITORY,
@@ -401,10 +355,8 @@ const GLANCE_CELLS = [
   TASK_ROW_CELL.UPDATED,
 ] as const;
 
-/** How wide each placeholder row's name stands. */
 const READING_NAMES = ["46%", "38%", "54%"] as const;
 
-/** A list never chosen still being read: each row's own cells holding blocks. */
 function ReadingRowsSkeleton(): React.JSX.Element {
   return (
     <TaskRows label="Recent" cells={GLANCE_CELLS} edges={TASK_ROW_EDGES.UNCHOSEN}>

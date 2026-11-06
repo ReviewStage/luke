@@ -1,20 +1,9 @@
 import { Schema } from "effect";
 
-/**
- * The ids the app's own user-facing settings are named by. They live here
- * rather than beside the desktop's settings schema because the product-event
- * vocabulary, which may carry a setting's id but never its value, names the
- * same set and may not depend on the schema. The ids of settings this build no
- * longer offers stay, so a count an older build still sends under one validates.
- */
 export const APP_SETTING_ID = {
-  /** Offered by no build: the voice a call spoke with, removed with calls. */
   VOICE: "voice",
-  /** Offered by no build: a call's captions, removed before calls were. */
   VOICE_CAPTIONS: "voice_captions",
-  /** Offered by no build: the Video calls experiment's Avatar picker, removed with video calls. */
   VIDEO_AVATAR: "video_avatar",
-  /** Offered by no build: Quiet Music and Spotify during a call, removed with calls. */
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
   AGENT_ENTER: "agent_enter",
@@ -25,9 +14,7 @@ export const APP_SETTING_ID = {
   OPEN_AT_LOGIN: "open_at_login",
   AGENT_NOTIFICATIONS: "agent_notifications",
   MAC_COMMANDS: "mac_commands",
-  /** Offered by no build: Run agents on this Mac, removed since Runs on chooses where each agent runs. */
   LOCAL_AGENTS: "local_agents",
-  /** Offered by no build: an earlier sandbox switch of This Mac's, which never drew a row. */
   LOCAL_AGENTS_SANDBOX: "local_agents_sandbox",
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",

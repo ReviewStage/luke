@@ -11,16 +11,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
-/**
- * admin-day.test.ts -- one day's page names the day it covers and whether it
- * is still filling, states its live totals and active accounts first and the
- * retired hosted tier's under it, each under its own heading, busiest first
- * with an admin marked in words, and moves the way a
- * maintainer asks: a plain press on an account or on the way back moves in
- * place, and a modified one is left to the browser's own gesture. The
- * network, the HTTP boundary to the service, is a fake that answers the day's read.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const DAY = "2026-10-12";
@@ -73,10 +63,6 @@ const LIN_ACTIVE: AdminDayActiveAccount = {
   },
 };
 
-/**
- * A synthetic past day, read two days after it closed, with two active
- * accounts of four listed and two hosted-tier accounts of three.
- */
 function detail(overrides: Partial<AdminDayDetail> = {}): AdminDayDetail {
   return {
     generatedAt: Date.UTC(2026, 9, 14, 12),
@@ -114,7 +100,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The day's page, signed in, with its read answered by `body`, or left hanging without one. */
 async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     body === undefined
@@ -156,7 +141,6 @@ function headings(page: HTMLElement, level: string): string[] {
   return Array.from(page.querySelectorAll(level), (heading) => heading.textContent ?? "");
 }
 
-/** Each row's cells of the table named `label`, in the words they read. */
 function rows(page: HTMLElement, label: string): string[][] {
   const table = page.querySelector(`table[aria-label="${label}"]`);
   if (table === null) throw new Error(`no table named ${label}`);
@@ -165,14 +149,12 @@ function rows(page: HTMLElement, label: string): string[][] {
   );
 }
 
-/** The toolbar's way back, the button its path leads with. */
 function wayBack(page: HTMLElement): HTMLButtonElement {
   const found = page.querySelector<HTMLButtonElement>('header nav[aria-label="Path"] button');
   if (found === null) throw new Error("no way back");
   return found;
 }
 
-/** The page the path says the reader stands on. */
 function current(page: HTMLElement): string | undefined {
   return page.querySelector('header [aria-current="page"]')?.textContent ?? undefined;
 }
@@ -185,7 +167,6 @@ function link(page: HTMLElement, words: string): HTMLAnchorElement {
   return found;
 }
 
-/** A primary-button press on `target`, modified as asked; whether the page took it over. */
 function press(target: Element, init: MouseEventInit = {}): boolean {
   const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init });
   act(() => {

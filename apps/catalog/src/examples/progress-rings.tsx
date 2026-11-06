@@ -1,10 +1,3 @@
-/**
- * progress-rings.tsx -- the progress ring at its start, part way, and full
- * in the working blue, the tones the agent's context ring takes, and the ring
- * beside its count as a sub-task's row and card say it, bare and as the badge
- * a Board card's pills draw.
- */
-
 import {
   GAP,
   Inline,

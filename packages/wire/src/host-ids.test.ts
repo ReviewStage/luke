@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { hostMintedId, sentLineId } from "./host-ids.js";
 
-/** The digest as `node:crypto` lays it out, which every row written before the pure digest was keyed by. */
 function nodeId(parts: readonly string[]): string {
   const digest = createHash("sha256")
     .update(Buffer.from("3c9b1f8e4a524d6b9e0f7b2c5a1d8e43", "hex"))

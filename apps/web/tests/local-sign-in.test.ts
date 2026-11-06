@@ -14,16 +14,6 @@ import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { localSignIn } from "../server/local-sign-in";
 
-/**
- * The demo's sign-in on one Better Auth configured as `auth.ts` configures
- * the desktop's authorization, over an in-memory database holding the seeded
- * member: the desktop's PKCE flow, sent to the login page, comes back through
- * the local sign-in to the desktop's loopback with a code for that member,
- * and a browser that opens the page bare lands on the web app signed in, each
- * leaving the way in a sign-in records.
- * Synthetic accounts throughout.
- */
-
 const SERVICE_URL = "http://127.0.0.1:5173";
 const LOOPBACK = "http://127.0.0.1:54698/callback";
 const LOOPBACK_DATABASE = "postgres://app:app@127.0.0.1:54329/app";
@@ -36,7 +26,6 @@ const SEEDED = {
   email: "seeded@example.test",
 } as const;
 
-/** RFC 7636's example pair, standing in for a verifier the Mac drew. */
 const PKCE = {
   verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
@@ -71,7 +60,6 @@ function serviceAuth() {
       oauthResource: [],
     }),
     disabledPaths: [...DISABLED_AUTH_PATHS],
-    // The plugins `auth.ts` installs that the desktop's authorization reaches, in its order.
     plugins: [
       jwt(JWT_KEY_STORAGE),
       lastLoginMethod({ storeInDatabase: true }),
@@ -88,7 +76,6 @@ function serviceAuth() {
 
 type Auth = ReturnType<typeof serviceAuth>;
 
-/** The `name=value` pairs a browser would send back from a response's cookies. */
 function cookiesFrom(response: Response): string {
   return response.headers
     .getSetCookie()
@@ -102,7 +89,6 @@ function location(response: Response): URL {
   return new URL(next, SERVICE_URL);
 }
 
-/** The account the browser's cookie is signed in as, as the web app reads it. */
 async function sessionUser(auth: Auth, cookie: string) {
   const session = await auth.handler(
     new Request(`${SERVICE_URL}/api/auth/get-session`, { headers: { cookie } }),
@@ -117,14 +103,12 @@ function navigate(auth: Auth, url: URL, cookie?: string): Promise<Response> {
   );
 }
 
-/** Where the desktop's authorize sends a browser that holds no session: the login page, on the query the provider signed. */
 async function loginPageOfDesktopAuthorize(auth: Auth): Promise<URL> {
   const query = new URLSearchParams({
     response_type: "code",
     client_id: DESKTOP_OAUTH_CLIENT.id,
     redirect_uri: LOOPBACK,
     scope: "openid profile email offline_access",
-    // The desktop names the provider its card chose ahead of the state's entropy.
     state: "google.oauth-state",
     code_challenge: PKCE.challenge,
     code_challenge_method: "S256",
@@ -155,7 +139,6 @@ test("the desktop's PKCE sign-in completes as the seeded member through the loca
 
   const signedIn = await localSignIn(auth, SEEDED.id).fetch(new Request(loginPage));
   const browser = cookiesFrom(signedIn);
-  // Authorize asked `prompt=login`, which only the sign-in's own resume drops; kept, this would land on the login page again.
   const loopback = location(await navigate(auth, location(signedIn), browser));
   assert.equal(`${loopback.origin}${loopback.pathname}`, LOOPBACK);
   assert.equal(loopback.searchParams.get("state"), "google.oauth-state");

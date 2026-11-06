@@ -28,7 +28,6 @@ const WEB = fileURLToPath(new URL("..", import.meta.url));
 
 const vercel = await readVercelConfig(WEB);
 
-/** Whether a route or a top-level rewrite is held to one host, as the sandbox's are. */
 const heldToAHost = (route: object) => "has" in route;
 
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes but the sandbox host's", async () => {
@@ -45,7 +44,6 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   );
 });
 
-/** Whether Vercel deploys a push to the branch, by the `git.deploymentEnabled` globs, where a branch no glob names deploys. */
 function deploys(branch: string): boolean {
   const refused = Object.entries(vercel.git.deploymentEnabled).some(
     ([glob, enabled]) => !enabled && matchesGlob(branch, glob),
@@ -88,11 +86,9 @@ test("a vercel.json key the generator does not know refuses the generation rathe
   await assert.rejects(vercelConfigSource(web), /images/u);
 });
 
-/** The first step of a path, where it is spelled as itself rather than matched. */
 const FIRST_STEP = /^\^?\/([a-z0-9-]+)(?:\/|$)/u;
 
 test("no workspace's slug can be the first step of a page the web app serves under its own name", () => {
-  // A route held to the sandbox's host is never the app's own address.
   const routed = [
     ...vercel.services[SERVICE.WEB].routes
       .filter((route) => !heldToAHost(route))
@@ -116,19 +112,11 @@ test("no workspace's slug can be the first step of a page the web app serves und
   );
 });
 
-/** A condition a route or a rewrite holds a request to: the host it was made to, as a pattern of its spellings. */
 interface HostCondition {
   readonly type: "host";
   readonly value: { readonly re: string };
 }
 
-/**
- * A route of the web service as the platform reads it: a rewrite to a file
- * of the build and the headers sent beside it, held to one host where it
- * names one, with the status it is answered with where it names one, or the
- * request headers it takes off; a redirect's status and `Location`; or
- * headers alone that routing carries on past (`continue`).
- */
 interface WebRoute {
   readonly src: string;
   readonly has?: readonly HostCondition[];
@@ -143,62 +131,33 @@ interface WebRoute {
   readonly continue?: true;
 }
 
-/** The app's own host: any host but the sandbox's answers alike. */
 const APP_HOST = "tryluke.dev";
 
-/** The sandbox's own host, which the routing holds to the page route, by each spelling a browser may send: with a trailing dot too. */
 const SANDBOX_HOST = new URL(PAGE_SANDBOX_ORIGIN).host;
 
 const SANDBOX_HOSTS = [SANDBOX_HOST, `${SANDBOX_HOST}.`] as const;
 
-/** Whether a request made to the host meets every condition a route or a rewrite holds it to. */
 function heldTo(entry: { readonly has?: readonly HostCondition[] }, host: string): boolean {
   return (entry.has ?? []).every((condition) => new RegExp(condition.value.re, "u").test(host));
 }
 
-/**
- * The service a request enters, read as Vercel reads the top-level
- * rewrites: in order, the first whose pattern matches the whole path and
- * whose conditions the request meets.
- */
 function serviceFor(path: string, host: string): string | undefined {
   return vercel.rewrites.find(
     (rewrite) => heldTo(rewrite, host) && new RegExp(`^${rewrite.source}$`, "iu").test(path),
   )?.destination.service;
 }
 
-/**
- * An answer's headers by their lower-cased names, a later route's standing in
- * for an earlier one's of the same name, and every value the routes it passed
- * named for each.
- */
 interface AnswerHeaders {
   readonly headers: ReadonlyMap<string, string>;
   readonly named: ReadonlyMap<string, readonly string[]>;
 }
 
-/**
- * What the web service answers a path with: the file of the build a route
- * rewrote it to, with the status the route forces where it names one, or the
- * path left to the build's own files (`file` undefined), with the headers its
- * routes laid on it; or a redirect.
- */
 type Served =
   | ({ readonly file: string | undefined; readonly forced?: number } & AnswerHeaders)
   | { readonly status: number; readonly location: string };
 
 const WEB_ROUTES: readonly WebRoute[] = vercel.services[SERVICE.WEB].routes;
 
-/**
- * What the web service answers a path made to a host with, the app's unless
- * named, read as Vercel reads its routes, in order: each whose pattern
- * matches the whole path, in its own case, and whose conditions the request
- * meets lays its headers on the answer, a later route's header standing in
- * for an earlier one of the same name; one that continues lets routing go on,
- * and the first that does not rewrites the path to its destination, the
- * pattern's groups written in, or redirects it. Where none does, the path is
- * left to the build's own files.
- */
 function servedBy(path: string, host = APP_HOST): Served {
   const headers = new Map<string, string>();
   const named = new Map<string, string[]>();
@@ -230,25 +189,16 @@ const servedFile = (path: string, host = APP_HOST) => {
   return "file" in served ? served.file : undefined;
 };
 
-/** The headers a path is answered with, where it is answered rather than redirected. */
 function answeredHeaders(path: string): AnswerHeaders {
   const served = servedBy(path);
   assert.ok("headers" in served, `${path} is answered, not redirected`);
   return served;
 }
 
-/**
- * The policies a browser may be sent with an answer: every distinct value its
- * routes named for its Content Security Policy. Vercel documents no
- * precedence between two routes naming one header, so where they name one
- * policy the browser enforces exactly it, whether the later stands in for the
- * earlier or both are sent; where they name two, it may enforce both at once.
- */
 function policiesSent(answer: AnswerHeaders): ReadonlySet<string> {
   return new Set(answer.named.get("content-security-policy"));
 }
 
-/** A policy's directives by name, each with its sources. */
 function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   return new Map(
     policy.split(";").map((directive) => {
@@ -288,14 +238,12 @@ test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a s
   ]) {
     assert.equal(servedFile(path), "/app.html", path);
   }
-  // The build's file name is never an address: it sends the browser to the app's own, for good, and the browser keeps the fragment.
   assert.deepEqual(servedBy("/app.html"), { status: 308, location: "/app" });
   assert.equal(servedFile("/about"), "/about.html");
   assert.equal(servedFile("/privacy"), "/privacy.html");
   assert.equal(servedFile("/changelog"), "/changelog.html");
   assert.equal(servedFile("/changelog/page/2"), "/changelog/page/2.html");
   assert.equal(servedFile("/admin"), "/admin.html");
-  // A page of the site written with a slash after it is sent to its bare address for good, and the changelog's first page, which no file is built for, to the changelog.
   for (const [path, location] of [
     ["/about/", "/about"],
     ["/privacy/", "/privacy"],
@@ -307,7 +255,6 @@ test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a s
   ] as const) {
     assert.deepEqual(servedBy(path), { status: 308, location }, path);
   }
-  // An API path still reaches the oRPC route with the whole path it names, and an exception its own route with the id.
   for (const path of [
     "/api/plans/x/description/revisions",
     "/api/inbox/i1",
@@ -328,7 +275,6 @@ test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a s
     assert.equal(served.searchParams.get("route"), route, path);
     assert.equal(served.searchParams.get("id"), path.split("/")[3], path);
   }
-  // The landing page, the sign-in, a static file, and a path naming no place, an old issue's among them, are the build's own files.
   for (const path of [
     "/",
     "/sign-in.html",
@@ -343,7 +289,6 @@ test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a s
 });
 
 test("no page of Vespin's own, by any first step a workspace's slug may not take, nor a file of the site's, is served the web app as a workspace's Home", () => {
-  // `/app` is the app's own path, which serves it by a rule of its own.
   const reserved = [...RESERVED_WORKSPACE_SLUGS].filter((step) => step !== "app");
   for (const step of reserved) {
     for (const path of [`/${step}`, `/${step}/`, `/${step}.html`]) {
@@ -362,7 +307,6 @@ test("no page of Vespin's own, by any first step a workspace's slug may not take
 });
 
 test("a first step no workspace's slug or id could be is answered the site's not-found page under a 404, and one a workspace's could be is served the web app, to say nothing of which are taken", () => {
-  // A slug is lower case but `personal-<account id>`, and an id is 32 letters and digits of either case, or a UUID.
   for (const path of ["/About", "/Stage/", `/${"a".repeat(97)}`]) {
     const served = servedBy(path);
     assert.ok("file" in served && served.file === "/404.html" && served.forced === 404, path);
@@ -391,16 +335,13 @@ test("each standalone page is served at its clean path and at its .html file's a
     const clean = servedBy(`/${page}`);
     const alias = servedBy(file);
     assert.ok("file" in clean && clean.file === file && clean.forced === undefined, page);
-    // A shipped desktop and a sent invitation open the file's own address, which a route rewrites or leaves to the build's file.
     assert.ok("file" in alias && (alias.file ?? file) === file && alias.forced === undefined, page);
     assert.deepEqual([...clean.named], [...alias.named], page);
   }
 });
 
-/** A link's token as the routing sees it: its claims and its signature, base64url, joined by a dot. */
 const LINK_TOKEN = "eyJzaXRlIjoiaHR0cHM6Ly9mdWxsc3Bpbi5wYWdlIn0.c2lnbmVkLWJ5LXRoZS1zZXJ2aWNl";
 
-/** The paths of the app, its API, auth, and its files, none of which the sandbox's host may serve. */
 const APP_PATHS = [
   "/",
   "/app",
@@ -417,7 +358,6 @@ const APP_PATHS = [
   "/install.sh",
 ] as const;
 
-/** The file the sandbox's host answers every path but a link's with, under a forced 404. */
 const SANDBOX_NOT_FOUND = "/sandbox-not-found.txt";
 
 test("the sandbox's host, spelled with a trailing dot or without, reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, and auth's among them, not found from a static file", async () => {
@@ -426,13 +366,11 @@ test("the sandbox's host, spelled with a trailing dot or without, reaches the pa
     definition.routes.includes(pageRoute),
   );
   assert.ok(pages !== undefined);
-  // The function a link lands in holds no other route, so no `route` a caller's query names reaches the API.
   assert.deepEqual(pages.routes, [pageRoute]);
   const pagesPath = `/${functionPublicPath(pages)}`;
   const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
   assert.ok(readdirSync(join(WEB, "public")).includes(SANDBOX_NOT_FOUND.slice(1)));
   for (const host of SANDBOX_HOSTS) {
-    // Every path of the host enters the web service, whose routes hold it.
     for (const path of [linkPath, ...APP_PATHS]) {
       assert.equal(serviceFor(path, host), SERVICE.WEB, `${host}${path}`);
     }
@@ -442,7 +380,6 @@ test("the sandbox's host, spelled with a trailing dot or without, reaches the pa
     assert.equal(landed.pathname, pagesPath, host);
     assert.equal(landed.searchParams.get("route"), pageRoute, host);
     assert.equal(landed.searchParams.get(PAGE_LINK_ROUTE.TOKEN_QUERY), LINK_TOKEN, host);
-    // Every other path is a file of the build's own, answered not found, so no function is woken by it.
     for (const path of APP_PATHS) {
       const refused = servedBy(path, host);
       assert.ok("file" in refused, `${host}${path}`);
@@ -463,7 +400,6 @@ test("the sandbox's host, spelled with a trailing dot or without, reaches the pa
 
 test("on any host but the sandbox's, a link's address reaches no route, and the app is routed as before", () => {
   const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
-  // A host that holds the sandbox's name within it is no spelling of the sandbox's.
   for (const host of [
     APP_HOST,
     "vespin-web-git-main-stage-review.vercel.app",
@@ -472,7 +408,6 @@ test("on any host but the sandbox's, a link's address reaches no route, and the 
     `${SANDBOX_HOST}s`,
   ]) {
     assert.equal(serviceFor(linkPath, host), SERVICE.WEB, host);
-    // Left to the build's own files, which hold none at that path.
     assert.equal(servedFile(linkPath, host), undefined, host);
     assert.equal(servedFile("/app", host), "/app.html", host);
   }
@@ -484,24 +419,17 @@ test("every path the web app is served at sends its own Content Security Policy 
   for (const path of ["/app", "/app/", "/acme/plan/p1", "/acme/inbox", "/acme/settings/agents"]) {
     const answer = answeredHeaders(path);
     const { headers } = answer;
-    // The app is sent its own policy alone, never the site's beside it to be enforced too.
     assert.deepEqual([...policiesSent(answer)], [headers.get("content-security-policy")], path);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], path);
-    // Files changed colors its diffs with Pierre's Highlights, one WebAssembly module, which this alone lets the app compile.
     assert.deepEqual(directives.get("script-src"), ["'self'", "'wasm-unsafe-eval'"], path);
     assert.deepEqual(directives.get("object-src"), ["'none'"], path);
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
     assert.deepEqual(directives.get("form-action"), ["'self'"], path);
     assert.deepEqual(directives.get("frame-ancestors"), ["'none'"], path);
-    // An agent's page is framed from the sandbox's own site (`@repo/features/page-frame`), and no other.
     assert.deepEqual(directives.get("frame-src"), ["'self'", PAGE_SANDBOX_ORIGIN], path);
-    // The installed app's manifest and its icons are the site's own files.
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], path);
     assert.ok(directives.get("img-src")?.includes("'self'"), path);
-    // The tab reaches the processor for session replay through its own origin
-    // (`@repo/features/posthog-proxy`), and Sentry's ingest in the organization's region,
-    // and no other address.
     assert.deepEqual(
       directives.get("connect-src"),
       ["'self'", "https://*.ingest.us.sentry.io"],
@@ -510,16 +438,12 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.equal(headers.get("x-frame-options"), "DENY", path);
     assert.equal(headers.get("x-content-type-options"), "nosniff", path);
     assert.equal(headers.get("referrer-policy"), "strict-origin-when-cross-origin", path);
-    // A cross-origin opener loses its hold on the tab, while a connect tab the app opens
-    // keeps the app's hold until it leaves for its provider (`src/app/connect-tab.ts`).
     assert.equal(headers.get("cross-origin-opener-policy"), "same-origin-allow-popups", path);
-    // Calls and dictation ask for the microphone.
     assert.ok(
       headers.get("permissions-policy")?.split(/,\s*/u).includes("microphone=(self)"),
       path,
     );
   }
-  // An API answer's headers are its handler's own; no page's route reaches it.
   for (const path of [
     "/api/plans/x/description/revisions",
     "/api/workspaces/w1/photo",
@@ -548,7 +472,6 @@ test("PostHog's path passes what the browser sends on to PostHog, without this o
       (each) =>
         !each.continue && heldTo(each, APP_HOST) && new RegExp(`^${each.src}$`, "iu").test(path),
     );
-    // The session cookie is this origin's, and Vercel passes on every header a rewrite does not take off.
     assert.ok(
       route?.transforms?.some(
         (transform) =>
@@ -562,7 +485,6 @@ test("PostHog's path passes what the browser sends on to PostHog, without this o
 });
 
 test("a content-hashed build asset is cached for a year, and nothing unhashed under /assets is", () => {
-  // Vite's default `build.assetsDir` is `assets`, which `public/assets` shares with unhashed files.
   for (const path of [
     "/assets/app-DyIpMmfT.js",
     "/assets/app-a1_B-2cD.css",
@@ -584,22 +506,12 @@ test("a content-hashed build asset is cached for a year, and nothing unhashed un
   }
 });
 
-/** The pages the web app frames itself, which this site alone may frame: the one a page's frame is sent to where the deployment has no sandbox (`packages/service/src/pages/page-frame.ts`). */
 const FRAMED_BY_THE_APP: ReadonlySet<string> = new Set(["page-in-mac-app.html"]);
 
-/** The maintainers' dashboard, which runs no analytics and draws charts and accounts' pictures. */
 const ADMIN_PAGE = "admin.html";
 
-/** The HTML files the web app's entry pages are built from, at the web app's root. */
 const ENTRY_PAGES = readdirSync(WEB).filter((name) => name.endsWith(".html"));
 
-/**
- * Every HTML file the build emits, relative to its root, with the addresses
- * that may serve it: Vite's entry pages, at their own path and without their
- * extension; the files `public/` carries as they are; and every changelog
- * page and release `scripts/prerender.ts` writes, at its own path and its
- * route's.
- */
 function emittedPages(): ReadonlyMap<string, readonly string[]> {
   const pages = new Map<string, readonly string[]>();
   const add = (file: string, ...addresses: readonly string[]) =>
@@ -618,7 +530,6 @@ function emittedPages(): ReadonlyMap<string, readonly string[]> {
   return pages;
 }
 
-/** The addresses among a page's candidates the web service answers with it: a route's rewrite to it, or its own path left to the build's files. */
 function addressesServing(file: string, candidates: readonly string[]): readonly string[] {
   return [...new Set(candidates)].filter((address) => {
     const served = servedBy(address);
@@ -628,7 +539,6 @@ function addressesServing(file: string, candidates: readonly string[]): readonly
   });
 }
 
-/** Every page the build emits, at every address it is served at, with the headers it is answered with. */
 function pageAnswers(): readonly { file: string; address: string; answer: AnswerHeaders }[] {
   return [...emittedPages()].flatMap(([file, candidates]) => {
     const addresses = addressesServing(file, candidates);
@@ -637,7 +547,6 @@ function pageAnswers(): readonly { file: string; address: string; answer: Answer
   });
 }
 
-/** The sources a policy's directive names, or its `default-src` where it names none. */
 function sourcesOf(directives: ReadonlyMap<string, readonly string[]>, name: string) {
   return directives.get(name) ?? directives.get("default-src") ?? [];
 }
@@ -647,7 +556,6 @@ test("every HTML page the build emits is served at every address under one Conte
   assert.ok(answers.some(({ file }) => file.startsWith("changelog/page/")));
   for (const { file, address, answer } of answers) {
     const { headers } = answer;
-    // No page is sent two policies to be enforced together.
     assert.equal(policiesSent(answer).size, 1, address);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     const scripts = sourcesOf(directives, "script-src");
@@ -679,13 +587,10 @@ test("the site's pages run scripts from this origin alone, connect to it alone, 
   for (const { address, answer } of site) {
     const directives = directivesOf(answer.headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], address);
-    // The analytics client (`src/analytics.ts`) loads its configuration and its recorder,
-    // and posts what it counts, through this origin (`@repo/features/posthog-proxy`).
     assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("style-src"), ["'self'"], address);
     assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
     assert.deepEqual(directives.get("img-src"), ["'self'", "data:"], address);
-    // Only the app frames the sandbox's site.
     assert.equal(directives.get("frame-src"), undefined, address);
   }
 });
@@ -697,9 +602,7 @@ test("the maintainers' dashboard runs scripts from this origin alone and connect
     );
     assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
-    // A chart's colors are an inline sheet `@repo/ui`'s chart writes (`ChartStyle`).
     assert.deepEqual(directives.get("style-src"), ["'self'", "'unsafe-inline'"], address);
-    // An account's picture is its provider's (`@repo/features/account-picture`).
     assert.deepEqual(
       directives.get("img-src"),
       [
@@ -713,7 +616,6 @@ test("the maintainers' dashboard runs scripts from this origin alone and connect
   }
 });
 
-/** The entry pages a connect lands on, which close their tab once the app's tab answers (`src/connect-return.ts`). */
 const CONNECT_LANDINGS = ENTRY_PAGES.filter((file) => {
   const entry = /<script type="module" src="\/(src\/[^"]+)"/u.exec(
     readFileSync(join(WEB, file), "utf8"),

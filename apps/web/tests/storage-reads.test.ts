@@ -21,16 +21,6 @@ import { type ToolSet, tool } from "ai";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 
-/**
- * The conversation reads the brain and the voice make, against the real
- * migrations: each answers the rows it names typed by role and skips a
- * conversation stamped `deleted_at` from the very next call, the purge takes
- * the stamped rows once the window has passed and nothing sooner, a row
- * naming a tool the catalog has retired reads back without that part, and a
- * row this build cannot read back — parts that are not a message's —
- * refuses the page rather than riding out in it.
- */
-
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
@@ -107,7 +97,6 @@ function readRecords(read: MessageListRead): readonly StoredMessageRecord[] {
   return read.ok ? read.value : [];
 }
 
-/** A main conversation with three messages and the turn that wrote them. */
 async function populateMain(
   userId: string,
 ): Promise<{ main: string; turn: string; ids: string[] }> {
@@ -120,7 +109,6 @@ async function populateMain(
   return { main, turn, ids };
 }
 
-/** Every read this module answers, of one account's rows in one conversation, each as the ids it answered. */
 async function everyRead(userId: string, conversationId: string, rows: { readonly turn: string }) {
   const { messages, turns } = database.store;
   const recordIds = (read: MessageListRead) => readRecords(read).map((record) => record.id);
@@ -147,7 +135,6 @@ test("one account's rows are never read under another's id", async () => {
 });
 
 test("the purge takes a stamped conversation and everything under it once the window has passed, and nothing sooner", async () => {
-  // The purge runs across every account, so this test's stamps stand in a year of their own, clear of the other tests' stamps.
   const base = new Date("2020-01-01T00:00:00.000Z");
   const userId = await database.createUser();
   const other = await database.createUser();

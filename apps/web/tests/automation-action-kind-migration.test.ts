@@ -8,21 +8,9 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * automation-action-kind-migration.test.ts -- the migrations that spell every stored automation's action kind `agent`.
- *
- * Over a database migrated up to each, holding an automation in each
- * spelling an earlier build wrote: once it runs, both say `agent` and keep
- * the rest of their action as it stood; a second run changes nothing. The
- * stragglers migration rewrites the rows a release still serving beside the
- * first wrote as `coding-agent`, so that migration leaves none behind.
- * Synthetic accounts throughout.
- */
-
 const MIGRATION = "20261029013202_automation_action_kind_agent";
 const STRAGGLERS = "20261029030257_automation_action_kind_agent_stragglers";
 
-/** A migrations folder holding the migrations whose names `keep` takes, and no other. */
 function foldersWhere(keep: (name: string) => boolean) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
@@ -36,7 +24,6 @@ function foldersWhere(keep: (name: string) => boolean) {
   });
 }
 
-/** Each action as an earlier build stored it, in order. */
 const BEFORE = [
   { kind: "coding-agent", prompt: "Triage today's issues.", disabledServers: ["sentry"] },
   { kind: "agent", prompt: "Sweep the flaky tests." },
@@ -70,7 +57,6 @@ it.effect.each([MIGRATION, STRAGGLERS])(
           ],
         );
 
-        // A second run, as a deploy that ran it before recording it would, changes nothing.
         const fileSystem = yield* FileSystem;
         const path = yield* Path;
         yield* sql.unsafe(

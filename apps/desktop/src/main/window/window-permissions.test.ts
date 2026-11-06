@@ -3,20 +3,12 @@ import type { Session, WebContents } from "electron";
 import { test } from "vitest";
 import { grantWindowPermissions } from "./window-permissions";
 
-/**
- * What a page is answered as it asks Chromium for a permission: a window of
- * the app's own may take the microphone and full screen, and nothing else, and
- * a page that is no window of the app's is refused everything.
- */
-
 type CheckHandler = Parameters<Session["setPermissionCheckHandler"]>[0];
 type RequestHandler = Parameters<Session["setPermissionRequestHandler"]>[0];
 
-// SAFETY: the pages are only identities the handlers compare, which nothing here reads further.
 const own = {} as WebContents;
 const foreign = {} as WebContents;
 
-/** A session as Electron's holds its handlers, granted to `own` alone. */
 function grantedSession() {
   let check: CheckHandler = null;
   let request: RequestHandler = null;
@@ -31,14 +23,12 @@ function grantedSession() {
     },
     (webContents) => webContents === own,
   );
-  /** What a request is answered, as Electron hands it the details it does. */
   const asked = (
     webContents: WebContents,
     permission: Parameters<NonNullable<RequestHandler>>[1],
     details: Partial<Electron.MediaAccessPermissionRequest> = {},
   ): boolean => {
     let granted: boolean | undefined;
-    // SAFETY: the handlers read only the media types of a request's details.
     request?.(webContents, permission, (answer) => (granted = answer), {
       requestingUrl: "app://desktop/panel",
       isMainFrame: true,
@@ -47,7 +37,6 @@ function grantedSession() {
     assert.notEqual(granted, undefined, "every request is answered");
     return granted === true;
   };
-  /** What a check is answered. */
   const checked = (
     webContents: WebContents | null,
     permission: Parameters<NonNullable<CheckHandler>>[1],

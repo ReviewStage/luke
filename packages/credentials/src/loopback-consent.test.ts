@@ -23,11 +23,6 @@ const REASON = {
   TIMED_OUT: "Sign-in timed out. Try again from the Example row.",
 } as const;
 
-/**
- * The trip under test, with the browser and the exchange recorded rather than
- * performed. `armed` settles with the authorization the trip composed, which
- * is the moment the loopback is listening and the tab would have opened.
- */
 function harness(
   armed: Deferred.Deferred<LoopbackAuthorization>,
   overrides: Partial<LoopbackConsentOptions<Grant>> = {},
@@ -57,19 +52,10 @@ function harness(
   return { consent, opened, authorizations, exchanges };
 }
 
-/** One trip in a scope of its own, the way a press runs one. */
 function trip(consent: ReturnType<typeof harness>["consent"]) {
   return Effect.forkChild(Effect.scoped(consent.signInEffect()));
 }
 
-/**
- * The authorization the trip composed, read once the trip has armed itself on
- * it: the tab opened and the page held for reopening. Composing the page is
- * what settles `armed`, and a fiber that completes a Deferred resumes its
- * waiters on its own stack, so a read of `armed` alone lands inside the trip's
- * own compose, a statement ahead of the browser. The scheduler turn is what
- * stands between the two.
- */
 function armedTrip(
   armed: Deferred.Deferred<LoopbackAuthorization>,
 ): Effect.Effect<LoopbackAuthorization> {
@@ -80,12 +66,6 @@ function armedTrip(
   });
 }
 
-/**
- * Follows the redirect the browser would make. On its own connection every
- * time: a trip may bind a registered port rather than an ephemeral one, so a
- * pooled socket left over from an earlier trip would be reused against a
- * server that has since closed.
- */
 function answerCallback(
   redirectUri: string,
   parameters: Record<string, string>,
@@ -142,7 +122,6 @@ it.effect("one trip runs press to grant, with the PKCE pair the exchange answers
     assert.equal(answered.status, 200);
     assert.deepEqual(yield* Fiber.join(waiting), { token: "granted" });
 
-    // SAFETY: The granted callback above ran the exchange exactly once.
     const exchange = exchanges[0] as LoopbackExchange;
     assert.equal(exchange.code, "auth-code");
     assert.equal(exchange.redirectUri, authorization.redirectUri);
@@ -207,8 +186,6 @@ it.effect(
       const { consent, opened, authorizations } = harness(armed, { isOnline: () => false });
 
       const waiting = yield* trip(consent);
-      // Note that the clock never moves: a trip that waited on its deadline
-      // would still be waiting here.
       yield* Effect.yieldNow;
 
       assert.notEqual(
@@ -296,7 +273,6 @@ it.effect("another path, or a state this trip never issued, is refused without s
     const stray = yield* callback(strayPath.toString(), { state: authorization.state });
     assert.equal(stray.status, 404);
 
-    // The real redirect was still on its way, and the trip was still listening.
     const genuine = yield* callback(authorization.redirectUri, {
       state: authorization.state,
       code: "auth-code",

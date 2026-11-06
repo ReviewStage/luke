@@ -1,10 +1,3 @@
-/**
- * update-acts.ts -- the updater's acts as main carries them: a check, the install, the move to Applications, and the releases page and changelog opened.
- *
- * Each is handed to the update service as it stands; none reads which window
- * asked.
- */
-
 import { actPortFor, type PlatformActProcedures } from "@repo/host/act-port";
 import { UPDATE_ACT_KIND } from "@repo/host/contract";
 import type { WebContents } from "electron";

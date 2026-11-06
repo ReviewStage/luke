@@ -10,18 +10,8 @@ import { afterAll, beforeAll, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
 
-/**
- * The web app drawn in the account's Theme setting, as the desktop is: the
- * root wears the theme the setting resolves to, follows the machine's
- * appearance under System (the setting's default) and only then, says its
- * ground to the browser's chrome, and keeps the choice for the next load's
- * first frame. One mount, because the panel's state read is the tab's once.
- */
-
-/** The site palette's two grounds (`@repo/ui`'s `palettes.css`), which the chrome is tinted with. */
 const GROUND = { light: "#fffcfa", dark: "#0f0d0b" } as const;
 
-/** The query a machine's dark appearance answers. */
 const MACHINE_DARK = "(prefers-color-scheme: dark)";
 
 let app: WebApp | undefined;
@@ -29,7 +19,6 @@ let laid: HTMLStyleElement | undefined;
 let machineDark = false;
 const flipped = new Set<EventListenerOrEventListenerObject>();
 
-/** The machine's appearance turning dark or light, said to every query listening for it. */
 function machineTurns(dark: boolean): void {
   machineDark = dark;
   for (const changed of flipped) {
@@ -59,7 +48,6 @@ beforeAll(() => {
         dispatchEvent: () => false,
       }) satisfies MediaQueryList,
   );
-  // The page's own tags, as app.html writes them: the profile, and the chrome's tint.
   document.documentElement.setAttribute("data-ui-profile", "web");
   document.documentElement.setAttribute("data-ui-theme", "light");
   const meta = document.head.appendChild(document.createElement("meta"));
@@ -76,7 +64,6 @@ afterAll(async () => {
   vi.restoreAllMocks();
 });
 
-/** What the tab wears now: its root's theme, the chrome's tint, and the choice kept for the next load. */
 function worn() {
   return {
     theme: document.documentElement.getAttribute("data-ui-theme"),
@@ -85,7 +72,6 @@ function worn() {
   };
 }
 
-/** Writes the Theme setting as its row in Settings does. */
 async function chooseTheme(theme: (typeof THEME)[keyof typeof THEME]): Promise<void> {
   await askAct(ACT_KIND.SETTING_UPDATE, { field: "theme", value: theme });
 }
@@ -95,20 +81,17 @@ test("the tab wears the account's theme and follows the machine under System", a
   app = await mountWebApp(root, { httpClient: fakeService({ signedIn: false }).layer });
   assert.ok(app !== undefined, "the host stands");
 
-  // System, the setting's default, on a light machine.
   await vi.waitFor(() =>
     assert.deepEqual(worn(), { theme: "light", chrome: GROUND.light, kept: THEME.SYSTEM }),
   );
   machineTurns(true);
   assert.deepEqual(worn(), { theme: "dark", chrome: GROUND.dark, kept: THEME.SYSTEM });
 
-  // Light chosen on the dark machine: the choice wins.
   await chooseTheme(THEME.LIGHT);
   await vi.waitFor(() =>
     assert.deepEqual(worn(), { theme: "light", chrome: GROUND.light, kept: THEME.LIGHT }),
   );
 
-  // Dark chosen, and the machine turning light under it changes nothing.
   await chooseTheme(THEME.DARK);
   await vi.waitFor(() =>
     assert.deepEqual(worn(), { theme: "dark", chrome: GROUND.dark, kept: THEME.DARK }),

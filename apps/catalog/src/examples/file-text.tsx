@@ -2,12 +2,6 @@ import { FILE_TEXT_EXTENT, FileText } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * file-text.tsx -- a file's words as written: a skill's SKILL.md whole,
- * scrolling past its reading height, and a peek of pasted text faded at
- * its foot.
- */
-
 const SKILL = `---
 name: grill-me
 description: Interview the user relentlessly about a plan or design until it holds up.

@@ -21,19 +21,16 @@ const tester = new RuleTester();
 
 tester.run("no-source-read-in-test", noSourceReadInTestRule, {
   valid: [
-    // A fixture or a recording is data, not source.
     {
       code: 'readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");',
       filename: TEST_FILE,
     },
     { code: 'await readFile(path.join(directory, "settings.json"), "utf8");', filename: TEST_FILE },
     { code: 'readdirSync(path.join(temporary, "out"));', filename: TEST_FILE },
-    // A module in a checkout the test made is the test's own data.
     {
       code: 'const fresh = cloned(checkout); readFileSync(join(fresh, "src", "invites.ts"), "utf8");',
       filename: TEST_FILE,
     },
-    // A module that is no test may read what it likes.
     {
       code: 'readFileSync("./tokens.css", "utf8");',
       filename: path.join(REPOSITORY_ROOT, "scripts/example.ts"),
@@ -45,7 +42,6 @@ tester.run("no-source-read-in-test", noSourceReadInTestRule, {
       filename: TEST_FILE,
       errors: [{ messageId: "sourceRead" }],
     },
-    // The path held in a constant above the read.
     {
       code: 'const ROOT = path.dirname(fileURLToPath(import.meta.url)); const SHEET = path.join(ROOT, "src", "text.css"); const text = fs.readFileSync(SHEET, "utf8");',
       filename: TEST_FILE,

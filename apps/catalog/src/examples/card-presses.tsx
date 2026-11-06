@@ -25,25 +25,12 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * card-presses.tsx -- a whole card as one press: over the card, its own ⋯
- * standing above the press; through the card, its link its own and its
- * words the card's; and unavailable. Then how a pressed card answers the
- * pointer resting on it: a thread at rest washed, on the column's ground and
- * raised over the page; and a board's cards lifting off their well, one held
- * lifted as while its menu stands. The line under them says which press
- * landed, and with which modifier.
- */
-
-/** What the last press was, as the line under the cards says it. */
 function said(card: string, event: CardPressEvent): string {
   return event.metaKey || event.ctrlKey ? `${card}, with ⌘ or Ctrl` : card;
 }
 
-/** A board's cards, the second held lifted as while its menu is open. */
 const LIFTED = ["Draft the launch post", "Its menu open"] as const;
 
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function CardPresses(): React.JSX.Element {

@@ -11,12 +11,6 @@ export const ACTION_RESULT_STATUS = {
 
 export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTION_RESULT_STATUS];
 
-/**
- * The one status outside the three above an action can end in: dispatched, and
- * its answer lost before it was recorded. It is neither a refusal nor a
- * result; the effect may have happened, so nothing that reads it may retry
- * the action on its own or report it as failed.
- */
 export const UNKNOWN_ACTION_STATUS = "unknown";
 
 export type UnknownActionResult = {
@@ -46,11 +40,6 @@ const ActionResultSchema = Schema.Union([
 
 export type ActionResult = Schema.Schema.Type<typeof ActionResultSchema>;
 
-/**
- * The read stops at the keys the three records name, the way a strict wire
- * record does. Effect v4 settles that at the read rather than on the
- * declaration, so it is stated here rather than annotated onto each member.
- */
 const readsActionResult = readEither(ActionResultSchema, { excess: EXCESS_KEYS.REFUSE });
 
 export function isActionResult(value: UnparsedWireValue): value is ActionResult {

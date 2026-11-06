@@ -12,14 +12,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * bar-items.tsx -- a phone's bar of places: glyphs over names, the place
- * shown in the accent's ink, counts of what waits on the reader on their
- * glyphs, short and long, and a last item that opens a drawer and says
- * whether it stands open; and the phone's floating bar, its places in one
- * pill beside a round action.
- */
-
 const PLACE = { INBOX: "inbox", TASKS: "tasks" } as const;
 type Place = (typeof PLACE)[keyof typeof PLACE];
 

@@ -1,17 +1,3 @@
-/**
- * web-admin-doors.tsx -- the standalone `/admin` page's doors into the admin screens: the service's admin procedures on this page's browser client, under the session cookie, and the page's own sign-in and refusal cards.
- *
- * The screens are the panel's (`@repo/panel/admin/*`) and name no client;
- * this page hands them its own (`admin-doors.tsx`). A refusal is worded
- * here, by its status, as the screens tell it apart, and an answer that came
- * through a redirect is something in front of the service answering, such as
- * a preview's deployment protection. The page keeps an account's page and a
- * typed search in its address bar. It alone signs a maintainer in as a
- * member, through Better Auth's admin plugin (`../auth-client.ts`). Until a
- * sign-in has been pressed on this page once, every read is held at the
- * gate, whatever cookie the browser holds (`SIGN_IN_CHOSEN`).
- */
-
 import type {
   AdminDayDetail,
   AdminMetrics,
@@ -49,7 +35,6 @@ import {
 import { impersonate } from "../auth-client";
 import { ForbiddenCard, SignInCard } from "./chrome/gate-cards";
 
-/** The word the screens tell a refusal apart by, from the status it was answered under. */
 const REFUSED_BY_STATUS: ReadonlyMap<number, AdminRefused> = new Map([
   [ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_REFUSED.SIGNED_OUT],
   [ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_REFUSED.FORBIDDEN],
@@ -57,13 +42,8 @@ const REFUSED_BY_STATUS: ReadonlyMap<number, AdminRefused> = new Map([
   [ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_REFUSED.UNAVAILABLE],
 ]);
 
-/**
- * One read on the browser client, its refusal worded for the screens; any
- * other failure passes through as it came, as the screen's own.
- */
 async function asked<T>(read: () => Promise<unknown>): Promise<T> {
   try {
-    // SAFETY: each admin procedure answers the shape `@repo/features/admin-answer-wire` names for it, for which the contract declares no output.
     return (await read()) as T;
   } catch (cause) {
     if (cause instanceof BrowserRedirected) throw new AdminReadRefused(ADMIN_REFUSED.INTERCEPTED);
@@ -89,7 +69,6 @@ const WEB_ADMIN_READS: AdminReads = {
     asked<AdminWorkspaceList>(() => browserClient.admin.workspaces(query, { signal })),
   workspace: (query, signal) =>
     asked<AdminWorkspaceDetail>(() => browserClient.admin.workspace(query, { signal })),
-  // A refusal of the star did not land, whatever it was.
   favorite: (id, favorite) => {
     const input = { query: { [ADMIN_USER_ID_PARAM]: id } };
     const write = favorite ? browserClient.admin.favorite : browserClient.admin.unfavorite;
@@ -107,8 +86,6 @@ const WEB_ADMIN_DOORS: AdminDoors = {
     signedOut: () => <SignInCard />,
     forbidden: ({ email, onSignOut }) => <ForbiddenCard email={email} onSignOut={onSignOut} />,
   },
-  // The page keeps an account's page and a typed search in its address bar,
-  // the search in place, so the back button walks views rather than keystrokes.
   address: {
     accountHref,
     workspaceHref,
@@ -119,11 +96,9 @@ const WEB_ADMIN_DOORS: AdminDoors = {
       return () => window.removeEventListener("popstate", listener);
     },
   },
-  // The page's cookie session is the one kind a maintainer may sign in as a member from.
   impersonate,
 };
 
-/** The page's doors, handed to every admin screen under it. */
 export function WebAdminDoors({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <AdminDoorsProvider value={WEB_ADMIN_DOORS}>{children}</AdminDoorsProvider>;
 }

@@ -1,14 +1,6 @@
 import { expect, test } from "vitest";
 import { pageLeave } from "../src/app/page-leave";
 
-/**
- * page-leave.test.ts -- a tab holds the browser's close and reload back
- * only while the panel holds unsaved work, so a page with nothing to lose
- * keeps its place in the back-forward cache; and the tab's own sends ask
- * the panel first, going past the browser's question once told to leave.
- */
-
-/** Whether the browser would ask before the page goes: a `beforeunload` it was told to hold back. */
 function holdsBack(page: EventTarget): boolean {
   const event = new Event("beforeunload", { cancelable: true });
   page.dispatchEvent(event);
@@ -23,7 +15,6 @@ test("the browser's close and reload are held back only while a page holds unsav
   tab.unsavedWork(() => undefined);
   expect(holdsBack(page)).toBe(true);
 
-  // A page standing a newer ask in place of its first still holds work.
   tab.unsavedWork(() => undefined);
   expect(holdsBack(page)).toBe(true);
 
@@ -60,7 +51,6 @@ test("a Leave whose send never unloads lets one beforeunload pass, and the next 
   const tab = pageLeave(page);
   const asked: (() => void)[] = [];
   tab.unsavedWork((leave) => asked.push(leave));
-  // The send is stopped before it commits, so the page never goes.
   tab.leave(() => undefined);
   asked[0]?.();
 

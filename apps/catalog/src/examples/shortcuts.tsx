@@ -4,13 +4,6 @@ import { GAP, Inline, Shortcut, Stack, Text } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * shortcuts.tsx -- chords as the window prints them: a command's beside its
- * words, a bare key, a system-wide key's accelerator, and a chord that is a
- * row's whole value, drawn at the row's label size and read aloud. Under a
- * finger only the value stands.
- */
-
 function Shortcuts(): React.JSX.Element {
   return (
     <>

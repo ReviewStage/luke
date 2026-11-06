@@ -1,65 +1,4 @@
 #!/bin/sh
-# install.sh -- installs our host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to the service with a code a member approves, and upgrades it in place when run again; in its `cli` mode, installs the `vespin` command instead.
-#
-# Served by the web app at /install.sh with the release, and the origin it
-# was fetched from, written in (packages/service/src/agents/host-install-script-app.ts),
-# and run, with no sudo, as the account whose agents the host should run:
-#
-#   curl -fsSL https://vespin.dev/install.sh | sh
-#
-# Before it changes anything it checks the computer and says what is missing:
-# Linux x64 or arm64 with a systemd user manager it can reach, or an Apple
-# silicon Mac on macOS MAC_MIN_VERSION or later, and git. On Windows it runs
-# inside WSL2 alone, whose kernel is Linux's; WSL1 has none, so it is refused.
-# Run as root directly, it installs into root's own account, which is all a
-# VPS that logs in as root has; run as root under sudo from another account,
-# it is refused, so a stale `curl … | sudo sh` never installs into root's
-# account.
-#
-# The account's files, which `vespin-host uninstall` (apps/host/scripts/vespin-host.sh)
-# removes by the same names, and which the release's own launcher reads its
-# state root from:
-#
-#   ~/.local/share/vespin-host/versions/<version>/ each release, as its tarball's vespin-host/ folder
-#   ~/.local/share/vespin-host/current              link to versions/<version>, the one that runs
-#   ~/.local/bin/vespin-host                        absolute link to …/current/bin/vespin-host
-#   ~/.local/state/vespin-host/                     the state root: the box's record and its agents'
-#   ~/.config/systemd/user/vespin-host.service      Linux: the service, run through current
-#   ~/Library/LaunchAgents/dev.vespin.host.standalone.plist
-#                                                   Mac: the LaunchAgent, run through current
-#   ~/Library/Logs/Vespin Host/vespin-host.log      Mac: the LaunchAgent's log
-#
-# On Linux it turns on lingering first, so the service keeps running after
-# the account logs out: on its own where the account may, and otherwise with
-# `sudo loginctl enable-linger`, the one sudo it ever asks for, said first. It
-# then downloads the release's tarball for the computer and checks it against
-# the SHA-256 this script carries before anything of it is installed, unpacks
-# it beside the releases already there, and points current at it. It starts
-# the service before the box is connected, a systemd user service enabled at
-# boot or a LaunchAgent that runs while the user is logged in, which waits
-# until the box's record stands; then it runs `vespin-host connect`, which prints
-# a link and a code and waits for a member to approve it in the app, or answers at
-# once where the box is connected already. Once it is connected it restarts the
-# service on the new release and removes every other release. Where the code
-# is denied or lapses, the service stands waiting, so a later
-# `vespin-host connect` by hand is followed within a minute. Run again, it
-# upgrades in place: the box keeps its pairing, and the service is restarted
-# on the new release.
-#
-# Its `cli` mode installs the `vespin` command's release (CLI_RELEASE in
-# packages/features/src/cli-release.ts) into the account instead, and sets up
-# no service, connects nothing, and needs no systemd or git:
-#
-#   curl -fsSL https://vespin.dev/install.sh | sh -s cli
-#
-#   ~/.local/share/vespin-cli/versions/<version>/ each release, as its tarball's vespin/ folder
-#   ~/.local/bin/vespin                           absolute link to …/versions/<version>/bin/vespin
-#
-# It checks the tarball against the SHA-256 this script carries as the host's
-# install does, links the command to the new release, and removes every other
-# release. Run again, it upgrades in place, or says the release is installed
-# already; `vespin update` runs it so, and reads a command whose real path
-# stands under versions/ as one this mode installed.
 set -eu
 
 VERSION="@@VERSION@@"
@@ -78,24 +17,13 @@ CLI_URL_ARM64="@@CLI_URL_ARM64@@"
 CLI_URL_DARWIN_ARM64="@@CLI_URL_DARWIN_ARM64@@"
 
 ORIGIN="@@ORIGIN@@"
-# What the script installs, as its messages name it; the cli mode names its own.
 PRODUCT="Vespin host"
 UNIT="vespin-host.service"
-# A Mac's LaunchAgent, by its label.
 MAC_LABEL="dev.vespin.host.standalone"
-# The oldest macOS it installs on: the release's Node (24) needs macOS 13.5,
-# the command's as the host's.
 MAC_MIN_VERSION="13.5"
-# The folder that stands where systemd runs the box; a test points it elsewhere.
 SYSTEMD_RUN_DIR="${APP_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
-# How long a Mac's install waits for its running LaunchAgent to stop before it
-# swaps the release; a test points it at none.
 MAC_STOP_WAIT_SECONDS="${APP_HOST_MAC_STOP_WAIT_SECONDS:-30}"
-# Whether the box is WSL2, which require_supported_os reads from /proc/version.
 ON_WSL=false
-# The command's link as a person types it, which their own shell expands to
-# LINK. Note that it is named by its path whatever this shell's PATH holds,
-# since the shell they type in later may not hold ~/.local/bin.
 TYPED_LINK='~/.local/bin/vespin-host'
 
 if [ -t 1 ]; then
@@ -112,8 +40,6 @@ fail() {
   exit 1
 }
 
-# The account's files, under its home, by the names the header lists. Note
-# that they are set once the home is known, as account_paths does.
 account_paths() {
   RELEASES="$HOME/.local/share/vespin-host"
   LINK="$HOME/.local/bin/vespin-host"
@@ -122,9 +48,6 @@ account_paths() {
   MAC_LOG="$HOME/Library/Logs/Vespin Host/vespin-host.log"
 }
 
-# The computer's own architecture. On a Mac it reads the hardware, so Apple
-# silicon is still arm64 from a shell running under Rosetta, where uname -m
-# says x86_64.
 hardware_machine() {
   if [ "$(uname -s)" = "Darwin" ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = "1" ]; then
     echo arm64
@@ -133,10 +56,6 @@ hardware_machine() {
   fi
 }
 
-# Refuses a computer the host does not run on, as the script's first word on
-# it, before it changes anything: its kernel ($1), its machine ($2), and its
-# /proc/version ($3). WSL2's names its kernel microsoft-standard (and WSL2 since
-# 5.10) and is let through, setting ON_WSL; WSL1's names Microsoft alone.
 require_supported_os() {
   case "$1" in
     Linux) ;;
@@ -156,8 +75,6 @@ require_supported_os() {
   esac
 }
 
-# Refuses a macOS older than MAC_MIN_VERSION, $1 as `sw_vers -productVersion`
-# prints it, naming the version it needs.
 require_macos_version() {
   major="${1%%.*}"
   minor="${1#"$major"}"
@@ -173,13 +90,6 @@ require_macos_version() {
   fail "$PRODUCT needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
 }
 
-# Refuses a run as root under sudo from another account, whose files would
-# land in root's account rather than the one that typed the command, and a
-# run with no home to install into. On a Mac it refuses root as well, which
-# has no login session for a LaunchAgent to run in. Note that a session sudo
-# opened as another account than root, which installs into that account, is
-# let through, and on Linux refused by require_user_manager where its user
-# manager cannot be reached.
 require_own_account() {
   if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
     fail "Run it without sudo, as the account whose agents Vespin host should run: curl -fsSL $ORIGIN/install.sh | sh"
@@ -190,9 +100,6 @@ require_own_account() {
   [ -n "${HOME:-}" ] && [ -d "$HOME" ] || fail "This account has no home folder to install Vespin host into (HOME is ${HOME:-not set})."
 }
 
-# Refuses a box not run by systemd, or whose systemd user manager for this
-# account cannot be reached, which the host's service runs under, saying under
-# WSL how to turn systemd on.
 require_user_manager() {
   if ! command -v systemctl >/dev/null 2>&1 || [ ! -d "$SYSTEMD_RUN_DIR" ]; then
     if [ "$ON_WSL" = true ]; then
@@ -204,8 +111,6 @@ require_user_manager() {
     fail "Could not reach the systemd user manager of $(id -un), which Vespin host runs under. Run this from a login of that account, over SSH or at its console, rather than through su or sudo."
 }
 
-# Refuses a computer without git, which agents make their worktrees with, or
-# without a tool to check a download's SHA-256 with.
 require_tools() {
   if ! git --version >/dev/null 2>&1; then
     if [ "$(uname -s)" = "Darwin" ]; then
@@ -217,16 +122,10 @@ require_tools() {
     fail "Vespin host needs sha256sum (coreutils) or shasum to check its download."
 }
 
-# Answers whether the account named $1 lingers, its user manager kept running
-# while it is logged out.
 lingering() {
   [ "$(loginctl show-user "$1" --property=Linger --value 2>/dev/null)" = yes ]
 }
 
-# Turns lingering on for this account, so the service keeps running after it
-# logs out: on its own where the account may, never asking for a password,
-# and only where that is refused with sudo, saying why first. Fails, with
-# nothing installed, where neither turns it on.
 enable_lingering() {
   user="$(id -un)"
   if lingering "$user"; then
@@ -246,8 +145,6 @@ enable_lingering() {
   fail "Could not turn lingering on for $user, so nothing was installed: without it Vespin host would stop when you log out. Have an administrator of this box run sudo loginctl enable-linger $user, then run this again."
 }
 
-# Fails unless the file's SHA-256 is the one given: $1 the file, $2 its digest.
-# Note that a Mac has shasum where Linux has sha256sum.
 check_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
     actual="$(sha256sum "$1" | cut -d ' ' -f 1)"
@@ -257,7 +154,6 @@ check_sha256() {
   [ "$actual" = "$2" ] || fail "The download's checksum is $actual, not $2. Nothing was installed."
 }
 
-# Downloads $1 to $2, over https, with curl or wget.
 download() {
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1" || fail "Could not download $1"
@@ -268,13 +164,6 @@ download() {
   fi
 }
 
-# Writes the service's unit, run through current so a release is switched by
-# moving that link, and started with the user manager, which lingering starts
-# at boot. Note that it is restarted a minute after any exit, a clean one
-# among them: the daemon exits 0 on a record the service refused, the box removed in
-# the app, and asks the service nothing on it, so a box paired again by hand with
-# vespin-host connect is followed within a minute, as the daemon's own rest
-# follows one never connected.
 write_unit() {
   mkdir -p "$(dirname "$UNIT_FILE")"
   cat >"$UNIT_FILE" <<UNIT_EOF
@@ -293,12 +182,6 @@ WantedBy=default.target
 UNIT_EOF
 }
 
-# Writes the LaunchAgent to $1, running the release through current, logging
-# to $2. It runs at login, and again a minute after any exit, as write_unit's
-# unit does and for its reason. Note that the state root is the release's
-# launcher's to name, and that there is no ProcessType, since a Background
-# job's CPU and disk are throttled and its agents are work the member asked
-# for.
 write_launch_agent() {
   cat >"$1" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -327,9 +210,6 @@ write_launch_agent() {
 PLIST_EOF
 }
 
-# Stops the LaunchAgent of the user whose uid is $1 and waits until launchd
-# lists it no more, so no daemon of it is left running a release about to be
-# swapped; refuses, having changed nothing, where it does not stop.
 stop_launch_agent() {
   agent="gui/$1/$MAC_LABEL"
   launchctl bootout "$agent" >/dev/null 2>&1 || true
@@ -342,10 +222,6 @@ stop_launch_agent() {
   done
 }
 
-# Starts the LaunchAgent written to $2 in the login session of the user whose
-# uid is $1, where they are logged in; where they are not, or launchd will not
-# start it from here, says it starts at their next login. Answers whether it
-# started.
 start_launch_agent() {
   if ! launchctl print "gui/$1" >/dev/null 2>&1; then
     ok "Installed $MAC_LABEL, which starts at this account's next login"
@@ -359,8 +235,6 @@ start_launch_agent() {
   return 0
 }
 
-# Stops the systemd user unit $1; refuses, having changed nothing, where it is
-# still running.
 stop_unit() {
   systemctl --user stop "$1" >/dev/null 2>&1 || true
   case "$(systemctl --user is-active "$1" 2>/dev/null)" in
@@ -370,10 +244,6 @@ stop_unit() {
   esac
 }
 
-# Stops the service before its release's folder is swapped for the same
-# version's, so no daemon runs from a folder taken away under it; refuses,
-# having changed nothing, where it is still running. Note that a new
-# version's folder stands beside the running one's, which needs no stop.
 stop_service() {
   if [ "$(uname -s)" = "Darwin" ]; then
     stop_launch_agent "$(id -u)"
@@ -382,9 +252,6 @@ stop_service() {
   stop_unit "$UNIT"
 }
 
-# Unpacks the checked tarball $1 into the releases, as versions/$VERSION, and
-# points current and the command's link at it. Note that it is unpacked into
-# $work, a folder of the releases' own, so the version's folder appears whole.
 install_release() {
   mkdir -p "$RELEASES/versions" "$work/unpacked"
   tar -xzf "$1" -C "$work/unpacked" || fail "Could not unpack ${1##*/}"
@@ -401,7 +268,6 @@ install_release() {
   ok "Installed Vespin host $VERSION to $target"
 }
 
-# Removes every release but the one current names, once the service runs it.
 remove_other_releases() {
   for release in "$RELEASES/versions"/*; do
     [ -e "$release" ] && [ "$release" != "$RELEASES/versions/$VERSION" ] || continue
@@ -409,10 +275,6 @@ remove_other_releases() {
   done
 }
 
-# Connects the box through the release just installed, which prints the link
-# and the code and waits for them to be approved, or answers at once where the
-# box is connected already; ends the script where it is not connected, by the
-# code connect ended with, the service left waiting for a connect by hand.
 connect_box() {
   code=0
   "$LINK" connect --origin "$ORIGIN" || code=$?
@@ -421,9 +283,6 @@ connect_box() {
   exit "$code"
 }
 
-# Enables and starts the systemd user service before the box is connected, so
-# a box connected later by hand is followed too. Note that one already running
-# is left on its release until restart_unit.
 enable_unit() {
   write_unit
   systemctl --user daemon-reload
@@ -433,18 +292,12 @@ enable_unit() {
   ok "Enabled $UNIT, which keeps running after you log out"
 }
 
-# Restarts the systemd user service on the release just installed, once the
-# box is connected, so it follows the box at once.
 restart_unit() {
   systemctl --user restart "$UNIT" ||
     fail "Could not start $UNIT. See journalctl --user -u $UNIT"
   ok "Started $UNIT on Vespin host $VERSION"
 }
 
-# Writes the LaunchAgent and loads it before the box is connected, where this
-# user is logged in and it is not loaded already, as enable_unit does and for
-# its reason. Note that one already running is left on its release until
-# restart_mac_agent.
 load_mac_agent() {
   mkdir -p "$(dirname "$PLIST")" "$(dirname "$MAC_LOG")"
   write_launch_agent "$PLIST" "$MAC_LOG"
@@ -454,9 +307,6 @@ load_mac_agent() {
     launchctl bootstrap "gui/$uid" "$PLIST" >/dev/null 2>&1 || true
 }
 
-# Restarts the LaunchAgent on the release just installed, once the box is
-# connected, in this user's login session where they are logged in, and says
-# it runs only while they are.
 restart_mac_agent() {
   uid="$(id -u)"
   stop_launch_agent "$uid"
@@ -464,8 +314,6 @@ restart_mac_agent() {
   printf 'It runs while %s is logged in, so on a Mac nobody sits at, turn on automatic login for %s.\n' "$(id -un)" "$(id -un)"
 }
 
-# The release's tarball for this computer, by its name, address and SHA-256,
-# set as target_*; fails where the release carries none for it.
 release_target() {
   if [ "$(uname -s)" = "Darwin" ]; then
     target_name="darwin-arm64"
@@ -489,15 +337,11 @@ release_target() {
   [ -n "$target_sha256" ] || fail "Vespin host $VERSION has no release for $target_name yet."
 }
 
-# The command's files, under the account's home, by the names the header lists.
 cli_paths() {
   CLI_RELEASES="$HOME/.local/share/vespin-cli"
   CLI_LINK="$HOME/.local/bin/vespin"
 }
 
-# Refuses a computer the command has no release for, before it changes
-# anything, saying where npm installs it instead: its kernel ($1) and its
-# machine ($2).
 require_cli_target() {
   case "$1-$2" in
     Darwin-arm64)
@@ -519,9 +363,6 @@ require_cli_target() {
   esac
 }
 
-# Refuses a run as root under sudo from another account, whose command would
-# land in root's account rather than the one that typed it, and a run with no
-# home to install into.
 require_cli_account() {
   if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
     fail "Run it without sudo, as the account that will use vespin: curl -fsSL $ORIGIN/install.sh | sh -s cli"
@@ -531,11 +372,6 @@ require_cli_account() {
     fail "Vespin CLI needs sha256sum (coreutils) or shasum to check its download."
 }
 
-# Unpacks the checked tarball $1 into the command's releases, as
-# versions/$CLI_VERSION, and points the command's link at it. Note that it is
-# unpacked into $work, a folder of the releases' own, so the version's folder
-# appears whole, and that no service runs from a release, so one standing
-# there already is swapped without a stop.
 install_cli_release() {
   mkdir -p "$CLI_RELEASES/versions" "$work/unpacked"
   tar -xzf "$1" -C "$work/unpacked" || fail "Could not unpack ${1##*/}"
@@ -548,7 +384,6 @@ install_cli_release() {
   ok "Installed Vespin CLI $CLI_VERSION to $target"
 }
 
-# Removes every release of the command but the one its link names.
 remove_other_cli_releases() {
   for release in "$CLI_RELEASES/versions"/*; do
     [ -e "$release" ] && [ "$release" != "$CLI_RELEASES/versions/$CLI_VERSION" ] || continue
@@ -556,8 +391,6 @@ remove_other_cli_releases() {
   done
 }
 
-# Installs the `vespin` command's release into this account, or says it is
-# installed already, and how to reach it where ~/.local/bin is not on PATH.
 main_cli() {
   [ "$#" -eq 0 ] || fail "Unknown option: $1"
   PRODUCT="Vespin CLI"
@@ -598,8 +431,6 @@ main_cli() {
   printf 'To upgrade later, run vespin update.\n'
 }
 
-# Installs, connects and starts the host in this account, the options parsed;
-# with `cli` first, installs the command instead.
 main() {
   if [ "${1:-}" = cli ]; then
     shift
@@ -662,19 +493,14 @@ main() {
   fi
   remove_other_releases
 
-  # Note that nothing says how to upgrade, because the host updates itself to each release.
   printf '\n'
   ok "Ready. Pick it under a task's Runs on in Vespin."
   printf 'To remove it: %s uninstall\n' "$TYPED_LINK"
-  # Note that a systemd service does not keep a WSL distro up: WSL stops it about
-  # 15 seconds after its last window closes, unless instanceIdleTimeout is -1.
   if [ "$ON_WSL" = true ]; then
     printf 'Under WSL, Windows stops %s about 15 seconds after its last WSL window closes: keep one open, or set [general] instanceIdleTimeout=-1 in %%UserProfile%%\\.wslconfig (WSL 2.5 or later).\n' "$UNIT"
   fi
 }
 
-# A test sources the script up to here, to call its functions and read what it carries.
 [ -z "${APP_HOST_INSTALL_LIBRARY:-}" ] || return 0
 
-# Note that the whole script is read before any of it runs, since sh reads a piped script as it goes.
 main "$@"

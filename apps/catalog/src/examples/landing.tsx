@@ -13,14 +13,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * landing.tsx -- the product's landing: its bar, the one line beside the
- * copper ball, a feature over its scene, a feature with facts beside its
- * stage, and the close over the wordmark in dots, and the page an unknown
- * address is answered with, each in a frame that scrolls as a document would.
- * Every name and line is made up.
- */
-
 function Bar(): React.JSX.Element {
   return (
     <nav className="catalog-public-banner" aria-label="Site">

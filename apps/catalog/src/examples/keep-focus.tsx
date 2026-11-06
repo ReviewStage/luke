@@ -1,7 +1,3 @@
-/**
- * keep-focus.tsx -- a heading beside a field that leaves the caret in the field when pressed anywhere on it, so typing goes on where it stood.
- */
-
 import {
   ArrowLeftIcon,
   GAP,

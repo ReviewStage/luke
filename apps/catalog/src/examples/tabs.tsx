@@ -22,17 +22,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * tabs.tsx -- a strip of tabs to choose, close, and drag along, the chosen
- * one raised: one with a count after its name, one marked failed, one that
- * something arrived on, and a preview; the same strip on the frame, led by
- * the task it heads, its status mark and name, anchored where no drag or
- * close reaches it; the same strip in a narrow row, where
- * it scrolls along with the chosen tab pinned; and a switcher's row of recent
- * cards, a still and glyphs, one chosen and the screen here dimmed.
- */
-
-/** One tab of the example strips: its key, glyph, name, and what it wears. */
 interface SampleTab {
   readonly id: string;
   readonly icon: React.JSX.Element;
@@ -42,7 +31,6 @@ interface SampleTab {
   readonly failed?: boolean;
   readonly unread?: boolean;
   readonly preview?: boolean;
-  /** Leads the strip and never moves or closes: the task the strip heads. */
   readonly anchored?: boolean;
 }
 
@@ -62,7 +50,6 @@ const SAMPLE_TABS: readonly SampleTab[] = [
   { id: "board", icon: <BoardIcon />, label: "token-refresh.ts", preview: true },
 ];
 
-/** The frame's strip: the task it heads first, by its status mark and name, then its tabs. */
 const FRAME_TABS: readonly SampleTab[] = [
   {
     id: "task",
@@ -73,7 +60,6 @@ const FRAME_TABS: readonly SampleTab[] = [
   ...SAMPLE_TABS.filter((tab) => tab.id !== "description"),
 ];
 
-/** The tabs in their order now, the one at `from` taken to `to`, counted after the anchored tabs, which never move. */
 function movedTabs(tabs: readonly SampleTab[], from: number, to: number): SampleTab[] {
   const lead = tabs.filter((tab) => tab.anchored === true).length;
   from += lead;
@@ -84,7 +70,6 @@ function movedTabs(tabs: readonly SampleTab[], from: number, to: number): Sample
   return moved;
 }
 
-/** A strip of the sample tabs, chosen, closed, kept, and moved for real: on a column's ground, or on the window's frame above a sheet. */
 function Strip({
   narrow = false,
   frame = false,
@@ -148,12 +133,10 @@ function Strip({
   );
 }
 
-/** A small picture of a screen, standing in for a switcher's still. */
 const STILL = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="352" height="220"><rect width="352" height="220" fill="#f4f4f5"/><rect x="16" y="16" width="200" height="14" rx="4" fill="#d4d4d8"/><rect x="16" y="44" width="320" height="8" rx="4" fill="#e4e4e7"/><rect x="16" y="60" width="280" height="8" rx="4" fill="#e4e4e7"/><rect x="16" y="76" width="300" height="8" rx="4" fill="#e4e4e7"/></svg>',
 )}`;
 
-/** A switcher's recent screens: the one here dimmed, the one after it chosen. */
 function Cards(): React.JSX.Element {
   const [chosen, setChosen] = useState(1);
   const [picked, setPicked] = useState<string | undefined>(undefined);

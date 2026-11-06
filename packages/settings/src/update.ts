@@ -1,14 +1,3 @@
-/**
- * Where the updater stands, in the states electron-updater's own lifecycle
- * moves through. `IDLE` is both "nothing learned yet" and "nothing newer" —
- * `upToDate` on the snapshot says which, so the row never poses an unasked
- * question as an answer. A check that finds a newer build downloads it at
- * once, so there is no standing "available" state: the news arrives as
- * `DOWNLOADING`. `UPDATED` is transient — the first launch after an install
- * confirms what just happened.
- * `ERROR` must never be drawn as a dead end: a failed install offers the
- * browser, and a failed check offers to check again.
- */
 export const UPDATE_STATUS = {
   IDLE: "idle",
   CHECKING: "checking",
@@ -20,72 +9,35 @@ export const UPDATE_STATUS = {
 
 export type UpdateStatus = (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
 
-/**
- * Why an update failed, where the failure is one the row can name a remedy
- * for rather than only offer the browser.
- */
 export const UPDATE_FAILURE = {
-  /**
-   * The app runs from a read-only volume, its disk image or a translocated
-   * copy, which Squirrel cannot replace; moving it to Applications mends it.
-   */
   READ_ONLY_VOLUME: "read-only-volume",
 } as const;
 
 export type UpdateFailure = (typeof UPDATE_FAILURE)[keyof typeof UPDATE_FAILURE];
 
-/**
- * The commit a build was cut from, stamped by the desktop's `scripts/build.mjs` from the
- * checkout it ran in: the short SHA, whether the tree held uncommitted
- * changes, and the branch: the one checked out, or for a detached head the
- * nearest ref holding it (`fix/x~2`) or else its worktree's folder. A build
- * made where git could not answer carries no commit.
- */
 export interface BuildCommit {
   sha: string;
   dirty: boolean;
   branch?: string;
 }
 
-/**
- * What the running build is, beside where the updater stands: a packaged
- * release or a development build run from source, and the commit it was cut
- * from, so the update row can name a build no release version describes.
- */
 export interface RunningBuild {
   packaged: boolean;
   commit?: BuildCommit;
 }
 
-/** How far along a download is, as electron-updater reports it. */
 export interface UpdateProgress {
   percent: number;
   transferredBytes: number;
   totalBytes: number;
 }
 
-/**
- * What the update row draws from. The latest version travels only on the
- * states that learned it, and no address ever travels: the manifest updates
- * are fetched from and the page a failure falls back to are both fixed in
- * the main process, so nothing a check read can steer where a press goes.
- * `installSupported` says whether this build can replace itself in place —
- * only a signed, packaged build running live can — so every other run's row
- * offers the browser instead of an install that must fail. An error's text
- * stays in the main process's log; the row words failures itself.
- */
 export type UpdateSnapshot =
   | {
       status: typeof UPDATE_STATUS.IDLE;
       currentVersion: string;
       installSupported: boolean;
-      /** True only after a check positively answered "nothing newer". */
       upToDate: boolean;
-      /**
-       * True only after a check the developer asked for could not reach the
-       * feed. A timed check's network failure stays silent, but an asked one
-       * that answered nothing must not read as one never asked.
-       */
       unreachable?: boolean;
     }
   | {
@@ -110,7 +62,6 @@ export type UpdateSnapshot =
       status: typeof UPDATE_STATUS.UPDATED;
       currentVersion: string;
       installSupported: boolean;
-      /** The version this build replaced, for the row to name the arrival. */
       previousVersion: string;
     }
   | {
@@ -118,6 +69,5 @@ export type UpdateSnapshot =
       currentVersion: string;
       installSupported: boolean;
       latestVersion?: string;
-      /** Why it failed, where that is a failure with a remedy of its own. */
       failure?: UpdateFailure;
     };

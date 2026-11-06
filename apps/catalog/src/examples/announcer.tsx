@@ -12,15 +12,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * announcer.tsx -- the window's one pair of live regions, which the catalog's
- * root mounts as an app's does: words said politely, the same words said
- * again and read again, a burst that ends on its last words, and an alert
- * that interrupts. The regions are drawn nowhere; a screen reader, or the
- * accessibility tree, hears them. The example mounts an `Announcer` of its
- * own beside the root's, which draws no second pair while the root's stands.
- */
-
 function Announcers(): React.JSX.Element {
   return (
     <>

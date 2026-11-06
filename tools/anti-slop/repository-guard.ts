@@ -9,15 +9,6 @@ import { launchBundleGuard } from "./guards/launch-bundle.ts";
 import { probeFixturesGuard } from "./guards/probe-fixtures.ts";
 import { webPagesGuard } from "./guards/web-pages.ts";
 
-/**
- * repository-guard.ts -- the rules about the repository's state a lint rule cannot see, run by `scripts/repository-checks.sh`.
- *
- * Each guard was once a test that read the repository to forbid or require
- * a pattern, which root AGENTS.md's "Testing" leaves to a check; each reads
- * what it holds (a manifest, an installed package, a directory, a page) and
- * fails on what disagrees. Run under the tsx loader, since several load the
- * module whose constants they compare: `node --import tsx tools/anti-slop/repository-guard.ts`.
- */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const GUARDS: Readonly<Record<string, RepositoryGuard>> = {

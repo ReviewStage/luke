@@ -12,18 +12,8 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * split-buttons.tsx -- a split button in each look, its chevron dropping the
- * models its main part starts on; unavailable and busy; folded to its
- * glyph, as a toolbar short of room draws it; and bare, that glyph alone,
- * as a toolbar shorter still draws it, where the app offers the options
- * some other way (the desktop's composer); a visual state, so here the
- * models are not reachable from it.
- */
-
 const MODELS = ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] as const;
 
-/** Start on the chosen model, and a chevron that drops the models to choose from. */
 function StartSplit({
   variant,
   disabled,

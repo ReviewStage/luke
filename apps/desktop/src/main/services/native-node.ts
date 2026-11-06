@@ -14,46 +14,30 @@ import {
 } from "../native/microphone-route";
 import type { DesktopConfig } from "./desktop-config";
 
-/** Electron's media-access status word, read as one this build names; Electron documents no other. */
 const readMicrophoneStatusWord = Schema.decodeUnknownSync(
   Schema.Literals(Object.values(MICROPHONE_STATUS)),
 );
 
-/** The capabilities this node offers the host by name; a capability no node offers is a typed refusal there. */
 interface NativeNodeCapabilities {
-  /** Hands an address to the operating system; a throw is an open that did not land. */
   openExternal: (url: string) => Promise<void>;
 }
 
 interface NativeNodeDependencies {
   config: DesktopConfig;
-  /** Where what these devices answer is written; the windows are told from it. */
   state: AppStateStore;
 }
 
 export interface NativeNode extends DesktopService {
   readonly capabilities: NativeNodeCapabilities;
-  /**
-   * Reads macOS's own answer now and writes it to the document. The
-   * permission is the system's to move, and it moves while the app runs, so
-   * every reader takes it afresh rather than trusting what was written last.
-   */
   refreshMicrophoneStatus: () => MicrophoneStatus;
   requestMicrophone: () => Promise<MicrophoneStatus>;
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
 }
 
-/**
- * What this machine's own devices answer: the capabilities the host asks this
- * node for by name, the microphone's permission, and the watcher that reports
- * where the developer would be heard from. None of it reads audio or writes a
- * device.
- */
 export function createNativeNode(dependencies: NativeNodeDependencies): NativeNode {
   const { config, state } = dependencies;
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
-  /** One write of what this machine's own devices answer, into the one document. */
   function writeAudio(patch: {
     microphoneStatus?: MicrophoneStatus;
     microphoneRoute?: MicrophoneRoute | undefined;

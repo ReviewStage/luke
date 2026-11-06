@@ -2,14 +2,6 @@ import { PAGER_AXIS, PAGER_COUNT, Pager, PaneBar } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * pagers.tsx -- an item stepped through its list one at a time: its place
- * before arrows up and down a column, before arrows left and right through
- * pages at the end of a tab's bar, the arrow at the first stepped back, and
- * between them with what it counts.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function Pagers(): React.JSX.Element {

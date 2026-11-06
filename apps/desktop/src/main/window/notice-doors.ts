@@ -3,24 +3,7 @@ import type { AgentNoticeDoorsSurface } from "@repo/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@repo/settings/settings-controls";
 import { app, Notification } from "electron";
 
-/**
- * notice-doors.ts -- the doors a notice leaves this process through: Electron's `Notification`, shown once with its click handed back, which only a command waiting on this Mac posts, or the Dock's badge.
- *
- * A system that posts no notifications is left alone rather than asked;
- * the prompt in the window still says a command waits.
- *
- * Note that each notification is held until macOS is done with it, because
- * the object is all that ties the banner to its click: one the collector
- * took has no click left to hand back. Whether macOS refused it or showed
- * it is handed on, since that is the only word Electron gives of whether
- * notifications are on for the app, which This Mac says under Ask every time.
- *
- * The Dock's badge is Electron's own count, which macOS draws only where
- * notifications are allowed for the app and its badges are not turned off in
- * System Settings, so the developer's own switch for it is the system's.
- */
 export function electronNoticeDoors(dependencies: {
-  /** macOS showed a notification, or refused one: whether notifications are on for the app. */
   onAnswered: (status: NotificationsStatus) => void;
   report: (line: string) => void;
 }): AgentNoticeDoorsSurface {
@@ -52,13 +35,6 @@ export function electronNoticeDoors(dependencies: {
   };
 }
 
-/**
- * Asks macOS whether the app may post notifications, at launch rather than at
- * the first command ask. Electron asks as it first reaches for notifications
- * and posts without waiting for the answer, so a first notification posted
- * before the developer has answered is refused, and the question itself
- * would arrive while the window is behind, which is when an ask is posted.
- */
 export function askForNotifications(): void {
   Notification.isSupported();
 }

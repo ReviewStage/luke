@@ -4,17 +4,8 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * form-field.tsx -- a field with a label alone, with a description, with an
- * error, one that may be left empty, with long words in a narrow column, and one counting its words
- * against its limit once they near it. The control is a text field standing
- * in for any control a field holds.
- */
-
-/** How many characters the counted example takes at most. */
 const NAME_LIMIT = 24;
 
-/** A name a few characters short of its limit, so its count already stands. */
 function CountedField(): React.JSX.Element {
   const [name, setName] = useState("Acme design systems");
   return (
@@ -30,7 +21,6 @@ function CountedField(): React.JSX.Element {
   );
 }
 
-/** A text field standing in for whichever control a field holds. */
 function SampleInput({ control }: { control: FieldControl }): React.JSX.Element {
   const [name, setName] = useState("Acme");
   return <TextField field={control} value={name} onChange={setName} />;

@@ -4,18 +4,8 @@ import * as HttpClientError from "effect/http/HttpClientError";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
-/**
- * How a fake answers one request. The vocabulary is the network's own rather
- * than Effect's, because what a test states is a route table over URLs and a
- * `Response` — the client shape around it is this module's business.
- */
 export type FakeResponder = (url: string, init: RequestInit) => Response | Promise<Response>;
 
-/**
- * What `fetch` computes for itself and refuses to be told, dropped on the way
- * out exactly as `FetchHttpClient` drops it, so a fake sees the headers a
- * production client would actually have sent.
- */
 const CONTENT_LENGTH = "content-length";
 
 function sentHeaders(headers: HttpClientRequest.HttpClientRequest["headers"]): Headers {
@@ -27,20 +17,6 @@ function sentHeaders(headers: HttpClientRequest.HttpClientRequest["headers"]): H
   return sent;
 }
 
-/**
- * The `HttpClient` a test's own route table answers as. Everything the
- * responder observes is what the request declares — its method, its headers,
- * its body, and the abort signal the runtime's own interruption raises — and
- * everything it answers is handed back whole: a status the client never
- * filters (`filterStatusOk` stays the caller's own choice, as it is for the
- * platform's fetch client) and a body the response streams rather than
- * buffers.
- *
- * A responder that rejects or throws reaches the caller as an
- * `HttpClientError` whose reason is a `TransportError`, which is what the
- * platform's own fetch client raises for the same failure, so a test over a
- * retrying caller reads one shape.
- */
 export function fakeHttpClient(respond: FakeResponder): HttpClient.HttpClient {
   return HttpClient.make((request, url, signal) => {
     const send = (body: BodyInit | undefined) =>
@@ -65,9 +41,6 @@ export function fakeHttpClient(respond: FakeResponder): HttpClient.HttpClient {
     switch (request.body._tag) {
       case "Raw":
       case "Uint8Array":
-        // SAFETY: `HttpBody.Raw` carries whatever a caller handed it, and the
-        // platform's fetch client passes it to `fetch` the same way; the fake
-        // cannot narrow it further without refusing a body fetch accepts.
         return send(request.body.body as BodyInit);
       case "FormData":
         return send(request.body.formData);
@@ -79,17 +52,10 @@ export function fakeHttpClient(respond: FakeResponder): HttpClient.HttpClient {
   });
 }
 
-/** The same fake as the layer a test hands where production reads the tag. */
 export function fakeHttpClientLayer(respond: FakeResponder): Layer.Layer<HttpClient.HttpClient> {
   return Layer.succeed(HttpClient.HttpClient, fakeHttpClient(respond));
 }
 
-/**
- * A client that refuses every request. A suite hands it where production
- * reads the tag but its fakes answer every call, so nothing it runs sends; a
- * request that did reach this is a test composing a client it meant to fake,
- * and this is what makes that a failure rather than a call onto the network.
- */
 export const noNetwork: Layer.Layer<HttpClient.HttpClient> = fakeHttpClientLayer(() => {
   throw new Error("this test reaches no network");
 });

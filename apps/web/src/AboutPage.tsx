@@ -26,15 +26,6 @@ type Founder = {
   };
 };
 
-/**
- * The portraits ship at their full 450–500px edge so they stay sharp on any
- * display density and any zoom. The camera originals carried EXIF the site has
- * no business publishing, GPS among it, so what ships is the same JPEG cut
- * losslessly rather than the file that came off the phone: the EXIF, XMP, and
- * MPF segments are gone, and so is the HDR gain map the phone appended after
- * the image with an XMP block of its own. Only the JFIF header, the color
- * profile, and the picture remain.
- */
 const FOUNDERS: readonly Founder[] = [
   {
     name: "Charles Pan",
@@ -58,7 +49,6 @@ const FOUNDERS: readonly Founder[] = [
   },
 ];
 
-/** Who is behind the app: a page of its own, linked from the header and footer. */
 export function AboutPage(): React.JSX.Element {
   return (
     <PublicPage
@@ -68,8 +58,6 @@ export function AboutPage(): React.JSX.Element {
       title="About"
     >
       <PublicSection>
-        {/* Two up where the 700px column still leaves each card its measure, and
-            stacked below that rather than squeezed beside a photo. */}
         <div className="grid gap-8 min-[560px]:grid-cols-2 min-[560px]:gap-6">
           {FOUNDERS.map((founder) => (
             <FounderCard founder={founder} key={founder.name} />
@@ -110,8 +98,6 @@ function FounderSocials({
   readonly socials: Founder["socials"];
 }): React.JSX.Element {
   return (
-    /* The negative margin pulls the links' 44px squares back so the marks
-       line up with the name above them rather than sitting inset from it. */
     <div className="-my-2 -ml-3.5 mt-1 flex items-center">
       <IconButtonLink
         href={socials.linkedin}

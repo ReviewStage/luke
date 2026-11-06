@@ -12,10 +12,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * roving-keys.tsx -- a list Tab enters once, at the row last focused, whose rows ↑↓ walk, wrapping at the ends, Home and End going to the first and the last, the unavailable row stepped over.
- */
-
 const PLACES = [
   { id: "inbox", name: "Inbox", note: "3 items" },
   { id: "tasks", name: "Tasks", note: "12 open" },

@@ -21,12 +21,10 @@ const SHEET = "packages/ui/src/components/thing/thing.css";
 const MODULE = "packages/panel/src/thing.tsx";
 const SHELL_SHEET = "packages/panel/src/styles/shell.css";
 
-/** The rules a stylesheet breaks, in order. */
 function sheetRules(css: string, file = SHEET): readonly StyleRule[] {
   return styleViolations(file, css, NAMES).map((violation) => violation.rule);
 }
 
-/** The rules a module's class strings break, in order. */
 function classRules(source: string, file = MODULE): readonly StyleRule[] {
   return styleViolations(file, source, NAMES).map((violation) => violation.rule);
 }

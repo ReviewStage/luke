@@ -36,20 +36,12 @@ import {
   SiteNavigation,
 } from "./SiteChrome";
 
-/**
- * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
- * (`site-markdown.tsx` draws its releases when the site is built, and
- * `changelog-releases.ts` decides which releases an address shows). Every
- * release keeps the same rail and body wherever it appears, so a release
- * read on its own page looks as it does in the list.
- */
 export const RELEASES: readonly Release[] = releases;
 
 function formatReleaseDate(date: string): string {
   return formatDayHeading(date);
 }
 
-/** The view's door to GitHub, the landing hero's secondary button, so the two GitHub doors read as the same control. */
 function GitHubDoor({
   href,
   children,
@@ -71,9 +63,6 @@ function GitHubDoor({
 function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Element {
   return (
     <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-10 max-[640px]:grid-cols-1 max-[640px]:gap-4">
-      {/* `self-start` because a stretched grid item is as tall as the
-          release and leaves sticky nowhere to travel. On one column the rail
-          becomes the entry's own dated heading line. */}
       <div className="sticky top-24 flex flex-col gap-1 self-start max-[640px]:static max-[640px]:flex-row max-[640px]:items-baseline max-[640px]:gap-3">
         <TextLink
           href={changelogReleasePath(release.version)}
@@ -99,12 +88,8 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
   );
 }
 
-/* The navs stand under the notes' column, not centered on the page, so they
-   line up with what they page through: clear of the entry's 8.5rem rail and
-   its `gap-10`, 176px in all; on one column there is no rail to clear. */
 const UNDER_NOTES = "ml-44 pt-4 max-[640px]:ml-0";
 
-/** The changelog's pages as numbers, the current one held, with a step to either side. */
 function PageNumbers({
   page,
   pageCount,
@@ -127,7 +112,6 @@ function PageNumbers({
   );
 }
 
-/** The releases beside this one: newer to the left, older to the right, as the changelog reads down. */
 function ReleaseSteps({
   newer,
   older,
@@ -163,15 +147,12 @@ function ReleaseSteps({
 }
 
 export function ChangelogPage({ view }: { readonly view: ChangelogView }): React.JSX.Element {
-  // Note that only page one is the changelog's own address; later pages and releases sit beneath it.
   const place = {
     page: SITE_PAGE.CHANGELOG,
     beneath: view.kind !== CHANGELOG_VIEW.PAGE || view.page !== 1,
   };
   const page = view.kind === CHANGELOG_VIEW.PAGE;
   const releases = page ? view.releases : [view.release];
-  // Wide: the rail and its gutter sit beside the notes, which keep about
-  // the reading column's own measure. Each release stands under a rule.
   return (
     <PublicPage
       banner={<SiteNavigation current={place} />}

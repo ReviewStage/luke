@@ -23,20 +23,8 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * chips.tsx -- each chip look at rest, with a mark and a chevron, with its
- * menu open, unavailable, and with a long name in a narrow column; a row of
- * filters, one pressed at a time; a row of compact counts, one pressed and
- * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
- * its mark alone; a name in the code face; removable filters, each
- * springing in as one is added and scaling out as its × lifts it, and
- * removable pills whose words open what they name; and a
- * branch cut in its middle, an ellipsis where the cut stands.
- */
-
 const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;
 
-/** A row of filter chips, the pressed one moving to whichever is pressed. */
 function FilterRow(): React.JSX.Element {
   const [chosen, setChosen] = useState<string>(FILTERS[0]);
   return (
@@ -55,7 +43,6 @@ function FilterRow(): React.JSX.Element {
   );
 }
 
-/** Filters each saying what they would leave out: Hide resolved on, Hide bots off. */
 function CountedFilters(): React.JSX.Element {
   const [resolved, setResolved] = useState(true);
   const [bots, setBots] = useState(false);
@@ -77,7 +64,6 @@ function CountedFilters(): React.JSX.Element {
   );
 }
 
-/** A row of compact counts, a pull request's reactions: the reader's own pressed, and one whose change is out. */
 function CompactRow(): React.JSX.Element {
   return (
     <Inline gap={GAP.TIGHT}>
@@ -94,13 +80,8 @@ function CompactRow(): React.JSX.Element {
   );
 }
 
-/** The filters the removable row can stand, in the order Add one brings them. */
 const FILTER_NAMES = ["Created by me", "Archived", "Assigned to me", "Due this week"] as const;
 
-/**
- * A row of removable filters, each springing in as Add one brings it and
- * scaling out as its × lifts it, and the first two back once none stands.
- */
 function RemovableRow(): React.JSX.Element {
   const [standing, setStanding] = useState<readonly string[]>(FILTER_NAMES.slice(0, 2));
   const shown = standing.length === 0 ? FILTER_NAMES.slice(0, 2) : standing;

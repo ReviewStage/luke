@@ -17,7 +17,6 @@ const PANEL_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/example.
 const UI_FILE = path.join(REPOSITORY_ROOT, "packages/ui/src/components/example/example.tsx");
 const TEST_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/example.test.tsx");
 
-// A file the baseline still holds, with how many buttons it holds it to.
 const [BASELINED_PATH, BASELINED_COUNT] = [...Object.entries(BUSY_BASELINE)][0] ?? ["", 0];
 const BASELINED_FILE = path.join(REPOSITORY_ROOT, BASELINED_PATH);
 
@@ -32,38 +31,30 @@ function panel(code: string): { code: string; filename: string } {
   return { code: IMPORT + code, filename: PANEL_FILE };
 }
 
-/** `count` buttons that press an act and are not busy. */
 function unbusy(count: number): string {
   return `${IMPORT}function A({ press }) { return <>${"<Button onClick={() => press(K)} />".repeat(count)}</>; }`;
 }
 
 tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
   valid: [
-    // An async press that says it is busy, however it holds the flag.
     panel(
       "function A({ press, busy }) { return <Button busy={busy} busyLabel='Saving' onClick={() => press(K)} />; }",
     ),
     panel(
       "function A({ save, busy }) { return <IconButton busy={busy} onClick={async () => { await save(); }} />; }",
     ),
-    // A spread may carry busy, so it is allowed.
     panel("function A({ press, busy }) { return <Button {...busy} onClick={() => press(K)} />; }"),
-    // A press that waits on nothing needs no busy.
     panel("function A({ open }) { return <Button onClick={() => open(K)} />; }"),
     panel("function A({ set }) { return <Button onClick={() => { set(1); }} />; }"),
-    // A press the rule cannot read is no place: a prop, a member, an import.
     panel("function A({ onSave }) { return <Button onClick={onSave} />; }"),
     panel("function A({ save }) { return <Button onClick={save.onPress} />; }"),
-    // An act started only inside a function the press defines is not the press's wait.
     panel(
       "function A({ press }) { return <Button onClick={() => { const later = () => press(K); later; }} />; }",
     ),
-    // A wrapper over a function that waits on nothing, or that calls itself, needs no busy.
     panel("function A() { const open = () => set(1); return <Button onClick={() => open()} />; }"),
     panel(
       "function A() { function again() { again(); } return <Button onClick={() => again()} />; }",
     ),
-    // A name that is no `@repo/ui` button, or a lowercase element, is not the rule's.
     {
       code: 'import { Button } from "./my-button.js"; function A({ press }) { return <Button onClick={() => press(K)} />; }',
       filename: PANEL_FILE,
@@ -72,17 +63,13 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
       code: 'import { TextButton } from "@repo/ui"; function A({ press }) { return <TextButton onClick={() => press(K)} />; }',
       filename: PANEL_FILE,
     },
-    // A handler held under a name that is declared twice is no one function.
     panel(
       "function A({ press }) { const go = async () => press(K); return <Button onClick={go} />; } function B() { const go = () => 1; return null; }",
     ),
-    // A test draws buttons for what they do.
     { code: unbusy(1), filename: TEST_FILE },
-    // A file the baseline holds, at exactly the count it holds it to.
     ...(BASELINED_COUNT === 0 ? [] : [{ code: unbusy(BASELINED_COUNT), filename: BASELINED_FILE }]),
   ],
   invalid: [
-    // An async function, an act, an await, a chained promise.
     {
       ...panel(
         "function A({ save }) { return <Button onClick={async () => { await save(); }} />; }",
@@ -109,12 +96,10 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
       ),
       errors: [{ messageId: "noBusy" }],
     },
-    // A provider button's press is its `onPress`.
     {
       ...panel("function A({ press }) { return <ProviderButton onPress={() => press(K)} />; }"),
       errors: [{ messageId: "noBusy", data: { tag: "ProviderButton" } }],
     },
-    // A handler held under a name in the same file, as a function, a constant, or one a hook hands back.
     {
       ...panel(
         "function A({ press }) { async function save() { await press(K); } return <Button onClick={save} />; }",
@@ -133,39 +118,33 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
       ),
       errors: [{ messageId: "noBusy" }],
     },
-    // A short wrapper over a function of this file that is async.
     {
       ...panel(
         "function A() { const send = async () => { await go(); }; return <Button onClick={() => void send()} />; }",
       ),
       errors: [{ messageId: "noBusy" }],
     },
-    // Either branch of a conditional press.
     {
       ...panel(
         "function A({ press, on }) { return <Button onClick={on ? () => press(K) : undefined} />; }",
       ),
       errors: [{ messageId: "noBusy" }],
     },
-    // A button under a `@repo/ui` subpath, or renamed on import.
     {
       code: 'import { Button as Press } from "@repo/ui/button"; function A({ press }) { return <Press onClick={() => press(K)} />; }',
       filename: PANEL_FILE,
       errors: [{ messageId: "noBusy" }],
     },
-    // Inside `@repo/ui` a relative import is the button.
     {
       code: 'import { Button } from "../button/button.js"; function A({ press }) { return <Button onClick={() => press(K)} />; }',
       filename: UI_FILE,
       errors: [{ messageId: "noBusy" }],
     },
-    // A file not on the baseline reports each button.
     {
       code: unbusy(2),
       filename: PANEL_FILE,
       errors: [{ messageId: "noBusy" }, { messageId: "noBusy" }],
     },
-    // A baselined file holding one more than its count reports the one past it, and one holding fewer says to lower it; none once the baseline is empty.
     ...(BASELINED_COUNT === 0
       ? []
       : [

@@ -3,22 +3,11 @@ import path from "node:path";
 import type { DevBuildBadge } from "@repo/settings/dev-build";
 import { app, BrowserWindow, type NativeImage, nativeImage, nativeTheme } from "electron";
 
-/**
- * The Dock tile per theme: the copper tile for a light desktop, the night
- * one for a dark. The bundle's `.icns` is cut from the dark tile
- * and cannot follow the theme, and an unpackaged run has only Electron's stock
- * icon, so the running app draws the Dock image itself from these.
- */
 const DOCK_ICON_FILES = {
   LIGHT: "icon-light.png",
   DARK: "icon-dark.png",
 } as const;
 
-/**
- * Where a development build's band stands, in the tile art's 1024-unit
- * canvas: across the foot of the 824-unit tile `@repo/brand` centers on it
- * (`ICON_GRID` in its generate-brand-assets.mjs), clipped to its corners.
- */
 const BAND = {
   CANVAS: 1024,
   TILE_EDGE: 100,
@@ -27,11 +16,9 @@ const BAND = {
   TOP: 780,
   BASELINE: 884,
   FONT_SIZE: 96,
-  /** The pixels the tile is drawn at, the size of the art the build ships. */
   PIXELS: 512,
 } as const;
 
-/** Text made safe to stand inside SVG markup. */
 function escapeMarkup(text: string): string {
   return text
     .replaceAll("&", "&amp;")
@@ -40,12 +27,6 @@ function escapeMarkup(text: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/**
- * A page drawing the tile with the build's band across its foot, its label in
- * white. Note that the SVG stands as a block, because an inline one sits on
- * the text baseline and leaves the page a few pixels taller than the window,
- * which paints scrollbars into the tile's right and bottom edges.
- */
 function bandedTilePage(tile: NativeImage, badge: DevBuildBadge): string {
   const { CANVAS, TILE_EDGE, TILE_SIDE, TILE_RADIUS, TOP, BASELINE, FONT_SIZE, PIXELS } = BAND;
   const svg = [
@@ -60,15 +41,8 @@ function bandedTilePage(tile: NativeImage, badge: DevBuildBadge): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(page)}`;
 }
 
-/** How many frames the band's window may paint empty before it is given up on. */
 const PAINT_FRAMES = 60;
 
-/**
- * Draws a page into an image off screen. The main process draws no text of
- * its own, so a hidden, script-free window lays the band's words out and is
- * closed once it has painted them. Note that we wait for the first frame that
- * holds an image, because the first an offscreen window paints is empty.
- */
 async function paintOffscreen(page: string): Promise<NativeImage> {
   const window = new BrowserWindow({
     show: false,
@@ -94,20 +68,11 @@ async function paintOffscreen(page: string): Promise<NativeImage> {
   }
 }
 
-/** The theme's plain tile, empty where the build carries no artwork. */
 function plainTile(iconDirectory: string): NativeImage {
   const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
   return nativeImage.createFromPath(path.join(iconDirectory, file));
 }
 
-/**
- * Draws the app's own icon in the Dock, matched to the theme. Artwork missing
- * from a build draws nothing, leaving the bundle icon (or the stock one) in
- * place rather than an empty tile. A development build's band is drawn over
- * the plain tile once it has painted, so a band that fails, or never paints,
- * leaves the plain tile standing rather than Electron's own, and one a later
- * draw overtook (`latest`) sets nothing.
- */
 async function drawDockIcon(
   iconDirectory: string,
   badge: DevBuildBadge | undefined,
@@ -121,7 +86,6 @@ async function drawDockIcon(
   if (badge === undefined) return;
   try {
     const banded = await paintOffscreen(bandedTilePage(tile, badge));
-    // Note that a draw a later theme change overtook keeps its band to itself.
     if (latest()) app.dock.setIcon(banded);
   } catch (error) {
     report(
@@ -130,14 +94,6 @@ async function drawDockIcon(
   }
 }
 
-/**
- * The app always stands in the Dock, as an ordinary app does; this keeps its
- * tile matched to the theme, drawn now and again as the desktop changes mode.
- * A development build's tile carries its band (`badge`), so builds running
- * side by side are told apart in the Dock and the app switcher. What it
- * answers draws the tile again with another band, or none, as the menu bar
- * hides a build's label for a demo.
- */
 export function followDockIcon(
   iconDirectory: string,
   badge: DevBuildBadge | undefined,

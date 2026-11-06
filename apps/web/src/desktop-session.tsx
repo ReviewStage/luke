@@ -1,25 +1,3 @@
-/**
- * desktop-session.tsx -- the page that hands the Mac a Better Auth session of its own from the signed-in browser.
- *
- * The Mac opens it right after its OAuth sign-in, with a PKCE challenge, a
- * state, and its loopback address. On the browser's session the page asks
- * Better Auth's Electron plugin to transfer the user
- * (https://www.better-auth.com/docs/integrations/electron#handling-authorization-in-the-browser),
- * and sends the plugin's single-use code back to the loopback, where the Mac
- * exchanges it with its verifier. The plugin's own browser client would
- * redirect through a custom URL scheme; the Mac app listens on the loopback
- * its OAuth sign-in already uses, so the page returns there, and only to a
- * loopback (`desktop-session-wire.ts`).
- *
- * A browser that holds no session, which is the case when the Mac asks for
- * a session apart from its sign-in, signs in here first, and the page
- * carries on with the transfer when the sign-in returns it.
- *
- * It is also where the website names the visitor and counts their sign-in
- * (`completeSiteSignIn`), since the desktop's sign-in skips the consent page
- * and passes through no other page of the site on the session it made.
- */
-
 import {
   type DesktopSessionPageQuery,
   desktopSessionPageQuery,
@@ -41,15 +19,12 @@ import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient();
 
-/** The Electron plugin's transfer endpoint, which the plugin's browser client calls `electron.transferUser`. */
 const TRANSFER_PATH = "/electron/transfer-user";
 
 const TransferAnswer = Schema.Struct({ electron_authorization_code: Schema.String });
 
-/** The HTTP status Better Auth answers a transfer with when the browser holds no session. */
 const SIGNED_OUT_STATUS = 401;
 
-/** What the page shows: the hand-off under way, a sign-in it needs first, or how it ended short of the Mac. */
 const VIEW = { WORKING: "working", SIGN_IN: "sign-in", SAID: "said" } as const;
 
 type View =
@@ -66,14 +41,10 @@ function said(title: string, body: string): View {
   return { kind: VIEW.SAID, title, body };
 }
 
-/** Asks the plugin for the code and sends the browser on to the loopback; answers what to show when it cannot. */
 async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View> {
   if (query === undefined) {
     return said(`This link did not come from ${PRODUCT_NAME}`, "Sign in again.");
   }
-  // Note that the session is read beside the transfer rather than after it,
-  // and under a deadline, so counting the sign-in adds little to the
-  // hand-off and never holds it for long (`completeSiteSignIn`).
   const signedIn = authClient
     .getSession({ fetchOptions: { signal: signInCountDeadline() } })
     .then((answer) => answer.data)
@@ -93,30 +64,17 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
       : said(`${PRODUCT_NAME} could not be reached`, "Sign in again.");
   }
   const code = Schema.decodeUnknownSync(TransferAnswer)(answered.data).electron_authorization_code;
-  // Note that the sign-in is counted here, before the page leaves, because
-  // the desktop's client skips consent and this is the one page of the flow
-  // that runs on the session a sign-in just made; a count that fails never
-  // stands between the Mac and its session.
   await completeSiteSignIn(signedIn).catch(() => undefined);
   window.location.replace(desktopSessionReturnUrl(query.returnTo, code, query.transfer.state));
   return WORKING;
 }
 
-/**
- * The page opens on the app's mark, badged as failed once the hand-off ended
- * short of the Mac: the title says where the hand-off stands, the description
- * what to do about it, the body holds the providers when a sign-in comes
- * first, and the Open link goes back where it ended. A sign-in that cannot start
- * is said in the page's alert region rather than under the choices.
- */
 function DesktopSession(): React.JSX.Element {
   const started = useRef(false);
   const handing = useMutation({ mutationFn: handOff });
   const view = handing.data ?? WORKING;
   const signInChoices = useSocialSignIn(authClient);
 
-  // Note that the hand-off runs once even where StrictMode runs an effect
-  // twice, because each transfer mints a code of its own.
   useEffect(() => {
     if (started.current) return;
     started.current = true;

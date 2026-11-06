@@ -65,20 +65,6 @@ import { sql } from "drizzle-orm";
 import { Clock, type Context, DateTime, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 
-/**
- * A description's comment threads through the paths a desktop calls, answered by
- * the hosted oRPC router as the deployed route answers them, over a real
- * dialect: a member starts a thread on a teammate's description and every member
- * reads it, named by its writer; a reader whose cursor is behind reads it at
- * once, and one whose cursor is current is held until something moves or
- * the hold ends, on the test's clock; an account outside the workspace
- * reads and writes nothing, exactly as for a plan that does not exist; and
- * the developer's edit that deletes the anchored words leaves the thread its
- * quote, while the edit their editor's undo sends anchors it again.
- *
- * Synthetic accounts, bearers, and plans throughout.
- */
-
 const ORIGIN = "https://app.test";
 const EDIT = (taskId: string) => `/api/plans/${taskId}/description`;
 
@@ -95,11 +81,9 @@ interface Answered {
   readonly body: string;
 }
 
-/** The account's Descriptions turned on or off, which its agents are handed a description's comment threads by. */
 const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
-/** An account with Descriptions on, whose agents are handed a description's comment threads only then. */
 const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -109,16 +93,13 @@ const openAccount = (name: string) =>
     return id;
   });
 
-/** Every bearer `Bearer <account>`. */
 const resolveUserId = (incoming: Request) =>
   Effect.succeed(
     Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
   );
 
-/** Every message the fake eve was asked to open a session with, in order. */
 const opened: EveMessage[] = [];
 
-/** eve as the routes reach it under the member's bearer: every open accepted and written down, no other call made. */
 const fakeEve = (): AgentSessions => ({
   open: (message) =>
     Effect.sync(() => {
@@ -141,16 +122,13 @@ const fakeEve = (): AgentSessions => ({
   reset: () => Effect.die(new Error("this suite retires no session")),
 });
 
-/** What the routes counted, across the file; a case reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-/** The properties of each event of one name the account was counted for, in order. */
 const countedProperties = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** The services a request runs on: the test's own database and clock, the analytics, no GitHub or model catalog, and where a case keeps it, the work run past the answer. */
 const servicesOver = (clock: Clock.Clock, after: Layer.Layer<AfterResponse> | undefined) =>
   Effect.gen(function* () {
     return Layer.mergeAll(
@@ -166,17 +144,14 @@ const servicesOver = (clock: Clock.Clock, after: Layer.Layer<AfterResponse> | un
     );
   });
 
-/** The web runtime's services as a request runs on them: the test's own database and clock. */
 const webServicesOver = (clock: Clock.Clock, after?: Layer.Layer<AfterResponse>) =>
   Effect.gen(function* () {
     const provided = yield* Effect.context<Database>().pipe(
       Effect.provide(yield* servicesOver(clock, after)),
     );
-    // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
     return provided as Context.Context<WebServices>;
   });
 
-/** The comments resource behind the hosted handler, answering one request on the clock handed in, keeping the work past its answer where `after` keeps it. */
 const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Layer<AfterResponse>) =>
   Effect.gen(function* () {
     const services = yield* webServicesOver(clock, after);
@@ -193,7 +168,6 @@ const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Laye
     };
   });
 
-/** One request answered on the test's own clock: the comments resource, or the plans resource's edit. */
 const answer = (routes: "comments" | "plans", request: Request) =>
   Effect.gen(function* () {
     if (routes === "comments") return yield* commentsAnswer(request, yield* Clock.Clock);
@@ -231,14 +205,12 @@ function request(
   });
 }
 
-/** The threads a read answered, failing the test where it does not read. */
 function threadsIn(answered: Answered): readonly DescriptionCommentThread[] {
   const read = readEither(descriptionCommentsAnswerSchema)(unparsedWire(JSON.parse(answered.body)));
   if (Result.isFailure(read)) return assert.fail(answered.body);
   return read.success.threads;
 }
 
-/** The thread a write answered, failing the test where it answered none. */
 function threadIn(answered: Answered): DescriptionCommentThread {
   const read = readEither(descriptionCommentThreadAnswerSchema)(
     unparsedWire(JSON.parse(answered.body)),
@@ -247,10 +219,8 @@ function threadIn(answered: Answered): DescriptionCommentThread {
   return read.success.thread;
 }
 
-/** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
-  // Our key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
   yield* connectAgentApiKeys(owner);
   const teammate = yield* openAccount("Charles Pan");
   const outsider = yield* openAccount("Someone Else");
@@ -261,7 +231,6 @@ const openSharedTask = Effect.gen(function* () {
   return { owner, teammate, outsider, taskId };
 });
 
-/** A coding agent the owner started on the task, its session standing, which a comment's mention hands the thread. */
 const startAgent = (owner: string, taskId: string) =>
   Effect.gen(function* () {
     const { agent } = Option.getOrThrow(
@@ -286,14 +255,11 @@ const startAgent = (owner: string, taskId: string) =>
     return agent.id;
   });
 
-/** An agent's mention link, as a member's chip writes it. */
 const agentLink = (taskId: string, agentId: string) =>
   `[@Invite email](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
-/** A task's mention of the app, as a chip wrote it while a task had one. */
 const appLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
 
-/** A start of a thread on the sentence above. */
 function startBody(comment: string) {
   const from = DESCRIPTION_TEXT.indexOf(WORDS);
   return {
@@ -459,7 +425,6 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
 
         const [message] = opened.slice(before);
         assert.ok(message, "the agent was handed the thread");
-        // Note that the message is read as eve was handed it, its words wherever its parts hold them.
         const words = JSON.stringify(message.message);
         assert.ok(words.includes("Charles Pan sent you a comment thread"));
         assert.ok(words.includes(thread.id));
@@ -528,7 +493,6 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
         assert.ok(message, "the agent in the thread was handed the reply");
         assert.ok(JSON.stringify(message.message).includes("And withdrawing by email?"));
 
-        // An agent whose starter has Descriptions off is told nothing of the description's comments.
         yield* descriptionsFor(owner, false);
         const planless = readEither(descriptionCommentThreadAnswerSchema)(
           unparsedWire(JSON.parse((yield* reply("And by link?")).body)),
@@ -556,7 +520,6 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
         const agentId = yield* startAgent(owner, taskId);
-        // Note that a page's threads are no description's, so its starter's Descriptions off keeps none of them from the agent.
         yield* descriptionsFor(owner, false);
         const page = Option.getOrThrow(
           yield* writePage(
@@ -887,7 +850,6 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
 });
 
 it.layer(getTestDB())("a description's comments read held on the test's clock", (it) => {
-  /** A read past the cursor, forked on a clock that announces each wait it makes. */
   const heldRead = (userId: string, taskId: string, after: string) =>
     Effect.gen(function* () {
       const { clock, asleep } = yield* announcingClock;

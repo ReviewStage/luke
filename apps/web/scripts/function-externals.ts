@@ -9,13 +9,6 @@ import {
   functionBundlePlan,
 } from "../server/function-bundles.js";
 
-/**
- * `--write` bundles every function unwritten and records each bundle's
- * external imports in the committed map. The map is the review moment a
- * bundle's graph otherwise lacks: a diff line saying which function now loads
- * which package is a question a reviewer can ask, where a silently widened
- * bundle is not. `tests/vercel-functions.test.ts` fails on drift.
- */
 const WEB = join(import.meta.dirname, "..");
 const MODE = { WRITE: "--write" } as const;
 

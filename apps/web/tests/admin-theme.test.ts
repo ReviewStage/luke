@@ -7,13 +7,6 @@ import tokens from "@repo/ui/tokens.css?inline";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { followAppTheme } from "../src/admin/admin-appearance";
 
-/**
- * The admin dashboard draws in the theme the app keeps, not a forced dark one:
- * once its page (`admin.html`) is up, `followAppTheme` wears a change of
- * `app.theme`, or of the machine's appearance under System, as it lands, and
- * tints the browser's chrome in the worn theme's ground.
- */
-
 const WEB = join(import.meta.dirname, "..");
 const ADMIN_PAGE = new DOMParser().parseFromString(
   readFileSync(join(WEB, "admin.html"), "utf8"),
@@ -21,10 +14,8 @@ const ADMIN_PAGE = new DOMParser().parseFromString(
 );
 
 let machineDark = false;
-/** The media query lists handed out, which the machine's flip is announced to. */
 const machine: MediaQueryListStub[] = [];
 
-/** A media query list that is an event target, as the browser's is, answering the machine's appearance. */
 class MediaQueryListStub extends EventTarget implements MediaQueryList {
   onchange: MediaQueryList["onchange"] = null;
   constructor(readonly media: string) {
@@ -37,7 +28,6 @@ class MediaQueryListStub extends EventTarget implements MediaQueryList {
   removeListener(): void {}
 }
 
-/** The machine's appearance flips: every list handed out hears it. */
 function flipMachine(dark: boolean): void {
   machineDark = dark;
   for (const list of machine) list.dispatchEvent(new Event("change"));
@@ -51,7 +41,6 @@ beforeEach(() => {
     machine.push(list);
     return list;
   });
-  // The page's head as admin.html writes it: its root's attributes and its tint.
   for (const { name, value } of Array.from(ADMIN_PAGE.documentElement.attributes)) {
     document.documentElement.setAttribute(name, value);
   }

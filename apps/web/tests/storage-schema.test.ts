@@ -16,22 +16,9 @@ import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
 
-/**
- * What these tests hold to is the shape the migrations built: every row
- * cascades with its account, a child goes with its parent, the idempotency
- * key refuses the duplicate and admits the neighbor, a fresh conversation
- * numbers its messages from one, a tool set is one row however often it is
- * written, the v1 conversation tables and the briefing table are gone, the
- * per-conversation latest-turn laterals have the indexes they read through,
- * and a child says whether it expects a completion. The migration
- * runner's own bookkeeping table is not one of them: it records which of these
- * tables a database has, and is declared by no schema file.
- */
-
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-/** Every table the migrations declare, by its Postgres name, better-auth's own alongside ours. */
 const DECLARED_TABLES = [
   "account",
   "account_chatgpt_device_login",
@@ -184,7 +171,6 @@ async function insertTestMessage(
   });
 }
 
-/** One account's full set of rows: a main conversation with a turn and a message, and a child of it. */
 async function populateAccount(userId: string): Promise<{ main: string; child: string }> {
   const main = await insertTestConversation(userId);
   const turnId = await insertTestTurn(userId, main);

@@ -24,26 +24,14 @@ const brandRoot = BRAND_ASSETS_DIRECTORY;
 const appVersion = JSON.parse(
   await fs.readFile(path.join(appRoot, "package.json"), "utf8"),
 ).version;
-// The one release every build's reports and uploaded source maps share, a
-// Developer ID build's or not: main reports under it (`PACKAGED_SENTRY_RELEASE`)
-// and the upload below files the maps under it, so the two cannot drift.
 const sentryRelease = `Vespin@${appVersion}`;
-// Whether this build uploads its source maps (`sentryPlugins` below): where
-// the token is set, unless the build is a Release workflow rehearsal (a
-// manual dispatch), which publishes no release and so must not file maps
-// under the real one. A tag's build and a release cut by hand both upload.
 const uploadsSourceMaps =
   Boolean(process.env.SENTRY_AUTH_TOKEN) && process.env.GITHUB_EVENT_NAME !== "workflow_dispatch";
-// The Dock takes one large PNG per mode and swaps them as the theme changes.
 const DOCK_ICON_IMAGES = {
   "icon-light.png": "icon-light-512.png",
   "icon-dark.png": "icon-dark-512.png",
 };
 
-// The imports the panel's build table (`@repo/panel/build-table`) answers
-// differently from how they are written: Streamdown's HTML parser and Pierre's
-// diff writer, each redirected to a module of the panel's own. The table says
-// why each is answered as it is; this is esbuild's shape of it.
 const panelRedirects = {
   name: "panel-redirects",
   setup(build) {
@@ -54,10 +42,6 @@ const panelRedirects = {
   },
 };
 
-// A dynamic `import("lucide-react")` answered with the module of Lucide's
-// `icons` alone (`@repo/panel/build-table`'s `LUCIDE_WHOLE`). The CommonJS file
-// is read in a namespace of its own, so the resolver never takes it for the
-// package and keeps answering the named imports with the ES build.
 const LUCIDE_WHOLE_FILE = "lucide-whole-file";
 const lucideWholeOnDemand = {
   name: "lucide-whole-on-demand",
@@ -82,12 +66,6 @@ const lucideWholeOnDemand = {
   },
 };
 
-// The stylesheets a bundle's entry imports for itself (`import "./index.css"`),
-// each built on its own below to the file named here. esbuild writes a
-// stylesheet a split chunk imports and never loads it, so the import is
-// answered with a module that links the built file from beside the chunk
-// that imports it, which is where the renderer's chunks all stand. A bundler
-// that loads a chunk's stylesheets itself, as Vite does, needs none of this.
 const TERMINAL_STYLESHEET = path.join(appRoot, "../../packages/panel/src/terminal/index.css");
 const SIDE_STYLESHEETS = new Map([[TERMINAL_STYLESHEET, "terminal.css"]]);
 const sideStylesheetsLinked = {
@@ -111,13 +89,6 @@ const sideStylesheetsLinked = {
   },
 };
 
-// The commit the bundle is cut from, which Settings › Updates names
-// (`@repo/host`'s `build-commit.ts`): the short SHA, whether the tree held
-// uncommitted changes (a new file the bundle may carry counts too), and the
-// branch. A detached head names the nearest ref that holds it
-// (`fix/x~2`), or else the linked worktree's folder, so a development
-// build always says where it came from. A build made where git cannot
-// answer stamps none.
 function git(...args) {
   return execFileSync("git", args, {
     cwd: appRoot,
@@ -126,8 +97,6 @@ function git(...args) {
   }).trim();
 }
 
-// The ref nearest a detached head that holds it, without a remote's prefix;
-// none where no ref holds it.
 function nearestRef() {
   try {
     const ref = git("name-rev", "--name-only", "--no-undefined", "HEAD");
@@ -137,8 +106,6 @@ function nearestRef() {
   }
 }
 
-// The folder of the linked worktree the build runs in; none in the main
-// checkout, whose folder names the repository rather than the work.
 function worktreeFolder() {
   const gitDirectory = git("rev-parse", "--absolute-git-dir");
   const commonDirectory = path.resolve(appRoot, git("rev-parse", "--git-common-dir"));
@@ -161,8 +128,6 @@ function buildCommit() {
   }
 }
 
-// A document loads its window's entry as a module script, or the entry's
-// first `import` is a syntax error and the window stays blank.
 async function assertModuleEntry(document, entry) {
   const html = await fs.readFile(path.join(outputRoot, "renderer", document), "utf8");
   if (!html.includes(`<script type="module" src="${entry}"></script>`)) {
@@ -170,11 +135,6 @@ async function assertModuleEntry(document, entry) {
   }
 }
 
-// The source-map upload, for a build that uploads (`uploadsSourceMaps`). A
-// refused release or upload warns and the build goes on, so Sentry being
-// down never holds a release back; its traces stay unreadable until maps are
-// uploaded for it by hand. The maps ship in no package either way, since
-// electron-builder's `files` (`electron-builder-config.mjs`) leaves them out.
 function sentryPlugins() {
   if (!uploadsSourceMaps) return [];
   return [
@@ -196,21 +156,10 @@ await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
 await fs.mkdir(path.join(outputRoot, "icon"), { recursive: true });
 
-// The window's entry, by the bundle it is built into: its source, and the
-// document that loads it, copied beside it below.
 const WINDOW_ENTRIES = {
   panel: { source: "src/renderer/index.tsx", document: "index.html" },
 };
 
-// The bundles too large for any window's entry, each reached through a
-// dynamic `import()` of its own entry (`@repo/panel`'s `bundle-loader.ts`), so no
-// window parses one before it is needed: the editors (TipTap), a File tab's
-// tree (Pierre's tree), a Terminal tab's screen (xterm.js), a description's diagrams
-// (Mermaid), a Files changed diff (Pierre's diffs and Shiki), and session
-// replay's recorder (rrweb). Each is an entry rather than a chunk, so
-// it keeps a name of its own; what each reaches
-// through dynamic imports of its own, a diagram type's layout or a language's
-// grammar, is a chunk of its own, loaded when it is drawn.
 const SIDE_BUNDLE_ENTRIES = {
   "description-editor": "../../packages/panel/src/description-editor/index.ts",
   "file-tree": "../../packages/panel/src/file-tree/index.ts",
@@ -220,16 +169,9 @@ const SIDE_BUNDLE_ENTRIES = {
   "session-recorder": "src/renderer/session-recorder/index.ts",
 };
 
-// The worker Pierre's diffs highlights a Files changed list in, bundled as
-// the panel's build table says (`HIGHLIGHT_WORKER_BUILD`) and handed to the
-// diff bundle as text through `panelDefines`.
 const highlightWorker = await build(HIGHLIGHT_WORKER_BUILD);
 const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
 
-// The renderer, as ES modules: the window's entry, the side bundles above,
-// and the chunks they share, with no wrapper around the whole, which is about
-// 6 KB gzipped smaller than the same code as one script. The chunks are named by
-// their content, because esbuild names every shared one `chunk`.
 const rendererBuild = build({
   entryPoints: Object.fromEntries([
     ...Object.entries(WINDOW_ENTRIES).map(([name, { source }]) => [
@@ -251,19 +193,10 @@ const rendererBuild = build({
   minify: true,
   conditions: ["production"],
   plugins: [panelRedirects, lucideWholeOnDemand, sideStylesheetsLinked, ...sentryPlugins()],
-  // Every map is written beside its file and named by none: the maps stay
-  // out of the app (`electron-builder-config.mjs`), so a comment would point
-  // at a file that is not there. The upload finds each by `<file>.map`.
   sourcemap: "external",
   logLevel: "info",
   define: {
     ...panelDefines(highlightWorkerText),
-    // The analytics project the screen recorder files into, from the
-    // packaging environment rather than source, where secret scanners
-    // cannot tell a published project key from a real secret, and only for a
-    // Developer ID release build. A build without one records nothing at
-    // all — the same kill switch the site's own counting has, so a local run
-    // or an unconfigured build cannot record into production's project.
     ...replayProjectKeyDefine(process.env),
   },
 });
@@ -283,17 +216,11 @@ await Promise.all([
       PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
       PACKAGED_SENTRY_RELEASE: JSON.stringify(sentryRelease),
       PACKAGED_BUILD_COMMIT: JSON.stringify(buildCommit()),
-      // Whether this bundle rides in a Developer ID release, which is what
-      // decides the name — and so the state directory and Keychain entry —
-      // the run answers to; see `@repo/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
     sourcemap: "external",
     logLevel: "info",
   }),
-  // The code coloring process main forks with `utilityProcess`
-  // (`src/main/services/task-code-coloring.ts`), its own bundle so Shiki,
-  // its themes and its grammars ride in it alone and never in main's.
   build({
     entryPoints: [path.join(appRoot, "src/utility/task-code.ts")],
     outfile: path.join(outputRoot, "task-code.js"),
@@ -319,9 +246,6 @@ await Promise.all([
     logLevel: "info",
   }),
   build({
-    // The stylesheet entry `@import`s the renderer's stylesheets; esbuild
-    // inlines them into the single `styles.css` the renderer HTML links. The
-    // Tailwind entry among them is compiled by the plugin as it is loaded.
     entryPoints: [path.join(appRoot, "src/renderer/styles/index.css")],
     outfile: path.join(outputRoot, "renderer/styles.css"),
     bundle: true,
@@ -331,8 +255,6 @@ await Promise.all([
     sourcemap: "external",
     logLevel: "info",
   }),
-  // The stylesheet a Terminal tab's entry imports, linked as its entry runs
-  // (`sideStylesheetsLinked` above).
   build({
     entryPoints: [TERMINAL_STYLESHEET],
     outfile: path.join(outputRoot, "renderer", SIDE_STYLESHEETS.get(TERMINAL_STYLESHEET)),
@@ -358,10 +280,6 @@ await Promise.all(
   ),
 );
 
-// The panel's static files, the harness marks and the voice clips, copied
-// beside the bundle, which is the desktop's asset base
-// (`desktop-platform.ts`), so the panel loads nothing from the network and the
-// bundle carries none of their bytes.
 await Promise.all(
   panelStaticDirectories().map(({ from, to }) =>
     fs.cp(from, path.join(outputRoot, "renderer", to), { recursive: true }),

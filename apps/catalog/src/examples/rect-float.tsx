@@ -4,15 +4,8 @@ import { useRef } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * rect-float.tsx -- layers that stand by a box in the window rather than by
- * a button: a toolbar over words, and a link field under them, each laid in
- * the positioned box the words stand in.
- */
-
 const ignore = () => undefined;
 
-/** Words with a stretch of them marked as selected, a toolbar over the stretch and a link field under it. */
 function FloatsByWords(): React.JSX.Element {
   const words = useRef<HTMLElement>(null);
   const box = () => words.current?.getBoundingClientRect();

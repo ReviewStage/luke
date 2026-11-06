@@ -10,19 +10,10 @@ import { Effect } from "effect";
 import { handOffToMacApp } from "../src/app/mac-app-handoff";
 import { type FakeService, fakeService } from "./support/fake-service";
 
-/**
- * An app link loaded in a tab, handed to the Mac app only where the
- * signed-in account chose the Mac app, the tab is on a Mac, and it came to
- * the link by a fresh navigation: the place the address names goes to the
- * app in its own scheme, and every other load stays on the web. Synthetic
- * ids.
- */
-
 const ORIGIN = "http://localhost:3000";
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const TASK_ADDRESS = `${ORIGIN}/acme/plan/${TASK_ID}`;
 
-/** What the browser was asked to open, after one load at the address given, a fresh navigation unless said otherwise. */
 const loaded = (
   service: FakeService,
   address: string,
@@ -38,10 +29,8 @@ const loaded = (
     return opened;
   });
 
-/** A service whose signed-in account chose the place given. */
 const choosing = (linkOpen: LinkOpen) => fakeService({ signedIn: true, linkOpen });
 
-/** Whether the service was asked for the account's preferences. */
 const askedPreferences = (service: FakeService) =>
   service.seen().some((request) => request.path === "/api/account/preferences");
 

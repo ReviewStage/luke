@@ -6,22 +6,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { vi } from "vitest";
 import { SELECTION_EXAMPLE } from "./examples/selection.js";
 
-/**
- * selectable-lists.test.ts -- the catalog's two selectable lists, the `List`
- * of rows and the cards of the app's own in a `SelectionRegion`, are chosen
- * as every selectable list is (`@repo/ui/testing/selectable-list`), the
- * example's opening choice of two rows let go before each test.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** The example drawn, handing over the box with the id given and the rows whose title says they opened. */
 function drawn(id: string) {
-  // Note that every row measures its title, so the example draws beside a ResizeObserver, which jsdom lacks.
   vi.stubGlobal(
     "ResizeObserver",
     class {

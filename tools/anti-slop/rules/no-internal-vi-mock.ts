@@ -3,29 +3,16 @@ import { defineRule } from "@oxlint/plugins";
 
 import { isWatchedTest, literalText } from "../shared/test-guard.ts";
 
-/** The `vi` members that swap a module for another before the test imports it. */
 const MOCKING_MEMBERS: ReadonlySet<string> = new Set(["mock", "doMock"]);
 
-/**
- * A module of this repository: a relative or absolute path, a package
- * `imports` alias (`#main/…`), or a workspace package (`@repo/…`).
- */
 const INTERNAL_MODULE = /^(?:\.{1,2}\/|\/|#|@repo\/)/u;
 
-/** The module a mock names: a specifier, or the `import("…")` vitest also takes. */
 function mockedModule(argument: ESTree.Node | undefined): string | undefined {
   if (argument === undefined) return undefined;
   if (argument.type === "ImportExpression") return literalText(argument.source);
   return literalText(argument);
 }
 
-/**
- * Root AGENTS.md's "Testing": use real code first, then a fake, then a stub,
- * and replace only what crosses a process boundary. A test that swaps a
- * module of this repository for one of its own tests that module's callers
- * against a copy of it, so `vi.mock` names only an outside package
- * (`electron`, a provider's SDK).
- */
 export const noInternalViMockRule = defineRule({
   meta: {
     type: "problem",

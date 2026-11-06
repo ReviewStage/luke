@@ -18,12 +18,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * spinners.tsx -- a wait beside words and alone in a region, the ring as a
- * mark and at a caption's size beside the words that say the wait, and a control's words giving way to it beside the same words at
- * rest, so the two stand the same width.
- */
-
 function Spinners(): React.JSX.Element {
   return (
     <>

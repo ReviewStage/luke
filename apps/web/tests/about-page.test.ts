@@ -5,13 +5,6 @@ import { renderToString } from "react-dom/server";
 import { test } from "vitest";
 import { AboutPage } from "../src/AboutPage";
 
-/**
- * The About page as the prerender writes it: one title, a heading per founder,
- * and each founder's profiles named for whom they belong to. The site's chrome
- * is site-chrome.test.ts's.
- */
-
-/** The page's main as the prerender writes it. */
 function main(): HTMLElement {
   const root = document.createElement("div");
   root.innerHTML = renderToString(createElement(AboutPage));

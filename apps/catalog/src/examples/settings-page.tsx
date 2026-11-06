@@ -16,15 +16,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * settings-page.tsx -- a page of sections with a Reset at the end of its
- * title's line, tall enough to scroll inside its frame; and the same page
- * in a frame narrower than the 480px a desktop page insets less under, its
- * long title pushing the Reset below it; the page on a phone, its way back
- * and Reset in its bar's corners; and a page whose content is an empty
- * state, standing in the room under its title.
- */
-
 function HeldSwitch({ label, describedBy }: { label: string; describedBy: string | undefined }) {
   const [on, setOn] = useState(true);
   return <Switch checked={on} label={label} describedBy={describedBy} onChange={setOn} />;

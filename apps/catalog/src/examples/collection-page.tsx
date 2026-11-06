@@ -25,18 +25,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * collection-page.tsx -- a collection's page in each state its content
- * takes, switched in place so the header and filters can be seen to stand
- * still, and the same page in a phone's width; the page under a window's
- * toolbar, which holds its title and acts, and a board under it standing
- * across the room and scrolling sideways. The empty and failed states
- * here are plain words, standing in for the shared EmptyState and
- * ErrorState. A read in progress stands the rows' own skeleton, the same
- * `ListRow`s with blocks for their words, or, handed none, the page's rows
- * of blocks. Every name is made up.
- */
-
 const TASKS = [
   { id: "launch", name: "Launch checklist", detail: "Edited by Ada Lovelace", when: "2h ago" },
   { id: "billing", name: "Billing migration", detail: "Edited by Grace Hopper", when: "Yesterday" },
@@ -61,7 +49,6 @@ type Scope = (typeof SCOPES)[number]["value"];
 
 const STATES = Object.values(COLLECTION_STATE).map((state) => ({ value: state, label: state }));
 
-/** The tasks' rows while they are read: the same rows, blocks where their words will be. */
 function TasksSkeleton(): React.JSX.Element {
   return (
     <List label="Tasks">
@@ -136,7 +123,6 @@ function Tasks({
   );
 }
 
-/** The window's toolbar over the tasks, holding their title and the act to make one. */
 function Toolbar(): React.JSX.Element {
   return (
     <header className="catalog-window-toolbar">
@@ -188,7 +174,6 @@ function TasksUnderToolbar({ state }: { state: CollectionState }): React.JSX.Ele
   );
 }
 
-/** The tasks as a board under the toolbar, its columns across the room. */
 function Board(): React.JSX.Element {
   return (
     <CollectionPage

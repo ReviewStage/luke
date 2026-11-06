@@ -32,39 +32,8 @@ import {
   TEST_SOURCE,
 } from "./shared/test-guard.ts";
 
-/**
- * The design system's guards have no escape hatch: oxlint honors every
- * inline disable and has no flag to refuse one, so `pnpm lint` runs this
- * after it. It fails on a JSX-capable file outside `@repo/ui` holding a
- * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
- * file holding one that would silence `skeleton-through-components` or
- * `async-press-needs-busy`, whose baseline is the only way past it, on a
- * JSX-capable file outside `@repo/ui` holding one that would silence
- * `no-open-page-from-button`, `no-raw-heading-outside-ui` or
- * `no-hand-written-live-region`, on any TypeScript file outside `@repo/ui`
- * that names an arrow key and holds one that would silence
- * `no-hand-written-arrow-keys`, on any TypeScript file holding one that would
- * silence `no-lucide-outside-door` or, where it adds a listener,
- * `no-document-press-listener` or, where it names the window's storage or
- * its helpers, `no-direct-view-storage`, whose baselines are the only way past
- * them, on any TypeScript file that names a placeholder and words ending in
- * an ellipsis and holds one that would silence `no-placeholder-ellipsis`,
- * which has no way past it, on any of the panel's or the design system's own
- * TypeScript files
- * holding one that would silence `no-follow-outside-host-read`, which has no
- * way past it, on any TypeScript file that spells
- * a retired name and holds one that would silence `retired`, whose retired
- * file's baseline is the only way past it, on a vendored shadcn component
- * holding one that would silence `no-shadcn-focus-ring`, on any test file
- * holding one that would silence `no-internal-vi-mock`,
- * `no-focused-or-skipped-test` or `no-source-read-in-test`, which hold rules
- * root AGENTS.md's "Testing" says never bend, and on an `.oxlintrc.json` that
- * leaves any of them short of an error anywhere or whose `ignorePatterns`
- * hide a file one of them watches.
- */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** Tracked files and new ones git does not ignore, so a local run sees a file not yet added. */
 function sourceFiles(): readonly string[] {
   const listed = spawnSync(
     "git",
@@ -78,14 +47,11 @@ function sourceFiles(): readonly string[] {
   return listed.stdout.split("\0").filter((file) => file.length > 0);
 }
 
-/** A press listener on the whole window, as far as the text says: the only file that has anything to silence. */
 const PRESS_LISTENER =
   /(?:document|window|globalThis|ownerDocument|defaultView)\s*\.\s*addEventListener\(\s*["'`](?:pointerdown|mousedown|touchstart|click|auxclick)/u;
 
-/** A file that touches the window's storage or imports the helpers over it, as far as the text says: the only file that has anything to silence. */
 const KEPT_STORAGE = /\b(?:localStorage|sessionStorage)\b|kept-storage/u;
 
-/** Each guard, the files it watches, and what to do instead of silencing it. */
 const GUARDS = [
   {
     rule: PRESS_GUARD_RULE,
@@ -131,7 +97,6 @@ const GUARDS = [
   {
     rule: ARROW_KEY_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    // A file that never names an arrow key has nothing to silence; the guards' own tests spell fixtures.
     watches: (absolute: string) =>
       isOutsideUi(absolute) &&
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
@@ -142,8 +107,6 @@ const GUARDS = [
   {
     rule: LUCIDE_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    // The guards' own tests spell bare directives as fixtures, and oxlint ignores that tree anyway.
-    // A file that never names the library has nothing to silence, so an ignored tree of vendored code is no gap.
     watches: (absolute: string) =>
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&
@@ -153,7 +116,6 @@ const GUARDS = [
   {
     rule: PLACEHOLDER_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    // A file that names no placeholder, or holds no words ending in an ellipsis, has nothing to silence; the guards' own tests spell fixtures.
     watches: (absolute: string) =>
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&
@@ -164,7 +126,6 @@ const GUARDS = [
   {
     rule: PRESS_LISTENER_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    // A file that never adds a listener has nothing to silence; the guards' own tests spell fixtures.
     watches: (absolute: string) =>
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&
@@ -175,7 +136,6 @@ const GUARDS = [
   {
     rule: KEPT_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    // A file that names no storage has nothing to silence; the guards' own tests spell fixtures.
     watches: (absolute: string) =>
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&
@@ -192,7 +152,6 @@ const GUARDS = [
   {
     rule: RETIRED_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    // As for Lucide: a file that never spells a retired name has nothing to silence.
     watches: (absolute: string) =>
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&

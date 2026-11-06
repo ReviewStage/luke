@@ -4,18 +4,11 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * error-lines.tsx -- the one line a refusal is said in: alone, under a form
- * field, and under a Settings row, each the same line in the same ink.
- */
-
-/** The refusal every sample says. */
 const REFUSED = {
   words: "The GitHub installation no longer reaches acme/old-name.",
   failure: CATALOG_FAILURE,
 };
 
-/** A form field whose value was refused. */
 function RefusedField(): React.JSX.Element {
   const [repository, setRepository] = useState("acme/old-name");
   return (

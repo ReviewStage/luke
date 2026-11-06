@@ -3,12 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * readable-controls.tsx -- a checkbox whose words may be selected: a drag
- * across them selects them and holds back the toggle, and a plain click
- * toggles as any checkbox does, the count under it saying which happened.
- */
-
 function ReadableControlsExample(): React.JSX.Element {
   const [checked, setChecked] = useState(false);
   const [toggles, setToggles] = useState(0);

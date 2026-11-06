@@ -20,20 +20,6 @@ import { DISPATCH_QUERY, dispatchRoutes } from "../server/function-dispatch.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 
-/**
- * The adaptor's proof: a route built from a route layer reads the request it
- * was handed and the services the web runtime built, answers the gate's own
- * refusals, and answers the bounded body read's statuses on the answer and on
- * every refusal; and a state-changing request a browser's cookie carried from
- * a page the deployment does not serve is refused before any route answers it.
- */
-
-/**
- * The web runtime's layer names a database, so building it needs a connection
- * string. `pg` connects on its first query and nothing here queries, so this
- * one is never dialed — the placeholder `tests/auth-app.test.ts` and
- * `auth:generate` use for the same reason.
- */
 const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/app";
 
 beforeEach(() => {
@@ -53,14 +39,12 @@ const SECRET = "cron-secret-test";
 const USER_ID = "user-1";
 const AUTHORIZATION = "Bearer token";
 
-/** The deployment's own origin, which the guard reads from the address production registers. */
 const OWN_ORIGIN = "https://app.test";
 const FOREIGN_ORIGIN = "https://evil.example";
 const SESSION_COOKIE = "__Secure-better-auth.session_token=fixture";
 const WRITE_PATH = "/api/write";
 const WRITE_ROUTE_KEY = "write";
 
-/** Names the deployment production at its own origin, whatever environment the suite runs in. */
 function stubProduction(): void {
   vi.stubEnv("VERCEL_ENV", "production");
   vi.stubEnv("BETTER_AUTH_URL", OWN_ORIGIN);
@@ -70,7 +54,6 @@ function post(path: string, headers: Record<string, string>): Request {
   return new Request(`${OWN_ORIGIN}${path}`, { method: "POST", headers });
 }
 
-/** A route whose one path answers whatever reaches it, beside the hosted vocabulary's own not-found. */
 function writeRoute() {
   return routeFromHttpRouter(
     Layer.mergeAll(
@@ -80,13 +63,6 @@ function writeRoute() {
   );
 }
 
-/**
- * The gate every hosted group runs its requests through, as one route: the
- * method, a deployment secret configured, and the caller signed in. The
- * secret is the environment's, which is what `HostedEnvironment` reads as the runtime's
- * services are built, so a case naming another secret ends the runtime before
- * it asks for the next.
- */
 function gateRoute(resolveUserId: UserIdResolver<string | undefined>) {
   return routeFromHttpRouter(
     HttpRouter.add(

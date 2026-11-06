@@ -1,53 +1,29 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { commitLabel, devBuildDetail } from "./dev-build.js";
-import {
-  type RunningBuild,
-  UPDATE_FAILURE,
-  UPDATE_STATUS,
-  type UpdateSnapshot,
-} from "./update.js";
+import { type RunningBuild, UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "./update.js";
 
-/** The one action the row's button offers in each state. */
 export const UPDATE_ROW_ACTION = {
-  /** Ask the release manifest for the latest build. */
   CHECK: "check",
-  /** Nothing to press: a check is already out. */
   CHECKING: "checking",
-  /** Nothing to press: a newer build is downloading itself, and the row draws how far along. */
   DOWNLOADING: "downloading",
-  /** Restart into the downloaded release. */
   RESTART: "restart",
-  /** Open the latest release's page in the browser. */
   GET: "get",
-  /** Move the app into Applications, where an install it could not land in place can, or open the release's page instead. */
   MOVE: "move",
-  /** Ask the release manifest again, after a check that answered nothing. */
   RETRY: "retry",
-  /** Nothing to press: a development build is newer than any release. */
   NONE: "none",
 } as const;
 
 export type UpdateRowAction = (typeof UPDATE_ROW_ACTION)[keyof typeof UPDATE_ROW_ACTION];
 
-/** What the update row says, and what its button does. */
 export interface UpdateRow {
-  /** Which build is running: its version, or that it is a development build. */
   title: string;
   detail: string;
   action: UpdateRowAction;
-  /** Whether the running build is positively the latest, for the check mark. */
   current: boolean;
-  /** Whether the detail says a check or an install failed, which Settings announces as an alert. */
   failed: boolean;
-  /** How far a download is, from 0 to 100, while one runs. */
   progress?: number;
 }
 
-/**
- * Whether a newer release is positively known to exist. The news stands
- * through the whole install: a release downloading, waiting on its restart,
- * or failed mid-fetch is still one this build is not on.
- */
 function updateAvailable(update: UpdateSnapshot): boolean {
   return (
     update.status === UPDATE_STATUS.DOWNLOADING ||
@@ -56,13 +32,6 @@ function updateAvailable(update: UpdateSnapshot): boolean {
   );
 }
 
-/**
- * Whether the sidebar carries the release, between the account and the gear:
- * only while it has something to press — the restart once the release is
- * downloaded, or the releases page once installing it failed. A download
- * runs silently, as a browser's does, and a build that updates by hand has
- * no news to carry.
- */
 export function updateInSidebar(update: UpdateSnapshot): boolean {
   return (
     update.installSupported &&
@@ -71,11 +40,6 @@ export function updateInSidebar(update: UpdateSnapshot): boolean {
   );
 }
 
-/**
- * The release a fixture run stages as downloaded and waiting on its restart,
- * one minor version past the running build, so every capture shows the
- * sidebar's update control. A live run has the updater's own answer.
- */
 export function fixtureUpdate(
   run: { readonly fixtureMode: boolean },
   update: UpdateSnapshot,
@@ -90,7 +54,6 @@ export function fixtureUpdate(
   };
 }
 
-/** The version, with the commit beside it quietly, for a bug report to quote. */
 function versionTitle(update: UpdateSnapshot, build: RunningBuild): string {
   const version = `Version ${update.currentVersion}`;
   return build.commit ? `${version} (${commitLabel(build.commit)})` : version;
@@ -101,7 +64,6 @@ function downloadingDetail(update: UpdateSnapshot & { status: "downloading" }): 
   return `Downloading ${update.latestVersion}…${percent}`;
 }
 
-/** Where an idle updater stands: positively current, unable to reach the feed when asked, or not yet asked. */
 function idleRow(
   update: UpdateSnapshot & { status: typeof UPDATE_STATUS.IDLE },
 ): Omit<UpdateRow, "title"> {
@@ -116,8 +78,6 @@ function idleRow(
       failed: true,
     };
   }
-  // Not an answer: nothing has been learned yet, so the row only offers to
-  // ask rather than posing an unknown as up to date.
   return {
     detail: "Not checked yet",
     action: UPDATE_ROW_ACTION.CHECK,
@@ -126,10 +86,7 @@ function idleRow(
   };
 }
 
-/** A packaged build's row, from where its updater stands. */
 function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
-  // Note that a packaged build only lacks an updater when it runs on no
-  // network or off macOS; the browser is still its way to the latest.
   if (!update.installSupported) {
     return {
       detail: "This copy can't update itself",
@@ -169,9 +126,6 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
         failed: false,
       };
     case UPDATE_STATUS.ERROR:
-      // Note that an install a read-only volume refused is mended by the
-      // move, an install that failed otherwise is fetched by hand, and a
-      // check that failed is most likely answered by asking again.
       if (update.failure === UPDATE_FAILURE.READ_ONLY_VOLUME) {
         return {
           detail: `Move ${PRODUCT_NAME} to Applications to install ${update.latestVersion ?? "updates"}`,
@@ -198,17 +152,6 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
   }
 }
 
-/**
- * Reads the row from the last learned answer. The row only ever says where
- * the build stands and offers the next honest step: check again, wait for
- * the check or download already out, restart into a build already fetched,
- * try a check that failed again, move a copy that cannot be replaced where
- * it stands into Applications — or, where installing in place is
- * impossible or has failed, go get it in the browser instead. A build that cannot install itself never offers a
- * check it could do nothing with. A development build — run from source,
- * so newer than any release — names its commit and offers nothing, since a
- * release would only be older.
- */
 export function updateRow(update: UpdateSnapshot, build: RunningBuild): UpdateRow {
   if (!update.installSupported && !build.packaged) {
     return {

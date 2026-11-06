@@ -9,27 +9,16 @@ import { afterEach, test, vi } from "vitest";
 import { browserLoadedFresh } from "../src/app/mac-app-handoff";
 import { pageLoadedBy } from "./support/page-load";
 
-/**
- * Which loads of a tab the hand-off counts as fresh, by what the browser
- * says of how it loaded the page: a navigation to the address is one; a
- * reload, a Back or Forward into the tab, or a navigation onto an entry
- * holding a place the panel saved is not, nor one our own Open in
- * browser flagged to stay on the web, once; and a browser that says nothing
- * is taken as not.
- */
-
 const TASK_ADDRESS = "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 const histories: RouterHistory[] = [];
 
-/** The tab's router history as the page loads it, which the web root makes before reading the load. */
 function loadedHistory(): RouterHistory {
   const history = createBrowserHistory();
   histories.push(history);
   return history;
 }
 
-/** Where the page loaded, as the tab's router history reads it. */
 function loaded(): HistoryLocation {
   return loadedHistory().location;
 }
@@ -57,7 +46,6 @@ test("a reload, or a Back or Forward into the tab, is not", () => {
 
 test("a navigation onto an entry holding a place the panel saved is not", () => {
   window.history.replaceState(null, "", "/");
-  // A step the panel saved through an earlier load's router history, read back by the next load's.
   const earlier = loadedHistory();
   earlier.replace(TASK_ADDRESS, { step: { place: { kind: "plan", taskId: "t1" }, index: 3 } });
   earlier.flush();

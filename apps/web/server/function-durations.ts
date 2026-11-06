@@ -16,35 +16,14 @@ import { MEMBER_MCP_PATH } from "@repo/service/member-mcp/resource";
 import { PAGE_LINK_ROUTE } from "@repo/service/pages/page-links";
 import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
-/**
- * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the WebSocket functions, the terminal relay, the sandbox
- * tunnel, the Browser tab's live view, and the live reads' socket, carry the platform's longest
- * generally available duration.
- */
 const WEBSOCKET_FUNCTION_MAX_DURATION_SECONDS = 800;
 
 const API_PREFIX = "/api/";
 
-/** The route key of a client path: `server/routes/<key>.ts` answers `/api/<key>`. */
 function routeKeyOf(path: string): string {
   return path.slice(API_PREFIX.length);
 }
 
-/**
- * The deployed functions the routes are grouped into. Vercel's Node builder
- * detects, traces, and uploads each function separately and in series, at
- * several seconds apiece, so forty routes as forty functions were most of a
- * deploy; the routes now share one function per duration bound, because the
- * builder reads `maxDuration` from the function file and nothing narrower.
- * Grouping never moves a bound: a route joins a group whose duration is the
- * one it already had.
- *
- * The one group not drawn by a bound is the sandbox's page route's, which
- * shares its function with nothing: it is the one function the sandbox's host
- * reaches (the root `vercel.json`), and a dispatcher holding any other route
- * would hand that route a request whose query named it, the API's among them.
- */
 const FUNCTION_GROUP = {
   DEFAULT: "default",
   WORKSPACE_MCP: "workspace-mcp",
@@ -56,24 +35,14 @@ const FUNCTION_GROUP = {
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
 export interface FunctionDefinition {
-  /** The function's file under `api/` and `dist-functions/`, without its extension. */
   readonly file: string;
-  /** The `maxDuration` the function's stub declares; absent for the platform's default. */
   readonly maxDuration?: number;
-  /** The route keys the function answers. */
   readonly routes: readonly string[];
-  /**
-   * Whether the bundle is a generated dispatcher over the routes, or the one
-   * route's own module. A WebSocket route exports the `http.Server` Vercel
-   * upgrades WebSockets into, which no fetch dispatcher can front, so it
-   * stays a function of its own.
-   */
   readonly dispatches: boolean;
 }
 
 interface GroupDefinition {
   readonly file: FunctionGroup;
-  /** The group's bound; absent for the platform's default. */
   readonly maxDuration?: number;
   readonly routes: readonly string[];
 }
@@ -84,29 +53,24 @@ const GROUPS: readonly GroupDefinition[] = [
     maxDuration: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(MAINTENANCE_SWEEP_PATH)],
   },
-  // A Generate runs one model call of up to three minutes, past the platform's default duration.
   {
     file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
     maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
     routes: PULL_REQUEST_CHAPTERS_ROUTE_PATHS.map(routeKeyOf),
   },
-  // A native agent's `run_on_mac` waits on the developer's Mac for up to eight minutes, past the platform's default duration.
   {
     file: FUNCTION_GROUP.WORKSPACE_MCP,
     maxDuration: WORKSPACE_MCP_FUNCTION.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(WORKSPACE_MCP_PATH)],
   },
-  // An outside MCP client's call answers once its tool has, which a later child's tool may hold for an agent's start.
   {
     file: FUNCTION_GROUP.MEMBER_MCP,
     maxDuration: MEMBER_MCP_FUNCTION.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(MEMBER_MCP_PATH), routeKeyOf(MEMBER_MCP_METADATA_ROUTE)],
   },
-  // A page on the sandbox's host answers within the platform's default, in a function holding no other route.
   { file: FUNCTION_GROUP.PAGE_SANDBOX, routes: [routeKeyOf(PAGE_LINK_ROUTE.PATH)] },
 ];
 
-/** The WebSocket services, each a function of its own: the terminal relay, the sandbox tunnel, the Browser tab's live view, and the live reads' socket. */
 const STANDALONE_ROUTES: readonly string[] = [
   TERMINAL_RELAY.PATH,
   SANDBOX_TUNNEL.PATH,
@@ -114,13 +78,6 @@ const STANDALONE_ROUTES: readonly string[] = [
   LIVE_SOCKET.PATH,
 ].map(routeKeyOf);
 
-/**
- * The functions a deploy carries, given every route key under `server/routes/`:
- * the grouped functions, the standalone WebSocket functions, and the default
- * group over every route none of those claimed and the hosted oRPC route,
- * which holds every path that is no route file's. Sorted by file, so the
- * bundles and the rewrites are written in one order.
- */
 export function functionDefinitions(routeKeys: readonly string[]): readonly FunctionDefinition[] {
   if (routeKeys.includes(ORPC_ROUTE_KEY)) {
     throw new Error(`the route key ${ORPC_ROUTE_KEY} is the hosted oRPC route's, not a file's`);

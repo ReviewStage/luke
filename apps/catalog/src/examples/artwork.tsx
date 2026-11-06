@@ -22,17 +22,8 @@ import codexThreeX from "../../../../packages/panel/marks/codex-48.png";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * artwork.tsx -- the production artwork `@repo/ui` draws from `@repo/brand`'s
- * generated sources: the product's mark, every glyph, every provider's
- * mark, and what fires an automation, each drawn from the package itself
- * rather than from a copy.
- */
-
-/** Codex's picture as the desktop serves it, from the panel's own files. */
 const CODEX_ART = { oneX: codexOneX, twoX: codexTwoX, threeX: codexThreeX };
 
-/** One of each thing that fires an automation or a run, as its row's glyph draws it. Synthetic. */
 const FIRINGS = [
   {
     name: "Schedule",
@@ -54,15 +45,12 @@ const FIRINGS = [
   { name: "Run now", of: { kind: AUTOMATION_FIRING.MANUAL } },
 ] as const satisfies readonly { name: string; of: AutomationFiring | AutomationTrigger }[];
 
-/** A glyph's name as `@repo/ui` exports it: every glyph ends in `Icon`, a heading's starts with `Heading`. */
 type GlyphName = Extract<keyof typeof ui, `${string}Icon` | `Heading${string}`>;
 
-/** Whether an export of the package is a glyph, by the name it is exported under. */
 function isGlyph(entry: [string, unknown]): entry is [GlyphName, (typeof ui)[GlyphName]] {
   return entry[0].endsWith("Icon") || entry[0].startsWith("Heading");
 }
 
-/** Every glyph `face/glyphs.tsx` draws, by the name it is exported under, read off the package so none is left out. */
 const GLYPHS = Object.entries(ui).filter(isGlyph);
 
 function Artwork(): React.JSX.Element {

@@ -8,7 +8,6 @@
       name="description"
       content="Vespin is an inbox for all your coding agents. They post to it when they need you, and you answer them there."
     />
-    <!-- Matches the page background so mobile browser chrome blends into it. -->
     <meta name="theme-color" content="#0f0d0b" />
 
     <meta property="og:type" content="website" />
@@ -20,13 +19,6 @@
     />
     <meta property="og:url" content="https://vespin.dev/" />
     <link rel="canonical" href="https://vespin.dev/" />
-    <!-- The 1200x630 card every unfurler reads — Facebook, LinkedIn, Slack,
-         Discord, iMessage, WhatsApp, and Telegram all take these Open Graph
-         tags. The URL is absolute because scrapers resolve nothing, the
-         dimensions let a first share render before the image is fetched, and
-         the alt is what screen readers get on platforms that honor it. The
-         PNG is cut from packages/brand/assets/social/og-card.svg — see
-         packages/brand/README.md. -->
     <meta property="og:image" content="https://vespin.dev/og-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -35,10 +27,6 @@
       property="og:image:alt"
       content="The Vespin logo — a disc cut by a V, beside the name — on a near-black ground."
     />
-    <!-- summary_large_image is what makes X and Discord show the card full
-         width instead of as a thumbnail. X documents falling back to the
-         Open Graph tags, but its crawler renders no image on that fallback,
-         so the card is repeated under the twitter: names it reads. -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Vespin: an inbox for all your coding agents" />
     <meta
@@ -51,28 +39,10 @@
       content="The Vespin logo — a disc cut by a V, beside the name — on a near-black ground."
     />
 
-    <!-- Vespin's app icon: the mark on its copper tile, cut from the
-         generated packages/brand/assets/icon/favicon.svg (see
-         packages/brand/README.md). The SVG serves browsers that take one, the
-         ICO the readers that ask for /favicon.ico by name, and the touch icon
-         iOS's home screen and the link previews that show a site's icon.
-         Files rather than an inline data address, so every page shares one
-         copy and a reader that fetches an icon by URL finds it. -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- What Google reads for its result: the WebSite's name is the site name
-         it shows above the link in place of the bare domain, and the
-         Organization names Vespin's logo and what Vespin is, so a search
-         for the name finds this product rather than one spelled like it.
-         The logo is the app icon the manifest already serves, at 512 pixels,
-         past Google's 112-pixel floor. The two stand apart, each one top-level
-         item, as Google's examples write them. Google's Rich Results Test
-         reports neither (it answers "No items detected" for Google's own
-         Organization sample too), so check them with validator.schema.org.
-         A data block runs nothing, so the site's script-src policy leaves it
-         alone. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",

@@ -4,15 +4,6 @@ import { attributeName, intrinsicTagOf, literalValuesOf } from "../shared/jsx.ts
 import { LIVE_ATTRIBUTE, LIVE_REGION_ROLES } from "../shared/live-region-guard.ts";
 import { isOutsideUi } from "../shared/press-guard.ts";
 
-/**
- * Outside `@repo/ui`, an intrinsic element is never a live region: no
- * `role="status"`, `role="alert"` or `role="log"`, and no `aria-live`. What a
- * reader should hear goes through `announce` and the one `Announcer`, and a
- * block that stands in the page keeps its words in a `@repo/ui` component
- * (`ErrorState`, `FailureNote`, `EmptyState`, `NoteLine`) that owns its role.
- * Note that a role the rule cannot read as a literal is left alone, as is a
- * component's own `role` prop: it names no intrinsic element.
- */
 export const noHandWrittenLiveRegionRule = defineRule({
   meta: {
     type: "problem",

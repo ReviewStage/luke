@@ -4,13 +4,6 @@ import { defineRule } from "@oxlint/plugins";
 import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 import { isDoorFile, isLucideModule, LUCIDE_BASELINE } from "../shared/lucide-guard.ts";
 
-/**
- * Every icon is imported through `@repo/ui/icons`, so one glyph stands for
- * each meaning and no screen picks a drawing of its own. A direct
- * `lucide-react` import is refused outside the door, from a baseline of the
- * files that still hold one (`lucide-baseline.json`), which only shrinks as
- * each screen moves onto the door.
- */
 export const noLucideOutsideDoorRule = defineRule({
   meta: {
     type: "problem",
@@ -60,7 +53,6 @@ export const noLucideOutsideDoorRule = defineRule({
         if (argument?.type === "Literal") note(node, argument.value);
       },
       "Program:exit"(program) {
-        // Note that the imports past the baseline's count are the ones reported, since the ones before it were already there.
         for (const node of imports.slice(expected))
           context.report({ node, messageId: "newImport" });
         if (imports.length >= expected) return;

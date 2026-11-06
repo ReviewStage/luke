@@ -4,12 +4,6 @@ import { RAW_HEADING_ELEMENTS } from "../shared/heading-guard.ts";
 import { intrinsicTagOf } from "../shared/jsx.ts";
 import { isOutsideUi } from "../shared/press-guard.ts";
 
-/**
- * Outside `@repo/ui`, an intrinsic `h1`–`h6` is never drawn: a heading is
- * `Text` in the role that sizes it, standing in the element the outline
- * needs (`as`). Note that a heading inside an HTML string is page content,
- * not JSX, so the rule never sees it.
- */
 export const noRawHeadingOutsideUiRule = defineRule({
   meta: {
     type: "problem",

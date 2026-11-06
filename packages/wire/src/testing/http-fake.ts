@@ -5,26 +5,13 @@ import { HTTP_STATUS as BOUNDARY_HTTP_STATUS } from "../json.js";
 import { fakeHttpClientLayer } from "./http-client-fake.js";
 import type { JsonValue } from "./json.js";
 
-/**
- * Statuses a fake answers with, plus the ones product code names, so a test
- * never restates 401. `OK` and `SERVER_ERROR` are what a route table returns;
- * the rest are the failures the boundary already branches on.
- */
 export const HTTP_STATUS = {
   OK: 200,
   ...BOUNDARY_HTTP_STATUS,
-  // What a production route answers a request missing a header it demands,
-  // reproduced by a provider fake so a forgotten header cannot pass.
   BAD_REQUEST: 400,
   SERVER_ERROR: 500,
 } as const;
 
-/**
- * One recorded fetch, with the URL and headers already parsed. Provider tests
- * that need a header of their own — a provider's API key header —
- * read it from `headers`; everything else is here because every fake asked
- * for it.
- */
 export interface RecordedRequest {
   method: string;
   url: string;
@@ -50,24 +37,17 @@ function header(headers: Headers, name: string): string | undefined {
   return headers.get(name) ?? undefined;
 }
 
-/** The body as sent, when it was sent as text; a test records nothing else. */
 function requestBody(body: BodyInit | null | undefined): string | undefined {
   if (body === null || body === undefined) return undefined;
   if (Object.prototype.toString.call(body) !== "[object String]") return undefined;
-  // SAFETY: Object.prototype.toString confirmed a string body before recording.
   return body as string;
 }
 
-/** A recorded log behind the `HttpClient` a test hands its caller. */
 export interface RecordingHttpClient {
   readonly layer: Layer.Layer<HttpClient.HttpClient>;
   readonly requests: readonly RecordedRequest[];
 }
 
-/**
- * An `HttpClient` that records every request, then answers through `respond`.
- * The per-provider route table is `respond`; this only keeps the log.
- */
 export function recordingHttpClient(
   respond: (request: RecordedRequest) => Response | Promise<Response>,
 ): RecordingHttpClient {
@@ -94,12 +74,6 @@ export function recordingHttpClient(
   return { layer, requests };
 }
 
-/**
- * The recorded request at `index`. A test that has already asserted how many
- * calls were made still cannot convince the type checker that an indexed read
- * found one, so the check lives here and fails as a test rather than as a
- * `possibly undefined` on every assertion that follows.
- */
 export function recordedRequest(requests: readonly RecordedRequest[], index = 0): RecordedRequest {
   const request = requests[index];
   assert.ok(request, `no request was recorded at index ${index}`);

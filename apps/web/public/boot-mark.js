@@ -1,30 +1,3 @@
-// boot-mark.js -- the loading frame's mark as copper dots: they appear in
-// place as the product's mark, a studio light moves through them by density
-// alone, and they fade out with the frame as the app draws.
-//
-// app.html's frame holds the mark as an SVG; this classic script, run as the
-// body is parsed (a file, because the page's policy runs no inline script),
-// draws it instead as dots on a canvas over the frame, reading the mark's
-// shape off that SVG. Each dot stands on a grid forty cells across the mark
-// and is lit or not by the landing's 8×8 ordered dither (`@repo/ui`'s
-// landing-paint.ts) over the light the landing's copper ball reflects
-// (`@repo/ui`'s mark-orb.tsx), here off a flat mark seen from close by, so
-// light reads as more dots and shadow as fewer, all in the theme's one
-// copper. The dots appear once the wait has run long enough to notice
-// (`--ui-hint-delay`), each fading in where it stands, in the dither's order,
-// and settling up the last few pixels into place, so the mark never strays
-// more than those few pixels from its own box; the light keeps moving while
-// the tab loads. When
-// the panel draws, `src/app/web-root.tsx` lifts the frame out of the root and
-// sends it `boot-frame-leave`: the dots stop where they stand and fade out
-// with the frame's ground, as one layer, to the app beneath, and the frame
-// removes itself once it has. Note that the dots never travel beyond the
-// mark, because the panel's first screen (a sign-in card, most often) stands
-// in the middle of the window, around it, and may draw at any moment of the
-// dots' arrival. Where motion is held still, as
-// reduced motion and a capture run hold it (`@repo/ui`'s `motionHeld`, read
-// here the same way, off the motion tokens), or where a canvas cannot draw,
-// the SVG mark stands still as before.
 (() => {
   const GRID = { ACROSS: 40, DOT: 0.72, LEAST: 3 };
   const LIGHT = { FLOOR: 0.32, GAIN: 0.72, TURN: 0.55, LEAN: 0.8 };
@@ -50,7 +23,6 @@
   };
   const easeOut = (x) => 1 - (1 - x) ** 4;
 
-  /** How bright the landing ball's studio is in the direction (x, y, z), turned by `angle` about the vertical. */
   function studio(x, y, z, angle) {
     const c = Math.cos(angle);
     const s = Math.sin(angle);
@@ -62,20 +34,17 @@
     return clamp(top * 0.9 + strip * 0.85 + rim);
   }
 
-  /** A duration CSS gives, such as `500ms` or `0.5s`, in milliseconds. */
   function millisecondsOf(value) {
     const amount = Number.parseFloat(value);
     if (!Number.isFinite(amount)) return HINT_FALLBACK;
     return value.trim().endsWith("ms") ? amount : amount * 1000;
   }
 
-  /** Whether motion is held still: the motion tokens' durations zeroed, as `@repo/ui`'s `motionHeld` reads them. */
   function motionHeld() {
     const duration = getComputedStyle(document.body).getPropertyValue("--ui-duration-fast");
     return duration.trim() !== "" && millisecondsOf(duration) <= 1;
   }
 
-  /** The theme's copper as the browser resolves it, read through a probe so any color syntax works. */
   function copperOf() {
     const probe = document.createElement("span");
     probe.style.color = "var(--ui-color-accent)";
@@ -85,7 +54,6 @@
     return copper;
   }
 
-  // The dots, laid out for the frame's size and the screen's density: one per cell of the mark's grid the mark covers.
   let layout = null;
   function layOut() {
     const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -103,7 +71,6 @@
     maskContext.scale(size / 100, size / 100);
     maskContext.fill(new Path2D(markPath));
     const covered = maskContext.getImageData(0, 0, size, size).data;
-    // Note that a cell is never under three device pixels and a dot always leaves a pixel of gap in it, so the dots never merge into a solid.
     const cell = Math.max(GRID.LEAST, Math.round(size / GRID.ACROSS));
     const dot = Math.min(Math.round(cell * GRID.DOT), cell - 1);
     const left = Math.round((width - size) / 2);
@@ -114,7 +81,6 @@
         const cx = Math.min(size - 1, Math.floor(i * cell + cell / 2));
         const cy = Math.min(size - 1, Math.floor(j * cell + cell / 2));
         if (!covered[(cy * size + cx) * 4 + 3]) continue;
-        // Where the flat mark reflects the studio from here: a viewer close by sees each point at its own angle.
         const u = ((cx / size) * 2 - 1) * LIGHT.LEAN;
         const v = (1 - (cy / size) * 2) * LIGHT.LEAN;
         const length = Math.hypot(u, v, 1);
@@ -140,13 +106,11 @@
   let fading = 0;
   let gathered = 0;
 
-  /** Takes the dots down and gives the frame back its still SVG, for the root's first render to replace as before. */
   function standDown() {
     canvas.remove();
     delete frame.dataset.bootMark;
   }
 
-  /** Whether `layout` was laid out for the frame and the mark as they stand now. */
   function current(laidOut) {
     const mark = frame.querySelector(".boot-frame-mark");
     const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -159,14 +123,12 @@
     );
   }
 
-  /** Draws one frame of the dots; answers whether there is another to draw. */
   function drawn(now) {
     if (!frame.isConnected) return false;
     if (leaveAt !== null && now - leaveAt >= fading) {
       frame.remove();
       return false;
     }
-    // Note that motion is asked again on every frame before the dots leave, because a stylesheet that lands after this script can hold it still.
     if (leaveAt === null && motionHeld()) {
       standDown();
       return false;
@@ -179,14 +141,12 @@
     const { width, height, ratio, dot, dots, copper } = layout;
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, width, height);
-    // The dots hold where they stand once the frame leaves, so none crosses the panel as the frame fades.
     if (leaveAt === null) gathered = clamp((now - start) / MOTION.REVEAL);
     const angle = ((now - start) / 1000) * LIGHT.TURN;
     context.fillStyle = copper;
     for (const d of dots) {
       const lit = LIGHT.FLOOR + studio(d.rx, d.ry, d.rz, angle) * LIGHT.GAIN > d.threshold;
       if (!lit) continue;
-      // Each dot arrives in the dither's order, fading in where it stands and settling up the last few pixels into place.
       const arrival = clamp((gathered - d.threshold * MOTION.STAGGER) / (1 - MOTION.STAGGER));
       if (arrival <= 0) continue;
       const settle = (0.5 + d.drift / 2) * MOTION.SETTLE * ratio * (1 - easeOut(arrival));
@@ -197,7 +157,6 @@
     return true;
   }
 
-  // Note that a frame that fails to draw gives the page back its still mark, or, once leaving, takes itself down, so a failure never hides the frame's mark nor leaves the frame over the panel.
   function paint(now) {
     try {
       if (drawn(now)) requestAnimationFrame(paint);

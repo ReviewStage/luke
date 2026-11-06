@@ -14,13 +14,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * more-buttons.tsx -- a header's ⋯ dropping its thing's menu, named for the
- * thing ("Automation actions"), at the control's size and compact, and one
- * whose menu is unavailable. A row's ⋯ is `ListRow`'s `menu`, drawn in the
- * list rows' example.
- */
-
 const ignore = (): void => undefined;
 
 const AUTOMATION_ACTIONS: readonly (readonly MenuEntry[])[] = [
@@ -31,7 +24,6 @@ const AUTOMATION_ACTIONS: readonly (readonly MenuEntry[])[] = [
   [{ label: "Delete", icon: <TrashIcon />, danger: true, onSelect: ignore }],
 ];
 
-/** A ⋯ in a page's strip and the menu it drops. */
 function AutomationHeader(): React.JSX.Element {
   const menu = useMenu(true);
   return (

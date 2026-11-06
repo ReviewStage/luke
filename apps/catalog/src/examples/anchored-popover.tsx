@@ -16,14 +16,6 @@ import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * anchored-popover.tsx -- a popover hung from its button by either edge, and
- * one inside a short room that scrolls, which turns below its button as the
- * room scrolls it toward the top. Each holds a panel, which fades out in
- * its place as the popover closes, and leaves the layer where it stood.
- */
-
-/** A button and the popover it opens, hung from the edge `align` names. */
 function Hung({ align, label }: { align: PopoverAlign; label: string }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);

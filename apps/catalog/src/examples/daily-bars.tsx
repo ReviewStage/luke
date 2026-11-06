@@ -4,22 +4,13 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * daily-bars.tsx -- a fortnight of days as one series, the last day still
- * counting and faded, and as a stack of three whose columns open the day
- * they stand for.
- */
-
-/** The fortnight drawn, oldest first, its last day the one still counting. */
 const DAYS = Array.from(
   { length: 14 },
   (_, index) => `2026-10-${String(10 + index).padStart(2, "0")}`,
 );
 
-/** Midday on the last day, so it reads as partial. */
 const GENERATED_AT = Date.parse("2026-10-23T12:00:00Z");
 
-/** The corners a column's top is rounded at. */
 const RADIUS: [number, number, number, number] = [6, 6, 0, 0];
 
 const CALLS_CHART = {

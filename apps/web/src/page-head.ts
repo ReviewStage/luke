@@ -1,14 +1,3 @@
-/**
- * page-head.ts -- rewrites a built page's `<head>` for one route: its title, description, address, canonical address, and share image.
- *
- * The prerender serves many routes from one built template (every changelog
- * page and release from `changelog.html`), and a browser tab, a search
- * result, and a share card each read the route's own head, not the
- * template's. The template's tags are the contract: each one rewritten here
- * must be in it once, and a template without it is refused rather than
- * shipped with another route's words.
- */
-
 import type { PageHead } from "./changelog-releases";
 
 export interface ImageSize {
@@ -26,7 +15,6 @@ const escapeAttribute = (value: string) =>
 const escapeText = (value: string) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
-/** A `<meta>` tag's content, found by its `name` or `property` across however it is wrapped. */
 function withMeta(
   html: string,
   attribute: "name" | "property",
@@ -37,14 +25,12 @@ function withMeta(
     `(<meta\\s+${attribute}="${key.replaceAll(".", "\\.")}"\\s+content=")[^"]*(")`,
   );
   if (!tag.test(html)) throw new Error(`the page template has no <meta ${attribute}="${key}">`);
-  // A replacer function, because a string replacement would read any `$` in the content as a back-reference.
   return html.replace(
     tag,
     (_, open: string, close: string) => `${open}${escapeAttribute(content)}${close}`,
   );
 }
 
-/** The `<link rel="canonical">` a search engine files the page under, rewritten to the route's own address. */
 function withCanonical(html: string, url: string): string {
   const tag = /(<link\s+rel="canonical"\s+href=")[^"]*(")/;
   if (!tag.test(html)) throw new Error('the page template has no <link rel="canonical">');
@@ -54,10 +40,6 @@ function withCanonical(html: string, url: string): string {
   );
 }
 
-/**
- * The template's head rewritten for a route. A route with an image shares it
- * in place of the site's card, at its own size when the caller read one.
- */
 export function withPageHead(
   html: string,
   head: PageHead,

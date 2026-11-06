@@ -43,12 +43,10 @@ const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
 
 type SettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
 
-/** What every schema row declares alike, toggle or choice: its field, its name, and where it stands. */
 interface RowSpec<Field extends string, Id extends AppSettingId> {
   field: Field;
   id: Id;
   label: string;
-  /** What the row cannot say for itself, drawn under its label; worded by the settings as they stand where it follows the choice. */
   detail?: string | ((settings: AppSettingReader) => string);
   page: SettingsPage;
   section?: SettingSection;
@@ -58,15 +56,10 @@ interface RowSpec<Field extends string, Id extends AppSettingId> {
   visible?: (view: SettingsVisibility) => boolean;
 }
 
-/** What a toggle declares of its own; the rest is fixed by its being a toggle. */
 interface ToggleSpec<Field extends string, Id extends AppSettingId> extends RowSpec<Field, Id> {
   default: boolean;
 }
 
-/**
- * The part of a row's entry its spec fixes whatever its kind: where it
- * stands, its one id, and its description, of `kind` and worded by `value`.
- */
 function rowEntry<Field extends string, Id extends AppSettingId>(
   spec: RowSpec<Field, Id>,
   kind: SettingKind,
@@ -106,10 +99,6 @@ function rowEntry<Field extends string, Id extends AppSettingId>(
   };
 }
 
-/**
- * One toggle's entry but for its guard, which decides what nothing stored
- * reads as and so is each builder's own.
- */
 function toggleEntry<Field extends string, Id extends AppSettingId>(
   spec: ToggleSpec<Field, Id>,
 ): Omit<AppSettingSchemaEntry<Field, boolean, Id, boolean>, "guard" | "control"> {
@@ -122,23 +111,12 @@ function toggleEntry<Field extends string, Id extends AppSettingId>(
   };
 }
 
-/**
- * A stored on/off. That it is a toggle is what fixes its guard, its
- * description's kind and words for its two states, and the shape a change is
- * counted in, so a toggle declares only what is its own.
- */
 export function toggleSetting<Field extends string, Id extends AppSettingId>(
   spec: ToggleSpec<Field, Id>,
 ): AppSettingSchemaEntry<Field, boolean, Id, boolean> {
   return { ...toggleEntry(spec), guard: boolean(spec.default) };
 }
 
-/**
- * A stored on/off whose default is the build's: `default` in a packaged build,
- * `unpackagedDefault` in a development one. Nothing stored is kept as nothing
- * rather than read as `default`, because only the store knows which build it
- * runs in, and it answers its snapshot with that build's default.
- */
 export function buildToggleSetting<Field extends string, Id extends AppSettingId>(
   spec: ToggleSpec<Field, Id> & { unpackagedDefault: boolean },
 ): AppSettingSchemaEntry<Field, boolean | undefined, Id, boolean> & {
@@ -152,12 +130,6 @@ export function buildToggleSetting<Field extends string, Id extends AppSettingId
   };
 }
 
-/**
- * A stored on/off the account carries (`ACCOUNT_PREFERENCE_FIELDS`). Nothing
- * stored is kept as nothing rather than read as `default`, because a device
- * clears an account's preferences when another account signs in, and nothing
- * then reads as the default.
- */
 export function accountToggleSetting<Field extends string, Id extends AppSettingId>(
   spec: ToggleSpec<Field, Id>,
 ): AppSettingSchemaEntry<Field, boolean | undefined, Id, boolean> {
@@ -165,12 +137,6 @@ export function accountToggleSetting<Field extends string, Id extends AppSetting
   return { ...toggleEntry(spec), guard: (value: UnparsedWireValue) => optional(value, isBoolean) };
 }
 
-/**
- * A stored value the account carries (`ACCOUNT_PREFERENCE_FIELDS`) that no
- * row draws, written only by the flow it belongs to. Nothing stored is kept
- * as nothing, as an account toggle's is, and it describes nothing, so the
- * settings search never finds it.
- */
 export function accountHiddenSetting<
   Field extends string,
   Value extends string,
@@ -181,7 +147,6 @@ export function accountHiddenSetting<
   page: SettingsPage;
   order: number;
   sideEffect: SettingSideEffectId;
-  /** The value's own guard, from the package that names what one is. */
   guard: (value: UnparsedWireValue) => value is Value;
 }): AppSettingSchemaEntry<Field, Value | undefined, Id, undefined> {
   return {
@@ -199,13 +164,6 @@ export function accountHiddenSetting<
   };
 }
 
-/**
- * A stored one-of. `values` is the stored vocabulary and `token` is the word
- * the control stores each by — also what it shows, unless `optionLabel` words
- * it differently, which is the difference between "marin" as a token and
- * "Marin (default)" on a pop-up. `absent` is the word for no choice at all,
- * for a setting whose default is nothing.
- */
 export function choiceSetting<
   Field extends string,
   Value extends string | number,
@@ -213,25 +171,13 @@ export function choiceSetting<
   Default extends Value | undefined,
 >(
   spec: RowSpec<Field, Id> & {
-    /** Every value the setting stores, in the order the control offers them. */
     values: readonly Value[];
-    /** The control's token for a value, and the value its description reads. */
     token: (value: Value) => string;
-    /** How a value is worded on the control, when that differs from `token`. */
     optionLabel?: (value: Value) => string;
     default: Default;
-    /** The word for no choice at all, required where the default is nothing. */
     absent?: string;
-    /**
-     * The vocabulary's own guard for its own values. Passed rather than built
-     * from `values`, because the package that names a value set is the package
-     * that says what one is, and a membership test rebuilt here would be a
-     * second reading of it.
-     */
     guard: (value: UnparsedWireValue) => SettingGuardResult<Value | undefined>;
-    /** A control whose options are observed, or whose empty token is its own. */
     control?: SettingControl<Value | undefined>;
-    /** The empty search field's words, for a list long enough that its pop-up searches. */
     search?: string;
   },
 ): AppSettingSchemaEntry<Field, Value | undefined, Id, Default> {
@@ -242,12 +188,8 @@ export function choiceSetting<
   const storedValue = (read: AppSettingReader): Value | undefined => {
     const value = read(spec.field);
     if (value === undefined) return undefined;
-    // SAFETY: The field's own guard is what put this value in the store.
     return value as Value;
   };
-  // A choice with a default says the default where nothing is stored; one with
-  // no default needs a word for nothing, and `schema.test.ts` refuses an entry
-  // that would read as blank rather than letting it draw one.
   const tokenOf = (value: Value | undefined): string => {
     if (value !== undefined) return spec.token(value);
     if (spec.absent !== undefined) return spec.absent;

@@ -3,16 +3,6 @@ import { defineRule } from "@oxlint/plugins";
 
 import { isAllowedFile, RUN_ALLOWLIST } from "../shared/effect-edges.ts";
 
-/**
- * `Effect.run*` runs a description, and so does each `Effect.run*With`, which
- * is where a `Runtime<R>` went: v4 removed the type, so the services a caller
- * used to carry as a runtime are a `Context` it hands one of these instead.
- * `ManagedRuntime.make` builds the thing that runs one, `Runtime.makeRunMain`
- * mints one for a host, and `NodeRuntime.runMain` runs one as a whole process.
- * All of them belong at an edge, because a runtime built where the work lives
- * is a second runtime, and two runtimes are two copies of every service a
- * `Context.Service` was supposed to identify.
- */
 const RUNNING_MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [
     "Effect",
@@ -36,25 +26,10 @@ const RUNNING_MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["NodeRuntime", new Set(["runMain"])],
 ]);
 
-/**
- * Names whose call answers a runner rather than a result: the web edge's
- * `webRuntime()` (`apps/web/server/runtime.ts`), whose
- * `webRuntime().runPromise(effect)` is the same run one member deeper than
- * `RUNNING_MEMBERS` reaches. Naming it here is what keeps its callers on the
- * allowlist rather than invisible to it.
- */
 const RUNNER_FACTORIES: ReadonlySet<string> = new Set(["webRuntime"]);
 
-/**
- * Runners an edge exports for a collaborator to hold. `runWeb`
- * (`apps/web/server/runtime.ts`) runs an effect on the one runtime `apps/web`
- * builds, and `runAgent` (each eve root's `runtime.ts`) on the one its root
- * builds, so either in a module that is not itself an edge is the same escape
- * `Effect.runPromise` would be.
- */
 const HANDED_RUNNERS: ReadonlySet<string> = new Set(["runWeb", "runAgent"]);
 
-/** Every member name any of the namespaces above runs an Effect through. */
 const EVERY_RUNNING_MEMBER: ReadonlySet<string> = new Set(
   [...RUNNING_MEMBERS.values()].flatMap((members) => [...members]),
 );
@@ -77,7 +52,6 @@ function runningMemberName(
   return EVERY_RUNNING_MEMBER.has(property.name) ? `${factory.name}().${property.name}` : null;
 }
 
-/** Keep the running of an Effect at the process edges root AGENTS.md names. */
 export const noRunPromiseOutsideEdgesRule = defineRule({
   meta: {
     type: "problem",

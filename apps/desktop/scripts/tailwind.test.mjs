@@ -5,11 +5,6 @@ import { tailwindPlugin } from "./tailwind.mjs";
 
 const ENTRY = fileURLToPath(new URL("../src/renderer/styles/tailwind.css", import.meta.url));
 
-// A `@source` whose path no longer resolves is not an error to Tailwind: it
-// reads nothing, and the utilities only it spelled drop out of the stylesheet.
-// `[counter-reset:line]` is spelled by Streamdown's code block alone, never by
-// a module of the renderer's or the panel's, so the stylesheet carries it only
-// while Streamdown is read.
 test("the renderer's stylesheet carries the utilities Streamdown draws with", async () => {
   const result = await build({
     entryPoints: [ENTRY],

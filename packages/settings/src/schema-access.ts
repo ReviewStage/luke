@@ -37,12 +37,6 @@ export type StoredAppSettings = {
     : never]?: AppSettingValue<Field>;
 };
 
-/**
- * Every stored field, in the order its schema entry claims. The order is the
- * entries' own `order` rather than the object literal's, because a formatter or
- * a merge can reorder a literal and neither the search's list nor a page's
- * rows may move with it.
- */
 export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA)
   .filter((field): field is AppSettingField => field in APP_SETTING_SCHEMA)
   .sort((left, right) => APP_SETTING_SCHEMA[left].order - APP_SETTING_SCHEMA[right].order);
@@ -51,12 +45,6 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
   return isWireString(value) && value in APP_SETTING_SCHEMA;
 }
 
-/**
- * Account preferences are the settings an account carries across its Macs and
- * the web. Machine-local controls — the theme, the zoom, launch at login,
- * display layout, hotkeys, microphone routing, and credentials — stay in each
- * device's own store.
- */
 export const ACCOUNT_PREFERENCE_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
   APP_SETTING_SCHEMA.agentEnter.field,
@@ -69,22 +57,12 @@ export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
 
 export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferenceField>>;
 
-/**
- * The preferences the snapshot's shared `preferences` part carries, which a
- * write replaces whole: none since the voice went with calls, though the
- * part stays on the wire, because v0.18.0 refuses a snapshot without it.
- * Note that each preference rides a part of its own beside it
- * (`OWN_PART_FIELDS`), because a build from before it reads this part and
- * writes it back whole: a choice inside it would be refused by the older
- * reader and cleared by the older writer.
- */
 const SHARED_PREFERENCE_FIELDS = [] as const satisfies readonly AccountPreferenceField[];
 
 const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFERENCE_FIELDS);
 
 const SHARED_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(SHARED_PREFERENCE_FIELDS);
 
-/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's app links open, what Enter does in an agent's box while it works, who authors an agent's commits, whether the account finished setup, and where it stands in setup. */
 const OWN_PART_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
   APP_SETTING_SCHEMA.agentEnter.field,
@@ -95,7 +73,6 @@ const OWN_PART_FIELDS = [
 
 type OwnPartField = (typeof OWN_PART_FIELDS)[number];
 
-/** Where a preferences record came from: the account's stored row, or a client's or the service's wire. */
 const PREFERENCE_SOURCE = {
   STORED: "stored",
   WIRE: "wire",
@@ -103,18 +80,6 @@ const PREFERENCE_SOURCE = {
 
 type PreferenceSource = (typeof PREFERENCE_SOURCE)[keyof typeof PREFERENCE_SOURCE];
 
-/**
- * The preferences a record holds, each read by its own setting's guard.
- * A key outside `fields` is passed over wherever it comes from, so a
- * preference a build newer than this one adds costs this one none of the
- * others. Builds before this rule do not pass it over: v0.18.0's reader
- * refuses the whole of a wire record that names a key it does not know, so
- * the shared part keeps to the keys that build reads, and a new preference
- * rides a part of its own (`account-preferences.test.ts` pins the list). A
- * known key holding what its guard refuses is passed over in a stored
- * record, and refuses the whole of a wire one, which a client or the
- * service sent wrong.
- */
 function parseAccountPreferences(
   value: UnparsedWireValue,
   fields: ReadonlySet<string>,
@@ -130,17 +95,14 @@ function parseAccountPreferences(
       if (source === PREFERENCE_SOURCE.WIRE) return undefined;
       continue;
     }
-    // SAFETY: The account-preference guard accepted this value as that setting's stored JSON shape.
     const parsedValue = parsed.value as UnparsedWireValue;
     if (parsedValue !== undefined) {
       preferences[field] = parsedValue;
     }
   }
-  // SAFETY: Every key is an account preference field and every value passed that field's guard.
   return preferences as AccountPreferences;
 }
 
-/** The snapshot's shared `preferences` part as a client or the service sent it; nothing where a value in it is refused. */
 export function accountPreferencesFromWire(
   value: UnparsedWireValue,
 ): AccountPreferences | undefined {
@@ -153,58 +115,39 @@ export function accountPreferencesFromStored(
   return parseAccountPreferences(value, ACCOUNT_PREFERENCE_FIELD_SET, PREFERENCE_SOURCE.STORED);
 }
 
-/** One preference as a write's own part for it names it; nothing where it names no choice this build knows. */
 export function ownPreferenceFromWire<Field extends OwnPartField>(
   field: Field,
   value: UnparsedWireValue,
 ): AccountPreferences[Field] {
   const parsed = APP_SETTING_SCHEMA[field].guard(value);
-  // SAFETY: the field's own guard read the value as that preference's stored shape.
   return (parsed.valid ? parsed.value : undefined) as AccountPreferences[Field];
 }
 
-/**
- * The parts of the snapshot an account's preferences travel in: the shared
- * part, and each own part's choice where one is held. A device that never
- * chose sends no part for it, so it cannot clear another device's choice.
- */
 export type AccountPreferencesParts = { preferences: AccountPreferences } & {
   [Field in OwnPartField]?: NonNullable<AccountPreferences[Field]>;
 };
 
-/** The own parts' choices a record holds, by field, leaving out those it holds none for. */
 function ownChoices(record: Partial<Record<OwnPartField, UnparsedWireValue>>): AccountPreferences {
   const chosen: Record<string, UnparsedWireValue> = {};
   for (const field of OWN_PART_FIELDS) {
     if (record[field] !== undefined) chosen[field] = record[field];
   }
-  // SAFETY: each value is an own part's choice, read by its guard where it came off a wire.
   return chosen as AccountPreferences;
 }
 
-/** An account's preferences without its own parts' choices: its shared part. */
 function sharedOf(preferences: AccountPreferences): AccountPreferences {
   const shared: Record<string, UnparsedWireValue> = { ...preferences };
   for (const field of OWN_PART_FIELDS) delete shared[field];
-  // SAFETY: what is left is the record's shared preferences, as they were.
   return shared as AccountPreferences;
 }
 
-/** An account's preferences split into the parts of the snapshot that carry them. */
 export function accountPreferencesParts(preferences: AccountPreferences): AccountPreferencesParts {
-  // SAFETY: `ownChoices` leaves out every own part the record holds no choice for.
   return {
     preferences: sharedOf(preferences),
     ...ownChoices(preferences),
   } as AccountPreferencesParts;
 }
 
-/**
- * An account's preferences joined from the snapshot's parts: nothing where
- * the shared part is refused, and an own part passed over where it names no
- * choice this build knows, since a newer service's choice must not cost
- * this device the shared part beside it.
- */
 export function accountPreferencesFromParts(
   snapshot: Record<string, UnparsedWireValue>,
 ): AccountPreferences | undefined {
@@ -215,17 +158,6 @@ export function accountPreferencesFromParts(
   return { ...shared, ...ownChoices(owned) };
 }
 
-/**
- * The preferences a snapshot stands for, as a device merges them over its
- * own. Note that the shared part counts only once written (`updatedAt`): a
- * device takes no unwritten shared part over its own, so its own shared
- * preferences stand in for it. An own part is written apart and never
- * cleared on the service, only chosen again, so one the snapshot holds is
- * taken either way, and a choice made on the web reaches a Mac before any
- * shared part was written; one it lacks was never written by anyone, so the
- * device's own stands in for it, and a first choice made before the first
- * sync is kept to be written rather than merged away.
- */
 export function snapshotAccountPreferences(
   remote: AccountPreferences,
   sharedWritten: boolean,
@@ -235,13 +167,6 @@ export function snapshotAccountPreferences(
   return { ...shared, ...ownChoices(local), ...ownChoices(remote) };
 }
 
-/**
- * What a device writes of its preferences. An own part's choice it held
- * when it last synced and has since cleared is written as the default,
- * since a write without that part leaves the service's choice standing, and
- * the next sync would bring back the choice the device let go of; one it
- * never held is left out, so it clears no other device's.
- */
 export function accountPreferencesToWrite(
   local: AccountPreferences,
   baseline: AccountPreferences | undefined,
@@ -252,16 +177,9 @@ export function accountPreferencesToWrite(
       written[field] = APP_SETTING_SCHEMA[field].default;
     }
   }
-  // SAFETY: each value is the device's own choice or the preference's default.
   return written as AccountPreferences;
 }
 
-/**
- * What a device pushes as one of its own preferences changes: what it
- * writes, less an own part's choice it has not changed since it last
- * synced, since the service may hold a newer one another device made
- * meanwhile, which a push of the part beside it must not put back.
- */
 export function accountPreferencesToPush(
   local: AccountPreferences,
   baseline: AccountPreferences | undefined,
@@ -272,7 +190,6 @@ export function accountPreferencesToPush(
   for (const field of OWN_PART_FIELDS) {
     if (written[field] === baseline?.[field]) delete written[field];
   }
-  // SAFETY: what is left is what the device writes, less its unchanged own parts.
   return written as AccountPreferences;
 }
 
@@ -308,12 +225,10 @@ function descriptionsFor(
 function settingReader(settings: Pick<StoredAppSettings, AppSettingField>): AppSettingReader {
   return (field) => {
     if (!isAppSettingField(field)) return undefined;
-    // SAFETY: Every stored value is one of the runtime families a guard answers in.
     return settings[field] as StoredSettingValue;
   };
 }
 
-/** Every setting's description as the settings stand, in schema order: the settings search's corpus. */
 export function describedSettings(
   settings: Pick<StoredAppSettings, AppSettingField>,
 ): DescribedSetting[] {
@@ -321,53 +236,30 @@ export function describedSettings(
   return APP_SETTING_FIELDS.flatMap((field) => [...descriptionsFor(field, read)]);
 }
 
-/** Whether a field's row is drawn right now. A field that declares no condition is always drawn. */
 export function settingVisible(field: AppSettingField, view: SettingsVisibility): boolean {
   return APP_SETTING_SCHEMA[field].visible?.(view) ?? true;
 }
 
-/** Whether the row one setting id names is drawn right now. */
 export function settingIdVisible(id: string, view: SettingsVisibility): boolean {
   const field = settingFieldForId(id);
   return field !== undefined && settingVisible(field, view);
 }
 
-/**
- * What the settings pages and the settings search are both read from: the
- * settings as they stand, and the facts a row's own condition is judged from.
- * One record, so a result can never lead to a page without its row.
- */
 export interface SettingsRowsInput extends SettingsVisibility {
-  /** The settings as they stand, and the experiments the account has on, which decide whether a gated feature's rows stand. */
   settings: Pick<StoredAppSettings, AppSettingField> & { experiments: ExperimentChoices };
 }
 
-/** One row of a settings page, as the panel's own schema renderer draws it. */
 interface SchemaSettingRow {
   field: AppSettingField;
-  /** The setting as it describes itself now: its words and its value. */
   entry: DescribedSetting;
-  /** Whether the stored value differs from the default, which earns the mark. */
   changed: boolean;
-  /** The pop-up's own current token and options, for a choice row. */
   control?: { value: string; options: readonly SettingOption[]; search?: string | undefined };
 }
 
-/**
- * One field's control, read at the one width every field's shares: every stored
- * value is a `StoredSettingValue`, and which one it is the field already says.
- */
 function settingControl(field: AppSettingField): SettingControl<StoredSettingValue> | undefined {
-  // SAFETY: The control belongs to the field selected, whose stored type this widens to.
   return APP_SETTING_SCHEMA[field].control as SettingControl<StoredSettingValue> | undefined;
 }
 
-/**
- * Every row one section of one page draws, in the order its entries claim. The
- * schema is the whole answer: which page, which section, whether the row stands
- * right now, and what its control offers — so a page component has no list of
- * fields of its own to drift from this one.
- */
 export function settingRowsForPage(
   page: SettingsPage,
   section: SettingSection,
@@ -398,32 +290,19 @@ export function settingRowsForPage(
   });
 }
 
-/**
- * What one of a row's own option tokens means as a stored value, for the choice
- * rows whose options the control declares. Nothing means the choice is cleared.
- */
 export function settingFromOption<Field extends AppSettingField>(
   field: Field,
   token: string,
   view: SettingsVisibility,
 ): AppSettingValue<Field> | undefined {
-  // SAFETY: The control belongs to the field selected, so its stored type is that field's.
   return settingControl(field)?.stored(token, view) as AppSettingValue<Field> | undefined;
 }
 
-/** What a counted setting change reports: which setting, and the shape of its new value. */
 interface SettingAnalytics {
   id: AppSettingId;
   value: ProductSettingValue;
 }
 
-/**
- * How a change to this field is counted, or nothing for a field the schema
- * does not count. The value itself never travels — only whether a switch went
- * on or off, or whether a choice was made or returned to nothing. The id is the
- * field's first, because a change rides one stored write however many
- * descriptions it builds.
- */
 export function settingAnalytics(
   field: AppSettingField,
   settings: Pick<StoredAppSettings, AppSettingField>,
@@ -431,7 +310,6 @@ export function settingAnalytics(
   const definition = APP_SETTING_SCHEMA[field];
   const id = definition.ids[0];
   if (!definition.analytics || id === undefined) return undefined;
-  // SAFETY: The reading belongs to the field selected, whose stored value this is.
   return { id, value: definition.analytics.value(settings[field] as StoredSettingValue) };
 }
 
@@ -443,7 +321,6 @@ type AppSettingDefaults = {
 };
 
 function typedAppSettingDefaults(): AppSettingDefaults {
-  // SAFETY: Each field is paired with the default declared by its own schema entry.
   return appSettingDefaults as AppSettingDefaults;
 }
 
@@ -452,7 +329,6 @@ export const APP_SETTING_DEFAULTS = typedAppSettingDefaults();
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,
   scope: SettingsResetScope,
-  /** What decides which rows are drawn, so only a change the page shows offers its reset. */
   view: SettingsVisibility,
 ): boolean {
   return APP_SETTING_FIELDS.some((field) => {

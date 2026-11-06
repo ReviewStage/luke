@@ -2,13 +2,6 @@ import { EMPTY_STATE_ACTION_LOOK, EmptyState, SearchIcon, UserIcon } from "@repo
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * empty-states.tsx -- an empty place with a heading and its way on, one
- * whose way on is the primary press, one with its line alone, and long
- * words in a pane narrower than the state's measure, each in a room it fills.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function EmptyStates(): React.JSX.Element {

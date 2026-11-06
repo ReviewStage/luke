@@ -16,12 +16,9 @@ const ACCOUNT = {
   email: "ada@example.test",
 } as const;
 
-/** The permission bits of a file or folder, as `ls -l` reads them. */
 const modeOf = (file: string) =>
   Effect.promise(() => stat(file)).pipe(Effect.map((stats) => stats.mode & 0o777));
 
-// Note that the regression this catches is a write that drops the mode, leaving a refresh token
-// readable by every account on the machine.
 it.effect("keeps the sign-in in a file only its owner can read, under XDG_CONFIG_HOME", () =>
   Effect.gen(function* () {
     const config = yield* temporaryDirectoryScoped("vespin-cli-");

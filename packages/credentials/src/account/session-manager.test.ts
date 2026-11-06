@@ -26,19 +26,12 @@ function manager(options: {
   revoke?: (token: string) => Effect.Effect<void, Error>;
   exchangeCode?: () => Effect.Effect<{ accessToken: string; refreshToken: string }, Error>;
   client?: AccountClient;
-  /** Who the service says a token belongs to; the stored account's person unless given. */
   identity?: { id: string; email: string };
-  /** The capability start a sign-in runs; recording "start" unless given. */
   startCapabilities?: Effect.Effect<void>;
-  /** The capability stop a sign-out runs; recording "stop" unless given. */
   stopCapabilities?: Effect.Effect<void>;
-  /** The refresh grant's answer; new tokens unless given. */
   refresh?: AccountClient["refresh"];
-  /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
-  /** Whose session the hand-off's exchange answers; the stored account's person unless given. */
   sessionUserId?: string;
-  /** That session's account's address; the stored account's unless given. */
   sessionEmail?: string;
 }): Effect.Effect<
   {
@@ -62,7 +55,6 @@ function manager(options: {
     const opened: string[] = [];
     const sessionExchanges: { code: string; state: string; codeVerifier: string }[] = [];
     const endedSessions: string[] = [];
-    // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
     const fixtureClient = {
       revoke: options.revoke ?? (() => Effect.void),
       userInfo: () =>
@@ -128,9 +120,6 @@ function manager(options: {
           events.push("stop");
         }),
     });
-    // The subscriber every test is: a fiber forked into the test's own scope,
-    // pumping every snapshot the instance settles on, exactly as
-    // `compose-account.ts`'s `lifetime` does over the same `changes` stream.
     const subscription = yield* instance.changes;
     yield* Effect.forkScoped(
       Stream.runForEach(subscription, (account) => Effect.sync(() => changes.push(account.status))),
@@ -160,8 +149,6 @@ it.effect("sign out closes capabilities, clears storage, broadcasts, then revoke
     });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
     yield* subject.instance.signOut({ revokeRemote: true });
-    // The subscriber is a separate fiber pumping the published snapshots, so
-    // enough turns are given for it to have drained both before they are read.
     yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     assert.deepEqual(subject.events, ["stop"]);
     assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
@@ -170,12 +157,6 @@ it.effect("sign out closes capabilities, clears storage, broadcasts, then revoke
   }),
 );
 
-/**
- * The real `AccountClient` over the ambient `HttpClient`, so the renewal
- * decision below runs through the actual conversion this PR made rather than
- * a synthetic error object: a network the token endpoint cannot be reached
- * over must never be read as the service's own refusal.
- */
 function refreshingClient(
   tokenEndpoint: (request: Request) => Promise<Response>,
   userInfoEndpoint: (request: Request) => Response = () =>
@@ -236,8 +217,6 @@ it.effect(
   "a renewal that signs out answers its caller before the sign-out's capability stop settles",
   () =>
     Effect.gen(function* () {
-      // The stop waits on the renewal's caller, as `tasks.reset` waits on the
-      // lock a Plans read holds while it renews.
       const callerDone = yield* Deferred.make<void>();
       const subject = yield* manager({
         stored: STORED,
@@ -266,26 +245,21 @@ it.effect(
     }),
 );
 
-/** Waits for the consent trip to have composed its authorization page. */
 async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
 }
 
-/** Answers the consent's own loopback as the browser would, with a code. */
 function grantCode(authorizations: readonly { redirectUri: string; state: string }[]) {
   return Effect.gen(function* () {
     yield* Effect.promise(() => armed(authorizations));
-    // SAFETY: `armed` returns only once the first authorization was composed.
     const { redirectUri, state } = authorizations[0] as { redirectUri: string; state: string };
     const callback = new URL(redirectUri);
     callback.searchParams.set("state", state);
     callback.searchParams.set("code", "auth-code");
-    // The browser is handed on to the hand-off page rather than following it here.
     return yield* Effect.promise(() => fetch(callback, { redirect: "manual" }));
   });
 }
 
-/** Lets the event loop turn `count` times, long enough for a loopback round trip to land. */
 async function turns(count: number): Promise<void> {
   for (let turn = 0; turn < count; turn += 1) await new Promise((resolve) => setImmediate(resolve));
 }
@@ -319,7 +293,6 @@ it.effect(
         subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
       );
       const granting = yield* Effect.forkChild(grantCode(subject.authorizations));
-      // The stop is held until a sign-in that did not wait would have landed.
       yield* Effect.race(
         Fiber.join(signingIn),
         Effect.promise(() => turns(500)),
@@ -402,13 +375,11 @@ it.effect(
     }),
 );
 
-/** The hand-off page the sign-in sent the browser on to, read off its redirect. */
 function handOffPage(response: Response): URL {
   assert.equal(response.status, 303);
   return new URL(response.headers.get("location") ?? "");
 }
 
-/** The hand-off page returning the plugin's code to the loopback, as it does on a transfer. */
 function returnCode(page: URL, code = "session-code") {
   return Effect.promise(async () => {
     const back = new URL(page.searchParams.get("return_to") ?? "");
@@ -418,10 +389,8 @@ function returnCode(page: URL, code = "session-code") {
   });
 }
 
-/** Waits for the session trip to have opened its hand-off page in the browser. */
 async function openedPage(opened: readonly string[]): Promise<URL> {
   while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: the loop returns only once a page was opened.
   return new URL(opened[0] as string);
 }
 
@@ -451,7 +420,6 @@ it.effect(
       assert.equal(exchanged?.code, "session-code");
       assert.equal(exchanged?.state, page.searchParams.get("state"));
       assert.equal(s256(exchanged?.codeVerifier ?? ""), page.searchParams.get("code_challenge"));
-      // One tab for the whole sign-in: the hand-off page rode the sign-in's redirect.
       assert.equal(subject.opened.length, 1);
       assert.equal(new URL(subject.opened[0] ?? "").origin, "https://accounts.example");
     }),
@@ -552,7 +520,6 @@ it.effect(
       assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
       assert.deepEqual(subject.stored(), STORED);
       assert.deepEqual(revoked, []);
-      // The session still renews as it did before the trip began.
       yield* subject.instance.renewOnce();
       assert.equal(subject.stored()?.refreshToken, "new-refresh");
     }),
@@ -576,7 +543,6 @@ it.effect("a sign-in again that lands replaces the standing session and revokes 
     assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
     assert.equal(subject.stored()?.refreshToken, "issued-refresh");
     assert.deepEqual(revoked, [STORED.refreshToken]);
-    // Never signed out on the way, so nothing the session carried was closed.
     assert.equal(subject.events.includes("stop"), false);
   }),
 );

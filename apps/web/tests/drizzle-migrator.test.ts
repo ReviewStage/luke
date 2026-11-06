@@ -18,16 +18,6 @@ import { Path } from "effect/Path";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * Drizzle's migrator applies every folder its history table does not name,
- * so a migration a branch wrote before main's newer ones still applies once
- * the branch lands. A database the old `effect/sql` runner migrated keeps its
- * history under the old file tags, and the runner copies it into Drizzle's
- * table once before the migrator reads it, so such a database re-runs
- * nothing the old runner ran and applies only the migrations written after
- * the move; a tag it cannot place fails the run, naming the tag.
- */
-
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
 interface RecordedMigration {
@@ -36,7 +26,6 @@ interface RecordedMigration {
   readonly name: string;
 }
 
-/** Drizzle's history, in the order it was written. */
 const recorded = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql<RecordedMigration>`
@@ -57,7 +46,6 @@ const tableNamed = (schema: string, table: string) =>
     return rows.length > 0;
   });
 
-/** Every folder the generated migrations hold, in name order. */
 const folders = Effect.promise(async () =>
   (await readdir(MIGRATIONS_FOLDER)).sort((left, right) => left.localeCompare(right)),
 );
@@ -68,16 +56,10 @@ function withPlatform<A, E>(
   return Layer.provideMerge(layer, NodeServices.layer);
 }
 
-/** A database of its own per test: `it.layer` would share one across the group. */
 function onFreshDatabase<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return Effect.provide(effect, withPlatform(unmigratedPgliteSqlClient));
 }
 
-/**
- * What the old runner did: each migration under its old tag, its statements
- * run in order, recorded in `effect_sql_migrations` with an id one past the
- * migration before it.
- */
 function migrateAsTheOldRunner(
   migrations: ReadonlyArray<readonly [tag: string, statements: ReadonlyArray<string>]>,
 ) {
@@ -97,7 +79,6 @@ function migrateAsTheOldRunner(
   return Migrator.make({})({ loader, table: EFFECT_MIGRATIONS_TABLE });
 }
 
-/** Every migration the old runner knew, by its old tag, with the statements of the folder it moved to. */
 const oldRunnerMigrations = Effect.promise(() =>
   Promise.all(
     Object.entries(EFFECT_MIGRATION_FOLDERS).map(async ([tag, folder]) => {
@@ -133,7 +114,6 @@ it.effect("a fresh database takes every folder, in name order", () =>
   ),
 );
 
-/** A migrations folder of the test's own, one `create table` per migration it is told to write. */
 const syntheticMigrationsFolder = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
@@ -183,7 +163,6 @@ it.effect(
           yield* write(THIRD);
           assert.deepEqual(yield* runWebMigrations(folder), [FIRST, THIRD]);
 
-          // A branch cut before THIRD lands with SECOND after main has applied THIRD.
           yield* write(SECOND);
           assert.deepEqual(yield* runWebMigrations(folder), [SECOND]);
           assert.ok(yield* tableNamed("public", SECOND));

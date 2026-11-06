@@ -1,38 +1,6 @@
-/**
- * Turns one feedback submission into email to the founders, and a response
- * to Vespin's feedback survey in PostHog, which posts it to the team's Slack.
- *
- * This is the fixed endpoint the desktop app's composer posts to
- * (`packages/features/src/feedback/delivery.ts`), deployed with the landing page.
- * It forwards exactly what the user typed and attached — the app never holds a
- * mail credential, and the destination never crosses the wire.
- *
- * Plain ESM rather than TypeScript, like every script in this repository: the
- * function is compiled by Vercel's builder, and handing it JavaScript leaves
- * that builder nothing to resolve, transpile, or fail on.
- *
- * Deployment needs two values: `RESEND_API_KEY`, a Resend key for a domain
- * verified to send as the `from` address, and `FEEDBACK_TO`, the inbox
- * submissions are forwarded to — held in the deployment rather than this
- * public repository, so the address cannot be scraped from source.
- * `FEEDBACK_FROM` may override the sender. Without either required value the
- * endpoint answers 503 and the composer reports the service unavailable;
- * nothing else about the app depends on it. Where the deployment also holds
- * `POSTHOG_PROJECT_API_KEY` (production does, a Preview does not), a note the
- * mail service took is recorded as a response to the feedback survey: its
- * words and the credit the user chose, never its screenshots, under a
- * distinct id of its own that makes no person. A PostHog destination posts
- * each response to the team's Slack.
- */
-
 const RESEND_URL = "https://api.resend.com/emails";
 const DEFAULT_FROM = "Vespin <feedback@vespin.dev>";
 
-/**
- * Vespin's feedback survey in PostHog: an API survey, shown to no one, that
- * a note is recorded under so PostHog reads it as a response, and its one
- * open question, whose answer PostHog keys by the question's id.
- */
 const FEEDBACK_SURVEY = {
   ID: "01a1a39c-6e8f-0000-b2a9-1c94c0673240",
   NAME: "Feedback",
@@ -44,21 +12,11 @@ const FEEDBACK_SURVEY = {
 const POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com";
 const POSTHOG_CAPTURE_PATH = "/i/v0/e/";
 
-/** How long the survey response may hold the answer, since the note is already delivered by mail. */
 const POSTHOG_TIMEOUT_MS = 5_000;
 
-/**
- * A best-effort brake on abuse: the endpoint is public and each accepted
- * submission spends mail quota, so one address gets a handful per window and
- * a 429 after. The counter lives in the function instance, which makes it a
- * per-instance brake rather than a guarantee — platform-level rules (Vercel's
- * firewall) are the real backstop — but it turns "curl in a loop" from a
- * flooded inbox into a trickle at zero infrastructure cost.
- */
 const RATE_LIMIT = {
   WINDOW_MS: 10 * 60_000,
   MAX_PER_WINDOW: 6,
-  /** The counter map is bounded; past this it forgets rather than grows. */
   MAX_TRACKED_SENDERS: 10_000,
 };
 
@@ -67,10 +25,6 @@ const recentSenders = new Map();
 
 /** @param {Request} request */
 function senderAddress(request) {
-  // `x-real-ip` is the client as Vercel itself saw it, set by the platform
-  // and not forwardable past it. The forwarded chain is only a fallback for
-  // running the function elsewhere: its first hop is client-controlled, so a
-  // brake keyed on it alone could be rotated past with forged addresses.
   return (
     request.headers.get("x-real-ip")?.trim() ||
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -102,10 +56,8 @@ const FEEDBACK_KINDS = Object.values(FEEDBACK_KIND);
 
 const FEEDBACK_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
-/* An experiment key's shape, as the desktop's own boundary holds it: a note sent from an experiment's row names it. */
 const EXPERIMENT_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 
-/* The same bounds the composer and the app's trust boundary enforce. */
 const FEEDBACK_LIMITS = {
   MESSAGE_MAX_LENGTH: 8_000,
   NAME_MAX_LENGTH: 120,
@@ -127,12 +79,6 @@ function decodedByteLength(base64) {
   return (base64.length / 4) * 3 - padding;
 }
 
-/**
- * The bytes every claimed format is required to open with. A public endpoint
- * relaying attachments from a trusted sender must not take a media type at
- * its word: content that does not carry its format's own signature is refused,
- * so arbitrary binaries cannot ride out under an image's name.
- */
 const IMAGE_SIGNATURE = {
   "image/png": (bytes) =>
     bytes.length >= 8 &&
@@ -158,7 +104,6 @@ const IMAGE_SIGNATURE = {
     bytes[11] === 0x50,
 };
 
-/** What each verified format's attachment is named; the extension is ours. */
 const IMAGE_EXTENSION = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -187,8 +132,6 @@ function readString(value) {
 function carriesImageSignature(base64, mediaType) {
   const check = IMAGE_SIGNATURE[mediaType];
   if (!check) return false;
-  // The first sixteen encoded quartets decode to the leading bytes, which is
-  // all any signature needs.
   return check(Buffer.from(base64.slice(0, 64), "base64"));
 }
 
@@ -210,24 +153,11 @@ function feedbackImage(value) {
   return { name: name.trim(), mediaType, base64 };
 }
 
-/**
- * Whether an optional credit address is shaped like one worth handing Resend
- * as a reply-to. A typo here must not cost the message itself: an address
- * that fails this still rides in the body's credit line, and only the
- * reply-to header goes without.
- */
 function isReplyableEmail(value) {
   const email = readString(value);
   return email !== undefined && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/*
- * A single line of credit: bounded, and never carrying a line break that could
- * reach a mail header. `null` means refused, `undefined` means not given.
- *
- * @param {unknown} value
- * @param {number} maxLength
- */
 function optionalLine(value, maxLength) {
   if (value === undefined) return undefined;
   const text = readString(value);
@@ -238,11 +168,7 @@ function optionalLine(value, maxLength) {
   return trimmed;
 }
 
-/**
- * Reads an untrusted request body into a submission, or nothing if malformed.
- *
- * @param {unknown} value
- */
+/** @param {unknown} value */
 function feedbackSubmission(value) {
   if (!isRecord(value)) return undefined;
   const kind = readString(value.kind);
@@ -290,10 +216,6 @@ function emailBody(submission) {
 }
 
 /**
- * The survey response a note is recorded as, in the shape PostHog's own
- * survey SDKs send one. Every note has a distinct id of its own and makes no
- * person, since the note names its sender only by the credit they chose.
- *
  * @param {ReturnType<typeof feedbackSubmission> & object} submission
  * @param {string} apiKey
  */
@@ -323,20 +245,12 @@ function surveyResponse(submission, apiKey) {
       feedback_screenshot_count: submission.images.length,
       environment: process.env.VERCEL_ENV?.trim() || "development",
       $process_person_profile: false,
-      // Without it a note with no address resolves to the data center's.
       $geoip_disable: true,
     },
   };
 }
 
-/**
- * Records a delivered note as a feedback survey response, where the
- * deployment holds the project key. Best effort: the mail service already
- * took the note, so a PostHog that fails or is slow costs the response and
- * never the answer.
- *
- * @param {ReturnType<typeof feedbackSubmission> & object} submission
- */
+/** @param {ReturnType<typeof feedbackSubmission> & object} submission */
 async function recordSurveyResponse(submission) {
   const apiKey = process.env.POSTHOG_PROJECT_API_KEY?.trim();
   if (!apiKey) return;
@@ -387,7 +301,6 @@ export async function POST(request) {
   if (!submission) return json(400, { reason: "Malformed submission." });
 
   const signature = submission.name ?? submission.email;
-  // A note sent from an experiment's row says which experiment it is about.
   const topic = submission.experiment
     ? `${SUBJECT_LINE[submission.kind]} on the ${submission.experiment} experiment`
     : SUBJECT_LINE[submission.kind];
@@ -424,11 +337,9 @@ export async function POST(request) {
   }
 
   if (!response.ok) {
-    // The status is diagnosis enough; the submission itself is never logged.
     console.error(`Feedback forwarding failed with status ${response.status}`);
     return json(502, { reason: "The mail service refused this submission." });
   }
-  // Only once the mail is taken, so a retry after a refused send is recorded once.
   await recordSurveyResponse(submission);
   return json(200, { delivered: true });
 }

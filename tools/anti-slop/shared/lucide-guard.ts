@@ -6,19 +6,8 @@ const PLUGIN_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url
 
 export const LUCIDE_GUARD_RULE = "anti-slop/no-lucide-outside-door";
 
-/**
- * The files that may import `lucide-react`: the icon door and what stands
- * behind it. Everything else imports an icon from `@repo/ui/icons`.
- */
 const DOOR_DIRECTORY = "packages/ui/src/icons/";
 
-/**
- * The files that still import `lucide-react` directly, each with how many
- * times. The baseline may only shrink: a file not on it that imports Lucide
- * fails, a file holding more imports than its count fails, and so does one
- * holding fewer, until its count is lowered to what it holds (a file with
- * none leaves the list), so the list is always what the repository still owes.
- */
 const BASELINE_FILE = path.join(PLUGIN_DIRECTORY, "lucide-baseline.json");
 
 export function isLucideModule(specifier: unknown): boolean {

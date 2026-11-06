@@ -13,11 +13,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * switches.tsx -- a switch off, on, and unavailable in each, and the drawing
- * alone as a menu row draws it.
- */
-
 function Held({ start, label }: { start: boolean; label: string }): React.JSX.Element {
   const [on, setOn] = useState(start);
   return <Switch checked={on} label={label} onChange={setOn} />;

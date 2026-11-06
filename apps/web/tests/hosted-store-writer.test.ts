@@ -54,16 +54,8 @@ import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 
-/**
- * The store writer over the real migrations on PGlite. Synthetic fixtures
- * throughout: no real title, branch, transcript, or spoken word. What these
- * tests hold to is the record the plan describes — which rows a turn of each
- * kind leaves, in which states, in which order — and never the words in them.
- */
-
 const NOW = 1_800_000_000_000;
 
-/** The statuses a refused call settles under, as the run stream's own settlement types them. */
 type ToolRefusalStatus = Extract<
   ToolCallSettlement,
   { readonly state: typeof TOOL_CALL_SETTLEMENT.OUTPUT_ERROR }
@@ -72,7 +64,6 @@ type ToolRefusalStatus = Extract<
 const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
-/** The envelope any call may answer with: its effect unknown. Every declared output schema admits it. */
 const UNKNOWN_OUTCOME = z.object({
   status: z.literal(UNKNOWN_ACTION_STATUS),
   reason: z.string(),
@@ -96,8 +87,6 @@ const TOOLS: ToolSet = {
       providerSessionId: z.string(),
       text: z.string(),
     }),
-    // An action's output is its envelope, whichever way it went: a tool that declares an output
-    // schema has to admit the unknown outcome, or the reader refuses the row of a call that did not answer.
     outputSchema: z.object({
       status: z.enum([
         ACTION_RESULT_STATUS.ACCEPTED,
@@ -118,7 +107,6 @@ const TYPED_ASK: UserMessageMetadata = {
 
 const writer = await database.run(storeWriter({ tools: TOOLS }));
 
-/** Messages as they cross into the reader: their JSON shape, which is what a row holds. */
 function asWire(stored: readonly UIMessage[]): UnparsedWireValue {
   return unparsedWire(JSON.parse(JSON.stringify(stored)));
 }
@@ -131,7 +119,6 @@ async function conversation(
   return { userId, conversationId };
 }
 
-/** One turn's stream, numbered as the turn's teller numbers it. */
 class Stream {
   readonly turnId = randomUUID();
   #sequence = 0;
@@ -295,7 +282,6 @@ const REPLY_PARTS: UIMessage["parts"] = [
   { type: UI_PART_TYPE.TEXT, text: "It is waiting on a permission.", state: UI_PART_STATE.DONE },
 ];
 
-/** A developer's typed ask that reads one transcript and answers, told from start to end. */
 function developerTurn(stream: Stream, askId: string, replyId: string): readonly RunEvent[] {
   return [
     stream.started(RUN_TURN_ORIGIN.TYPED, TURN_TRIGGER.ASK),

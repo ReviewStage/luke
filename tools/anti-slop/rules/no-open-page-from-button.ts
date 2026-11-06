@@ -7,12 +7,10 @@ import { attributeName, calleeName, isFunction, isNode } from "../shared/jsx.ts"
 import { BUTTON_COMPONENTS, OPEN_PAGE_CALLS, WINDOW_GLOBALS } from "../shared/open-page-guard.ts";
 import { isOutsideUi, JSX_SOURCE } from "../shared/press-guard.ts";
 
-/** How many names a handler is followed through before the rule gives up on it. */
 const FOLLOW_DEPTH = 4;
 
 type Node = ESTree.Node;
 
-/** Whether `callee` is the browser's `window.open`. */
 function isWindowOpen(callee: Node): boolean {
   return (
     callee.type === "MemberExpression" &&
@@ -24,14 +22,6 @@ function isWindowOpen(callee: Node): boolean {
   );
 }
 
-/**
- * The rule: outside `@repo/ui`, a button's press never opens a page. A page
- * to open is a link, `ButtonLink`, `TextLink` or `Chip`'s `href`, so a
- * right-click, ⌘-click and a reader's link list find it. A handler is read
- * where it is written, or by the name it is held under in the same file, and
- * a press the rule cannot read (a prop, a member) is no place. The rule
- * started clean, so it takes no baseline.
- */
 export const noOpenPageFromButtonRule = defineRule({
   meta: {
     type: "problem",
@@ -51,15 +41,9 @@ export const noOpenPageFromButtonRule = defineRule({
     let buttons: ESTree.JSXOpeningElement[] = [];
 
     function hold(name: string, value: Node): void {
-      // Note that a name declared twice is no one function, so it is left unread.
       held.set(name, held.has(name) ? null : value);
     }
 
-    /**
-     * Whether `node`, a handler's body, calls something that opens a page, or
-     * a function of this file that does, outside any function it only
-     * defines: what the press does itself.
-     */
     function opensPage(node: Node, depth: number): boolean {
       if (node.type === "CallExpression") {
         const name = calleeName(node.callee);
@@ -77,7 +61,6 @@ export const noOpenPageFromButtonRule = defineRule({
       return false;
     }
 
-    /** Whether the press `node` names or writes opens a page, following a name held in this file. */
     function pressOpens(node: Node | null | undefined, depth: number): boolean {
       if (node === null || node === undefined) return false;
       switch (node.type) {
@@ -94,7 +77,6 @@ export const noOpenPageFromButtonRule = defineRule({
         case "Identifier":
           return depth < FOLLOW_DEPTH && pressOpens(held.get(node.name), depth + 1);
         case "CallExpression": {
-          // A handler hook hands back the function it was given.
           const name = calleeName(node.callee);
           return (
             name !== undefined && HANDLER_HOOKS.has(name) && pressOpens(node.arguments[0], depth)
@@ -124,7 +106,6 @@ export const noOpenPageFromButtonRule = defineRule({
         return watched;
       },
       ImportDeclaration(node) {
-        // Note that a file the rule does not watch collects no buttons, so it reports none.
         if (!watched || !isUiModule(String(node.source.value), file)) return;
         for (const binding of node.specifiers) {
           if (binding.type !== "ImportSpecifier") continue;

@@ -41,7 +41,6 @@ describe("the site's pages", () => {
 
   it("name a framed page whose style its policy no longer admits, or that loads a script", () => {
     const page = "<style>body{margin:0}</style>";
-    // The digest of `body{margin:0}`, worked out by hand with `openssl dgst -sha256 -binary | base64`.
     const policy =
       "default-src 'none'; style-src 'sha256-IAdwN3biDCQ3brrgp1m8kBEsPQYyqfREKOEfeoREopc='";
     expect(framedPageProblems(page, policy)).toEqual([]);

@@ -12,19 +12,6 @@ import {
   STORAGE_OBJECTS,
 } from "../shared/kept-guard.ts";
 
-/**
- * A view choice (a fold, a filter, a sort, a view mode, a width, where a list
- * stood scrolled) is read and written through `useKept`, and nothing else
- * stores one. Outside `use-kept.ts` and the storage under it, a read of the
- * window's `localStorage` or `sessionStorage`, or an import of
- * `kept-storage.ts`'s helpers, is refused. Storage that is no view choice (a
- * draft, a credential's handling, a cache, a read mark) is named in
- * `kept-storage-allowed.json` with its reason, and the files that still keep
- * a view choice by hand are on `kept-storage-baseline.json`, which only
- * shrinks.
- */
-
-/** The storage object a member expression names, where it names one: `window.localStorage`, `localStorage.getItem`, `tab["sessionStorage"]`. */
 function storageNamed(node: ESTree.MemberExpression): string | undefined {
   const { object, property } = node;
   if (object.type === "Identifier" && STORAGE_OBJECTS.has(object.name)) return object.name;
@@ -86,7 +73,6 @@ export const noDirectViewStorageRule = defineRule({
         const baseline = expected === 0 ? {} : { [file]: expected };
         for (const problem of baselineProblems(counts, baseline, true)) {
           if (problem.grew) {
-            // Note that the places past the baseline's count are the ones reported, since the ones before it were already there.
             for (const { node, what } of places.slice(expected)) {
               context.report({ node, messageId: "newStorage", data: { what } });
             }

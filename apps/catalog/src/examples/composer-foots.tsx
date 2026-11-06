@@ -27,26 +27,14 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * composer-foots.tsx -- a message box's foot in each state: empty, with its
- * Send unavailable; an unfinished answer's, its Send refusing a press and
- * saying what is missing; holding files, which stand over its words; near its limit, the counter showing;
- * sending; Stop in the send's place, and stopping; with a cut paste's note,
- * a refused send's Retry, and a closed box's mend under its note; dictating;
- * then at a field's and a bare frame's inset, and still loading.
- */
-
 const ignore = () => undefined;
 
-/** How many characters the catalog's boxes take. */
 const LIMIT = 4000;
 
-/** A synthetic picture drawn in place, so the catalog renders offline. */
 const PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#7aa7f4"/><stop offset="1" stop-color="#3d5ac8"/></linearGradient></defs><rect width="64" height="48" fill="url(#g)"/><path d="M0 40l18-14 12 10 14-12 20 16v8H0z" fill="#fff8"/></svg>',
 )}`;
 
-/** The tools at a box's start: attach, mention, skill. */
 function Tools(): React.JSX.Element {
   return (
     <>
@@ -57,7 +45,6 @@ function Tools(): React.JSX.Element {
   );
 }
 
-/** A box's words, under its `files` where it holds any, over its foot, at `look`. */
 function Box({
   look = COMPOSER_LOOK.CARD,
   words,
@@ -89,7 +76,6 @@ function Box({
   );
 }
 
-/** A box still loading: its foot's placeholders, a tool's and a press's, and the send's disc. */
 function BoxSkeleton(): React.JSX.Element {
   return (
     <ComposerFrame look={COMPOSER_LOOK.CARD}>

@@ -1,8 +1,3 @@
-/**
- * progress.tsx -- a download's bar under the words that say it in numbers,
- * at its start, part way, and done, and a bar of its own named by its label.
- */
-
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { GAP, Progress, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import type { Example } from "../examples";

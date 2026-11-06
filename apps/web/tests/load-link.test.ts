@@ -3,13 +3,6 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "vitest";
 import { addressBar, installPanelDoors, openAt, unmountPanels } from "./support/web-panel";
 
-/**
- * A tab opened at a link written before the task was a task, under
- * `/plan/`, stands on the link written now, `/task/`, with all it named:
- * the place after the task, the comment thread its query names, and the
- * section its fragment names. Synthetic ids throughout.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 afterEach(() => unmountPanels());

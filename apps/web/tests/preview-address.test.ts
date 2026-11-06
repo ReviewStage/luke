@@ -12,7 +12,6 @@ const SCRIPTS = [
   "scripts/vercel-ignore.sh",
   "scripts/vercel-deployed-paths.mjs",
 ];
-/** The least workspace the ignore step reads its deployed tree from: one service, the web app. */
 const WORKSPACE = {
   "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n',
   "vercel.json": `${JSON.stringify({ services: { web: { root: "apps/web" } } })}\n`,
@@ -21,20 +20,11 @@ const WORKSPACE = {
 const REPOSITORY = "acme/web";
 const BRANCH = "agent/rebased";
 
-/** The script's own exit for a commit no build serves the deployed tree of. */
 const EXIT_NOT_AFFECTED = 3;
-/** The script's own exit for a commit whose record never settled within the wait. */
 const EXIT_NOT_READY = 6;
-/** The script's own exit for a read of GitHub that failed. */
 const EXIT_UNREADABLE = 7;
-/** The script's own exit for an agent's branch no preview was asked for. */
 const EXIT_NOT_REQUESTED = 8;
 
-/**
- * GitHub's answers, one file a request path, which the fake `gh` filters with
- * the script's own `--jq`; a path with no file answers an empty list, and one
- * whose file holds the refusal fails as an unreachable GitHub does.
- */
 const FAKE_GH = `#!/usr/bin/env bash
 [[ $1 == api ]] || exit 2
 path=$2
@@ -46,7 +36,6 @@ grep -qx REFUSED "$file" && { echo 'HTTP 503' >&2; exit 1; }
 jq -r "$filter" "$file"
 `;
 
-/** A preview that answers a stranger without sending them to Vercel's SSO. */
 const FAKE_CURL = "#!/bin/sh\nexit 0\n";
 
 function git(root: string, ...args: string[]): string {
@@ -79,7 +68,6 @@ function commit(root: string, path: string, content: string): string {
   return git(root, "rev-parse", "HEAD");
 }
 
-/** What the fake `gh` answers for a request GitHub refuses. */
 const REFUSED = Symbol("refused");
 
 function answer(answers: string, path: string, body: unknown): void {
@@ -89,7 +77,6 @@ function answer(answers: string, path: string, body: unknown): void {
   );
 }
 
-/** Records the build Vercel made of `sha`, as its GitHub deployment record and that record's newest status. */
 function built(
   answers: string,
   sha: string,
@@ -104,11 +91,9 @@ interface Build {
   readonly id: number;
   readonly address: string;
   readonly state: "success" | "failure";
-  /** When Vercel started it, which orders a commit's records. */
   readonly at: string;
 }
 
-/** Records every build Vercel made of `sha`, a redeployment beside its first build among them. */
 function deployed(answers: string, sha: string, builds: readonly Build[]): void {
   answer(
     answers,
@@ -127,7 +112,6 @@ function deployed(answers: string, sha: string, builds: readonly Build[]): void 
   }
 }
 
-/** Records that the project's Ignored Build Step skipped `sha`, which writes no deployment record. */
 function skipped(answers: string, sha: string): void {
   answer(answers, `repos/${REPOSITORY}/commits/${sha}/status`, {
     statuses: [
@@ -136,7 +120,6 @@ function skipped(answers: string, sha: string): void {
   });
 }
 
-/** The heads the branch was pushed at, newest first, as GitHub's repository activity lists them. */
 function pushed(answers: string, heads: readonly string[] | typeof REFUSED): void {
   answer(
     answers,
@@ -154,18 +137,11 @@ interface Fixture {
   readonly checkout: string;
   readonly answers: string;
   readonly bin: string;
-  /** The branch's first head, built and then force-pushed away. */
   readonly earlier: string;
-  /** The head pushed after it, deploying the same tree, which the rebase also force-pushed away. */
   readonly between: string;
-  /** The rebased head, which the checkout is at. */
   readonly head: string;
 }
 
-/**
- * An origin whose main moves on with a desktop-only commit after the branch
- * was first pushed and built, and a checkout of the branch rebased onto it.
- */
 async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<Fixture> {
   const origin = await temporaryDirectory(t, "preview-address-origin-");
   git(origin, "init", "-q", "-b", "main");
@@ -181,7 +157,6 @@ async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<F
   commit(origin, "README.md", "base\n");
   git(origin, "checkout", "-q", "-b", BRANCH);
   const earlier = commit(origin, "apps/web/src/main.tsx", webBeforeRebase);
-  // Note that the earlier head stays fetchable by its sha, as GitHub keeps a force-pushed commit.
   git(origin, "update-ref", "refs/kept/earlier", earlier);
   const between = commit(origin, "docs/NOTES.md", "notes\n");
   git(origin, "update-ref", "refs/kept/between", between);
@@ -256,7 +231,6 @@ test("an earlier head whose own build failed is passed over for an older one tha
 
 test("a rebased branch whose pushes GitHub will not list answers unreadable rather than another branch's preview", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
-  // Note that the rebased head here stands for the head of the branch rebased onto, built as that branch's own preview.
   built(fixture.answers, fixture.head, 9, "https://other-branch.vercel.app");
   commit(fixture.checkout, "docs/NOTES.md", "notes\n");
   skipped(fixture.answers, git(fixture.checkout, "rev-parse", "HEAD"));

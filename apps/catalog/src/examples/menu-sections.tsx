@@ -15,12 +15,6 @@ import { ICON_SIZE } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * menu-sections.tsx -- a popover's rows in headed sections: the group
- * heading, a count at its right end, and the hairline over every section
- * after the first, as an agent's MCP popover heads Built in and Connected.
- */
-
 function MenuSections(): React.JSX.Element {
   return (
     <CatalogSection id="menu-sections" title="Headed sections, counted">

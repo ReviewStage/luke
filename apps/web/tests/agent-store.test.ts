@@ -40,17 +40,6 @@ import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 
-/**
- * The coding agents of an account's tasks, through the store's public
- * functions against a real dialect. What is held to is the shape a Start
- * relies on: one Start is one agent with one `coding_agent` conversation,
- * a retry carrying the same key is that agent and not a second, the tabs
- * read a task's agents in the order they were started, and nothing of a
- * task another account owns is read or written.
- *
- * Synthetic accounts, tasks, repositories, and keys throughout.
- */
-
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -58,14 +47,12 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one task started. */
 const openTask = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   return { userId, taskId: task.id };
 });
 
-/** What a Start hands the agent where the test names nothing: the description's text. */
 const TASK_BRIEF: AgentBriefText = {
   descriptionSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
   prompt: null,
@@ -88,14 +75,12 @@ function start(
   };
 }
 
-/** The agent a Start answered and made, failing the test where it answered none or found one. */
 function started(answer: Option.Option<AgentStarted>): Agent {
   const start = Option.getOrElse(answer, () => assert.fail("the start answered no agent"));
   assert.equal(start.created, true);
   return start.agent;
 }
 
-/** The agent a Start answered and found already made, failing the test where it answered none or made one. */
 function found(answer: Option.Option<AgentStarted>): Agent {
   const start = Option.getOrElse(answer, () => assert.fail("the start answered no agent"));
   assert.equal(start.created, false);
@@ -121,7 +106,6 @@ const conversationKind = (conversationId: string) =>
     (rows) => rows[0],
   );
 
-/** A pull request as GitHub answered a read of it. */
 const PULL_REQUEST: AgentPullRequest = {
   number: 41,
   title: "Teammate invitations",
@@ -133,12 +117,10 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 3,
 };
 
-/** Text the size of a long description, which an agent may be handed and no list line carries. */
 const LARGE_TEXT = "Any member may invite a teammate by email, and the invite expires.\n".repeat(
   4_000,
 );
 
-/** What a list reads of an agent: its row without the text it was handed, whether that was a prompt, and its automation's name. */
 function listedLine({ descriptionSnapshot, prompt, automationOrigin, ...row }: Agent) {
   const brief =
     prompt !== null
@@ -160,7 +142,6 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         const theirs = started(yield* createAgent(other.userId, start(other.taskId)));
 
         yield* recordAgentPublished(userId, agent.id, PULL_REQUEST);
-        // Another account's write names no agent of theirs, and another account's read names none of this one's.
         yield* recordAgentPublished(userId, theirs.id, PULL_REQUEST);
         assert.deepEqual(yield* listPublishedAgents(userId, [taskId, other.taskId]), [
           { agent: listedLine(agent), published: PULL_REQUEST },
@@ -412,7 +393,6 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
           "Invite emails",
         );
 
-        // The teammate's Start under the starter's key is a Start of their own, and the starter's retry still finds theirs.
         const theirs = started(
           yield* createAgent(teammate, start(task.id, { idempotencyKey: asked.idempotencyKey })),
         );

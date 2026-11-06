@@ -1,13 +1,3 @@
-/**
- * diff-view.ts -- the words every diff is drawn by: its layout, how a changed line is marked and what of it, the type it is set in and how tall, and the syntax themes it may be colored in, each with the name a control shows it by.
- *
- * Settings stores each as an app setting (`schema.ts`), and the desktop's
- * diff bundle draws by them, so they stand here, in a door that imports
- * nothing: the bundle that reads them carries none of the settings' own
- * machinery.
- */
-
-/** How a diff is laid out: one column of lines, or the old side beside the new. */
 export const DIFF_LAYOUT = {
   UNIFIED: "unified",
   SPLIT: "split",
@@ -15,14 +5,12 @@ export const DIFF_LAYOUT = {
 
 export type DiffLayout = (typeof DIFF_LAYOUT)[keyof typeof DIFF_LAYOUT];
 
-/** How a changed line is marked at its edge: with git's `+` and `-`, with a bar, or not at all. */
 export const DIFF_INDICATORS = {
   CLASSIC: "classic",
   BARS: "bars",
   NONE: "none",
 } as const;
 
-/** What a changed line marks of what it changed: whole words joined across spaces, words, characters, or nothing. */
 export const INLINE_DIFF = {
   WORD_ALT: "word-alt",
   WORD: "word",
@@ -30,7 +18,6 @@ export const INLINE_DIFF = {
   NONE: "none",
 } as const;
 
-/** The type a diff is set in, each a font every Mac has, so none is fetched: the window's own code type first. */
 export const DIFF_FONT = {
   SF_MONO: "sf-mono",
   MENLO: "menlo",
@@ -39,21 +26,14 @@ export const DIFF_FONT = {
   ANDALE_MONO: "andale-mono",
 } as const;
 
-/** The sizes a diff's type is offered at, in pixels, the File tab's own 11.5 among them. */
 export const DIFF_FONT_SIZES = ["10", "11", "11.5", "12", "13", "14", "15"] as const;
 
-/** How tall a diff's line stands for its type: tighter than the File tab's, as tall, or roomier. */
 export const DIFF_LINE_HEIGHT = {
   COMPACT: "compact",
   NORMAL: "normal",
   SPACIOUS: "spacious",
 } as const;
 
-/**
- * The syntax themes a diff may be colored in, by Shiki's name and its own,
- * each appearance's apart, as Shiki's bundled themes and Pierre's two are;
- * the bundle fetches the one chosen as a chunk of its own.
- */
 export const DIFF_THEMES = {
   DARK: [
     { id: "andromeeda", label: "Andromeeda" },
@@ -128,20 +108,17 @@ export const DIFF_THEMES = {
   ],
 } as const;
 
-/** What each layout is called on a control. */
 export const DIFF_LAYOUT_LABEL = {
   [DIFF_LAYOUT.UNIFIED]: "Unified",
   [DIFF_LAYOUT.SPLIT]: "Split",
 } as const satisfies Record<DiffLayout, string>;
 
-/** What each indicator is called on a control. */
 export const DIFF_INDICATORS_LABEL = {
   [DIFF_INDICATORS.CLASSIC]: "Classic (+/-)",
   [DIFF_INDICATORS.BARS]: "Bars",
   [DIFF_INDICATORS.NONE]: "None",
 } as const satisfies Record<(typeof DIFF_INDICATORS)[keyof typeof DIFF_INDICATORS], string>;
 
-/** What each inline diff is called on a control. */
 export const INLINE_DIFF_LABEL = {
   [INLINE_DIFF.WORD_ALT]: "Words (smart)",
   [INLINE_DIFF.WORD]: "Words",
@@ -149,7 +126,6 @@ export const INLINE_DIFF_LABEL = {
   [INLINE_DIFF.NONE]: "Off",
 } as const satisfies Record<(typeof INLINE_DIFF)[keyof typeof INLINE_DIFF], string>;
 
-/** What each font is called on a control: its own name. */
 export const DIFF_FONT_LABEL = {
   [DIFF_FONT.SF_MONO]: "SF Mono",
   [DIFF_FONT.MENLO]: "Menlo",
@@ -158,7 +134,6 @@ export const DIFF_FONT_LABEL = {
   [DIFF_FONT.ANDALE_MONO]: "Andale Mono",
 } as const satisfies Record<(typeof DIFF_FONT)[keyof typeof DIFF_FONT], string>;
 
-/** What each line height is called on a control, tightest first. */
 export const DIFF_LINE_HEIGHT_LABEL = {
   [DIFF_LINE_HEIGHT.COMPACT]: "Compact",
   [DIFF_LINE_HEIGHT.NORMAL]: "Normal",

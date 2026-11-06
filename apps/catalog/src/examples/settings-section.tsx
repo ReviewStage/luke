@@ -24,37 +24,22 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * settings-section.tsx -- a headed section of rows, one with no heading,
- * one holding a single row, one with a long heading and long rows in a
- * column narrower than the 380px a row's controls drop below its words
- * under, one with no card around a text area that draws its own frame,
- * groups of compact rows bare in a surface that frames them, and
- * lines in the rows' place: a note before rows, a note alone, and a read
- * that failed with its Retry; and placeholders while a read is out: rows in
- * a card, marked and not, every control a row ends in, and whole sections.
- */
-
-/** A provider's key row while it is read: its mark, its name alone, and its press. */
 const KEY_ROW: SettingsRowSkeletonShape = {
   described: false,
   mark: SETTINGS_ROW_MARK_WIDTH,
   controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
 };
 
-/** A member's row while it is read: a face at a card's size, the email under the name, the role and the ⋯. */
 const MEMBER_ROW: SettingsRowSkeletonShape = {
   described: true,
   mark: "32px",
   controls: [SETTINGS_SKELETON_CONTROL.VALUE, SETTINGS_SKELETON_CONTROL.MORE],
 };
 
-/** A described row ending in each control a placeholder stands. */
 const EVERY_CONTROL: readonly SettingsRowSkeletonShape[] = Object.values(
   SETTINGS_SKELETON_CONTROL,
 ).map((control) => ({ described: true, controls: [control] }));
 
-/** A switch holding its own state, named `label` and described and failed by its row. */
 function HeldSwitch({ label, control }: { label: string; control: SettingsRowControl }) {
   const [on, setOn] = useState(true);
   return (
@@ -84,7 +69,6 @@ function SwitchRow({
   );
 }
 
-/** A text area holding its own words. */
 function HeldTextArea() {
   const [text, setText] = useState("");
   return (

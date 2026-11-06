@@ -3,20 +3,11 @@ import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
 import { webPlatform } from "../src/app/web-platform";
 
-/**
- * The web's door to a cloud Browser tab's live view: the socket is opened
- * from the page on its own origin at the tab's path, as a plain same-origin
- * WebSocket the browser carries the session cookie on; what the panel sends
- * while it opens is held for it; and the service's frames and its close
- * reach the panel. A stand-in WebSocket, which jsdom opens nothing with.
- */
-
 const TARGET = {
   agentId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   tabId: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
 } as const;
 
-/** A WebSocket the test opens and closes by hand, keeping what was sent on it. */
 class StandInSocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;

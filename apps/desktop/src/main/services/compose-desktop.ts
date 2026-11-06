@@ -55,14 +55,6 @@ import {
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
 
-/**
- * Every capability the desktop answers itself, but Install command-line tool
- * in a live run before this build names a release of the command
- * (`CLI_RELEASE`): until then the install script has none to install, so the
- * row offers the npm command alone, as a browser tab does. Note that a
- * fixture run keeps it, because its settings fixture answers the install
- * with a staged one rather than running the script.
- */
 function desktopClientCapabilities(fixtureMode: boolean) {
   return ALL_CLIENT_CAPABILITIES.filter(
     (capability) =>
@@ -70,83 +62,27 @@ function desktopClientCapabilities(fixtureMode: boolean) {
   );
 }
 
-/**
- * The composition, as the bridge registration reads it. The keychain and the
- * host are not named here because nothing outside reaches them: the cipher is
- * the host's, the server is the operator's, and the drain is one of the steps
- * the scope's close runs.
- */
 export interface DesktopServices {
   readonly config: DesktopConfig;
-  /**
-   * Everything main keeps of what the host tells it and what this machine
-   * answers for itself, in one document. Every window's bootstrap is read
-   * from it and every push to a window leaves from it.
-   */
   readonly state: AppStateStore;
   readonly telemetry: TelemetryService;
   readonly native: NativeNode;
   readonly updates: UpdateServiceHost;
   readonly operator: OperatorClient;
   readonly windows: WindowService;
-  /** Where every coding-agent answer is noted, for the unseen dots and the counts. */
   readonly notices: AgentNotices;
-  /**
-   * A transcript's fenced block colored in a process of its own, spawned the
-   * first time one is asked for and killed with the launch's scope, so the
-   * tokenizer never holds this process's event loop.
-   */
   readonly colorCode: ColorCode;
-  /**
-   * Every act's Effect, run here rather than under a context of its own: the
-   * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
-   * that runtime's own services, read back out of the fiber that is building
-   * this layer rather than assembled apart from it. A defect in one is
-   * reported to Sentry, since many of them are begun and never awaited.
-   */
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
-  /**
-   * The same services as they stand, handed to the act port as oRPC's
-   * `effect/context`, so a procedure's effect runs on them as `run` would
-   * run it rather than on a runtime of oRPC's own.
-   */
   readonly services: Context.Context<never>;
-  /** Which panels say they hold unsaved work, as each tells it. */
   readonly unsavedWork: UnsavedWorkHolders<WebContents>;
-  /** Which commands each panel offers the menu bar, as each tells it. */
   readonly menuOffers: MenuOffers;
-  /**
-   * Asks before a way out of the app while something would be lost, answering
-   * whether to go on: the one sheet the quit, Restart to update, and Sign
-   * out each ask through.
-   */
   readonly askBeforeLeaving: (leave: Leave) => Promise<boolean>;
 }
 
-/** The desktop client as it stands once every step of the launch has run. */
 export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
   "@repo/desktop/Desktop",
 ) {}
 
-/**
- * The steps of the launch, in the order it has to keep, each one built into
- * the same scope so the quit is this list closed in reverse.
- *
- * The channels come first: a window that loaded before its channels were
- * registered would meet an unhandled invoke. Then what this machine itself
- * answers, so nothing that draws waits on it; then the host, whose standing
- * layer is what the operator's attach rides behind and what the drain
- * registers its last finalizer in, so the close runs the drain before any
- * composer stops; then the operator, which is what carries the bootstrap
- * every later decision is made from; then the updater, which reads and spends
- * the last-run-version mark, so a standup that failed or was quit must not
- * have spent it; then the windows, which are what a bootstrap that never
- * arrived must not be drawn over, and which read the updater's snapshot in
- * their own bootstrap. The updater's own scope is not one of these steps —
- * `createUpdateServiceHost` already forked its fibers into the assembly's own
- * scope and registered its stop as that scope's finalizer — only the one
- * `start()` call the version mark's ordering still needs is here.
- */
 const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, HostAssemblyTag> => {
   const { config, state, telemetry, native, operator, updates, windows } = services;
   const { report } = config;
@@ -155,23 +91,14 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
     effectServiceLayer(telemetry, report),
     serviceLayer(native, report),
   ]).pipe(Layer.provideMerge(channels));
-  // The one place the document becomes a push. Every window reads its state
-  // on one channel, so what a window is told and what `app:state-request`
-  // answers it are the same document read twice, and a window's own write is
-  // not raced against a broadcast: the version it is handed only ever rises.
-  // Forked after the windows service has started, so nothing publishes to a
-  // window that is not yet there to receive it.
   const stateBroadcast = Layer.effectDiscard(
     publishAppStateChanges(
       state,
       () =>
-        // The theme and the zoom are steered first, so a window handed new
-        // settings already draws under the appearance they name.
         Effect.andThen(
           windows.applyAppearance(),
           Effect.sync(() => {
             windows.publishAppState();
-            // A gated feature's menu items follow the account's experiments and the platform's capabilities as the windows' surfaces do.
             const held = state.snapshot();
             config.showMenuBar({
               experiments: held.settings?.experiments ?? NO_EXPERIMENTS,
@@ -190,17 +117,6 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   return stateBroadcast.pipe(Layer.provideMerge(throughWindows));
 };
 
-/**
- * The desktop client, composed once and started once. Constructing performs
- * no side effect and reads no fact of the process the launch has not already
- * established: every `app` read is in the config `main` was handed, so the
- * launch's order is the order this layer builds in rather than the order
- * these modules happened to be evaluated in.
- *
- * The client is one operator over the Gateway and one node offering this
- * machine's capabilities back; the host it operates is built into the same
- * scope, which is why disposing the one runtime is the whole quit.
- */
 export function composeDesktop(
   config: DesktopConfig,
   quit: DesktopQuit,
@@ -212,15 +128,9 @@ export function composeDesktop(
     DesktopTag,
     Effect.gen(function* () {
       const host = yield* HostAssemblyTag;
-      // The services this launch stands on, read back out of the fiber
-      // building it rather than assembled again: every act's Effect runs
-      // under them, never under a context of their own.
       const services: Context.Context<never> = yield* Effect.context();
       const run = <A>(effect: Effect.Effect<A>): Promise<A> =>
         Effect.runPromiseWith(services)(Effect.withErrorReporting(effect, { defectsOnly: true }));
-      // Nothing to install without a signed build, a network, and the platform
-      // Squirrel serves; the row says so rather than offering a press that could
-      // not land, and the document says so from its first version.
       const updateEngine =
         config.packaged && config.runMode.sendsNetwork && config.platform === "darwin"
           ? createElectronUpdaterEngine()
@@ -229,12 +139,10 @@ export function composeDesktop(
         initialAppState(
           config,
           updateEngine !== undefined,
-          // The desktop answers every capability a client can, beside the concerns its host runs.
           hostCapabilities(host.concerns, desktopClientCapabilities(config.launch.fixtureMode)),
         ),
         services,
       );
-      // Every report main sends names the account signed in, from its first document on.
       yield* followAccountInReports(state);
       const native = createNativeNode({ config, state });
       const operator = yield* createOperatorClient({
@@ -246,8 +154,6 @@ export function composeDesktop(
       });
       const telemetry = createTelemetryService({
         config,
-        // A counted event is begun rather than waited on: nothing the windows
-        // do turns on it, and the host counts it whatever this act answers.
         recordEvent: (name, properties) => {
           void run(operator.host.recordEvent(name, properties));
         },
@@ -261,12 +167,7 @@ export function composeDesktop(
         launchStanding: quit.launchStanding,
       });
       const colorCode = yield* colorCodeInUtilityProcess(config.resourceDirectory);
-      // A quit, a restart to update, and a sign-out asked for while a panel
-      // holds unsaved work ask first, with Cancel the default, as a Mac app
-      // asks before it loses anything; while nothing would be lost none of
-      // them asks at all.
       const unsavedWork = unsavedWorkHolders<WebContents>((sender) => sender.isDestroyed());
-      // The menu bar dims the commands the focused panel offers none of, drawn again as the focus moves.
       const offers = menuOffers(config.showMenuBar);
       yield* Effect.acquireRelease(
         Effect.sync(() => windows.onPanelFocusChanged(() => offers.focusMoved())),
@@ -277,15 +178,12 @@ export function composeDesktop(
         atStake,
         ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),
       });
-      // ⌘R reloads the window chosen over, asking first, as a sheet on that
-      // window, while its page holds edits that haven't saved.
       const askBeforeReload = reloadGate<BrowserWindow>({
         holds: (window) => unsavedWork.holds(window.webContents),
         ask: askBeforeLeaving,
       });
       config.showMenuBar({
         reload: {
-          // Note that only a browser window has a page to reload.
           onReload: (window) => {
             if (!(window instanceof BrowserWindow)) return;
             void askBeforeReload(window).then((reload) => {
@@ -301,7 +199,6 @@ export function composeDesktop(
           again: () => config.quit(),
         }),
       );
-      // A command ask's notification clicked brings the window forward, where its prompt stands.
       const noticeDoors = electronNoticeDoors({
         onAnswered: (status) => {
           if (state.snapshot().notifications.status !== status) {
@@ -317,7 +214,6 @@ export function composeDesktop(
         onPanelFocusChanged: windows.onPanelFocusChanged,
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
-      // A run that sends nothing, a fixture's or a capture's, is never offline.
       if (config.runMode.sendsNetwork) {
         yield* linkNetworkWatch({
           state,
@@ -362,12 +258,7 @@ export function composeDesktop(
   return Layer.unwrap(Effect.map(DesktopTag, launchSteps)).pipe(
     Layer.provideMerge(assembly),
     Layer.provideMerge(hostAssembly),
-    // The keychain is the one service nothing else is built over: the host
-    // takes its cipher as a seam, so it is constructed before the assembly
-    // and begins before it.
     Layer.provideMerge(effectServiceLayer(keychain, config.report)),
-    // Sentry's reporter stands beneath everything, so every fiber the launch
-    // forks and every act `run` begins reports through it.
     Layer.provideMerge(mainErrorReporting),
   );
 }

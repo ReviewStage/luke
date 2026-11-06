@@ -1,13 +1,3 @@
-/**
- * The vitest-driven `temporaryDirectory` re-exported below answers a
- * `TestContext`; a caller building its test on `it.effect` has no such
- * context and needs the same guarantee — a directory this test alone holds,
- * gone when its scope closes — stated as an `Effect`. `FileSystem`'s own
- * `makeTempDirectoryScoped` already is that guarantee, an `acquireRelease`
- * pairing `mkdtemp` with a recursive `remove`; this is a thin wrapper naming
- * this repository's own default prefix, the same one the vitest helper uses.
- */
-
 import { Effect, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";

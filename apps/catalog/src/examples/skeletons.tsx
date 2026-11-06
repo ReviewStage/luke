@@ -12,16 +12,8 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * skeletons.tsx -- each shape, lines set in a heading's and the body's type
- * so they stand where those lines will, and a list's rows while it is read,
- * each drawn by a `*Skeleton` component, as every skeleton is.
- */
-
-/** How wide each placeholder member's name stands. */
 const MEMBER_WIDTHS = ["70%", "45%", "60%"] as const;
 
-/** Each shape, its box the catalog's own size for it. */
 function ShapesSkeleton(): React.JSX.Element {
   return (
     <Inline gap={GAP.FIELD}>
@@ -39,7 +31,6 @@ function ShapesSkeleton(): React.JSX.Element {
   );
 }
 
-/** A description's heading over its lines, each block in the type its words will stand in. */
 function DescriptionSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the description">
@@ -58,7 +49,6 @@ function DescriptionSkeleton(): React.JSX.Element {
   );
 }
 
-/** A list's rows while it is read, a person's circle before each name. */
 function MembersSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading members">

@@ -30,35 +30,27 @@ function panel(code: string): { code: string; filename: string } {
 
 tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
   valid: [
-    // A ui component takes the press, whatever its props are called.
     panel("<Button onClick={go} />"),
     panel("<Chip onPointerDown={go} onContextMenu={menu} />"),
     panel("<Menu.Item onClick={go} />"),
-    // Containers: hover, drag and drop, focus, wheel, scroll, and clipboard.
     panel(
       "<div onPointerEnter={a} onPointerLeave={a} onPointerMove={a} onMouseOver={a} onMouseOut={a} />",
     ),
     panel("<li onDragStart={a} onDragOver={a} onDrop={a} onDragEnd={a} />"),
     panel("<section onFocus={a} onBlur={a} onWheel={a} onScroll={a} />"),
     panel("<div onPaste={a} onCopy={a} onCut={a} onAnimationEnd={a} onTransitionEnd={a} />"),
-    // Keys bubbling up to a container that takes no focus itself.
     panel("<div onKeyDown={rove} />"),
     panel("<search onKeyUpCapture={escape} />"),
     panel("<div contentEditable={false} onKeyDown={rove} />"),
-    // A spread from a ui helper is invisible to the rule and allowed.
     panel("<li {...menu.contextMenu()} />"),
     panel("<div tabIndex={0} />"),
-    // A hidden input draws nothing and is no control.
     panel('<input type="hidden" name="width" value={width} />'),
-    // A non-pressable role, and a link role on the anchor it names.
     panel('<div role="group" />'),
     panel('<a role="link" href={url} />'),
-    // A role left off on a branch, and a member of a capitalized namespace, which is a component.
     panel('<div role={narrow ? "tabpanel" : undefined} />'),
     panel('<span role={gone ? null : "status"} />'),
     panel("<Controls.button onClick={go} />"),
     panel("<example.Render />"),
-    // `@repo/ui` is where controls are built.
     { code: "<button onClick={go} />", filename: UI_FILE },
     {
       code: '<div role="tab" tabIndex={0} onKeyDown={key} onPointerDown={go} />',
@@ -66,7 +58,6 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
     },
   ],
   invalid: [
-    // Raw controls, whatever handler they carry, in every app's UI.
     { ...panel("<button>Go</button>"), errors: [{ messageId: "rawControl" }] },
     { code: "<input />", filename: WEB_FILE, errors: [{ messageId: "rawControl" }] },
     { code: "<select />", filename: DESKTOP_FILE, errors: [{ messageId: "rawControl" }] },
@@ -86,7 +77,6 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
       ...panel("<button onClick={go} />"),
       errors: [{ messageId: "rawControl" }, { messageId: "pressEvent" }],
     },
-    // A hidden input whose type may be another, or which a spread may retype.
     {
       ...panel('<input type={hidden ? "hidden" : kind} />'),
       errors: [{ messageId: "rawControl" }],
@@ -95,15 +85,12 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
       ...panel('<input type="hidden" {...props} />'),
       errors: [{ messageId: "rawControl" }],
     },
-    // A role that is no literal may be a pressable one.
     { ...panel("<div role={role} />"), errors: [{ messageId: "unknownRole" }] },
     {
       ...panel('<div role={open ? "group" : role} />'),
       errors: [{ messageId: "unknownRole" }],
     },
-    // A lowercase factory's member renders the element it names.
     { ...panel("<motion.div onClick={go} />"), errors: [{ messageId: "pressEvent" }] },
-    // Pressable roles.
     ...[
       "button",
       "tab",
@@ -124,7 +111,6 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
       ...panel('<span role={open ? "tab" : "presentation"} />'),
       errors: [{ messageId: "pressableRole" }],
     },
-    // Press events, and their capture forms.
     ...[
       "onClick",
       "onDoubleClick",
@@ -143,7 +129,6 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
       })),
     ),
     { code: "<li onClick={go} />", filename: WEB_FILE, errors: [{ messageId: "pressEvent" }] },
-    // Key events on an element that takes the focus itself.
     {
       ...panel("<div tabIndex={0} onKeyDown={key} />"),
       errors: [

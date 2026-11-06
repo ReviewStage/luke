@@ -5,18 +5,7 @@ import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
 import { act } from "react";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 
-/**
- * site-sign-in.test.ts -- a sign-in the website completes names the visitor
- * by the account it signed in as and counts `site:sign_in_complete`, once
- * per session, and both have left the browser before the desktop's hand-off
- * page sends it on to the Mac. The page runs as the Mac opens it, on the
- * real analytics library; the network, Better Auth's answers, and the
- * browser's beacon are the fakes, and the page leaving is read off jsdom's
- * report that it cannot navigate.
- */
-
 declare global {
-  /** The page's own jsdom, which vitest's jsdom environment sets on the global. */
   var jsdom: {
     readonly virtualConsole: { on(event: string, listen: (error: Error) => void): void };
   };
@@ -27,9 +16,7 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const PROJECT_KEY = "phc_site_sign_in_test";
 const TRANSFER_PATH = "/api/auth/electron/transfer-user";
 const SESSION_PATH = "/api/auth/get-session";
-/** Where the library posts events before the project's remote configuration says otherwise, on this origin's path to PostHog. */
 const DEFAULT_CAPTURE_PATH = `${POSTHOG_PROXY.PATH}/e/`;
-/** Where the project's remote configuration routes events, and what it serves beside that. */
 const CAPTURE_ENDPOINT = "/i/v0/e/";
 const CAPTURE_PATH = `${POSTHOG_PROXY.PATH}${CAPTURE_ENDPOINT}`;
 const PROJECT_CONFIG = {
@@ -43,25 +30,16 @@ const STATE = "state-from-the-mac";
 const CHALLENGE = "challenge-from-the-mac";
 const LOOPBACK = "http://127.0.0.1:4810/callback";
 
-/** One event as it left the browser, and where in `timeline` the request carrying it went. */
 interface SentEvent {
   readonly event: string;
   readonly properties: { readonly distinct_id?: string; readonly $current_url?: string };
   readonly at: number;
 }
 
-/** What left the page, in order: each request carrying events, and the page leaving. */
 const timeline: Array<"send" | "leave"> = [];
 const sent: SentEvent[] = [];
-/** Decodes still under way, since a beacon's Blob is read asynchronously. */
 const reading: Promise<void>[] = [];
 
-/**
- * Notes a request to a capture endpoint, and its events once its body is
- * read: a batch's JSON, or the base64 form data a beacon carries when it is
- * not compressed. Note that `/i/v0/e/` answers that form data `400 failed to
- * parse request`, as PostHog's does, so its events are not noted as sent.
- */
 function noteSend(url: URL, body: Promise<string>): void {
   const at = timeline.push("send") - 1;
   reading.push(
@@ -76,23 +54,19 @@ function noteSend(url: URL, body: Promise<string>): void {
   );
 }
 
-/** Every event sent so far, once each request's body has been read. */
 async function sentEvents(): Promise<SentEvent[]> {
   await Promise.all(reading);
   return sent;
 }
 
-/** Whether Better Auth answers the session read, or leaves it hanging until its deadline. */
 let sessionAnswers = true;
 
-/** A request that never answers, failing as fetch does once its signal aborts. */
 function hanging(signal: AbortSignal | null | undefined): Promise<Response> {
   return new Promise((_, reject) => {
     signal?.addEventListener("abort", () => reject(signal.reason));
   });
 }
 
-/** Better Auth's answers, by path; the analytics endpoints answer an empty object. */
 function answer(url: URL, signal: AbortSignal | null | undefined): Promise<Response> | Response {
   if (url.pathname === SESSION_PATH && !sessionAnswers) return hanging(signal);
   if (url.pathname === TRANSFER_PATH) {
@@ -104,7 +78,6 @@ function answer(url: URL, signal: AbortSignal | null | undefined): Promise<Respo
   return Response.json({});
 }
 
-/** The hand-off page as the Mac opens it, loaded but not yet run to its end. */
 async function loadHandOff(): Promise<void> {
   window.history.replaceState(
     null,
@@ -124,7 +97,6 @@ async function loadHandOff(): Promise<void> {
   });
 }
 
-/** The hand-off page as the Mac opens it, run until it leaves for the loopback. */
 async function openHandOff(): Promise<void> {
   await loadHandOff();
   await vi.waitFor(() => assert.ok(timeline.includes("leave")));
@@ -145,8 +117,6 @@ beforeAll(() => {
     if (CAPTURE_PATHS.has(url.pathname)) noteSend(url, Promise.resolve(String(init?.body)));
     return answer(url, init?.signal);
   });
-  // Note that jsdom does not navigate: it reports each attempt on its own
-  // console, which the environment exposes as `jsdom`.
   globalThis.jsdom.virtualConsole.on("jsdomError", (error) => {
     if (error.message.includes("navigation")) timeline.push("leave");
   });
@@ -180,7 +150,6 @@ test("a sign-in finished on the hand-off is identified and counted before the pa
   expect(identify.properties.distinct_id).toBe(ACCOUNT.id);
   expect(complete.properties.distinct_id).toBe(ACCOUNT.id);
   expect(complete.properties.$current_url).toBe("http://localhost:3000/desktop-session");
-  // Note that the loopback's port is matched only after its host, plain or escaped, because a random id may hold its digits.
   expect(JSON.stringify(events)).not.toMatch(
     /state-from-the-mac|challenge-from-the-mac|127\.0\.0\.1(?::|%(?:25)?3A)4810/iu,
   );
@@ -188,7 +157,6 @@ test("a sign-in finished on the hand-off is identified and counted before the pa
 
 test("a hand-off whose session read stalls goes on to the Mac at its deadline, uncounted", async () => {
   sessionAnswers = false;
-  // The read's deadline is the clock this page reads, so the test holds it.
   const deadline = new AbortController();
   const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
 
@@ -227,7 +195,6 @@ test("a session read that answers after the page's own work still counts", async
   await import("posthog-js");
 
   const counting = completeSiteSignIn(read);
-  // A turn of the event loop, so the count is already waiting on the read.
   await new Promise((resolve) => setTimeout(resolve, 0));
   answerRead({ session: { id: "session-late" }, user: ACCOUNT });
   await counting;

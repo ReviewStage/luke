@@ -4,28 +4,12 @@ import path from "node:path";
 
 import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
 
-/**
- * web-pages.ts -- what the site's pages carry in their heads and the stylesheets they draw with.
- *
- * Every page names Vespin's icons and a theme color, each icon a file the
- * site serves, so no page ships a blank tab; the web app installs from a
- * manifest whose icons are the sizes they claim; a pasted Vespin link unfurls
- * as the landing page's card under Vespin's name, since an unfurler reads it
- * signed out; the page the app frames carries its one style by the digest
- * its policy admits and loads nothing; and every Tailwind entry takes
- * `@repo/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
- * utilities compile to nothing; and the panel's root stops a phone's text
- * autosizing, without which iOS Safari draws a code block's lines larger
- * than the words around them.
- */
-
 const WEB = "apps/web";
 const PUBLIC = `${WEB}/public`;
 const BRAND_FAVICON = "packages/brand/assets/icon/favicon.svg";
 const FRAMED_PAGE = "page-in-mac-app.html";
 const PANEL_BASE = "packages/panel/src/styles/base.css";
 
-/** The icons every page links, in order, and no other. */
 const ICONS = [
   { rel: "icon", href: "/favicon.ico" },
   { rel: "icon", href: "/favicon.svg" },
@@ -34,16 +18,12 @@ const ICONS = [
 
 const THEME_COLOR = /<meta name="theme-color" content="(#[0-9a-f]{6})" \/>/u;
 
-/** A Tailwind entry: a stylesheet that compiles Tailwind's utilities. */
 const TAILWIND_UTILITIES = /@import\s+"tailwindcss(?:\/utilities\.css)?"/u;
 
-/** What every Tailwind entry takes from `@repo/ui`, so its components' utilities compile. */
 const UI_THEME_IMPORTS = ['"@repo/ui/tailwind/sources.css"', '"@repo/ui/tailwind/theme.css"'];
 
-/** What the panel's root declares so a phone draws its sizes as the tokens say: WebKit's spelling and the standard one. */
 const TEXT_SIZE_ADJUST = ["-webkit-text-size-adjust", "text-size-adjust"] as const;
 
-/** Each `<link>` in a page's head, as its `rel` and `href`. */
 function linksOf(html: string): readonly { rel: string; href: string }[] {
   const head = html.slice(0, html.indexOf("</head>"));
   return Array.from(head.matchAll(/<link\b[^>]*>/gu), ([tag]) => ({
@@ -52,7 +32,6 @@ function linksOf(html: string): readonly { rel: string; href: string }[] {
   }));
 }
 
-/** A page's `<meta>` tags, by their `name` or `property`. */
 function metaOf(html: string): ReadonlyMap<string, string> {
   return new Map(
     Array.from(
@@ -62,7 +41,6 @@ function metaOf(html: string): ReadonlyMap<string, string> {
   );
 }
 
-/** Where a page's head misses an icon, links another, or names no theme color. */
 export function headProblems(page: string, html: string): readonly string[] {
   const problems: string[] = [];
   const icons = linksOf(html).filter((link) => link.rel.includes("icon"));
@@ -73,7 +51,6 @@ export function headProblems(page: string, html: string): readonly string[] {
   return problems;
 }
 
-/** Where a pasted link's card differs from the landing page's, or leaves Vespin's name or one description. */
 export function unfurlProblems(app: string, landing: string): readonly string[] {
   const tags = metaOf(app);
   const card = metaOf(landing);
@@ -83,7 +60,6 @@ export function unfurlProblems(app: string, landing: string): readonly string[] 
       problems.push(`app.html: ${key} is ${tags.get(key) ?? "missing"}, not ${value ?? "absent"}`);
   };
   for (const key of ["og:title", "twitter:title", "og:site_name"]) expect(key, "Vespin");
-  // Note that a card naming a URL would lead to the landing page rather than the link pasted.
   expect("og:url", undefined);
   for (const key of ["og:image", "og:image:width", "og:image:height", "og:image:alt"])
     expect(key, card.get(key));
@@ -96,13 +72,11 @@ export function unfurlProblems(app: string, landing: string): readonly string[] 
   return problems;
 }
 
-/** A PNG's width and height, read from its IHDR chunk, which always follows the 8-byte signature. */
 export function pngSize(png: Buffer): string | undefined {
   if (png.toString("latin1", 1, 4) !== "PNG") return undefined;
   return `${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`;
 }
 
-/** Where the manifest would not install the app full screen at /app, with the icons a browser asks for. */
 export function manifestProblems(
   html: string,
   manifest: Record<string, unknown>,
@@ -124,7 +98,6 @@ export function manifestProblems(
   if (typeof manifest.scope !== "string" || !"/app".startsWith(manifest.scope))
     say("its scope leaves out /app");
   if (manifest.display !== "standalone") say("it does not install standalone");
-  // Note that the splash and the installed app's chrome are the page's own ground.
   const themeColor = THEME_COLOR.exec(html)?.[1];
   if (manifest.theme_color !== themeColor || manifest.background_color !== themeColor)
     say(`its theme and background colors are not app.html's theme-color, ${themeColor ?? "none"}`);
@@ -145,7 +118,6 @@ export function manifestProblems(
   return problems;
 }
 
-/** A policy's directives by name, each with its sources. */
 function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   return new Map(
     policy.split(";").map((directive) => {
@@ -155,7 +127,6 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-/** Where the framed page loads anything, or carries a style its policy does not admit by digest. */
 export function framedPageProblems(html: string, policy: string | undefined): readonly string[] {
   const problems: string[] = [];
   const digests = [...html.matchAll(/<style>([\s\S]*?)<\/style>/gu)].map(
@@ -177,9 +148,7 @@ export function framedPageProblems(html: string, policy: string | undefined): re
   return problems;
 }
 
-/** Where a Tailwind entry leaves out `@repo/ui`'s sources or theme, or takes it before Tailwind's own. */
 export function themeImportProblems(file: string, sheet: string): readonly string[] {
-  // Note that an import inside a comment is no import, so comments are taken out before reading.
   const css = sheet.replace(/\/\*[\s\S]*?\*\//gu, "");
   const tailwind = TAILWIND_UTILITIES.exec(css);
   if (tailwind === null) return [];
@@ -191,11 +160,9 @@ export function themeImportProblems(file: string, sheet: string): readonly strin
   );
 }
 
-/** Where a sheet's root leaves a phone's browser free to inflate its text, in either spelling. */
 export function textSizeProblems(file: string, sheet: string): readonly string[] {
   const css = sheet.replace(/\/\*[\s\S]*?\*\//gu, "");
   const root = /(?:^|\})\s*:root\s*\{([^}]*)\}/u.exec(css)?.[1] ?? "";
-  // Note that the last declaration of a property is the one that stands, as the cascade reads it.
   const declared = new Map(
     root.split(";").map((declaration) => {
       const [property = "", ...value] = declaration.split(":");
@@ -206,7 +173,6 @@ export function textSizeProblems(file: string, sheet: string): readonly string[]
   return [`${file}: its :root does not set -webkit-text-size-adjust and text-size-adjust to 100%`];
 }
 
-/** The Content-Security-Policy a route of the web service answers the framed page with. */
 function framedPolicy(root: string): string | undefined {
   const services = record(readJson(root, "vercel.json").services, "vercel.json's services");
   for (const service of Object.values(services)) {
@@ -221,7 +187,6 @@ function framedPolicy(root: string): string | undefined {
   return undefined;
 }
 
-/** The stylesheets of each app's and package's source, by path from the root. */
 function stylesheets(root: string): readonly string[] {
   return ["apps", "packages"].flatMap((parent) =>
     readdirSync(path.join(root, parent)).flatMap((workspace) => {

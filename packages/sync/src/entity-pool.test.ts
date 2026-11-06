@@ -11,12 +11,6 @@ import {
   type WriteDeclaration,
 } from "./entity-pool.js";
 
-/**
- * The pool: a row lives once however many reads hold it, and leaves once
- * the last lets it go; and a write stands over the rows without holding back
- * what the reads answer meanwhile. Synthetic rows.
- */
-
 interface Row {
   readonly id: string;
   readonly name: string;
@@ -27,7 +21,6 @@ const ROW = fieldKind((row: Row) => row.id);
 
 const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 
-/** A read stood on the pool in a scope of its own, which the test closes to let it go, counting how often the pool draws it again; one that `adopts` shows every row a write makes. */
 function standing(pool: EntityPool, adopts = false) {
   return Effect.gen(function* () {
     const scope = yield* Scope.make();
@@ -46,7 +39,6 @@ function standing(pool: EntityPool, adopts = false) {
   });
 }
 
-/** A write that makes `row` and stands until the service answers, which it never does. */
 const MAKES: WriteDeclaration<Row, FieldChange<Row>, Row, void> = {
   kind: ROW,
   keys: (row) => [row.id],
@@ -54,7 +46,6 @@ const MAKES: WriteDeclaration<Row, FieldChange<Row>, Row, void> = {
   send: () => Effect.never,
 };
 
-/** What a read that adopts shows of `row`'s key while a write making it stands: the pool's own row where it still holds one, else the one made. */
 function shownOver(pool: EntityPool, row: Row) {
   return Effect.gen(function* () {
     const probe = yield* standing(pool, true);

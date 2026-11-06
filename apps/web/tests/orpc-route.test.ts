@@ -1,23 +1,3 @@
-/**
- * orpc-route.test.ts -- the oRPC route as the platform reaches it, through rewrite and dispatcher.
- *
- * The oRPC route as the platform reaches it: a client's URL rewritten by a
- * table the generator wrote, dispatched by the grouped function, and
- * answered by the hosted router behind it. Every path that is no route
- * file's reaches the router through the one fallback rewrite, which carries
- * the whole public path, segments and all, and the router matches it;
- * `/api/models` answers its refusals through the committed
- * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
- * holds the signed-in read, which needs a catalog and a database), and a plan's routes refuse the
- * same way, an unsigned caller before its body is read (`tasks-app.test.ts` holds the signed-in
- * reads and writes), and the inbox's paths reach theirs the same way, each with an id among
- * its segments. And every procedure the contract declares is reached the same way and refuses
- * a caller who names no account as unauthenticated, over the deployment's own seams, so a
- * procedure built without a caller check answers something else and is named; the one that
- * reads no credential by design, a box's pairing start, is named here and answers a caller
- * with no daemon version as needing an upgrade.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { oc } from "@orpc/contract";
@@ -42,13 +22,10 @@ import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched, dispatchedBy } from "./support/platform-landing.js";
 
-/** The web runtime's layer names a database; nothing here queries it, so it is never dialed (`route-effect.test.ts`). */
 const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/app";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
-  // The deployed route reads the runtime's services once for its instance's life, so whichever test reaches it first fixes the environment its procedures read.
-  // A deployment that names an analytics project takes the desktop's batch, so that procedure asks for its caller; one that names none refuses every caller first (`events-procedures.ts`).
   vi.stubEnv(POSTHOG_ENVIRONMENT.PROJECT_API_KEY, "posthog-placeholder");
 });
 
@@ -58,22 +35,17 @@ afterEach(async () => {
 });
 
 const ORIGIN = "https://app.test";
-/** The grouped function as it is deployed: the oRPC route under its key, which the fallback lands every other path on. */
 const ORPC_ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
 
 const GROUPED = { file: "default", routes: [ORPC_ROUTE_KEY], dispatches: true } as const;
 
-/** The value a path parameter is written as: an id, but for a revision's number, which reads as one before its caller is asked for. */
 const PATH_PARAMETER_VALUES: ReadonlyMap<string, string> = new Map([["seq", "3"]]);
 const PATH_PARAMETER_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 
-/** The dashboard's resource, which answers a signed-out caller in its own words. */
 const ADMIN_RESOURCE: keyof typeof hostedContract = "admin";
 
-/** The procedures that read no credential, by key: a box starting a pairing, which answers a caller who names no daemon version as needing an upgrade. */
 const CREDENTIAL_FREE: ReadonlySet<string> = new Set(["deviceAgents.startPairing"]);
 
-/** A procedure's public path, every parameter written as a value it reads. */
 function readablePath(procedure: ProcedureRoute): string {
   return procedure.path.replaceAll(
     /\{\+?([^{}]+)\}/gu,
@@ -91,7 +63,6 @@ const partContract = {
 
 const parts = implement(partContract).$context<HostedContext>();
 
-/** A test-only procedure on a path with two segments, answering the ones it was handed. */
 const partRoute = routeFromHostedFetch(
   hostedFetch(
     parts.router({
@@ -100,7 +71,6 @@ const partRoute = routeFromHostedFetch(
   ),
 );
 
-/** A client's path landed by the generated fallback alone and dispatched to the test procedure. */
 function partAnswer(path: string): Promise<Response> {
   return dispatchedBy(
     apiRewrites([GROUPED], [], []),
@@ -182,7 +152,6 @@ test("the held message reads are reached at their public paths through the commi
     assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, path);
     assert.equal(await unsigned.text(), '{"error":"invalid-token"}', path);
   }
-  // A worker's transcript takes no write: matched at its public path, it is refused by method rather than not found.
   const posted = await dispatched(
     new Request(`${ORIGIN}/api/agents/${agent}/subagents/call-1/messages`, {
       method: HTTP_METHOD.POST,
@@ -343,7 +312,6 @@ test("the inbox's parameterized paths reach their procedures through the committ
   assert.deepEqual(await answer(HTTP_METHOD.DELETE, `/api/inbox/${id}/read`), unsigned);
   assert.deepEqual(await answer(HTTP_METHOD.PUT, "/api/inbox/read"), unsigned);
   assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}`), unsigned);
-  // A method no procedure takes at a matched path is the hosted 405, so each path is the procedure's own.
   assert.deepEqual(await answer(HTTP_METHOD.POST, `/api/inbox/${id}/read`), otherMethod);
   assert.deepEqual(await answer(HTTP_METHOD.PUT, `/api/inbox/${id}`), otherMethod);
   assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}/messages`), otherMethod);
@@ -359,7 +327,6 @@ it.effect(
         if (new URL(request.url).pathname === "/api/throws") throw new RangeError("no runtime");
         return new Response(null, { status: 204 });
       });
-      // Note that the web runtime is built first, because building it starts the deployment's own Sentry, which the recording one then stands in for.
       const answered = yield* Effect.promise(() =>
         route.fetch(new Request(`${ORIGIN}/api/answers`)),
       );
@@ -424,7 +391,6 @@ test("every procedure the contract declares is reached through the committed fal
 test("a pull request's chapters are reached at their public paths through the committed table, in a function that outlasts a generation, an unsigned caller refused on both methods", async () => {
   const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
   const workspace = "9c1e2f3a-4b5c-4d6e-8f70-112233445566";
-  // Through an agent, and by the repository and number for a pull request no agent opened.
   const publicPaths = new Map([
     ["agents/chapters", `/api/agents/${agent}/chapters?number=7`],
     [

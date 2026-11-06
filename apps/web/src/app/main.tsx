@@ -1,7 +1,3 @@
-/**
- * main.tsx -- the web app's entry, loaded by `app.html`: the panel's stylesheet, and the panel drawn into the page's root.
- */
-
 import "./app.css";
 import { mountWebApp } from "./web-root";
 

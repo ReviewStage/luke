@@ -3,31 +3,19 @@ import { defineRule } from "@oxlint/plugins";
 
 import { calleeName, isWatchedTest, nodesWithin } from "../shared/test-guard.ts";
 
-/** The calls that read a file's text, `fs`'s and `fs/promises`' alike. */
 const FILE_READERS: ReadonlySet<string> = new Set(["readFile", "readFileSync"]);
 
-/** The calls that list a tree of files. */
 const TREE_LISTERS: ReadonlySet<string> = new Set(["glob", "globSync", "readdir", "readdirSync"]);
 
-/** A path to a stylesheet or a TypeScript source. */
 const SOURCE_PATH = /\.(?:css|[cm]?tsx?)$/u;
 
-/** A path that names a workspace's `src` tree. */
 const SOURCE_TREE = /(?:^|\/)src(?:\/|$)/u;
 
-/**
- * A path spelled from this checkout: relative to the test, a workspace
- * package's, or through a workspace's source (`packages/<name>/src/`). A
- * folder's name alone (`src`) proves nothing, since a checkout the test made
- * holds the same names; a path into one is data, not source.
- */
 const CHECKOUT_PATH =
   /^@repo\/|(?:^|\/)\.{1,2}(?:\/|$)|(?:^|\/)(?:apps|packages|tools)\/[^/]+\/src(?:\/|$)/u;
 
-/** The names a module reaches its own place on disk by. */
 const OWN_PLACE: ReadonlySet<string> = new Set(["__dirname", "__filename"]);
 
-/** Whether a path's subtree reaches into this checkout, by `import.meta`, `__dirname`, or a path that names it. */
 function reachesCheckout(nodes: readonly ESTree.Node[], strings: readonly string[]): boolean {
   if (strings.some((text) => CHECKOUT_PATH.test(text))) return true;
   return nodes.some(
@@ -37,13 +25,6 @@ function reachesCheckout(nodes: readonly ESTree.Node[], strings: readonly string
   );
 }
 
-/**
- * Root AGENTS.md's "Testing": a rule about source text, such as a banned
- * class or import, is a lint rule, never a test that reads source files. A
- * test reads a stylesheet or a module's text only to pin a pattern in it,
- * which is a lint rule's job, or appearance, which `@repo/ui` and its rules
- * hold. A test asserts what a caller sees through the public export.
- */
 export const noSourceReadInTestRule = defineRule({
   meta: {
     type: "problem",
@@ -57,7 +38,6 @@ export const noSourceReadInTestRule = defineRule({
     },
   },
   createOnce(context) {
-    // Note that a path is often held in a constant above the read, so each constant's value is kept to read through.
     let constants = new Map<string, ESTree.Node>();
 
     return {

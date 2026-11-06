@@ -1,13 +1,3 @@
-/**
- * repositories.tsx -- a repository as every surface names it.
- *
- * A line shows its owner's picture, then its name. Where another repository
- * in the view shares the name, the line says `owner/name`. No repository is a
- * crossed-out folder. A glyph slot holds the picture, or that folder, alone.
- * The card shows the owner under the name. The catalog asks nothing of the
- * network, so every picture stands as the repository's glyph.
- */
-
 import {
   GAP,
   Inline,
@@ -21,7 +11,6 @@ import { repositoryLabel } from "@repo/ui/task-list-model";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** The repositories one view names, two of which share a name. */
 const VIEW = [
   { repository: "acme/relay" },
   { repository: "acme/site" },

@@ -10,14 +10,6 @@ import { type ReactNode, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * search-fields.tsx -- a SearchField empty with its chord, holding a query
- * with its clear, with a tally of its results and of none, its tally folded
- * as a narrow bar folds it, in a narrow column with a long query, and as a
- * menu's head row.
- */
-
-/** A search the example holds the query of, as a caller would. */
 function Held({
   start,
   label,

@@ -3,15 +3,8 @@ import path from "node:path";
 import { PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 
 const NOTARY_KEYCHAIN_PROFILE = "vespin-notary";
-// The version-free asset name every release carries beside the versioned DMG,
-// so the download link on the website can point at the latest release forever.
 export const RELEASE_LATEST_DMG_FILE_NAME = "Vespin.dmg";
-// The version-free manifest name every release carries, so the app's update
-// feed URL — releases/latest/download/latest-mac.yml — never moves either.
-// The name is electron-updater's own convention for a macOS generic feed.
 export const RELEASE_UPDATE_FEED_FILE_NAME = "latest-mac.yml";
-// The mounted installer volume is not named bare after the app: it appears
-// beside the app's bundle in Finder, and both wear the app's icon.
 export const RELEASE_VOLUME_NAME = "Vespin Installer";
 export const NOTARY_CREDENTIAL_SOURCE = {
   KEYCHAIN_PROFILE: "keychain-profile",
@@ -30,9 +23,6 @@ export function releaseDmgFileName(version) {
   return `Vespin-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
 }
 
-// The zip is the auto-update path's food — Squirrel.Mac updates from an
-// archive of the app, never a DMG — so every release carries it beside the
-// DMG people actually open.
 export function releaseZipFileName(version) {
   return `Vespin-${version}-macos-${PACKAGED_ARCHITECTURE}.zip`;
 }
@@ -45,9 +35,6 @@ export function resetBuilderReleaseArtifactDirectory(repoRoot) {
   fs.rmSync(builderReleaseArtifactDirectory(repoRoot), { recursive: true, force: true });
 }
 
-// A developer's Mac holds a stored notarytool profile; a CI runner has only
-// the repository secrets, decoded into a key file for the run. Either form
-// names the same App Store Connect key — the env only says where it lives.
 export function resolveNotaryCredentials(env) {
   const keyPath = env.APPLE_API_KEY_PATH?.trim();
   const keyId = env.APPLE_API_KEY_ID?.trim();
@@ -78,9 +65,6 @@ function notaryCredentialArguments(credentials) {
   return ["--keychain-profile", NOTARY_KEYCHAIN_PROFILE];
 }
 
-// notarytool's own --wait crashes with SIGBUS on most runs, and its accelerated
-// upload path has left incomplete submissions reported as In Progress. Use the
-// alternate endpoint, submit once, then poll the returned submission id.
 export function notarySubmitArguments(artifactPath, credentials) {
   return [
     "notarytool",
@@ -108,9 +92,6 @@ export function notaryLogArguments(submissionId, credentials) {
   return ["notarytool", "log", submissionId, ...notaryCredentialArguments(credentials)];
 }
 
-// A status Apple has not documented here is treated as still running rather
-// than as a failure, so an unfamiliar name costs the release a wait instead of
-// the whole build.
 export async function awaitNotarizationDecision({
   readStatus,
   wait,
@@ -141,13 +122,9 @@ export function stapleArguments(artifactPath) {
   return ["stapler", "staple", artifactPath];
 }
 
-// Apple's ticket service can drop the stapler's lookup for a minute or two after a
-// notarization is accepted (the v0.18.0 run lost its connection twice, seconds after
-// acceptance), so a staple is tried again on a wait before the release gives up.
 export const STAPLE_ATTEMPTS = 6;
 export const STAPLE_RETRY_INTERVAL_MS = 30_000;
 
-/** Staples through `staple`, trying again after `wait` until it succeeds or the attempts run out. */
 export async function stapleWithRetry({ staple, wait, attempts, intervalMs }) {
   for (let attempt = 1; ; attempt += 1) {
     try {

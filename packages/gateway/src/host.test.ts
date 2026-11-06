@@ -1,7 +1,3 @@
-/**
- * host.test.ts -- a handler that dies refuses that one call as internal, and the defect is reported to whatever `ErrorReporter` stands; a handler's own refusal is an answer and is not.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect, ErrorReporter } from "effect";

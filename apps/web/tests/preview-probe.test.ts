@@ -1,11 +1,3 @@
-/**
- * preview-probe.test.ts -- what the deployed-shape probe asks of the fallback onto the hosted oRPC router, and how it reads the answers.
- *
- * An unknown `/api/` path is planned though no client spells it, and held
- * to the router's own JSON 404, so the platform's `NOT_FOUND` there, or a 404
- * of another body, fails the probe.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@repo/wire/testing";

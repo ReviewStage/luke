@@ -8,22 +8,11 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * conversation-kind-agent-migration.test.ts -- the migrations that spell every agent's conversation kind `agent`.
- *
- * Over a database migrated up to each, holding a conversation of each kind
- * an earlier build wrote: once it runs, every `coding_agent` says `agent` and
- * every other kind stands as it was; a second run of its rewrite changes
- * nothing. The contract's rewrite catches what a release still serving wrote
- * after the first. Synthetic accounts throughout.
- */
-
 const MIGRATIONS = [
   "20261029032309_conversation_kind_agent",
   "20261029032431_agent_sql_contract",
 ] as const;
 
-/** A migrations folder holding every migration named before `migration`, and none after. */
 const foldersBefore = (migration: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
@@ -38,7 +27,6 @@ const foldersBefore = (migration: string) =>
     return folder;
   });
 
-/** Each conversation's kind as an earlier build stored it, in order, and as it reads once the migration has run. */
 const KINDS = [
   ["coding_agent", "agent"],
   ["coding_agent", "agent"],
@@ -72,7 +60,6 @@ it.effect.each(MIGRATIONS)(
           KINDS.map(([, after]) => after),
         );
 
-        // A second run, as a deploy that ran it before recording it would, changes nothing.
         const fileSystem = yield* FileSystem;
         const path = yield* Path;
         const rewrites = (yield* fileSystem.readFileString(

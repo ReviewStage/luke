@@ -1,21 +1,3 @@
-/**
- * shoot.ts -- shoots every catalog example at both profiles, both themes,
- * wide and at a phone's width, one PNG each, and an index page of them.
- *
- * Run it with `pnpm --filter @repo/catalog shoot` (`--help` lists the flags).
- * It builds the catalog and serves the build itself, or opens one already
- * running at `--base`, and drives Chromium over the catalog's own addresses
- * (`?example=&profile=&theme=&width=`, see `src/catalog.tsx`), so what it
- * shoots is what a reader sees. It is not a test: nothing is compared, no
- * golden is kept, and no CI job runs it, so a polish pass can look at the
- * pictures, on Linux under xvfb for layout and on the Mac for the last look.
- *
- * Note that the motion tokens are zeroed as a capture run zeroes them
- * (`packages/panel/src/styles/base.css`), so a shot lands on the steady
- * state, never mid-transition. Playwright is not a dependency of the
- * workspace: it is found beside the script, or in the global npm folder.
- */
-
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -28,27 +10,21 @@ const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const REPOSITORY_ROOT = path.resolve(APP_ROOT, "../..");
 const DEFAULT_OUT = path.join(REPOSITORY_ROOT, "artifacts", "polish", "catalog");
 
-// The catalog's own vocabulary (`@repo/ui`'s PROFILE and THEME), which a plain node script cannot import.
 const PROFILE = { DESKTOP: "desktop", WEB: "web" } as const;
 const THEME = { DARK: "dark", LIGHT: "light" } as const;
 const PROFILES = [PROFILE.DESKTOP, PROFILE.WEB] as const;
 const THEMES = [THEME.DARK, THEME.LIGHT] as const;
 
-// Wide is the stage's own width at a desktop window; phone frames the example at 390px, on a touch device.
 const SIZE = { WIDE: "wide", PHONE: "phone" } as const;
 const SIZES = [SIZE.WIDE, SIZE.PHONE] as const;
 const WINDOW = { width: 1280, height: 900 } as const;
 const PHONE_WIDTH = 390;
 
 const DEFAULT_JOBS = 4;
-// Time for a first paint to settle after the fonts and the page are ready.
 const SETTLE_MS = 150;
-// The longest a shot waits on an example that makes something before it draws, a recording say.
 const READY_TIMEOUT_MS = 10_000;
-// What the video player's example says while it records its stand-in (`src/examples/video-player.tsx`).
 const RECORDING_WORDS = "Recording a stand-in video";
 
-/** The capture run's zeroing of motion, laid on the root and the body, over whatever the token sheets say. */
 const STILL_MOTION_CSS = `
 :root, body {
   --ui-duration-shape: 0s !important;
@@ -95,7 +71,6 @@ interface ShotResult {
   readonly problems: readonly string[];
 }
 
-// Playwright's surface this script touches, typed here because the package is not installed beside it.
 interface PlaywrightPage {
   goto(url: string): Promise<unknown>;
   waitForSelector(selector: string): Promise<unknown>;
@@ -120,12 +95,10 @@ interface Playwright {
   chromium: { launch(): Promise<PlaywrightBrowser> };
 }
 
-/** One line to the terminal. */
 function say(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-/** Playwright, from beside this script or from the global npm folder. */
 function loadPlaywright(): Playwright {
   const require = createRequire(import.meta.url);
   try {
@@ -142,7 +115,6 @@ function loadPlaywright(): Playwright {
   }
 }
 
-/** Builds the catalog into `outDir` and serves it, answering its address and how to stop it. */
 async function serveBuild(
   outDir: string,
 ): Promise<{ readonly base: string; readonly stop: () => Promise<void> }> {
@@ -159,7 +131,6 @@ async function serveBuild(
   return { base, stop: () => server.close() };
 }
 
-/** The address of one shot. */
 function addressOf(base: string, shot: Shot): string {
   const params = new URLSearchParams({
     example: shot.example.id,
@@ -170,7 +141,6 @@ function addressOf(base: string, shot: Shot): string {
   return new URL(`?${params.toString()}`, base).toString();
 }
 
-/** The examples the catalog's own index lists, in its order. */
 async function listExamples(
   browser: PlaywrightBrowser,
   base: string,
@@ -188,7 +158,6 @@ async function listExamples(
   return entries;
 }
 
-/** Shoots `shot` into `file` on `page`, answering what went wrong on the way. */
 async function shootOne(
   page: PlaywrightPage,
   base: string,
@@ -199,7 +168,6 @@ async function shootOne(
   await page.goto(addressOf(base, shot));
   await page.waitForSelector(".catalog-example h1");
   await page.evaluate("document.fonts.ready.then(() => true)");
-  // Note that the video player draws nothing but this line until its recording is made, some frames on.
   try {
     await page.waitForFunction(
       `!document.querySelector(".catalog-example").textContent.includes(${JSON.stringify(RECORDING_WORDS)})`,
@@ -218,7 +186,6 @@ async function shootOne(
   if (problems.length > 0) say(`${shot.example.id}: ${problems.join("; ")}`);
 }
 
-/** The index page: one row per example, its eight pictures in a grid, each a link to the PNG. */
 function indexPage(results: readonly ShotResult[], examples: readonly ExampleEntry[]): string {
   const rows = examples.map((example) => {
     const mine = results.filter((result) => result.shot.example.id === example.id);
@@ -244,7 +211,6 @@ figure{margin:0}img{width:100%;border:1px solid #ccc}figcaption{color:#555;font-
 <h1>Catalog shots</h1><nav>${toc}</nav>${rows.join("")}`;
 }
 
-/** Takes the next shot off `queue` until none is left, on a page of its own per size. */
 async function work(
   contexts: Readonly<Record<(typeof SIZES)[number], PlaywrightContext>>,
   base: string,
@@ -291,7 +257,6 @@ async function main(): Promise<void> {
   let served: Awaited<ReturnType<typeof serveBuild>> | undefined;
   let browser: PlaywrightBrowser | undefined;
   try {
-    // Playwright is looked for first, so a machine without it fails before the long build.
     const playwright = loadPlaywright();
     served = values.base === undefined ? await serveBuild(buildDir) : undefined;
     const base = values.base ?? served?.base ?? "";
@@ -319,7 +284,6 @@ async function main(): Promise<void> {
     await Promise.all(
       Array.from({ length: jobs }, () => work(contexts, base, outDir, queue, results)),
     );
-    // The workers finish out of order, so the index is laid in the order queued.
     const queued = order.flatMap((shot) => results.filter((result) => result.shot === shot));
     writeFileSync(path.join(outDir, "index.html"), indexPage(queued, examples));
     const flagged = results.filter((result) => result.problems.length > 0).length;

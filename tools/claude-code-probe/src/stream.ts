@@ -1,12 +1,3 @@
-/**
- * stream.ts -- what the probe reads off the SDK's message stream: the session's start, the account it bills, the tools it called, its words, and the leak check's report.
- *
- * Each reader decodes only the fields it needs, dropping the rest, so a
- * newer CLI that adds fields reads the same; a message of another shape is
- * skipped, never a failure, because the verdict is what decides whether
- * something the probe needed was missing.
- */
-
 import {
   EXCESS_KEYS,
   isWireString,
@@ -19,7 +10,6 @@ import { readEither } from "@repo/wire/effect";
 import { Result, Schema } from "effect";
 import { DRIVER_EVENT, LEAK_CHECK_MARKER } from "./pins.js";
 
-/** The session's start, as the CLI reports it once per launch. */
 const InitSchema = Schema.Struct({
   type: Schema.Literal("system"),
   subtype: Schema.Literal("init"),
@@ -30,7 +20,6 @@ const InitSchema = Schema.Struct({
 });
 export type SessionInit = typeof InitSchema.Type;
 
-/** The account the CLI is signed in as, which the driver asks for after the start; only the fields that say who pays. */
 const AccountSchema = Schema.Struct({
   type: Schema.Literal(DRIVER_EVENT.ACCOUNT),
   subscriptionType: Schema.optional(Schema.String),
@@ -76,7 +65,6 @@ const ResultSchema = Schema.Struct({
 });
 export type TurnResult = typeof ResultSchema.Type;
 
-/** What a leak check found, as its script prints it: counts and flags, never a value it read. */
 const LeakReportSchema = Schema.Struct({
   user: Schema.String,
   sudo: Schema.Boolean,
@@ -92,7 +80,6 @@ const LeakReportSchema = Schema.Struct({
 });
 export type LeakReport = typeof LeakReportSchema.Type;
 
-/** A tool the agent called, by name, with the command a Bash call ran and whether it ran it in the background. */
 export interface ToolCall {
   readonly name: string;
   readonly command: string;
@@ -109,10 +96,8 @@ const readUser = readEither(UserSchema, lenient);
 const readToolResult = readEither(ToolResultSchema, lenient);
 const readResult = readEither(ResultSchema, lenient);
 const readLeakReport = readEither(LeakReportSchema, lenient);
-/** A decode of one message or block: the value, or why it is another shape. */
 type Reader<Value> = (value: UnparsedWireValue) => Result.Result<Value, Error>;
 
-/** Every value a reader answered, in order, skipping the messages or blocks of another shape. */
 function each<Value>(values: readonly WireValue[], read: Reader<Value>): readonly Value[] {
   return values.flatMap((value) => {
     const decoded = read(value);
@@ -120,7 +105,6 @@ function each<Value>(values: readonly WireValue[], read: Reader<Value>): readonl
   });
 }
 
-/** The session's start, the first one the launch reported. */
 export function sessionInit(messages: readonly WireValue[]): SessionInit | undefined {
   return each(messages, readInit)[0];
 }
@@ -139,7 +123,6 @@ export function toolCalls(messages: readonly WireValue[]): readonly ToolCall[] {
   );
 }
 
-/** Everything the agent said, in order, as one text. */
 export function assistantText(messages: readonly WireValue[]): string {
   return each(messages, readAssistant)
     .flatMap((assistant) => each(assistant.message.content, readText).map((block) => block.text))
@@ -150,7 +133,6 @@ export function turnResults(messages: readonly WireValue[]): readonly TurnResult
   return each(messages, readResult);
 }
 
-/** The text of every tool result the CLI handed back to the model, in order. */
 export function toolResultTexts(messages: readonly WireValue[]): readonly string[] {
   return each(messages, readUser).flatMap((user) => {
     const content = user.message.content;
@@ -165,7 +147,6 @@ export function toolResultTexts(messages: readonly WireValue[]): readonly string
   });
 }
 
-/** The leak check's report in a command's output, the line after its marker; none where it printed none. */
 export function leakReportIn(output: string): LeakReport | undefined {
   for (const line of output.split("\n")) {
     const at = line.indexOf(LEAK_CHECK_MARKER);

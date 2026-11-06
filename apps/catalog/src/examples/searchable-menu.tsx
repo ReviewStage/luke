@@ -34,32 +34,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * searchable-menu.tsx -- the picker menu hung from its button at each of its
- * three widths, over synthetic repositories under their owners, the one
- * chosen checked and one that cannot be picked now saying why; a menu with
- * rows pinned under its list, one opening a submenu of efforts, and the
- * last line under them saying who pays, Manage usage at its end; and the
- * notes said in the list's place while the rows are read and once a read
- * failed, with Retry, and the row a list with nothing to pick for want of
- * a connection holds there, ending in the press that connects it. Each closes on Escape, a pick, a second press of its
- * button, and focus leaving it, and hands the focus back to its button.
- * Then three hundred reviewers whose picks turn each on or off, several
- * checked at once and the menu standing through each pick (`checked`).
- * Then a short list of what a pick may do, no field over it, whose choice
- * turns it into a search headed by that choice, led by the folded way
- * back, as Task relation asks for the relation before the task.
- * Then a menu embedded in a layer floated under words (`RectFloat`), as
- * the date picker's time zones are, which places it and sets its width.
- * Last, the model menu as it rises on a phone: its button marks the
- * document's root a phone's room before the menu opens, as the panel's
- * shell marks it in a narrow window (`stage-room.ts`), and takes the mark
- * off once the menu is gone, so the menu stands as a sheet from the
- * window's foot, its field unfocused until pressed, Effort opening in the
- * sheet's place and Fast switching where it stands.
- */
-
-/** The last line a ChatGPT-paid agent's model menu ends on: who pays, Manage usage set apart at its end. */
 const PLAN_LINE: MenuLastLine = {
   words: "Using ChatGPT plan",
   end: (
@@ -69,7 +43,6 @@ const PLAN_LINE: MenuLastLine = {
   ),
 };
 
-/** Synthetic repositories, under the owners a GitHub account would list. */
 const REPOSITORIES: readonly MenuRow[] = [
   {
     id: "acme/app",
@@ -98,14 +71,12 @@ const REPOSITORIES: readonly MenuRow[] = [
   },
 ];
 
-/** What a menu holds: its rows, or a note in their place, and what is pinned under them. */
 interface Held {
   rows: readonly MenuRow[];
   note?: React.ReactNode;
   pinned?: boolean;
 }
 
-/** A button and the menu it opens, hung from the edge `align` names at `width`. */
 function Hung({
   label,
   align,
@@ -118,7 +89,6 @@ function Hung({
   held: Held;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  // Note that the menu is held drawn through its fade, as a panel owner does, so it fades out in place.
   const drawn = useDisclosure(open);
   const [chosen, setChosen] = useState<string | undefined>("acme/app");
   const [effort, setEffort] = useState("high");
@@ -172,7 +142,6 @@ function Hung({
                       onPick: setEffort,
                     },
                   },
-                  // A row with a quiet mark after its label, as Start's Run on wears its Experimental tag.
                   { id: "run-on", label: "Run on", tag: <Badge>Beta</Badge>, onPress: close },
                   { id: "github", label: "Open on GitHub", onPress: close },
                 ]
@@ -193,7 +162,6 @@ function Hung({
   );
 }
 
-/** A menu whose read failed, which reads again on Retry and then lists its rows. */
 function Failed(): React.JSX.Element {
   const [read, setRead] = useState(false);
   return (
@@ -216,17 +184,11 @@ function Failed(): React.JSX.Element {
   );
 }
 
-/** What the headed menu's first list offers, each the head its search then wears. */
 const ACTIONS: readonly MenuRow[] = [
   { id: "Add to pinned", label: "Add to pinned…" },
   { id: "Move to archive", label: "Move to archive…" },
 ];
 
-/**
- * A button opening what a pick may do, too short to search; a choice turns
- * the menu into a search of repositories headed by it, whose way back, and
- * Escape, return to the choices.
- */
 function Headed(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -293,7 +255,6 @@ function Headed(): React.JSX.Element {
   );
 }
 
-/** A menu standing in a layer floated under marked words, with no layer of its own. */
 function Embedded(): React.JSX.Element {
   const words = useRef<HTMLElement>(null);
   const [chosen, setChosen] = useState<string | undefined>("acme/app");
@@ -327,17 +288,13 @@ function Embedded(): React.JSX.Element {
   );
 }
 
-/** The Codex mark's files, as the desktop's build copies them beside the panel. */
 const CODEX_ART = { oneX: codexOneX, twoX: codexTwoX, threeX: codexThreeX };
 
-/** The mark of the harness each synthetic model runs in. */
 const CLAUDE = <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />;
 const CODEX = <HarnessMark provider={MODEL_PROVIDER.OPENAI} codexArt={CODEX_ART} />;
 
-/** What a model nothing of the reader's pays for says at its row's end. */
 const CONNECT_CLAUDE = "Connect Claude";
 
-/** Synthetic models, the newest of each family listed and the older ones found by a search. */
 const MODELS: readonly MenuRow[] = [
   { id: "opus-5.5", label: "Opus 5.5", icon: CLAUDE, end: CONNECT_CLAUDE },
   { id: "fable-5.1", label: "Fable 5.1", icon: CLAUDE, end: CONNECT_CLAUDE },
@@ -352,7 +309,6 @@ const MODELS: readonly MenuRow[] = [
   { id: "opus-4.7", label: "Opus 4.7", icon: CLAUDE, end: CONNECT_CLAUDE, searchOnly: true },
 ];
 
-/** The efforts a model runs at, as the Effort submenu lists them. */
 const EFFORTS = [
   { id: "low", label: "Low" },
   { id: "medium", label: "Medium" },
@@ -361,10 +317,8 @@ const EFFORTS = [
   { id: "max", label: "Max" },
 ] as const;
 
-/** The attribute the panel's shell marks the document's root with in a phone's layout (`stage-room.ts`). */
 const ROOM_ATTRIBUTE = "data-ui-room";
 
-/** The model menu from a button that opens it as a phone's layout does, as a sheet. */
 function PhoneSheet(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -377,7 +331,6 @@ function PhoneSheet(): React.JSX.Element {
     setOpen(false);
     trigger.current?.focus();
   };
-  // The phone's mark comes off once the sheet is gone, so the catalog's other menus hang as they do on the desktop.
   useEffect(() => {
     if (!drawn.mounted) document.documentElement.removeAttribute(ROOM_ATTRIBUTE);
   }, [drawn.mounted]);
@@ -433,7 +386,6 @@ function PhoneSheet(): React.JSX.Element {
             setChosen(id);
           }}
           onClose={close}
-          // Note that a sheet traps the focus, so it never says the focus left it.
           onLeave={() => setOpen(false)}
         />
       )}
@@ -441,17 +393,11 @@ function PhoneSheet(): React.JSX.Element {
   );
 }
 
-/** Synthetic reviewers, as long a list as a large organization's assignable users: three hundred people. */
 const REVIEWERS: readonly MenuRow[] = Array.from({ length: 300 }, (_, at) => ({
   id: `reviewer-${at + 1}`,
   label: `reviewer-${String(at + 1).padStart(3, "0")}`,
 }));
 
-/**
- * A menu whose picks turn rows on and off rather than choose one, as a pull
- * request's reviewers are asked: the rows on stand checked, several at once,
- * and the menu stays open through each pick.
- */
 function Toggled(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);

@@ -1,22 +1,3 @@
-/**
- * agent.ts -- `vespin agent start`, `list`, `view`, `logs`, `send`, `stop`, `wait`, and `checkout`: coding agents started, read, followed, messaged, stopped, waited on, and their work brought into the working folder.
- *
- * A turn is followed on the held transcript read (`messages.agent`): asked
- * past the cursor the last answer handed back, the service holds it while
- * the agent works and nothing new was written, and answers with the new
- * messages and where the agent then stands. It is asked again on a
- * `Schedule` until the agent's status says the turn ended, which
- * `cliExitOfAgentStatus` reads into the exit code `wait` ends with. The live
- * events (`contract/live.ts`) carry no agent status, so the held read is the
- * one that answers both.
- *
- * An agent has two branches a person may mean: the one its sandbox stood on
- * as its last turn ended (`agents.read`), pushed or not, and the one it
- * pushed, as GitHub holds it (`agentPullRequests.pullRequest`). `view`
- * shows both; `checkout` takes the sandbox's, else the pushed one, and
- * refuses one GitHub does not hold yet rather than failing its fetch.
- */
-
 import { isWireUuid } from "@repo/features";
 import {
   AGENT_CURSOR_START,
@@ -40,10 +21,8 @@ import { askService, session } from "../session.js";
 import { resolveTaskId } from "../tasks.js";
 import { resolveWorkspace } from "../workspace.js";
 
-/** How long after a held read answers the next is asked, so a read that answers at once never spins. */
 const FOLLOW_SPACING = Duration.seconds(1);
 
-/** What a start asks of its agent beside the task: its prompt, model and effort, where it runs, and the branch its checkout is cloned at. */
 interface AgentStartChoice {
   readonly prompt?: string;
   readonly model?: string;
@@ -52,17 +31,14 @@ interface AgentStartChoice {
   readonly branch?: string;
 }
 
-/** An agent as a line of a table: its id, where it stands, and its title or model. */
 export function agentLines(agents: readonly AgentSummary[]): string[] {
   return columns(agents.map((agent) => [agent.id, agent.status, agent.title ?? agent.model]));
 }
 
-/** What a start says once its agent is started. */
 export function startedLines(agent: AgentSummary): string[] {
   return [`Started agent ${agent.id} on ${agent.model} (${agent.effort}).`];
 }
 
-/** An agent started on a task, under a key of its own, or a refusal saying why it was not. */
 export function startAgent(taskId: string, choice: AgentStartChoice) {
   return Effect.gen(function* () {
     const admitted = agentStartRequestOnWire({ idempotencyKey: crypto.randomUUID(), ...choice });
@@ -83,7 +59,6 @@ export function startAgent(taskId: string, choice: AgentStartChoice) {
   });
 }
 
-/** Where `--cloud` or `--on` says the agent runs, the device by its id or its name among the member's hosts; none for where a Start naming none runs. */
 function runsOnOf(cloud: boolean, on: Option.Option<string>) {
   return Effect.gen(function* () {
     if (cloud && Option.isSome(on)) {
@@ -114,7 +89,6 @@ function runsOnOf(cloud: boolean, on: Option.Option<string>) {
   });
 }
 
-/** The whole transcript, oldest first: the newest page, and every page below it. */
 function wholeTranscript(agentId: string) {
   return Effect.gen(function* () {
     const { hosted } = yield* session;
@@ -132,7 +106,6 @@ function wholeTranscript(agentId: string) {
   });
 }
 
-/** What a reader following a turn holds: where it stands in the transcript, how many parts of each message it printed, and the messages as they now stand. */
 interface Following {
   readonly cursor: string;
   readonly printed: ReadonlyMap<string, number>;
@@ -141,7 +114,6 @@ interface Following {
   readonly failureReason: string | undefined;
 }
 
-/** The lines a page of messages adds past what was printed of each, and how much of each is printed after them. */
 function pageLines(
   page: readonly AgentTranscriptMessage[],
   printed: ReadonlyMap<string, number>,
@@ -161,11 +133,6 @@ function pageLines(
   return { lines, printed: next };
 }
 
-/**
- * A turn followed until it ends: each held read past the cursor, its new
- * parts streamed where `print` asks, asked again on the schedule while the
- * agent works. Answers how the turn ended and the transcript as it stood.
- */
 function followTurn(agentId: string, print: boolean) {
   return Effect.gen(function* () {
     const { hosted } = yield* session;
@@ -205,7 +172,6 @@ function followTurn(agentId: string, print: boolean) {
       schedule: Schedule.spaced(FOLLOW_SPACING),
       until: (following) => cliExitOfAgentStatus(following.status) !== undefined,
     });
-    // Note that a turn that had ended before the first read leaves parts the first page held back as still written, which are printed whole now.
     if (print) {
       const rest = pageLines([...settled.messages.values()], settled.printed, true);
       yield* streamLines(rest.lines);
@@ -214,7 +180,6 @@ function followTurn(agentId: string, print: boolean) {
   });
 }
 
-/** How a turn ended, in words for a person. */
 function endedWords(following: Following): string {
   if (following.status === AGENT_STATUS.COMPLETED) return "The agent's turn completed.";
   if (following.status === AGENT_STATUS.CANCELED) return "The agent's turn was stopped.";
@@ -222,7 +187,6 @@ function endedWords(following: Following): string {
   return `The agent's turn failed${reason}.`;
 }
 
-/** A turn waited on, or followed, until it ends or the timeout passes; the answer says how it ended, and the exit code too. */
 function waitOn(agentId: string, options: { readonly print: boolean; readonly timeout?: number }) {
   return Effect.gen(function* () {
     const followed = followTurn(agentId, options.print);
@@ -256,7 +220,6 @@ function waitOn(agentId: string, options: { readonly print: boolean; readonly ti
   });
 }
 
-/** Ends the command with the turn's exit code where it is not fine, its words already printed. */
 function endedWith(exit: number) {
   return exit === CLI_EXIT.OK
     ? Effect.void
@@ -403,7 +366,6 @@ const listCommand = Command.make(
               ...(Option.isSome(offset) ? { offset: String(offset.value) } : undefined),
             });
       const { agents } = listed;
-      // A task's list, and a service before paging, name no next page.
       const nextOffset = listed.nextOffset ?? null;
       yield* answer({
         json: { agents, nextOffset },
@@ -413,7 +375,6 @@ const listCommand = Command.make(
             ? []
             : [
                 "",
-                // The next page names its workspace, so it pages the same list whatever the default.
                 `More agents stand: vespin agent list -w ${workspace?.slug ?? workspace?.id} --offset ${nextOffset}`,
               ]),
         ],
@@ -652,7 +613,6 @@ const checkoutCommand = Command.make("checkout", { agent: agentArgument }, ({ ag
   ]),
 );
 
-/** The agent group: start through checkout. */
 export const agentCommand = Command.make("agent").pipe(
   Command.withDescription(`Start, follow, message, and stop ${PRODUCT_NAME}'s coding agents`),
   Command.withSubcommands([

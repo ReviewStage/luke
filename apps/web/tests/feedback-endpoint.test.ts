@@ -2,16 +2,6 @@ import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
 import { POST } from "../server/feedback.mjs";
 
-/**
- * The public feedback endpoint, its mail service scripted at its HTTP
- * boundary: a note sent from an experiment's row is mailed under a subject
- * naming that experiment, an experiment that is not a key's shape is
- * refused before anything is mailed, and a delivered note is recorded as a
- * response to the feedback survey where the deployment holds a PostHog key.
- *
- * A synthetic note and inbox throughout.
- */
-
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
@@ -19,7 +9,6 @@ afterEach(() => {
 
 const POSTHOG_HOST = "https://posthog.app.test";
 
-/** The endpoint configured, its mail service and PostHog answering every send and keeping what each was sent. */
 function mailService() {
   vi.stubEnv("RESEND_API_KEY", "re_test");
   vi.stubEnv("FEEDBACK_TO", "founders@app.test");
@@ -78,7 +67,6 @@ test("a delivered note is recorded as a feedback survey response, its screenshot
   vi.stubEnv("POSTHOG_PROJECT_API_KEY", "phc_test");
   vi.stubEnv("POSTHOG_HOST", POSTHOG_HOST);
   vi.stubEnv("VERCEL_ENV", "production");
-  // The smallest PNG signature the endpoint accepts as a screenshot.
   const screenshot = { name: "board.png", mediaType: "image/png", base64: "iVBORw0KGgo=" };
   const answered = await POST(
     note({ name: "Ada Example", email: "ada@example.test", images: [screenshot] }),

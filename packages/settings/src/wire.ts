@@ -10,25 +10,12 @@ export type {
   AppSettingValue,
 } from "./schema-access.js";
 
-/** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
   stored: StoredAppSettings;
-  /**
-   * The experiments the signed-in account turned on or back off, as the
-   * service last answered them; none while signed out. The account's on the
-   * service rather than a stored setting, carried here so every window and
-   * the main process read them off the one document the settings ride.
-   */
   experiments: ExperimentChoices;
-  /**
-   * Whether the service has answered the signed-in account's preferences, or
-   * failed to, since it signed in to this host; until then `stored` may hold
-   * none of the account's own, as on a device it never used.
-   */
   accountRead: boolean;
 }
 
-/** A renderer-local view over the two disjoint halves of the settings wire. */
 type ResolvedSettingField =
   | "theme"
   | "zoom"
@@ -66,19 +53,11 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
   };
 }
 
-/** Every settings write returns the canonical action result and the latest stored snapshot. */
 export type SettingsUpdateResult = ActionResult & {
   settings: AppSettings;
-  /** Present only when the canonical action result is rejected or unsupported. */
   reason?: string;
 };
 
-/**
- * A settings document as a settings write's answer carries it: read for its
- * two halves and passed on whole, as that answer always crossed. Each
- * stored field is the settings store's to check, which checked it before
- * answering, so nothing here reads one, and nothing here drops one.
- */
 const appSettingsSchema = Schema.declare(
   (value): value is AppSettings =>
     Predicate.isObject(value) &&
@@ -86,7 +65,6 @@ const appSettingsSchema = Schema.declare(
     Predicate.isObject(value.experiments),
 );
 
-/** A settings write's answer, the type above as a schema: its action result, the settings as they then stand, and why where it did not land. */
 export const settingsUpdateResultSchema = Schema.Union([
   Schema.Struct({
     status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED),

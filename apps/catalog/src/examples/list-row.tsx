@@ -34,18 +34,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * list-row.tsx -- a list's rows with their metadata and acts lined up, the
- * one open now, unread rows, what a row belongs to on a line of its own,
- * rows that open nothing, rows in a card,
- * a row a finger's height on a coarse pointer, compact and dense, compact
- * and dense rows with their metadata, a mark, and a chip on the title's
- * line, rows whose acts show on hover, rows that go deeper, rows nested under a row that
- * folds them, rows whose menu their ⋯, a right-click, and the menu key
- * open, a rail's rows counting what each holds on their last line, and
- * long words in a narrow column.
- */
-
 const MEMBERS = [
   { id: "ada", name: "Ada Lovelace", email: "ada@example.com", role: "Owner" },
   { id: "grace", name: "Grace Hopper", email: "grace@example.com", role: "Admin" },
@@ -77,7 +65,6 @@ const AUTOMATIONS = [
   { id: "review", name: "Code review", trigger: "When a pull request is opened", next: "On event" },
 ] as const;
 
-/** Rows edge to edge in a card, each with a switch beside its press. */
 function Automations(): React.JSX.Element {
   const [on, setOn] = useState<Record<string, boolean>>({ sweep: true, review: false });
   return (
@@ -104,7 +91,6 @@ function Automations(): React.JSX.Element {
 
 const ignore = (): void => undefined;
 
-/** One task's menu, which its row's ⋯, right-click, and menu key all open. */
 function taskMenu(name: string): readonly (readonly MenuEntry[])[] {
   return [
     [{ label: `Rename ${name}`, icon: <PencilIcon />, onSelect: ignore }],
@@ -117,7 +103,6 @@ const TASKS = [
   { id: "release", name: "Ship the spring release", updated: "1d" },
 ] as const;
 
-/** Rows whose menu is one definition, opened by its ⋯, a right-click, or the menu key. */
 function TaskRows({ density }: { density: ListDensity }): React.JSX.Element {
   return (
     <List label="Tasks" density={density}>
@@ -134,7 +119,6 @@ function TaskRows({ density }: { density: ListDensity }): React.JSX.Element {
   );
 }
 
-/** A task and the child tasks nested under it, two levels deep, each level folded until opened. */
 const NESTED = [
   { id: "launch", name: "Launch child tasks", parent: undefined, updated: "1h" },
   { id: "schema", name: "Tasks gain a parent", parent: "launch", updated: "2h" },
@@ -142,7 +126,6 @@ const NESTED = [
   { id: "sidebar", name: "Nest them in the sidebar", parent: "launch", updated: "4h" },
 ] as const;
 
-/** Rows nested under the rows that fold them, opened and folded as their chevrons are pressed. */
 function NestedRows(): React.JSX.Element {
   const [opened, setOpened] = useState<readonly string[]>(["launch"]);
   const depthOf = (parent: string | undefined): number =>
@@ -193,7 +176,6 @@ function NestedRows(): React.JSX.Element {
   );
 }
 
-/** Rows as an Inbox beside its page draws them: the open one, an unread one, a done one, and a plain one. */
 const INBOX_TINT_ROWS = [
   {
     title: "Review the migration plan",

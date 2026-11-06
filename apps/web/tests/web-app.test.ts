@@ -7,18 +7,8 @@ import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-service";
 
-/**
- * The web app's root signed out, on a Mac: the shared host in the tab reads
- * the cookie session, finds none, and the panel draws its own sign-in with
- * the way to the Mac app beside it; and a return to the tab after the cookie
- * changed, another tab having signed in, reads the session again and opens
- * the account's tasks. One mount per file, because the panel's state read
- * is the tab's once.
- */
-
 let app: WebApp | undefined;
 
-/** How many session reads the tab has begun so far. */
 function sessionReads(service: FakeService): number {
   return service.seen().filter((request) => request.path === "/api/auth/get-session").length;
 }
@@ -47,14 +37,8 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   );
   assert.match(toMac?.getAttribute("href") ?? "", /^vespin:/u);
 
-  // The launch reads the session again once the host stands; that read must
-  // have begun before the cookie changes, or it alone would sign the tab in
-  // and the return below would prove nothing. A return to the tab while a
-  // read is still out joins it, so the tab is returned to until a read begun
-  // after the change lands.
   await vi.waitFor(() => assert.ok(sessionReads(service) >= 2, "the launch's reads have begun"));
 
-  // Another tab signed in: the cookie names someone now, and this tab is focused again.
   service.setSession(true);
   await vi.waitFor(() => {
     window.dispatchEvent(new Event("focus"));

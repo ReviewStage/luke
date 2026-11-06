@@ -5,17 +5,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 
-/**
- * admin-usage-chart.test.ts -- the usage chart names each day it draws on its
- * axis, and a reader stepping through the days by keyboard reads each one's
- * exact count in the tooltip, today's marked as a day still running. jsdom
- * measures nothing, so the chart draws at the size it starts at before its
- * container is measured, which is room enough for three days.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A synthetic window of three days, read at noon on the last. */
 const DAILY = [
   { day: "2026-10-13", calls: 2 },
   { day: "2026-10-14", calls: 3 },
@@ -50,14 +41,12 @@ function renderUsageChart(): HTMLElement {
   );
 }
 
-/** The chart's plot, the one stop a keyboard reader lands on. */
 function plot(page: HTMLElement): SVGElement {
   const surface = page.querySelector<SVGElement>("svg[tabindex='0']");
   if (surface === null) throw new Error("the chart drew no plot");
   return surface;
 }
 
-/** What the tooltip says now: nothing while it is hidden. */
 function tooltipText(page: HTMLElement): string {
   return page.querySelector(".recharts-tooltip-wrapper")?.textContent ?? "";
 }

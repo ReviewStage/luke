@@ -14,13 +14,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * typography.tsx -- every type role in each ink and each face, then roles set
- * on elements of other levels, and a long line set in a narrow column, both
- * wrapped and cut to one line, on synthetic words.
- */
-
-/** Each job a role does, in the role that does it. */
 const JOBS = [
   { job: "A document's title in the page", variant: TEXT_VARIANT.TITLE },
   { job: "The name in the window's top bar", variant: TEXT_VARIANT.TOOLBAR_TITLE },

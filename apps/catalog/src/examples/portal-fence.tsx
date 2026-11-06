@@ -1,7 +1,3 @@
-/**
- * portal-fence.tsx -- a control inside a fold's summary whose press, fenced, stays its own rather than folding the summary around it, as a viewer drawn in a portal keeps its presses from the section that drew it.
- */
-
 import {
   BUTTON_VARIANT,
   Button,

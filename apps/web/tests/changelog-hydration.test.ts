@@ -7,9 +7,6 @@ import { test } from "vitest";
 import { ChangelogPage, RELEASES } from "../src/ChangelogPage";
 import { changelogRoutes, changelogViewForPath } from "../src/changelog-releases";
 
-/* React reports a hydration mismatch as a recoverable error and quietly
-   renders the client's tree instead, so a page that drew the wrong view would
-   still look right; the errors are the only witness. */
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ROUTES = changelogRoutes(RELEASES);

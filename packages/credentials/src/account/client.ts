@@ -24,19 +24,6 @@ export interface AccountTokens {
 }
 
 export interface AccountIdentity {
-  /**
-   * The account's own opaque id, exactly as the service's `sub` claim gives
-   * it. It is the same id the hosted endpoints resolve a bearer token to, so
-   * anything the desktop files under it lands on the person the desktop's own
-   * counted events already belong to — and is erased with them when the
-   * account is deleted. Nothing about the user can be read out of it.
-   *
-   * Optional, and its absence is never a refusal. Every hosted endpoint
-   * resolves this same claim from the bearer token itself, so an identity
-   * without one is signed in exactly as before and only the things that need
-   * to name a person locally stand down. Refusing the sign-in instead would
-   * trade an account for a feature.
-   */
   id?: string;
   email: string;
   name?: string;
@@ -44,11 +31,6 @@ export interface AccountIdentity {
   provider: AccountProvider;
 }
 
-/**
- * The account's picture, kept only where it is drawn from a host the
- * renderer's image policy allows (`@repo/features/account-picture`, the one
- * rule the service's workspace read follows too).
- */
 function accountPictureUrl(value: UnparsedWireValue): string | undefined {
   return isWireString(value) ? pinnedPictureUrl(value) : undefined;
 }
@@ -56,34 +38,21 @@ function accountPictureUrl(value: UnparsedWireValue): string | undefined {
 interface AccountClientOptions {
   baseUrl: string;
   clientId: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
 }
 
-/**
- * The account service's own answer to a request that reached it: a status and
- * the OAuth code the body named, when it named one, or a body that would not
- * read. Everything that decides on a failure below — the renewal, the
- * sign-out — reads these two fields and nothing else.
- */
 class AccountClientError extends Data.TaggedError("AccountClientError")<{
   readonly message: string;
   readonly status?: number | undefined;
   readonly oauthError?: string | undefined;
 }> {}
 
-/**
- * A request that reached no status at all: a client that could not carry it,
- * or the deadline. The name is the error's kind, the way `AbortSignal.timeout`
- * always named its own, so a reader tells a timeout from a closed socket.
- */
 class AccountTransportError extends Data.TaggedError("AccountTransportError")<{
   readonly message: string;
   readonly errorName: string | undefined;
 }> {}
 
-/** Every way a call on the account service fails. */
 export type AccountClientFailure = AccountClientError | AccountTransportError;
 
 function record(value: UnparsedWireValue): WireRecord | undefined {
@@ -127,24 +96,14 @@ const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
 const JSON_CONTENT_TYPE = "application/json";
 
-/**
- * The response header Better Auth's bearer plugin hands a session out in,
- * signed under the service's secret: the one form of the token the service
- * takes back as a bearer (https://www.better-auth.com/docs/plugins/bearer).
- */
 const SESSION_TOKEN_HEADER = "set-auth-token";
 
-/** The Mac's own Better Auth session, and whose it is. */
 export interface AccountSession {
-  /** The signed session token, sent back as `Authorization: Bearer`. */
   sessionToken: string;
-  /** The account the session is for, as the service's `sub` names it. */
   userId: string;
-  /** That account's address, for a stored account that names no id. */
   email: string;
 }
 
-/** The session the exchange answered, read off the bearer plugin's header and the plugin's own body. */
 function sessionFrom(
   response: Response,
   body: WireRecord,
@@ -159,19 +118,6 @@ function sessionFrom(
   return Effect.succeed({ sessionToken, userId: user.id, email: user.email });
 }
 
-/**
- * One request over the client handed in, under its own deadline, which is
- * provided here so a caller yields the request without carrying an
- * `HttpClient` of its own. A client that could not carry it, or a body that
- * outlived the deadline, fails with the error it always carried — the
- * platform's own transport error for the first, a timeout named the way
- * `AbortSignal.timeout` always named it for the second — so every caller here
- * reads the same error it always did, on the failure channel rather than as a
- * throw. A defect joins it there, exactly as the promise this replaces
- * rejected with one. An interruption does not: a caller that cut this fiber
- * is not a request that failed, and every reader of a failure here — the
- * sign-out's report, the withdrawn sign-in — tells the two apart.
- */
 function timedRequest(
   client: Layer.Layer<HttpClient.HttpClient>,
   request: HttpClientRequest.HttpClientRequest,
@@ -189,7 +135,6 @@ function timedRequest(
   );
 }
 
-/** What a failure or a defect carried, named by its kind and worded as it was. */
 function transportError(cause: unknown): AccountTransportError {
   return new AccountTransportError({
     message: cause instanceof Error ? cause.message : String(cause),
@@ -257,7 +202,6 @@ export class AccountClient {
     );
   }
 
-  /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
   revoke(refreshToken: string): Effect.Effect<void, AccountClientFailure> {
     return Effect.gen({ self: this }, function* () {
       const response = yield* timedRequest(
@@ -278,13 +222,6 @@ export class AccountClient {
     });
   }
 
-  /**
-   * Exchanges the Electron plugin's single-use code for a session of this
-   * Mac's own, as the plugin's `/electron/token` takes it: the code, the
-   * state it was asked for under, and the PKCE verifier whose challenge the
-   * hand-off page carried
-   * (https://www.better-auth.com/docs/integrations/electron#manual-token-exchange).
-   */
   exchangeSessionCode(input: {
     code: string;
     state: string;
@@ -309,7 +246,6 @@ export class AccountClient {
     });
   }
 
-  /** Ends the Mac's session on the service; local sign-out never depends on this succeeding. */
   endSession(sessionToken: string): Effect.Effect<void, AccountClientFailure> {
     return Effect.gen({ self: this }, function* () {
       const response = yield* timedRequest(
@@ -369,15 +305,9 @@ export class AccountClient {
   }
 }
 
-/** The signed-in identity with the tokens it was issued, as the store keeps it. */
 export interface StoredAccount extends AccountIdentity {
   accessToken: string;
   refreshToken: string;
-  /**
-   * The Mac's own Better Auth session, signed, for the endpoints that take a
-   * session rather than an OAuth token. Absent for an account signed in
-   * before the Mac held one, or whose hand-off did not complete.
-   */
   sessionToken?: string;
 }
 
@@ -388,14 +318,12 @@ export const ACCOUNT_FAILURE_ACTION = {
 
 type AccountFailureAction = (typeof ACCOUNT_FAILURE_ACTION)[keyof typeof ACCOUNT_FAILURE_ACTION];
 
-/** Only the OAuth server's definitive revocation answer removes a stored account. */
 export function accountFailureAction(error: AccountClientFailure): AccountFailureAction {
   return error._tag === "AccountClientError" && error.oauthError === "invalid_grant"
     ? ACCOUNT_FAILURE_ACTION.SIGN_OUT
     : ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT;
 }
 
-/** Whether the pinned auth provider has definitively rejected an access token. */
 export function accessTokenNeedsRefresh(error: AccountClientFailure): boolean {
   return (
     error._tag === "AccountClientError" &&
@@ -403,7 +331,6 @@ export function accessTokenNeedsRefresh(error: AccountClientFailure): boolean {
   );
 }
 
-/** Fixture and capture modes remain deterministic and never need an account. */
 export function accountGateOpen(
   runMode: { readonly requiresAccount: boolean },
   signedIn: boolean,
@@ -414,20 +341,12 @@ export function accountGateOpen(
 const DELETE_TIMEOUT_MS = 15_000;
 
 interface AccountDeletionOptions {
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The signed-in account's current access token. */
   accessToken: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
 }
 
-/**
- * A deletion that did not land, as the caller reads it: a refusal the
- * service answered, an expired access token among them as the 401 it is, or
- * a request that reached no answer this build could read.
- */
 function deletionFailure(failed: HostedFailure): AccountClientFailure {
   if (failed._tag === "HostedRefused") {
     return new AccountClientError({
@@ -446,15 +365,6 @@ function deletionFailure(failed: HostedFailure): AccountClientFailure {
   });
 }
 
-/**
- * Asks the hosted service to erase the signed-in account. The bearer token is
- * the whole request — the service resolves who to delete from it, so nothing
- * here can name a different account. The token is the one handed in and is
- * never renewed here: a refusal fails with an `AccountClientError`, an
- * expired access token carrying its 401, which is what lets the caller tell
- * an expired access token (refresh and retry) from a service that actually
- * said no.
- */
 export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("credentials/deleteHostedAccount")(
   function* (options: AccountDeletionOptions): Effect.fn.Return<void, AccountClientFailure> {
     const hosted = hostedClient({
@@ -469,23 +379,6 @@ export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("credentials/delete
   },
 );
 
-/**
- * One call made on a fiber of its own and waited for where it was asked for.
- * The revocation below runs as a failed attempt unwinds, where
- * `Effect.onError`'s cleanup is uninterruptible — and an uninterruptible
- * region is one nothing inside it may interrupt either, including the
- * deadline {@link timedRequest} races against its own request, which would
- * then never win and never end a hung revocation. The call is forked as a
- * daemon, and a fork is interruptible whatever the status of the fiber that
- * made it, so its deadline ends it exactly as it did when the request ran on a
- * fiber of its own, and the unwinding still waits for what it asked for.
- */
-/**
- * Ensures credentials rejected before sign-in completes do not outlive the
- * failed attempt. The revocation runs on the way out of any end the use did
- * not reach — a failure, a defect, or an interruption — because a refresh
- * token nobody holds is the same live credential however the attempt ended.
- */
 export function withIssuedAccountTokens<A, E>(options: {
   issue: Effect.Effect<AccountTokens, AccountClientFailure>;
   use: (tokens: AccountTokens) => Effect.Effect<A, E>;

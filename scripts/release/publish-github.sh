@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Publishes a manual macOS release from what pnpm release:macos just built.
-# The asset set is load-bearing on both ends and encoded here so a by-hand
-# release cannot break either: the version-free Vespin.dmg is what the website's
-# download link reaches through releases/latest, and the version-free
-# latest-mac.yml is the electron-updater manifest the app updates from — so
-# the release must end up a published, non-draft, non-prerelease one whose
-# tag matches the desktop version exactly, and it stays a draft until every
-# asset has finished uploading, because a release published mid-upload points
-# releases/latest at a manifest whose archive is still incomplete.
-
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/../lib/workspace.sh"
@@ -21,8 +11,6 @@ if [[ "$#" -ne 0 ]]; then
     exit 2
 fi
 
-# Every name the release reads from the build's own configuration, in one
-# node call: the version, then each asset's name, then the output directory.
 release_names=$(node --input-type=module -e "
 const { version } = JSON.parse(await (await import('node:fs/promises')).readFile('./apps/desktop/package.json', 'utf8'));
 const config = await import('./apps/desktop/scripts/release-config.mjs');

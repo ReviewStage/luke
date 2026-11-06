@@ -1,7 +1,3 @@
-/**
- * remote-surface.tsx -- a canvas a page running elsewhere is drawn on, here a dot where the pointer last went down, whose input goes on only while it is driven.
- */
-
 import {
   BUTTON_VARIANT,
   Button,

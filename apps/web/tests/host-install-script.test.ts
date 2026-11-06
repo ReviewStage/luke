@@ -9,21 +9,8 @@ import installScript from "../server/routes/hosts/install-script.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched } from "./support/platform-landing.js";
 
-/**
- * host-install-script.test.ts -- the install script the web service answers
- * at `/install.sh` names, as the origin its box enrolls against, the address
- * it was fetched from, so a Preview's install command pairs the box with that
- * Preview rather than production, and nothing in it is left unfilled.
- *
- * The request lands as the platform lands it, by the committed table, on the
- * route file itself, and a shell reads the origin out of the script it
- * answered. The web runtime the route is built on names a database, which
- * nothing here dials.
- */
-
 const PLACEHOLDER_DATABASE_URL = "postgresql://install:script@127.0.0.1:5432/app";
 
-/** An address a Preview answers on, apart from production's and its other ones. */
 const PREVIEW_ORIGIN = "https://vespin-git-feature-install-stage-review.vercel.app";
 
 beforeEach(() => {
@@ -46,7 +33,6 @@ test("the install script fetched from a Preview names that Preview as the origin
 
   const file = join(await temporaryDirectory(t, "install-script-"), "install.sh");
   writeFileSync(file, script);
-  // The script stops once it has defined what it carries, under the variable its own tests set.
   const origin = spawnSync("sh", ["-c", '. "$1"; printf %s "$ORIGIN"', "sh", file], {
     env: { PATH: process.env.PATH, APP_HOST_INSTALL_LIBRARY: "1" },
     encoding: "utf8",

@@ -12,12 +12,6 @@ import { useMemo, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * data-table.tsx -- a table sorted by its headings with rows that open, one
- * that sorts nothing, one with no rows, and a wide table scrolling sideways
- * in a narrow column.
- */
-
 interface Run {
   readonly id: string;
   readonly name: string;
@@ -52,7 +46,6 @@ const RUNS: readonly Run[] = [
 
 const column = createDataTableColumnHelper<Run>();
 
-/** The runs' columns, the name a button that opens its run where `onOpen` is given. */
 function runColumns(onOpen?: (run: Run) => void): DataTableColumns<Run> {
   return column.columns([
     column.accessor((run) => run.name, {
@@ -61,7 +54,6 @@ function runColumns(onOpen?: (run: Run) => void): DataTableColumns<Run> {
       sortFn: "text",
       sortDescFirst: true,
       cell: ({ row: { original: run } }) =>
-        // Note that the run's name is a button, so a keyboard opens the row the pointer presses.
         onOpen ? (
           <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onOpen(run)}>
             {run.name}
@@ -92,7 +84,6 @@ function runColumns(onOpen?: (run: Run) => void): DataTableColumns<Run> {
   ]);
 }
 
-/** A table that sorts nothing: its columns with no accessor. */
 const STATIC_COLUMNS = column.columns([
   column.display({ id: "name", header: "Run", cell: ({ row: { original: run } }) => run.name }),
   column.display({ id: "owner", header: "Owner", cell: ({ row: { original: run } }) => run.owner }),
@@ -110,7 +101,6 @@ const STATIC_COLUMNS = column.columns([
   }),
 ]);
 
-/** The longest runs first. */
 const LONGEST_FIRST: SortingState = [{ id: "minutes", desc: true }];
 
 function SortedRuns(): React.JSX.Element {

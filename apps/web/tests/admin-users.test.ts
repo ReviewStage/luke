@@ -7,15 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
-/**
- * admin-users.test.ts -- the roster names itself and its search before its
- * first answer lands, says it is loading, and takes typing then;
- * loaded, it counts and lists the accounts under the search, narrows them
- * at once as a maintainer types, and says no account matches in the table's
- * place when none does. The network, the HTTP boundary to the service, is a fake
- * that answers the roster's read or leaves it hanging.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ADA: AdminUserListRow = {
@@ -44,7 +35,6 @@ const GRACE: AdminUserListRow = {
   favorite: false,
 };
 
-/** A synthetic roster of two accounts, both listed. */
 function roster(overrides: Partial<AdminUserList> = {}): AdminUserList {
   return {
     generatedAt: Date.UTC(2026, 9, 14, 12),
@@ -76,7 +66,6 @@ function answer(body: AdminUserList): Response {
   });
 }
 
-/** The roster's page, signed in, with its read answered by `body`, or left hanging without one. */
 async function openUsers(body: AdminUserList | undefined): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     body === undefined ? new Promise(() => undefined) : Promise.resolve(answer(body)),
@@ -86,7 +75,6 @@ async function openUsers(body: AdminUserList | undefined): Promise<HTMLElement> 
   return page;
 }
 
-/** The roster's page with its first read held until the returned `land` answers it with `body`. */
 async function openUsersAnsweredLater(): Promise<{
   page: HTMLElement;
   land: (body: AdminUserList) => Promise<void>;
@@ -138,7 +126,6 @@ function searchBox(page: HTMLElement): HTMLInputElement {
   return box;
 }
 
-/** Types `words` into `box` the way React hears a keystroke. */
 function type(box: HTMLInputElement, words: string): void {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(box, words);
@@ -146,7 +133,6 @@ function type(box: HTMLInputElement, words: string): void {
   });
 }
 
-/** Each body row's account cell, in the words it reads. */
 function accounts(page: HTMLElement): string[] {
   return Array.from(
     page.querySelectorAll("tbody tr"),
@@ -161,7 +147,6 @@ test("before its first answer the roster names itself, says it is loading, and t
   expect(page.querySelector('[role="status"][aria-busy="true"]')?.textContent).toContain(
     "Reading users",
   );
-  // The roster's skeleton names no account.
   expect(page.querySelector("tbody a")).toBeNull();
   type(searchBox(page), "ada");
   expect(searchBox(page).value).toBe("ada");
@@ -248,7 +233,6 @@ test("under the roster, the sign-in methods count every account, whatever the se
 
   const headings = Array.from(page.querySelectorAll("h2"), (heading) => heading.textContent);
   expect(headings).toContain("Sign-in methods");
-  // A method nobody linked draws no bar.
   expect(page.textContent).toContain("Linked sign-in methods");
   expect(page.textContent).toContain("GitHubGoogle");
   expect(page.textContent).not.toContain("Other");

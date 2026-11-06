@@ -32,23 +32,6 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * hover-cards.tsx -- the words of a card hung in a pill's place: a head with
- * its glyph, line, and corner; notes wrapped and on one line faded at its
- * end; quieter rows under the name, one a press and one text; and a rule
- * before the rows it lists, every one, scrolling and fading past a few rather
- * than counting the rest, each row a button the pointer crosses onto the
- * card to press, rows that open nothing yet hang a card of their own, and a
- * long body that is no list scrolling the same way; and a card's figures under a rule, each label at the card's edge
- * and its count at the other; and each card's skeleton beside it, its glyph or
- * its mark in the loaded card's slot, so its head stands still as what it says
- * is read. Each card shows once the pointer rests on
- * its control or the keyboard reaches it, and stands while the pointer is on
- * the control, on the card, or between them: the catalog's own stand-in for
- * the linger an app gives its cards.
- */
-
-/** More agents than a card's list has height for, so the example scrolls. */
 const CATALOG_AGENTS = [
   "Billing after downgrade",
   "Rate limit search",
@@ -59,7 +42,6 @@ const CATALOG_AGENTS = [
   "Old onboarding copy",
 ] as const;
 
-/** A task's sub-tasks, each with its status, more than a card's list has height for. */
 const CATALOG_SUB_TASKS = [
   { name: "Write the invitation email", key: "ACME-43", status: TASK_STATUS.DONE },
   { name: "Expire invitations after a week", key: "ACME-44", status: TASK_STATUS.IN_PROGRESS },
@@ -68,14 +50,12 @@ const CATALOG_SUB_TASKS = [
   { name: "Document the invite API", key: "ACME-47", status: TASK_STATUS.BACKLOG },
 ] as const;
 
-/** A server's tools, each hanging what it does from a row that opens nothing. */
 const CATALOG_TOOLS = [
   { title: "List issues", summary: "List the team's issues." },
   { title: "Read an issue", summary: "Read one issue." },
   { title: "Comment", summary: "Comment on an issue." },
 ] as const;
 
-/** Whether the point `x`, `y` stands within the box spanning both rectangles, the gap between them included. */
 function withinBoth(x: number, y: number, one: DOMRect, other: DOMRect): boolean {
   return (
     x >= Math.min(one.left, other.left) &&
@@ -85,7 +65,6 @@ function withinBoth(x: number, y: number, one: DOMRect, other: DOMRect): boolean
   );
 }
 
-/** A control hanging `card` for itself while the pointer rests on it, on the card, or between them, or it has the keyboard's focus. */
 function Carded({ label, card }: { label: string; card: ReactNode }): React.JSX.Element {
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | undefined>(undefined);
@@ -95,21 +74,18 @@ function Carded({ label, card }: { label: string; card: ReactNode }): React.JSX.
     if (anchor === undefined) return;
     const holds = (node: EventTarget | null) =>
       node instanceof Node && (anchor.contains(node) || hung.current?.contains(node) === true);
-    // Note that the pointer leaving lets a card go only while the keyboard does not hold it.
     const follow = (event: PointerEvent) => {
       const at = hung.current?.getBoundingClientRect();
       if (at === undefined || holds(document.activeElement)) return;
       if (!withinBoth(event.clientX, event.clientY, anchor.getBoundingClientRect(), at))
         setAnchor(undefined);
     };
-    // Note that focus let fall to nothing, as a press on the card's words drops it, leaves the pointer to decide.
     const refocus = (event: FocusEvent) => {
       if (event.relatedTarget !== null && !holds(event.relatedTarget)) setAnchor(undefined);
     };
     const dismiss = (event: KeyboardEvent) => {
       if (event.key === "Escape") setAnchor(undefined);
     };
-    // Note that focus and keys are heard at the document, because the card is portaled outside the control.
     document.addEventListener("pointermove", follow);
     document.addEventListener("focusout", refocus);
     document.addEventListener("keydown", dismiss);
@@ -302,7 +278,6 @@ function HoverCards(): React.JSX.Element {
                   label="Created by Sam Rivera · 3d ago"
                 />
                 <HoverCardRule />
-                {/* Note that the list holds more rows than its height, so it scrolls and fades rather than counting the rest. */}
                 <HoverCardList label="Agents">
                   <li>
                     <HoverCardRow
@@ -387,7 +362,6 @@ function HoverCards(): React.JSX.Element {
               <HoverCard>
                 <HoverCardHead glyph={<PinIcon />} name="Linear" sub="7 tools" />
                 <HoverCardRule />
-                {/* Note that a body that is no list, as a server's tools are, scrolls and fades as a list does. */}
                 <HoverCardScroll>
                   {CATALOG_AGENTS.map((name) => (
                     <HoverCardRow key={name} glyph={<DocumentIcon />} label={name} />

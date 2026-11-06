@@ -13,28 +13,14 @@ import { type RefObject, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * attachment-chips.tsx -- a row of files coming along with a message:
- * pictures at their own shapes, a tall phone capture narrow and a panorama
- * cropped at the wide bound, files drawn by name and size, one with nothing
- * to open, a long name cut short, and the way off each, unavailable while busy,
- * each file taken off scaling out under the row's `ListMotion`;
- * then the same chips in a narrow column, a call's pictures still read,
- * gone, and not kept, and files going up, at a share and with none, which
- * land on a press, each taking its check.
- */
-
-/** A synthetic picture drawn in place, so the catalog renders offline. */
 const PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#7aa7f4"/><stop offset="1" stop-color="#3d5ac8"/></linearGradient></defs><rect width="64" height="48" fill="url(#g)"/><path d="M0 40l18-14 12 10 14-12 20 16v8H0z" fill="#fff8"/></svg>',
 )}`;
 
-/** A tall phone capture, drawn in place: it stands narrow, cropped at the chip's narrow bound. */
 const PHONE_PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 96"><rect width="45" height="96" fill="#f4efe6"/><rect x="4" y="10" width="26" height="4" rx="1" fill="#2b2b2b"/><rect x="4" y="22" width="37" height="18" rx="2" fill="#d9d2c5"/><rect x="4" y="46" width="37" height="22" rx="3" fill="#fff" stroke="#d9d2c5"/></svg>',
 )}`;
 
-/** A panorama, drawn in place: it stands wide, cropped at the chip's wide bound. */
 const WIDE_PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48"><defs><linearGradient id="w" x2="1"><stop offset="0" stop-color="#f4b26a"/><stop offset="1" stop-color="#c8513d"/></linearGradient></defs><rect width="160" height="48" fill="url(#w)"/><path d="M0 38l30-16 26 12 34-20 40 18 30-8v24H0z" fill="#0004"/></svg>',
 )}`;
@@ -59,7 +45,6 @@ const FILES: readonly SampleFile[] = [
   { name: "trace.txt", openable: false },
 ];
 
-/** The row's chips, each followed by its file's name, in a component of their own under the row's `ListMotion`, whose context `useLeaving` reads, so a file taken off scales out. */
 function AttachmentList({
   row,
   files,
@@ -93,7 +78,6 @@ function AttachmentList({
   );
 }
 
-/** The sample row: a press on a chip says which file it opened, and each one's way off takes it off. */
 function AttachmentRow({ busy }: { busy: boolean }): React.JSX.Element {
   const [files, setFiles] = useState(FILES);
   const [opened, setOpened] = useState<string>();
@@ -114,7 +98,6 @@ function AttachmentRow({ busy }: { busy: boolean }): React.JSX.Element {
   );
 }
 
-/** Files on their way up: one at a known share, one whose send says none; a press lands them. */
 function UploadingRow(): React.JSX.Element {
   const [landed, setLanded] = useState(false);
   const state = landed ? ATTACHMENT_CHIP_STATE.READY : ATTACHMENT_CHIP_STATE.UPLOADING;

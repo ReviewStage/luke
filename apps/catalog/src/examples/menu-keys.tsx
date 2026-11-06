@@ -3,11 +3,6 @@ import { MenuKeys, menuKey } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * menu-keys.tsx -- the foot a list keyed from the caret names its keys with:
- * the `@` list's, and a list that hears one key fewer.
- */
-
 function MenuKeysExample(): React.JSX.Element {
   return (
     <>

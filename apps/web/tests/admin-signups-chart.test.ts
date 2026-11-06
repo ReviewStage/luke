@@ -5,19 +5,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 
-/**
- * admin-signups-chart.test.ts -- a signups chart with accounts in its window
- * draws them rather than the line saying there are none: each day named on
- * its axis and each day's count read in the tooltip, today's marked as a day
- * still running; and the sign-in methods chart draws each linked method with
- * its count, leaving out a method nobody has linked.
- * jsdom measures nothing, so a chart draws at the size it starts at before
- * its container is measured.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A synthetic window of three days, read at noon on the last. */
 const DAILY = [
   { day: "2026-10-13", count: 1 },
   { day: "2026-10-14", count: 0 },
@@ -47,14 +36,12 @@ function renderSignupsChart(): HTMLElement {
   );
 }
 
-/** The chart's plot, the one stop a keyboard reader lands on. */
 function plot(page: HTMLElement): SVGElement {
   const surface = page.querySelector<SVGElement>("svg[tabindex='0']");
   if (surface === null) throw new Error("the chart drew no plot");
   return surface;
 }
 
-/** What the tooltip says now: nothing while it is hidden. */
 function tooltipText(page: HTMLElement): string {
   return page.querySelector(".recharts-tooltip-wrapper")?.textContent ?? "";
 }

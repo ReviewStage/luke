@@ -35,22 +35,14 @@ import {
 } from "./client.js";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
 
-/** Why a sign-in again that landed on another account is refused. */
 const OTHER_ACCOUNT = `That sign-in is a different ${PRODUCT_NAME} account.`;
 
-/** Why a session hand-off from a browser signed in as someone else is refused. */
 const OTHER_BROWSER_ACCOUNT = `That browser is signed in to a different ${PRODUCT_NAME} account.`;
 
-/** The path the hosted authorize route sends the code back to. */
 const CALLBACK_PATH = "/callback";
 
-/** The path the hand-off page sends the session code back to. */
 const SESSION_CALLBACK_PATH = "/session";
 
-/**
- * The landing cards this sign-in leaves the browser on. Every string is fixed
- * by the build; nothing the redirect carried is ever interpolated.
- */
 const SIGN_IN_PAGES = {
   granted: {
     badge: "Signed in",
@@ -64,12 +56,6 @@ const SIGN_IN_PAGES = {
   },
 } as const;
 
-/**
- * The landing cards the session hand-off leaves the browser on. A sign-in
- * that continues into the hand-off ends on these rather than on the
- * sign-in's own, so a hand-off that fails says the account is signed in
- * all the same.
- */
 const SESSION_PAGES = {
   granted: SIGN_IN_PAGES.granted,
   notGranted: {
@@ -79,10 +65,6 @@ const SESSION_PAGES = {
   },
 } as const;
 
-/**
- * Whose mark the landing card carries. Only the two identity providers have
- * one; anything else draws our own mark alone rather than a wrong badge.
- */
 function connectionSource(provider: AccountProvider): LoopbackConnectionSource | undefined {
   if (provider === LOOPBACK_CONNECTION_SOURCE.GOOGLE) return LOOPBACK_CONNECTION_SOURCE.GOOGLE;
   if (provider === LOOPBACK_CONNECTION_SOURCE.GITHUB) return LOOPBACK_CONNECTION_SOURCE.GITHUB;
@@ -95,19 +77,13 @@ interface AccountSessionStore {
   clearAccount(): Effect.Effect<AccountSnapshot>;
 }
 
-/** A sign-in the developer withdrew, or a later attempt took the generation from: an ordinary end, never reported. */
 class SignInCanceled extends Data.TaggedError("SignInCanceled") {}
 
-/**
- * A sign-in that could not be completed: `failure` is the key the panel says
- * it in, and `message` the consent's own reason, for the host's log alone.
- */
 export class SignInFailed extends Data.TaggedError("SignInFailed")<{
   readonly failure: SignInFailure;
   readonly message: string;
 }> {}
 
-/** The failure a trip's refusal stands for: the consent's own where it named one, else that it did not finish. */
 function signInFailed(outcome: {
   reason: string;
   failure?: SignInFailure | undefined;
@@ -118,24 +94,16 @@ function signInFailed(outcome: {
   });
 }
 
-/** A deletion asked for with no stored credential to make it under. */
 export class NoStoredAccount extends Data.TaggedError("NoStoredAccount")<{
   readonly message: string;
 }> {}
 
-/**
- * A step of the sign-out whose failure is written down and never held against
- * the sign-out itself: an account that could not tell the service it was
- * leaving still leaves this machine.
- */
 function reportingFailure<A, E>(
   effect: Effect.Effect<A, E>,
   what: string,
   report: (line: string) => void,
 ): Effect.Effect<void> {
   return Effect.catchCause(effect, (cause) =>
-    // An interruption is not a failure of the step and is never written down
-    // as one: it is the caller ending this fiber, and it stands.
     Cause.hasInterruptsOnly(cause)
       ? Effect.interrupt
       : Effect.sync(() => {
@@ -150,23 +118,13 @@ interface AccountSessionManagerOptions {
   hostedServiceBaseUrl: string;
   requiresAccount: boolean;
   openExternal: (url: string) => Promise<void>;
-  /**
-   * Stands up each consent trip: the desktop's loopback
-   * (`@repo/credentials/node`), handed in so this manager reaches no Node.
-   */
   openConsent: OpenConsent;
-  /** Where a step's failure that is never held against the sign-out is written down. */
   report: (line: string) => void;
   startCapabilities: Effect.Effect<void>;
   stopCapabilities: Effect.Effect<void>;
 }
 
 export class AccountSessionManager {
-  /**
-   * The manager as an effect that builds its own `PubSub`, since Effect gives
-   * it no constructor that is not itself an effect: `compose-account.ts`
-   * yields one per host lifetime rather than reaching for `new` outside a run.
-   */
   static make(options: AccountSessionManagerOptions): Effect.Effect<AccountSessionManager> {
     return Effect.map(
       PubSub.unbounded<AccountSnapshot>(),
@@ -175,23 +133,9 @@ export class AccountSessionManager {
   }
 
   readonly #options: AccountSessionManagerOptions;
-  /** One refresh however many callers ask for it at once; every ask joins the flight already under way. */
   readonly refreshOnce: () => Effect.Effect<void>;
-  /**
-   * One refresh grant however many callers ask for it at once, `refresh`'s
-   * own included. Note that two grants on one refresh token are a replay to
-   * Better Auth, which answers the second by revoking every token the account
-   * holds on this client, so no second flight may ever start beside this one.
-   */
   readonly renewOnce: () => Effect.Effect<void>;
   readonly #changesPubSub: PubSub.PubSub<AccountSnapshot>;
-  /**
-   * Every snapshot this session settles on, in order, as the subscription a
-   * subscriber's own fiber pumps rather than a callback this class runs: the
-   * subscribe is the acquire (`PubSub.subscribe`, a scoped effect) and the
-   * subscriber's scope closing is the release, so nothing here holds a
-   * handle to give back.
-   */
   readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
@@ -202,9 +146,7 @@ export class AccountSessionManager {
   #cancelSignIn: (() => void) | undefined;
   #sessionRunning: Fiber.Fiber<LoopbackConsentOutcome<AccountSnapshot>> | undefined;
   #cancelSession: (() => void) | undefined;
-  /** The sign-out a refused renewal started, which `refresh` and a sign-in wait on and no renewal does. */
   #signingOut: Fiber.Fiber<AccountSnapshot> | undefined;
-  /** How many cancels were pressed while a sign-in waited on `#signingOut`. */
   #waitCancels = 0;
 
   private constructor(
@@ -236,13 +178,6 @@ export class AccountSessionManager {
 
   signOut(options: { revokeRemote?: boolean } = {}): Effect.Effect<AccountSnapshot> {
     return Effect.gen({ self: this }, function* () {
-      // Everything up to the cleared account is one uninterruptible step, as
-      // the promise it replaces was by construction: the departure is reported
-      // before the credential is cleared and the cadences are disarmed, so a
-      // fiber cut between them — a Gateway request whose connection closed, a
-      // quit — would leave a panel saying signed out over a credential still
-      // on disk and loops still running. The revocation after it is the
-      // remote's own business and may be cut like any other call.
       const stored = yield* Effect.uninterruptible(this.#clearAccount());
       if (options.revokeRemote && stored?.refreshToken) {
         yield* reportingFailure(
@@ -262,7 +197,6 @@ export class AccountSessionManager {
     });
   }
 
-  /** The departure as this machine keeps it, answering the account that left. */
   #clearAccount(): Effect.Effect<StoredAccount | undefined> {
     return Effect.gen({ self: this }, function* () {
       this.#generation += 1;
@@ -270,9 +204,6 @@ export class AccountSessionManager {
       this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
       yield* this.#publishChange();
       const stored = yield* this.#options.store.readAccount();
-      // The clearing and the capability stop run together rather than in a
-      // fixed order: what the sign-out guarantees is that both have settled
-      // before the account it reports is the cleared one.
       const [cleared] = yield* Effect.all(
         [this.#options.store.clearAccount(), this.#options.stopCapabilities],
         { concurrency: 2 },
@@ -320,24 +251,10 @@ export class AccountSessionManager {
       }
       if (!accessTokenNeedsRefresh(identity.failure)) return;
       yield* this.renewOnce();
-      // Note that the launch's refresh holds nothing a teardown needs, so it
-      // alone waits for the sign-out a refused renewal started.
       if (this.#signingOut) yield* Fiber.await(this.#signingOut);
     });
   }
 
-  /**
-   * The refresh grant, for a caller whose token the service already refused
-   * (RFC 6749 section 1.5). The refusal is the verdict, so no userinfo read
-   * comes first: Better Auth answers a token it no longer holds with 400
-   * `invalid_request` rather than a 401, and a read taking that as a token
-   * still good would leave a dead one standing on every call after it.
-   *
-   * A refusal that signs out starts the sign-out and does not wait on it,
-   * because a renewal's caller may hold a lock the sign-out's capability stop
-   * needs: the Plans read holds the tasks lock while it waits here, and
-   * `tasks.reset` waits on that lock, so waiting would deadlock both.
-   */
   #renew(): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
@@ -354,9 +271,6 @@ export class AccountSessionManager {
         return;
       }
       const tokens = renewed.success;
-      // The renewed tokens are already stored by the time the identity read
-      // below is made, so a read that fails leaves the account signed in on
-      // them rather than undoing the renewal; it is written down, not held.
       yield* reportingFailure(
         Effect.gen({ self: this }, function* () {
           if (!(yield* this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
@@ -371,29 +285,10 @@ export class AccountSessionManager {
     });
   }
 
-  /**
-   * The one trip, as the fiber every concurrent ask joins. The trip is forked
-   * rather than run in the asking fiber, so an ask that is itself interrupted
-   * — a Gateway request whose connection closed — leaves the consent standing
-   * for the developer's own press rather than ending it, exactly as the held
-   * promise it replaces did.
-   */
   beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, SignInFailed> {
-    // The decision, the fork, and the store of the fiber are one
-    // uninterruptible step, the same guarantee `singleFlightEffect`'s own
-    // semaphore states: a second ask landing between them would start a second
-    // trip, and an interruption between them would leave the account signing
-    // in with no fiber behind it and a cancel that does nothing. Only the join
-    // is interruptible, and an ask interrupted there leaves the consent
-    // standing for the developer's own press, exactly as the held promise did.
     return Effect.uninterruptibleMask((restore) =>
       Effect.gen({ self: this }, function* () {
-        // Note that a sign-out a refused renewal started is let finish first,
-        // because its capability stop and cleared account would otherwise
-        // land over the session this sign-in starts.
         if (this.#signingOut) {
-          // A cancel pressed during the wait withdraws every press waiting,
-          // and still reaches a consent already standing, a sign-in again's.
           const cancels = this.#waitCancels;
           const standing = this.#cancelSignIn;
           const cancel = () => {
@@ -420,19 +315,7 @@ export class AccountSessionManager {
     );
   }
 
-  /**
-   * The trip taken again over a session that stands, for a grant only a new
-   * sign-in renews: GitHub's, which the service reads repositories with. The
-   * standing session is kept until the new one lands, so a withdrawn or failed
-   * trip leaves the developer signed in as before, and a trip that lands on
-   * another account is refused, its tokens revoked, rather than swapping the
-   * person under the window. Answers whether a new session landed through the
-   * provider asked for, so an ask for another provider while one runs
-   * answers no rather than joining it; over no session it is the ordinary
-   * sign-in.
-   */
   signInAgain(provider: AccountProvider): Effect.Effect<boolean, SignInFailed> {
-    // The same one uninterruptible decide-fork-store as `beginSignIn`'s.
     return Effect.uninterruptibleMask((restore) =>
       Effect.gen({ self: this }, function* () {
         if (this.#account.status !== ACCOUNT_STATUS.SIGNED_IN) {
@@ -473,7 +356,6 @@ export class AccountSessionManager {
     );
   }
 
-  /** Lets a trip's cancel go, unless a later trip's now stands in its place. */
   #dropCancel(cancel: () => void): void {
     if (this.#cancelSignIn === cancel) this.#cancelSignIn = undefined;
   }
@@ -490,9 +372,6 @@ export class AccountSessionManager {
         return this.#account;
       }
       if (this.#isCurrent(generation)) yield* this.signOut();
-      // A withdrawn sign-in — the developer's own press, or a later attempt
-      // taking the generation out from under this one — is an ordinary end.
-      // Anything else is a failure the panel has to be able to report.
       if (outcome.reason === LOOPBACK_CONSENT_CANCELED) return this.#account;
       return yield* Effect.fail(signInFailed(outcome));
     }).pipe(
@@ -505,15 +384,7 @@ export class AccountSessionManager {
     );
   }
 
-  /**
-   * A session of the Mac's own asked for apart from a sign-in: for an
-   * account signed in before the Mac held one, or one whose session the
-   * service no longer takes. Opens the hand-off page in the browser, which
-   * signs a signed-out browser in first, and answers whether a session
-   * landed; an ask while one is under way joins it.
-   */
   obtainSession(): Effect.Effect<boolean, SignInFailed> {
-    // The same one uninterruptible decide-fork-store as `beginSignIn`'s.
     return Effect.uninterruptibleMask((restore) =>
       Effect.gen({ self: this }, function* () {
         if (this.#account.status !== ACCOUNT_STATUS.SIGNED_IN) return false;
@@ -528,14 +399,6 @@ export class AccountSessionManager {
     );
   }
 
-  /**
-   * Where a sign-in sends the browser once its tokens are stored: on to the
-   * hand-off page, through a session trip whose page is handed to the
-   * sign-in's own redirect rather than opened in a tab of its own, so the
-   * whole sign-in is one trip through the browser. An account that already
-   * holds a session, a trip already under way, and a trip that could not
-   * listen all answer nothing, and the sign-in ends on its own card.
-   */
   #continueToSession(): Effect.Effect<string | undefined> {
     return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
@@ -549,7 +412,6 @@ export class AccountSessionManager {
     });
   }
 
-  /** Forks one session trip under the generation it was asked in, and holds it until it ends. */
   #startSession(
     generation: number,
     openExternal: (url: string) => void | Promise<void>,
@@ -599,14 +461,6 @@ export class AccountSessionManager {
     });
   }
 
-  /**
-   * Trades the hand-off's code for the Mac's session and keeps it beside the
-   * tokens. A session for anyone but the stored account is refused, since a
-   * browser signed in as someone else hands that someone's session over; an
-   * account stored before it named an id is matched by address and takes the
-   * session's id with it. A session nobody keeps — refused, or landed after a sign-out — is ended
-   * on the service rather than left live.
-   */
   #exchangeSession(
     generation: number,
     input: LoopbackExchange,
@@ -650,8 +504,6 @@ export class AccountSessionManager {
   ): LoopbackConsent<AccountSnapshot> {
     return this.#options.openConsent<AccountSnapshot>({
       callbackPath: CALLBACK_PATH,
-      // The hosted authorize route reads which provider was chosen back off
-      // the state it issued, so the choice rides in front of the entropy.
       statePrefix: provider,
       source: connectionSource(provider),
       pages: SIGN_IN_PAGES,
@@ -671,12 +523,6 @@ export class AccountSessionManager {
     });
   }
 
-  /**
-   * Trades the code for tokens and stands the session up on them. Everything
-   * the tokens are for happens inside the issue-and-use guard, so a sign-in
-   * that cannot be completed revokes what it was just issued rather than
-   * leaving a live refresh token nobody holds.
-   */
   #exchange(
     provider: AccountProvider,
     generation: number,
@@ -699,11 +545,7 @@ export class AccountSessionManager {
               new SignInFailed({ failure: SIGN_IN_FAILURE.UNFINISHED, message: OTHER_ACCOUNT }),
             );
           }
-          // Note that a sign-in again takes the generation from the session it
-          // replaces, so a refresh of the old one still out stores nothing over it.
           const current = options.again ? ++this.#generation : generation;
-          // The same person's session outlives a sign-in again, which renews
-          // only the OAuth grant.
           const session = replaced?.sessionToken ? { sessionToken: replaced.sessionToken } : {};
           if (!(yield* this.#storeCurrent(current, { ...tokens, ...identity, ...session }))) {
             return yield* Effect.fail(new SignInCanceled());
@@ -754,14 +596,12 @@ export class AccountSessionManager {
   }
 }
 
-/** Whether an identity is the stored account's person: by the service's id where both carry one, else by email. */
 function sameAccount(stored: StoredAccount, identity: AccountIdentity): boolean {
   return stored.id !== undefined && identity.id !== undefined
     ? stored.id === identity.id
     : stored.email === identity.email;
 }
 
-/** Whether the stored identity already says all the service does; a stored account missing the service's id is not, so a refresh records it. */
 function sameIdentity(stored: StoredAccount, identity: AccountIdentity): boolean {
   return (
     (identity.id === undefined || identity.id === stored.id) &&

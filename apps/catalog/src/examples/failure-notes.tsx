@@ -1,11 +1,3 @@
-/**
- * failure-notes.tsx -- a failure's line with Retry after its words, one with
- * no Retry, a tool's error of several lines, long words in a column
- * narrower than the line, one standing in a list's place beside a note
- * line, at the rows' inset, and one that is a transcript's history, drawn
- * the same but no alert.
- */
-
 import {
   FAILURE_NOTE_LOOK,
   FAILURE_NOTE_TIME,
@@ -18,7 +10,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function FailureNotes(): React.JSX.Element {

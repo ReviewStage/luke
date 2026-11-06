@@ -7,17 +7,9 @@ import { Effect } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { startWebSentry } from "../src/app/web-sentry";
 
-/**
- * The tab reports to Sentry only where its build carries a DSN, under the
- * deployment's environment and release and the desktop's share of traces;
- * what is reported before the SDK's chunk lands waits for it.
- */
-
-// Nothing leaves the test: whatever the SDK sends is kept here and answered.
 const { sentBodies } = vi.hoisted(() => {
   const sentBodies: string[] = [];
   globalThis.fetch = async (_input, init) => {
-    // Note that the SDK posts each envelope as its text, uncompressed.
     if (init?.body !== undefined && init.body !== null) sentBodies.push(String(init.body));
     return new Response("{}", { status: 200 });
   };
@@ -34,7 +26,6 @@ afterEach(async () => {
   sentBodies.length = 0;
 });
 
-/** The exceptions' messages the SDK sent, read from the envelopes it posted. */
 function sentExceptions(): string[] {
   return sentBodies.flatMap((body) =>
     body
@@ -65,12 +56,9 @@ test("a build with a DSN starts the SDK under the deployment's environment and r
   assert.equal(options?.dsn, DSN);
   assert.equal(options?.environment, "preview");
   assert.equal(options?.release, "abc123");
-  // Sentry's default data collection, as the desktop's and the service's: the
-  // SDK's own `dataCollection` (v11's successor to `sendDefaultPii`), widened by nothing here.
   assert.equal(options?.dataCollection, undefined);
 });
 
-/** A refusal as the browser says it, which jsdom does not construct itself. */
 function refusal(effectiveDirective: string, blockedURI: string, sourceFile = ""): Event {
   return Object.assign(new Event("securitypolicyviolation"), {
     effectiveDirective,
@@ -80,12 +68,10 @@ function refusal(effectiveDirective: string, blockedURI: string, sourceFile = ""
 }
 
 test("each kind of request the page's policy refuses is sent once as a warning, by its directive and origin alone, however often the SDK starts", async () => {
-  // A tab whose app mounted, closed, and mounted again starts the SDK twice.
   await startWebSentry(PRODUCTION).settled;
   await Sentry.getClient()?.close();
   await startWebSentry(PRODUCTION).settled;
   const sent: { message: string | undefined; level: string | undefined }[] = [];
-  // Read before Sentry's own deduplication, which would hide a second listener's copy.
   Sentry.getClient()?.on("preprocessEvent", (event) => {
     sent.push({ message: event.message, level: event.level });
   });
@@ -95,7 +81,6 @@ test("each kind of request the page's policy refuses is sent once as a warning, 
   document.dispatchEvent(refusal("connect-src", socket));
   document.dispatchEvent(refusal("script-src-elem", "inline"));
   document.dispatchEvent(refusal("img-src", "not a url?token=t"));
-  // The same origin under another directive is another kind, and so is another origin under the same.
   document.dispatchEvent(refusal("img-src", socket));
   document.dispatchEvent(refusal("connect-src", "wss://other.example/socket"));
   await Sentry.flush(1_000);
@@ -145,7 +130,6 @@ test("a refusal of a browser extension's address, or of what its own script did,
 
 test("a refusal dropped because the early reports were full is sent when it comes again", async () => {
   const sentry = startWebSentry(PRODUCTION);
-  // A tab failing in a loop while the chunk loads fills what is kept for it.
   for (let index = 0; index < 20; index += 1) sentry.reportBlankTab(new Error(`blank ${index}`));
   document.dispatchEvent(refusal("connect-src", "wss://crowded.example/socket"));
   await sentry.settled;
@@ -161,7 +145,6 @@ test("a refusal dropped because the early reports were full is sent when it come
 
 test("a refusal said before the SDK's chunk lands is sent once it does", async () => {
   const sentry = startWebSentry(PRODUCTION);
-  // Said in the same turn the tab started in, long before the chunk could land.
   document.dispatchEvent(refusal("connect-src", "wss://early.example/socket?token=t"));
   await sentry.settled;
   await Sentry.flush(1_000);
@@ -196,7 +179,6 @@ test("each page load and navigation, and the errors under it, are named by the k
   history.replaceState(null, "", "/acme/plan/0b805267-0061-4b69-8e2c-964920ec4a30");
   const named: string[] = [];
   const transactions: (string | undefined)[] = [];
-  // Each navigation follows a press, as a link's does; one with none this soon is told as a redirect.
   const navigate = (path: string) => {
     document.dispatchEvent(new MouseEvent("click"));
     history.pushState(null, "", path);

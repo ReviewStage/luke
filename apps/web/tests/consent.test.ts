@@ -2,21 +2,7 @@
 import { act } from "react";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 
-/**
- * consent.test.ts -- an authorization from a client that is not trusted stops
- * on the consent page, which names the client, the account, a line for each
- * scope, and where the answer goes, and sends nothing until the member
- * answers: Allow accepts, and Deny refuses and follows the server to the
- * client's redirect. And a sign-in page whose `state` names no provider offers
- * both, each sign-in carrying the signed authorization so it resumes. The
- * pages run as they do in the browser, each mounted on its own `#root`; the
- * network, the HTTP boundary to Better Auth, is a fake, and the page leaving
- * is read off jsdom's report that it cannot navigate, which names no address,
- * so the address left for is the fake server's `access_denied` redirect.
- */
-
 declare global {
-  /** The page's own jsdom, which vitest's jsdom environment sets on the global. */
   var jsdom: {
     readonly virtualConsole: { on(event: string, listen: (error: Error) => void): void };
   };
@@ -24,13 +10,8 @@ declare global {
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** Every root the pages mount themselves on, to unmount once each test ends. */
 const mounted = vi.hoisted(() => ({ roots: [] as Array<{ unmount(): void }> }));
 
-// Note that a page mounts its own root as its module loads, so React's
-// `createRoot` is wrapped to keep each one, and nothing else about it
-// changes: a pressed button stays busy after the test ends, and its settle
-// would otherwise draw a moment later, after jsdom has gone.
 vi.mock("react-dom/client", async (importOriginal) => {
   const client = await importOriginal<typeof import("react-dom/client")>();
   return {
@@ -51,14 +32,12 @@ const PATH = {
 } as const;
 
 const ACCOUNT = { id: "account-1", name: "Ada", email: "ada@example.com" };
-/** Where the server sends each answer: the client's redirect, with a code or with `access_denied`. */
 const ANSWERED = {
   ALLOWED: "http://127.0.0.1:4810/callback?code=code-for-the-client&state=client-state",
   DENIED:
     "http://127.0.0.1:4810/callback?error=access_denied&error_description=User+denied+access&state=client-state",
 } as const;
 
-/** An authorization as the server signs it onto the consent and sign-in pages, for a client whose `state` names no provider. */
 function signedAuthorization(): string {
   const query = new URLSearchParams({
     response_type: "code",
@@ -73,17 +52,14 @@ function signedAuthorization(): string {
   return query.toString();
 }
 
-/** One request the page sent: its path and its JSON body. */
 interface Sent {
   readonly path: string;
   readonly body: Record<string, unknown> | undefined;
 }
 
 let sent: Sent[] = [];
-/** How many times the page tried to leave. */
 let leaves = 0;
 
-/** Better Auth's answers, by path and body; every other request hangs. */
 function answer(path: string, body: Record<string, unknown> | undefined): Response | undefined {
   if (path === PATH.SESSION) {
     return Response.json({ session: { id: "session-1", userId: ACCOUNT.id }, user: ACCOUNT });
@@ -98,7 +74,6 @@ function answer(path: string, body: Record<string, unknown> | undefined): Respon
   return undefined;
 }
 
-/** `page` as the browser opens it at `address`, against the fake. */
 async function openPage(page: "consent" | "sign-in", address: string): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = input instanceof Request ? input : undefined;
@@ -127,7 +102,6 @@ function buttonNamed(page: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
-/** The page's title, once it says `title`. */
 async function titled(page: HTMLElement, title: string): Promise<void> {
   await vi.waitFor(() => expect(page.querySelector("h1")?.textContent).toBe(title));
 }
@@ -137,8 +111,6 @@ function postedTo(path: string): Sent[] {
 }
 
 beforeAll(() => {
-  // Note that jsdom does not navigate: it reports each attempt on its own
-  // console, which the environment exposes as `jsdom`.
   globalThis.jsdom.virtualConsole.on("jsdomError", (error) => {
     if (error.message.includes("navigation")) leaves += 1;
   });

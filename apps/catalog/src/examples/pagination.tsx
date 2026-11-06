@@ -2,17 +2,10 @@ import { GAP, Pagination, Stack } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * pagination.tsx -- numbered pages at either end and in the middle of a long
- * run, a few pages that all fit, and steps that say where they go.
- */
-
-/** A synthetic page's address. */
 function pageHref(page: number): string {
   return `#page-${page}`;
 }
 
-/** Page `current` of `count`, with a step to either side where there is one. */
 function Pages({ current, count }: { current: number; count: number }): React.JSX.Element {
   return (
     <Pagination

@@ -23,12 +23,10 @@ tester.run("no-focused-or-skipped-test", noFocusedOrSkippedTestRule, {
   valid: [
     { code: 'it.effect("answers", () => Effect.void);', filename: TEST_FILE },
     { code: 'test.each([1, 2])("takes %d", () => {});', filename: TEST_FILE },
-    // A platform's gate is a condition, not a weakening.
     {
       code: 'describe.skipIf(process.platform !== "darwin")("on a Mac", () => {});',
       filename: TEST_FILE,
     },
-    // A skip that is no test declaration's.
     { code: "context.skip(); reader.skip(4);", filename: TEST_FILE },
   ],
   invalid: [

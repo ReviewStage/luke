@@ -1,13 +1,3 @@
-/**
- * release-layout.test.ts -- a release laid out and packed as `package.ts` packs one passes the checks a host makes before it switches to it: unpacked by the system's `tar`, its `vespin-host/bin/vespin-host` is a file it may run, and its `version` answers the release's.
- *
- * Those checks are `host-update.ts`'s: `tar -xf` into a staging folder,
- * `stat` of `vespin-host/bin/vespin-host` as a file with an execute bit, and
- * its `version` run with nothing on stdin. The bundles are stand-ins, the daemon's one that
- * answers `version` as the built one does, on the Node running this test in
- * place of the pinned one `package.ts` fetches; the command is the real one.
- */
-
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +9,6 @@ const VERSION = "0.8.0";
 
 const folders: string[] = [];
 
-/** A folder of the test's own. */
 const folder = () => {
   const made = mkdtempSync(join(tmpdir(), "vespin-host-release-"));
   folders.push(made);

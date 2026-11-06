@@ -6,15 +6,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 
-/**
- * admin-activity-chart.test.ts -- the Overview's stacked activity chart names
- * every feature it stacks in its legend, and a reader stepping through the
- * days by keyboard reads each feature's count that day in the tooltip, today's
- * marked as a day still running; a window with no activity says so instead
- * of drawing a flat stack. jsdom measures nothing, so the chart draws at the
- * size it starts at, which is room enough for two days.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const GENERATED_AT = Date.UTC(2026, 9, 15, 12);

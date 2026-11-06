@@ -1,7 +1,3 @@
-/**
- * pane-pins.tsx -- a pane floated by its toggle and put away by a press anywhere outside it: a press inside the pane, or on the strip that holds its toggle, is pinned as its own and leaves it standing.
- */
-
 import {
   BUTTON_VARIANT,
   Button,
@@ -20,7 +16,6 @@ import { CatalogSection } from "../section";
 function PanePins(): React.JSX.Element {
   const [floating, setFloating] = useState(false);
   const [presses, setPresses] = useState(0);
-  // Whether the press the document hears next was pinned on its way up.
   const pinned = useRef(false);
   useEffect(() => {
     if (!floating) return;

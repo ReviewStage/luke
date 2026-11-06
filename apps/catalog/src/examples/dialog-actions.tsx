@@ -13,14 +13,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * dialog-actions.tsx -- a dialog's one foot: Cancel and then the act, red
- * for an act that destroys and in the accent otherwise, or Done alone for a
- * dialog that only shows; each opened from its button and put away by its
- * answers.
- */
-
-/** A dialog whose foot asks Cancel or the act, in `tone`. */
 function Asking({
   label,
   title,
@@ -53,7 +45,6 @@ function Asking({
   );
 }
 
-/** A dialog that only shows a result, put away by its Done. */
 function Showing(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);

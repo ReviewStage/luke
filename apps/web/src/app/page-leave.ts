@@ -1,50 +1,22 @@
-/**
- * page-leave.ts -- the tab's own ways out of the panel, closed, reloaded, or sent elsewhere, asking first while a page or a description holds unsaved work.
- *
- * The panel's leave guard asks before any of its own doors moves it off a
- * page whose work would be lost, and tells the platform the ask standing
- * (`AppPlatform.unsavedWork`). A tab has ways out the panel never sees: the
- * browser's close and reload, and this tab sent to another address, as a
- * sign-in and a connect whose tab the browser refused do. While an ask
- * stands, the browser's own ways out ask through `beforeunload`, and this
- * tab's sends ask through the panel's question first; once none stands the
- * listener comes down, because one always registered keeps the page out of
- * the back-forward cache. A send the developer said to take goes past the
- * browser's question too, since they were just asked, and past it once
- * only: a send that never unloads (stopped, or never committed) leaves the
- * next close or reload asked about again. A description's words not saved, which
- * the panel asks nothing about before its own doors, hold the browser's
- * close and reload back too, and send this tab's ways out to the browser's
- * question rather than past it, a Leave answered for a page's work among them.
- */
-
 import type { AppPlatform } from "@repo/panel/app-platform";
 
-/** The ask the panel stands while a page holds unsaved work. */
 type LeaveAsk = Parameters<NonNullable<AppPlatform["unsavedWork"]>>[0];
 
-/** What leaving reaches of the page: its `beforeunload`. */
 export interface LeavingPage {
   readonly addEventListener: (type: "beforeunload", listener: (event: Event) => void) => void;
   readonly removeEventListener: (type: "beforeunload", listener: (event: Event) => void) => void;
 }
 
 export interface PageLeave {
-  /** What the platform answers the panel with: the ask standing while a page holds unsaved work, or nothing once none does. */
   readonly unsavedWork: (ask: LeaveAsk) => void;
-  /** What the platform answers the panel with: whether a description holds words not saved, which no page's ask covers. */
   readonly unsavedDescriptionWords: (unsaved: boolean) => void;
-  /** Takes `go`, a way out of this tab, once the standing ask says to, or at once where none stands. */
   readonly leave: (go: () => void) => void;
 }
 
 export function pageLeave(page: LeavingPage): PageLeave {
   let standing: LeaveAsk;
-  // Whether a description holds words not saved, which the panel asks nothing about before its own doors.
   let descriptionWords = false;
-  // Whether the browser is told to hold its close and reload back.
   let listening = false;
-  // Whether a way out the developer said to take is under way, whose one `beforeunload` the browser asks nothing about.
   let leaving = false;
 
   const holdBack = (event: Event): void => {
@@ -53,11 +25,9 @@ export function pageLeave(page: LeavingPage): PageLeave {
       return;
     }
     event.preventDefault();
-    // Note that Chrome and Edge before 119 ask only where `returnValue` is set too.
     event.returnValue = true;
   };
 
-  /** The browser's close and reload held back while an ask stands or work is held, and let go once neither is. */
   const listen = (): void => {
     const hold = standing !== undefined || descriptionWords;
     if (hold && !listening) page.addEventListener("beforeunload", holdBack);
@@ -66,22 +36,17 @@ export function pageLeave(page: LeavingPage): PageLeave {
   };
 
   const unsavedWork = (ask: LeaveAsk): void => {
-    // A newly stood ask is work the developer has not yet said to leave.
     if (ask !== undefined) leaving = false;
     standing = ask;
     listen();
   };
 
-  // Note that words held with no ask standing let this tab's own sends go at
-  // once, so the browser's own question is the one that asks before them.
   const unsavedDescriptionWords = (next: boolean): void => {
     if (next && !descriptionWords) leaving = false;
     descriptionWords = next;
     listen();
   };
 
-  // Note that a Leave answers for the page's work alone, so while a description's
-  // words stand too the browser still asks before the send goes.
   const take = (go: () => void): void => {
     leaving = !descriptionWords;
     go();
@@ -99,7 +64,6 @@ export function pageLeave(page: LeavingPage): PageLeave {
   return { unsavedWork, unsavedDescriptionWords, leave };
 }
 
-/** This tab's ways out, over its own window. */
 export function tabLeave(): PageLeave {
   return pageLeave(window);
 }

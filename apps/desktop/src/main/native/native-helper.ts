@@ -25,7 +25,6 @@ interface NativeHelperOptions {
 
 let resolvedNativeDirectory: string | undefined;
 
-/** Resolves packaged versus development placement once for every helper. */
 function nativeDirectory(): string {
   resolvedNativeDirectory ??= app.isPackaged
     ? process.resourcesPath
@@ -33,15 +32,10 @@ function nativeDirectory(): string {
   return resolvedNativeDirectory;
 }
 
-/** The one path resolver for the native files beside the app: its executable helpers and its addon. */
 export function nativeHelperPath(binary: string): string {
   return path.join(nativeDirectory(), binary);
 }
 
-/**
- * Owns one native helper process: direct spawn, newline framing, input, and
- * exit/error convergence. Callers learn only complete lines and one ending.
- */
 export class NativeHelper {
   readonly #options: NativeHelperOptions;
   readonly #lineListeners = new Set<(line: string) => void>();
@@ -91,31 +85,24 @@ export class NativeHelper {
     }
   }
 
-  /** Closes stdin without killing; EOF is the media helper's restore command. */
   endInput(): void {
     const child = this.#detach();
     try {
       child?.stdin?.end?.();
-    } catch {
-      // A closed pipe has already received the only signal owed here.
-    }
+    } catch {}
   }
 
-  /** Stops the process without waiting for its exit. */
   stop(): void {
     this.#detach()?.kill?.();
   }
 
   #spawn(): NativeHelperProcess | undefined {
-    // The helpers are Mac binaries, so there is nothing to spawn anywhere
-    // else.
     if (process.platform !== "darwin") return undefined;
     const stdio: StdioOptions = [
       this.#options.input ?? "ignore",
       this.#options.output === "lines" ? "pipe" : "inherit",
       "ignore",
     ];
-    // SAFETY: spawn returns ChildProcess; this module alone narrows the stdio it configured.
     return spawn(nativeHelperPath(this.#options.binary), [], { stdio }) as NativeHelperProcess;
   }
 
@@ -132,9 +119,6 @@ export class NativeHelper {
 
   #finish(): void {
     if (this.#ended) return;
-    // A process exit cannot complete a partially written event. In particular,
-    // treating `down` without its newline as a press can leave hold-to-talk
-    // without the matching release the dying helper owed.
     this.#buffer = "";
     this.#ended = true;
     this.#child = undefined;

@@ -12,29 +12,16 @@ import {
   WINDOW_OF_ELEMENT,
 } from "../shared/press-listener-guard.ts";
 
-/**
- * A popover, menu or card closes on a press outside it through the layer it
- * hangs from (`AnchoredPopover`, `RectFloat`: `onPressAway`, which
- * `usePressAway` hears once for the whole window), never a listener of its
- * own. A `pointerdown`, `mousedown`, `touchstart` or `click` listener on the
- * document or the window is refused outside `@repo/ui`, from a baseline of
- * the files that still hold one (`press-listener-baseline.json`), which only
- * shrinks.
- */
-
-/** Whether `node` is the whole window's event target: `document`, `window`, `globalThis`, or an element's `ownerDocument`. */
 function hearsWholeWindow(node: ESTree.Node): boolean {
   if (node.type === "Identifier") return WINDOW_GLOBALS.has(node.name);
   if (node.type !== "MemberExpression" || node.computed) return false;
   if (node.property.type !== "Identifier") return false;
   if (WINDOW_OF_ELEMENT.has(node.property.name)) return true;
-  // Note that `window.document` and `globalThis.window` are the same target, spelled longer.
   return node.object.type === "Identifier" && WINDOW_GLOBALS.has(node.object.name)
     ? WINDOW_GLOBALS.has(node.property.name)
     : false;
 }
 
-/** The event a listener hears, where it is spelled out: a string, or a template with nothing in it. */
 function eventNamed(node: ESTree.Node | undefined): string | undefined {
   if (node?.type === "Literal" && typeof node.value === "string") return node.value;
   if (node?.type === "TemplateLiteral" && node.expressions.length === 0) {
@@ -87,7 +74,6 @@ export const noDocumentPressListenerRule = defineRule({
         const baseline = expected === 0 ? {} : { [file]: expected };
         for (const problem of baselineProblems(counts, baseline, true)) {
           if (problem.grew) {
-            // Note that the listeners past the baseline's count are the ones reported, since the ones before it were already there.
             for (const { node, event, target } of listeners.slice(expected)) {
               context.report({ node, messageId: "newListener", data: { event, target } });
             }

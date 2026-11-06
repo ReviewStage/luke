@@ -1,7 +1,3 @@
-/**
- * drawer-swipes.tsx -- a phone's drawer on a stage a phone's size: a finger swiped in from its left edge drags the drawer and the dimmed window under it as one, and it springs open past half way or shut short of it; swiped left it shuts. A mouse keeps the button alone.
- */
-
 import {
   BUTTON_VARIANT,
   Button,

@@ -21,28 +21,14 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * confirm-dialogs.tsx -- an irreversible act's question, opened from its
- * button: one refused the first time it is answered and accepted when tried
- * again, its card shaking at the refusal and its act wearing a check as it
- * lands, one in the accent for an act that can be undone but reaches someone
- * else, a long one, one that asks for a field to be filled, and one gated on
- * the subject's name. Only an act past undoing is red. A question asked
- * inside a dialog about what it holds asks at that dialog's foot instead
- * (`FootQuestion`): a key's Remove, refused the first time.
- */
-
-/** What a confirming act answers, as `useConfirmDialog` reads it, so the catalog needs nothing beyond `@repo/ui`. */
 type ActionResult = NonNullable<ConfirmAct["refused"]>;
 
 const ACCEPTED: ActionResult = { status: "accepted" };
 
-/** An act refused, saying why. */
 function refused(reason: string): ActionResult {
   return { status: "rejected", reason };
 }
 
-/** An act answered at once by `answer`, its refusal held as a caller's mutation holds one, until it is let go. */
 function useAnsweredAct(answer: () => ActionResult): ConfirmAct {
   const [answered, setAnswered] = useState<ActionResult | undefined>(undefined);
   return {
@@ -56,7 +42,6 @@ function useAnsweredAct(answer: () => ActionResult): ConfirmAct {
   };
 }
 
-/** A button that asks `question` before its act, which answers with `answer`. */
 function Asking({
   label,
   question,
@@ -65,7 +50,6 @@ function Asking({
 }: {
   label: string;
   question: DialogQuestion;
-  /** The subject's name the act waits on, for the gravest acts. */
   gate?: string;
   answer?: () => ActionResult;
 }): React.JSX.Element {
@@ -84,7 +68,6 @@ function Asking({
   );
 }
 
-/** A key whose deletion is refused the first time, so the refusal and the second try can be seen. */
 function RefusedOnce(): React.JSX.Element {
   const [triedOnce, setTriedOnce] = useState(false);
   return (
@@ -106,7 +89,6 @@ function RefusedOnce(): React.JSX.Element {
   );
 }
 
-/** A question that asks for the new owner's name before it acts; Enter in the field answers. */
 function Named(): React.JSX.Element {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement | null>(null);
@@ -154,7 +136,6 @@ function Named(): React.JSX.Element {
   );
 }
 
-/** A dialog holding a key whose Remove asks at the dialog's own foot, refused the first time so the refusal can be seen there. */
 function KeyInADialog(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(true);

@@ -7,15 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
-/**
- * admin-cost.test.ts -- the Cost screen reads its window and scope from the
- * service, states each headline tile in words, names every dollar figure a
- * list-price equivalent and says it is not what we pay, shows a model the
- * catalog does not price as unpriced rather than as dollars, and opens an expensive account's own page from its
- * row. The network, the HTTP boundary to the service, is a fake that answers the
- * screen's read.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const DAY = {
@@ -25,7 +16,6 @@ const DAY = {
   dictation: 0.01,
 };
 
-/** A synthetic week: one priced model, one the catalog does not price, and one account. */
 function cost(overrides: Partial<AdminCost> = {}): AdminCost {
   return {
     generatedAt: Date.UTC(2026, 9, 17, 12),
@@ -81,7 +71,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The screen, signed in, with its read answered by `body`, every address it asked kept in `asked`. */
 async function openCost(
   body: AdminCost,
   opened: string[] = [],
@@ -120,7 +109,6 @@ async function openCost(
   return page;
 }
 
-/** The words of the card whose name is `label`, its figure and hint after it. */
 function cardOf(page: HTMLElement, label: string): string {
   const name = Array.from(page.querySelectorAll("div")).find(
     (element) => element.children.length === 0 && element.textContent === label,
@@ -128,7 +116,6 @@ function cardOf(page: HTMLElement, label: string): string {
   return name?.parentElement?.parentElement?.textContent ?? "";
 }
 
-/** One table's body rows, each as the words of its cells. */
 function rowsOf(page: HTMLElement, label: string): string[][] {
   const table = page.querySelector(`table[aria-label="${label}"]`);
   return Array.from(table?.querySelectorAll("tbody tr") ?? [], (row) =>

@@ -13,16 +13,9 @@ import { type UpdateMenuAct, updateMenuAct } from "../app-menu";
 import type { DesktopConfig } from "./desktop-config";
 
 export interface UpdateServiceHost {
-  /**
-   * Begins the timed check, once the launch has reached the point it must:
-   * after the operator's own standup, which the version mark this spends must
-   * not survive a standup that failed or was quit before reaching here. Safe
-   * to call on a build with nothing to install; does nothing then.
-   */
   start: () => void;
   check: () => Promise<UpdateSnapshot>;
   install: () => void;
-  /** Moves the app into Applications, where an install it could not land in place can. */
   moveToApplications: () => void;
   openLatestRelease: () => void;
   openChangelog: () => void;
@@ -31,54 +24,14 @@ export interface UpdateServiceHost {
 interface UpdateServiceHostDependencies {
   config: DesktopConfig;
   recordProductEvent: RecordProductEvent;
-  /**
-   * The installer this build carries, or none: an unpackaged build, a fixture
-   * run, and a platform Squirrel does not serve all have nothing to install.
-   */
   engine: UpdaterEngine | undefined;
-  /**
-   * The whole quit's teardown, awaited before Squirrel is let near this
-   * executable. It is the teardown and not the host's drain alone for two
-   * reasons: the restart must not swap the binary over runtime work still
-   * going, and the install's own quit must not be the one `before-quit`
-   * holds back — a prevented `before-quit` aborts the install, so everything
-   * owed has to be given back, and seen to be given back, before the
-   * installer asks to leave.
-   */
   beforeRestart: () => Promise<void>;
-  /**
-   * Asks before Restart to update while a call stands or a panel holds
-   * unsaved work, answering whether to restart;
-   * yes at once while nothing would be lost. It is asked before the install
-   * begins, never inside it, because Squirrel's own quit must not be held.
-   */
   askBeforeRestart: () => Promise<boolean>;
-  /** Every state the row draws, written to the document the windows are told from. */
   state: AppStateStore;
-  /**
-   * Brings the window forward on Settings, where a check's answer is drawn:
-   * the menu bar's Check for Updates runs with no window of its own to say it.
-   */
   showSettings: () => void;
-  /**
-   * Moves the app into Applications, quitting this copy through the ordinary
-   * quit once the move lands; it throws where the copy could not be made.
-   */
   moveToApplications: () => void;
 }
 
-/**
- * The updater's lifecycle and the five actions the Updates row offers, built
- * on the ambient scope, with the menu bar's update item drawn from every
- * state it moves to: `UpdateService`'s timed check and first check fork
- * into it directly, so they are interrupted by the
- * launch's own scope closing at quit rather than a scope this function made
- * and had to give back itself. `UpdateService` holds the feed and the
- * schedule; what is here is when it begins and the counted event
- * each press files. Construction alone does not start it: the caller's own
- * `start()` is what the launch calls once it has reached the right point in
- * its own order, never this function's own return.
- */
 export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/createUpdateServiceHost")(
   function* (
     dependencies: UpdateServiceHostDependencies,
@@ -96,8 +49,6 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
       report: config.report,
     });
 
-    // The menu bar is drawn again only when its item's act changes, not on
-    // every download tick.
     let shownAct: UpdateMenuAct | undefined | null = null;
     const showMenu = (update: UpdateSnapshot) => {
       const act = updateMenuAct(update, config.packaged);
@@ -144,8 +95,6 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
       report: config.report,
     });
 
-    // The timed check and the first check are handles the quit takes back: a check firing into a process already draining reads the
-    // fixed feed for a build that is leaving.
     yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
 
     const host: UpdateServiceHost = {
@@ -158,8 +107,6 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
         });
         return service.check({ asked: true });
       },
-      // Note that the press is counted only once the developer says to
-      // restart, since a Cancel installs nothing.
       install: () => {
         void dependencies.askBeforeRestart().then((restart) => {
           if (!restart) return;
@@ -183,7 +130,6 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
         void config.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
       },
     };
-    // A build whose updater never moves still shows where it stands.
     showMenu(service.snapshot());
     return host;
   },

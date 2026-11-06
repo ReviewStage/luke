@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { stapleWithRetry } from "./release-config.mjs";
 
-/** A staple that fails the first `failures` times it is tried, as Apple's ticket lookup can. */
 function flakyStaple(failures) {
   const tried = { count: 0 };
   const staple = () => {

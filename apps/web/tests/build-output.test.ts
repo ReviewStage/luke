@@ -18,37 +18,15 @@ import { functionBundlePlan } from "../server/function-bundles";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
 import { apiRewrites } from "../server/function-rewrites";
 
-/**
- * The tree Vercel deploys is emitted here from the same plan the build step
- * uses, into a directory of its own, and read back as data. Two things are
- * asserted and they are different claims. Structure: every planned function
- * has a `.func`, and every `/api/` rewrite names a `.func` that exists, so a
- * route cannot point at nothing while the build stays green. Isolation: each
- * `.func` loads with nothing above it on disk, which is how a function is
- * mounted on the platform; a bundle that reached a module it did not carry
- * loads in this checkout and fails on production, which is the shape of the
- * one outage.
- */
-
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
 const LOAD_MODULE = "await import(process.argv[1]);";
 
-/** Loads a function and answers one request through its default export, printing the status and the body. */
 const ANSWER_REQUEST =
   "const fn = await import(process.argv[1]); const answer = await fn.default.fetch(new Request(process.argv[2])); console.log(answer.status, await answer.text()); process.exit(0);";
 
-/** A database URL that connects to nothing, which the web runtime's layer names and no answer here dials. */
 const PLACEHOLDER_DATABASE_URL = "postgresql://isolation:load@127.0.0.1:5432/app";
 
-/**
- * What a load is given: a PATH to find node, and nothing else. Every bundle
- * reaches the auth module statically, and that module once built its pool as
- * it was constructed, so a load needed a `DATABASE_URL` to get through the
- * import at all; a load now reads no environment, and this environment is
- * what proves it. The guard is about what a bundle can resolve, not what a
- * deployment is configured with.
- */
 const LOAD_ENVIRONMENT = { PATH: process.env.PATH ?? "" } as const;
 
 async function emitFromTask(): Promise<{

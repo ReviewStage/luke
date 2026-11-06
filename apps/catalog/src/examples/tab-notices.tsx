@@ -1,13 +1,7 @@
-/**
- * tab-notices.tsx -- the line under a tab's bar: words alone, words with the
- * press that answers them, and long words in a column narrower than the line.
- */
-
 import { Button, TabNotice } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function TabNotices(): React.JSX.Element {

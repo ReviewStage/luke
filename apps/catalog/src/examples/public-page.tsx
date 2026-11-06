@@ -19,15 +19,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * public-page.tsx -- the landing's shape, a hero over its lead, acts, a
- * recording bleeding past the column, and sections; a plain page under the
- * profile's page title; a wide page of ruled entries with a rail beside their
- * words; a page beneath it with its way back; and the landing in a phone's
- * width, each in a frame that scrolls as a document would, with the site's
- * banner and footer. Every name and line is made up.
- */
-
 const SECTIONS = [
   {
     id: "talk",

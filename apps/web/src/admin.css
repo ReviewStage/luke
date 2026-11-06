@@ -1,5 +1,2 @@
-/* The standalone admin page: the site's own sheet, and the utilities the
-   admin screens spell, which live in the panel (`@repo/panel/admin`) rather
-   than under this app's sources. */
 @import "./styles.css";
 @import "@repo/panel/admin/sources.css";

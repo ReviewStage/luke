@@ -1,5 +1,3 @@
-// shortcuts-docs.ts -- writes or checks the docs' Keyboard shortcuts page from the window's shortcut table.
-
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exit } from "node:process";
@@ -28,13 +26,6 @@ import {
   type WritingShortcut,
 } from "../src/shortcuts.js";
 
-/**
- * `--write` regenerates `apps/docs/shortcuts.mdx` from `@repo/settings`'
- * shortcut table, as the Mac app's Keyboard shortcuts page lists it for an
- * account with no experiments on: its groups in order, then Writing, Files
- * changed, and Chapters. `--check` writes nothing and exits non-zero when the
- * committed page is not what the table renders.
- */
 const PAGE = join(import.meta.dirname, "../../../apps/docs/shortcuts.mdx");
 const MODE = { WRITE: "--write", CHECK: "--check" } as const;
 const DESKTOP = Object.values(HOST_CAPABILITY);
@@ -55,7 +46,6 @@ function kbd(chord: ShortcutChord): string {
   return `<kbd>${shortcutGlyphs(shortcutAccelerator(chord)).join("")}</kbd>`;
 }
 
-/** A code span whose fence outruns any backtick run inside it, so a Markdown rule like ``` survives. */
 function code(text: string): string {
   const longest = Math.max(0, ...(text.match(/`+/gu) ?? []).map((run) => run.length));
   const fence = "`".repeat(longest + 1);
@@ -67,7 +57,6 @@ function inContext(key: InContextKey): Row {
   return [label, through === undefined ? kbd(chord) : `${kbd(chord)}–${kbd(through)}`];
 }
 
-/** One row per action: an action with two keys, such as play or pause on Space and K, lists both. */
 function merged(rows: readonly Row[]): readonly Row[] {
   const keysOf = new Map<string, string[]>();
   for (const [label, keys] of rows) keysOf.set(label, [...(keysOf.get(label) ?? []), keys]);

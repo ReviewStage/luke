@@ -45,30 +45,12 @@ import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 
-/**
- * A description's pictures through the routes a desktop calls, over a real
- * dialect: a member keeps a picture on a teammate's description and every member
- * of the workspace reads its bytes back under the type they were sniffed
- * to be, never cached on the way; an account outside the workspace keeps
- * and reads nothing, exactly as for a plan that does not exist; bytes that
- * are not the image their label names are refused; a recording is kept as
- * it was sent and served as a video, up to a sent video's bound and the
- * description's count of videos; and a description at its bound refuses in band. An upload is answered by the hosted oRPC router at the
- * plan's public path, and refuses exactly as the old route did. A file a
- * comment on the description carries is served at the same path, under the type
- * it traveled as, to the same members alone.
- *
- * Synthetic accounts, bearers, and pictures throughout.
- */
-
 const ORIGIN = "https://app.test";
 const ATTACHMENT = "/api/plans/attachment";
 
-/** A PNG's signature and a few bytes more: all the service reads of a picture. */
 const PNG_BYTES = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
 const PNG_URL = `data:image/png;base64,${Buffer.from(PNG_BYTES).toString("base64")}`;
 
-/** What a route answered: its status, type, cache rule, and body as bytes. */
 interface Answered {
   readonly status: number;
   readonly contentType: string | null;
@@ -84,7 +66,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** The plan routes over the test's own database, every bearer `Bearer <account>`, answering one request. */
 const ask = (request: Request) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -104,7 +85,6 @@ const ask = (request: Request) =>
       { disableLogger: true },
     );
     const keep = hostedFetch({ taskFiles: taskFilesProcedures({ resolveUserId }) });
-    // SAFETY: the upload yields the services provided above alone, which is all a test provides of the web runtime's services.
     const webServices = (yield* Effect.scoped(
       Layer.build(services),
     )) as Context.Context<WebServices>;
@@ -122,7 +102,6 @@ const ask = (request: Request) =>
     } satisfies Answered;
   });
 
-/** An upload as a desktop sends it, to the plan's own public path. */
 function upload(
   taskId: string,
   userId: string | undefined,
@@ -140,7 +119,6 @@ function upload(
   });
 }
 
-/** One picture's upload, as JSON. */
 function pictureBody(picture: string): string {
   return JSON.stringify({ picture });
 }
@@ -152,7 +130,6 @@ function read(taskId: string, attachmentId: string, userId: string): Request {
   return new Request(url, { headers: { authorization: `Bearer ${userId}` } });
 }
 
-/** An answer's JSON body as the upload's wire reads it, failing the test where it does not. */
 function uploaded(answered: Answered) {
   const answer = readEither(descriptionAttachmentAnswerSchema)(
     unparsedWire(JSON.parse(new TextDecoder().decode(answered.bytes))),
@@ -161,7 +138,6 @@ function uploaded(answered: Answered) {
   return answer.success;
 }
 
-/** A plan in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -235,7 +211,6 @@ it.layer(getTestDB())("a description's picture routes", (it) => {
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(served.contentType, PICTURE_TYPE.PNG);
         assert.equal(served.cache, "private, no-store");
-        // Note that a page a browser opens from the bytes runs no script and stands in an origin of its own.
         assert.deepEqual(served.policy, SANDBOXED_PAGE);
         assert.deepEqual([...served.bytes], [...PNG_BYTES]);
         assert.equal(

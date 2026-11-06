@@ -22,18 +22,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * disclosures.tsx -- a fold closed and open, its body indented under the
- * summary's words or flush with the row, a fold whose holder keeps its
- * state, a summary long enough to wrap in a pane narrower than its words,
- * a head holding a control beside its summary, pressed without folding
- * it, a chip at the end of its row counting the threads it folds, a fold
- * drawn as a card, its chevron leading its head or ending it, a ⋯ beside
- * its head, and a transcript's line, bare, which the skin around its fold
- * draws.
- */
-
-/** A fold whose head ends with a ⋯ beside its summary, which counts its presses rather than folding the row. */
 function ActionDisclosure(): React.JSX.Element {
   const [presses, setPresses] = useState(0);
   return (
@@ -52,7 +40,6 @@ function ActionDisclosure(): React.JSX.Element {
   );
 }
 
-/** A fold that is only its row, as a file's header: its own chevron button leading it beside its summary, its letter the summary, and its path, which copies itself, standing after it and taking the row's room; a rule under it while open. */
 function RowDisclosure(): React.JSX.Element {
   const [open, setOpen] = useState(true);
   const [copies, setCopies] = useState(0);
@@ -81,7 +68,6 @@ function RowDisclosure(): React.JSX.Element {
   );
 }
 
-/** A line's threads minimized to a chip at the row's end: resolved, and how many comments, the threads under it once shown. */
 function ChipDisclosure(): React.JSX.Element {
   return (
     <Disclosure>
@@ -96,7 +82,6 @@ function ChipDisclosure(): React.JSX.Element {
   );
 }
 
-/** A fold whose open state its holder keeps, as a tab keeps which of its notes it folded. */
 function HeldDisclosure(): React.JSX.Element {
   const [open, setOpen] = useState(true);
   return (

@@ -16,13 +16,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * task-marks.tsx -- a task's status as its mark, each of the five, its
- * priority as its mark, each of the five, and the one icon of how its agents
- * stand, each of the seven it can wear, every one beside the word it stands for.
- */
-
-/** A task's agents at rest, with `counts` and a pull request standing in `state` where one is given, in the merge queue where `queued`. */
 function agents(
   counts: Partial<Pick<TaskAgentsSummary, "working" | "failed">>,
   state?: (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE],
@@ -52,7 +45,6 @@ function agents(
   };
 }
 
-/** One task's agents in each status its icon wears, most pressing first, each beside its word. */
 const AGENTS_STATUSES = [
   ["failed", agents({ failed: 1 })],
   ["working", agents({ working: 1 })],
@@ -63,7 +55,6 @@ const AGENTS_STATUSES = [
   ["closed", agents({}, PULL_REQUEST_STATE.CLOSED)],
 ] as const;
 
-/** Every status a task's agents icon wears, at `size`, each beside its word. */
 function TaskAgentsMarks({ size }: { size: TaskAgentsMarkSize }): React.JSX.Element {
   return (
     <Inline gap={GAP.SECTION}>

@@ -14,12 +14,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * loading-indicators.tsx -- the marks that say work is under way beside a ring:
- * an agent's working mark, a line of words
- * with a light passing along it, and a spinner that waits a moment to show.
- */
-
 function LoadingIndicators(): React.JSX.Element {
   return (
     <>

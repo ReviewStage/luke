@@ -7,14 +7,6 @@ import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 
-/**
- * A local agent's Terminal as main carries it, over a file system that
- * answers from a set: it opens the agent's worktree in the Mac's own
- * Terminal once the host made it, refuses before then, and answers only a
- * panel. Synthetic names throughout.
- */
-
-/** Every act port a fixture opened, closed once its test is done. */
 const ports: TestActPort<WebContents>[] = [];
 
 afterEach(() => {
@@ -23,7 +15,6 @@ afterEach(() => {
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-// SAFETY: the rows read a sender by identity alone; one inert object is one window.
 const panelOf = (): ActSender<WebContents> => ({
   sender: {} as WebContents,
   panel: true,

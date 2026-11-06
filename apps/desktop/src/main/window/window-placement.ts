@@ -1,19 +1,7 @@
-/**
- * window-placement.ts -- where the window stood when it last closed: kept in a file, and put back on a display that is still connected.
- *
- * A Mac app opens where it was left: on the same display, at the same size,
- * zoomed or full screen as it was. The frame kept is the window's normal one,
- * so a window closed zoomed or full screen comes back to that state over the
- * frame it would return to. A display unplugged since is not a place a
- * window may open on, so a frame no display holds any longer opens at the
- * first frame instead, and a frame only partly on one is brought within it.
- */
-
 import fs from "node:fs";
 import { Option, Schema } from "effect";
 import type { Rectangle } from "electron";
 
-/** The window as it closed: its normal frame, and whether it stood zoomed or full screen over it. */
 export interface WindowPlacement {
   bounds: Rectangle;
   zoomed: boolean;
@@ -35,19 +23,16 @@ const decodePlacement = Schema.decodeUnknownOption(
   ),
 );
 
-/** How much of one frame lies over another, in square points. */
 function overlap(a: Rectangle, b: Rectangle): number {
   const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
   const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
   return width > 0 && height > 0 ? width * height : 0;
 }
 
-/** A value held between two ends, the lower winning where they cross. */
 function clamp(value: number, lowest: number, highest: number): number {
   return Math.max(lowest, Math.min(value, highest));
 }
 
-/** A frame moved and, if need be, shrunk until the whole of it lies in the area. */
 function within(bounds: Rectangle, area: Rectangle): Rectangle {
   const width = Math.min(bounds.width, area.width);
   const height = Math.min(bounds.height, area.height);
@@ -59,12 +44,6 @@ function within(bounds: Rectangle, area: Rectangle): Rectangle {
   };
 }
 
-/**
- * The window as it stands, to be kept: its normal frame, zoomed or full
- * screen over it. Note that a window moved to another display while full
- * screen keeps its normal frame on the display it left, so that frame is
- * centered on the display the window now fills instead, where it would open.
- */
 export function placementOf(window: {
   normal: Rectangle;
   shown: Rectangle;
@@ -86,7 +65,6 @@ export function placementOf(window: {
   return { bounds, zoomed, fullScreen };
 }
 
-/** Where the window last stood, or nothing for a first launch or a file that is not one. */
 export function readWindowPlacement(file: string): WindowPlacement | undefined {
   let text: string;
   try {
@@ -97,25 +75,12 @@ export function readWindowPlacement(file: string): WindowPlacement | undefined {
   return Option.getOrUndefined(decodePlacement(text));
 }
 
-/**
- * Keeps where the window stands now. Note that a write the disk refuses is
- * let go, because the window is closing either way and all it costs is the
- * first frame at the next launch.
- */
 export function writeWindowPlacement(file: string, placement: WindowPlacement): void {
   try {
     fs.writeFileSync(file, JSON.stringify(placement));
-  } catch {
-    // The next launch opens at the first frame.
-  }
+  } catch {}
 }
 
-/**
- * Where the window opens: the saved frame, within the work area of the
- * display it lies most over, zoomed or full screen as it was; or `first`,
- * the frame a first launch opens at, when nothing is saved or no connected
- * display holds any of the saved frame.
- */
 export function placeWindow(options: {
   saved: WindowPlacement | undefined;
   workAreas: readonly Rectangle[];

@@ -1,7 +1,3 @@
-/**
- * over-panes.tsx -- a pane floated over a narrow tab by its toggle, sliding in from its edge and back out past it: a sheet at the tab's right, as a File tab's tree floats, a column at its left, as the Chapters rail does, and the tab's whole width, as the tree fills a phone; Escape or a press anywhere outside it puts it away.
- */
-
 import {
   BUTTON_VARIANT,
   Button,
@@ -21,10 +17,8 @@ import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
-/** A narrow tab whose toggle floats a pane of `rows` over it, at `edge` and `width`. */
 function Room({
   label,
   edge,
@@ -38,8 +32,6 @@ function Room({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
-  // Note that the toggle stands above the tab rather than in it, as a tab's
-  // bar does, so the pane it floats never covers it.
   return (
     <Stack gap={GAP.TIGHT}>
       <Inline>

@@ -1,11 +1,3 @@
-/**
- * one-line.tsx -- words held to one line in a narrow column, ending in a
- * fade and in an ellipsis, a pane's heading and a name in the code face,
- * and a short line that ends on its last letter;
- * the pointer resting on a line cut short reads it whole in the window's
- * tooltip (`wholeWordsHint`).
- */
-
 import { GAP, ONE_LINE_ELEMENT, ONE_LINE_END, OneLine, Stack, wholeWordsHint } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

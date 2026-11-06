@@ -17,14 +17,6 @@ import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * popover-panels.tsx -- a panel hung from its button: a card with its title
- * and ×, and a menu whose search field is its head and takes the focus.
- * Each closes on Escape, its ×, a second press of its button, and focus
- * leaving it, fading out as it goes, and hands the focus back to its button.
- */
-
-/** A button and the panel it opens, drawn in `look`. */
 function Hung({ look, label }: { look: PopoverPanelLook; label: string }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");

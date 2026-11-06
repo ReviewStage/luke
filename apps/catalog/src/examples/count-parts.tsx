@@ -2,13 +2,6 @@ import { CountParts, GAP, Inline, linesCount, STATUS_TONE } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * count-parts.tsx -- what an option counts as parts each in its own tone: a
- * pull request's checks as one part, and a diff's lines as the two parts
- * `linesCount` builds, additions in the complete tone and deletions in the
- * danger tone.
- */
-
 function CountPartsExample(): React.JSX.Element {
   return (
     <CatalogSection id="count-parts" title="One part, and two">

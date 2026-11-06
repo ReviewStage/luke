@@ -3,12 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * swatches.tsx -- a row of color swatches as a picker draws them: the
- * struck-through dot for no color first, then each color, the one chosen
- * ringed.
- */
-
 const COLORS = [
   { label: "Red", color: "#e5484d" },
   { label: "Green", color: "#30a46c" },

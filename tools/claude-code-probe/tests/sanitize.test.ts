@@ -1,10 +1,3 @@
-/**
- * sanitize.test.ts -- what a fixture keeps of the SDK's stream: its shape, never a token, an account, an email, or a real id.
- *
- * Every credential here is built at run time from a low-entropy fake, so no
- * tracked line is shaped like a live one.
- */
-
 import { describe, expect, it } from "vitest";
 import { fixtureLeaks, REDACTED, sanitizer } from "../src/sanitize.js";
 

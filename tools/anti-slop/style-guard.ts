@@ -22,21 +22,11 @@ import {
   themeNames,
 } from "./shared/style-guard.ts";
 
-/**
- * The style guard, run by `pnpm lint`: reads every stylesheet and every
- * Tailwind class string outside `@repo/ui`'s token sheets and fails on a
- * place a rule refuses beyond its baseline, on a baseline above what a file
- * still holds, and on a comment asking to silence it. `--shrink` lowers
- * each baseline to what the files now hold, and never raises one. It also
- * holds `anti-slop/retired`'s classes in every stylesheet's selectors, which
- * oxlint cannot read, against the CSS rows of each retired file's baseline.
- */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BASELINES = path.join(REPOSITORY_ROOT, "tools", "anti-slop", "style-baselines");
 const THEME_SHEET = path.join(REPOSITORY_ROOT, "packages", "ui", "src", "tailwind", "theme.css");
 const SHRINK_FLAG = "--shrink";
 
-/** Tracked files and new ones git does not ignore, so a local run sees a file not yet added. */
 function sourceFiles(): readonly string[] {
   const listed = spawnSync(
     "git",

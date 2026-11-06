@@ -1,20 +1,3 @@
-/**
- * sidebar.tsx -- the admin dashboard's shell: the app's sidebar beside the open view, its toggle in the title bar's row, and the account at its foot.
- *
- * The shell is the app's own (`@repo/panel`'s `shell.css`, which the panel
- * lays for its window): the same two columns, the sidebar's ground, insets,
- * and width, the app's head over its rows, and the toggle standing at the
- * column's top-left whichever way the sidebar is. Hiding the sidebar slides
- * it off the left edge on the pane's motion while the view takes the room at
- * once, and the choice is remembered (`prefs.ts`). A narrow room's sidebar,
- * a phone's, is a drawer over the view instead, opened by the same toggle
- * and put away by a choice in it, Escape, or a press outside it, the view
- * inert while it stands, as the app's is (`stage-room.ts` measures the room).
- *
- * The account stands at the sidebar's foot, as the app's does: its face and
- * name, raising its menu above it, whose one act is Sign out, which acts on the press.
- */
-
 import { VERB } from "@repo/features/words";
 import "@repo/panel/styles/shell.css";
 import { AccountAvatar, type ViewerAccount } from "@repo/panel/admin/chrome/page-header";
@@ -46,17 +29,11 @@ import { UNREPORTED } from "@repo/ui/reported-failure";
 import { LogOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** What the toggle names for a reader: the sidebar's way back, or its way away. */
 const SIDEBAR_TOGGLE_LABEL = {
   SHOW: "Show sidebar",
   HIDE: "Hide sidebar",
 } as const;
 
-/**
- * How the sidebar stands over the view while it stands out of the columns,
- * in the attribute the shared sheet reads (`shell.css`'s
- * `data-sidebar-overlay`): away, or open over it as a narrow room's drawer.
- */
 const SIDEBAR_OVERLAY = {
   CLOSED: "closed",
   OPEN: "open",
@@ -64,22 +41,14 @@ const SIDEBAR_OVERLAY = {
 
 type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
 
-/** What the foot says where signing out failed, in the app's words. */
 const SIGN_OUT_REFUSED = "The account could not be signed out. Try again.";
 
-/**
- * The foot's account: the signed-in account's face and name, raising its
- * menu over the column, whose heading says whose account it is over Sign out.
- * Sign out acts on the press, as the app's does: nothing is lost, and a
- * refusal is said above the foot (`AdminSidebar`).
- */
 function AccountFoot({
   account,
   shown,
   onSignOut,
 }: {
   account: ViewerAccount;
-  /** Whether the sidebar is in sight; hidden, nothing it raised stands over the page. */
   shown: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
@@ -111,12 +80,6 @@ function AccountFoot({
   );
 }
 
-/**
- * The column itself: the title bar's row the toggle stands over, the app's head
- * named for the dashboard, the places as the app's sidebar lists its own,
- * each a real anchor to its own address so a modified click still gets the
- * browser's own gesture, and the account at the foot.
- */
 function AdminSidebar({
   active,
   inSight,
@@ -132,7 +95,6 @@ function AdminSidebar({
   onSignOut: () => Promise<void>;
   ref: React.Ref<HTMLElement>;
 }): React.JSX.Element {
-  // Note that a refusal stays up until the next press, since the account is still signed in.
   const [refused, setRefused] = useState(false);
   const signOut = () => {
     setRefused(false);
@@ -175,16 +137,6 @@ function AdminSidebar({
   );
 }
 
-/**
- * The drawer's own dismissals while it stands over a narrow room's view: a
- * press on the shell anywhere but the drawer and the toggle, and Escape in
- * it, which hands the keyboard back to the toggle. Opened, it takes the keyboard
- * to the place shown, as the app's drawer does. Note that a press outside
- * the shell, or Escape there, is not the view's: the account's menu and the
- * menu are drawn over the page from the body, and what is
- * pressed in them is theirs, so it must not put the drawer, and them with
- * it, away.
- */
 function useDrawerDismiss(
   open: boolean,
   shell: React.RefObject<HTMLElement | null>,
@@ -217,12 +169,6 @@ function useDrawerDismiss(
   }, [open, shell, drawer, toggle, onClose]);
 }
 
-/**
- * Every view past the gate stands in this shell: the sidebar marking
- * `active`, the view beside it, and the toggle over the sidebar's top-left.
- * Hidden or in a narrow room, the toggle stands over the start of the view's
- * toolbar, which starts its title past it, so it covers none of the page.
- */
 export function AdminShell({
   active,
   hidden,
@@ -233,7 +179,6 @@ export function AdminShell({
   children,
 }: {
   active: AdminTab;
-  /** Whether the reader hid the sidebar, which a narrow room's drawer leaves as it was. */
   hidden: boolean;
   account: ViewerAccount | undefined;
   onToggleHidden: () => void;
@@ -244,8 +189,6 @@ export function AdminShell({
   const stage = useStageRoom();
   const narrow = stage.room === SHELL_ROOM.NARROW;
   const [overlay, setOverlay] = useState<SidebarOverlay>(SIDEBAR_OVERLAY.CLOSED);
-  // Note that a drawer left open as the room widens is put away, so the room
-  // narrowing again opens on the view rather than on the drawer.
   if (!narrow && overlay === SIDEBAR_OVERLAY.OPEN) setOverlay(SIDEBAR_OVERLAY.CLOSED);
   const drawerOpen = overlay === SIDEBAR_OVERLAY.OPEN;
   const collapsed = hidden || narrow;
@@ -271,9 +214,6 @@ export function AdminShell({
 
   return (
     <div ref={stage.ref} className="relative h-dvh">
-      {/* The admin's title bar holds the sidebar's toggle alone, where the
-          app's holds New task beside it, so a folded sidebar's page starts
-          its toolbar past the one button. */}
       <div
         ref={shell}
         className="desktop-shell [--sidebar-toggle-clearance:calc(var(--title-bar-left)_+_var(--ui-control-height)_+_var(--ui-control-gap))]"
@@ -289,10 +229,6 @@ export function AdminShell({
           onNavigate={navigate}
           onSignOut={onSignOut}
         />
-        {/* The content region is the app's work column and the page's `main`
-            landmark, as the app's own is. The page owns its scroll under
-            its toolbar, so the region only fills; a folded sidebar's toggle
-            stands over the toolbar's start, which leaves it room (`shell.css`). */}
         <main className="desktop-main" inert={drawerOpen}>
           {children}
         </main>

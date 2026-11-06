@@ -10,17 +10,8 @@ import { ChangelogPage, RELEASES } from "../src/ChangelogPage";
 import { changelogRoutes } from "../src/changelog-releases";
 import { PrivacyPage } from "../src/PrivacyPage";
 
-/**
- * The site's chrome as a reader meets it on every public page, drawn as the
- * prerender writes it: the banner's navigation names its links, the footer
- * keeps its own, and both mark the page the reader is on, and only that one;
- * a page beneath the changelog marks the changelog as the part of the site
- * the reader is in, never as the page they are on.
- */
-
 const CHANGELOG_ROUTES = changelogRoutes(RELEASES);
 
-/** The changelog as drawn at `path`. */
 function changelogAt(path: string): FunctionComponent {
   const route = CHANGELOG_ROUTES.find((candidate) => candidate.path === path);
   assert.ok(route !== undefined);
@@ -36,14 +27,12 @@ const PAGES: readonly { path: string; page: FunctionComponent; marked: readonly 
   { path: "/privacy", page: PrivacyPage, marked: ["Privacy"] },
 ];
 
-/** The page as the prerender writes it. */
 function drawn(page: FunctionComponent): HTMLElement {
   const root = document.createElement("div");
   root.innerHTML = renderToString(createElement(page));
   return root;
 }
 
-/** What each link is named, its words or else its label, with where it goes. */
 function links(region: Element | null): string[] {
   assert.ok(region !== null);
   return Array.from(region.querySelectorAll("a")).map(
@@ -85,7 +74,6 @@ for (const { path, page, marked } of PAGES) {
 
 test("the landing offers the web app beside the download, and nothing in its scenes to press", () => {
   const body = drawn(App).querySelector("main");
-  // A scene's controls are a picture of the app: none of them may take the keyboard.
   const pressable = Array.from(body?.querySelectorAll("button, [tabindex]") ?? []).filter(
     (control) => control.closest("[inert]") === null,
   );

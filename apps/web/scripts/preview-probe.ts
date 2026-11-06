@@ -20,26 +20,6 @@ import {
   VERDICT,
 } from "../server/preview-probe.js";
 
-/**
- * Reads the deployed shape of a preview, or of any address handed to it, and
- * exits non-zero when a request the clients make is not answered by the
- * deployment's own handler:
- *
- *   PREVIEW_PROBE_DOOR=<door> PREVIEW_PROBE_SHA=<head> GITHUB_TOKEN=… \
- *     pnpm --dir apps/web exec tsx scripts/preview-probe.ts
- *   PREVIEW_PROBE_DOOR=bypass-secret \
- *     pnpm --dir apps/web exec tsx scripts/preview-probe.ts --url https://vespin.dev
- *
- * Without `--url` it waits on the head's preview through the GitHub
- * deployment records, which is what CI does; with it, it probes the address
- * given, which is the read of production after a merge. The door names which
- * project setting the probe relies on; the bypass door sends
- * `VERCEL_AUTOMATION_BYPASS_SECRET` when one is set and otherwise plain GETs,
- * which an unprotected production answers and a protected preview redirects,
- * reported as such. The report is written to standard output and, where
- * `GITHUB_STEP_SUMMARY` names a file, appended there as a table.
- */
-
 const URL_FLAG = "--url";
 
 const ENV = {
@@ -52,7 +32,6 @@ const ENV = {
 } as const;
 
 const doorConfig = Config.Literals(ProbeDoorSchema.literals, ENV.DOOR);
-/** A workflow hands an absent secret over as the empty string, which is no secret. */
 const bypassSecretConfig = Config.option(Config.Redacted(ENV.BYPASS_SECRET)).pipe(
   Config.map(Option.filter((secret) => Redacted.value(secret).length > 0)),
 );
@@ -137,7 +116,6 @@ const appendStepSummary = /* @__PURE__ */ Effect.fnUntraced(function* (text: str
 const describeReading = (reading: PreviewReading) =>
   write(`preview: ${reading.kind}${"id" in reading ? ` (record ${reading.id})` : ""}\n`);
 
-/** The address to probe: the one given, or the head's preview once its record has settled; none when Vercel skipped the build. */
 const resolveTarget = /* @__PURE__ */ Effect.fn("web/resolveTarget")(function* (
   bypassSecret: ProbeTarget["bypassSecret"],
 ) {

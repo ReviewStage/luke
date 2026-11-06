@@ -1,37 +1,14 @@
-/* Our public landing page.
- *
- * The page chrome is Tailwind, written at its call sites. What stays in this
- * file is what utilities cannot hold: the theme. The generated documents'
- * typography is `@repo/ui`'s `Prose`.
- */
-
 @import "tailwindcss";
 
-/* The shared tokens: `@repo/ui`'s scale, the web profile's roles, and its
-   light and dark palettes, keyed on each page root's `data-ui-profile="web"` and `data-ui-theme` (the HTML entry
-   points). */
 @import "@repo/ui/tokens.css";
-/* The shared components' own rules, in Tailwind's `components` layer, over
-   the preflight and under the utilities. */
 @import "@repo/ui/styles.css";
-/* The utilities `@repo/ui`'s components spell (a button's box, corner, and
-   edge), read from its own modules, and the shadcn/ui vocabulary they are
-   spelled in, as every app's Tailwind entry takes them. */
 @import "@repo/ui/tailwind/sources.css";
 @import "@repo/ui/tailwind/theme.css";
 
-/* The three faces the page loads, declared beside the stack that names them
-   rather than at each of the four HTML entry points. */
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/jetbrains-mono/wght.css";
 @import "@fontsource-variable/bricolage-grotesque/wght.css";
 
-/* Only the tokens the page actually draws with, and a token nothing reads is
-   drift waiting to happen. Every value is a shared role's, merely aliased
-   here, so the utilities and the plain-CSS blocks draw the same vocabulary.
-   No color is aliased: the page and the admin dashboard spell a role
-   directly (`text-(--ui-color-text-muted)`), and the chart configs read
-   `--ui-color-chart-*`. */
 @theme inline {
   --radius-sm: var(--ui-radius-6);
   --radius-md: var(--ui-control-radius);
@@ -42,27 +19,17 @@
 }
 
 :root {
-  /* The page's palette, its fonts, its 4px space scale, and its corner are
-     the web profile's in `@repo/ui` (`tokens/palettes.css`, `profiles.css`),
-     read here as its `--ui-*` roles. A page is light unless its root asks for the dark
-     theme: the app and the admin dashboard ask for it from the account's
-     Theme setting (`public/app-theme.js`), the OAuth cards by their own page. */
   font-optical-sizing: auto;
   font-synthesis: none;
 }
 
-/* An integration whose brand publishes its one-color mark in named inks
-   wears them by the ground (`@repo/ui`'s `marks/provider-mark.tsx`). The one
-   page that draws an integration's mark, its landing, is on the dark ground,
-   so these are the dark inks: Executor's, Notion's, Resend's, and Sentry's white,
-   Mercury's near-white, and Neon's green for a dark ground. */
 [data-ui-theme="dark"]
-:is(
-  .integration-mark-executor,
-  .integration-mark-notion,
-  .integration-mark-resend,
-  .integration-mark-sentry
-) {
+  :is(
+    .integration-mark-executor,
+    .integration-mark-notion,
+    .integration-mark-resend,
+    .integration-mark-sentry
+  ) {
   color: #fff;
 }
 
@@ -96,6 +63,6 @@
     [contenteditable],
     input:not([type="checkbox"], [type="radio"], [type="range"])
   ):focus-visible {
-    outline: none; /* no ring: the caret marks the field */
+    outline: none;
   }
 }

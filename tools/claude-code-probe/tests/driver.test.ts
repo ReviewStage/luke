@@ -1,13 +1,3 @@
-/**
- * driver.test.ts -- the in-sandbox driver as a child process: a stop reaches the session while a turn runs a foreground command, and the end of input ends it.
- *
- * The SDK is replaced at its package boundary by a fake that behaves as
- * the SDK does where it matters here: once a turn starts it reads no
- * further prompt until the turn ends, and the turn (a foreground command)
- * runs until `interrupt()` is called. A driver that reads its stop only
- * inside the prompt stream never sees it, and this test times out.
- */
-
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -18,7 +8,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const DRIVER = new URL("../src/sandbox/driver.mjs", import.meta.url);
 
-/** The fake SDK, written into the child's own node_modules. */
 const FAKE_SDK = `
 export function query({ prompt }) {
   let release;

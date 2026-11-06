@@ -1,20 +1,3 @@
-/**
- * paste-back-consent.ts -- a consent trip for a machine whose browser is elsewhere: the authorization page shown as a link, and the redirect it lands on pasted back.
- *
- * The same code flow as the loopback (`loopback-consent.ts`), asked with the
- * same options, so a caller hands either one to the sign-in it words: a
- * verifier and a state minted per trip, the page's URL built on a loopback
- * redirect, and the exchange run on the code the redirect carried. What
- * differs is how the code comes back. Nothing listens on the loopback: the
- * person signs in on a browser of their own, which fails to load the
- * redirect on a machine that is not this one, and pastes the address it was
- * sent to back here. That address is read as the loopback reads a callback
- * (its path and its state this trip's own), so a pasted address from
- * another trip, or one that carried a refusal, is refused before any code is
- * exchanged. The service needs nothing of its own for it, since the
- * redirect is the loopback one the client registered.
- */
-
 import { SIGN_IN_FAILURE } from "@repo/features/words";
 import { Effect, Result } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -28,13 +11,10 @@ import { codeChallenge, createCodeVerifier } from "./pkce.js";
 
 const LOOPBACK_HOST = "127.0.0.1";
 
-/** The ports a pasted-back redirect names where its flow names none: the dynamic range, one picked per trip, since nothing listens on it. */
 const DYNAMIC_PORTS = { FIRST: 49_152, MASK: 0x3fff } as const;
 
-/** The state's random bytes, as many as the loopback's. */
 const STATE_BYTES = 32;
 
-/** Why a pasted address is not this trip's redirect, in words a terminal shows. */
 export const PASTE_BACK_REASON = {
   NOT_AN_ADDRESS: "That is not the address the sign-in page sent you to.",
   OTHER_TRIP: "That address is from another sign-in. Start again and paste the newest one.",
@@ -43,7 +23,6 @@ export const PASTE_BACK_REASON = {
   SHOWN: "Could not show the sign-in page's address.",
 } as const;
 
-/** What a pasted address read as: the code to exchange, or why there is none. */
 type PastedRead =
   | { readonly code: string }
   | {
@@ -60,16 +39,9 @@ function portOf(ports: readonly number[] | undefined): number {
   const [named] = ports ?? [];
   if (named !== undefined) return named;
   const [random = 0] = crypto.getRandomValues(new Uint16Array(1));
-  // Note that the range is a power of two, so masking the draw keeps every port equally likely.
   return DYNAMIC_PORTS.FIRST + (random & DYNAMIC_PORTS.MASK);
 }
 
-/**
- * A pasted address read as this trip's redirect: a URL on the trip's own
- * callback path, carrying the trip's own state, and a code rather than a
- * refusal. Its ends are trimmed, since a terminal paste often brings a
- * space or a line with it.
- */
 function readPasted(
   pasted: string,
   trip: { readonly state: string; readonly callbackPath: string },
@@ -90,12 +62,6 @@ function readPasted(
   return { code };
 }
 
-/**
- * Stands up paste-back trips, each reading the pasted address with `paste`:
- * the line the person pasted, or nothing where they pasted none. The page's
- * address goes to the trip's `openExternal`, which shows it rather than
- * opening a browser.
- */
 export function pasteBackConsent(paste: Effect.Effect<string | undefined>): OpenConsent {
   return <Grant extends object>(options: LoopbackConsentOptions<Grant>): LoopbackConsent<Grant> => {
     let shown: string | undefined;
@@ -133,7 +99,6 @@ export function pasteBackConsent(paste: Effect.Effect<string | undefined>): Open
 
     return {
       signInEffect: () => trip(),
-      // Note that a trip waits on the person's paste alone, which their own Ctrl-C ends.
       cancel(): void {},
       reopen(): void {
         if (shown !== undefined)

@@ -5,7 +5,6 @@ import { UPDATE_ROW_ACTION, updateInSidebar, updateRow } from "./update-row.js";
 
 const RELEASE: RunningBuild = { packaged: true };
 
-/** What `run.sh` launches: unpackaged, so no updater stands behind it. */
 const UNINSTALLABLE_IDLE: UpdateSnapshot = {
   status: UPDATE_STATUS.IDLE,
   currentVersion: "0.11.0",
@@ -14,8 +13,6 @@ const UNINSTALLABLE_IDLE: UpdateSnapshot = {
 };
 
 function supported(update: Partial<UpdateSnapshot> & Pick<UpdateSnapshot, "status">) {
-  // SAFETY: every call site passes the fields its status's snapshot variant
-  // requires; the assertion only spares each test restating the two constants.
   return { currentVersion: "0.1.0", installSupported: true, ...update } as UpdateSnapshot;
 }
 
@@ -120,7 +117,6 @@ test("the sidebar carries a release only while it has something to press: its re
     updateInSidebar(supported({ status: UPDATE_STATUS.ERROR, latestVersion: "0.2.0" })),
     true,
   );
-  // Note that a download runs silently: nothing is pressed until it lands.
   assert.equal(
     updateInSidebar(supported({ status: UPDATE_STATUS.DOWNLOADING, latestVersion: "0.2.0" })),
     false,

@@ -25,16 +25,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * choice-list.tsx -- a pick-one list with a recommended option and an
- * unavailable one, a pick-several list, both marked with their radios or
- * checkboxes and numbered, a yes and a no across, toned, pills, cards holding controls of their own, rows with a mark before their words, an
- * unavailable list, a settled record of what was picked, a marked list
- * stepped back beside a step and its presses, as an ask taken back, a list
- * and its presses on a tint laid over the column's ground, as a post that
- * needs the reader draws its ask, and a narrow column of long words.
- */
-
 const RETRIES: readonly ChoiceOption<string>[] = [
   {
     value: "three",

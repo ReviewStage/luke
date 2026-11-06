@@ -50,25 +50,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * settings-row.tsx -- a settings row with a switch, led by an account's face,
- * with a button and no description, with a failed write, and with long
- * words, each at a settings page's measure and in a column narrower than the
- * 380px its name fades under; a row whose two presses would squeeze its
- * words in a column a little wider than that, which drops them below its
- * words, beside a row whose one press still fits; compact rows in a
- * popover narrower than 380px, whose controls stay beside their words; and
- * list rows, a reference list's lines in a card, each a command and its chord;
- * and the slots: a Modified word riding a label, a key's field grown under
- * its row with a refusal under that, and accounts indented under their
- * provider's row; and accounts that fold their repositories open under
- * their words, one open from the start with a long name among them, one
- * folded with Show all at its foot, one with a ⋯ before its chevron, at a page's measure and
- * narrower than 380px; and integrations that fold the rows they own under
- * their own row, closed until pressed, beside one that owns none.
- */
-
-/** A switch holding its own state, named `label` and described and failed by its row. */
 function HeldSwitch({ label, control }: { label: string; control: SettingsRowControl }) {
   const [on, setOn] = useState(true);
   return (
@@ -122,12 +103,10 @@ function Rows(): React.JSX.Element {
   );
 }
 
-/** A provider's mark, at the size a row's leading mark stands. */
 function Mark({ provider }: { provider: (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER] }) {
   return <ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.ROW} />;
 }
 
-/** A key's field and its presses, grown under the key's row. */
 function KeyForm(): React.JSX.Element {
   const [key, setKey] = useState("");
   return (
@@ -147,7 +126,6 @@ function KeyForm(): React.JSX.Element {
   );
 }
 
-/** The row's slots: an adornment on the label's line, what a row grows below it, and indented rows. */
 function SlottedRows(): React.JSX.Element {
   return (
     <SettingsSection>
@@ -199,7 +177,6 @@ function SlottedRows(): React.JSX.Element {
   );
 }
 
-/** A row whose two presses leave its words too little room beside them, as Workspace connections' GitHub stands, and a row whose one press leaves enough. */
 function PressRows(): React.JSX.Element {
   return (
     <SettingsSection>
@@ -230,7 +207,6 @@ function PressRows(): React.JSX.Element {
   );
 }
 
-/** What a row's line says about its subject, a mark led by its own box, and a value ending in a column. */
 function StateRows(): React.JSX.Element {
   return (
     <SettingsSection>
@@ -287,7 +263,6 @@ function StateRows(): React.JSX.Element {
   );
 }
 
-/** A saved credential's facts beside its presses, wrapping where the line is narrow. */
 function FactsLine(): React.JSX.Element {
   return (
     <Inline justify={JUSTIFY.BETWEEN}>
@@ -305,7 +280,6 @@ function FactsLine(): React.JSX.Element {
   );
 }
 
-/** Compact rows, bare in a popover that insets them, as a pane's view settings stand. */
 function CompactRows(): React.JSX.Element {
   return (
     <div className="catalog-popover catalog-settings-narrow">
@@ -330,7 +304,6 @@ function CompactRows(): React.JSX.Element {
   );
 }
 
-/** List rows, a reference read down rather than set, as the window's keyboard shortcuts stand. */
 function ListRows(): React.JSX.Element {
   const commands = [
     APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE],
@@ -348,7 +321,6 @@ function ListRows(): React.JSX.Element {
   );
 }
 
-/** Accounts under their provider's row that fold their repositories open under their words. */
 function FoldRows(): React.JSX.Element {
   return (
     <SettingsSection>
@@ -400,7 +372,6 @@ function FoldRows(): React.JSX.Element {
   );
 }
 
-/** Integrations that fold their own rows under their row, closed until pressed, and one with no rows to fold. */
 function RowsFoldRows(): React.JSX.Element {
   return (
     <SettingsSection title="Workspace connections">

@@ -14,16 +14,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * folding-buttons.tsx -- a toolbar's folding buttons with their words drawn,
- * folded to their glyphs, busy either way, round in the tinted looks a
- * release's presses wear, and in a toolbar that folds them once it is
- * narrower than 360px, which its corner resizes. Folded, each
- * raises its words in the window's tooltip once the pointer rests on it or
- * the keyboard reaches it.
- */
-
-/** A toolbar's acts: the way back, Send feedback, and an outlined Run now, busy where asked. */
 function Acts({ busy = false }: { busy?: boolean }): React.JSX.Element {
   return (
     <Inline gap={GAP.CONTROL}>
@@ -40,7 +30,6 @@ function Acts({ busy = false }: { busy?: boolean }): React.JSX.Element {
   );
 }
 
-/** A release's presses: Restart on the working wash, and Download on the danger wash, round and compact. */
 function Tinted(): React.JSX.Element {
   return (
     <Inline gap={GAP.CONTROL}>
@@ -62,7 +51,6 @@ function Tinted(): React.JSX.Element {
   );
 }
 
-/** A group's fold: a row-wide press, its glyph then its words, and a count inside its fill. */
 function Counted(): React.JSX.Element {
   return (
     <FoldingButton

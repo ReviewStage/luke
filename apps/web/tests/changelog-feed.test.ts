@@ -25,7 +25,6 @@ const CHANGELOG = [
   "",
 ].join("\n");
 
-/** The feed as a feed reader parses it: XML, or a parse error that fails the test. */
 function parsedFeed(markdown: string): Document {
   const feed = new DOMParser().parseFromString(
     changelogFeed(parseReleases(markdown)),

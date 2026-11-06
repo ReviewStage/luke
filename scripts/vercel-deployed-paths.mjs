@@ -1,9 +1,6 @@
-// vercel-deployed-paths.mjs -- the workspaces the Vercel deployment installs and builds from, as git pathspecs.
-
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// Every field pnpm's `--filter <service>...` follows to a workspace.
 const DEPENDENCY_FIELDS = [
   "dependencies",
   "devDependencies",
@@ -11,9 +8,6 @@ const DEPENDENCY_FIELDS = [
   "peerDependencies",
 ];
 const WORKSPACE_PROTOCOL = "workspace:";
-// What a workspace holds that no build reads: its documents, its tests, and
-// their fixtures and goldens. Note that `testing/` is not among them, because
-// a service's build may import from it.
 const UNSHIPPED = [
   "**/*.md",
   "**/*.test.*",
@@ -23,7 +17,6 @@ const UNSHIPPED = [
   "tests/**",
 ];
 
-/** The `packages:` globs of `pnpm-workspace.yaml`, read as the one flat list it is. */
 function workspaceGlobs(root) {
   const lines = readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split("\n");
   const start = lines.findIndex((line) => line.trim() === "packages:");
@@ -37,7 +30,6 @@ function workspaceGlobs(root) {
   return globs;
 }
 
-/** Every workspace directory, from the root, that holds a `package.json`. */
 function workspaceDirectories(root, globs) {
   const directories = [];
   for (const glob of globs) {
@@ -58,7 +50,6 @@ function readManifest(root, dir) {
   return JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8"));
 }
 
-/** The workspaces the deployment's services sit in, from `vercel.json`'s own `services`. */
 function serviceRoots(root) {
   const services = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")).services ?? {};
   const roots = Object.values(services).map((service) => service.root);
@@ -68,7 +59,6 @@ function serviceRoots(root) {
   return roots;
 }
 
-/** The service roots and every workspace they reach through a `workspace:` dependency. */
 function deployedWorkspaces(root) {
   const directories = workspaceDirectories(root, workspaceGlobs(root));
   const byName = new Map(directories.map((dir) => [readManifest(root, dir).name, dir]));
@@ -92,8 +82,6 @@ function deployedWorkspaces(root) {
   return [...reached].sort();
 }
 
-// Note that a tree this cannot read says why on one line and exits 1, which
-// the ignore step reads as a doubt and builds.
 const root = process.argv[2] ?? process.cwd();
 try {
   const paths = deployedWorkspaces(root).flatMap((dir) => [

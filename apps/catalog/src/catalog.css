@@ -1,14 +1,7 @@
-/* catalog.css -- the catalog's own page, drawn in the shared tokens it shows,
-   so the index and the toolbar change density and palette with the example. */
-
-/* Note that the base layer is named first, as each app's reset names it,
-   so a bare glyph's own rule sits under the component that draws it. */
 @layer base, components;
 
 @import "@repo/ui/tokens.css";
 @import "@repo/ui/styles.css";
-/* Tailwind's theme and utilities alone, no preflight, as the apps take them,
-   over `@repo/ui`'s own sources and its shadcn/ui vocabulary. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @import "@repo/ui/tailwind/sources.css";
@@ -32,13 +25,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* One ring for every control, in the apps' own tokens (`--ui-focus-ring-*`,
-   `tokens/profiles.css`) and on the same controls as their reset
-   (`packages/panel/src/styles/base.css`), so a control rings here as it does
-   there. Note that the gate is `:focus-visible` alone, which a browser tab
-   answers right, where the apps track the keyboard themselves
-   (`keyboard-modality.ts`) because their Electron window guesses wrong. In
-   the base layer, so a component's own rule for its focus still wins. */
 @layer base {
   :is(
     button,
@@ -57,11 +43,8 @@ body {
     outline-offset: var(--ui-focus-ring-offset);
   }
 
-  /* A control whose drawn shape is a part of it, a card's reach or a
-     picture's face, rings that part alone, which says so with
-     `data-focus-ring`, as in the apps. */
   :focus-visible:has(> [data-focus-ring]) {
-    outline: none; /* no ring: the part it names rings */
+    outline: none;
   }
 
   :focus-visible > [data-focus-ring] {
@@ -70,24 +53,21 @@ body {
   }
 }
 
-/* A field holding the caret wears no ring, as in the apps (desktop base.css). */
 :is(
   textarea,
   [contenteditable],
   input:not([type="checkbox"], [type="radio"], [type="range"])
 ):focus-visible {
-  outline: none; /* no ring: the caret marks the field */
+  outline: none;
 }
 
-/* A brand whose one-color mark is published in named inks wears them by
-   the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
 [data-ui-theme="dark"]
-:is(
-  .integration-mark-executor,
-  .integration-mark-notion,
-  .integration-mark-resend,
-  .integration-mark-sentry
-) {
+  :is(
+    .integration-mark-executor,
+    .integration-mark-notion,
+    .integration-mark-resend,
+    .integration-mark-sentry
+  ) {
   color: #fff;
 }
 
@@ -244,8 +224,6 @@ body {
   white-space: nowrap;
 }
 
-/* A popover's anchor, the positioned box that holds its button alone, and
-   the room the popover opens in: tall enough above the buttons to hold it. */
 .catalog-anchor {
   position: relative;
 }
@@ -263,9 +241,6 @@ body {
   box-shadow: 0 4px 16px var(--ui-color-shadow);
 }
 
-/* A short room that scrolls (`ScrollArea`), its button low enough that the
-   popover opens above it until a scroll lifts the button toward the room's
-   top. The frame clips the scroll bar to its corners. */
 .catalog-popover-room {
   position: relative;
   display: flex;
@@ -282,7 +257,6 @@ body {
   padding: 140px var(--ui-space-12) 0;
 }
 
-/* An example's column of samples, each a row of its own. */
 .catalog-stack {
   display: flex;
   flex-direction: column;
@@ -290,7 +264,6 @@ body {
   gap: var(--ui-space-12);
 }
 
-/* A row of attachment chips, with room above for the discs on their corners. */
 .catalog-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -300,7 +273,6 @@ body {
   list-style: none;
 }
 
-/* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;
   flex-direction: column;
@@ -312,14 +284,11 @@ body {
   border-radius: var(--ui-radius-8);
 }
 
-/* A column wider than a strip's narrow break and short of its whole sentence, so its words are cut short. */
 .catalog-strip-room {
   width: 520px;
   max-width: 100%;
 }
 
-/* A sample block standing for an item an arrangement holds; a long one
-   gives way rather than overflowing, as a real label does. */
 .catalog-swatch {
   overflow: hidden;
   padding: var(--ui-space-4) var(--ui-space-8);
@@ -332,8 +301,6 @@ body {
   white-space: nowrap;
 }
 
-/* A bar a path gives way in, at its wide, narrow, and narrowest widths
-   (`Breadcrumbs`' `shownAt`, read off the `BreadcrumbBar` it holds). */
 .catalog-crumb-bar {
   display: flex;
   width: 600px;
@@ -351,7 +318,6 @@ body {
   width: 240px;
 }
 
-/* A pane's room an empty state fills, tall enough to stand it above the middle. */
 .catalog-empty-room {
   display: flex;
   flex-direction: column;
@@ -362,15 +328,12 @@ body {
   width: 200px;
 }
 
-/* A region whose drawing failed, tall enough for the mark, the words, and
-   Reload. */
 .catalog-reload-room {
   display: flex;
   flex-direction: column;
   height: 280px;
 }
 
-/* A region a failed read would have filled, its failure centered in it. */
 .catalog-error-region {
   align-items: center;
   justify-content: center;
@@ -380,12 +343,10 @@ body {
   width: 200px;
 }
 
-/* A toolbar's room, wider than its presses and short of its whole sentence. */
 .catalog-error-toolbar {
   width: 400px;
 }
 
-/* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--ui-space-8);
   border: 1px dashed var(--ui-color-border-strong);
@@ -396,7 +357,6 @@ body {
   width: 160px;
 }
 
-/* A pane a Fill stands in: its head, then the room the Fill takes. */
 .catalog-fill-pane {
   display: flex;
   width: 160px;
@@ -408,7 +368,6 @@ body {
   border-radius: var(--ui-radius-8);
 }
 
-/* A transcript's column, as wide as a narrow panel's, which a line spans. */
 .catalog-transcript {
   width: min(360px, 100%);
   padding: var(--ui-space-8);
@@ -416,13 +375,10 @@ body {
   border-radius: var(--ui-radius-8);
 }
 
-/* A card in a column narrower than its words. */
 .catalog-card-narrow {
   width: 200px;
 }
 
-/* A line a flush card's list draws, inset as a table's cell is, with a
-   hairline between it and the line above. */
 .catalog-card-row {
   padding: var(--ui-space-12) var(--ui-space-20);
 }
@@ -431,24 +387,19 @@ body {
   border-top: 1px solid var(--ui-color-border);
 }
 
-/* A card's own control, standing over the card's press. */
 .catalog-card-press-lift {
   position: relative;
   z-index: 1;
 }
 
-/* A form's column at a settings page's measure. */
 .catalog-column {
   max-width: 360px;
 }
 
-/* A sample composer's words and foot, inside its frame. */
 .catalog-composer {
   padding: var(--ui-space-12);
 }
 
-/* A palette's short card: its search row over a list engine's box that
-   fills the rest of the card's height. */
 .catalog-palette {
   display: flex;
   height: 200px;
@@ -456,8 +407,6 @@ body {
   gap: var(--ui-space-8);
 }
 
-/* A picture's card: its name and Close along the top, the picture under
-   it on its own ground. */
 .catalog-media-bar {
   display: flex;
   align-items: center;
@@ -474,8 +423,6 @@ body {
   background: var(--ui-color-surface);
 }
 
-/* A picture in a bare dialog's own card: the picture centered on its own
-   ground under its bar. */
 .catalog-window-picture {
   display: grid;
   min-height: 0;
@@ -484,9 +431,6 @@ body {
   background: var(--ui-color-surface);
 }
 
-/* The mark gives way to a narrow or short window, so the card that fits it
-   never has to clip it: the window less the dimmed margin, the picture's
-   inset, the card's edge, and, for its height, the bar above it. */
 .catalog-media-picture > .ui-product-mark,
 .catalog-window-picture > .ui-product-mark {
   width: min(
@@ -502,7 +446,6 @@ body {
   aspect-ratio: 3 / 2;
 }
 
-/* The measure a settings page gives its sections. */
 .catalog-settings {
   max-width: 560px;
 }
@@ -511,14 +454,10 @@ body {
   max-width: 320px;
 }
 
-/* A column past the row's 380px line, as a phone's card stands, where two
-   presses still leave the words too little room beside them. */
 .catalog-settings-between {
   max-width: 400px;
 }
 
-/* The window or pane a settings page fills: a fixed height, so the page
-   scrolls inside it, and a dashed edge showing where the page's own edge is. */
 .catalog-settings-frame {
   width: 100%;
   max-width: 880px;
@@ -531,8 +470,6 @@ body {
   max-width: 400px;
 }
 
-/* A key's field and its presses, grown under its row: the field takes the
-   line's room. */
 .catalog-settings-key {
   display: flex;
   flex-wrap: wrap;
@@ -544,28 +481,23 @@ body {
   flex: 1 1 var(--ui-select-field-width);
 }
 
-/* The tooltips example's row, whose name's card hangs beside the whole row. */
 .catalog-carded-row {
   display: inline-flex;
   gap: var(--ui-space-4);
 }
 
-/* The hover card example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
 }
 
-/* A toolbar folding its buttons, as an app's container query does. */
 .catalog-folded {
   --ui-fold: folded;
 }
 
-/* A toolbar shorter still, leaving a split button its main part's glyph. */
 .catalog-bare {
   --ui-fold: bare;
 }
 
-/* A toolbar whose corner resizes it, folding its buttons below 360px. */
 .catalog-folding-toolbar {
   overflow: hidden;
   width: 480px;
@@ -582,9 +514,6 @@ body {
   }
 }
 
-/* A name renamed in place: the name, or its field, and Rename at its end.
-   In a well, the well is outlined and holds the field at a tab's width, as
-   a tab holds its name's field. */
 .catalog-inline-edit {
   display: flex;
   align-items: center;
@@ -607,7 +536,6 @@ body {
   width: 24ch;
 }
 
-/* A decorative ring at a mark's size. */
 .catalog-ring {
   display: inline-flex;
   width: 14px;
@@ -615,14 +543,11 @@ body {
   color: var(--ui-color-accent-text);
 }
 
-/* A region of a pane, tall enough to center what it holds. */
 .catalog-region {
   display: flex;
   height: 120px;
 }
 
-/* Room a placeholder stands in, as wide as what it stands for; a block's
-   room is a plot's whole box. */
 .catalog-skeleton-block {
   width: 240px;
   height: 96px;
@@ -636,13 +561,10 @@ body {
   width: 120px;
 }
 
-/* A row's item that takes the room its row leaves. */
 .catalog-skeleton-grow {
   flex: 1;
 }
 
-/* A frame the size of a screen a page pattern fills: a tablet's width, or
-   a phone's, as tall as the window, so the page centers in it as it would. */
 .catalog-screens {
   display: flex;
   flex-wrap: wrap;
@@ -662,27 +584,20 @@ body {
   width: 320px;
 }
 
-/* A side panel's width, narrower than a page's measure and its insets. */
 .catalog-screen-panel {
   width: 440px;
 }
 
-/* A screen as tall as a window's content, so a collection page scrolls in it. */
 .catalog-screen-collection {
   display: flex;
   height: 480px;
 }
 
-/* A screen as tall as a window's content, so a detail page's columns
-   scroll in it. */
 .catalog-screen-detail {
   display: flex;
   height: 480px;
 }
 
-/* The window's toolbar a page under the toolbar frame stands still: one
-   row, its title at the toolbar's own 15px, a hairline under it, as the
-   desktop window draws it. */
 .catalog-window-toolbar {
   display: flex;
   flex: none;
@@ -701,8 +616,6 @@ body {
   white-space: nowrap;
 }
 
-/* A board's columns, each a card's width, which outrun a narrow screen so
-   the page scrolls them sideways. */
 .catalog-board {
   display: flex;
   gap: var(--ui-space-12);
@@ -712,16 +625,12 @@ body {
   flex: 1 0 220px;
 }
 
-/* A screen as tall as a window, which scrolls the public page it holds as a
-   document would (`ScrollArea`), so its banner stands still at the top. */
 .catalog-screen-public {
   display: flex;
   height: 480px;
   flex-direction: column;
 }
 
-/* The words an example lays in a public page's banner and footer, as the
-   site's own chrome lays them. */
 .catalog-public-banner {
   display: flex;
   align-items: center;
@@ -748,21 +657,17 @@ body {
   font-size: var(--ui-type-caption-size);
 }
 
-/* A recording's stand-in in the landing's example, at the demo's own shape. */
 .catalog-public-media {
   aspect-ratio: 1240 / 864;
   background: var(--ui-color-fill-hover);
 }
 
-/* A release in the wide page's example: its version and date on a rail
-   beside its notes, as the changelog lays them. */
 .catalog-public-release {
   display: grid;
   grid-template-columns: 8.5rem minmax(0, 1fr);
   gap: var(--ui-space-40);
 }
 
-/* The product's mark at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;
   width: 52px;
@@ -775,9 +680,6 @@ body {
   height: 100%;
 }
 
-/* A pane's room a scroll area fills under a pinned bar, short enough that
-   its rows run past it; the wide one holds a board that runs past its
-   side. */
 .catalog-scroll-room {
   display: flex;
   flex-direction: column;
@@ -798,14 +700,10 @@ body {
   border-bottom: 1px solid var(--ui-color-border);
 }
 
-/* The caller's own element inside the area, holding its padding, so the
-   scroll bar stands at the area's edge. */
 .catalog-scroll-body {
   padding: var(--ui-space-8) var(--ui-space-12);
 }
 
-/* A log whose groups each open on a band stuck to the area's top, the
-   band's height the role the area's fade inset begins beneath. */
 .catalog-scroll-banded {
   padding: 0 var(--ui-space-12) var(--ui-space-8);
 }
@@ -834,7 +732,6 @@ body {
   background: var(--ui-color-fill-hover);
 }
 
-/* The width field and its Apply sit with the toolbar's links. */
 .catalog-width {
   display: flex;
   align-items: center;
@@ -843,19 +740,14 @@ body {
 }
 
 .catalog-width [data-slot="input"] {
-  inline-size: 10ch; /* four digits and the spinner, at either profile's size */
+  inline-size: 10ch;
 }
 
-/* An example framed at a chosen width: no padding or border, so the example
-   gets the whole width, and its edge drawn as an outline just outside, so
-   what overflows the width shows past the line rather than being clipped. */
 .catalog-width-frame {
   outline: 1px dashed var(--ui-color-border);
   outline-offset: var(--ui-space-4);
 }
 
-/* Picture tiles: the frame a place draws a picture in, and a row of tiles
-   that fill the room each is given. */
 .catalog-picture-frame {
   display: block;
   overflow: clip;
@@ -895,8 +787,6 @@ body {
   white-space: nowrap;
 }
 
-/* A picture opened over the window from its tile: its name over it, the
-   picture fitted under. */
 .catalog-picture-viewer-title {
   padding: var(--ui-space-8) var(--ui-space-12);
   color: var(--ui-color-text-muted);
@@ -909,7 +799,6 @@ body {
   background: var(--ui-color-surface);
 }
 
-/* A message box's card around a bare text area, at a composer's insets. */
 .catalog-message-box {
   --ui-text-area-inset-start: var(--ui-space-12);
   --ui-text-area-inset-inline: var(--ui-space-12);
@@ -919,8 +808,6 @@ body {
   background: var(--ui-color-ground);
 }
 
-/* A toolbar's row a tab strip stands in, at a pane's width and a narrow
-   one's, so its tabs give way and scroll along. */
 .catalog-tab-row {
   display: flex;
   align-items: center;
@@ -935,13 +822,10 @@ body {
   width: 320px;
 }
 
-/* A strip on the window's frame stands on the frame's own color. */
 .catalog-tab-row[data-frame="true"] {
   background: var(--ui-color-sidebar);
 }
 
-/* A failure's mark at a tab's end, as an app draws its own: the alert in
-   the danger color, a size under the glyph it follows. */
 .catalog-end-mark {
   display: inline-flex;
   width: 14px;
@@ -954,8 +838,6 @@ body {
   height: 100%;
 }
 
-/* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
-   list's width, its crumb inset as the rows' words are. */
 .catalog-menu-surface {
   width: calc(100% - var(--ui-space-48));
 }
@@ -964,14 +846,12 @@ body {
   padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-4);
 }
 
-/* A row that has set its own type and ink, for words that inherit them. */
 .catalog-inherited {
   margin: 0;
   color: var(--ui-color-text-muted);
   font-size: var(--ui-type-caption-size);
 }
 
-/* The box a hidden rail's strip stands in, as tall as a few rows. */
 .catalog-mark-strip {
   display: flex;
   width: var(--ui-space-12);
@@ -979,9 +859,6 @@ body {
   border-right: 1px solid var(--ui-color-border);
 }
 
-/* The room a toast stack stands in: its transform makes it the containing
-   block of the stack's fixed corner, so the stack stands in the box rather
-   than the window. */
 .catalog-toast-stage {
   position: relative;
   height: 340px;
@@ -990,10 +867,6 @@ body {
   transform: translateZ(0);
 }
 
-/* A phone's stage for the drawer swipe (`drawer-swipes.tsx`): the drawer
-   stands on its left edge over the work, slid away until opened, on the
-   pane's beat, and while a finger drags it, at the share open the swipe
-   writes, playing nothing. */
 .catalog-drawer-stage {
   position: relative;
   width: min(360px, 100%);
@@ -1030,13 +903,10 @@ body {
   transition: none;
 }
 
-/* A box the words inside answer the width of (`under`), as a card or a header does. */
 .catalog-room {
   container: ui-room / inline-size;
 }
 
-/* A card a band stands across the top of, as a review thread's card names
-   the lines it is on (`LineButton`'s band). */
 .catalog-band-card {
   display: flex;
   overflow: clip;
@@ -1061,8 +931,6 @@ body {
   padding: var(--ui-space-4) var(--ui-space-12);
 }
 
-/* A glyph's seat before its line's words (`GlyphSlot`), as a call's line
-   lays one out; one before words that wrap stands at their first line. */
 .catalog-glyph-line {
   display: flex;
   align-items: center;
@@ -1083,13 +951,10 @@ body {
   color: var(--ui-color-accent-text);
 }
 
-/* A container sizing the glyphs it seats, as a review card does its face. */
 .catalog-glyph-large {
   --ui-glyph-size: var(--ui-space-24);
 }
 
-/* A box holding a pane and the work beside it, the pane's edge
-   (`ResizeEdge`) straddling the border between them. */
 .catalog-edged-box {
   display: flex;
   width: min(360px, 100%);
@@ -1109,8 +974,6 @@ body {
   flex: 1 1 auto;
 }
 
-/* The frame a zoomed picture (`ZoomImage`) stands in, which clips what
-   stands past it and takes two fingers' pinch rather than the page. */
 .catalog-zoom-frame {
   display: grid;
   width: 320px;
@@ -1122,8 +985,6 @@ body {
   touch-action: none;
 }
 
-/* A transcript's fold skins its summary's line itself, as a pull request's
-   section heading does. */
 .catalog-transcript-fold .ui-disclosure-summary {
   display: flex;
   align-items: center;

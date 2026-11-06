@@ -1,12 +1,3 @@
-/**
- * tasks.ts -- the task and the member a `vespin` command names: a task argument read as its id, its number, or its key, and the signed-in member's own id.
- *
- * A number or a key names a task of the workspace the command acts in
- * (`workspace.ts`), found through `plans.find` as a link's is; an id is
- * taken as it is, and the service answers one the member does not reach as
- * not found.
- */
-
 import { cliIdentity } from "@repo/credentials/cli";
 import { CLI_EXIT } from "@repo/features/cli-exit";
 import { cliTaskRefOf } from "@repo/features/cli-task-ref";
@@ -15,7 +6,6 @@ import { CommandFailed } from "./output.js";
 import { accountBaseUrl, askService, session } from "./session.js";
 import { resolveWorkspace } from "./workspace.js";
 
-/** The id of the task an argument names, or a usage failure where it names none. */
 export function resolveTaskId(argument: string) {
   return Effect.gen(function* () {
     const ref = cliTaskRefOf(argument);
@@ -36,7 +26,6 @@ export function resolveTaskId(argument: string) {
   });
 }
 
-/** The signed-in member's own account id, as the service's userinfo names it. */
 export const signedInMemberId = Effect.gen(function* () {
   const { origin, credential } = yield* session;
   const identity = yield* Effect.mapError(

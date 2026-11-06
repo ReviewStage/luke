@@ -12,26 +12,10 @@ import {
   type WorkingSetCrossing,
 } from "./renderer-health";
 
-/**
- * renderer-health.test.ts -- what main hears of each window's renderer: a
- * panel that stops answering is one report per stretch, however often
- * Electron repeats itself, carrying how long and how much memory; and a
- * window's working set is noted once as it crosses its bound, never while
- * it stays under it or above it; and each kind of process's CPU is summed
- * up every five minutes from its CPU time, never more often.
- *
- * Note that Electron's module is replaced whole, because it is the operating
- * system's door (its windows and its process metrics) and answers nothing
- * outside an Electron process.
- */
-
 const { FakeWindow, cpu, metrics, windows } = await vi.hoisted(async () => {
   const { EventEmitter } = await import("node:events");
-  /** The working set of each process, in kilobytes, as the system would measure it. */
   const metrics = new Map<number, number>();
-  /** Each process's type and the CPU seconds it has spent since it started, as the system would count them. */
   const cpu = new Map<number, { type: string; seconds: number }>();
-  /** A window as Electron opens it: its own events, and the page behind it in a process of its own. */
   class FakeWindow extends EventEmitter {
     static #nextId = 1;
     readonly webContents: {
@@ -93,7 +77,6 @@ afterEach(() => {
 
 const KILOBYTES_PER_GIGABYTE = 1024 ** 2;
 
-/** Lets the fibers forked here hear what was just emitted, with no time passing. */
 const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
   times: 5,
 });
@@ -111,7 +94,6 @@ it.effect("a panel that stops answering is reported once per stretch, as it answ
     panel.emit("unresponsive");
     yield* settle;
     yield* TestClock.adjust(Duration.seconds(3));
-    // Electron may say it again within the same stretch.
     panel.emit("unresponsive");
     yield* TestClock.adjust(Duration.seconds(4));
     assert.equal(reported.length, 0, "nothing is reported while the page still does not answer");
@@ -130,7 +112,6 @@ it.effect("a panel that stops answering is reported once per stretch, as it answ
       },
     ]);
 
-    // A second stretch is a second report.
     panel.emit("unresponsive");
     yield* settle;
     yield* TestClock.adjust(Duration.seconds(2));
@@ -193,12 +174,10 @@ it.effect("a window's working set is noted once as it crosses its bound, and nev
     yield* TestClock.adjust(Duration.seconds(30));
     assert.deepEqual(noted, [{ document: "index.html", workingSetBytes: 1.6 * 1024 ** 3 }]);
 
-    // Staying over the bound is not crossing it again.
     metrics.set(4201, 1.8 * KILOBYTES_PER_GIGABYTE);
     yield* TestClock.adjust(Duration.seconds(60));
     assert.equal(noted.length, 1);
 
-    // Falling back under and crossing again is.
     metrics.set(4201, 1.0 * KILOBYTES_PER_GIGABYTE);
     yield* TestClock.adjust(Duration.seconds(60));
     metrics.set(4201, 1.7 * KILOBYTES_PER_GIGABYTE);
@@ -236,8 +215,6 @@ it.effect("each kind of process's CPU is summed up every five minutes, from its 
     );
     yield* settle;
 
-    // Twenty fifteen-second spans: main spends a tenth of a core but for one
-    // span of a whole one, and the two renderers a fifth and a tenth.
     for (let span = 1; span <= 20; span++) {
       spend(4300, span === 7 ? 15 : 1.5);
       spend(4301, 3);
@@ -248,7 +225,6 @@ it.effect("each kind of process's CPU is summed up every five minutes, from its 
       yield* TestClock.adjust(Duration.seconds(15));
     }
 
-    // Main: (19 × 10 % + 100 %) / 20. The renderers together: 20 % + 10 %.
     assert.deepEqual(summaries, [
       {
         process: "main",

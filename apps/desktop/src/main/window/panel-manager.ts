@@ -27,91 +27,35 @@ import { trafficLightsAt } from "./zoom";
 
 interface PanelManagerOptions {
   runMode: RunMode;
-  /** The native material its windows are drawn on (`window-material.ts`); the sidebar's where unset. */
   material?: WindowMaterial | undefined;
-  /** The named development instance this run is, which every window's title then carries; none for the plain one. */
   instance?: string | undefined;
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
-  /** The zoom factor a window is created at: the stored size as it stands. */
   zoomFactor: () => number;
-  /**
-   * The file the window's place is kept in as it closes and read from as it
-   * opens; none for a run that keeps no place, which opens at the first frame.
-   */
   placementPath: string | undefined;
-  /**
-   * Whether this process is going, so closing the window lets it go rather
-   * than hiding it. Read from the quit rather than from `before-quit`,
-   * because a quit held for a question is not one that is going.
-   */
   closing: () => boolean;
-  /**
-   * The last panel window went down on its own. All panels closed is how
-   * this process decides it is done.
-   */
   onAllClosed?: () => void;
-  /**
-   * The window went into full screen or came out of it, which its title bar
-   * lays itself out by (`windowFactsFor`).
-   */
   onFullScreenChanged?: () => void;
-  /**
-   * Follows a window from its creation until it closes, for each stretch
-   * its page stops answering (`renderer-health.ts`); handed every window
-   * this opens.
-   */
   followResponsiveness?: (window: BrowserWindow) => void;
-  /**
-   * The window's renderer died or failed to load: it is about to be
-   * reloaded, or, past the bound, the developer is asked whether to.
-   */
   onRendererGone?: (reason: string) => void;
 }
 
-/**
- * Checklist: scripts/evidence.sh validates every capture at WIDTH by HEIGHT.
- *
- * The window the app first opens in: large enough to read a description beside its
- * questions, and never past the display's work area less a margin, so a
- * small display still shows the whole window with the Dock and the menu bar
- * clear of it.
- */
 const DESKTOP_WINDOW = {
   WIDTH: 1280,
   HEIGHT: 840,
   MIN_WIDTH: 760,
   MIN_HEIGHT: 520,
-  // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
-  // The window's native ground is the Mac's own sidebar material, which
-  // follows the window's appearance and the Reduce transparency setting by
-  // itself; the page draws on it in clear, so the shell's gray frame is a
-  // tint over the frosted wallpaper, and the work sheet is laid over that.
   MATERIAL: "sidebar",
   CLEAR: "#00000000",
 } as const;
 
-/**
- * The sidebar material, as a window before Tahoe is created on and as one
- * whose glass could not be laid falls back to. Note that it follows the
- * window, as a native window's material does: live while the window is key,
- * and flat once another app is in front, so WindowServer stops blending the
- * desktop behind a window no one is working in.
- */
 const SIDEBAR_VIBRANCY = {
   vibrancy: DESKTOP_WINDOW.MATERIAL,
   visualEffectState: "followWindow",
 } as const satisfies BrowserWindowConstructorOptions;
 
-/**
- * Lays Liquid Glass behind the window's page once it has loaded, as the
- * addon needs the page's view in place. A transparent window hides the
- * traffic lights unless asked, so they are shown. Where the glass cannot be
- * laid, the window falls back to the sidebar material rather than standing
- * clear over the desktop.
- */
 function layGlassOnceLoaded(window: BrowserWindow): void {
   window.webContents.once("did-finish-load", () => {
     if (window.isDestroyed()) return;
@@ -120,7 +64,6 @@ function layGlassOnceLoaded(window: BrowserWindow): void {
   });
 }
 
-/** The first frame of the window, centered in the display's work area. */
 function desktopBounds(display: Display): Rectangle {
   const area = display.workArea;
   const width = Math.min(DESKTOP_WINDOW.WIDTH, area.width - DESKTOP_WINDOW.MARGIN * 2);
@@ -133,15 +76,6 @@ function desktopBounds(display: Display): Rectangle {
   };
 }
 
-/**
- * The app's one window: an ordinary, resizable app window, opened where it was
- * last left (`window-placement.ts`) and always showing the panel. It is kept
- * under the panel's old name and shape because every caller — the IPC
- * handlers, the tray, the talk key — addresses a panel by display, and the
- * window answers for the display it was opened against. Closing it hides
- * it; the app keeps listening, and the Dock tile or a second launch brings
- * it back.
- */
 export class PanelManager {
   readonly #runMode: RunMode;
   readonly #instance: string | undefined;
@@ -155,9 +89,7 @@ export class PanelManager {
   readonly #onRendererGone: ((reason: string) => void) | undefined;
   readonly #placementPath: string | undefined;
   readonly #closing: () => boolean;
-  /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
-  /** The windows hidden, minimized, or wholly covered since they last showed, the ones whose document is held. */
   readonly #hidden = new WeakSet<BrowserWindow>();
 
   readonly #material: WindowMaterial;
@@ -178,12 +110,6 @@ export class PanelManager {
     this.#closing = options.closing;
   }
 
-  /**
-   * Makes sure the one window stands, keyed by the main display. A window
-   * whose display went away is re-keyed rather than recreated, so the
-   * conversation and the panel's state survive a swap of the main display;
-   * macOS itself moves the frame onto a display that is still there.
-   */
   reconcile(): void {
     const wanted = screen.getPrimaryDisplay().id;
     const [held] = [...this.#windows.keys()];
@@ -191,7 +117,6 @@ export class PanelManager {
     else if (held !== wanted) this.#rebind(held, wanted);
   }
 
-  /** Hands a payload to every living window. */
   broadcast<Name extends EventPushName>(push: Name, payload: PushPayload<Name>): void {
     for (const window of this.#windows.values()) {
       if (window.isDestroyed()) continue;
@@ -199,7 +124,6 @@ export class PanelManager {
     }
   }
 
-  /** The window an action aimed at the app lands on. */
   primaryPanel(): BrowserWindow | undefined {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed()) return window;
@@ -207,24 +131,10 @@ export class PanelManager {
     return undefined;
   }
 
-  /**
-   * A window no one can see is told no document until it shows again, when
-   * it is handed the newest at once, because every document it is pushed is
-   * rendered there whether or not the window is drawn, and while agents run
-   * that is a hidden panel's whole CPU. Only the document is held: its
-   * events and its own calls still go through.
-   */
   #holdState(window: BrowserWindow): void {
     windowPushes.holdState(window.webContents, this.#hidden.has(window));
   }
 
-  /**
-   * Follows whether anyone can see the window. Note that on macOS Electron
-   * says `hide` and `show` as the window's occlusion changes, so a window
-   * wholly covered, minimized, or under a hidden app reads as hidden, and one
-   * partly in view reads as shown. A window that takes the keyboard is shown
-   * whatever was said before, so a missed `show` cannot leave it stale.
-   */
   #followVisibility(window: BrowserWindow): void {
     const hidden = () => {
       if (window.isDestroyed()) return;
@@ -243,12 +153,10 @@ export class PanelManager {
     window.on("focus", shown);
   }
 
-  /** Every living panel window, for what each one applies itself: the zoom. */
   windows(): readonly BrowserWindow[] {
     return [...this.#windows.values()].filter((window) => !window.isDestroyed());
   }
 
-  /** Every living panel's renderer, for a payload composed per window. */
   senders(): readonly WebContents[] {
     const senders: WebContents[] = [];
     for (const window of this.#windows.values()) {
@@ -257,7 +165,6 @@ export class PanelManager {
     return senders;
   }
 
-  /** The display a renderer message came from, so each window answers for itself. */
   displayIdFor(sender: WebContents): number | undefined {
     for (const [displayId, window] of this.#windows) {
       if (!window.isDestroyed() && window.webContents === sender) return displayId;
@@ -269,7 +176,6 @@ export class PanelManager {
     return screen.getAllDisplays().find((candidate) => candidate.id === displayId);
   }
 
-  /** Brings the window forward, shown again if it was closed. */
   focusExpanded(): void {
     this.#focusWindow(this.primaryPanel());
   }
@@ -278,14 +184,12 @@ export class PanelManager {
     this.#focusWindow(this.#windows.get(displayId));
   }
 
-  /** How many panel windows stand — the count the process's lifetime is decided by. */
   get standing(): number {
     let count = 0;
     for (const window of this.#windows.values()) if (!window.isDestroyed()) count += 1;
     return count;
   }
 
-  /** Whether the panel window's renderer is asking. */
   owns(webContents: WebContents): boolean {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed() && window.webContents === webContents) return true;
@@ -293,7 +197,6 @@ export class PanelManager {
     return false;
   }
 
-  /** Whether the panel window whose renderer is asking stands in full screen. */
   fullScreen(webContents: WebContents): boolean {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed() && window.webContents === webContents) return window.isFullScreen();
@@ -301,14 +204,12 @@ export class PanelManager {
     return false;
   }
 
-  /** Shows the window without taking focus, as a second launch or a wake asks. */
   showInactiveAll(): void {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed()) window.showInactive();
     }
   }
 
-  /** Re-keys the living window under another display. */
   #rebind(fromDisplayId: number, toDisplayId: number): void {
     const window = this.#windows.get(fromDisplayId);
     if (!window) return;
@@ -316,11 +217,6 @@ export class PanelManager {
     this.#windows.set(toDisplayId, window);
   }
 
-  /**
-   * Brings the window forward as the key window, showing it again if it was
-   * closed. The app has to come forward before one of its windows can take
-   * keyboard focus.
-   */
   #focusWindow(window: BrowserWindow | undefined): void {
     if (!window || window.isDestroyed() || !this.#runMode.takesFocus) return;
     if (process.platform === "darwin") app.focus({ steal: true });
@@ -328,7 +224,6 @@ export class PanelManager {
     window.focus();
   }
 
-  /** Keeps where the window stands, as it closes, for the next launch to open it there. */
   #keepPlacement(window: BrowserWindow): void {
     if (this.#placementPath === undefined) return;
     writeWindowPlacement(
@@ -351,32 +246,20 @@ export class PanelManager {
       workAreas: screen.getAllDisplays().map((each) => each.workArea),
       first: desktopBounds(display),
     });
-    // Created at the stored zoom, so the first frame is drawn at the size it
-    // keeps rather than jumping to it once the page has loaded.
     const zoomFactor = this.#zoomFactor();
 
     const material = this.#material;
     const windowOptions: BrowserWindowConstructorOptions = {
       ...placement.bounds,
-      // Only ever set when true, because a false here takes the green
-      // button's full screen away from the window altogether.
       ...(placement.fullScreen ? { fullscreen: true } : undefined),
       minWidth: DESKTOP_WINDOW.MIN_WIDTH,
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
       title: this.#instance === undefined ? PRODUCT_NAME : `${PRODUCT_NAME} (${this.#instance})`,
       show: false,
       backgroundColor: DESKTOP_WINDOW.CLEAR,
-      // On Tahoe the window is clear for the Liquid Glass laid behind its
-      // page once it loads; before it, it is drawn on the sidebar material
-      // (`window-material.ts`). Note that the glass window still names the
-      // material's state, because Electron keeps it from construction and has
-      // no setter: the sidebar material a failed lay falls back to then
-      // follows the window too.
       ...(material === WINDOW_MATERIAL.LIQUID_GLASS
         ? { transparent: true, visualEffectState: SIDEBAR_VIBRANCY.visualEffectState }
         : SIDEBAR_VIBRANCY),
-      // The renderer draws its own title bar under the traffic lights, so the
-      // window keeps its frame, its shadow, and its buttons, and nothing else.
       titleBarStyle: "hiddenInset",
       trafficLightPosition: trafficLightsAt(zoomFactor),
       webPreferences: {
@@ -391,9 +274,6 @@ export class PanelManager {
 
     refuseForeignNavigation(window, this.#rendererUrl);
     this.#followVisibility(window);
-    // A page that stops answering is reported once per stretch, as it answers
-    // again or the window closes on it; it is not reloaded, since it may
-    // answer again and the panel holds what the developer was doing. One whose renderer died has lost that already.
     this.#followResponsiveness?.(window);
     const revival = this.#followDeaths(window);
     const drew = () => {
@@ -405,22 +285,15 @@ export class PanelManager {
       if (window.isDestroyed()) return;
       drew();
       if (placement.zoomed) window.maximize();
-      // A capture run is a camera, not a person: it shows the window without
-      // taking the keyboard from whatever else is running.
       if (this.#runMode.takesFocus) this.#focusWindow(window);
       else window.showInactive();
     });
-    // Closing is hiding, as for any Mac app that keeps working in the
-    // background: the app keeps listening for its keys, and the Dock tile, ⌘0,
-    // and ⌘N bring the window back (`app-menu.ts`). Only a quit lets it go.
     window.on("close", (event) => {
       this.#keepPlacement(window);
       if (this.#closing()) return;
       event.preventDefault();
       window.hide();
     });
-    // A named instance's window says which instance it is wherever macOS
-    // lists it, after the title the page gives it.
     const instance = this.#instance;
     if (instance !== undefined) {
       window.on("page-title-updated", (event, title) => {
@@ -430,10 +303,7 @@ export class PanelManager {
     }
     window.on("enter-full-screen", () => this.#onFullScreenChanged?.());
     window.on("leave-full-screen", () => this.#onFullScreenChanged?.());
-    // A mouse's back and forward buttons arrive as a swipe under Logi Options+.
     followSwipes(window);
-    // Found by the window rather than the id it was born under, because a
-    // rebind may have moved it.
     window.on("closed", () => {
       revival.stop();
       windowPushes.holdState(page, false);
@@ -446,20 +316,11 @@ export class PanelManager {
     this.#load(window);
   }
 
-  /** Loads the panel's page; a load that fails is heard as `did-fail-load`, so its promise's rejection says nothing more. */
   #load(window: BrowserWindow): void {
     if (window.isDestroyed()) return;
     window.loadFile(this.#rendererHtmlPath).catch(() => undefined);
   }
 
-  /**
-   * Reloads the window's page each time its renderer dies or fails to load,
-   * after a pause and within a bound (`renderer-revival.ts`),
-   * so a blank window stands only for that pause. Past the bound the window
-   * is shown with the question of reloading once more, since a window that
-   * crash-loops unasked would spin the process, or quitting. A quit's own
-   * teardown is no death.
-   */
   #followDeaths(window: BrowserWindow): RendererRevival {
     const revival: RendererRevival = new RendererRevival({
       revive: () => this.#load(window),
@@ -469,9 +330,6 @@ export class PanelManager {
         void askReloadPanel(window).then((reload) => {
           if (window.isDestroyed() || this.#closing()) return;
           if (!reload) app.quit();
-          // Note that a quit held for its question leaves the launch
-          // standing, and declining it keeps it so, so the page is loaded
-          // once more rather than left blank with no question on it.
           if (!this.#closing()) revival.restart();
         });
       },

@@ -6,14 +6,6 @@ import "@repo/panel/testing/match-media";
 import tokens from "@repo/ui/tokens.css?inline";
 import { afterEach, beforeEach, test, vi } from "vitest";
 
-/**
- * The web app's first frame (`public/app-theme.js`, which app.html runs in
- * its head before any stylesheet paints): the theme the account last chose
- * in this browser is worn, and with nothing chosen, or System, the
- * machine's; and the browser's chrome is tinted with that theme's own
- * ground, as the palette names it, so a dark tab never opens light.
- */
-
 const BOOT = readFileSync(join(import.meta.dirname, "..", "public", "app-theme.js"), "utf8");
 
 let machineDark = false;
@@ -32,7 +24,6 @@ beforeEach(() => {
         dispatchEvent: () => false,
       }) satisfies MediaQueryList,
   );
-  // The page's head as app.html writes it: the profile, the light theme, and the light tint.
   document.documentElement.setAttribute("data-ui-profile", "web");
   document.documentElement.setAttribute("data-ui-theme", "light");
   const meta = document.head.appendChild(document.createElement("meta"));
@@ -47,7 +38,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The page loading: the boot script run, and what the first frame wears. */
 function firstFrame() {
   // biome-ignore lint/security/noGlobalEval: the script under test is the site's own file, run as the page runs it.
   window.eval(BOOT);

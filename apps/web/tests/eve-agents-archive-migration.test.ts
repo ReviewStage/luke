@@ -17,27 +17,8 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * eve-agents-archive-migration.test.ts -- the migration that archives every agent left on eve.
- *
- * Over a database migrated with every migration but it, holding agents on
- * eve, from before the runtime column, on Claude Code, and on eve but
- * archived by a member already: once it runs, the agents on eve or with no
- * runtime stand archived by the app for their starter, with why, the others
- * as they were; the archived agent's open question is closed and its ask
- * withdrawn, its notice and the Claude Code agent's question left open; a
- * second run changes nothing; and the starter's unarchive opens the
- * question again.
- * Synthetic accounts throughout.
- */
-
 const MIGRATION = "20261102192712_eve_agents_archive";
 
-/**
- * A migrations folder holding every migration but this one. Note that the
- * ones named after it are held too, because the agents are seeded through
- * the store, whose inserts name every column a later migration adds.
- */
 const foldersBut = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
@@ -93,7 +74,6 @@ it.effect(
 
         const archivedBy = (agentId: string) =>
           Effect.map(readAgent("dean", agentId), (agent) => Option.getOrThrow(agent).archivedBy);
-        // Note that the migration stores the app as `luke`, its word then, which reads as the app's.
         const retired = {
           by: "app",
           userId: "dean",

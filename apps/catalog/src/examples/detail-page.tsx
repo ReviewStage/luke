@@ -18,16 +18,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * detail-page.tsx -- one thing's page with a secondary column beside its
- * main content, each scrolling on its own; the same page with no secondary
- * column; and the page in a phone's width, where the secondary column
- * follows the main content in the one scroll; a long page whose bar picks up
- * its title once the header scrolls away; and the page under a window's
- * toolbar, which holds its title and acts; and the page in a side panel
- * under its tabs, its words at the tabs' column inset. Every name is made up.
- */
-
 const SECTIONS = [
   {
     id: "goal",
@@ -122,7 +112,6 @@ function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
   );
 }
 
-/** A page long enough to scroll its header away, so its bar picks up the title. */
 function LongTask(): React.JSX.Element {
   return (
     <DetailPage
@@ -165,7 +154,6 @@ function TaskUnderToolbar(): React.JSX.Element {
   );
 }
 
-/** The tabs a side panel's page stands under, as a pull request's do. */
 const PANEL_TABS = [
   { value: "conversation", label: "Conversation" },
   { value: "checks", label: "Checks" },

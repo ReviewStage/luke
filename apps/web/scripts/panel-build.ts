@@ -1,12 +1,3 @@
-/**
- * panel-build.ts -- the panel's build table (`@repo/panel/build-table`) in Vite's shape: the redirects, the trim, the defines, and the static files under `/app/`.
- *
- * The desktop wraps the same table in esbuild's plugins (`apps/desktop/scripts/build.mjs`),
- * so the two builds answer the panel's imports alike and neither restates
- * why. What only esbuild needs, linking a split chunk's stylesheet by hand,
- * Vite does itself.
- */
-
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -21,18 +12,12 @@ import { build } from "esbuild";
 import type { Plugin } from "vite";
 import { PANEL_ASSET_BASE } from "../src/app/web-address";
 
-// Rollup's name for the module this answers itself, `\0`-led so no other plugin loads it.
 const LUCIDE_WHOLE_ID = "\0lucide-whole";
 
-// What each kind of static file is served as in development.
 const CONTENT_TYPES = new Map([[".png", "image/png"]]);
 
-// A dynamic `import("lucide-react")`, as the icon picker spells it. Note that
-// Rollup's resolver is never told whether an import is dynamic, so the call
-// itself is rewritten to name the module of Lucide's `icons` alone.
 const LUCIDE_DYNAMIC_IMPORT = /\bimport\(\s*["']lucide-react["']\s*\)/;
 
-/** Every file under a directory, as its path relative to that directory. */
 async function filesUnder(directory: string): Promise<readonly string[]> {
   const entries = await readdir(directory, { recursive: true, withFileTypes: true });
   return entries
@@ -40,12 +25,6 @@ async function filesUnder(directory: string): Promise<readonly string[]> {
     .map((entry) => path.relative(directory, path.join(entry.parentPath, entry.name)));
 }
 
-/**
- * The panel's imports as its build table answers them: Streamdown's HTML
- * parser and Pierre's diff writer redirected to the panel's own modules, and
- * the icon picker's whole Lucide read from one file. Vitest runs this alone,
- * so a test draws what the build ships.
- */
 export function panelResolve(): Plugin {
   return {
     name: "panel-resolve",
@@ -65,11 +44,6 @@ export function panelResolve(): Plugin {
   };
 }
 
-/**
- * The free identifiers the panel reads, among them the diff highlighter's
- * worker, bundled through esbuild as the desktop bundles it. Note that
- * `process.env.NODE_ENV` is left to Vite, which sets it by mode.
- */
 function panelDefine(): Plugin {
   return {
     name: "panel-define",
@@ -83,7 +57,6 @@ function panelDefine(): Plugin {
   };
 }
 
-/** The panel's static files under `/app/`: served from where they stand in development, and emitted with the client build. */
 function panelStaticFiles(): Plugin {
   const served = panelStaticDirectories().map(({ from, to }) => ({
     from,
@@ -101,7 +74,6 @@ function panelStaticFiles(): Plugin {
         const found = served.find(({ prefix }) => url.startsWith(prefix));
         if (found === undefined) return next();
         const file = path.join(found.from, url.slice(found.prefix.length));
-        // Note that a path climbing out of the folder (`..`) is refused rather than served.
         if (!file.startsWith(found.from + path.sep)) return next();
         readFile(file).then(
           (bytes) => {
@@ -128,7 +100,6 @@ function panelStaticFiles(): Plugin {
   };
 }
 
-/** Everything the web's build needs to bundle the panel. */
 export function panelBuild(): Plugin[] {
   return [panelResolve(), panelDefine(), panelStaticFiles()];
 }

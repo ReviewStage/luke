@@ -4,7 +4,6 @@ import { defineRule } from "@oxlint/plugins";
 import { attributeName, intrinsicTagOf, literalValuesOf } from "../shared/jsx.ts";
 import { isSkeletonClass, isSkeletonComponent, SKELETON_BLOCKS } from "../shared/skeleton-guard.ts";
 
-/** A function's own name, or the name of the binding it is assigned to, or undefined where it has none. */
 function functionNameOf(node: ESTree.Node): string | undefined {
   if (
     node.type !== "FunctionDeclaration" &&
@@ -20,11 +19,6 @@ function functionNameOf(node: ESTree.Node): string | undefined {
     : undefined;
 }
 
-/**
- * The component a JSX element is drawn in: the nearest enclosing function
- * named as a component is (capitalized), so a row's callback or a
- * lowercase helper inside a skeleton counts as the skeleton's own.
- */
 function componentOf(node: ESTree.Node): string | undefined {
   for (let at = node.parent; at; at = at.parent) {
     const name = functionNameOf(at);
@@ -33,16 +27,6 @@ function componentOf(node: ESTree.Node): string | undefined {
   return undefined;
 }
 
-/**
- * A loading skeleton stands in the shape of what replaces it only while it
- * is drawn through the same components, because a skeleton that copies its
- * surface's boxes is a second description of that surface that the surface
- * never reads, and it drifts the first time either changes. So a skeleton's
- * blocks (`Skeleton`, `SkeletonRegion`) are drawn only by a component named
- * `*Skeleton`, and inside one an intrinsic element wears only a class of the
- * skeleton's own, one naming itself a skeleton's; every other box comes from
- * the component the loaded state draws with.
- */
 export const skeletonThroughComponentsRule = defineRule({
   meta: {
     type: "problem",
@@ -79,7 +63,6 @@ export const skeletonThroughComponentsRule = defineRule({
         const tag = intrinsicTagOf(node.name);
         if (!skeleton || tag === undefined) return;
         for (const attribute of node.attributes) {
-          // Note that a spread may carry a class the rule cannot read, so it is refused as an unread class is.
           if (attribute.type === "JSXSpreadAttribute") {
             context.report({ node: attribute, messageId: "spreadBox", data: { tag, component } });
             continue;

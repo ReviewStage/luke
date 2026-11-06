@@ -18,21 +18,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * combobox.tsx -- a Combobox narrowing synthetic issues under a heading, with
- * the words as typed offered after them, open on a query; in a narrow
- * column with a long title; and a list standing alone on a popover, as an
- * editor's `@` hangs one, a row that opens a further list wearing its
- * chevron, and its note where nothing matches; and a list too short to
- * search, holding the keys itself, with a model that cannot be chosen now,
- * the one chosen checked, and a note after them; and rows a list engine of
- * the app's owns, each drawn as `ComboboxOptionItem`, the second lit as the
- * engine's `aria-selected` says, in the box the engine owns too
- * (`ComboboxListBox`); and that box filling a short card under a search
- * row, as ⌘K's results do, scrolling inside itself.
- */
-
-/** Synthetic issues, as a tracker would list them. */
 const ISSUES = [
   { id: "eng-1", key: "ENG-1", title: "Restack the deploy queue", state: "Todo" },
   {
@@ -44,7 +29,6 @@ const ISSUES = [
   { id: "ops-7", key: "OPS-7", title: "Rotate the deploy key", state: "Backlog" },
 ] as const;
 
-/** A field over the issues its words match, holding its own words and active option as a caller would. */
 function Issues({ start }: { start: string }): React.JSX.Element {
   const [value, setValue] = useState(start);
   const [active, setActive] = useState(0);
@@ -85,14 +69,12 @@ function Issues({ start }: { start: string }): React.JSX.Element {
   );
 }
 
-/** Synthetic mentions, as an editor's `@` would offer them: a file, a folder, and the kind a press narrows to. */
 const MENTIONS: readonly ComboboxOption[] = [
   { id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" },
   { id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" },
   { id: "files", label: "Files and folders", icon: <FolderIcon />, detail: "2 files", opens: true },
 ];
 
-/** A list standing alone over `options`, holding its own active option as an editor's caller would. */
 function Mentions({ options }: { options: readonly ComboboxOption[] }): React.JSX.Element {
   const [active, setActive] = useState(0);
   return (
@@ -109,14 +91,12 @@ function Mentions({ options }: { options: readonly ComboboxOption[] }): React.JS
   );
 }
 
-/** Synthetic models, as a picker would list them: one not on the plan, and the one chosen. */
 const MODELS: readonly ComboboxOption[] = [
   { id: "opus", label: "Opus", detail: "High", current: true },
   { id: "sonnet", label: "Sonnet", hint: "Not on this plan", disabled: true, current: false },
   { id: "haiku", label: "Haiku", hint: "⌘3", current: false },
 ];
 
-/** A list with no field, steering itself as a picker too short to search does. */
 function Models(): React.JSX.Element {
   const [active, setActive] = useState(0);
   const keys = useComboboxField({
@@ -145,7 +125,6 @@ function Models(): React.JSX.Element {
   );
 }
 
-/** Rows as a list engine (cmdk) would hand them through its `asChild`, in the box it owns, the second the engine's selected one. */
 function EngineRows(): React.JSX.Element {
   return (
     <div className="catalog-popover catalog-column">
@@ -177,7 +156,6 @@ function EngineRows(): React.JSX.Element {
   );
 }
 
-/** Synthetic files, more than a short card holds, as a palette's Files filter lists them. */
 const FILES = Array.from({ length: 12 }, (_, index) => ({
   id: `file-${index}`,
   label: `notes-${index + 1}.md`,
@@ -185,7 +163,6 @@ const FILES = Array.from({ length: 12 }, (_, index) => ({
   detail: "docs/notes",
 }));
 
-/** An engine's box filling a short card under its search row, as ⌘K's results fill its card, scrolling inside itself. */
 function EngineFill(): React.JSX.Element {
   return (
     <div className="catalog-popover catalog-column catalog-palette">

@@ -13,16 +13,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * picture-sets.tsx -- several pictures shown together: a few in one row at
- * their own shapes, captioned and stretched to the column; many as
- * thumbnails that wrap, six drawn, the last veiled with how many more; a
- * call's few as thumbnails, one still read and one not kept; and what
- * stands in a picture's place alone, read or gone. A press only counts,
- * since opening a picture over the window is the app's.
- */
-
-/** A stand-in screenshot, `width` by `height`, in a gradient of `from` to `to`. */
 function screenshot(width: number, height: number, from: string, to: string): PictureState {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${String(width)}" height="${String(height)}" viewBox="0 0 ${String(width)} ${String(height)}"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><rect x="8%" y="10%" width="40%" height="8%" rx="4" fill="#fff9"/><rect x="8%" y="26%" width="84%" height="56%" rx="6" fill="#fff5"/></svg>`;
   return { kind: PICTURE_STATE.READY, url: `data:image/svg+xml,${encodeURIComponent(svg)}` };
@@ -43,7 +33,6 @@ const MANY = Array.from({ length: 9 }, (_, at) => ({
   to: at % 2 === 0 ? "#c8603d" : "#5a3dc8",
 }));
 
-/** How many times a tile above was pressed. */
 function OpenedLine({ opened }: { opened: number }): React.JSX.Element {
   return (
     <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

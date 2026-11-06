@@ -26,27 +26,22 @@ function panel(code: string): { code: string; filename: string } {
 
 tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
   valid: [
-    // A skeleton draws its blocks through the components the loaded state draws with.
     panel(
       "function RowsSkeleton() { return <SkeletonRegion label={l}><ListRow title={<Skeleton />} /></SkeletonRegion>; }",
     ),
     panel(
       "const ComposerSkeleton = () => <ComposerCard field={<ComposerFieldRoom />} trail={<Skeleton shape={CIRCLE} />} />;",
     ),
-    // A class of the skeleton's own names itself one, and a row's callback is the skeleton's own.
     panel(
       'function LogSkeleton() { return <div className="agent-log-skeleton">{widths.map((w) => <Skeleton key={w} width={w} />)}</div>; }',
     ),
     panel(
       'function PartSkeleton({ wide }) { return <div className={wide ? "pr-skeleton pr-skeleton-wide" : "pr-skeleton"} />; }',
     ),
-    // A lowercase helper inside a skeleton is the skeleton's own.
-    // A spread on a component is the component's to read, as the loaded state's is.
     panel("function RowSkeleton(props) { return <ListRow {...props} title={<Skeleton />} />; }"),
     panel(
       "function TableSkeleton() { const bone = (w) => <Skeleton width={w} />; return <Table>{bone(1)}</Table>; }",
     ),
-    // `@repo/ui`'s own block is a skeleton's, and a classed box outside any skeleton is no business of the rule's.
     {
       code: 'function Skeleton() { return <span className="ui-skeleton" />; }',
       filename: UI_FILE,
@@ -54,7 +49,6 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
     panel('function Composer() { return <div className="agent-composer" />; }'),
   ],
   invalid: [
-    // Blocks drawn by a component that is no skeleton, or by no component at all.
     {
       ...panel(
         "function Generating() { return <SkeletonRegion label={l}><Skeleton /></SkeletonRegion>; }",
@@ -72,7 +66,6 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
       errors: [{ messageId: "blockOutsideSkeleton" }],
     },
     { ...panel("const block = <Skeleton />;"), errors: [{ messageId: "blockOutsideSkeleton" }] },
-    // A skeleton copying a box of the surface it stands for, in `@repo/ui` as anywhere.
     {
       ...panel(
         'function ComposerSkeleton() { return <div className="agent-composer"><Skeleton /></div>; }',
@@ -108,7 +101,6 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
         { messageId: "copiedBox", data: { name: "pr-row", tag: "div", component: "PartSkeleton" } },
       ],
     },
-    // A spread on an intrinsic element may carry a copied class, whether its source is a literal or not.
     {
       ...panel(
         'function ComposerSkeleton() { return <div {...{ className: "agent-composer" }}><Skeleton /></div>; }',
@@ -119,7 +111,6 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
       ...panel("function PartSkeleton(props) { return <div {...props} />; }"),
       errors: [{ messageId: "spreadBox" }],
     },
-    // A class the rule cannot read may be a copied box.
     {
       ...panel("function PartSkeleton({ className }) { return <div className={className} />; }"),
       errors: [{ messageId: "unknownClass" }],

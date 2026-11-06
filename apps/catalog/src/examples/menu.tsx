@@ -50,20 +50,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * menu.tsx -- a menu dropped from a ⋯ with glyphs, shortcuts, a dimmed item
- * and a red one ruled apart; one of settings in submenus; one with a heading
- * and a footer, its long words fading where cut; people whose items hang
- * their cards beside them; a + whose item opens a searchable list beside
- * the menu as its submenu, a panel its owner draws; one a right-click hangs at the pointer; a searchable menu's pinned rows, steered from its field: one
- * opening a list beside it, a switch, and one that does not apply now; and
- * the menu's surface under lists an app hangs and keys itself: an `@` list
- * narrowed under its kind's crumb, edge to edge, one press inset, as
- * one offered over selected words is, and a find bar's field and buttons
- * laid side by side on it; and toolbars floated on it, a hair round their
- * buttons: a message's actions, a picture's worded tools, and one press.
- */
-
 const ignore = () => undefined;
 
 const TASK_ACTIONS: readonly (readonly MenuEntry[])[] = [
@@ -81,7 +67,6 @@ const TASK_ACTIONS: readonly (readonly MenuEntry[])[] = [
   [{ label: "Delete", icon: <TrashIcon />, danger: true, onSelect: ignore }],
 ];
 
-/** A ⋯ and the task's menu it drops. */
 function TaskMenu(): React.JSX.Element {
   const menu = useMenu(true);
   return (
@@ -97,7 +82,6 @@ function TaskMenu(): React.JSX.Element {
 const GROUPINGS = ["Repository", "Status", "None"] as const;
 const ORDERS = ["Last updated", "Created", "Name"] as const;
 
-/** View options: two submenus of settings, each a check on the one chosen. */
 function ViewMenu(): React.JSX.Element {
   const menu = useMenu(true);
   const [grouping, setGrouping] = useState<string>("Repository");
@@ -134,7 +118,6 @@ const RELATED_TASKS = [
   { id: "stag-1047", label: "Composer + menu consistency", detail: "STAG-1047" },
 ] as const;
 
-/** A composer's +, raised over it: Attachment, and Task relation, whose task search stands beside the menu as its submenu. */
 function PlusMenu(): React.JSX.Element {
   const menu = useMenu(true);
   const [related, setRelated] = useState<string | undefined>(undefined);
@@ -172,7 +155,6 @@ function PlusMenu(): React.JSX.Element {
   );
 }
 
-/** The account's menu: whose it is over its items, long words cut short, and who shares it under them. */
 function AccountMenu(): React.JSX.Element {
   const menu = useMenu(true);
   return (
@@ -209,7 +191,6 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A people filter: each person's item, their email beside their name, hangs their card beside it while the pointer rests there, a long name fading where cut. */
 function PeopleMenu(): React.JSX.Element {
   const menu = useMenu(true);
   const person = (name: string, email: string, note: string) => ({
@@ -252,10 +233,6 @@ function PeopleMenu(): React.JSX.Element {
   );
 }
 
-/**
- * A row's menu: its ⋯, a right-click or a touch held on it, and the menu key
- * open the one menu of the task's acts.
- */
 function RightClickRow(): React.JSX.Element {
   return (
     <List label="Tasks" variant={LIST_VARIANT.CARD}>
@@ -267,7 +244,6 @@ function RightClickRow(): React.JSX.Element {
   );
 }
 
-/** Pinned rows as a model picker's foot draws them, the pointer moving their one highlight. */
 function PinnedRows(): React.JSX.Element {
   const [highlighted, setHighlighted] = useState("effort");
   const [fast, setFast] = useState(true);
@@ -297,7 +273,6 @@ function PinnedRows(): React.JSX.Element {
   );
 }
 
-/** A narrowed `@` list on the menu's surface, under its kind's crumb, as an editor hangs one. */
 function NarrowedList(): React.JSX.Element {
   const [active, setActive] = useState(0);
   return (
@@ -332,7 +307,6 @@ function NarrowedList(): React.JSX.Element {
   );
 }
 
-/** A find bar on the menu's surface: its field, then the buttons that step through what it found. */
 function FindBar(): React.JSX.Element {
   const [query, setQuery] = useState("");
   return (

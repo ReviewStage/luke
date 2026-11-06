@@ -8,14 +8,6 @@ import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService, LISTED_TASK } from "./support/fake-service";
 import { pageLoadedBy } from "./support/page-load";
 
-/**
- * The web app's root reloaded at a plan's link on a Mac, for an account that
- * chose to open its app links in the Mac app: the panel draws the plan, and
- * nothing is handed to the app, because a visitor reloading the tab is
- * staying on the web. One mount per file, because the panel's state read is
- * the tab's once.
- */
-
 let app: WebApp | undefined;
 
 afterEach(async () => {
@@ -39,7 +31,6 @@ test("a plan's link reloaded on a Mac by an account that chose the Mac app is no
   });
 
   assert.ok(app !== undefined, "the host stands");
-  // The plan drawn comes well after a hand-off would have, which asks the service once.
   await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
   assert.deepEqual(opened, []);
 });

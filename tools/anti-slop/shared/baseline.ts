@@ -1,28 +1,11 @@
-/**
- * A guard's baseline: the places a rule still finds, counted by file, that
- * may only shrink. A rule lands with one where today's code breaks it, so it
- * holds every file from the day it lands; each change that fixes a place
- * lowers the count in the same change, and the rule is at zero once the
- * baseline is empty. Kept as a checked-in JSON object of counts by path.
- */
-
-/** How many places each file may still hold, by path from the repository's root. */
 export type Baseline = Readonly<Record<string, number>>;
 
-/** A file whose count and baseline part: `grew` where it holds more than the baseline allows. */
 export interface BaselineProblem {
   readonly file: string;
   readonly says: string;
   readonly grew: boolean;
 }
 
-/**
- * Where what each file holds and its baseline part: a place past the count,
- * which fails, and a count above what the file still holds, which fails too,
- * so the baseline shrinks in the change that fixes a place rather than
- * leaving room for a new one. A rule that started clean takes no baseline,
- * so any entry for it fails.
- */
 export function baselineProblems(
   counts: ReadonlyMap<string, number>,
   baseline: Baseline,
@@ -48,7 +31,6 @@ export function baselineProblems(
   return problems;
 }
 
-/** A baseline lowered to what each file now holds and never raised, its files in order. */
 export function shrunkBaseline(counts: ReadonlyMap<string, number>, baseline: Baseline): Baseline {
   const shrunk: Record<string, number> = {};
   for (const file of Object.keys(baseline).sort()) {

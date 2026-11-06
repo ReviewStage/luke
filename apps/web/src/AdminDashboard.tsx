@@ -29,7 +29,6 @@ import { AdminShell } from "./admin/chrome/sidebar";
 import { WebAdminDoors } from "./admin/web-admin-doors";
 import { authClient } from "./auth-client";
 
-/** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
 export function AdminDashboard(): React.JSX.Element {
   return (
     <WebAdminDoors>
@@ -39,10 +38,6 @@ export function AdminDashboard(): React.JSX.Element {
 }
 
 function AdminDashboardPage(): React.JSX.Element {
-  // Admin accounts are the maintainers' own; their traffic reads as noise in
-  // every count, so admins start hidden and the toggle is the explicit ask to
-  // include them, remembered across visits. The scope is the server's filter —
-  // aggregates cannot be unpicked client-side — so flipping it refetches.
   const [hideAdmins, setHideAdmins] = useState(ADMINS_HIDDEN.read);
   const changeHideAdmins = (hide: boolean) => {
     ADMINS_HIDDEN.write(hide);
@@ -51,9 +46,6 @@ function AdminDashboardPage(): React.JSX.Element {
   const session = authClient.useSession();
   const account = session.data?.user;
 
-  // The address bar owns which view is open — and which window it covers — so
-  // a tab, an account or workspace page, or a 90-day view can be reloaded, shared, and left
-  // with the browser's own back button.
   const [view, setView] = useState<AdminView>(viewFromLocation);
   const [windowDays, setWindowDays] = useState<AdminMetricsWindow>(windowFromLocation);
   useEffect(() => {
@@ -96,10 +88,6 @@ function AdminDashboardPage(): React.JSX.Element {
     });
   };
 
-  // Note that Better Auth answers a refused sign-out as a result rather than a
-  // throw, so the refusal is thrown here: the session still stands, and
-  // nothing past this may say it is gone. Each screen withdraws its reads
-  // around it (`useAdminSignOut`).
   const signOut = useCallback(async () => {
     const { error } = await authClient.signOut();
     if (error) throw new Error("The sign-out was refused.");
@@ -107,10 +95,6 @@ function AdminDashboardPage(): React.JSX.Element {
   }, []);
   const withdraw = useAdminSignOut(signOut);
 
-  // Sign out in the sidebar's foot leaves whichever view stood for the sign-in
-  // card. Note that the view is unmounted rather than told, because that drops
-  // its read with it: an answer that left carrying the old cookie cannot then
-  // put the page back up behind the sign-out.
   const [loggedOut, setLoggedOut] = useState(false);
   const withdrawSession = withdraw.mutateAsync;
   const signOutAndLeave = useCallback(async () => {
@@ -122,11 +106,6 @@ function AdminDashboardPage(): React.JSX.Element {
     ? { name: account.name, email: account.email, image: account.image ?? undefined }
     : undefined;
 
-  // The gate's cards — sign-in and the non-admin refusal — stand alone on
-  // every view: navigation drawn beside a consent card would pose as
-  // somewhere to go. Everything past the gate wears the sidebar, which is why
-  // the screens below take the shell as a frame to apply themselves, only
-  // around the answers that earn it.
   const shell = (tab: AdminTab, content: React.JSX.Element) => (
     <AdminShell
       active={tab}

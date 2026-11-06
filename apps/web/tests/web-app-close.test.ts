@@ -8,19 +8,11 @@ import { afterEach, test, vi } from "vitest";
 import { mountWebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
 
-/**
- * The web app's root closed: the panel taken down, and what the tab
- * installed for it taken down with it, so nothing it left behind answers a
- * later mount or follows the browser. Its own file, because the panel's
- * state read is the tab's once.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
 });
 
-/** The `popstate` listeners the window holds, as listened and unlistened from here on. */
 function popstateListeners(): Set<EventListenerOrEventListenerObject> {
   const held = new Set<EventListenerOrEventListenerObject>();
   const listen = window.addEventListener.bind(window);

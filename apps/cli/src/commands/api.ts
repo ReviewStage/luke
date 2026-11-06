@@ -1,15 +1,3 @@
-/**
- * api.ts -- `vespin api <method> <path>`: any hosted procedure called by its REST route with the member's bearer, and its JSON answer printed.
- *
- * The escape hatch for everything without a command of its own, as `gh api`
- * is. The route must be one the hosted contract declares
- * (`@repo/features/hosted-routes`), so a mistyped path is a usage error
- * rather than a bearer sent somewhere no procedure answers. The call goes
- * through `account-call.ts` like every other, so a lapsed token is renewed
- * once there. The answer is printed as the service wrote it, a refusal's
- * too, and the exit code says which it was.
- */
-
 import { accountCall, callAnswered } from "@repo/features";
 import { CLI_EXIT, cliExitOfFault, cliExitOfStatus } from "@repo/features/cli-exit";
 import { hostedRouteOf } from "@repo/features/hosted-routes";
@@ -19,10 +7,8 @@ import { Argument, Command, Flag } from "effect/cli";
 import { answer, CommandFailed, readInput } from "../output.js";
 import { SIGN_IN_HINT, session } from "../session.js";
 
-/** How long a call may take: past a Start, the longest a procedure answers in (`hosted-link.ts`'s `HOSTED_DEADLINE`). */
 const API_DEADLINE_MS = 120_000;
 
-/** The body read as JSON, or a usage failure saying it is not. */
 function jsonBody(text: string, source: string): Effect.Effect<string, CommandFailed> {
   try {
     JSON.parse(text);
@@ -34,7 +20,6 @@ function jsonBody(text: string, source: string): Effect.Effect<string, CommandFa
   }
 }
 
-/** An answer's body as JSON where it is, else as its text. */
 function readable(text: string): unknown {
   try {
     return JSON.parse(text);

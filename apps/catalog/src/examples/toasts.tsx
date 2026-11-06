@@ -1,13 +1,3 @@
-/**
- * toasts.tsx -- the passing notices in each tone, stacked as the window stacks
- * them: a plain one that lets clicks through, one with a second line, and
- * ones carrying an action, one of them led by a provider's mark, whose × shows under the pointer or focus, the
- * Undo one draining its countdown, paused under the pointer; then one whose
- * work is under way, turned in place into done or failed by a press, and
- * one to drag or sweep sideways away, shown again by a press; and failures
- * that offer their details to copy, alone and beside a Retry.
- */
-
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
@@ -27,13 +17,10 @@ import { CatalogSection } from "../section";
 
 function noop(): void {}
 
-/** How long the Undo toast's countdown runs, as the window's hold for a toast with an action. */
 const ACTION_HOLD_MS = 5000;
 
-/** How long a failure toast's countdown runs, as the window's hold for a refusal. */
 const FAILED_HOLD_MS = 6000;
 
-/** A toast with an action, as an undoable change carries one. */
 function Acting({
   tone,
   words,
@@ -46,7 +33,6 @@ function Acting({
   words: string;
   detail?: string;
   label: string;
-  /** The page the action opens, drawn as a link in the action's look. */
   href?: string;
   countdown?: number;
 }): React.JSX.Element {
@@ -72,7 +58,6 @@ function Acting({
 function Toasts(): React.JSX.Element {
   return (
     <CatalogSection id="toast-stack" title="Stacked in the corner">
-      {/* A transform makes this box the containing block of the stack's fixed corner. */}
       <div className="catalog-toast-stage">
         <ToastStack
           label="Notifications"
@@ -122,7 +107,6 @@ function Toasts(): React.JSX.Element {
   );
 }
 
-/** What a failure's Copy details puts on the clipboard, as the panel builds it from the failure's report. */
 const FAILURE_DETAILS = [
   `${PRODUCT_NAME} error details. Include these when you report this problem:`,
   "time: 2026-10-29T18:20:03.198Z",
@@ -131,12 +115,10 @@ const FAILURE_DETAILS = [
   "failure.code: TypeError",
 ].join("\n");
 
-/** A catalog's clipboard: the browser's own. */
 function copyToClipboard(text: string): Promise<void> {
   return navigator.clipboard.writeText(text);
 }
 
-/** Failure toasts, each offering its details to copy: one with nothing else to press, and one beside its Retry. */
 function Failures(): React.JSX.Element {
   const copy = { text: FAILURE_DETAILS, what: "details", copy: copyToClipboard };
   return (
@@ -172,7 +154,6 @@ function Failures(): React.JSX.Element {
   );
 }
 
-/** What the working toast says, by what came of its work. */
 const SAYING = {
   [STATUS_TONE.WORKING]: "Adding to the description…",
   [STATUS_TONE.COMPLETE]: "Added to the description",
@@ -181,7 +162,6 @@ const SAYING = {
 
 type Outcome = keyof typeof SAYING;
 
-/** A working toast, turned in place by a press into what came of its work. */
 function Working(): React.JSX.Element {
   const [tone, setTone] = useState<Outcome>(STATUS_TONE.WORKING);
   return (
@@ -206,7 +186,6 @@ function Working(): React.JSX.Element {
   );
 }
 
-/** A toast to drag or sweep sideways away, drawn anew by a press once it has gone. */
 function Swiped(): React.JSX.Element {
   const [shown, setShown] = useState({ count: 0, leaving: false });
   const dismiss = () => setShown({ ...shown, leaving: true });

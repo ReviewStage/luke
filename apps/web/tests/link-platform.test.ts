@@ -4,13 +4,6 @@ import { LINK_PLATFORM } from "@repo/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { browserLinkPlatform } from "../src/link-platform";
 
-/**
- * Which browsers the hand-off counts as on a Mac, by what each says of
- * itself: a Mac's Safari, Chrome, or Firefox is one; an iPad asking for the
- * desktop site says "Macintosh" too but has a touch screen, and stays on
- * the web, as Windows, Linux, and a phone do.
- */
-
 const MAC_SAFARI =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 const MAC_CHROME =
@@ -20,7 +13,6 @@ const WINDOWS_CHROME =
 const IPHONE_SAFARI =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
-/** The browser saying the user agent and touch points given. */
 function browserSaying(userAgent: string, maxTouchPoints: number): void {
   vi.stubGlobal("navigator", { userAgent, maxTouchPoints });
 }

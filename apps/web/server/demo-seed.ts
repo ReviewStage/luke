@@ -15,31 +15,6 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Config, Effect, Option, Redacted, Result } from "effect";
 import { Pool } from "pg";
 
-/**
- * demo-seed.ts -- `pnpm --filter @repo/web demo:seed`: the demo's acme world written into the freshly migrated Postgres on loopback that `DATABASE_URL` names.
- *
- * `run.sh --demo` calls it once per run, after `db:migrate` and `auth:seed`
- * against the same database. It reads:
- *
- * - `DATABASE_URL`, which must name a Postgres on this machine's loopback
- *   (`127.0.0.1`, `localhost`, or `::1`); anything else is refused before a
- *   connection is opened.
- * - `APP_DEMO_CLAUDE_TOKEN`, a `claude setup-token`, or else
- *   `APP_DEMO_ANTHROPIC_API_KEY`, optional: saved as Dean's, for his agents.
- * - `PROVIDER_KEY_ENCRYPTION_KEYS`, needed only with a credential: the ring
- *   it is sealed under, which the local server must hold too.
- * - `APP_DEMO_HOST_STATE` and `APP_DEMO_SERVICE_ORIGIN`, optional and
- *   given together: the state folder of the host the run starts on this Mac
- *   (`vespin-host run` under `APP_HOST_STATE_ROOT`), and the local server's
- *   origin it calls. The host is enrolled as Dean's, every task runs its
- *   agents on it, and its record is written into that folder once the seed
- *   has landed, holding a device secret minted here, which the database
- *   keeps only as its hash.
- *
- * It prints what it wrote and never a credential. A database that holds
- * any account already is refused, so it runs once per fresh database.
- */
-
 const DEMO_ENVIRONMENT = {
   DATABASE_URL: "DATABASE_URL",
   CLAUDE_TOKEN: "APP_DEMO_CLAUDE_TOKEN",
@@ -49,7 +24,6 @@ const DEMO_ENVIRONMENT = {
   SERVICE_ORIGIN: "APP_DEMO_SERVICE_ORIGIN",
 } as const;
 
-/** The credential the run hands in, the setup token before the API key, sealed under the ring it names; none where it hands none. */
 const demoCredential = Effect.gen(function* () {
   const token = yield* Config.option(Config.Redacted(DEMO_ENVIRONMENT.CLAUDE_TOKEN));
   const apiKey = yield* Config.option(Config.Redacted(DEMO_ENVIRONMENT.ANTHROPIC_API_KEY));
@@ -62,7 +36,6 @@ const demoCredential = Effect.gen(function* () {
   return Option.some<DemoCredential>({ ...handed.value, ring });
 });
 
-/** Where the run's host keeps its state and the origin it calls, where the run starts one; the secret its record holds, minted now. */
 const demoHost = Effect.gen(function* () {
   const stateRoot = yield* Config.option(Config.String(DEMO_ENVIRONMENT.HOST_STATE));
   const serviceOrigin = yield* Config.option(Config.String(DEMO_ENVIRONMENT.SERVICE_ORIGIN));
@@ -93,7 +66,6 @@ const seedConfiguredDatabase = Effect.gen(function* () {
   }
   const credential = yield* demoCredential;
   const host = yield* demoHost;
-  // Better Auth writes through a pool of its own, as the deployment's does, ended once the seed is.
   const pool = yield* Effect.acquireRelease(
     Effect.sync(() => new Pool({ connectionString: url.success })),
     (opened) => Effect.promise(() => opened.end()),

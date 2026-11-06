@@ -68,14 +68,6 @@ export function createElectronBuilderConfig(env = process.env) {
       output: builderReleaseArtifactDirectory(repoRoot),
     },
     asar: true,
-    // Note that the packaged binary's Node switches are burnt off, because the
-    // app holds the microphone and Apple Events: a process that could launch
-    // it as Node (`ELECTRON_RUN_AS_NODE`), preload into it (`NODE_OPTIONS`), or
-    // attach a debugger (`--inspect`) would run its own code under those
-    // permissions. The app loads only from its asar, checked against the hash
-    // in Info.plist, and its cookies are encrypted with the same Keychain key
-    // `safeStorage` already uses. A development run (`electron .`) keeps
-    // Electron's defaults.
     electronFuses: {
       runAsNode: false,
       enableNodeOptionsEnvironmentVariable: false,
@@ -121,9 +113,6 @@ export function createElectronBuilderConfig(env = process.env) {
           path.join("Contents", "Resources", NODE_PTY.folder, NODE_PTY.prebuilds, binary),
         ),
       ],
-      // The app's own scheme, which an app link's page that opens it in the app hands
-      // the plan to (`src/main/services/window-service.ts`): written into the
-      // bundle's CFBundleURLTypes, which macOS registers the app for.
       protocols: [{ name: "Vespin link", schemes: ["vespin", "tryluke"], role: "Viewer" }],
       extendInfo: {
         CFBundleName: productName,

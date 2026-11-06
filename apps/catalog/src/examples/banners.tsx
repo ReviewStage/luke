@@ -1,13 +1,3 @@
-/**
- * banners.tsx -- a notice in each look: a strip across a column in the
- * attention tone, a card over a document in either tone, a card whose glyph
- * is a failure's bare mark, and a quiet row in
- * its place's frame; then each in a narrow column, where the presses drop
- * beneath the words; and a strip whose words its column cuts short, fading
- * out at their end; and the strip a maintainer signed in as a member reads,
- * for a member with a name and one without.
- */
-
 import {
   AlertIcon,
   ArchiveIcon,
@@ -29,7 +19,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** Every look, at the width the column gives them. */
 function Looks(): React.JSX.Element {
   return (
     <Stack gap={GAP.FIELD}>

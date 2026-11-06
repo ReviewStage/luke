@@ -96,28 +96,12 @@ import { TestClock } from "effect/testing";
 import { DISPATCH_QUERY, ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
 import { dispatched } from "./support/platform-landing";
 
-/**
- * The Tasks tab's task routes, answered by the group the way a
- * function answers them, over a real dialect: the bearer names the account
- * and nothing else does, a task another account owns answers exactly as one
- * that does not exist, and what the notetaker's notes saved is what the window opens.
- * A plan's own routes are asked at the path a client sends, landed through
- * the committed rewrites on the hosted oRPC router; the old group's at the
- * path the rewrite hands it, the task id moved from the path into the `id`
- * query. A task's repository is kept only once our
- * GitHub App, over a GitHub the test scripts, confirms the
- * installation connected to the task's workspace reaches it.
- *
- * Synthetic accounts, bearers, tokens, and repositories throughout.
- */
-
 const ORIGIN = "https://app.test";
 const TASKS = "/api/plans";
 const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
 const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
 const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
-/** A window of a file the File tab asks for. */
 const README_WINDOW = { path: "README.md", first: "1", last: "10" } as const;
 const PAGES = (taskId: string) => `${ONE_TASK(taskId)}/pages`;
 const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/description/revisions`;
@@ -140,21 +124,14 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The Linear connector the deployment names, the accounts' own. */
 const LINEAR_CONNECTORS = { LINEAR_CONNECTOR_UID: "oauth/linear" } as const;
 
-/** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
 const UNREACHED_GITHUB: FakeGitHub = {
   layer: NO_GITHUB,
   sent: [],
   respond: () => Promise.reject(new Error("this test reaches no GitHub")),
 };
 
-/**
- * Two accounts, each behind its own bearer. The owner signed in with GitHub
- * through the App; the other signed in with Google alone, and reaches
- * nothing on GitHub.
- */
 const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -176,18 +153,15 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
     return { owner, other, ask };
   });
 
-/** How the suite's accounts sign in: each one's OAuth bearer, and the session cookie of a browser signed in to it. */
 interface SignedIn {
   readonly bearers: ReadonlyMap<string, string>;
   readonly sessions: ReadonlyMap<string, string>;
 }
 
-/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
 function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** The auth service's userinfo over the suite's bearers. */
 function userInfoOf(bearers: ReadonlyMap<string, string>): UserInfoEndpoint {
   return (input) => {
     const sub = bearers.get(input.headers.get("authorization") ?? "");
@@ -195,20 +169,11 @@ function userInfoOf(bearers: ReadonlyMap<string, string>): UserInfoEndpoint {
   };
 }
 
-/** The auth service's session read over the suite's session cookies. */
 function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
   return (input) =>
     Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? "")));
 }
 
-/**
- * The routes over the test's own database and the GitHub given, answering
- * one request: a plan's own routes as a client sends them, landed by the
- * platform through the committed rewrites and the grouped function's
- * dispatcher on the hosted oRPC router; or, where a route key is named,
- * landed on a function holding the old group under that key.
- */
-/** What the routes counted, across the file; a case reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
 const countedFor = (userId: string, name: string) =>
@@ -219,7 +184,6 @@ const countedFor = (userId: string, name: string) =>
 const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landedAs?: string) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -230,7 +194,6 @@ const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landed
       integrationConnectOver(LINEAR_CONNECTORS),
     );
     const seams = {
-      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
       resolveUserId: (incoming: Request) =>
         requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
       workspaces: yield* fakeWorkspaceSeams,
@@ -241,7 +204,6 @@ const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landed
       tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    // SAFETY: the plans and transcript procedures yield the services above alone, which is all a test provides of the web runtime's services.
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
@@ -257,7 +219,6 @@ const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landed
       }
       return dispatched(request, new Map([[ORPC_ROUTE_KEY, tasksRoute]]));
     });
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     yield* Effect.promise(() => dispose());
     return { status: response.status, body } satisfies Answer;
@@ -272,7 +233,6 @@ function request(
     id?: string;
     command?: string;
     query?: Readonly<Record<string, string>>;
-    /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
     cookie?: string;
   } = {},
 ): Request {
@@ -283,7 +243,6 @@ function request(
   const headers = new Headers();
   if (userId !== undefined) headers.set("authorization", `Bearer ${userId}`);
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
-  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
   if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
@@ -292,7 +251,6 @@ function request(
   });
 }
 
-/** An answer read as the wire declares it, failing the test where it is not one. */
 function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   status: number,
@@ -305,20 +263,17 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** The started task's id, failing the test where the answer is not a started task. */
 function startedId(started: Answer): string {
   return readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.id;
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/** The repository out of reach, with why, as the routes refuse it. */
 const unreachable = (unreached: RepositoryUnreached): Answer => ({
   status: HOSTED_HTTP_STATUS.FORBIDDEN,
   body: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached },
 });
 
-/** What the contents API holds of the fixture repository, by path: a file's text, a directory, a link, or a file past the bound. */
 const CONTENTS = new Map([
   ["src/invite.ts", () => fileContents(`one\ntwo\n${"x".repeat(500)}\nfour`)],
   ["src/marked.ts", () => fileContents("\uFEFFa\r\nb")],
@@ -341,7 +296,6 @@ const CONTENTS = new Map([
   ["linked.ts", () => Response.json({ type: "symlink", target: "../outside.ts" })],
 ]);
 
-/** The contents API's answer for a regular file of the text given. */
 function fileContents(text: string): Response {
   const bytes = Buffer.from(text);
   return Response.json({
@@ -354,7 +308,6 @@ function fileContents(text: string): Response {
 
 const CONTENTS_PATH = /^\/repos\/Acme\/Relay\/contents\/(.+)$/u;
 
-/** The fixture repository's contents, as GitHub answers them on the repository's own paths. */
 function contentsOf(sent: SentToGitHub): Response | undefined {
   const named = CONTENTS_PATH.exec(new URL(sent.url).pathname);
   if (named === null) return undefined;
@@ -364,14 +317,12 @@ function contentsOf(sent: SentToGitHub): Response | undefined {
     : contents();
 }
 
-/** The installation reaching the fixture repository, under the id given: every test sharing the database connects its own, since one installation stands for one workspace. */
 const relayInstallation = (id: number): InstallationFixture => ({
   id,
   login: "Acme",
   repositories: [{ owner: "Acme", name: "Relay" }],
 });
 
-/** A workspace the account owns with the installation connected to it, as a finished connect leaves it; its id. */
 const openConnectedWorkspace = (ownerId: string, installation: InstallationFixture) =>
   Effect.gen(function* () {
     const workspaceId = yield* openWorkspace(ownerId);
@@ -440,7 +391,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
             readTask(owner, startedId(answer)),
             (read) => Option.getOrUndefined(read)?.brief,
           );
-        // Note that a control character is the widest a character escapes to in JSON, six bytes.
         const widest = "\u0001".repeat(TASK_BOUNDS.MAX_BRIEF_CHARS);
 
         const briefed = yield* ask(
@@ -650,7 +600,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* patch(other, { status: TASK_STATUS.CANCELED }),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
-        // A plan is archived no longer: an older build's archive keeps a settled status, answers no archive, and the plan still takes a change after it.
         const settled = readAnswer(
           taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -666,7 +615,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ).plan.priority,
           TASK_PRIORITY.LOW,
         );
-        // A member's move to Done or Canceled is counted where it changed the status, once each, and a refused one or an unchanged status is not.
         yield* patch(owner, { status: TASK_STATUS.CANCELED });
         yield* patch(owner, { status: TASK_STATUS.CANCELED });
         assert.deepEqual(countedFor(owner, SERVER_EVENT.TASK_FINISH), [
@@ -750,7 +698,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         body: { plans: [], planlessAgents: [] },
       });
       assert.equal((yield* ask(request(ONE_TASK(taskId), owner))).status, HOSTED_HTTP_STATUS.OK);
-      // The reads that need only where the plan stands, not its document, refuse it as the open does, and a plan that is none alike.
       for (const id of [taskId, randomUUID()]) {
         const bearer = id === taskId ? other : owner;
         for (const read of [
@@ -773,7 +720,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
         const now = yield* DateTime.nowAsDate;
-        // A revision a later build wrote, by a kind of writer this build has no name for.
         yield* Database.use((db) =>
           db.insert(descriptionRevision).values({
             taskId,
@@ -818,7 +764,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const deletedBy = (taskId: string, by: string) =>
           ask(request(ONE_TASK(taskId), undefined, { method: "DELETE", cookie: by }));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-        // A delete is answered with the transaction it committed in, whichever that is.
         const deletedAs = (taskId: string, by: string) =>
           Effect.map(
             deletedBy(taskId, by),
@@ -884,7 +829,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const start = (body: WireBoundaryInput) =>
           ask(request(TASKS, owner, { method: "POST", body }));
 
-        // Note that the keys are spelled as v0.22.0 sends them, because nothing on this side declares them now.
         const fromLinear = yield* start({ ...RELAY, linearIssueId: "issue-1" });
         const linking = yield* start({
           ...LEDGER,
@@ -1156,7 +1100,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ),
         );
 
-        // The member has no GitHub account row, so the read can only go through the installation.
         const read = readAnswer(
           taskFileAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1187,7 +1130,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const taskId = startedId(
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
-        // A rename the bound would admit, padded with the whitespace JSON reads past to a body larger than any change.
         const body = `${JSON.stringify({ name: "Invitation expiry" })}${" ".repeat(16_384)}`;
         const padded = new Request(new URL(ONE_TASK(taskId), ORIGIN), {
           method: "PATCH",
@@ -1214,10 +1156,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
-  /**
-   * The owner's description written twice, far enough apart to be two revisions:
-   * the context first, then the goal.
-   */
   const twoRevisions = (userId: string, taskId: string) =>
     Effect.gen(function* () {
       yield* saveNotes({ userId, taskId: taskId }, [added("Context", "Only admins can invite.")]);
@@ -1403,7 +1341,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const { plan: task } = answered;
         const at = task.lastEdit?.at ?? assert.fail("the edit names no last edit");
         assert.deepEqual(task.document, { body: value, assumptions: [] });
-        // A host waits on the transaction the edit answers before it lets a delivery of the plan land.
         assert.match(answered.txid ?? "", /^\d+$/u);
         assert.equal(task.lastEdit?.actor, DESCRIPTION_ACTOR.DEVELOPER);
         const by = task.lastEdit?.by ?? assert.fail("the edit names no member");
@@ -1441,7 +1378,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
             }),
           );
 
-        // At the bound alone, but past it once laid over the line we added.
         const padding = "x".repeat(TASK_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
         const oversized = yield* edit(
           taskId,
@@ -1494,7 +1430,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         const theirs = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
         yield* edit(other, INVITATIONS_TEXT, theirs);
-        // The owner's own later save of another section is the description's newest revision.
         const goal = theirs.replace("invite a teammate", "invite a teammate or a guest");
         yield* edit(owner, theirs, goal);
         const conflicted = yield* edit(
@@ -1549,7 +1484,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const unnamed = startedId(yield* start({ ...LEDGER, workspaceId: acme }));
         const otherChange = yield* change(unnamed, "octocat/dotfiles");
         const ownChange = yield* change(unnamed, "acme/relay");
-        // The personal workspace has nothing connected, so even the repository the account's own workspace reaches is refused there.
         const personalStart = yield* start({ ...LEDGER, repository: "acme/relay" });
         const personal = startedId(yield* start(LEDGER));
         const personalChanges = [
@@ -1637,7 +1571,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         const moved = readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, toAcme).plan;
         assert.deepEqual([moved.workspaceId, moved.repository], [acme, "acme/relay"]);
-        // The teammate was in the workspace the task left, not the one it moved to.
         assert.deepEqual(
           yield* ask(request(ONE_TASK(task.id), other)),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

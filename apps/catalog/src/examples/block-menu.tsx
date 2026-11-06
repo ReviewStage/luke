@@ -16,14 +16,6 @@ import { useId, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * block-menu.tsx -- the list a `/` opens: every block in its groups, each
- * saying the Markdown that makes it or its chord, the highlight following
- * the pointer; the list narrowed by the words typed after the `/`; and one
- * narrowed to nothing.
- */
-
-/** The rows a document offers beyond the vocabulary's, as the description's own. */
 const DIAGRAM: BlockMenuRow = {
   id: "diagram",
   label: "Diagram",
@@ -67,7 +59,6 @@ const EVERY_BLOCK: readonly BlockMenuGroup[] = [
   },
 ];
 
-/** `/h` typed: the headings alone. */
 const NARROWED: readonly BlockMenuGroup[] = [
   {
     label: BLOCK_MENU_GROUP.BASIC,
@@ -79,7 +70,6 @@ const NARROWED: readonly BlockMenuGroup[] = [
   },
 ];
 
-/** The menu over `groups`, its highlight following the pointer and a press. */
 function Sample({ groups }: { groups: readonly BlockMenuGroup[] }): React.JSX.Element {
   const id = useId();
   const [active, setActive] = useState(0);

@@ -10,15 +10,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * provider-buttons.tsx -- a sign-in's provider choices in both sizes: at
- * rest with the way in taken last filled and wearing its pill, and pending,
- * the pressed one named for its wait while the other stands back. A press
- * begins the wait and a second press of the waited one is refused, so the
- * example is pressed through as a sign-in is. Setup's GitHub step names
- * its own act, "Install on GitHub", in place of "Continue with GitHub".
- */
-
 const WAYS_IN = [
   { provider: MARK_PROVIDER.GOOGLE, name: "Google" },
   { provider: MARK_PROVIDER.GITHUB, name: "GitHub" },
@@ -26,13 +17,11 @@ const WAYS_IN = [
 
 type WayIn = (typeof WAYS_IN)[number]["provider"];
 
-/** What the pending button says, per size: the web's opening, the gate's wait. */
 const PENDING_LABEL = {
   [PROVIDER_BUTTON_SIZE.CONTROL]: (name: string) => `Opening ${name}`,
   [PROVIDER_BUTTON_SIZE.GATE]: () => "Waiting for browser…",
 } as const;
 
-/** Both choices in `size`, GitHub used last, pending on `initial` until another is pressed. */
 function Choices({
   size,
   initial,

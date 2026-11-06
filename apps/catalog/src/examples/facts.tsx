@@ -2,12 +2,6 @@ import { Fact, Facts, GAP, Stack, Text } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * facts.tsx -- facts, each a muted name and its value at the line's end:
- * a plain column, and one ruled off from what stands over it, as a
- * context popover's stand under its legend.
- */
-
 const STATS = [
   { label: "Used", value: "41%" },
   { label: "Left before compacting", value: "~118,000 tokens" },

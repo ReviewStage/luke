@@ -22,27 +22,15 @@ import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { PANEL_PATH } from "./app/web-address";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
-/** The newest release's version-free DMG, named for the product as the Release workflow names it. */
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/${PRODUCT_NAME}.dmg`;
 
-/**
- * The user docs, which Mintlify builds from `apps/docs`; the root
- * `vercel.json` passes `/docs` and Mintlify's asset paths on to it, so they
- * stand beside the changelog on this origin.
- */
 export const DOCS_URL = "/docs";
 
-/** Where the web app opens, the one address the site and the invitation page send a reader to. */
 export const WEB_APP_URL = PANEL_PATH;
 
-/**
- * The product's name beside the mark, in the web profile's wordmark display style
- * (`@repo/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
- */
 export const WORDMARK =
   "font-brand text-(length:--ui-display-wordmark-size) font-(--ui-display-wordmark-weight) tracking-(--ui-display-wordmark-tracking)";
 
-/** The pages the site's chrome links to, by the path each is served at. */
 export const SITE_PAGE = {
   HOME: "/",
   ABOUT: "/about",
@@ -52,35 +40,15 @@ export const SITE_PAGE = {
 
 export type SitePage = (typeof SITE_PAGE)[keyof typeof SITE_PAGE];
 
-/**
- * Where the reader is: on `page` itself, or, `beneath` it, on a page of that
- * part of the site (a release under the changelog).
- */
 export type SitePlace = { readonly page: SitePage; readonly beneath?: boolean };
 
-/** What the chrome is told of the page it is drawn on: where the reader is. */
 type ChromeProps = { readonly current?: SitePlace };
 
-/**
- * What a link to `page` says about it when the reader is at `place`: the
- * current page where they are on it, and the current part of the site where
- * they are beneath it, since the page they are on is not the one it links to.
- */
 function currentOf(page: SitePage, place: SitePlace | undefined): TextLinkCurrent | undefined {
   if (place?.page !== page) return undefined;
   return place.beneath === true ? TEXT_LINK_CURRENT.SECTION : TEXT_LINK_CURRENT.PAGE;
 }
 
-/**
- * Shared between every page so navigation and branding never drift apart:
- * the wordmark, then at the bar's end the site's pages, a hairline, and the
- * actions that leave the page (the repository, signing in), handed to
- * PublicPage's `banner` or the landing's `bar`; `current` marks where the
- * reader is. The call (`SiteBarDownload`) ends the bar after them, as every
- * devtool's bar ends on its call with signing in just before it. Every link
- * stands the web's 44px tall inside the 64px banner, so its hit target is the
- * contract's without moving a word.
- */
 export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
@@ -118,9 +86,6 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
             Changelog
           </TextLink>
         </SiteBarPages>
-        {/* The negative margins take back the room round the mark inside
-              its 44px square, the same on either side, so the mark stands as
-              far from its neighbors as one word stands from the next. */}
         <span className="-mx-3 flex">
           <IconButtonLink
             href={REPOSITORY_URL}
@@ -136,10 +101,6 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   );
 }
 
-/**
- * The download, the landing's one call in its hero and its close, counted
- * wherever it is pressed.
- */
 export function SiteDownload(): React.JSX.Element {
   return (
     <ButtonLink
@@ -152,12 +113,6 @@ export function SiteDownload(): React.JSX.Element {
   );
 }
 
-/**
- * The download at the end of every page's bar: a pill, so it nests in the
- * floating bar's round end, and named in one word, as the bar has room for,
- * since the page under it says which Mac it is for; its accessible name says
- * it whole. Counted as the hero's is.
- */
 export function SiteBarDownload(): React.JSX.Element {
   return (
     <ButtonLink
@@ -172,10 +127,6 @@ export function SiteBarDownload(): React.JSX.Element {
   );
 }
 
-/**
- * Shared between every page so the legal and license links never drift
- * apart: what PublicPage's `footer` holds under its rule.
- */
 export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
   return (
     <Text
@@ -184,8 +135,6 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
       tone={TEXT_TONE.MUTED}
       font={TEXT_FONT.MONO}
     >
-      {/* The separator belongs to the gap between items rather than to any
-            item, so adding or reordering a link never leaves a stray dot. */}
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
         <span>Apache-2.0</span>
         <span>macOS 14+</span>
@@ -196,17 +145,12 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
         <TextLink href={SITE_PAGE.CHANGELOG} current={currentOf(SITE_PAGE.CHANGELOG, current)}>
           Changelog
         </TextLink>
-        {/* The changelog's feed, as quiet as the rest of the footer: a reader
-              subscribes once, so it needs a way in, not a call to action. */}
         <TextLink href="/changelog/rss.xml">RSS</TextLink>
         <TextLink href={SITE_PAGE.PRIVACY} current={currentOf(SITE_PAGE.PRIVACY, current)}>
           Privacy
         </TextLink>
         <TextLink href="mailto:founders@vespin.dev">Contact</TextLink>
       </div>
-      {/* The notice sits under its own rule at the foot of the column, the
-            way stagereview.app closes its footer, so the link row above stays
-            a row of links. */}
       <p className="mt-8 border-t border-(--ui-color-border) pt-6">© 2026 Stage Inc.</p>
     </Text>
   );

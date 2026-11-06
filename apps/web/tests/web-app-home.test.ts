@@ -6,13 +6,6 @@ import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService, LISTED_TASK } from "./support/fake-service";
 
-/**
- * The web app's root over a standing cookie session: the shared host in the
- * tab signs in from the session the service names, reads the account's tasks
- * from the service, and the panel opens on Home listing them. One mount per
- * file, because the panel's state read is the tab's once.
- */
-
 let app: WebApp | undefined;
 
 afterEach(async () => {

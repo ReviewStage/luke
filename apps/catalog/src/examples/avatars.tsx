@@ -14,21 +14,10 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * avatars.tsx -- every size with a picture, a letter, a picture that fails,
- * a name with no letter, and no one's dashed outline, side by side so their
- * boxes line up; an app's square by its picture, its glyph bare and tiled,
- * the product's as GitHub shows its App's bot, and its letter; a workspace's tile, plain or edged and blank as a
- * repository's owner is; the six
- * hues; and discs beside the names they stand for in a narrow column.
- */
-
-/** A synthetic picture drawn in place, so the catalog renders offline. */
 const PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#f4b860"/><stop offset="1" stop-color="#c8553d"/></linearGradient></defs><rect width="40" height="40" fill="url(#g)"/><circle cx="20" cy="16" r="7" fill="#fff8"/><path d="M6 40a14 14 0 0 1 28 0" fill="#fff8"/></svg>',
 )}`;
 
-/** An address whose bytes are no picture, so the disc shows what a failed fetch leaves. */
 const BROKEN = "data:image/png;base64,AAAA";
 
 const NAMES = [

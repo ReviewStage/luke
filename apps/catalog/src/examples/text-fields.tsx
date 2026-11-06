@@ -24,18 +24,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
- * unavailable, as a secret, as code in the mono face, as a time of day, and as a number; a page's title
- * written in place; a TextArea, standing and growing with its words, and busy
- * sending what ⌘Return submitted; a compact TextField in a bar, selecting its
- * address as the caret arrives; a bare TextArea growing without limit in a message box's card,
- * sent with Return; a TextField on a card's ground, as one stands over a card
- * composer; a TextField in a settings row, invalid while the row says its error; and
- * both in a narrow column.
- */
-
-/** A field the example holds the value of, as a caller would. */
 function Held({
   start,
   children,
@@ -47,7 +35,6 @@ function Held({
   return <>{children(value, setValue)}</>;
 }
 
-/** A count the example holds, as a number or nothing. */
 function NumberHeld(): React.JSX.Element {
   const [count, setCount] = useState<number | undefined>(3);
   return (
@@ -59,7 +46,6 @@ function NumberHeld(): React.JSX.Element {
   );
 }
 
-/** A reply that ⌘Return sends, saying what it sent, beside one standing busy while its words are on their way. */
 function SubmittedNote(): React.JSX.Element {
   const [reply, setReply] = useState("Looks good to me.");
   const [sent, setSent] = useState<string | undefined>(undefined);
@@ -81,7 +67,6 @@ function SubmittedNote(): React.JSX.Element {
   );
 }
 
-/** A message box's card holding a bare note that Return sends, saying what it sent. */
 function MessageBox(): React.JSX.Element {
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState<string | undefined>(undefined);

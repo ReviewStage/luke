@@ -13,10 +13,6 @@ import {
   RAW_CONTROL_ELEMENTS,
 } from "../shared/press-guard.ts";
 
-/**
- * Note that a hidden input's type must be the literal `hidden` on every
- * branch, and no spread may stand on it, since a spread may set its type.
- */
 function isHiddenInput(tag: string, element: ESTree.JSXOpeningElement): boolean {
   if (tag !== HIDDEN_INPUT.ELEMENT) return false;
   if (element.attributes.some((attribute) => attribute.type === "JSXSpreadAttribute")) return false;
@@ -28,7 +24,6 @@ function isHiddenInput(tag: string, element: ESTree.JSXOpeningElement): boolean 
   return values !== undefined && values.length > 0 && values.every((v) => v === HIDDEN_INPUT.TYPE);
 }
 
-/** Note that `contentEditable={false}` takes no focus, so it is not counted. */
 function takesFocus(attribute: ESTree.JSXAttribute): boolean {
   const value = attribute.value;
   if (value === null || value.type !== "JSXExpressionContainer") return true;
@@ -36,13 +31,6 @@ function takesFocus(attribute: ESTree.JSXAttribute): boolean {
   return !(expression.type === "Literal" && expression.value === false);
 }
 
-/**
- * Outside `@repo/ui`, an intrinsic JSX element is drawn and never pressed:
- * no raw control, no pressable role, no press event, and no key event on an
- * element that takes the focus itself. A ui component or variant is where a
- * press lives. A spread is invisible here and allowed, which is how a ui
- * helper such as `menu.contextMenu()` hands its handlers on.
- */
 export const noRawPressOutsideUiRule = defineRule({
   meta: {
     type: "problem",

@@ -8,16 +8,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
-/**
- * admin-workspaces.test.ts -- the Workspaces tab heads its table with the
- * shared workspaces' four counts, lists each workspace with its owner and
- * GitHub installation, narrows the rows as a maintainer
- * types, asks for every workspace once View options' "Shared only" is cleared, and opens a
- * row's owner on a press. The network, the HTTP boundary to the service, is a fake
- * that answers every read with the list given and writes down what it was
- * asked.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const NORTHWIND: AdminWorkspaceRow = {
@@ -82,7 +72,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The tab, signed in, with every read answered by `body`; answers the page, the addresses read, and the accounts and workspaces opened. */
 async function openWorkspaces(body: AdminWorkspaceList) {
   const asked: string[] = [];
   const opened: string[] = [];
@@ -116,7 +105,6 @@ async function openWorkspaces(body: AdminWorkspaceList) {
   return { page, asked, opened };
 }
 
-/** Types `words` into the search box the way React hears a keystroke. */
 function type(page: HTMLElement, words: string): void {
   const box = page.querySelector<HTMLInputElement>('input[aria-label="Search workspaces by name"]');
   if (box === null) throw new Error("no search box");
@@ -126,7 +114,6 @@ function type(page: HTMLElement, words: string): void {
   });
 }
 
-/** Each body row's words. */
 function rows(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("tbody tr"), (row) => row.textContent ?? "");
 }
@@ -163,7 +150,6 @@ test("typing narrows the loaded workspaces at once, and a miss says so", async (
   type(page, "nobody");
   expect(page.querySelector("table")).toBeNull();
   expect(page.textContent).toContain("No workspaces match");
-  // The headline counts stand whatever the search narrows.
   expect(page.textContent).toContain("Shared workspaces20");
 });
 

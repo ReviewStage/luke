@@ -20,20 +20,9 @@ import { Effect, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { pageResponse } from "./page-protocol";
 
-/**
- * The find a page is served with, as the side panel drives it: a page served
- * by the `app-page:` scheme, drawn in a frame of the test's window, asked to
- * search and step as the panel's find bar asks, and answering with its tally
- * and its selection; the link pressed in it, handed to the panel; and the
- * element a comment is on, picked in it at the panel's asking. jsdom lays nothing out, so where a match stands on
- * screen is the one thing answered for it: every match below the fold, and
- * a scroll into view recorded on the element that holds it. Synthetic pages.
- */
-
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const PAGE_ID = "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f";
 
-/** A page's frame as the test drives it: what it posted to the panel, an ask from the panel, and the elements scrolled into view. */
 interface DrawnPage {
   readonly frame: HTMLIFrameElement;
   readonly posted: Posted[];
@@ -41,7 +30,6 @@ interface DrawnPage {
   readonly ask: (ask: PageFindAsk | PagePickAsk, from?: MessageEventSource | null) => void;
 }
 
-/** What the page may post to the panel: the find's answer, a link pressed, or an element picked. */
 const postedSchema = Schema.Union([
   pageFindAnswerSchema,
   pageLinkPressSchema,
@@ -50,7 +38,6 @@ const postedSchema = Schema.Union([
 
 type Posted = typeof postedSchema.Type;
 
-/** The pages drawn by the test running, each cleared as it ends so no find outlives its frame. */
 const drawn: DrawnPage[] = [];
 
 afterEach(() => {
@@ -59,7 +46,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page's HTML as the scheme serves it. */
 const served = (html: string) =>
   Effect.flatMap(
     pageResponse(pageFrameUrl({ taskId: TASK_ID, pageId: PAGE_ID, version: 1 }), () =>
@@ -70,19 +56,10 @@ const served = (html: string) =>
     (response) => Effect.promise(() => response.text()),
   );
 
-/**
- * Draws the page as served in a frame, its scripts run as the frame runs
- * them, and records what it posts to the window that framed it.
- */
 const draw = (html: string) => Effect.map(served(html), drawServed);
 
-/** Reads what the page posted, as the panel reads it. */
 const readAnswer = Schema.decodeUnknownSync(postedSchema);
 
-/**
- * The prototype up `of`'s chain that defines `name` itself: one of a frame's
- * own interfaces, since jsdom gives each frame a realm of its own.
- */
 function protoDefining(of: Node | AbstractRange, name: string): object {
   for (
     let proto = Object.getPrototypeOf(of);
@@ -94,14 +71,12 @@ function protoDefining(of: Node | AbstractRange, name: string): object {
   return assert.fail(`nothing up the chain defines ${name}`);
 }
 
-/** Draws a page's HTML as served, as `draw` does. */
 function drawServed(html: string): DrawnPage {
   const frame = document.createElement("iframe");
   document.body.append(frame);
   const framed = frame.contentWindow ?? assert.fail("the frame has no window");
   const page = framed.document;
   page.documentElement.innerHTML = html;
-  // Note that a script written as markup never runs, so each is written again as an element.
   for (const parsedScript of [...page.querySelectorAll("script")]) {
     const script = page.createElement("script");
     script.textContent = parsedScript.textContent;
@@ -112,7 +87,6 @@ function drawServed(html: string): DrawnPage {
     posted.push(readAnswer(message));
   });
   const scrolled: string[] = [];
-  // Note that jsdom lays nothing out, so each frame's own prototypes say where a match stands.
   Object.defineProperty(protoDefining(page.createRange(), "setStart"), "getBoundingClientRect", {
     value: () => DOMRect.fromRect({ x: 0, y: framed.innerHeight + 100, width: 10, height: 10 }),
     configurable: true,
@@ -129,7 +103,6 @@ function drawServed(html: string): DrawnPage {
   return drawnPage;
 }
 
-/** The tallies the page posted, oldest first. */
 function talliesOf(posted: readonly Posted[]) {
   return posted.flatMap((message) => ("tally" in message ? [message.tally] : []));
 }
@@ -200,7 +173,6 @@ it.effect(
       const framed = frame.contentWindow ?? assert.fail();
       const page = frame.contentDocument ?? assert.fail();
       const scroller = page.querySelector("div") ?? assert.fail();
-      // The match stands in the window's height, below the scroller's.
       Object.defineProperty(
         protoDefining(page.createRange(), "setStart"),
         "getBoundingClientRect",

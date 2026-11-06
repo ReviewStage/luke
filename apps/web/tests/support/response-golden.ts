@@ -2,15 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/**
- * A response recorded whole — its status line, every header in the order the
- * answer carries them, and its body — so a route's bytes stand on disk and a
- * conversion that moved one of them fails rather than passes quietly.
- *
- * Headers are a list rather than a record because `set-cookie` arrives more
- * than once, and a record would record a joined byte no client is sent.
- */
-
 const UPDATE_FIXTURES = process.env.APP_UPDATE_FIXTURES === "1";
 const GOLDEN_SUFFIX = ".json";
 
@@ -30,7 +21,6 @@ export async function recordedResponse(response: Response): Promise<RecordedResp
   };
 }
 
-/** The recorded response against the file named for it, which `APP_UPDATE_FIXTURES=1` writes. */
 export async function settleResponseGolden(
   root: string,
   name: string,

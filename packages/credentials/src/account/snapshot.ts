@@ -19,44 +19,23 @@ export const ACCOUNT_STATUS = {
   SIGNED_IN: "signed-in",
 } as const;
 
-/** Renderer-safe identity. OAuth tokens never cross the preload boundary. */
 export type AccountSnapshot =
   | { status: typeof ACCOUNT_STATUS.SIGNED_OUT }
   | { status: typeof ACCOUNT_STATUS.SIGNING_IN }
   | {
       status: typeof ACCOUNT_STATUS.SIGNED_IN;
-      /**
-       * The account's own id, the service's `sub` (`client.ts`'s
-       * `AccountIdentity`), which is how the window tells the signed-in
-       * member's work from a teammate's. Absent for an identity stored
-       * without one, where the window names nobody You.
-       */
       id?: string;
       email: string;
       name?: string;
-      /**
-       * The provider's own avatar for the signed-in user, kept only when it
-       * lives on a host this build pins in the renderer's image policy.
-       */
       pictureUrl?: string;
       provider: AccountProvider;
-      /**
-       * True while a maintainer is signed in as the account from the web
-       * (Better Auth's `session.impersonatedBy`), which the web panel draws
-       * its Viewing as banner by; absent everywhere else, the Mac always.
-       */
       impersonated?: true;
     };
 
-/** The signed-in account's own id, or none while nobody is signed in or the identity stored names none. */
 export function signedInAccountId(account: AccountSnapshot | undefined): string | undefined {
   return account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
 }
 
-/**
- * An account snapshot as it crosses to a window, the type above as a schema:
- * what an act that answers the account carries back to the window that asked.
- */
 export const accountSnapshotSchema = Schema.Union([
   Schema.Struct({ status: Schema.Literal(ACCOUNT_STATUS.SIGNED_OUT) }),
   Schema.Struct({ status: Schema.Literal(ACCOUNT_STATUS.SIGNING_IN) }),
@@ -71,14 +50,8 @@ export const accountSnapshotSchema = Schema.Union([
   }),
 ]);
 
-/**
- * What a sign-in begun from a window answers: the account it settled on, or
- * the key of why it ended without landing, which the window says in words of
- * its own. No sentence a provider or a client wrote ever rides it.
- */
 export type SignInAnswer = { account: AccountSnapshot } | { failure: SignInFailure };
 
-/** A sign-in's answer as it crosses to the window that began it, the type above as a schema. */
 export const signInAnswerSchema = Schema.Union([
   Schema.Struct({ account: accountSnapshotSchema }),
   Schema.Struct({ failure: Schema.Literals(Object.values(SIGN_IN_FAILURE)) }),

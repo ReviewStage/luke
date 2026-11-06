@@ -1,28 +1,3 @@
-/**
- * cli.ts -- the probe itself: opens a Vercel Sandbox from today's image plus Claude Code, runs the plan's turns as the agent user, stops and resumes, and prints whether each of P00's two checks held.
- *
- *   APP_PROBE_CLAUDE_OAUTH_TOKEN=… APP_PROBE_GITHUB_TOKEN=… \
- *     APP_PROBE_REPOSITORY=owner/throwaway pnpm probe:claude-code
- *
- * Run once, by the developer, from a `vercel link`ed checkout: the Sandbox
- * SDK reads the linked project and the Vercel CLI's own sign-in for its OIDC
- * token, so nothing is pulled into a file. The Claude token is a `claude
- * setup-token` of a Max account; the GitHub token reaches the throwaway
- * repository and stands at the sandbox's firewall alone, on that
- * repository's git path, as a coding agent's does today. The Claude token
- * stands there too, on Anthropic's API, swapped for a random placeholder the
- * CLI is handed in its place, as a coding agent's launch has it, so a bump
- * of the pins proves again that Claude Code runs on a placeholder. Neither
- * token is printed, passed in argv, or written anywhere, nor enters the
- * sandbox. `APP_PROBE_KEEP_SANDBOX=1` keeps the sandbox for a look afterwards;
- * `APP_PROBE_MODEL` names another model than the default.
- *
- * What the run saw is sanitized (`sanitize.ts`) and written over the
- * committed fixtures: the SDK's message stream, and a report of the pins,
- * the options, the image's findings, and every condition of the verdict.
- * The process exits non-zero when any condition failed.
- */
-
 import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
@@ -86,7 +61,6 @@ const SOURCES = {
   LEAK_CHECK: new URL("./sandbox/leak-check.sh", import.meta.url),
 } as const;
 
-/** Where the sources are written before root installs them, since the file API writes as the default user. */
 const UPLOAD_DIRECTORY = "/tmp/agent-probe-upload";
 
 const WAIT = {
@@ -99,10 +73,8 @@ const WAIT = {
   RESUMED_TURN: Duration.minutes(5),
 } as const;
 
-/** How much of a step's output a finding keeps. */
 const FINDING_MAX_CHARS = 4_000;
 
-/** What the run's own consumer offers once a launch's output has ended, which no SDK message is. */
 const STREAM_END: WireRecord = { type: "agent_probe_stream_end" };
 
 const LAUNCH = { FIRST: "first", RESUMED: "resumed" } as const;
@@ -117,13 +89,11 @@ class ProbeStepFailed extends Data.TaggedError("ProbeStepFailed")<{
   }
 }
 
-/** A step's output, kept for the report. */
 interface Finding {
   readonly step: string;
   readonly output: string;
 }
 
-/** Everything the run has seen so far; each step fills in what it observed, so a failed run still reports how far it got. */
 interface Recording {
   readonly nonce: string;
   readonly streams: { readonly [Name in Launch]: WireValue[] };
@@ -144,7 +114,6 @@ interface Recording {
 
 interface Settings {
   readonly claudeToken: Redacted.Redacted<string>;
-  /** What the CLI is handed in the token's place, minted for the run. */
   readonly placeholder: Redacted.Redacted<string>;
   readonly githubToken: Redacted.Redacted<string>;
   readonly repository: string;
@@ -152,7 +121,6 @@ interface Settings {
   readonly model: string;
 }
 
-/** A detached driver: its command, and the messages it printed, as they arrive. */
 interface DriverRun {
   readonly command: Command;
   readonly events: Queue.Queue<WireValue>;
@@ -166,21 +134,16 @@ const settingsConfig = Config.all({
   model: Config.String(PROBE_ENV.MODEL).pipe(Config.withDefault(DEFAULT_MODEL)),
 });
 
-/** How many random bytes a placeholder carries, as the service mints one (`sandbox-firewall.ts`). */
 const PLACEHOLDER_BYTES = 32;
 
-/** The shortest login the sanitizer replaces wherever it appears. */
 const MIN_LOGIN_CHARS = 5;
 
-/** Where a command runs that names no directory of its own. */
 const DEFAULT_DIRECTORY = "/tmp";
 
-/** The secret values the run holds, which no output may carry. */
 function secretsOf(settings: Settings): readonly string[] {
   return [settings.claudeToken, settings.placeholder, settings.githubToken].map(Redacted.value);
 }
 
-/** A sanitizer for everything the run keeps or prints: the run's secrets by value, and the repository's owner and the developer's home and login by name, which a stack trace carries. */
 function scrubberOf(settings: Settings): Sanitizer {
   const owner = settings.repository.split("/")[0] ?? "";
   return sanitizer({
@@ -189,7 +152,6 @@ function scrubberOf(settings: Settings): Sanitizer {
       [settings.repository, "agent-probe-owner/throwaway"],
       [owner, "agent-probe-owner"],
       [homedir(), "~"],
-      // Note that a login too short to be told from a word is left alone, since replacing it would garble the stream.
       [userInfo().username.length >= MIN_LOGIN_CHARS ? userInfo().username : "", "developer"],
     ],
   });
@@ -215,13 +177,6 @@ function say(line: string) {
   return Effect.sync(() => process.stdout.write(`${line}\n`));
 }
 
-/**
- * The firewall a coding agent's sandbox stands behind: open internet, the
- * GitHub token as git's basic authorization on the one repository's git
- * path alone, which is where `git push` reaches, and the Claude token as
- * the CLI's bearer on Anthropic's API, set only on a request that carries
- * the placeholder there, as the service's swap does (`placeholderSwap`).
- */
 function networkPolicy(settings: Settings) {
   const basic = Buffer.from(`x-access-token:${Redacted.value(settings.githubToken)}`).toString(
     "base64",
@@ -248,7 +203,6 @@ function networkPolicy(settings: Settings) {
   };
 }
 
-/** What Anthropic answers the placeholder with from the probe's own machine, outside the sandbox and its firewall. */
 function placeholderOutside(scrub: Sanitizer, settings: Settings) {
   return attempt(scrub, "the placeholder from outside the sandbox", () =>
     fetch(ANTHROPIC_API.MESSAGES, {
@@ -263,11 +217,6 @@ function placeholderOutside(scrub: Sanitizer, settings: Settings) {
   );
 }
 
-/**
- * Who a command runs as: the default user as a Terminal's shell is today,
- * that user with every capability dropped, root (the Sandbox API's `sudo`),
- * or the agent user through the launch's own drop from root.
- */
 const RUN_AS = {
   DEFAULT: "default",
   DEFAULT_CAPS_DROPPED: "default-caps-dropped",
@@ -276,7 +225,6 @@ const RUN_AS = {
 } as const;
 type RunAs = (typeof RUN_AS)[keyof typeof RUN_AS];
 
-/** The command, its argv before `bash -c`, and whether it is asked for as root. */
 const RUN_PREFIX = {
   [RUN_AS.DEFAULT]: { cmd: "bash", args: [], sudo: false },
   [RUN_AS.DEFAULT_CAPS_DROPPED]: {
@@ -294,7 +242,6 @@ const RUN_PREFIX = {
   };
 };
 
-/** A command run to its end as `as` says; a non-zero exit fails the step unless `allowFailure`. */
 const run = Effect.fn("probe/run")(function* (
   scrub: Sanitizer,
   recording: Recording,
@@ -332,7 +279,6 @@ const run = Effect.fn("probe/run")(function* (
   return stdout.trim();
 });
 
-/** Starts the driver as the agent user, dropped from root, and hands it its config line. */
 const launchDriver = Effect.fn("probe/launchDriver")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -390,7 +336,6 @@ const launchDriver = Effect.fn("probe/launchDriver")(function* (
   return { command, events } satisfies DriverRun;
 });
 
-/** Whether a message the predicate takes arrives before the wait runs out or the driver's output ends. */
 function waitFor(
   driver: DriverRun,
   within: Duration.Duration,
@@ -422,14 +367,12 @@ const isExit = (value: WireValue) => isRecord(value) && value.type === DRIVER_EV
 const startsStoppedCommand = (value: WireValue) =>
   toolCalls([value]).some((call) => call.command.includes(STOPPED_COMMAND));
 
-/** Ends a driver's input and waits for it to exit, killing it where it does not. */
 const endDriver = Effect.fn("probe/endDriver")(function* (scrub: Sanitizer, driver: DriverRun) {
   yield* send(scrub, driver, { type: DRIVER_COMMAND.END });
   const exited = yield* waitFor(driver, WAIT.EXIT, isExit);
   if (!exited) yield* attempt(scrub, "kill the driver", () => driver.command.kill());
 });
 
-/** The first launch: the session starts, a Terminal's shell looks for the token, the workflow turn runs, and a long turn is stopped. */
 const firstLaunch = Effect.fn("probe/firstLaunch")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -480,7 +423,6 @@ const firstLaunch = Effect.fn("probe/firstLaunch")(function* (
   return sessionInit(recording.streams.first)?.session_id;
 });
 
-/** The second launch, on the resumed sandbox: the session resumed and asked what only its history knows. */
 const resumedLaunch = Effect.fn("probe/resumedLaunch")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -504,7 +446,6 @@ const resumedLaunch = Effect.fn("probe/resumedLaunch")(function* (
   yield* endDriver(scrub, driver);
 });
 
-/** The image: the agents' image's own base, then Claude Code, the checkout, and the probe's files. */
 const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -558,7 +499,6 @@ const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
   [recording.launchUser, recording.launchCapEff] = launched.split("\n");
 });
 
-/** The session's files on the sandbox disk, by path, as root finds them. */
 const sessionFiles = Effect.fn("probe/sessionFiles")(function* (
   scrub: Sanitizer,
   recording: Recording,
@@ -575,7 +515,6 @@ const sessionFiles = Effect.fn("probe/sessionFiles")(function* (
   return found.split("\n").filter((line) => line.trim() !== "");
 });
 
-/** Every step in order, filling in the recording; the first failure ends the run, which still reports. */
 const probe = Effect.fn("probe/probe")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -642,7 +581,6 @@ function observationsOf(recording: Recording): ProbeObservations {
   };
 }
 
-/** The sanitized stream and report, written over the committed fixtures. */
 function writeFixtures(
   scrub: Sanitizer,
   settings: Settings,

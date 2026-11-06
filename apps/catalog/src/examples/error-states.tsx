@@ -1,14 +1,3 @@
-/**
- * error-states.tsx -- a failed read among rows with Retry beside it, one at
- * a list's rows' inset, one
- * alone in its region with Retry under it, one with no Retry, ones with a
- * remedy, Remove, or Dismiss beside Retry, one whose place failed to draw,
- * the product's mark over its sentence and Reload, one on a toolbar short of
- * room, long words and a long remedy in a pane narrower than the line,
- * a list's foot that is itself the retry, and a failure's Retry on its own
- * beside its words, named for what it reads again.
- */
-
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   ERROR_STATE_PLACEMENT,
@@ -26,7 +15,6 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function ErrorStates(): React.JSX.Element {

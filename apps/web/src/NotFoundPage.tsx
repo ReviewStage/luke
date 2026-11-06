@@ -2,17 +2,12 @@ import { BUTTON_VARIANT, ButtonLink, LostPage, TEXT_LINK_HEIGHT, TextLink } from
 import { useEffect, useState } from "react";
 import { SITE_PAGE, SiteBarDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
-/**
- * The path the reader asked for, read once the page mounts. Note that the
- * page is prerendered once for every address, so the first frame names none.
- */
 function useAskedPath(): string | undefined {
   const [path, setPath] = useState<string | undefined>(undefined);
   useEffect(() => setPath(window.location.pathname), []);
   return path;
 }
 
-/** What any address the site has no page for is answered with, the site's chrome around it and a way home. */
 export function NotFoundPage(): React.JSX.Element {
   return (
     <LostPage

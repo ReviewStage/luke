@@ -8,21 +8,8 @@ import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { recordedResponse, settleResponseGolden } from "./support/response-golden.js";
 
-/**
- * The auth group carries Better Auth's answers rather than describing them, so
- * what this holds is that carrying: the same request object reaches the
- * handler, and the handler's own response — its status, its every header,
- * its `set-cookie`s, and its bytes — is what the function answers.
- *
- * Each case answers twice, once through the group and once by calling the
- * handler the way the route called it before the conversion, and the two
- * recordings are compared. The goldens beside them are the bytes themselves,
- * so a later change to the adaptor cannot move them silently.
- */
-
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/auth-route");
 
-/** The layer names a database and nothing here queries one, as in `web-runtime.test.ts`. */
 const PLACEHOLDER_DATABASE_URL = "postgresql://runtime:edge@127.0.0.1:5432/app";
 
 const AUTH_ORIGIN = "https://app.test";
@@ -32,7 +19,6 @@ interface StubbedHandler {
   requests: Request[];
 }
 
-/** A handler that answers from the script it was given, recording what it was handed. */
 function stubbedHandler(answer: () => Response): StubbedHandler {
   const requests: Request[] = [];
   return {

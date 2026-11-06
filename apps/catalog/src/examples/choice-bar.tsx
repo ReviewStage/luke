@@ -1,13 +1,3 @@
-/**
- * choice-bar.tsx -- the one bar of options where you choose one, in its
- * fill and its segmented look at both sizes: tabs over panels with glyphs
- * and toned counts, a diff's lines among them, set in to a reading measure
- * or names alone; a value set by a radio group; a clearable one with none
- * chosen; an option and a whole bar that cannot be chosen; a row too
- * narrow for its options, which names every option while none is chosen;
- * and one folding every option together, each named in its hint.
- */
-
 import {
   ALIGN,
   AlertIcon,
@@ -42,7 +32,6 @@ const VIEW = {
 } as const;
 type View = (typeof VIEW)[keyof typeof VIEW];
 
-/** A pull request's three views, each counting what it holds, its checks failing. */
 const VIEWS: readonly ChoiceItem<View>[] = [
   { value: VIEW.CONVERSATION, icon: <UserIcon />, label: "Conversation", count: "12" },
   {
@@ -54,7 +43,6 @@ const VIEWS: readonly ChoiceItem<View>[] = [
   { value: VIEW.FILES, icon: <CodeIcon />, label: "Files changed", count: linesCount(128, 42) },
 ];
 
-/** The same views, their checks passing. */
 const VIEWS_PASSING: readonly ChoiceItem<View>[] = VIEWS.map((item) =>
   item.value === VIEW.CHECKS
     ? {
@@ -66,7 +54,6 @@ const VIEWS_PASSING: readonly ChoiceItem<View>[] = VIEWS.map((item) =>
     : item,
 );
 
-/** Three views by their names, one glyph among them. */
 const PLAIN: readonly ChoiceItem<View>[] = [
   { value: VIEW.CONVERSATION, icon: <DocumentIcon />, label: "Overview" },
   { value: VIEW.CHECKS, label: "Activity" },
@@ -80,7 +67,6 @@ const SHOW = {
 } as const;
 type Show = (typeof SHOW)[keyof typeof SHOW];
 
-/** An Inbox's tabs: names and counts, one needing the reader in the attention tone. */
 const SHOWS: readonly ChoiceItem<Show>[] = [
   {
     value: SHOW.NEEDS_YOU,
@@ -108,7 +94,6 @@ const EFFORTS: readonly ChoiceItem<Effort>[] = [
   { value: EFFORT.HIGHEST, label: "Highest", disabled: true },
 ];
 
-/** A tab bar the example holds, over a panel for each of its views. */
 function HeldTabs<Value extends string>({
   label,
   items,
@@ -157,7 +142,6 @@ function HeldTabs<Value extends string>({
   );
 }
 
-/** A radio group the example holds, setting an effort, clearable as given. */
 function HeldEffort({
   start,
   look = CHOICE_BAR_LOOK.SEGMENTED,
@@ -186,7 +170,6 @@ function HeldEffort({
   );
 }
 
-/** A clearable radio group over glyphed options the example holds, none chosen at first. */
 function HeldClearableViews(): React.JSX.Element {
   const [view, setView] = useState<View | undefined>(undefined);
   return (

@@ -1,34 +1,6 @@
 import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
 import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 
-/**
- * What vespin.dev counts about itself. It exists to close the funnel the
- * desktop opens: without the landing page and the sign-in, install-to-first-
- * session drop-off is only visible from the point someone already has an
- * account.
- *
- * The browser posts to a path of this site's own origin, which the web
- * service passes on to the analytics processor (`@repo/features/posthog-proxy`),
- * because ad blockers refuse the processor's own host. What the processor is
- * handed is the browser's request, the visitor's address and user agent
- * among it, but for the site's cookies, which the rewrite takes off — where
- * the desktop's *counted* events reach it through our own service, built
- * from an allowlist. Say so in `PRIVACY.md` rather than letting the counted
- * events' stronger claim bleed onto this.
- *
- * The recorder here masks less than the app's: the desktop panel's recording
- * masks every word it draws (`apps/desktop/src/renderer/session-replay.ts`),
- * because the panel shows somebody's work, where this is a marketing page
- * whose copy is public and whose only typed field is a sign-in, so only what
- * is typed is masked. The two `mask_all_*` options below are autocapture's,
- * not the recorder's, and keep a press's words out of its event.
- *
- * What the client does is set here in full rather than left to the project's
- * settings, because the library turns on whatever the project's remote
- * configuration asks for wherever `init` is silent, and `PRIVACY.md` says
- * what this site collects, not what the project happens to have switched on.
- */
-
 const PROJECT_API_KEY = import.meta.env.VITE_POSTHOG_PROJECT_API_KEY;
 
 export const SITE_EVENT = {
@@ -39,18 +11,6 @@ export const SITE_EVENT = {
 
 export type SiteEvent = (typeof SITE_EVENT)[keyof typeof SITE_EVENT];
 
-/**
- * The pages of the OAuth sign-in flow, and the hand-off that follows it. Their
- * address carries the desktop's signed authorization request — the state, the
- * PKCE challenge, the redirect, the expiry, and the signature — or the Mac's
- * own state, challenge, and loopback for its session, each a live step of a
- * credential the funnel never needs to count. So no half of this file may
- * keep their address whole: the recorder does not run on them
- * (`disable_session_recording` below), and a counted event's every address is
- * cut to its path before it leaves (`sanitizeAnalyticsUrls`). Each is served
- * at its clean path and at its `.html` file's, which a shipped desktop and a
- * link already sent still open, so both are held alike.
- */
 const AUTH_PATH = {
   SIGN_IN: "/sign-in",
   CONSENT: "/consent",
@@ -61,15 +21,6 @@ const AUTH_PATHS: ReadonlySet<string> = new Set(
   Object.values(AUTH_PATH).flatMap((path) => [path, `${path}.html`]),
 );
 
-/**
- * The query parameters that carry a credential, or a step of one, on any
- * page: an OAuth authorization code and its state, an error a provider
- * hands back, a PKCE challenge or verifier, a signed request and its
- * signature, and a bearer token by its usual names. A provider or a link may
- * land on any page with one, the landing page included, so these are taken
- * off every address that leaves, not only the sign-in pages', from its query
- * and from a fragment written as a query, where an implicit grant puts them.
- */
 const AUTH_PARAM = {
   CODE: "code",
   STATE: "state",
@@ -89,38 +40,22 @@ const AUTH_PARAM = {
 
 const AUTH_PARAMS: ReadonlySet<string> = new Set(Object.values(AUTH_PARAM));
 
-/** The library's console-log capture, which a project can switch on whatever `init` says. */
 const LOGS_SCRIPT = "/logs.js";
 
-/**
- * Where the browser keeps the id of the last Better Auth session it counted a
- * sign-in for, so a sign-in that passes more than one page that would count
- * it (consent, where it is shown, then the desktop's hand-off) is counted once.
- */
 const COUNTED_SESSION_KEY = "app_site_sign_in_session";
 
-/** Whether the page now loading is one the sign-in flow's address serves. */
 function onAuthPage(): boolean {
   return AUTH_PATHS.has(window.location.pathname);
 }
 
-/** Whether this browser already counted a sign-in for `sessionId`, marking it counted if not. */
 function firstCountOf(sessionId: string): boolean {
   try {
     if (window.localStorage.getItem(COUNTED_SESSION_KEY) === sessionId) return false;
     window.localStorage.setItem(COUNTED_SESSION_KEY, sessionId);
-  } catch {
-    // Storage refused: count it, since a double count beats none.
-  }
+  } catch {}
   return true;
 }
 
-/**
- * A query or a fragment (`?…` or `#…`) without its credential parameters, or
- * undefined when it holds none, so an address with nothing to take off is
- * never re-encoded. A part with no `=` is not written as parameters, so an
- * anchor that happens to be named `#code` is left alone.
- */
 function withoutAuthParams(part: string): string | undefined {
   if (!part.includes("=")) return undefined;
   const params = new URLSearchParams(part.slice(1));
@@ -130,19 +65,10 @@ function withoutAuthParams(part: string): string | undefined {
   return params.toString();
 }
 
-/** Whether a script the library is about to load is its console-log capture. */
 function isLogsScript(script: HTMLScriptElement): boolean {
   return new URL(script.src, window.location.href).pathname.endsWith(LOGS_SCRIPT);
 }
 
-/**
- * Cuts an auth page's address to its origin and path, dropping the query and
- * the fragment that carry the authorization request, and takes the
- * credential-bearing parameters off every other address's query and
- * fragment. The rest of an address is kept, so a marketing link keeps the
- * campaign that brought someone; an address with nothing to take off, and a
- * value that is not an address, are returned exactly as they came.
- */
 function scrubAuthUrl(value: string): string {
   let url: URL;
   try {
@@ -159,17 +85,6 @@ function scrubAuthUrl(value: string): string {
   return url.toString();
 }
 
-/**
- * Rewrites every address a capture result carries — an event property, the
- * referrer, the session's entry address, and the first-seen pair PostHog
- * keeps once on the person, which rides in the top-level `$set`/`$set_once`
- * beside the properties, not within them — so no address leaves with a
- * credential in it (`scrubAuthUrl`). An address only ever sits as a string
- * value in a plain record, so the walk descends into those alone: an array (a
- * recording's `$snapshot_data`, whose addresses the recorder's own hook
- * rewrites, and an autocaptured element list) and a class instance (the
- * capture result's `Date` timestamp) are each a leaf, left whole.
- */
 export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
   if (typeof value === "string") return scrubAuthUrl(value) as Value;
   if (value !== null && typeof value === "object") {
@@ -183,86 +98,35 @@ export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
   return value;
 }
 
-/**
- * The client, once it has loaded. It is imported dynamically rather than at
- * the top of this module because the library is larger than everything else
- * the site ships put together: a static import would land it in the shared
- * chunk, so every page — the privacy document included — would block on it.
- * Deferring also makes the kill switch literal, since a build with no key
- * never fetches the chunk at all.
- */
 let client: Promise<PostHog | undefined> | undefined;
 
-/**
- * Starts counting, or does nothing at all. A build carrying no project key is
- * inert rather than broken — the same kill switch the recording endpoint has,
- * so a preview deployment or a local run measures nothing without being
- * configured to.
- *
- * Called from every page the site builds, not only the landing one: a funnel
- * that saw the landing page alone would undercount everyone who arrived by a
- * link.
- */
 export function startSiteAnalytics(): void {
   const projectApiKey = PROJECT_API_KEY;
   if (client || !projectApiKey) return;
   client = import("posthog-js").then(({ default: posthog }) => {
     posthog.init(projectApiKey, {
-      // A path rather than an address, so it stands on whichever of the
-      // product's origins served the page.
       api_host: POSTHOG_PROXY.PATH,
       ui_host: POSTHOG_PROXY.UI_ORIGIN,
       autocapture: true,
       capture_pageview: true,
       capture_pageleave: false,
-      // Visitors stay personless until they sign in, which is both cheaper
-      // and the honest shape: an anonymous visitor is not a person we
-      // know. The identify where a sign-in completes (`completeSiteSignIn`)
-      // is what links their earlier page views to the account, so no aliasing
-      // is needed.
       person_profiles: "identified_only",
-      // Autocapture's own two: an event says what was clicked and where, never
-      // the words on it. Recording is configured separately below, because
-      // rrweb does not read either of these.
       mask_all_text: true,
       mask_all_element_attributes: true,
-      // The sign-in flow's address is a live authorization request, so the
-      // recorder never runs on its pages, and no event or recording on any
-      // page keeps a credential in an address.
       disable_session_recording: onAuthPage(),
-      // A sign-in page leaves the moment its work is done: for the provider, or
-      // for the desktop once its sign-in is counted. So on those pages every
-      // event is posted within the call that captures it, uncompressed, on a
-      // keepalive request the browser finishes after the page has gone. Note
-      // that neither half may go: the library gzips an event on a promise
-      // that a page already gone never gets to, and what it batches leaves
-      // with the page as a beacon of base64 form data, which the capture
-      // endpoint the project routes events to (`/i/v0/e/`) refuses.
       disable_compression: onAuthPage(),
       request_batching: !onAuthPage(),
       before_send: (event) => event && sanitizeAnalyticsUrls(event),
       session_recording: {
-        // The sign-in address is the only thing anybody types on this site,
-        // and it is the one thing here worth masking.
         maskAllInputs: true,
         blockSelector: ".ph-block",
-        // No request's headers or body, whatever the project's settings say.
         recordHeaders: false,
         recordBody: false,
-        // The recorder's own hook for every address it writes: the page's
-        // address in each snapshot, each navigation, and each network entry.
         maskCapturedNetworkRequestFn: (request: CapturedNetworkRequest) => ({
           ...request,
           name: scrubAuthUrl(request.name),
         }),
       },
-      // Everything below is off whatever the project's settings say, because
-      // `PRIVACY.md` does not offer it: no exceptions, no console in a
-      // recording or as logs, no network timing or web vitals, no heatmaps or
-      // dead clicks, no Conversations widget, surveys, or product tours, and
-      // no feature flags, which nothing on this site reads. Console logs are
-      // the one the library lets a project switch on over `init`, so their
-      // script is refused from loading at all.
       capture_exceptions: false,
       enable_recording_console_log: false,
       logs: { captureConsoleLogs: false },
@@ -279,11 +143,6 @@ export function startSiteAnalytics(): void {
   });
 }
 
-/**
- * Runs one call against the client, whenever it arrives. A press landing
- * before the chunk does still counts, because it queues behind the load; a
- * chunk that never arrives costs nothing but the count.
- */
 function withClient(use: (posthog: PostHog) => void): void {
   void client?.then((posthog) => posthog && use(posthog)).catch(() => undefined);
 }
@@ -292,46 +151,17 @@ export function captureSiteEvent(event: SiteEvent): void {
   withClient((posthog) => posthog.capture(event));
 }
 
-/** What a completed sign-in left the browser holding, as Better Auth's `getSession` answers it. */
 export interface SiteSession {
   readonly session: { readonly id: string };
   readonly user: { readonly id: string; readonly name?: string; readonly email?: string };
 }
 
-/**
- * How long a sign-in page may hold its hand-off for the session read the
- * count needs, from when it starts reading (`signInCountDeadline`).
- */
 const SIGN_IN_COUNT_DEADLINE_MS = 2_000;
 
-/**
- * The deadline a sign-in page puts on its session read, as the read's own
- * abort signal, so a read that stalls gives the sign-in up uncounted rather
- * than holding the Mac's hand-off. Note that it is the fetch's own deadline,
- * not a timer of this site's, which is what keeps it beside the read it bounds.
- */
 export function signInCountDeadline(): AbortSignal {
   return AbortSignal.timeout(SIGN_IN_COUNT_DEADLINE_MS);
 }
 
-/**
- * Where the two halves of the funnel join: names the visitor by the account
- * the browser just signed in as and counts
- * `site:sign_in_complete`, once per Better Auth session however many pages of
- * the flow call it.
- *
- * It waits for the session (`signedIn`, which the caller starts reading
- * beside its own work under `signInCountDeadline`), so a read that answers
- * just after the caller's own work still counts, and one that stalls ends at
- * the deadline, uncounted, because a sign-in page hands off to the desktop
- * the moment this resolves. The client is waited for too: it is this site's
- * own script, started as the page loaded, and loads or fails without reaching
- * PostHog.
- *
- * Resolves once both have been handed to the browser to send, so the caller
- * may leave the page on the next line: on a sign-in page each is posted
- * within its own call (`request_batching` in `startSiteAnalytics`).
- */
 export async function completeSiteSignIn(
   signedIn: Promise<SiteSession | null | undefined>,
 ): Promise<void> {

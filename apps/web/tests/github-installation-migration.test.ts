@@ -8,20 +8,8 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * The migration that lets a workspace hold several GitHub installations,
- * over a database that already holds connected workspaces and their plans:
- * every installation row and every plan stands as it was, no installation
- * has to be connected again, a workspace then takes a second installation
- * while an installation still stands for one workspace alone, a run of the
- * migration's statements again changes nothing, and the writer from before
- * it, which replaced a workspace's installation by keying on the workspace,
- * fails against it rather than replacing anything. Synthetic ids throughout.
- */
-
 const MIGRATION = "20261015174747_github_installation_per_workspace_many";
 
-/** A migrations folder holding every migration named before this one, and none after. */
 const foldersBeforeMigration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
@@ -37,7 +25,6 @@ const foldersBeforeMigration = Effect.gen(function* () {
   return folder;
 });
 
-/** The migration's own statements, as the runner splits them. */
 const migrationStatements = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
@@ -68,7 +55,6 @@ const installationRows = (sql: SqlClient.SqlClient) =>
     from github_installation order by installation_id
   `;
 
-/** Whether the statement fails, which a constraint refusing it is. */
 const refused = <A, E, R>(statement: Effect.Effect<A, E, R>) =>
   Effect.match(statement, { onFailure: () => true, onSuccess: () => false });
 

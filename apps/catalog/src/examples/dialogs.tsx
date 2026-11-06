@@ -24,28 +24,11 @@ import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * dialogs.tsx -- a dialog holding a field, a question that must be
- * answered, a long one, a wide note that grows with its words and rings
- * while a file is dragged over the window, a tool at its foot's start, a
- * composer's card as New task's stands, which on a phone's screen gives its
- * words the room the desktop's margins would spend, and a picture shown edge
- * to edge under its own bar, each opened from its button and
- * put away by its answers, Escape, or a press on the dimmed window, fading
- * out as it goes; the
- * note and the composer, holding words, are nudged by the first of those
- * and put away by the next. The
- * question's words scroll inside the card in a short window, so its answers
- * stay on screen.
- */
-
-/** What each dialog here is told: whether it stands, and how it is put away. */
 interface DialogBody {
   open: boolean;
   onClose: () => void;
 }
 
-/** A dialog that renames a task, its field taking focus as it opens. */
 function RenameDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const [name, setName] = useState("Launch checklist");
   const field = useRef<HTMLInputElement | null>(null);
@@ -75,7 +58,6 @@ function RenameDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A question that must be answered before going on, with more to say than one line holds. */
 function DeleteDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const cancel = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
@@ -98,7 +80,6 @@ function DeleteDialog({ open, onClose }: DialogBody): React.JSX.Element {
         </>
       }
     >
-      {/* The long words give way and scroll in a short window, so the answers under them stay on the card. */}
       <ScrollArea size={SCROLL_SIZE.CONTENT}>
         <Text tone={TEXT_TONE.MUTED} id={bodyId}>
           The task, its description, and every agent’s transcript under it go for good. Anyone in
@@ -109,7 +90,6 @@ function DeleteDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A note being written, on the wide card, which rings while a file is dragged over the window. */
 function NoteDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const [note, setNote] = useState("");
   const [dropping, setDropping] = useState(false);
@@ -161,7 +141,6 @@ function NoteDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A task's first words on the composer's card, its tool at the foot's start and its start at the end. */
 function ComposerDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const [words, setWords] = useState("");
   const field = useRef<HTMLTextAreaElement | null>(null);
@@ -193,7 +172,6 @@ function ComposerDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A picture opened over the window, the card fitted to it under a bar naming it. */
 function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const titleId = useId();
   return (
@@ -211,7 +189,6 @@ function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A picture opened bare over the dimmed window, below its top bar, in a card of its own under a bar naming it. */
 function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const titleId = useId();
   return (
@@ -231,7 +208,6 @@ function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A button that opens `Body`, which closes itself and fades out as it goes; each opening is drawn afresh. */
 function Opener({
   label,
   Body,

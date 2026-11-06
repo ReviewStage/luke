@@ -23,17 +23,6 @@ import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * group-headers.tsx -- a group's head folding its rows, open and folded,
- * with its glyph, a pin, a count shown at rest or under the pointer, and
- * its actions beside the fold; a group its holder keeps; a head with no
- * glyph, whose chevron stands at rest; heads that fold nothing; a list's head
- * with its buttons standing; a list's head whose buttons wait,
- * a filter that is on standing with its dot; the count on a wide page and
- * in a narrow column; and a group named in place, its glyph's button hanging
- * a panel and its field in the head's type over its rows.
- */
-
 const ignore = (): void => undefined;
 
 function Rows({ names }: { names: readonly string[] }): React.JSX.Element {
@@ -89,7 +78,6 @@ function Folding(): React.JSX.Element {
   );
 }
 
-/** A group whose holder keeps whether it is folded, as the sidebar keeps it across launches. */
 function Held(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return (
@@ -119,7 +107,6 @@ function Still(): React.JSX.Element {
   );
 }
 
-/** The same group on a wide page, counted always, and in a narrow column, counted only folded or under the pointer. */
 function Surfaces(): React.JSX.Element {
   return (
     <div className="catalog-narrow">
@@ -145,7 +132,6 @@ function Surfaces(): React.JSX.Element {
   );
 }
 
-/** A list's own head: its buttons standing at rest. */
 function Standing(): React.JSX.Element {
   return (
     <div className="catalog-narrow">
@@ -159,7 +145,6 @@ function Standing(): React.JSX.Element {
   );
 }
 
-/** A list's head whose buttons wait for the pointer, as the sidebar's Tasks head's do: one with nothing filtered, and one whose Filter is on, standing at rest with its dot. */
 function Filtered(): React.JSX.Element {
   const head = (label: string, filtered: boolean) => (
     <GroupHeader
@@ -219,7 +204,6 @@ function GroupHeaders(): React.JSX.Element {
   );
 }
 
-/** A group named in place: Return keeps the name, Escape lets it go, and the glyph's button hangs a panel without ending the edit. */
 function Renamed(): React.JSX.Element {
   const [name, setName] = useState("Launch week");
   const [editing, setEditing] = useState(true);

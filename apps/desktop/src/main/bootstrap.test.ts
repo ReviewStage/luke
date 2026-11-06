@@ -4,7 +4,6 @@ import { appLinkInbox } from "@repo/features/app-links";
 import { test } from "vitest";
 import { type BootstrapApp, bootstrapDesktop } from "./bootstrap";
 
-/** Every call the bootstrap makes of Electron's app, in the order it made them. */
 const recordingApp = (
   steps: string[],
   packaged = false,

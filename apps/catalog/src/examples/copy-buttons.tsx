@@ -13,17 +13,6 @@ import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * copy-buttons.tsx -- the one Copy, named for what it copies: one whose copy
- * lands and turns to the check, one the clipboard refuses and turns to the
- * alert, compact, one with nothing to copy, and the chip look that names
- * what it copies, a branch, and a development build's chip, led by its
- * color; and a block that shows what it copies, at a control's width,
- * across its row with the shell's prompt, and too long for its width. The
- * catalog's copy act is the browser's own clipboard; an app hands in its
- * shell's.
- */
-
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
 
 const refuse = (): Promise<void> => Promise.reject(new Error("The clipboard refused the copy."));

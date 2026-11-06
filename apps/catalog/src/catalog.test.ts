@@ -6,14 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { Catalog, readView } from "./catalog.js";
 
-/**
- * catalog.test.ts -- an address that asks for a width frames its example at
- * that width, and every other way to change the view keeps it; an address
- * that asks for none, or for one out of range, draws the example at the
- * stage's own width. jsdom lays nothing out, so the frame's width is read
- * from the style the page gives it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -27,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The catalog drawn into the page at the view `address` asks for. */
 function open(address: string): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -36,7 +27,6 @@ function open(address: string): HTMLElement {
   return container;
 }
 
-/** The frame the example is drawn in, if the page frames it. */
 function frameOf(page: HTMLElement): HTMLElement | null {
   return page.querySelector<HTMLElement>("main .catalog-width-frame");
 }
@@ -82,7 +72,6 @@ test("a width typed and applied submits it with the rest of the view", () => {
   const page = open("?example=badges&profile=web&theme=light&width=390");
   const field = page.querySelector<HTMLInputElement>("input[name=width]");
   assert.ok(field);
-  // React tracks a field's value through the element's own setter, so a typed value goes in through it, as a keystroke's would.
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "414");
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -91,7 +80,6 @@ test("a width typed and applied submits it with the rest of the view", () => {
     (button) => button.textContent === "Apply",
   );
   assert.ok(apply);
-  // jsdom cannot navigate, so the submission is read where the browser would send it, from the form's own data.
   const form = apply.form;
   assert.ok(form);
   let submitted: URLSearchParams | undefined;

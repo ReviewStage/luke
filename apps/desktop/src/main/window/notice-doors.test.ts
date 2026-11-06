@@ -4,18 +4,9 @@ import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@repo/settings/s
 import { afterEach, test, vi } from "vitest";
 import { electronNoticeDoors } from "./notice-doors";
 
-/**
- * A command ask's notification as macOS meets it: its answer from macOS says
- * whether notifications are on for the app, and its click brings the app forward.
- *
- * Note that Electron's module is replaced whole, because it is the operating
- * system's door and answers nothing outside an Electron process.
- */
-
 const { posted, FakeNotification } = await vi.hoisted(async () => {
   const { EventEmitter } = await import("node:events");
   const posted: InstanceType<typeof FakeNotification>[] = [];
-  /** A notification as macOS holds it: shown once asked, and answering with Electron's events. */
   class FakeNotification extends EventEmitter {
     static isSupported = () => true;
     shown = false;
@@ -37,7 +28,6 @@ vi.mock("electron", () => ({
 
 const ignore = () => undefined;
 
-/** A command waiting on this Mac, announced as `client-notices.ts` announces it, its click handed in. */
 function askNotice(askId: string, onClick: () => void = ignore): AgentNotice {
   return {
     subject: { kind: NOTICE_KIND.MAC_COMMAND_ASK, askId },
@@ -47,7 +37,6 @@ function askNotice(askId: string, onClick: () => void = ignore): AgentNotice {
   };
 }
 
-/** The doors, with every answer from macOS they hand on gathered. */
 function doors() {
   const answers: NotificationsStatus[] = [];
   const surface = electronNoticeDoors({

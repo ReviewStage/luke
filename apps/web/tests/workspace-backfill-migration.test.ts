@@ -8,18 +8,8 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * The personal workspace backfill over a database that already holds an
- * account's personal organization without the row naming it the account's,
- * as an ensure that made the organization and not yet the row leaves it:
- * the backfill adopts that organization rather than leaving the account
- * without a row, which the plan backfill after it reads every plan's
- * workspace from, and makes no second one. Synthetic accounts throughout.
- */
-
 const BACKFILL = "20261013231123_personal_workspace_backfill";
 
-/** A migrations folder holding every migration named before the backfill, and none after. */
 const foldersBeforeBackfill = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;

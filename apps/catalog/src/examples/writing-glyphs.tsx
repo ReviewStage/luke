@@ -3,12 +3,6 @@ import { GAP, Inline, TEXT_VARIANT, Text, WritingGlyph } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * writing-glyphs.tsx -- the glyph of every writing action, each mark, block
- * and insert, beside the action it stands for, as the format toolbar, Turn
- * into, and the `/` menu draw them.
- */
-
 const GROUPS = [
   ["writing-marks", "Marks", Object.values(WRITING_MARK)],
   ["writing-blocks", "Blocks", Object.values(WRITING_BLOCK)],

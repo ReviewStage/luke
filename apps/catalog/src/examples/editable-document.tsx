@@ -1,7 +1,3 @@
-/**
- * editable-document.tsx -- a document edited in place, its title and two sections as blocks the keyboard selects, steps across with ↑ and ↓, and opens with Return, a press on a section's words opening it there, and the title's words edited where they stand.
- */
-
 import {
   EDITABLE_BLOCK_KIND,
   EDITABLE_HEADING_LEAVE,
@@ -27,7 +23,6 @@ function EditableDocument(): React.JSX.Element {
   const title = useRef<HTMLElement | null>(null);
   const titleBlock = useRef<HTMLDivElement | null>(null);
   const [heard, setHeard] = useState("Nothing opened yet");
-  // The words are the heading's own once drawn, as a description's title's are.
   useLayoutEffect(() => {
     if (title.current !== null) title.current.textContent = "Turn the lint guard on";
   }, []);

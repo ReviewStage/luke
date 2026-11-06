@@ -1,16 +1,8 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
-/**
- * The `Database` service (`@repo/database/core/query`), read as `db`,
- * builds statements that are Effects of Drizzle's Effect driver, so a
- * statement is yielded, never awaited. Examples of plain Drizzle await it, and this is the
- * line an agent copying one would get wrong. `authDatabase`, Better Auth's
- * own promise-shaped handle, is not this handle and is left alone.
- */
 const EFFECT_HANDLE = "db";
 
-/** The identifier a member-and-call chain such as `db.select().from(t)` starts from. */
 function chainRoot(expression: ESTree.Expression): ESTree.Expression {
   let link = expression;
   while (true) {
@@ -36,7 +28,6 @@ function isStatementChain(expression: ESTree.Expression): boolean {
   return root.type === "Identifier" && root.name === EFFECT_HANDLE;
 }
 
-/** Ban awaiting a statement built on the Effect handle, which is yielded instead. */
 export const noAwaitDrizzleStatementRule = defineRule({
   meta: {
     type: "problem",

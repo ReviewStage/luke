@@ -14,18 +14,6 @@ import {
 import { baselineProblems } from "../shared/baseline.ts";
 import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 
-/**
- * A list or menu is stepped by `useRovingKeys` and `List` (`@repo/ui`), never
- * a handler that matches `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`,
- * `Home` or `End` itself. Outside `@repo/ui` a key read off an event
- * (`event.key`, `event.code`, or a `key` bound from one) that is compared to
- * one of them, switched on, or listed as a key-to-step row is refused. The
- * files that need the raw keys for a purpose of their own are exempt by name
- * in `arrow-keys.json`, each with a reason; the files that still step a list
- * by hand sit on that file's baseline, which only shrinks.
- */
-
-/** Whether `node` reads a key's name: `event.key`, `e.code`, `event?.key`, or a bare `key` or `code`. */
 function readsKey(node: ESTree.Node): boolean {
   if (node.type === "ChainExpression") return readsKey(node.expression);
   if (node.type === "Identifier") return KEY_PROPERTIES.has(node.name);
@@ -33,7 +21,6 @@ function readsKey(node: ESTree.Node): boolean {
   return node.property.type === "Identifier" && KEY_PROPERTIES.has(node.property.name);
 }
 
-/** The arrow a node names through the shortcut registry, `SHORTCUT_KEY.LEFT.key`, where it does. */
 function shortcutArrowOf(node: ESTree.Node): string | undefined {
   if (node.type !== "MemberExpression" || node.computed) return undefined;
   if (node.property.type !== "Identifier" || !KEY_PROPERTIES.has(node.property.name)) {
@@ -50,7 +37,6 @@ function shortcutArrowOf(node: ESTree.Node): string | undefined {
     : undefined;
 }
 
-/** The arrow key a node spells, as a string or through the shortcut registry, where it does. */
 function arrowKeyOf(node: ESTree.Node | null | undefined): string | undefined {
   if (node !== null && node !== undefined) {
     const named = shortcutArrowOf(node);
@@ -107,11 +93,9 @@ export const noHandWrittenArrowKeysRule = defineRule({
         }
       },
       ArrayExpression(node) {
-        // A `["ArrowDown", 1]` row: the key-to-step table a handler looks `event.key` up in.
         const [first, second] = node.elements;
         if (node.elements.length !== 2 || first === null || second === null) return;
         if (first === undefined || second === undefined) return;
-        // Note that a row whose second cell is words is data (`["Home", "/"]`), not a step.
         if (second.type === "Literal" && typeof second.value === "string") return;
         if (second.type === "TemplateLiteral") return;
         const key = arrowKeyOf(first);
@@ -122,7 +106,6 @@ export const noHandWrittenArrowKeysRule = defineRule({
         const baseline = expected === 0 ? {} : { [file]: expected };
         for (const problem of baselineProblems(counts, baseline, true)) {
           if (problem.grew) {
-            // Note that the places past the baseline's count are the ones reported, since the ones before it were already there.
             for (const { node, key } of matches.slice(expected)) {
               context.report({ node, messageId: "arrowKey", data: { key } });
             }

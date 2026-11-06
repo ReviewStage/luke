@@ -11,14 +11,6 @@ import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * back-buttons.tsx -- the one way back: in a bar, its words drawn, and
- * folded away to its glyph where the bar folds its acts; at the top of a column of places; and a
- * page with a parent, whose bar leads with its trail, the page's own name
- * last.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function BackButtons(): React.JSX.Element {

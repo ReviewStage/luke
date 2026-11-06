@@ -36,25 +36,19 @@ function List({ rows, move }) {
 
 tester.run("no-hand-written-arrow-keys", noHandWrittenArrowKeysRule, {
   valid: [
-    // `@repo/ui` writes the walk once.
     { code: STEPPING_BY_HAND, filename: UI_FILE },
-    // The editor and the terminal need the raw keys, and are named for it in arrow-keys.json.
     { code: STEPPING_BY_HAND, filename: EDITOR_FILE },
     { code: 'const KEYS = [["ArrowLeft", "\\x01"]];', filename: TERMINAL_FILE },
-    // A test drives a key by dispatching it.
     {
       code: 'press({ key: "ArrowDown" }); expect(event.key === "ArrowDown").toBe(true);',
       filename: TEST_FILE,
     },
-    // Other keys, and a string that is no key read off an event.
     {
       code: 'function f(event) { return event.key === "Enter" || event.key === "Escape"; }',
       filename: PANEL_FILE,
     },
     { code: 'const label = "End"; const same = label === "End";', filename: PANEL_FILE },
-    // A row of words is data, even where the first word is a key's name.
     { code: 'const pages = [["Home", "/"], ["End", "/end"]];', filename: PANEL_FILE },
-    // A list stepped through the helper names no key.
     {
       code: "function List({ rows }) { const roving = useRovingKeys({ orientation: ROVING_ORIENTATION.VERTICAL }); return <ul ref={roving.box}>{rows}</ul>; }",
       filename: PANEL_FILE,

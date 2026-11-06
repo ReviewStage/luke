@@ -10,7 +10,6 @@ const TIMER_FUNCTION = {
 
 const TIMER_FUNCTIONS: ReadonlySet<string> = new Set(Object.values(TIMER_FUNCTION));
 const TIMER_MODULES: ReadonlySet<string> = new Set(["node:timers", "node:timers/promises"]);
-/** `window.setTimeout` is `setTimeout`; the object it hangs on says nothing about the timer. */
 const TIMER_HOSTS: ReadonlySet<string> = new Set(["globalThis", "window", "global", "self"]);
 const WATCH_MODULES: ReadonlySet<string> = new Set(["node:fs", "node:fs/promises"]);
 
@@ -19,7 +18,6 @@ const CONSTRUCTED = {
   ABORT_CONTROLLER: "AbortController",
 } as const;
 
-/** Every node an `Identifier` visitor is handed: a reference, a binding, a label, a name. */
 type IdentifierNode = Extract<ESTree.Node, { type: "Identifier" }>;
 
 type FileBindings = {
@@ -49,7 +47,6 @@ function hostedTimerName(callee: ESTree.Expression | ESTree.Super): string | nul
   return `${object.name}.${property.name}`;
 }
 
-/** `fs.watch` and `fs.promises.watch` are the same call under two namespaces. */
 function fileSystemNamespaceName(callee: ESTree.Expression | ESTree.Super): string | null {
   if (callee.type !== "MemberExpression") return null;
   const object = callee.object;
@@ -63,16 +60,6 @@ function includesNode(list: readonly unknown[], node: IdentifierNode): boolean {
   return list.includes(node);
 }
 
-/**
- * Whether an `Identifier` node stands for the value itself rather than being
- * called, constructed, imported, or declared — the shapes a raw primitive
- * escapes the two checks above through: held in a `??`, passed to another
- * function, read off an object. `node.parent` is the same tree the two
- * checks above already read; this is the one place both a call's callee and
- * a `new`'s callee are excluded, since those are already reported by
- * `CallExpression`/`NewExpression` below and would otherwise be reported
- * twice.
- */
 function isBareReference(node: IdentifierNode): boolean {
   const parent = node.parent;
   switch (parent.type) {
@@ -109,17 +96,6 @@ function isBareReference(node: IdentifierNode): boolean {
   }
 }
 
-/**
- * The raw primitives Effect replaces: a delay is `Effect.sleep`, a cadence a
- * `Schedule`, a value another fiber completes a `Deferred`, a cancellation a
- * fiber's interruption, and a watched directory a `Stream`. The allowlist this
- * reads is root AGENTS.md's twin, and no row on it is pending: each is an
- * OpenClaw port that imports nothing from `effect`, a foreign boundary this
- * repository does not own (an Electron main/renderer API, a browser API in a
- * React component, `ws`, `node:http2`), or a permanent adaptor named there —
- * never a file some later PR still converts. A shim on its way out is deleted
- * in the PR that finishes its callers, not left as a row here.
- */
 export const noRawAsyncPrimitivesRule = defineRule({
   meta: {
     type: "problem",

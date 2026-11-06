@@ -19,15 +19,6 @@ import { FlaskConicalIcon, GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * corner-counts.tsx -- a press's glyph wearing a count at its corner, a
- * review's pending comments, beside one with nothing waiting, and a count of
- * two figures; a press wearing a dot at its corner, a view filtered,
- * beside one that is not; a chip wearing the experiment's flask on a disc
- * at its corner; and a device's glyph wearing a status dot in a few of the
- * tones its standing takes.
- */
-
 function CornerCounts(): React.JSX.Element {
   return (
     <CatalogSection id="corner-count" title="A count at a glyph's corner">

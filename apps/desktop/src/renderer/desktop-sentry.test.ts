@@ -8,31 +8,18 @@ import { afterEach, test, vi } from "vitest";
 import { BLANK_WINDOW, startDesktopSentry } from "./desktop-sentry";
 import { createReportingRoot } from "./desktop-sentry-root";
 
-/**
- * A window loads Sentry's SDK only once it has drawn, so a window whose
- * state could not be read, or whose surface failed to render, reports
- * before the SDK stands; the report waits for it. This runs the SDK itself
- * and reads what it hands main over the window's IPC, the one boundary a
- * renderer's events cross, and runs the browser's idle callbacks by hand.
- */
-
-// React's own test mode, so `act` waits for each commit and its effects.
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-/** The idle callbacks the window armed, run by hand in the browser's place. */
 const idleCallbacks: (() => void)[] = [];
 vi.stubGlobal("requestIdleCallback", (callback: () => void) => idleCallbacks.push(callback));
 vi.stubGlobal("cancelIdleCallback", () => undefined);
 
-/** The envelopes the window handed main. */
 const envelopes: string[] = [];
 
-/** The IPC a preload exposes for Sentry, as `@sentry/electron/preload` names it, answered here in main's place. */
 const SENTRY_IPC = {
   "sentry-ipc": {
     sendRendererStart: () => undefined,
     sendScope: () => undefined,
-    // Note that an envelope with no attachment is handed over as its text.
     sendEnvelope: (body: string) => {
       envelopes.push(body);
     },
@@ -47,11 +34,9 @@ afterEach(() => {
   envelopes.length = 0;
   idleCallbacks.length = 0;
   vi.restoreAllMocks();
-  // Each test's window starts its SDK anew, as each window does once.
   Reflect.deleteProperty(window, "__SENTRY__RENDERER_INIT__");
 });
 
-/** A span as an envelope carries it to main, as far as these tests read it. */
 interface SentSpan {
   readonly name?: string;
   readonly start_timestamp?: number;
@@ -59,7 +44,6 @@ interface SentSpan {
   readonly attributes?: Record<string, { readonly value?: unknown } | undefined>;
 }
 
-/** Every item of every envelope the window handed main, as JSON. */
 function sentItems(): { readonly items?: readonly SentSpan[]; readonly [key: string]: unknown }[] {
   return envelopes.flatMap((body) =>
     body.split("\n").flatMap((line) => {
@@ -72,7 +56,6 @@ function sentItems(): { readonly items?: readonly SentSpan[]; readonly [key: str
   );
 }
 
-/** Each exception's message and mechanism in the envelopes the window handed main. */
 function sentExceptions(): { value: string | undefined; mechanism: string | undefined }[] {
   return envelopes.flatMap((body) =>
     body
@@ -136,11 +119,8 @@ test("a surface that fails its first render is handed to main as a blank window,
   const Broken = () => {
     throw new Error("the surface fell over");
   };
-  // Note that React logs what the root's handler is handed; the test reads what reached main.
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-  // Note that this renders outside `act`, which would keep the error from the
-  // root's handler to throw it itself, and waits on the scheduler as a window does.
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false });
   draw(createElement(Broken));
   await sentry.settled;
@@ -155,7 +135,6 @@ test("a surface that fails its first render is handed to main as a blank window,
 
 test("a span the panel timed before the SDK loads is sent once it has, with what it measured", async () => {
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
-  // Note that the trace sample rate keeps a tenth of spans; this one is kept.
   vi.spyOn(Math, "random").mockReturnValue(0);
   const sentry = startDesktopSentry();
   const startedAt = Date.now() - 1_500;
@@ -176,7 +155,6 @@ test("a span the panel timed before the SDK loads is sent once it has, with what
   const span = sentItems()
     .flatMap((item) => (Array.isArray(item.items) ? item.items : []))
     .find((each) => each.name === PANEL_SPAN.TRANSCRIPT_FIRST_PAINT);
-  // Sentry reads span times in seconds: the span starts when the panel said, and lasts 1.2 s.
   assert.equal(span?.start_timestamp, startedAt / 1_000);
   assert.equal(span?.end_timestamp, (startedAt + 1_200) / 1_000);
   assert.deepEqual(

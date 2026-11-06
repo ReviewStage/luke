@@ -17,11 +17,6 @@ const outputDirectory = path.join(appRoot, ".build", "native");
 
 fs.mkdirSync(outputDirectory, { recursive: true });
 
-// A helper is rebuilt only when what produced it changed: its source, the
-// scripts that compose the compiler arguments, and the toolchain. The record
-// is a content hash
-// rather than an mtime, because a cache restored on a CI runner and a fresh
-// checkout both carry mtimes that say nothing about the bytes.
 const toolchain = spawnSync("xcrun", ["--find", "swiftc"], { encoding: "utf8" });
 const toolchainVersion = spawnSync("xcrun", ["swiftc", "--version"], { encoding: "utf8" });
 const scriptSources = ["build-native.mjs", "package-config.mjs", "package-layout.mjs"]
@@ -62,11 +57,6 @@ for (const helper of NATIVE_HELPERS) {
   process.stdout.write(`Built macOS helper: ${output}\n`);
 }
 
-// Liquid Glass's addon is prebuilt by its package, so it is copied rather
-// than compiled, beside the helpers, where development and packaging both
-// read it from. The package is optional only so that a Linux install may
-// skip it; on a Mac it is required, and the build stops where it is missing
-// rather than ship or run a window without the glass it was built for.
 const liquidGlassSource = path.join(
   appRoot,
   "node_modules",
@@ -81,11 +71,6 @@ if (!fs.existsSync(liquidGlassSource)) {
 fs.copyFileSync(liquidGlassSource, path.join(outputDirectory, LIQUID_GLASS_ADDON.binary));
 process.stdout.write(`Copied the Liquid Glass addon: ${LIQUID_GLASS_ADDON.binary}\n`);
 
-// node-pty is copied rather than compiled too: its JavaScript, without its
-// tests and maps, and its prebuilds for the packaged architecture, laid out
-// as the package lays them, since its JavaScript finds the addon and
-// `spawn-helper` from its own folder. The package ships `spawn-helper`
-// without its execute bit, without which no shell starts, so it is set here.
 const nodePtySource = path.join(appRoot, "node_modules", NODE_PTY.packageName);
 const nodePtyOutput = path.join(outputDirectory, NODE_PTY.folder);
 const nodePtyPrebuilds = path.join(nodePtySource, NODE_PTY.prebuilds);

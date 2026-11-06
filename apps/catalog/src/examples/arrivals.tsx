@@ -3,12 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * arrivals.tsx -- a region's first read: nothing at first, one quiet line
- * once the wait has stood a second, and its content fading in as it lands,
- * replayed on a press.
- */
-
 function Arrivals(): React.JSX.Element {
   const [reading, setReading] = useState(true);
   return (

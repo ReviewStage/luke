@@ -1,7 +1,3 @@
-/**
- * lines.test.ts -- a command's output read back as whole lines however its chunks were cut.
- */
-
 import { describe, expect, it } from "vitest";
 import { lineSplitter } from "../src/lines.js";
 

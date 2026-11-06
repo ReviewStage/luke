@@ -2,15 +2,6 @@ import { BUTTON_VARIANT, Button, MoreButton, PAGE_HEADER_END, PageHeader } from 
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * page-header.tsx -- a document's own header: a description's title, the line
- * saying what it is, and its acts at the title's end; Settings' title with
- * a quiet Reset whose words end on the content's edge; and a long title in
- * a narrow column, its acts wrapping under it rather than standing outside
- * the page.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function PlanActions(): React.JSX.Element {

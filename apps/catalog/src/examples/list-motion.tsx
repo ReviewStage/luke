@@ -18,14 +18,6 @@ import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * list-motion.tsx -- lists under one `ListMotion`: a task added arrives and
- * the rows under it make room, a task pinned or unpinned glides between
- * Pinned and Tasks, and a task archived slides out and comes back the same
- * way on Undo.
- */
-
-/** One synthetic task: its id and its name. */
 interface Sample {
   readonly id: string;
   readonly name: string;
@@ -37,14 +29,12 @@ const FIRST: readonly Sample[] = [
   { id: "retries", name: "Retry failed emails" },
 ];
 
-/** The names a task added takes, in turn. */
 const ADDED = ["Dark mode for the docs", "Export to CSV", "Weekly digest", "Audit log filters"];
 
 function taskKey(task: Sample): string {
   return task.id;
 }
 
-/** One list's rows, each with its pin and its archive, drawn on while it leaves. */
 function Rows({
   label,
   tasks,

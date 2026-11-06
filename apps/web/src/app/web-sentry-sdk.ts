@@ -1,11 +1,3 @@
-/**
- * web-sentry-sdk.ts -- the chunk `web-sentry.ts` loads where the build carries a DSN: Sentry's browser SDK, started on the desktop renderer's terms, with transactions named by route.
- *
- * A module of its own, naming what it uses of the SDK, so the bundler keeps
- * only that in the chunk rather than every export a namespace import would
- * hold on to.
- */
-
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import { readLink } from "@repo/features/link-grammar";
 import { LINK_ORIGIN } from "@repo/features/link-home";
@@ -36,34 +28,20 @@ import type { QueryClient } from "@tanstack/react-query";
 import { PANEL_PATH } from "./web-address";
 import type { WebSentry, WebSentryBuild } from "./web-sentry";
 
-/** The SDK's client, as `getClient` answers it once `init` stands. */
 type Client = NonNullable<ReturnType<typeof getClient>>;
 
-/** The mechanism a blank tab's report names, so Sentry's issue says which path caught it, as the desktop's first read does. */
 const BLANK_TAB_MECHANISM = { type: "auto.browser.web_root.first_read", handled: false } as const;
 
-/**
- * What a span named by route says of its name, under Sentry's own attribute
- * names (`@sentry/conventions`, which the SDK does not export): that it is a
- * route, which Sentry groups by, and which path started it.
- */
 const ROUTE_SOURCE = "sentry.segment.name.source";
 const SPAN_ORIGIN = "sentry.origin";
 const ROUTE = "route";
 const PAGELOAD_ORIGIN = "auto.pageload.browser";
 
-/**
- * The route a tab's path is named by: the kind of place the app link it is
- * names (`/app/task`, `/app/agent`), and the panel's own route for any path
- * naming none, so no workspace's slug and no id becomes a transaction's
- * name.
- */
 function routeName(pathname: string): string {
   const link = readLink(`${LINK_ORIGIN}${pathname}`);
   return link === undefined ? PANEL_PATH : `${PANEL_PATH}/${link.place.kind}`;
 }
 
-/** The path of an address the tab navigated to, or the tab's own where none is said. */
 function pathOf(address: string | undefined): string {
   try {
     return new URL(address ?? location.href, location.origin).pathname;
@@ -72,18 +50,6 @@ function pathOf(address: string | undefined): string {
   }
 }
 
-/**
- * Names the page load and every navigation by route, as Sentry's guide to a
- * custom router has it: the page load is started here by its route rather
- * than by the integration by its path, and each navigation is renamed as it
- * starts. The scope's transaction name, which every error event carries, is
- * set from the same name, so neither a span nor an error names a slug or an
- * id.
- *
- * Note that a navigation's options are changed in place, because the SDK
- * reads the name off this same object, after this hook, both to start the
- * span and to name the scope's transaction.
- */
 function nameByRoute(client: Client): void {
   client.on("beforeStartNavigationSpan", (options, navigation) => {
     options.name = routeName(pathOf(navigation?.url));
@@ -95,25 +61,10 @@ function nameByRoute(client: Client): void {
   });
 }
 
-/** The account the tab's host has signed in, as its document says now. */
 function accountId(queryClient: QueryClient): string | undefined {
   return signedInAccountId(queryClient.getQueryData(appStateQuery.queryKey)?.account);
 }
 
-/**
- * Starts the SDK with its default data collection, under the build's DSN,
- * environment, and release, and the desktop renderer's filters: a
- * breadcrumb or an event that names an access token is dropped whole, and
- * so is a span that names one as it starts, while every span sent has its
- * addresses scrubbed (`@repo/features/sentry-breadcrumbs`). Each page load
- * and navigation is named by the kind of place it opens, never its path. A
- * failure the panel showed is sent as a log line, and as an issue besides
- * where nothing named it (`@repo/features/shown-failure`). Each event and log
- * line names the account signed in as it leaves, by its id alone, as
- * Sentry's user (`@repo/features/sentry-account`). Every envelope is posted
- * to a path on the tab's own origin, which passes it on to Sentry, because
- * tracker blockers refuse Sentry's own host (`@repo/features/sentry-tunnel`).
- */
 export function initWebSentry(build: WebSentryBuild, queryClient: QueryClient): WebSentry {
   init({
     dsn: build.dsn,
@@ -121,9 +72,6 @@ export function initWebSentry(build: WebSentryBuild, queryClient: QueryClient): 
     environment: build.environment,
     ...(build.release ? { release: build.release } : undefined),
     integrations: [
-      // The page load is started by route below, rather than by its path here.
-      // Long animation frames name the script behind a slow frame; INP is
-      // among the web vitals the SDK reports by default.
       browserTracingIntegration({ instrumentPageLoad: false, enableLongAnimationFrame: true }),
     ],
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,

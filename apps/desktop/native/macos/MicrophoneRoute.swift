@@ -2,22 +2,6 @@ import CoreAudio
 import Foundation
 import IOKit
 
-/// Reports where the developer's voice would be captured from — and nothing
-/// else. Three read-only facts: the default input device's transport, whether
-/// this Mac has a built-in microphone (and its name, so the renderer can find
-/// the same device in the browser's list), and whether the lid that microphone
-/// sits under is open. No audio is ever read, and nothing is ever written
-/// back: what the facts decide is only which device the renderer asks the
-/// browser to open when a press takes a turn, so a Bluetooth headset is not
-/// pulled onto its call codec when the Mac's own microphone can listen
-/// instead — and is left alone when a shut lid would muffle that microphone.
-///
-/// One line per state: `input transport=<built-in|bluetooth|other|none>
-/// lid=<open|shut|unknown> builtin=<name>` — emitted once on start, on every
-/// default-input change, and in answer to `probe` on stdin. The app probes at
-/// each press because a lid can close without any device changing. The
-/// `builtin` token is omitted on a machine with no built-in microphone, and it
-/// is always the line's tail, so the name may contain anything.
 private let MICROPHONE_ROUTE_COMMAND = "probe"
 
 private let TRANSPORT_WORD = (
@@ -78,8 +62,6 @@ private func transportWord(of device: AudioObjectID) -> String {
     }
 }
 
-/// Whether the device can capture at all: a built-in device list holds
-/// speakers too, and the microphone is the one with input streams.
 private func hasInputStreams(_ device: AudioObjectID) -> Bool {
     var query = address(kAudioDevicePropertyStreams, scope: kAudioDevicePropertyScopeInput)
     var size = UInt32(0)
@@ -124,9 +106,6 @@ private func builtInInputDevice() -> AudioObjectID? {
     }
 }
 
-/// The lid, read from the power domain's own record of it. A machine that
-/// keeps no such record — a desktop — answers `unknown`, which the reader
-/// treats as open: an iMac's microphone has no lid to be shut under.
 private func lidWord() -> String {
     let service = IOServiceGetMatchingService(
         kIOMainPortDefault, IOServiceMatching("IOPMrootDomain")
@@ -149,8 +128,6 @@ private struct MicrophoneRouteCommand {
 
     static func main() {
         var defaultInput = address(kAudioHardwarePropertyDefaultInputDevice)
-        // AirPods connecting, a USB interface unplugged: the answer follows
-        // whichever device the system would hand a capture to next.
         AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &defaultInput, DispatchQueue.main
         ) { _, _ in
@@ -160,8 +137,6 @@ private struct MicrophoneRouteCommand {
             let data = handle.availableData
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    // Stdin closing is the app going away; there is nothing to
-                    // restore, because nothing was ever changed.
                     if data.isEmpty {
                         FileHandle.standardInput.readabilityHandler = nil
                         exit(0)
@@ -177,8 +152,6 @@ private struct MicrophoneRouteCommand {
     static func read(_ data: Data) {
         buffer += String(decoding: data, as: UTF8.self)
         var lines = buffer.components(separatedBy: "\n")
-        // Whatever follows the last newline is the start of a line still
-        // arriving, held until the rest of it comes.
         buffer = lines.removeLast()
         for line in lines
         where line.trimmingCharacters(in: .whitespaces) == MICROPHONE_ROUTE_COMMAND {

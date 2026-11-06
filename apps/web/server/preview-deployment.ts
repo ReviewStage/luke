@@ -5,35 +5,14 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { TRANSPORT_RETRY } from "./preview-probe.js";
 
-/**
- * The PR's own preview, found through the GitHub deployment record Vercel's
- * app writes for the head commit. The record is the one signal that names
- * the deployment built from exactly this commit — an alias like the branch
- * URL keeps serving the previous build until the new one is promoted, which
- * is how a probe during the 2026-09-11 incident read 404 from a deployment
- * that was not the one under test — so the address probed is always the
- * record's own, and the wait is on that record's status rather than on a
- * clock or a guess. A build Vercel's `ignoreCommand` skipped is its own
- * state, not a failure: nothing under the deployed tree changed, so there is
- * no preview of the head and nothing to see. A canceled build is not the
- * end either: Vercel starts two deployments of a freshly pushed PR head and
- * cancels one within seconds, writing the record `inactive`, and the record
- * is moved to `success` with the surviving build's own address only when
- * that build completes, which the API showed minutes late on 2026-09-12; so
- * `inactive` is waited through, and only a build that failed, or the wait's
- * own budget, ends the wait with nothing to see.
- */
-
 const GITHUB_API = "https://api.github.com";
 const GITHUB_HEADERS = {
   accept: "application/vnd.github+json",
   "x-github-api-version": "2022-11-28",
   "user-agent": "preview-probe",
 } as const;
-/** The environment Vercel's GitHub app writes on a preview's deployment record. */
 const VERCEL_PREVIEW_ENVIRONMENT = "Preview";
 const DEPLOYMENT_PAGE = "10";
-/** Vercel's own words on the status it writes for a build its `ignoreCommand` skipped, compared whole. */
 const VERCEL_SKIPPED_DESCRIPTION = "Skipped - Not affected";
 
 const DEPLOYMENT_STATE = {
@@ -67,13 +46,9 @@ type DeploymentStatus = typeof DeploymentStatus.Type;
 const DeploymentStatuses = Schema.Array(DeploymentStatus);
 
 export const PREVIEW_STATE = {
-  /** No record yet, or its newest status is still on the way to a build's end. */
   WAITING: "waiting",
-  /** The build completed and the record names its address. */
   READY: "ready",
-  /** Vercel's `ignoreCommand` found nothing of the deployed tree changed, so no preview was built for this head. */
   NOT_AFFECTED: "not-affected",
-  /** The build failed, or ended without an address: there is no deployment to see. */
   NOT_BUILT: "not-built",
 } as const;
 
@@ -92,7 +67,6 @@ function newestFirst<T extends { readonly created_at: string }>(items: readonly 
   return [...items].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
-/** The newest preview record for the head and its newest status, read as one of the four states. */
 function decidePreview(
   records: readonly DeploymentRecord[],
   statusesOf: (record: DeploymentRecord) => readonly DeploymentStatus[],
@@ -126,9 +100,7 @@ function decidePreview(
 }
 
 export interface PreviewSource {
-  /** `owner/name`, as GitHub spells `GITHUB_REPOSITORY`. */
   readonly repository: string;
-  /** The head commit whose preview is wanted, never the merge commit: Vercel builds the branch. */
   readonly sha: string;
   readonly token: Redacted.Redacted<string>;
 }
@@ -145,7 +117,6 @@ function githubRead(
   );
 }
 
-/** One read of the head's preview from the deployment records, a dropped connection or a refused read retried a few times. */
 const readPreview = /* @__PURE__ */ Effect.fn("web/readPreview")(
   function* (
     source: PreviewSource,
@@ -177,19 +148,10 @@ const readPreview = /* @__PURE__ */ Effect.fn("web/readPreview")(
   },
   Effect.retry({
     schedule: TRANSPORT_RETRY,
-    // Every transport-level refusal and every response the status filter
-    // turned down is one `HttpClientError` in v4, whichever reason it
-    // carries; a body that failed to decode is not retried, since a second
-    // read of the same records would decode no better.
     while: (error) => error._tag === "HttpClientError",
   }),
 );
 
-/**
- * Twenty minutes. On 2026-09-12 a preview's record appeared about 25 s after
- * the push and reached success 85–115 s later; the rest of the budget is
- * Vercel's build queue on a day with many open branches.
- */
 const PREVIEW_WAIT = { intervalMs: 15_000, attempts: 80 } as const;
 
 export class PreviewNotReady extends Schema.TaggedError<PreviewNotReady>()("PreviewNotReady", {
@@ -201,11 +163,9 @@ export class PreviewNotReady extends Schema.TaggedError<PreviewNotReady>()("Prev
   }
 }
 
-/** The head's preview once its record has settled, read on a schedule until it does or the budget ends. */
 export function waitForPreview(
   source: PreviewSource,
   options: {
-    /** Told each reading as it lands, so a log shows the wait rather than silence. */
     readonly onReading?: (reading: PreviewReading) => Effect.Effect<void>;
   } = {},
 ): Effect.Effect<
@@ -219,9 +179,6 @@ export function waitForPreview(
       schedule: Schedule.spaced(Duration.millis(PREVIEW_WAIT.intervalMs)).pipe(
         Schedule.upTo({ times: PREVIEW_WAIT.attempts }),
       ),
-      // Annotated as a plain boolean rather than left to inference: a budget
-      // spent before the record settles answers with a waiting reading, which
-      // a refinement would have read out of the type.
       until: (reading: PreviewReading): boolean => reading.kind !== PREVIEW_STATE.WAITING,
     });
     if (reading.kind === PREVIEW_STATE.WAITING) {

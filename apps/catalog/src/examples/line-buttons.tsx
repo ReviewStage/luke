@@ -14,19 +14,8 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * line-buttons.tsx -- a LineButton as a call's row that opens a tab, a row
- * whose every word is muted brightening under the pointer, a LineRow as the
- * same row where it opens nothing, a LineSummary
- * folding a call's body open under it, and a quote that shows its words,
- * cut short after two lines in a narrow column, and a band naming the lines
- * a card is on across its top.
- */
-
-/** Does nothing, for a press the catalog only draws. */
 function pressed(): void {}
 
-/** A call's glyph, in the 16px seat a row's icon stands in. */
 function CallGlyph(): React.JSX.Element {
   return (
     <svg

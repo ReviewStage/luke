@@ -6,11 +6,6 @@ import { PASTE_BACK_REASON, pasteBackConsent } from "./paste-back-consent.js";
 
 const REFUSED = "Example did not grant access.";
 
-/**
- * One paste-back trip whose pasted address is built from the authorization
- * the trip composed, as the browser's redirect would carry it, with the
- * exchange recorded rather than performed.
- */
 function trip(pasted: (authorization: LoopbackAuthorization) => string) {
   let authorization: LoopbackAuthorization | undefined;
   const exchanges: LoopbackExchange[] = [];
@@ -37,9 +32,6 @@ function trip(pasted: (authorization: LoopbackAuthorization) => string) {
   return { outcome: Effect.scoped(consent.signInEffect()), exchanges };
 }
 
-// Note that the regression these catch is a pasted address taken without this trip's own state,
-// so a code from another trip, or one a page planted, is exchanged as the person's own.
-/** One pasted address a trip must refuse: what the person pasted, and the reason it ends on. */
 type Refused = readonly [
   label: string,
   pasted: (authorization: LoopbackAuthorization) => string,

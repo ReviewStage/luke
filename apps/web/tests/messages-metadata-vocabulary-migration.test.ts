@@ -16,31 +16,11 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * messages-metadata-vocabulary-migration.test.ts -- the migrations that rewrite every stored message's metadata in the vocabulary that says only what is true.
- *
- * Over a database migrated up to it, holding a row in each shape an earlier
- * build wrote: once it runs, a user row says what carried it by its channel
- * or source alone, a spoken ask keeps who said it, an agent message names its
- * sender by the row's columns alone, taking the name from its metadata where
- * they held none, a line another agent sent as a typed ask reads as the
- * agent message it is, a member's line on one of the agent's threads written
- * as a typed ask reads as the thread line it is, by its head's lead and key,
- * one naming no thread of the agent's staying as it stands, an assistant row
- * names the model, and every row reads
- * under the write door's own vocabulary; a second run changes nothing. The
- * stragglers migration rewrites the rows a release still serving beside the
- * first wrote in the old shape, so that migration leaves none behind.
- * Synthetic accounts throughout.
- */
-
 const MIGRATION = "20261028004039_messages_metadata_vocabulary";
 const STRAGGLERS = "20261028182547_messages_metadata_vocabulary_stragglers";
 
-/** A migrations folder holding every migration named before `MIGRATION`'s, and none after. */
 const foldersBefore = foldersUpTo(MIGRATION);
 
-/** A migrations folder holding every migration named before `last`, and none after. */
 function foldersUpTo(last: string) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
@@ -56,12 +36,6 @@ function foldersUpTo(last: string) {
   });
 }
 
-/**
- * An agent of dean's on no task, with its own conversation, as an earlier
- * build wrote it; its id. Note that the rows are written in SQL naming only
- * the columns they need, because the schema modules declare today's columns,
- * which a database migrated only up to the vocabulary does not hold.
- */
 const openEarlierAgent = (workspaceId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -73,7 +47,6 @@ const openEarlierAgent = (workspaceId: string) =>
     return id;
   });
 
-/** Each row as an earlier build wrote it, in order, with its words and sender where it kept them; `KEY` stands for the agent's thread's key. */
 const BEFORE = [
   { role: "user", metadata: { author: "developer", channel: "typed" } },
   { role: "assistant", metadata: { author: "brain" } },
@@ -122,7 +95,6 @@ const BEFORE = [
   },
 ] as const;
 
-/** Each row as it reads once the migration has run, with its sender and the name it keeps; `ITEM` stands for the agent's thread's id. */
 const AFTER: readonly (readonly [
   Readonly<Record<string, string>>,
   string | null,
@@ -178,8 +150,6 @@ it.effect(
           readonly senderName: string | null;
         }>`select id, role, parts, metadata, sender, sender_name as "senderName" from messages where conversation_id = ${conversationId} order by seq`;
 
-        // Note that the run stops short of the agent tables' rename, so a second run of the
-        // vocabulary migration, which names `coding_agent`, meets the schema it was written for.
         yield* runWebMigrations(yield* foldersUpTo(RENAME_AGENT_TABLES));
 
         const rows = yield* stored;
@@ -190,7 +160,6 @@ it.effect(
             ...rest,
           ]),
         );
-        // The write door's own read refuses any key the vocabulary does not name, so every row is in it.
         const read = yield* readStoredUIMessages(
           unparsedWire(
             rows.map(({ id, role, parts, metadata }) => ({ id, role, parts, metadata })),
@@ -199,7 +168,6 @@ it.effect(
         );
         assert.equal(read.ok, true);
 
-        // A second run, as a deploy that ran it before recording it would, changes nothing.
         const fileSystem = yield* FileSystem;
         const path = yield* Path;
         const statements = (yield* fileSystem.readFileString(
@@ -211,7 +179,6 @@ it.effect(
     ).pipe(Effect.provide(Layer.provideMerge(unmigratedPgliteSqlClient, NodeServices.layer))),
 );
 
-/** Each row a release still serving beside the vocabulary migration wrote in the old shape, in order, with the sender columns it kept. */
 const STRAGGLERS_BEFORE = [
   {
     role: "user",
@@ -297,8 +264,6 @@ it.effect(
           readonly senderName: string | null;
         }>`select id, role, parts, metadata, sender, sender_name as "senderName" from messages where conversation_id = ${conversationId} order by seq`;
 
-        // Note that the run stops short of the agent tables' rename, so a second run of the
-        // vocabulary migration, which names `coding_agent`, meets the schema it was written for.
         yield* runWebMigrations(yield* foldersUpTo(RENAME_AGENT_TABLES));
 
         const rows = yield* stored;
@@ -314,7 +279,6 @@ it.effect(
         );
         assert.equal(read.ok, true);
 
-        // A second run, as a deploy that ran it before recording it would, changes nothing.
         const fileSystem = yield* FileSystem;
         const path = yield* Path;
         const statements = (yield* fileSystem.readFileString(

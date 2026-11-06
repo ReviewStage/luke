@@ -10,38 +10,12 @@ import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
 import { ORPC_FALLBACK_SRC, type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
 
-/**
- * The caller side of the `/api/` routes. The route table is generated and
- * checked (`function-rewrites.ts`), but the constants clients build URLs from
- * were not, so a path constant could outlive its route and nothing failed
- * until production answered 404. This reads every `/api/` path a
- * client in the repository spells — the string and template literals of the
- * TypeScript, the paths in the shell scripts, and the exports of the hosted
- * paths module, evaluated — and
- * resolves each against what answers it: the extensionless aliases the Build
- * Output emits, then the committed rewrites of the routes that stay off the
- * hosted oRPC router, then the router's own procedure paths, read from the
- * contract it implements. The fallback rewrite, which lands every other
- * `/api/` path on the router, is not a resolution: a path no procedure
- * matches is the router's 404. A literal that resolves nowhere, a template
- * whose interpolation is not a whole path segment, and a paths-module export
- * that is not a path are each refused by name rather than passed over: a
- * check that silently skipped what it could not read would read as coverage.
- */
-
-/** Where the clients live, relative to the repository root; `packages` stands for every package's `src`. */
 const CALLER_ROOTS = ["apps/desktop/src", "packages", "scripts", "tools"] as const;
 const PACKAGES_ROOT = "packages";
-/**
- * The packages that are the callee rather than a client: `@repo/service`
- * holds the route groups themselves, whose dispatcher keys spell `/api/`
- * paths that are not public routes.
- */
 const CALLEE_PACKAGES: ReadonlySet<string> = new Set(["service"]);
 const PACKAGE_SOURCE_DIRECTORY = "src";
 const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist"]);
 
-/** The one module clients import their paths from; its exports are evaluated as well as read. */
 export const PATHS_MODULE = posix.join("packages", "features", "src", "service-paths.ts");
 
 const SOURCE_KIND = {
@@ -69,45 +43,33 @@ const SCRIPT_KIND_BY_EXTENSION: ReadonlyMap<string, ts.ScriptKind> = new Map([
 ]);
 
 export const CALLER_KIND = {
-  /** A path spelled whole. */
   STATIC: "static",
-  /** A path with an id interpolated as a whole segment, or a paths-module function called with one. */
   BUILDER: "builder",
 } as const;
 type CallerKind = (typeof CALLER_KIND)[keyof typeof CALLER_KIND];
 
 export const RESOLUTION = {
-  /** An extensionless alias of a standalone or hand-written function. */
   ALIAS: "alias",
-  /** A rewrite of the committed table ahead of the fallback, the first whose pattern matches. */
   REWRITE: "rewrite",
-  /** A procedure of the hosted oRPC router, whose public path the router matches itself. */
   PROCEDURE: "procedure",
-  /** A base other segments are appended to: one more segment lands on a rewrite. */
   PREFIX: "prefix",
 } as const;
 type Resolution = (typeof RESOLUTION)[keyof typeof RESOLUTION];
 
 const REFUSAL = {
-  /** No alias, rewrite, or procedure serves the path. */
   NO_ROUTE: "no-route",
-  /** A template interpolates something that is not a whole path segment, so the path it builds cannot be read. */
   UNREADABLE_BUILDER: "unreadable-builder",
-  /** A paths-module export that is not a path, a table of paths, or a function answering one. */
   NOT_A_PATH: "not-a-path",
 } as const;
 type Refusal = (typeof REFUSAL)[keyof typeof REFUSAL];
 
 interface CallerSite {
-  /** Repository-relative, POSIX separators. */
   readonly file: string;
   readonly line: number;
 }
 
 interface CallerPath {
-  /** The path as a reader sees it, an interpolated segment shown as `{…}`. */
   readonly display: string;
-  /** The path as it is matched, an interpolated segment stood in for by `PROBE_SEGMENT`. */
   readonly probe: string;
   readonly kind: CallerKind;
   readonly sites: readonly CallerSite[];
@@ -116,7 +78,6 @@ interface CallerPath {
 interface ResolvedCaller {
   readonly caller: CallerPath;
   readonly resolution: Resolution;
-  /** The alias path, the rewrite's `src`, or the procedure's path. */
   readonly route: string;
 }
 
@@ -133,21 +94,16 @@ interface ResolvedCallers {
 
 export interface CallerReport extends ResolvedCallers {
   readonly filesScanned: number;
-  /** How many exported functions of the paths module were called. */
   readonly builderExports: number;
 }
 
-/** What stands in for an interpolated id when a built path is matched; `encodeURIComponent` leaves it as it is. */
 export const PROBE_SEGMENT = "probe";
-/** Marks an interpolation inside a scanned literal; no source path carries a NUL. */
 const HOLE = "\u0000";
 const HOLE_DISPLAY = "{…}";
 const PATH_START = "/api/";
 const RELATIVE_PATH_START = "api/";
-/** Where a path ends inside a literal: a query, a fragment, whitespace, a quote, or a bracket. */
 const PATH_END = /[?#\s"'`<>()\\]/u;
 
-/** A literal as scanned: its text with every interpolation replaced by one `HOLE`. */
 interface Literal {
   readonly text: string;
   readonly line: number;
@@ -158,31 +114,20 @@ interface ScannedSite {
   readonly site: CallerSite;
 }
 
-/** What opens an absolute address's origin, which its host follows. */
 const SCHEME_END = "://";
 
-/**
- * Whether the `/api/` at `start` is deeper than an absolute address's first
- * path segment, as GitHub's `https://github.com/acme/api/issues/5` names a
- * repository called `api`: another site's page, which no route of ours
- * answers. A path with no origin before it, or one right after its origin's
- * host, is ours to resolve.
- */
 function insideForeignPath(text: string, start: number): boolean {
   const scheme = text.lastIndexOf(SCHEME_END, start);
-  // Note that an address ends where a path would, so one earlier in the words names nothing here.
   if (scheme === -1 || text.slice(scheme, start).search(PATH_END) !== -1) return false;
   const hostEnd = text.indexOf("/", scheme + SCHEME_END.length);
   return hostEnd !== -1 && hostEnd < start;
 }
 
-/** A relative `api/…` at the start of a literal, or right after an interpolated origin, is the same path. */
 function rooted(text: string): string {
   const fromStart = text.startsWith(RELATIVE_PATH_START) ? `/${text}` : text;
   return fromStart.replaceAll(`${HOLE}${RELATIVE_PATH_START}`, `${HOLE}${PATH_START}`);
 }
 
-/** Every `/api/` path a literal spells, holes carried through. */
 function pathTokens(text: string): readonly string[] {
   const rootedText = rooted(text);
   const tokens: string[] = [];
@@ -199,7 +144,6 @@ function pathTokens(text: string): readonly string[] {
   return tokens;
 }
 
-/** Whether every hole in a token stands as a whole segment: between slashes, or after one at the end. */
 function holesAreSegments(token: string): boolean {
   for (let index = token.indexOf(HOLE); index !== -1; index = token.indexOf(HOLE, index + 1)) {
     const before = token[index - 1];
@@ -246,7 +190,6 @@ const SHELL_COMMENT = /^\s*#/u;
 const SHELL_PATH = /\/api\/[^\s"'`<>()]*/gu;
 const SHELL_EXPANSION = /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*/gu;
 
-/** A shell script's paths are read line by line, a `$variable` inside one standing as a hole. */
 function shellLiterals(source: string): readonly Literal[] {
   return source.split("\n").flatMap((lineText, index) => {
     if (SHELL_COMMENT.test(lineText)) return [];
@@ -266,7 +209,6 @@ function literalsOf(kind: SourceKind, source: string, file: string): readonly Li
   }
 }
 
-/** The source files under a directory, a skipped directory pruned rather than walked. */
 async function sourceFilesUnder(directory: string): Promise<readonly string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -280,16 +222,6 @@ async function sourceFilesUnder(directory: string): Promise<readonly string[]> {
   return files.sort();
 }
 
-/**
- * The directories scanned under a repository root: every caller root, with
- * `packages` as each package's `src`. A package directory holding no `src`
- * contributes nothing: a checkout that has lived through a package's deletion
- * keeps the directory with its ignored build output, and a fresh clone (CI's,
- * every time) never has one, so a walk that threw on it was green in CI and
- * dead on a developer's Mac. The absence is decided here, where the tree is
- * enumerated, so the walk itself still fails loudly on a `readdir` that fails
- * for any other reason.
- */
 async function callerDirectories(repoRoot: string): Promise<readonly string[]> {
   const directories: string[] = [];
   for (const root of CALLER_ROOTS) {
@@ -319,7 +251,6 @@ function repositoryPath(repoRoot: string, file: string): string {
   return relative(repoRoot, file).split(sep).join(posix.sep);
 }
 
-/** Every `/api/` path spelled in the source files under the given repository-relative directories. */
 async function scanCallers(repoRoot: string, directories: readonly string[]): Promise<Scan> {
   const files = (
     await Promise.all(directories.map((directory) => sourceFilesUnder(join(repoRoot, directory))))
@@ -342,7 +273,6 @@ async function scanCallers(repoRoot: string, directories: readonly string[]): Pr
 interface ModuleExport {
   readonly name: string;
   readonly line: number;
-  /** Set for a function declaration: how many probe segments to call it with. */
   readonly parameterCount: number | undefined;
 }
 
@@ -353,7 +283,6 @@ function hasExportModifier(node: ts.Node): boolean {
   );
 }
 
-/** The exported declarations of a module, read from its source: what a client can import. */
 function moduleExports(source: string, file: string): readonly ModuleExport[] {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const lineOf = (node: ts.Node) =>
@@ -382,13 +311,6 @@ function moduleExports(source: string, file: string): readonly ModuleExport[] {
   return exports;
 }
 
-/**
- * An exported function is a builder; what it answers is read as a string at
- * the call, since the module is untyped here. The check is still `typeof` on
- * a function, but it is stated as the call this module makes of one: v4
- * narrows through an intersection, and `string & Function` has no call
- * signature for the probe to reach.
- */
 type PathBuilderCall = (...segments: readonly string[]) => unknown;
 const PathBuilder = Schema.declare((input: unknown): input is PathBuilderCall =>
   Predicate.isFunction(input),
@@ -404,21 +326,11 @@ const decodeModuleNamespace = Schema.decodeUnknownSync(
 );
 
 interface EvaluatedModule {
-  /** The paths the module's exports spell or answer, each with the export's own site. */
   readonly sites: readonly ScannedSite[];
-  /** Exports the check could not read as paths. */
   readonly refused: readonly RefusedCaller[];
-  /** How many exported functions were called. */
   readonly builders: number;
 }
 
-/**
- * The paths module's exports, evaluated: each exported string and table of
- * strings is a path, and each exported function is called with one probe
- * segment per parameter and must answer one. Text alone cannot see a builder
- * that composes another (`${turnPath(id)}/cancel` spells no `/api/`), so
- * the module is imported and asked.
- */
 async function evaluatePathsModule(
   repoRoot: string,
   moduleFile: string = PATHS_MODULE,
@@ -468,25 +380,14 @@ async function evaluatePathsModule(
   return { sites, refused, builders };
 }
 
-/** A hosted procedure's public path and method, as its contract declares them. */
 export interface ProcedureRoute {
-  /** The procedure's key path in the contract, its resource first. */
   readonly key: readonly string[];
   readonly method: string;
-  /** The public path, a parameter written `{name}`, or `{+name}` where it may span segments. */
   readonly path: string;
 }
 
-/** What the OpenAPI matcher takes for a procedure that names no method. */
 const DEFAULT_PROCEDURE_METHOD = "POST";
 
-/**
- * Every procedure of the hosted oRPC router, by the public path its contract
- * names: the router is `implement(hostedContract)`, so these are its routes,
- * read without the deployment's seams the router is built over. Every hosted
- * procedure names its path, so one that does not, or that names a prefix the
- * path would be read under, is refused here rather than matched wrongly.
- */
 export function hostedProcedureRoutes(): readonly ProcedureRoute[] {
   const routes: ProcedureRoute[] = [];
   walkProcedureContractsSync(hostedContract, (contract, key) => {
@@ -501,7 +402,6 @@ export function hostedProcedureRoutes(): readonly ProcedureRoute[] {
 
 const PATH_PARAMETER = /^\{(\+?)[^{}]+\}$/u;
 
-/** A procedure's path as the pattern the router matches it by: a parameter one segment, or the rest of the path where it spans. */
 function procedurePattern(path: string): RegExp {
   const segments = path.split("/").map((segment) => {
     const parameter = PATH_PARAMETER.exec(segment);
@@ -517,7 +417,6 @@ interface RouteTable {
   readonly aliases: ReadonlySet<string>;
 }
 
-/** A rewrite's `src` matches the whole pathname, as Vercel anchors it; the fallback is left out. */
 function routeTable(
   rewrites: readonly Rewrite[],
   procedures: readonly ProcedureRoute[],
@@ -535,7 +434,6 @@ function routeTable(
   };
 }
 
-/** What answers a whole path: an exception's rewrite first, as the platform tries it ahead of the fallback, then a procedure. */
 function servedBy(
   probe: string,
   table: RouteTable,
@@ -563,11 +461,6 @@ function resolveProbe(
 const byToken = (a: readonly [string, unknown], b: readonly [string, unknown]) =>
   a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
 
-/**
- * Every scanned site resolved against the aliases, the table, and the procedures, the sites
- * of one path gathered under it. An unreadable builder is refused before any
- * matching, since the path it builds is not known.
- */
 function resolveCallers(
   sites: readonly ScannedSite[],
   rewrites: readonly Rewrite[],
@@ -605,7 +498,6 @@ function resolveCallers(
   return { resolved, refused };
 }
 
-/** The extensionless paths the Build Output serves beside the rewrites: the standalone functions' and the hand-written one's. */
 async function buildOutputAliases(web: string): Promise<readonly string[]> {
   const standalone = (await webFunctions(web)).filter((definition) => !definition.dispatches);
   return [
@@ -614,7 +506,6 @@ async function buildOutputAliases(web: string): Promise<readonly string[]> {
   ].sort();
 }
 
-/** The whole check: every caller in the repository against the emitted aliases, the committed table, and the hosted procedures. */
 export async function checkApiCallers(input: {
   readonly repoRoot: string;
   readonly web: string;

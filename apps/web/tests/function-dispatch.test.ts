@@ -23,10 +23,11 @@ test("the route key picks the member and the request is restored to the route's 
   const task = recording();
   const dispatcher = dispatchRoutes(new Map([["plans/plan", task.route]]));
   const response = await dispatcher.fetch(
-    new Request(
-      `https://app.test/api/default.js?${DISPATCH_QUERY.ROUTE}=plans/plan&id=t1&wait=1`,
-      { method: "POST", body: "hello", headers: { "content-type": "text/plain" } },
-    ),
+    new Request(`https://app.test/api/default.js?${DISPATCH_QUERY.ROUTE}=plans/plan&id=t1&wait=1`, {
+      method: "POST",
+      body: "hello",
+      headers: { "content-type": "text/plain" },
+    }),
   );
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "hello");
@@ -87,7 +88,6 @@ test("a function that holds no oRPC route answers a key it does not hold 404 wit
 
 const WEB = join(import.meta.dirname, "..");
 
-/** Every route of the default function as a recorder, so a landed request names the key it reached and the request that key was handed. */
 async function landingOnDefault() {
   const grouped = (await webFunctions(WEB)).find((definition) => definition.file === "default");
   assert.ok(grouped);
@@ -213,7 +213,6 @@ test("every route that stays off the oRPC router is reached at its public URL by
     src: "/api/maintenance/sweep",
     dest: "/api/maintenance-sweep.js?route=maintenance/sweep",
   });
-  // The functions that answer by their own name are rewritten onto themselves, which the filesystem then serves as before.
   for (const path of [
     "/api/terminal/sessions",
     "/api/terminal/sessions.js",

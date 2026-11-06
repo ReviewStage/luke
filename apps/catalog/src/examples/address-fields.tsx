@@ -3,12 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * address-fields.tsx -- the browser bar's address field empty, with its
- * placeholder, holding an address, and unavailable.
- */
-
-/** A field the example holds the value of, as a caller would. */
 function Held({ start, disabled }: { start: string; disabled?: boolean }): React.JSX.Element {
   const [value, setValue] = useState(start);
   return (

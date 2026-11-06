@@ -6,15 +6,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * command-dialog.tsx -- a palette of tasks and actions, found by typing and
- * chosen with the arrows and Return, its keys' hints along its foot and a
- * failed source's note under its group; and one still reading its rows.
- * Each opens from its button and goes with Escape, a press on the dimmed
- * window, or a row chosen.
- */
-
-/** The palette's rows, each closing it as it is chosen. */
 function paletteGroups(close: () => void): CommandGroup[] {
   return [
     {
@@ -76,7 +67,6 @@ function paletteGroups(close: () => void): CommandGroup[] {
   ];
 }
 
-/** The keys' hints along the palette's foot. */
 function PaletteFoot(): React.JSX.Element {
   return (
     <>

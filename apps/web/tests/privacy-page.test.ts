@@ -5,13 +5,6 @@ import { renderToString } from "react-dom/server";
 import { test } from "vitest";
 import { PrivacyPage } from "../src/PrivacyPage";
 
-/**
- * The policy as a reader meets it, drawn as the prerender writes it: one
- * title over the page, and each of the policy's sections a region named by
- * its own heading, so a screen reader can move between them.
- */
-
-/** The page as the prerender writes it. */
 function drawn(): HTMLElement {
   const root = document.createElement("div");
   root.innerHTML = renderToString(createElement(PrivacyPage));

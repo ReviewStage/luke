@@ -1,32 +1,11 @@
-/**
- * failure-kind.ts -- a failure named for a log line by its kind alone, never by what it said.
- *
- * A log line is read wherever the deployment's logs are read, so what it may
- * say about a failure is which kind it is. An error's message, a Schema
- * issue's rendering, a statement's text, a response body, and a cause's
- * pretty print can each quote a value: a row, a prompt, a transcript's words,
- * a credential. The kind is read from the tags the failure is made of: its
- * `_tag`, or an `Error`'s `name`, and one level beneath it the tag of its
- * `reason` or `issue`, which is where a `SqlError`, an `HttpClientError`, and
- * a `SchemaError` say what went wrong. A failure that only wraps a `Cause`
- * of another — Drizzle's `EffectDrizzleQueryError` around the `SqlError` its
- * statement failed with — is named by what it wraps, since the wrapper's own
- * name says only that a statement failed. A tag is kept only when it is shaped
- * like an identifier, so a name that was given a sentence is not written
- * either.
- */
 import { Cause, Option, Schema } from "effect";
 
-/** A tag as a line may carry it: one identifier, nothing shaped like a sentence or a value. */
 const KIND_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
-/** The tag effect's `SqlError` carries, the one failure whose driver error is read for a code. */
 const SQL_ERROR_TAG = "SqlError";
 
-/** A driver's error code as a line may carry it: a SQLSTATE (`57P01`) or a socket's (`ECONNRESET`), upper-case and short. */
 const CODE_PATTERN = /^[A-Z0-9_]{2,32}$/;
 
-/** What a kind reads where the failure has no tag of that shape: a thrown string, a plain object, a renamed error. */
 const FAILURE_KIND = {
   INTERRUPT: "Interrupt",
   UNNAMED: "unnamed",
@@ -47,13 +26,11 @@ const readSqlCause = Schema.decodeUnknownOption(
 );
 const readWrapper = Schema.decodeUnknownOption(Schema.Struct({ cause: Schema.Unknown }));
 
-/** The failure's own tag, or its error name, where either is shaped like an identifier. */
 function tagOf(cause: unknown): Option.Option<string> {
   const tagged = Option.map(readTagged(cause), (read) => read._tag);
   return Option.isSome(tagged) || !(cause instanceof Error) ? tagged : readKind(cause.name);
 }
 
-/** The tag one level beneath: a `SqlError`'s or an `HttpClientError`'s reason, a `SchemaError`'s issue. */
 function beneathOf(cause: unknown): Option.Option<string> {
   return Option.orElse(
     Option.map(readReason(cause), (read) => read.reason._tag),
@@ -61,7 +38,6 @@ function beneathOf(cause: unknown): Option.Option<string> {
   );
 }
 
-/** The failure a wrapper carries as a `Cause` of its own, which is what it is named by. */
 function wrappedOf(cause: unknown): Option.Option<unknown> {
   return Option.flatMap(readWrapper(cause), ({ cause: inner }) =>
     Cause.isCause(inner) && !Cause.hasInterruptsOnly(inner)
@@ -70,10 +46,6 @@ function wrappedOf(cause: unknown): Option.Option<unknown> {
   );
 }
 
-/**
- * The failure as a few fixed words: `SqlError: ConnectionError`,
- * `TypeError`, or `unnamed` for a thrown value with no name of its own.
- */
 export function failureKind(cause: unknown): string {
   const wrapped = wrappedOf(cause);
   if (Option.isSome(wrapped)) return failureKind(wrapped.value);
@@ -83,16 +55,6 @@ export function failureKind(cause: unknown): string {
   return Option.isNone(beneath) ? kind.value : `${kind.value}: ${beneath.value}`;
 }
 
-/**
- * What the driver's own error beneath a `SqlError` carries to tell it from
- * another of its kind, in a few fixed words and never a value: its `code`,
- * which is a Postgres SQLSTATE (`57P01`) or a socket's (`ECONNRESET`), as
- * `code 57P01`; or, where it has none, the error's name, as `cause Error`,
- * since a pool's own "Connection terminated" carries nothing else that is
- * safe to write; or nothing where the failure is no `SqlError`. A `SqlError`
- * is classified by its SQLSTATE, so one that reads `UnknownError` is one
- * whose code no kind of its own was made for, which is why it is read here.
- */
 export function failureDetail(cause: unknown): Option.Option<string> {
   const wrapped = wrappedOf(cause);
   if (Option.isSome(wrapped)) return failureDetail(wrapped.value);
@@ -107,7 +69,6 @@ export function failureDetail(cause: unknown): Option.Option<string> {
   return Option.some(`cause ${Option.getOrElse(name, () => FAILURE_KIND.UNNAMED)}`);
 }
 
-/** The cause as `failureKind` names what it squashes to, or `Interrupt` where nothing failed. */
 export function causeKind(cause: Cause.Cause<unknown>): string {
   return Cause.hasInterruptsOnly(cause) ? FAILURE_KIND.INTERRUPT : failureKind(Cause.squash(cause));
 }

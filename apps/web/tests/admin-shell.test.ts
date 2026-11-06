@@ -9,35 +9,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
-/**
- * admin-shell.test.ts -- the admin's shell says where a maintainer is and
- * what it is doing: a view whose read is still out stands under its own
- * title with a status saying it is loading, the navigation marks that view
- * as the current page, and a press on another section moves both; the
- * sidebar hides and comes back from the toggle at its top, remembering which
- * across visits, and in a phone's narrow room stands as a drawer over the
- * view; the account stands at the sidebar's foot, its menu raised over it
- * closing on Escape or a press outside it, and Sign out, on the press, leaves
- * for the sign-in. The page runs as its entry mounts it in the browser, on
- * its own `#root`, and is unmounted after each test so no render it scheduled
- * outlives jsdom; the network, the HTTP boundary to the service and Better Auth, is
- * a fake that answers the session and a sign-out and leaves every admin read
- * hanging. jsdom lays nothing out, so a narrow room is a stage measured
- * narrow, as the browser's layout would report it.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const SESSION_PATH = "/api/auth/get-session";
 
 const SIGN_OUT_PATH = "/api/auth/sign-out";
 
-/** A phone's width, under the line the app's shell turns narrow at. */
 const PHONE_WIDTH = 390;
 
 let root: Root | undefined;
 
-/** What the fake answers a sign-out with: Better Auth's success, unless a test refuses it. */
 let signOutStatus = 200;
 
 const SIGNED_IN = {
@@ -45,7 +26,6 @@ const SIGNED_IN = {
   user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com", image: null },
 };
 
-/** The admin at `address`, signed in, with every read but the session's left hanging. */
 async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
@@ -69,8 +49,6 @@ async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   const container = document.createElement("div");
   container.id = "root";
   document.body.replaceChildren(container);
-  // Note that the dashboard is imported afresh, because its session lives in
-  // module state and each test signs in anew.
   vi.resetModules();
   const { AdminDashboard } = await import("../src/AdminDashboard");
   root = createRoot(container);
@@ -86,14 +64,12 @@ async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   return container;
 }
 
-/** The names of the navigation links marked as the current page. */
 function currentSections(page: HTMLElement): (string | null)[] {
   return Array.from(page.querySelectorAll('nav a[aria-current="page"]')).map(
     (link) => link.textContent,
   );
 }
 
-/** The sidebar's link to a section, by the name it shows. */
 function sectionLink(page: HTMLElement, name: string): HTMLAnchorElement {
   const link = Array.from(page.querySelectorAll<HTMLAnchorElement>("nav a")).find(
     (candidate) => candidate.textContent === name,
@@ -102,29 +78,22 @@ function sectionLink(page: HTMLElement, name: string): HTMLAnchorElement {
   return link;
 }
 
-/** The button a reader knows by `name`, wherever it stands. */
 function button(name: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll("button")).find(
     (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent?.trim()) === name,
   );
 }
 
-/** Whether nothing under `element` can be reached, by a pointer, the keyboard, or a screen reader. */
 function unreachable(element: Element): boolean {
   return element.closest("[inert]") !== null;
 }
 
-/** The view beside the sidebar, the page's own `main`. */
 function view(page: HTMLElement): HTMLElement {
   const main = page.querySelector("main");
   if (!(main instanceof HTMLElement)) throw new Error("No view");
   return main;
 }
 
-/**
- * Whether a status region says the page is loading. Its words lead with that,
- * ahead of the section headings the loading page draws as themselves.
- */
 function saysLoading(page: HTMLElement): boolean {
   return Array.from(page.querySelectorAll('[role="status"]')).some((region) =>
     region.textContent?.startsWith("Reading"),
@@ -132,9 +101,6 @@ function saysLoading(page: HTMLElement): boolean {
 }
 
 afterEach(() => {
-  // Note that the session store stops a second after its last reader leaves,
-  // on a timer the unmount arms, and that stop reaches for `window`; so the
-  // unmount runs on a fake clock that is run out while jsdom still stands.
   vi.useFakeTimers();
   act(() => root?.unmount());
   root = undefined;
@@ -169,7 +135,6 @@ test("a press on another section makes it the current page", async () => {
   expect(window.location.search).toBe("?view=users");
 });
 
-/** The names of a navigation's links, in the order it draws them. */
 function sectionNames(navigation: Element): (string | null)[] {
   return Array.from(navigation.querySelectorAll("a"), (link) => link.textContent);
 }
@@ -197,7 +162,6 @@ test("the toggle at the sidebar's top hides it and shows it again, remembered ac
   expect(unreachable(view(page))).toBe(false);
   expect(button("Hide sidebar")).toBeUndefined();
 
-  // A later visit opens it hidden, as it was left.
   act(() => root?.unmount());
   page = await openAdmin();
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
@@ -229,7 +193,6 @@ test("in a phone's narrow room the sidebar is a drawer the toggle opens over the
   expect(toggle.getAttribute("aria-label")).toBe("Hide sidebar");
   expect(document.activeElement).toBe(sectionLink(page, "Overview"));
 
-  // Escape puts it away and hands the keyboard back to the toggle.
   await act(async () => {
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
@@ -247,11 +210,9 @@ test("in a phone's narrow room the sidebar is a drawer the toggle opens over the
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Users"));
   expect(unreachable(sectionLink(page, "Users"))).toBe(true);
   expect(unreachable(view(page))).toBe(false);
-  // The drawer is the room's: hiding it there is no choice to remember.
   expect(window.localStorage.getItem("app-admin-sidebar-collapsed")).toBeNull();
 });
 
-/** The account's button at the sidebar's foot, once the session names it. */
 async function accountButton(page: HTMLElement): Promise<HTMLButtonElement> {
   return vi.waitFor(() => {
     const found = Array.from(page.querySelectorAll<HTMLButtonElement>("aside button")).find(
@@ -337,7 +298,6 @@ test("a quarter's address opens Reliability on the month, the longest window it 
   ]);
 });
 
-/** A press as a pointer makes it: its pointerdown, which a dismissal listens for, then its click. */
 async function press(element: Element | null | undefined): Promise<void> {
   if (!(element instanceof HTMLElement)) throw new Error("Nothing to press");
   await act(async () => {

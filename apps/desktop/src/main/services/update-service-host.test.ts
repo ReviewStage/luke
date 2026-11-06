@@ -8,18 +8,8 @@ import { vi } from "vitest";
 import type { DesktopConfig } from "./desktop-config";
 import { createUpdateServiceHost } from "./update-service-host";
 
-/**
- * Restart to update as the Updates row and the menu bar press it, over an
- * installer that has a build downloaded: it asks first, a Cancel installs
- * nothing and counts nothing, and a yes gives everything back before
- * Squirrel's own quit and install, which nothing holds. Synthetic versions
- * throughout.
- */
-
-// Note that Electron is never reached: the menu bar is drawn through `showMenuBar`, and no window opens.
 vi.mock("electron", () => ({}));
 
-/** What the updater reads of the launch: a packaged build that sends nothing on its own. */
 const CONFIG = {
   appVersion: "1.0.0",
   packaged: true,
@@ -30,7 +20,6 @@ const CONFIG = {
   openExternal: async () => undefined,
 };
 
-/** The updater over an installer holding `2.0.0`, recording what reached the teardown, Squirrel, and the counts. */
 const restartFixture = (answer: boolean) =>
   Effect.gen(function* () {
     const happened: string[] = [];
@@ -44,7 +33,6 @@ const restartFixture = (answer: boolean) =>
       clearCachedUpdate: async () => undefined,
     };
     const updates = yield* createUpdateServiceHost({
-      // SAFETY: the updater reads only the fields `CONFIG` names.
       config: CONFIG as unknown as DesktopConfig,
       recordProductEvent: (name) => happened.push(`counted ${name}`),
       engine,
@@ -55,7 +43,6 @@ const restartFixture = (answer: boolean) =>
         happened.push("asked");
         return answer;
       },
-      // SAFETY: the updater only writes where it stands, which no assertion reads.
       state: { update: () => undefined } as unknown as AppStateStore,
       showSettings: () => undefined,
       moveToApplications: () => undefined,
@@ -64,7 +51,6 @@ const restartFixture = (answer: boolean) =>
     return { updates, happened };
   });
 
-/** Lets the question's answer, and the teardown behind it, run. */
 const settled = Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
 
 it.effect("Restart to update asks first, and a Cancel installs nothing", () =>
@@ -101,7 +87,6 @@ it.effect("an install Squirrel refuses on a read-only volume is told as that fai
     const told: UpdateSnapshot[] = [];
     let heard: UpdaterEngineEvents | undefined;
     yield* createUpdateServiceHost({
-      // SAFETY: the updater reads only the fields `CONFIG` names.
       config: CONFIG as unknown as DesktopConfig,
       recordProductEvent: () => undefined,
       engine: {
@@ -114,7 +99,6 @@ it.effect("an install Squirrel refuses on a read-only volume is told as that fai
       },
       beforeRestart: async () => undefined,
       askBeforeRestart: async () => true,
-      // SAFETY: the updater only writes where it stands, which `told` keeps.
       state: {
         update: ({ update }: { update: UpdateSnapshot }) => told.push(update),
       } as unknown as AppStateStore,
@@ -123,7 +107,6 @@ it.effect("an install Squirrel refuses on a read-only volume is told as that fai
     });
 
     heard?.onAvailable("2.0.0");
-    // Squirrel.Mac's own words, as electron-updater hands them on.
     heard?.onError(
       "Cannot update while running on a read-only volume. The application is on a read-only volume. Please move the application and try again.",
     );

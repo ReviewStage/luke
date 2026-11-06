@@ -1,13 +1,3 @@
-/**
- * description.ts -- `vespin description show` and `description edit`: a task's description printed as the Markdown it is, and written whole from a file or stdin.
- *
- * A description is one Markdown text (`description-edit.ts`). `edit` writes it
- * through the procedure the app's description editor saves with,
- * `plans.editDescription`, naming the text it read just before as the base, so a write
- * an agent made in between is kept where the two do not touch the same
- * lines, and is refused as a conflict where they do, with nothing changed.
- */
-
 import { CLI_EXIT } from "@repo/features/cli-exit";
 import { DESCRIPTION_EDIT_REFUSAL } from "@repo/features/description-edit";
 import { TASK_BOUNDS } from "@repo/features/task-wire";
@@ -17,11 +7,6 @@ import { answer, CommandFailed, readInput } from "../output.js";
 import { askService, session } from "../session.js";
 import { resolveTaskId } from "../tasks.js";
 
-/**
- * A task's description written whole: `value` laid over `base`, the text
- * it was read as, answered with the description as saved, or a refusal
- * saying why nothing was.
- */
 export function writeDescription(taskId: string, base: string, value: string) {
   return Effect.gen(function* () {
     const { hosted } = yield* session;
@@ -53,7 +38,6 @@ const showCommand = Command.make("show", { task: taskArgument }, ({ task }) =>
     const { plan } = yield* askService(hosted.plans.open, { id });
     yield* answer({
       json: { id: plan.id, name: plan.name, body: plan.document.body },
-      // Note that the closing line break is dropped, since each line printed ends in one.
       lines: [plan.document.body.replace(/\n+$/u, "")],
       ids: [plan.id],
     });
@@ -106,7 +90,6 @@ const editCommand = Command.make(
   ]),
 );
 
-/** The description group: show and edit. */
 export const descriptionCommand = Command.make("description").pipe(
   Command.withDescription("Print or write a task's description"),
   Command.withSubcommands([showCommand, editCommand]),

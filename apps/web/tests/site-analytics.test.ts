@@ -4,28 +4,15 @@ import type { CaptureResult, PostHog } from "posthog-js";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { sanitizeAnalyticsUrls } from "../src/analytics";
 
-/**
- * site-analytics.test.ts -- no address the website's analytics sends carries
- * a credential, on the sign-in pages or any other, and the client collects
- * only what `PRIVACY.md` says it does however the project is configured. The
- * client is the real library, started through the site's own entry; the
- * network it posts to, and the remote configuration the project would serve,
- * are the fakes.
- */
-
 const SIGN_IN_URL =
   "https://vespin.dev/sign-in.html?state=github.abc&code_challenge=xyz&redirect_uri=luke%3A%2F%2Fauth&expires_at=1700000000&signature=deadbeef";
 const AUTH_CODE = "c".repeat(64);
 const LANDING_WITH_CODE = `/?code=${AUTH_CODE}&state=s1&utm_source=hn`;
 const PROJECT_KEY = "phc_site_analytics_test";
-/** Longer than the recorder waits before it sends what it has buffered. */
 const RECORDING_FLUSH_MS = 5_000;
-/** The rrweb event type of a recording's page address. */
 const RRWEB_META = 4;
-/** The rrweb event type of the recorder's own notes, its options among them. */
 const RRWEB_CUSTOM = 5;
 
-/** What a project with every optional feature switched on serves as its remote configuration. */
 const EVERYTHING_ON = {
   autocaptureExceptions: true,
   sessionRecording: {
@@ -47,18 +34,8 @@ const sent: URL[] = [];
 const captured: CaptureResult[] = [];
 let posthog: PostHog;
 
-/**
- * The runtime's own `CompressionStream`, taken off the global while the file
- * runs. The recorder gzips a full snapshot on it where there is one, and
- * every event after it waits in line behind that gzip, which runs on real
- * stream I/O the fake clock does not drive: a flush the clock fires before it
- * finishes ships the page's address and holds back the snapshot and the
- * recorder's options. Without one the recorder gzips in line (its own
- * fallback), so every event is buffered before the clock moves.
- */
 const compressionStream = globalThis.CompressionStream;
 
-/** The file names of the scripts the client asked the browser to load. */
 function requestedScripts(): string[] {
   return [...document.querySelectorAll<HTMLScriptElement>("script[src]")].map(
     (script) => new URL(script.src).pathname.split("/").at(-1) ?? "",
@@ -75,18 +52,13 @@ beforeAll(async () => {
   window.history.replaceState(null, "", LANDING_WITH_CODE);
   document.body.innerHTML = "<main><h1>Vespin</h1></main>";
   Reflect.set(window, "_POSTHOG_REMOTE_CONFIG", { [PROJECT_KEY]: { config: EVERYTHING_ON } });
-  // Note that native gzip is removed before the import, because the recorder checks for it as it loads.
   Reflect.deleteProperty(globalThis, "CompressionStream");
-  // Note that the module reads its key as it loads, so it is loaded afresh
-  // under the stubbed key, beside the client it will start. The recorder is
-  // the library's own bundle, loaded here because the page would fetch it.
   vi.resetModules();
   await import("posthog-js/dist/lazy-recorder");
   posthog = (await import("posthog-js")).default;
   posthog.on("eventCaptured", (event: CaptureResult) => captured.push(event));
   const { startSiteAnalytics, completeSiteSignIn } = await import("../src/analytics");
   startSiteAnalytics();
-  // The recorder holds its first batch until someone interacts with the page.
   await vi.waitFor(() => assert.ok(captured.some((event) => event.event === "$pageview")));
   document.querySelector("h1")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await vi.advanceTimersByTimeAsync(RECORDING_FLUSH_MS);
@@ -143,7 +115,6 @@ test("landing on the home page with a code sends no event that carries it", () =
   expect(JSON.stringify(captured)).not.toContain(AUTH_CODE);
 });
 
-/** Every rrweb event the recorder sent, in order. */
 function recorded(): { type: number; data: { href?: string; tag?: string; payload?: unknown } }[] {
   return captured
     .filter((event) => event.event === "$snapshot")

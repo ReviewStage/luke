@@ -8,15 +8,6 @@ import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Effect, Option } from "effect";
 
-/**
- * A plan's pages, through the store's write and reads: a write is a page's
- * next version and every version stands as written, the plan lists each page
- * by its newest, a member of the task's workspace reads and writes its pages
- * whoever started it, and a task of a workspace the account is not in, or a
- * page the task does not hold, reads and writes as none. Synthetic accounts, tasks, and pages
- * throughout.
- */
-
 const CHART = { title: "Invite funnel", html: "<!doctype html><p>v1</p>" } as const;
 const CHART_AGAIN = { title: "Invite funnel, by week", html: "<!doctype html><p>v2</p>" } as const;
 const MOCKUP = { title: "Invite dialog", html: "<!doctype html><button>Invite</button>" } as const;
@@ -34,7 +25,6 @@ const openTask = Effect.gen(function* () {
   return { userId, taskId: task.id, workspaceId: task.workspaceId };
 });
 
-/** A write the test expects to land, as the page it left. */
 const written = (userId: string, taskId: string, write: Parameters<typeof writePage>[2]) =>
   Effect.map(
     writePage(userId, taskPageOwner(taskId), write, { kind: PAGE_SHOWER.APP }),

@@ -1,40 +1,20 @@
-/**
- * door.ts -- what each method a client asks of the host does, said once, and the one way a row write's method is served: from its write declaration.
- *
- * A host classifies every method it answers (`ACT`) in one map, and types
- * its handler table by that map (`DoorTable`). A row write's method then
- * takes only a handler `declaredMethod` built from a write declaration, which
- * draws the write over the pool at once; a handler written by hand does not
- * compile. The brand that tells the two apart is a type alone, which only
- * `declaredMethod` gives.
- */
-
 import { Effect } from "effect";
 import type { EntityPool, WriteDeclaration } from "./entity-pool.js";
 
-/** What a method does, which decides how its handler may be built. */
 export const ACT = {
-  /** Writes a row a read holds: drawn over the pool at once, so served only from a write declaration. */
   ROW_WRITE: "rowWrite",
-  /** Work whose outcome only the service can say, as a start or a message: it draws its intent and waits for the outcome. */
   REMOTE_WORK: "remoteWork",
-  /** Text the editor draws itself and the service merges as a patch, never a row of the pool. */
   DOCUMENT: "document",
-  /** A write to what the host keeps itself, as a setting of this machine. */
   LOCAL_WRITE: "localWrite",
-  /** Reads, follows, or lets go of what the service holds, writing nothing. */
   READ: "read",
 } as const;
 
 export type Act = (typeof ACT)[keyof typeof ACT];
 
-/** The brand of a handler built from a write declaration: a type no value carries, so only `declaredMethod` gives it. */
 declare const DECLARED: unique symbol;
 
-/** A method handler `declaredMethod` built from a write declaration, the one a declared row write's method takes. */
 export type DeclaredHandler<Handler> = Handler & { readonly [DECLARED]: true };
 
-/** A handler table whose row writes take only a `DeclaredHandler`, and whose every other method takes any `Handler`. */
 export type DoorTable<
   Method extends string,
   Classes extends Readonly<Record<Method, Act>>,
@@ -45,7 +25,6 @@ export type DoorTable<
     : Handler;
 };
 
-/** A row write's handler: its params read as `declaration`'s input, and that written on `pool`, answering what the write answers. */
 export function declaredMethod<Params, Context, Input, Refusal, Row extends object, Change, Answer>(
   pool: EntityPool,
   declaration: WriteDeclaration<Row, Change, Input, Answer>,
@@ -53,6 +32,5 @@ export function declaredMethod<Params, Context, Input, Refusal, Row extends obje
 ): DeclaredHandler<(params: Params, context: Context) => Effect.Effect<Answer, Refusal>> {
   const handler = (params: Params, context: Context) =>
     Effect.flatMap(input(params, context), (read) => pool.write(declaration, read));
-  // SAFETY: the brand is a type no value carries, and this is the one place it is given, to a handler built from a write declaration.
   return handler as DeclaredHandler<typeof handler>;
 }

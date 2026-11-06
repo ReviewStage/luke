@@ -17,20 +17,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * badges.tsx -- every tone with its words, one with a glyph, a provider's
- * labels each wearing its color as a dot, a dark one and one with no color
- * it can paint among them, the same labels filled with their color, a
- * badge lit as the reader's own, badges standing on a line of body words,
- * words given up to a glyph or a tone's dot in a narrow room, a long
- * label in a narrow column, and a short badge beside a long row name in a
- * settings column at a page's measure and narrower, where the name gives way
- * and the badge stays whole; and where a state is a note rather than a
- * call to act, its quiet words in place of a badge, alone, after the
- * attention mark as a count named by its whole words, and after the failure
- * glyph.
- */
-
 const SAYS = {
   [STATUS_TONE.NEUTRAL]: "Draft",
   [STATUS_TONE.WORKING]: "Working",
@@ -40,7 +26,6 @@ const SAYS = {
   [STATUS_TONE.DANGER]: "Failed",
 } as const;
 
-/** GitHub labels as GitHub answers them: six hex digits, or a color the badge cannot paint. */
 const LABELS = [
   { name: "bug", color: "d73a4a" },
   { name: "enhancement", color: "a2eeef" },
@@ -48,7 +33,6 @@ const LABELS = [
   { name: "imported", color: "not-a-color" },
 ] as const;
 
-/** A repository's row under GitHub's, its long name marked Token, as Settings draws one. */
 function TokenRow(): React.JSX.Element {
   return (
     <SettingsSection>

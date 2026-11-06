@@ -1,7 +1,3 @@
-/**
- * resize-edges.tsx -- a pane resized by the edge on its side: dragged between its bounds, double-clicked back to its default width, and stepped from the keyboard; the sidebar's at its right, the side panel's at its left.
- */
-
 import {
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -17,10 +13,8 @@ import { CatalogSection } from "../section";
 
 const BOUNDS = { MIN: 120, MAX: 280, DEFAULT: 180 } as const;
 
-/** What the pane leaves the work beside it in the box they share. */
 const WORK_RESERVE = 80;
 
-/** A box holding a pane and the work beside it, the pane resized by its edge on `side`. */
 function EdgedPane({ side }: { side: ResizeEdgeSide }): React.JSX.Element {
   const [width, setWidth] = useState<number>(BOUNDS.DEFAULT);
   const edge = useResizeEdge({

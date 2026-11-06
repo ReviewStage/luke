@@ -1,50 +1,3 @@
-/**
- * polish-shots.ts -- shoots every scene of the polish manifest in both themes at three window sizes, on the desktop app, the web client and the catalog, and lays the pictures out on one contact sheet.
- *
- * Run it through `tools/polish/polish.sh`, which builds what it drives and
- * stands up a display on Linux (`--help` lists the flags). Each scene of
- * `scenes.ts` is drawn by:
- *
- * - the desktop app, Electron driven by Playwright's `_electron`, one launch
- *   per picture as `scripts/evidence.sh` launches one per capture, on the
- *   scene's fixture profile (`--fixture smoke --profile <profile>`);
- * - the web client in Chromium, served by its own development server, which
- *   alone reads a profile off the address (`?fixture=`, `web-fixture.ts`).
- *
- * The catalog is shot beside them, every example its index lists, over its
- * own addresses as `apps/catalog/scripts/shoot.ts` shoots it.
- *
- * Every picture is taken in light and in dark, with `data-ui-theme` held on
- * the root and the machine's appearance emulated to match, at the three sizes
- * the window is checked at: wide, the window Vespin opens in (1280×840,
- * `DESKTOP_WINDOW` in `apps/desktop/src/main/window/panel-manager.ts`); the
- * least window (760×520); and narrow, which is the phone layout on the web
- * (390 wide) and the least window at 125% zoom on the desktop (608 CSS px).
- *
- * A desktop picture is the whole window as Electron's `capturePage` takes
- * it, since Playwright's own screenshot clips to the page's CSS-px viewport
- * and so cuts a zoomed window's right side off. It is taken only once the
- * page lays out at the window's new size (`viewport.ts`), and flattened onto
- * the theme's sidebar color (`png.ts`), as the app's own capture mode paints
- * its frame, because the Mac's sidebar material frosts through a frame the
- * page draws part clear and no page capture holds the material. A launch that
- * fails outright is launched once more, and a renderer or helper that dies
- * is written beside the picture.
- *
- * Note that it drives the app as `pnpm start` runs it, not the signed bundle
- * `pnpm package:dir` makes, because that bundle's Node inspector fuse is
- * burnt off (`electron-builder-config.mjs`) and Playwright attaches through
- * the inspector. Each launch runs as a named instance of its own
- * (`APP_INSTANCE`), so it holds a lock and a state folder no other launch
- * shares and never replaces the Vespin a developer has open; the folder is
- * deleted once that launch has exited, which it is made to do past its quit
- * guard and so leaves its state unclosed. The motion tokens are zeroed as a capture run
- * zeroes them, so a picture lands on the steady state. It is not a test:
- * nothing is compared, no golden is kept, no CI job runs it, and nothing it
- * writes is committed. Playwright is not a dependency of the workspace: it
- * is found beside the script, or in the global npm folder.
- */
-
 import { type ChildProcess, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -76,12 +29,10 @@ const WEB_ROOT = path.join(REPOSITORY_ROOT, "apps", "web");
 const CATALOG_ROOT = path.join(REPOSITORY_ROOT, "apps", "catalog");
 const DEFAULT_OUT = path.join(REPOSITORY_ROOT, "artifacts", "polish", "app");
 
-/** Everything this shoots: the two clients of a scene, and the catalog. */
 const TARGET = { ...CLIENT, CATALOG: "catalog" } as const;
 type Target = (typeof TARGET)[keyof typeof TARGET];
 const TARGETS: readonly Target[] = Object.values(TARGET);
 
-// `@repo/ui`'s THEME, less `system`, which a plain node script cannot import.
 const THEME = { LIGHT: "light", DARK: "dark" } as const;
 type Theme = (typeof THEME)[keyof typeof THEME];
 const THEMES: readonly Theme[] = Object.values(THEME);
@@ -90,12 +41,9 @@ const SIZE = { WIDE: "wide", LEAST: "least", NARROW: "narrow" } as const;
 type Size = (typeof SIZE)[keyof typeof SIZE];
 const SIZES: readonly Size[] = Object.values(SIZE);
 
-// DESKTOP_WINDOW's opening and least sizes, which the desktop and the catalog share.
 const WIDE_FRAME: Frame = { width: 1280, height: 840, zoom: 1, phone: false };
 const LEAST_FRAME: Frame = { width: 760, height: 520, zoom: 1, phone: false };
-// A phone: the width the catalog's own phone frame draws at, its screen a modern phone's height.
 const PHONE_FRAME: Frame = { width: 390, height: 844, zoom: 1, phone: true };
-// The least window at 125% zoom, which leaves 608 CSS px: the desktop's own way to the narrow layout.
 const ZOOMED_FRAME: Frame = { ...LEAST_FRAME, zoom: 1.25 };
 
 const FRAMES: Readonly<Record<Target, Readonly<Record<Size, Frame>>>> = {
@@ -105,28 +53,18 @@ const FRAMES: Readonly<Record<Target, Readonly<Record<Size, Frame>>>> = {
 };
 
 const DEFAULT_JOBS = 3;
-// The longest the first page waits on the web client's development server compiling it.
 const FIRST_LOAD_TIMEOUT_MS = 180_000;
-// The longest a window waits to draw its stage, and a step to find its element.
 const READY_TIMEOUT_MS = 30_000;
 const STEP_TIMEOUT_MS = 5_000;
-// Time for the fixture's data to land after the stage draws, and for a step's answer to settle.
 const LOAD_SETTLE_MS = 1_200;
 const STEP_SETTLE_MS = 400;
-// The element every panel window draws once its state has arrived (`packages/panel/src/app.tsx`).
 const STAGE_SELECTOR = ".app-stage";
-// The video player's example draws only this line until its stand-in is recorded, some frames on (`apps/catalog/src/examples/video-player.tsx`).
 const RECORDED_SCRIPT = `!document.querySelector(".catalog-example").textContent.includes("Recording a stand-in video")`;
-// How long a scene waits for its skeletons and spinners to give way before it is shot anyway, with a note.
 const READING_TIMEOUT_MS = 10_000;
-// The desktop's renderer pages, by what their address's path ends with.
 const PANEL_PAGE = "/index.html";
-// How long a sized window's page has to lay out at its new size before it is sized once more, and how many times it is.
 const RESIZE_TIMEOUT_MS = 5_000;
 const RESIZE_TRIES = 2;
-// How long an app told to exit has before it is killed.
 const EXIT_TIMEOUT_MS = 10_000;
-// A desktop picture is flattened onto the panel's frame color, as the app's capture mode paints the frame (`shell.css`), or the page's ground where neither is set.
 const GROUND_SCRIPT = `(() => {
   const probe = document.createElement("div");
   probe.style.cssText = "position:fixed;width:1px;height:1px;background-color:var(--ui-color-sidebar, var(--ui-color-ground, #fff))";
@@ -143,10 +81,8 @@ const GROUND_SCRIPT = `(() => {
   const [red, green, blue] = paint.getImageData(0, 0, 1, 1).data;
   return { red, green, blue };
 })()`;
-// The caret hidden, as Playwright's screenshot hides it, since `capturePage` takes the page as it stands.
 const HIDE_CARET_SCRIPT = `document.head.append(Object.assign(document.createElement("style"), { textContent: "*, *::before, *::after { caret-color: transparent !important; }" }))`;
 
-/** The capture run's zeroing of motion, laid on the root and the body, over whatever the token sheets say. */
 const STILL_MOTION_CSS = `
 :root, body {
   --ui-duration-shape: 0s !important;
@@ -164,7 +100,6 @@ const STILL_MOTION_CSS = `
   --ui-scroll-glide: auto !important;
 }`;
 
-/** A page script that lays the still motion and holds `theme` on the root, whatever the app wears there after. */
 function stillPageScript(theme: Theme): string {
   return `
 (() => {
@@ -196,7 +131,6 @@ interface ShotResult {
   readonly problems: readonly string[];
 }
 
-// Playwright's surface this script touches, typed here because the package is not installed beside it.
 interface PlaywrightLocator {
   first(): PlaywrightLocator;
   getByRole(role: string, options: Record<string, unknown>): PlaywrightLocator;
@@ -231,7 +165,6 @@ interface PlaywrightBrowser {
   newContext(options: Record<string, unknown>): Promise<PlaywrightContext>;
   close(): Promise<void>;
 }
-/** A handle on a value of the main process, a `BrowserWindow`, run on there. */
 interface PlaywrightHandle {
   evaluate<Arg, Result>(
     script: (value: never, arg: Arg) => Result,
@@ -250,23 +183,19 @@ interface Playwright {
   _electron: { launch(options: Record<string, unknown>): Promise<ElectronApplication> };
 }
 
-/** A development server this run stood up: its address and how to stop it. */
 interface Served {
   readonly base: string;
   readonly stop: () => Promise<void>;
 }
 
-/** One line to the terminal. */
 function say(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-/** The first line of what was thrown. */
 function firstLineOf(error: unknown): string {
   return error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error);
 }
 
-/** Playwright, from beside this script or from the global npm folder. */
 function loadPlaywright(): Playwright {
   const require = createRequire(import.meta.url);
   try {
@@ -283,13 +212,11 @@ function loadPlaywright(): Playwright {
   }
 }
 
-/** Vite as the app at `appRoot` resolves it, since this folder is no workspace of its own. */
 async function viteOf(appRoot: string): Promise<typeof import("vite")> {
   const require = createRequire(path.join(appRoot, "package.json"));
   return (await import(require.resolve("vite"))) as typeof import("vite");
 }
 
-/** The web client's development server, the one build that reads a fixture profile off the address. */
 async function serveWeb(): Promise<Served> {
   const { createServer } = await viteOf(WEB_ROOT);
   const server = await createServer({
@@ -304,7 +231,6 @@ async function serveWeb(): Promise<Served> {
   return { base, stop: () => server.close() };
 }
 
-/** The catalog, built into `outDir` and served. */
 async function serveCatalog(outDir: string): Promise<Served> {
   const { build, preview } = await viteOf(CATALOG_ROOT);
   await build({ root: CATALOG_ROOT, logLevel: "warn", build: { outDir, emptyOutDir: true } });
@@ -319,7 +245,6 @@ async function serveCatalog(outDir: string): Promise<Served> {
   return { base, stop: () => server.close() };
 }
 
-/** The examples the catalog's index lists, in its order, as scenes of one place. */
 async function catalogScenes(browser: PlaywrightBrowser, base: string): Promise<readonly Scene[]> {
   const context = await browser.newContext({ viewport: WIDE_FRAME });
   const page = await context.newPage();
@@ -334,7 +259,6 @@ async function catalogScenes(browser: PlaywrightBrowser, base: string): Promise<
   return entries.map(({ id, title }) => ({ id, title, place: "Catalog", profile: "" }));
 }
 
-/** The element a step names, by its whole name where it asks, within its landmark where it names one. */
 function targetOf(
   page: PlaywrightPage,
   target: {
@@ -351,7 +275,6 @@ function targetOf(
   return scope.getByRole(target.role, { name: target.name, exact: target.exact === true }).first();
 }
 
-/** Runs `step` on `page`, `client`'s, answering what went wrong, or nothing. */
 async function runStep(
   page: PlaywrightPage,
   client: Client,
@@ -391,7 +314,6 @@ async function runStep(
   }
 }
 
-/** Floats the sidebar open where the window has folded it away, which its toggle offers as "Show sidebar" and only then; a pinned sidebar offers "Hide sidebar", so nothing is pressed. */
 async function showSidebar(
   page: PlaywrightPage,
   client: Client,
@@ -407,7 +329,6 @@ async function showSidebar(
   if (problem !== undefined) problems.push(problem);
 }
 
-/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. A scene that steps into the sidebar has it shown first, except in the phone's layout, whose drawer its own steps open. */
 async function stageScene(
   page: PlaywrightPage,
   client: Client,
@@ -430,7 +351,6 @@ async function stageScene(
   }
 }
 
-/** The desktop page that draws the panel's window, waiting for it to open. */
 async function desktopPage(app: ElectronApplication): Promise<PlaywrightPage> {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (;;) {
@@ -442,13 +362,11 @@ async function desktopPage(app: ElectronApplication): Promise<PlaywrightPage> {
   }
 }
 
-/** Options of a desktop launch: the Electron binary, and the worker it runs as. */
 interface DesktopLaunch {
   readonly electron: string;
   readonly worker: number;
 }
 
-/** Starts writing down, in the main process, each renderer or helper process of the app that dies, for `deathsOf` to read. */
 async function watchDeaths(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ app: electronApp }: never) => {
     const watched = electronApp as {
@@ -475,7 +393,6 @@ async function watchDeaths(app: ElectronApplication): Promise<void> {
   }, undefined);
 }
 
-/** The deaths `watchDeaths` wrote down, or none where the app no longer answers. */
 async function deathsOf(app: ElectronApplication): Promise<readonly string[]> {
   const deaths = await app
     .evaluate(() => (globalThis as { polishDeaths?: string[] }).polishDeaths ?? [], undefined)
@@ -483,7 +400,6 @@ async function deathsOf(app: ElectronApplication): Promise<readonly string[]> {
   return deaths as string[];
 }
 
-/** Whether `child` has exited, or does within the exit timeout. */
 async function exitsInTime(child: ChildProcess): Promise<boolean> {
   if (child.exitCode !== null || child.signalCode !== null) return true;
   return once(child, "exit", { signal: AbortSignal.timeout(EXIT_TIMEOUT_MS) }).then(
@@ -492,12 +408,6 @@ async function exitsInTime(child: ChildProcess): Promise<boolean> {
   );
 }
 
-/**
- * Ends the app at once, past its quit guard: one that asks "Quit Vespin?"
- * before a quit has no one there to answer it, so Playwright's own close,
- * a quit, would wait on it for ever. One that does not exit in time is
- * killed. Answers whether the process is gone.
- */
 async function endApp(app: ElectronApplication): Promise<boolean> {
   const child = app.process();
   const exited = exitsInTime(child);
@@ -512,11 +422,6 @@ async function endApp(app: ElectronApplication): Promise<boolean> {
   return killed;
 }
 
-/**
- * Where a development instance keeps its state: Electron's appData folder,
- * under the name `resolveAppName` gives it (`packages/host/src/app-identity.ts`),
- * spelled here because this plain script imports no workspace package.
- */
 function stateRootOf(instance: string): string {
   const appData =
     process.platform === "darwin"
@@ -525,7 +430,6 @@ function stateRootOf(instance: string): string {
   return path.join(appData, `Vespin Dev ${instance}`);
 }
 
-/** Sizes `window` to `frame` and zooms its page, then waits for the page to lay out at it, sizing it once more where it never did; answers what the page stood at where it still did not. */
 async function sizeWindow(
   window: PlaywrightHandle,
   page: PlaywrightPage,
@@ -551,14 +455,12 @@ async function sizeWindow(
   return unsizedNote(page, frame);
 }
 
-/** What the page lays out at, where that is not `frame`'s size. */
 async function unsizedNote(page: PlaywrightPage, frame: Frame): Promise<string | undefined> {
   if (await page.evaluate<boolean>(sizedScript(frame))) return undefined;
   const stood = await page.evaluate<string>('innerWidth + "×" + innerHeight');
   return `the page laid out at ${stood} CSS px, not ${frame.width}×${frame.height} at ${frame.zoom * 100}%`;
 }
 
-/** One desktop picture: a launch on the scene's profile, sized, themed and staged, then the whole window taken and flattened. */
 async function shootDesktop(
   playwright: Playwright,
   launch: DesktopLaunch,
@@ -568,7 +470,6 @@ async function shootDesktop(
 ): Promise<void> {
   const frame = FRAMES[shot.target][shot.size];
   const linux = process.platform === "linux";
-  // A fresh instance each launch, since the last one's state folder was left as an exit leaves it.
   const instance = `polish-${launch.worker}-${randomUUID().slice(0, 8)}`;
   const stateRoot = stateRootOf(instance);
   const forget = () => rmSync(stateRoot, { recursive: true, force: true });
@@ -577,7 +478,6 @@ async function shootDesktop(
       executablePath: launch.electron,
       args: [
         DESKTOP_ROOT,
-        // Note that Linux runs as an unprivileged user under xvfb, with no GPU and no setuid sandbox helper.
         ...(linux ? ["--no-sandbox", "--disable-gpu"] : []),
         "--fixture",
         "smoke",
@@ -587,7 +487,6 @@ async function shootDesktop(
       env: { ...process.env, APP_INSTANCE: instance },
       timeout: READY_TIMEOUT_MS,
     })
-    // Note that Playwright kills a launch it gave up on, so the folder that launch may have made goes with it.
     .catch((error: unknown) => {
       forget();
       throw error;
@@ -597,21 +496,16 @@ async function shootDesktop(
     const page = await desktopPage(app);
     page.on("pageerror", (error) => problems.push(error.message));
     page.on("crash", () => problems.push("the page crashed"));
-    // The window itself, as the page is drawn in it, rather than one looked up by its address.
     const window = await app.browserWindow(page);
     await app.evaluate(({ nativeTheme }: never, theme: Theme) => {
       (nativeTheme as { themeSource: string }).themeSource = theme;
     }, shot.theme);
     await page.emulateMedia({ colorScheme: shot.theme, reducedMotion: "reduce" });
     await page.evaluate(stillPageScript(shot.theme));
-    // The window takes the frame once its stage has drawn, since the app applies its stored zoom as it
-    // first pushes its state (`zoom.ts`), and so would undo one laid sooner.
     await page.waitForSelector(STAGE_SELECTOR, { timeout: READY_TIMEOUT_MS });
     const unsized = await sizeWindow(window, page, frame);
     if (unsized !== undefined) problems.push(unsized);
-    // Note that the zoomed size's 608 CSS px is under the panel's narrow line (`shell-room.ts`), so it draws the phone's layout.
     await stageScene(page, CLIENT.DESKTOP, shot.scene, shot.size === SIZE.NARROW, problems);
-    // A scene's steps can stand long enough for something to size the window again, so it is looked at once more.
     const resized = unsized !== undefined ? undefined : await unsizedNote(page, frame);
     if (resized !== undefined) problems.push(`when shot, ${resized}`);
     await page.evaluate(HIDE_CARET_SCRIPT);
@@ -625,7 +519,6 @@ async function shootDesktop(
           ): Promise<{ toPNG(): { toString(encoding: string): string } }>;
         };
       };
-      // As the app's own capture mode takes it (`register-desktop-ipc.ts`): the whole page, at the display's scale.
       const image = await captured.webContents.capturePage(undefined, {
         stayHidden: true,
         stayAwake: true,
@@ -635,13 +528,11 @@ async function shootDesktop(
     writeFileSync(file, flattenPng(Buffer.from(png, "base64"), ground));
   } finally {
     problems.push(...(await deathsOf(app)));
-    // The folder is deleted only once the process that held it is gone.
     if (await endApp(app)) forget();
     else problems.push(`the app would not exit, so ${stateRoot} is left behind`);
   }
 }
 
-/** One desktop picture, launched once more where the first launch fails outright, as a launch can time out on a loaded machine; the first failure is written beside the picture. */
 async function shootDesktopOnceMore(
   playwright: Playwright,
   launch: DesktopLaunch,
@@ -660,12 +551,10 @@ async function shootDesktopOnceMore(
   }
 }
 
-/** The web client's address for `scene`. */
 function webAddress(base: string, scene: Scene): string {
   return new URL(`app.html?${new URLSearchParams({ fixture: scene.profile })}`, base).toString();
 }
 
-/** The catalog's address for one example, as `apps/catalog/src/catalog.tsx` reads it. */
 function catalogAddress(base: string, shot: Shot): string {
   const params = new URLSearchParams({
     example: shot.scene.id,
@@ -677,7 +566,6 @@ function catalogAddress(base: string, shot: Shot): string {
   return new URL(`?${params}`, base).toString();
 }
 
-/** One browser picture, the web client's or the catalog's, on a context of its own. */
 async function shootBrowser(
   browser: PlaywrightBrowser,
   base: string,
@@ -687,16 +575,11 @@ async function shootBrowser(
   firstLoad: boolean,
 ): Promise<void> {
   const frame = FRAMES[shot.target][shot.size];
-  // The catalog frames a phone itself on a wide page, so only the web client is shot on one.
   const phone = frame.phone && shot.target === TARGET.WEB;
   const viewport = frame.phone && !phone ? WIDE_FRAME : frame;
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
-    // A finger works either phone, as the catalog's own shoot gives its phone frame.
     ...(frame.phone ? { hasTouch: true } : {}),
-    // Note that the phone is shot at one device pixel per CSS pixel, because an emulated scale
-    // gives the page a devicePixelRatio its device-pixel resize boxes do not share, and the
-    // terminal's WebGL screen, which sizes its canvas from that box, then draws nothing.
     ...(phone ? { isMobile: true } : {}),
     colorScheme: shot.theme,
     reducedMotion: "reduce",
@@ -732,12 +615,10 @@ async function shootBrowser(
   }
 }
 
-/** A picture's path under the out folder. */
 function fileOf(shot: Shot): string {
   return path.join(shot.target, shot.scene.id, `${shot.theme}.${shot.size}.png`);
 }
 
-/** What one worker is handed: what it drives each target with. */
 interface Drivers {
   readonly playwright: Playwright;
   readonly browser: PlaywrightBrowser | undefined;
@@ -745,7 +626,6 @@ interface Drivers {
   readonly bases: Partial<Record<Target, string>>;
 }
 
-/** Takes the next shot off `queue` until none is left. */
 async function work(
   drivers: Drivers,
   worker: number,
@@ -778,12 +658,10 @@ async function work(
   }
 }
 
-/** Escapes text for the contact sheet. */
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-/** One picture on the sheet: the picture, or why there is none, and its problems under it. */
 function figure(result: ShotResult | undefined, theme: Theme): string {
   if (result === undefined)
     return `<figure class="none"><figcaption>${theme}: not shot</figcaption></figure>`;
@@ -794,7 +672,6 @@ function figure(result: ShotResult | undefined, theme: Theme): string {
   return `<figure>${shot}<figcaption>${theme}${notes === "" ? "" : `<ul>${notes}</ul>`}</figcaption></figure>`;
 }
 
-/** The contact sheet: a section per place, a block per scene, a row per client and size, light beside dark. */
 function contactSheet(results: readonly ShotResult[], skipped: readonly Scene[]): string {
   const scenes = [...new Set(results.map((result) => result.shot.scene))];
   const places = [...PLACES, "Catalog"].filter((place) =>
@@ -853,7 +730,6 @@ figcaption ul{color:#a33;margin:2px 0;padding-left:16px}.missing{padding:24px;bo
 <h1>Polish capture</h1><p class="note">${results.length} pictures of ${scenes.length} scenes; ${flagged} with a note.</p>${flattenedNote}${skippedNote}<nav>${toc}</nav>${sections.join("")}`;
 }
 
-/** The targets the flags ask for, every one where none is named. */
 function wantedTargets(named: readonly string[] | undefined): readonly Target[] {
   if (named === undefined) return TARGETS;
   const unknown = named.filter((name) => !TARGETS.some((target) => target === name));
@@ -862,7 +738,6 @@ function wantedTargets(named: readonly string[] | undefined): readonly Target[] 
   return TARGETS.filter((target) => named.includes(target));
 }
 
-/** A scene's shots on each of `targets`, in sheet order. */
 function shotsOf(
   scene: Scene,
   targets: readonly Target[],
@@ -874,12 +749,10 @@ function shotsOf(
   );
 }
 
-/** The targets of `wanted` that draw an app scene: its clients, both where it names none. */
 function clientsOf(scene: Scene, wanted: readonly Target[]): readonly Client[] {
   return wanted.filter((target) => target !== TARGET.CATALOG && drawsOn(scene, target));
 }
 
-/** The clients among `wanted` that a scene naming its clients does not draw on. */
 function clientsNotDrawing(scene: Scene, wanted: readonly Target[]): readonly Client[] {
   if (scene.clients === undefined) return [];
   return wanted.filter((target) => target !== TARGET.CATALOG && !drawsOn(scene, target));
@@ -912,12 +785,10 @@ async function main(): Promise<void> {
   const sizes = SIZES.filter((size) => values.size === undefined || values.size === size);
   const wanted = values.scene;
   const named = SCENES.filter((scene) => wanted === undefined || wanted.includes(scene.id));
-  // The video tile and a Page tab draw only on the Mac.
   const onMac = process.platform === "darwin";
   const skipped = onMac ? [] : named.filter((scene) => scene.macOnly === true);
   for (const scene of skipped) say(`skipped ${scene.id} (${scene.title}): drawn only on the Mac`);
   const scenes = named.filter((scene) => !skipped.includes(scene));
-  // A scene that names its clients is not drawn by the others, so a run that asks for one says so.
   for (const scene of scenes)
     for (const target of clientsNotDrawing(scene, targets))
       say(
@@ -927,7 +798,6 @@ async function main(): Promise<void> {
     throw new Error("The desktop is driven through --electron <path to the Electron binary>");
   }
 
-  // Playwright is looked for first, so a machine without it fails before the long builds.
   const playwright = loadPlaywright();
   const catalogBuild = mkdtempSync(path.join(tmpdir(), "polish-catalog-"));
   const served: Served[] = [];
@@ -959,7 +829,6 @@ async function main(): Promise<void> {
     const order = [...queue];
     const results: ShotResult[] = [];
     const drivers: Drivers = { playwright, browser, electron: values.electron, bases };
-    // The web client's first page compiles the whole panel, so it is loaded alone before the workers fan out.
     const first = queue.findIndex((shot) => shot.target === TARGET.WEB);
     if (first >= 0) await work(drivers, 0, outDir, queue.splice(first, 1), results);
     await Promise.all(
@@ -967,7 +836,6 @@ async function main(): Promise<void> {
         work(drivers, worker + 1, outDir, queue, results),
       ),
     );
-    // The workers finish out of order, so the sheet is laid in the order queued.
     const queued = order.flatMap((shot) => results.filter((result) => result.shot === shot));
     writeFileSync(path.join(outDir, "index.html"), contactSheet(queued, skipped));
     const flagged = results.filter((result) => result.problems.length > 0).length;

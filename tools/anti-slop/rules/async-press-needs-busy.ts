@@ -17,20 +17,10 @@ import { repositoryPathOf } from "../shared/effect-edges.ts";
 import { attributeName, calleeName, isFunction, isNode } from "../shared/jsx.ts";
 import { JSX_SOURCE } from "../shared/press-guard.ts";
 
-/** How many names a handler is followed through before the rule gives up on it. */
 const FOLLOW_DEPTH = 4;
 
 type Node = ESTree.Node;
 
-/**
- * The rule: a `@repo/ui` button whose press is async, or hands back a
- * promise (`pressAct`, `useAct().press`, an awaited act, a `.then`), passes
- * `busy`, so a slow answer is seen working in the one busy shape every kind of
- * button takes. A handler is read where it is written, or by the name it is
- * held under in the same file; a press the rule cannot read (a prop, a
- * member) is no place. A spread may carry `busy`, so it is allowed. Files
- * that still hold such a button stand in `busy-baseline.json`, which only shrinks.
- */
 export const asyncPressNeedsBusyRule = defineRule({
   meta: {
     type: "problem",
@@ -52,17 +42,9 @@ export const asyncPressNeedsBusyRule = defineRule({
     let buttons: ESTree.JSXOpeningElement[] = [];
 
     function hold(name: string, value: Node): void {
-      // Note that a name declared twice is no one function, so it is left unread.
       held.set(name, held.has(name) ? null : value);
     }
 
-    /**
-     * Whether `node`, a handler's body, awaits something, starts an act,
-     * chains a promise, or calls a function of this file that does, outside
-     * any function it only defines: what a press does that takes time. Note
-     * that a `void`ed act counts, since it is the unawaited promise a person
-     * is left waiting on.
-     */
     function startsWait(node: Node, depth: number): boolean {
       if (node.type === "AwaitExpression") return true;
       if (node.type === "CallExpression") {
@@ -80,7 +62,6 @@ export const asyncPressNeedsBusyRule = defineRule({
       return false;
     }
 
-    /** Whether the press `node` names or writes is async, following a name held in this file. */
     function isAsync(node: Node | null | undefined, depth: number): boolean {
       if (node === null || node === undefined) return false;
       switch (node.type) {
@@ -97,7 +78,6 @@ export const asyncPressNeedsBusyRule = defineRule({
         case "Identifier":
           return depth < FOLLOW_DEPTH && isAsync(held.get(node.name), depth + 1);
         case "CallExpression": {
-          // A handler hook hands back the function it was given.
           const name = calleeName(node.callee);
           return name !== undefined && HANDLER_HOOKS.has(name) && isAsync(node.arguments[0], depth);
         }
@@ -107,7 +87,6 @@ export const asyncPressNeedsBusyRule = defineRule({
     }
 
     function hasBusy(element: ESTree.JSXOpeningElement): boolean {
-      // Note that a spread may carry `busy`, and is invisible here, so it counts as passing it.
       return element.attributes.some(
         (attribute) =>
           attribute.type === "JSXSpreadAttribute" || attributeName(attribute) === BUSY_PROP,
@@ -165,7 +144,6 @@ export const asyncPressNeedsBusyRule = defineRule({
             });
             continue;
           }
-          // Note that the buttons past the baseline's count are the ones reported, since the ones before it were already there.
           for (const button of found.slice(allowed ?? 0)) {
             const tag = button.name.type === "JSXIdentifier" ? button.name.name : "Button";
             context.report({ node: button.name, messageId: "noBusy", data: { tag } });

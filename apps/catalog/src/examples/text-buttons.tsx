@@ -10,14 +10,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * text-buttons.tsx -- every TextButton tone among the words it stands in: a
- * quiet name and count, an accent toggle that shows its replies, and long
- * words cut short in a narrow column, on one line or, as a card's name, on
- * two.
- */
-
-/** Does nothing, for a press the catalog only draws. */
 function pressed(): void {}
 
 function RepliesToggle(): React.JSX.Element {

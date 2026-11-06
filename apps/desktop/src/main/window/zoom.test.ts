@@ -5,13 +5,11 @@ import type { Point } from "electron";
 import { describe } from "vitest";
 import { applyZoomPreference, PanelWindows, type ZoomedWindow, zoomSteer } from "./zoom";
 
-/** What a panel was told: the zoom its page was given, and where its lights were moved if it has any. */
 interface Seen {
   zoom?: number;
   lights?: Point | null;
 }
 
-/** A panel that keeps what it was told, with traffic lights as on a Mac or none as elsewhere. */
 function panel(withLights: boolean) {
   const seen: Seen = {};
   const window: ZoomedWindow = {
@@ -54,7 +52,6 @@ describe("applying the stored zoom to the panels", () => {
         );
       yield* apply(125);
       assert.equal(mac.seen.zoom, 1.25);
-      // A push that leaves the size where it was tells no panel anything.
       delete mac.seen.zoom;
       delete mac.seen.lights;
       yield* apply(125);

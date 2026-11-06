@@ -1,10 +1,3 @@
-/**
- * verdict.test.ts -- which of P00's conditions hold for what a run observed: a run that did everything passes both checks, and each way the plan or the token could fail fails the condition that names it.
- *
- * The streams are built in the SDK's message shapes (`@anthropic-ai/claude-agent-sdk`
- * 0.3.304's `SDKMessage`), the fields the verdict reads and a few it does not.
- */
-
 import type { WireValue } from "@repo/wire";
 import { describe, expect, it } from "vitest";
 import {
@@ -33,7 +26,6 @@ const PRIVATE_REPORT = {
   cap_eff: NO_CAPABILITIES,
 };
 
-/** A Terminal's shell with its capabilities dropped, which reads nothing of the agent's. */
 const TERMINAL_CAPS_DROPPED = {
   user: "vercel-sandbox",
   ...PRIVATE_REPORT,
@@ -41,7 +33,6 @@ const TERMINAL_CAPS_DROPPED = {
   anthropic_http: "401",
 };
 
-/** A command the agent runs, which inherits the CLI's placeholder and reads the CLI's environment, but finds no token. */
 const AGENT_REPORT = {
   user: "agent",
   ...PRIVATE_REPORT,

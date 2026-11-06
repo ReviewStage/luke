@@ -12,12 +12,6 @@ import { useEffect, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * file-picker.tsx -- the system's file picker opened from a button and from an icon button, one
- * taking many images, one taking a single file, each saying what it was handed; and a photo
- * picked for something named, as a new workspace's is, before a name is typed and after.
- */
-
 function Picks(): React.JSX.Element {
   const [said, setSaid] = useState("Nothing picked yet");
   const note = (files: readonly File[]) =>
@@ -43,7 +37,6 @@ function Photo({ name }: { name: string }): React.JSX.Element {
       if (picked !== undefined) setPhoto(URL.createObjectURL(picked));
     },
   });
-  // Note that a picture replaced or left behind lets its blob go, since the page holds it until then.
   useEffect(
     () => () => {
       if (photo !== undefined) URL.revokeObjectURL(photo);

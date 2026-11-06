@@ -2,18 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 
 import { loadModule, type RepositoryGuard, readText } from "./guard.ts";
 
-/**
- * probe-fixtures.ts -- the committed recordings of Claude Code and Codex pass their own leak guards, whoever edited them last.
- *
- * Claude Code's probe scrubs a live run before it writes a fixture and
- * refuses to write one its leak guard still names something in, and Codex's
- * app-server recording is held to the leak guard the runner's tests keep
- * beside it (`packages/agent-runner/src/testing/sanitize.ts`). A fixture
- * edited by hand, or recorded by an older probe, skips that door; this is
- * the only scan that reads what is committed (root AGENTS.md's "Never": no
- * credential in a fixture).
- */
-
 const CLAUDE_PROBE = "tools/claude-code-probe";
 const CODEX_SANITIZER = "packages/agent-runner/src/testing/sanitize.ts";
 const CLAUDE_FIXTURES = [`${CLAUDE_PROBE}/fixtures/claude-code-stream.jsonl`];
@@ -22,7 +10,6 @@ const CODEX_FIXTURES = ["packages/agent-runner/src/testing/app-server.jsonl"];
 type FindLeaks = (text: string, secrets: readonly never[]) => readonly string[];
 type Scrub = (value: unknown) => unknown;
 
-/** A fixture's values: each line of a JSON-lines file, or the one value of a JSON file. */
 export function fixtureValues(file: string, text: string): readonly unknown[] {
   if (!file.endsWith(".jsonl")) return [JSON.parse(text)];
   return text
@@ -31,7 +18,6 @@ export function fixtureValues(file: string, text: string): readonly unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
-/** What a leak guard names in each fixture, and each value scrubbing would still change. */
 export function fixtureProblems(
   fixtures: readonly { readonly file: string; readonly text: string }[],
   findLeaks: FindLeaks,

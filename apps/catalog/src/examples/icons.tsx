@@ -4,15 +4,6 @@ import { GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * icons.tsx -- every concept the app draws as an icon, each with the one
- * glyph that stands for it, and the four seats an icon is drawn at: 12 beside
- * a caption's words, 16 in a button or a menu row, 20 as a row's lead, and 40
- * over an empty state; and every glyph the barrel exports under its own name,
- * so a glyph added to `@repo/ui` is drawn here without a line of its own.
- */
-
-/** Every glyph the barrel exports, which it names `…Icon`, by that name. */
 const GLYPH_EXPORTS = Object.entries(ui)
   .filter(([name, value]) => name.endsWith("Icon") && typeof value === "function")
   .map(([name, value]) => [name, value as () => React.JSX.Element] as const)

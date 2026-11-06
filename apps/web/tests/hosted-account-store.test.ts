@@ -18,19 +18,6 @@ import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 
-/**
- * The account group's own reads and writes against a real Postgres dialect.
- * The delete is the one action root AGENTS.md treats as unrecoverable, so
- * what is pinned here is the unit as well as the answer: the dependent rows
- * of exactly the named account go with it, another account's stand, and a
- * rewritten snapshot replaces what stood whole rather than merging into it.
- * The coding agents' default is the snapshot's other part: written on its
- * own or beside the preferences, each part replacing only itself, and the
- * catalog's default where none was ever chosen.
- *
- * Synthetic accounts throughout.
- */
-
 const SONNET_AT_MAX = { model: "anthropic/claude-sonnet-5.5", effort: "max" } as const;
 
 const openUser = Effect.gen(function* () {
@@ -40,11 +27,6 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/**
- * An organization with its first member as owner, as the plugin writes one,
- * and, for the account's first workspace, the row naming it the account's,
- * as `ensurePersonalWorkspace` writes it.
- */
 const openWorkspace = (input: { name: string; slug: string; owner: string; first: boolean }) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -68,7 +50,6 @@ const openWorkspace = (input: { name: string; slug: string; owner: string; first
     return id;
   });
 
-/** The account's own rows in the table one owning column belongs to. */
 const rowsOwnedBy = (column: PgColumn, userId: string) =>
   Effect.map(
     Database.use((db) =>
@@ -77,7 +58,6 @@ const rowsOwnedBy = (column: PgColumn, userId: string) =>
     (rows) => rows[0]?.rows ?? 0,
   );
 
-/** How many of the account's rows stand in each table the delete reaches. */
 const countRows = (userId: string) =>
   Effect.gen(function* () {
     return {
@@ -90,7 +70,6 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      // Note that a write answers the transaction it committed in beside the snapshot, which a read carries none of.
       const { txid: _committedIn, ...written } = yield* writeAccountPreferences(userId, {
         preferences: {},
       });
@@ -108,7 +87,6 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
       const chosen = yield* writeAccountPreferences(userId, { agent: SONNET_AT_MAX });
       assert.deepEqual(chosen.agent, SONNET_AT_MAX);
       assert.deepEqual(chosen.preferences, {});
-      // No preferences were ever written, so there is no snapshot for a Mac to take.
       assert.equal(chosen.updatedAt, undefined);
       assert.equal((yield* readAccountPreferences(userId))?.updatedAt, undefined);
 
@@ -121,7 +99,6 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
       yield* writeAccountPreferences(userId, { agent: AGENT_DEFAULT_CHOICE });
       const afterChoice = yield* readAccountPreferences(userId);
       assert.deepEqual(afterChoice?.agent, AGENT_DEFAULT_CHOICE);
-      // The instant is the preferences part's own, so a choice leaves it where it stood.
       assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
     }),

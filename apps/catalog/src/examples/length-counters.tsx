@@ -3,13 +3,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * length-counters.tsx -- a field's counter standing hidden while its words
- * are well short of the limit, and drawn at four fifths of it and at the
- * limit; and one a field drives, ticking as its words change.
- */
-
-/** A field with a limit of 24, its counter on the label's line, as a caller draws it. */
 function LimitedField(): React.JSX.Element {
   const [value, setValue] = useState("A name that is nearly too");
   return (

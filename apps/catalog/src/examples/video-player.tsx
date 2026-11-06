@@ -1,11 +1,3 @@
-/**
- * video-player.tsx -- a recording played in place of a picture under our
- * own bar, with its Expand, and as the file viewer plays it, both on a
- * short WebM the page records from a canvas as it opens, since the catalog
- * fetches nothing. While it records it says so, and where the browser can
- * record no WebM, as a test's window cannot, it says that instead.
- */
-
 import {
   GAP,
   Stack,
@@ -19,25 +11,20 @@ import { useEffect, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/** The stand-in recording's size, a screen's shape, and how many frames it runs. */
 const RECORDING = { WIDTH: 640, HEIGHT: 400, FRAMES: 90 } as const;
 
-/** Where the stand-in stands while there is no recording yet. */
 const STAND_IN = { RECORDING: "recording", UNSUPPORTED: "unsupported" } as const;
 
 type StandIn = (typeof STAND_IN)[keyof typeof STAND_IN] | { readonly url: string };
 
-/** What the example says where it has no recording to play. */
 const STAND_IN_WORDS = {
   [STAND_IN.RECORDING]: "Recording a stand-in video…",
   [STAND_IN.UNSUPPORTED]:
     "This browser cannot record a WebM, so there is no stand-in video to play.",
 } as const satisfies Record<(typeof STAND_IN)[keyof typeof STAND_IN], string>;
 
-/** The stand-in's colors, a page with a button sliding across it. */
 const INK = { PAGE: "#f5f5f7", ROW: "#e3e3e8", BUTTON: "#3d5ac8" } as const;
 
-/** Draws the stand-in's frame `at` on `pen`: two rows and a button partway across. */
 function drawFrame(pen: CanvasRenderingContext2D, at: number): void {
   pen.fillStyle = INK.PAGE;
   pen.fillRect(0, 0, RECORDING.WIDTH, RECORDING.HEIGHT);
@@ -48,10 +35,6 @@ function drawFrame(pen: CanvasRenderingContext2D, at: number): void {
   pen.fillRect(40 + at * 5, 220, 110, 34);
 }
 
-/**
- * Records the stand-in from a canvas, a frame each animation frame, and
- * hands it to `done` as a `data:` URL; answers how to stop early.
- */
 function recordStandIn(done: (url: string) => void): () => void {
   const canvas = document.createElement("canvas");
   canvas.width = RECORDING.WIDTH;
@@ -86,12 +69,10 @@ function recordStandIn(done: (url: string) => void): () => void {
   };
 }
 
-/** Whether this browser can record a WebM from a canvas. */
 function canRecord(): boolean {
   return typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm");
 }
 
-/** The stand-in recording once made, that it is being made, or that this browser cannot make one. */
 export function useStandIn(): StandIn {
   const [standIn, setStandIn] = useState<StandIn>(() =>
     canRecord() ? STAND_IN.RECORDING : STAND_IN.UNSUPPORTED,

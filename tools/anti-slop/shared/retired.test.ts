@@ -97,7 +97,6 @@ describe("the suppression check", () => {
     expect(namesRetired('import { LucideRetiredExample } from "@repo/ui/icons";')).toBe(true);
     expect(namesRetired("const a = G.RETIRED_EXAMPLE;")).toBe(true);
     expect(namesRetired('import { BotIcon } from "@repo/ui/icons";')).toBe(false);
-    // An import narrowed to names is spelled by them, not by its module, which every file spells.
     expect(namesRetired('import { BackIcon } from "@repo/ui";')).toBe(true);
     expect(namesRetired('import { Button } from "@repo/ui";')).toBe(false);
   });

@@ -25,18 +25,6 @@ app_wait_for_exit() {
     return 1
 }
 
-# Electron writes its single-instance lock into the user-data directory and names
-# the holder `<hostname>-<pid>`, so the process that blocks a launch identifies
-# itself. That is the process to replace even when it belongs to another
-# worktree: the lock is keyed on the app name, which every checkout shares.
-#
-# The app chooses its own name at launch — the product name for a Developer ID
-# release, "<product name> Dev" for an unpackaged run, and "<product name> Test"
-# for an ad-hoc package, so differently signed builds never share a Keychain
-# entry (see packages/host/src/app-identity.ts). Each name keeps a lock of its own,
-# so a caller replacing "the running instance" asks about all three. The product
-# name is still derived the way Electron derives its default, from the manifest:
-# `productName` when it sets one, the package name otherwise.
 app_product_name() {
     if ! (cd "$APP_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
@@ -51,11 +39,6 @@ app_app_names() {
     printf '%s Dev\n%s Test\n%s\n' "$app_name" "$app_name" "$app_name"
 }
 
-# A named development instance (`run.sh --instance <name>`) answers to
-# "<product name> Dev <name>", so it has a state directory, a lock, and a
-# Keychain entry of its own and runs beside the plain development instance.
-# The app refuses a name outside this pattern and runs as the plain instance
-# instead, so the script holds names to it first.
 APP_INSTANCE_NAME_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'
 APP_INSTANCE_NAME_MAX_LENGTH=48
 
@@ -69,8 +52,6 @@ app_instance_app_name() {
     printf '%s Dev %s\n' "$app_name" "$1"
 }
 
-# Folds any text (a branch, a host) into an instance name: lower case, every
-# run of other characters one hyphen, cut to length.
 app_instance_slug() {
     local slug
     slug=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
@@ -78,13 +59,6 @@ app_instance_slug() {
     printf '%s\n' "${slug%-}"
 }
 
-# The instance a `--preview` run gets when it names none: one per Preview, so
-# each keeps its own sign-in, since a Preview has its own database and auth
-# secret, and a Preview run never touches the plain instance's. A Preview the
-# script looked up is keyed to the branch it was built from (passed as the
-# second argument), which keeps one profile across that branch's pushes; an
-# address given by hand, or a lookup from a detached head, is keyed to the
-# address's host.
 app_preview_instance() {
     local address=$1 branch=${2:-}
     local key=$branch
@@ -101,15 +75,11 @@ app_app_lock_holder_pid() {
 
     local lock_target
     lock_target=$(readlink "$HOME/Library/Application Support/$app_name/SingletonLock" 2>/dev/null || true)
-    # Hostnames contain hyphens, so the pid is what follows the last one.
     local pid=${lock_target##*-}
     if [[ ! $pid =~ ^[0-9]+$ ]] || ! kill -0 "$pid" 2>/dev/null; then
-        # No lock, or a stale one whose holder is gone: Electron reclaims it.
         return 0
     fi
 
-    # A stale lock can name a pid that has since been reused, so a holder that is
-    # not an Electron app is reported rather than signaled.
     local command_line
     command_line=$(ps -o command= -p "$pid" 2>/dev/null || true)
     case $command_line in
@@ -123,12 +93,6 @@ app_app_lock_holder_pid() {
     esac
 }
 
-# Stopping a holder has to wait for it to exit, because the lock is released
-# as that process goes away rather than when it is signaled. Development, test,
-# and release instances hold separate locks, so all are stopped: a launch means
-# "this build owns the screen now", whichever build was there before. A named
-# instance, given as the one argument, stops only its own earlier run, and
-# the plain launch never stops a named one.
 app_stop_running_app() {
     local instance=${1:-} app_names
     if [[ -n $instance ]]; then
@@ -144,7 +108,6 @@ app_stop_running_app() {
             continue
         fi
 
-        # The path tells you which checkout the older instance came from.
         printf 'Stopping the running %s instance (pid %s: %s)\n' "$app_name" "$pid" "$(ps -o comm= -p "$pid")"
         kill "$pid" 2>/dev/null || true
         if app_wait_for_exit 5 "$pid"; then
@@ -177,10 +140,6 @@ app_require_node() {
     fi
 }
 
-# A script that launches Electron runs bootstrap first, every time. Note that
-# we do not guard on the Electron binary, because it survives a pull that
-# changes the lockfile and the launch then runs on stale dependencies; a
-# frozen install with nothing to change is quick.
 app_ensure_dependencies() {
     "$APP_REPO_ROOT/scripts/bootstrap.sh"
 }

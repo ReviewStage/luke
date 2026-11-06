@@ -15,17 +15,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * toolbars.tsx -- a workspace's bar with its title and actions; one whose
- * title opens what it names, filled while that stands; one led by a
- * way back, a tag after its title; one led by a control at the column's own
- * edge; a narrow bar, whose title fades where cut rather than wrapping; a
- * bar told to fold, its controls' glyphs alone; a tab strip's bar in a narrow
- * room, wrapping its strip to a row of its own; and a place that is not found
- * keeping its bar.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 function NewAutomation(): React.JSX.Element {
@@ -36,7 +25,6 @@ function NewAutomation(): React.JSX.Element {
   );
 }
 
-/** A task's bar whose name opens its details, open while pressed. */
 function TitlePressBar(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return (

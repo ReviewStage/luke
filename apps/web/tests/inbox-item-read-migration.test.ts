@@ -11,19 +11,8 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * inbox-item-read-migration.test.ts -- the migration that keeps a member's read state on an inbox item, over items that stood before it.
- *
- * Over a database migrated up to it, holding an item an agent posted: once
- * it runs, that item reads as read for its starter and a teammate alike,
- * with no marker of theirs written, while an item posted after it reads
- * unread for both; and a second run changes nothing. Synthetic accounts
- * throughout.
- */
-
 const MIGRATION = "20261018153718_inbox_item_read";
 
-/** A migrations folder holding every migration named before this one, and none after. */
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
@@ -37,7 +26,6 @@ const foldersBefore = Effect.gen(function* () {
   return folder;
 });
 
-/** An account's row, in raw SQL naming only the columns it needs, since Drizzle's insert names every column the schema declares today. */
 const openUser = (id: string) =>
   Effect.flatMap(
     SqlClient.SqlClient,
@@ -53,7 +41,6 @@ it.effect(
         yield* runWebMigrations(yield* foldersBefore);
         yield* openUser("dean");
         yield* openUser("charles");
-        // The task and its agent are written as the schema of then holds them, since the store writes columns later migrations add.
         const task = { id: randomUUID(), workspaceId: yield* openWorkspace("dean") };
         yield* sql`insert into task (id, user_id, organization_id, name, document) values (${task.id}, 'dean', ${task.workspaceId}, 'Teammate invitations', '')`;
         yield* joinWorkspace(task.workspaceId, "charles");

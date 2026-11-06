@@ -1,15 +1,3 @@
-/**
- * account.ts -- `vespin login`, `logout`, and `whoami`: the member signed in to a service, out of it, and who that is.
- *
- * `login` runs the desktop's own consent trip under the CLI's client id
- * (`@repo/credentials/cli`): the loopback, which opens the browser here
- * and listens for its redirect, or with `--no-browser` the paste-back,
- * which prints the page's address for a browser anywhere and reads back the
- * address it ended on. `logout` revokes the refresh token and clears the
- * store. `whoami` reads the account at userinfo and its workspaces through
- * `workspaces.list`, the one plain read of them the OAuth bearer reaches.
- */
-
 import { pasteBackConsent } from "@repo/credentials";
 import { type CliAccountFailed, cliIdentity, cliSignIn, cliSignOut } from "@repo/credentials/cli";
 import { loopbackConsent } from "@repo/credentials/node";
@@ -28,7 +16,6 @@ import {
   storeFor,
 } from "../session.js";
 
-/** What a person at a terminal is told to paste back, and asked for it with. */
 const PASTE_BACK = {
   SHOW: `Open this address in a browser, sign in to ${PRODUCT_NAME}, and copy the address the browser ends on (it will not load):`,
   PROMPT: "Paste that address here:",
@@ -38,7 +25,6 @@ function commandFailed(failed: CliAccountFailed): CommandFailed {
   return new CommandFailed({ exit: failed.exit, message: failed.message });
 }
 
-/** Writes a line on stderr from inside a consent trip, whose page opener is not an effect. */
 function shown(line: string): void {
   process.stderr.write(`${line}\n`);
 }
@@ -57,7 +43,6 @@ const loginCommand = Command.make(
     Effect.scoped(
       Effect.gen(function* () {
         const origin = yield* serviceOrigin;
-        // Note that the paste is read inside the trip, so it is handed the terminal's services here.
         const terminal = yield* Effect.context<Stdio.Stdio | Terminal.Terminal>();
         const pasted = Effect.provideContext(readLine(PASTE_BACK.PROMPT), terminal);
         const identity = yield* cliSignIn({
@@ -142,5 +127,4 @@ const whoamiCommand = Command.make("whoami", {}, () =>
   ]),
 );
 
-/** The account group: sign in, sign out, and who is signed in. */
 export const ACCOUNT_COMMANDS = [loginCommand, logoutCommand, whoamiCommand] as const;

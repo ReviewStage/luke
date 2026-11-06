@@ -19,12 +19,6 @@ import {
   WEB_APP_URL,
 } from "./SiteChrome";
 
-/**
- * The landing: the one line beside the copper ball, then a section for each
- * of the product's features over the app's own screens at work, and the
- * close. A reader with an account signs in from the bar or under the hero's
- * download.
- */
 export function App(): React.JSX.Element {
   return (
     <LandingPage

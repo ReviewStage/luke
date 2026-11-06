@@ -1,27 +1,3 @@
-/**
- * web-host.ts -- the shared host composed in a browser tab: its seams answered by the tab, signed in by the service's cookie, and reached by the panel through the in-process bridge.
- *
- * The host is the desktop's own (`@repo/host`), assembled with one platform
- * concern, an agent's terminals: each shell's relay socket is opened from
- * the page on its own origin under the session cookie
- * (`web-terminal-socket.ts`), and its port is posted to the panel in the
- * same page. Nothing here spawns a process or reaches the Mac's own
- * terminal. What the desktop's seams read from the machine the tab answers
- * instead: the settings file in the browser's storage, ids from `crypto`,
- * the service at the origin that served the page, and the account from the
- * session cookie that origin set, which no code here reads or keeps.
- *
- * The panel's acts reach the host's own procedures on the act port in this
- * process; the few a platform answers itself (a copy, a download, focus, the
- * contact mail, feedback, and an agent's Terminal tab) are the tab's, and
- * every other platform kind is refused in its own words, so the table stays
- * total. What waits is counted on the tab's badge (`web-notices.ts`), and the
- * tab posts no notification. The composition is a
- * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
- * is the host's drain; `fork` is that runtime's, handed in so no count runs
- * anywhere else.
- */
-
 import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { feedbackDelivery } from "@repo/features/feedback";
 import type { LinkPlatform } from "@repo/features/link-open";
@@ -92,41 +68,29 @@ import { onTabShownChanged, webNoticeDoors } from "./web-notices";
 import { copyPng, downloadText, openTab, webPlatform } from "./web-platform";
 import { openTerminalSocketFromPage } from "./web-terminal-socket";
 
-/** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
 const STATE_ROOT = "/app";
 
-/** The platform a tab names in app state, where the desktop names Node's `process.platform`. */
 const RUN_PLATFORM = { WEB: "web" } as const;
 
-/** The path feedback is posted to on the tab's own origin, which takes no credential (`server/feedback.mjs`). */
 const FEEDBACK_PATH = "/api/feedback";
 
-/** The page every act is from: a tab holds one panel and nothing else. */
 type WebSender = Window;
 
-/** What the tab's root reads of the host once it stands: the bridge and the act port the panel acts through, and what its platform answers. */
 export interface WebHost {
   readonly bridge: AppBridge;
-  /** The panel's end of its act port, for the acts that ride oRPC (`@repo/host/contract`). */
   readonly actPort: MessagePort;
-  /** What the panel's client of its act port is installed through: a workspace connect's press opens its tab. */
   readonly actPortClient: (client: ActPortClient) => ActPortClient;
   readonly platform: AppPlatform;
 }
 
 export class WebHostTag extends Context.Service<WebHostTag, WebHost>()("@repo/web/WebHost") {}
 
-/** What the tab hands the composition. */
 export interface WebHostOptions {
-  /** The client every service call goes out on: the tab's same-origin fetch, which sends the cookie, or a test's. */
   readonly httpClient: Layer.Layer<HttpClient.HttpClient>;
-  /** Forks an Effect nobody awaits, a surface event's count, on the tab's one runtime. */
   readonly fork: (effect: Effect.Effect<void>) => void;
-  /** The platform the tab runs on, which is offered the Mac app only where it is a Mac; the browser's own word where none is given. */
   readonly linkPlatform?: LinkPlatform;
 }
 
-/** The web host as built, with the operator its launch starts beside it. */
 interface ComposedWeb extends WebHost {
   readonly operator: OperatorClient;
 }
@@ -135,23 +99,14 @@ class ComposedWebTag extends Context.Service<ComposedWebTag, ComposedWeb>()(
   "@repo/web/ComposedWeb",
 ) {}
 
-/**
- * The session-storage entry a sign-in leaving the tab is kept under, so the
- * page it comes back to counts it: the tab's own, so another tab's return
- * is never this one's, and it outlives the provider's pages between.
- */
 const SIGN_IN_LEFT_KEY = "app.host.signInLeft";
 
-/** Keeps that a sign-in is leaving the tab; a storage the browser refuses keeps nothing, and the return goes uncounted. */
 function keepSignInLeft(): void {
   try {
     window.sessionStorage.setItem(SIGN_IN_LEFT_KEY, "1");
-  } catch {
-    // Storage refused: nothing to count the return by.
-  }
+  } catch {}
 }
 
-/** Whether a sign-in left the tab for the page now loading, taking the note so a reload is not that return again. */
 function takeSignInLeft(): boolean {
   try {
     const left = window.sessionStorage.getItem(SIGN_IN_LEFT_KEY) !== null;
@@ -162,18 +117,10 @@ function takeSignInLeft(): boolean {
   }
 }
 
-/** A line about the host's own running, on the tab's console. */
 const report = (message: string): void => {
   console.warn(message);
 };
 
-/**
- * What the cookie session needs of the tab: where it stands, a way to leave
- * for the provider, asking first while a page holds unsaved work, whether
- * the page now loading is a sign-in's return, and each
- * return to it, shown again or focused, on which the session is read again,
- * because another tab may have signed in as someone else.
- */
 function cookieDoor(tab: PageLeave): CookieSessionDoor {
   const shown = Stream.filter(
     Stream.fromEventListener(document, "visibilitychange"),
@@ -194,11 +141,6 @@ function cookieDoor(tab: PageLeave): CookieSessionDoor {
   };
 }
 
-/**
- * Each write another tab of this origin made to the files this tab's host
- * keeps, which the browser says as a `storage` event in every tab but the
- * writer's. A cleared storage (`key` null) is a change to them too.
- */
 function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
   const changed = Stream.filter(
     Stream.fromEventListener<StorageEvent>(window, "storage"),
@@ -207,13 +149,11 @@ function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
   return Stream.as(changed, undefined);
 }
 
-/** Every seam the host's kernel and assembly stand on, as the tab answers it. */
 function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   return Layer.mergeAll(
     Layer.succeed(StateRoot, STATE_ROOT),
     Layer.succeed(RunMode, runModeFor({ capture: false, fixture: fixture !== undefined })),
     Layer.succeed(AppIdentity, { appVersion, packaged: true, platform: PRODUCT_PLATFORM.WEB }),
-    // A tab has no environment to read an override from.
     Layer.succeed(Environment, ConfigProvider.fromEnv({ env: {} })),
     Layer.succeed(IdSource, { create: () => crypto.randomUUID() }),
     reporterLayer(report),
@@ -224,18 +164,10 @@ function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   );
 }
 
-/** The badge, which comes down with the host's scope. */
 const noticeDoors = Effect.acquireRelease(Effect.sync(webNoticeDoors), (doors) =>
   Effect.sync(() => doors.close()),
 );
 
-/**
- * How the host in this tab hands a shell's port to the panel beside it: a
- * channel in the page, its far end posted to this window under the
- * terminal's channel and the ticket naming the shell, as the desktop's
- * preload posts one (`@repo/panel`'s `terminal-port.ts` reads it). The page
- * goes only with the tab, and the host with it, so no port outlives it.
- */
 const pageTerminalPorts: TerminalPortSeam<WebSender> = {
   open: (sender, ticket) => {
     const { port1, port2 } = new MessageChannel();
@@ -250,19 +182,11 @@ const pageTerminalPorts: TerminalPortSeam<WebSender> = {
   whenGone: () => undefined,
 };
 
-/** What the tab's own procedures reach of the host: its operator, and the runtime a port's message is run on. */
 interface PlatformHost {
   readonly operator: OperatorClient;
   readonly fork: WebHostOptions["fork"];
 }
 
-/**
- * The platform procedures the tab answers itself: a copy of words or a
- * picture, a download, focus, the contact mail, feedback, and an agent's Terminal tab, its shells' ports posted to the
- * page. Every other platform kind is refused in its own words, since a page
- * cannot carry it yet: the updater, the microphone, the system's
- * notification settings, and the Mac's own terminal.
- */
 function platformProcedures(
   http: HttpClient.HttpClient,
   { operator, fork }: PlatformHost,
@@ -299,11 +223,6 @@ function platformProcedures(
   };
 }
 
-/**
- * The act port's procedures' dependencies, answered for a tab: no keys, so
- * no chord is ever held and no setting has a side effect of the tab's, and
- * the tab itself the one window a settings write is reported under.
- */
 function portDependencies(
   operator: OperatorClient,
   notices: AgentProceduresDependencies["notices"],
@@ -326,9 +245,6 @@ function portDependencies(
     installedSkills: { host },
     integrations: { host },
     macCommands: { host },
-    // Note that nothing is pushed on the tab's port: the tab hears the host
-    // through the in-process bridge's own listeners, so its push stream is
-    // never opened and this table stays empty.
     pushes: new WindowPushes(),
     settings: {
       host,
@@ -350,14 +266,6 @@ function portDependencies(
   };
 }
 
-/**
- * The act port as the tab opens it: a channel in the page, the host's end
- * upgraded with the act port's handler and the panel's end answered, as the
- * desktop's window root and main open one across a process. The panel is
- * the only page asking, from this build's own origin, so every call is the
- * panel's and trusted; the procedures' effects run on the tab's runtime.
- * Both ends close with the host's scope.
- */
 const servedActPort = (
   dependencies: ActPortDependencies,
   procedures: PlatformActProcedures<WebSender>,
@@ -383,7 +291,6 @@ const servedActPort = (
       }),
   ).pipe(Effect.map((channel) => channel.port1));
 
-/** The host standing in the tab, its document, its bridge, and the platform beside it. */
 const composedWeb = (
   fork: WebHostOptions["fork"],
   tab: PageLeave,
@@ -414,7 +321,6 @@ const composedWeb = (
         ),
         services,
       );
-      // An address the host opens goes to a connect's waiting tab, or opens as a link.
       const tabs = connectTabs(tabBrowser(openTab, tab.leave));
       yield* Effect.acquireRelease(Effect.sync(tabs.listen), (stop) => Effect.sync(stop));
       const operator = yield* createOperatorClient({
@@ -430,21 +336,18 @@ const composedWeb = (
         regained: operator.host.tasksRegained(),
         report,
       });
-      // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });
 
       const doors = yield* noticeDoors;
       const notices = yield* linkClientNotices({
         state,
         host: operator.host,
-        // No command runs in a tab, so no ask is ever announced here.
         presenter: { openMacCommandAsk: () => window.focus() },
         onPanelFocusChanged: onTabShownChanged,
         report,
       }).pipe(Effect.provideService(AgentNoticeDoors, doors));
 
       const count: AppPlatform["recordSurfaceEvent"] = (name, properties) => {
-        // A count that fails is said on the console, never left as a rejection nobody hears.
         fork(
           Effect.catchCause(operator.host.recordEvent(name, properties), (cause) =>
             Effect.sync(() => report(`A surface event was not counted: ${Cause.pretty(cause)}`)),
@@ -479,26 +382,13 @@ const composedWeb = (
     }),
   );
 
-/**
- * The host in the tab, composed and started: the assembly over the tab's
- * seams, an agent's terminals its one platform concern, then the composers
- * started in the launch's order, then the operator's first bootstrap read
- * into the document, so the panel's first read finds the account already
- * settled. Beside it, a chunk that fails to load once a deploy took it away
- * moves the tab onto the build now live (`stale-build.ts`). The scope this
- * is built in is the tab's; closing it is the host's drain.
- */
 export function composeWeb(
   options: WebHostOptions,
 ): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
   const { httpClient, fork, linkPlatform } = options;
-  // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
   const tab = tabLeave();
-  // Read once, so the files and the word of another tab's write are the same storage, in memory where the browser blocks it.
   const storage = tabStorage();
-  // Only a development tab's address can name one, so a production tab's host is always live.
   const fixture = developmentFixtureProfile(location.search);
-  // Every call the host makes to the service tells the service's reach beside it, which the tab's network watch follows.
   const assembly = Layer.provide(
     hostAssemblyLayer([HOST_PLATFORM_CONCERN.TERMINALS]),
     Layer.mergeAll(
@@ -522,7 +412,6 @@ export function composeWeb(
       ).pipe(Layer.provideMerge(hostStandingLayer)),
     ),
   );
-  // A tab left open across a deploy asks to move onto the build now live once a chunk of its own fails to load.
   const staleBuild = Layer.effectDiscard(
     Effect.forkScoped(
       Effect.suspend(() =>

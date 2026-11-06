@@ -17,17 +17,6 @@ import {
   UPDATE_MENU_ACT,
 } from "./app-menu";
 
-/**
- * The menu bar as a gated feature's experiment decides it: an item whose
- * command does not stand is not in its menu, and leaves no separator
- * stranded where it stood; and the one drawer redraws when the update item
- * or the account's experiments move, and only then, an experiment renaming
- * the items it changes the reach of; and an item ends its name
- * with an ellipsis only where it opens a window or asks; and only a
- * development build offers the developer tools.
- */
-
-/** The labels of one top-level menu's items, a separator as a dash. */
 function labelsOf(template: MenuItemConstructorOptions[], menu: string): readonly string[] {
   const found = template.find((item) => item.label === menu);
   if (!found || !Array.isArray(found.submenu)) return assert.fail(`no ${menu} menu`);
@@ -114,13 +103,11 @@ describe("the menu bar's drawer", () => {
     show({ update });
     assert.ok(labelsOf(drawn.at(-1) ?? [], "Vespin").includes("Restart to Update"));
 
-    // The experiments moving keeps the update item it was last told.
     show({ experiments: {}, capabilities: [] });
     assert.ok(labelsOf(drawn.at(-1) ?? [], "Vespin").includes("Restart to Update"));
   });
 });
 
-/** The labels of every item a reader can choose, every submenu walked; a disabled item is a status, not a choice. */
 function choosableLabels(items: readonly MenuItemConstructorOptions[]): string[] {
   return items.flatMap((item) => [
     ...(item.label === undefined || item.enabled === false ? [] : [item.label]),
@@ -128,7 +115,6 @@ function choosableLabels(items: readonly MenuItemConstructorOptions[]): string[]
   ]);
 }
 
-/** The labels of every item a reader can choose that end with an ellipsis, in any state of the update item. */
 function ellipsizedLabels(update?: Parameters<typeof appMenuTemplate>[1]): string[] {
   return choosableLabels(appMenuTemplate("Vespin", update)).filter((label) => label.endsWith("…"));
 }
@@ -217,7 +203,6 @@ describe("the menu bar's dimmed items", () => {
   });
 });
 
-/** Every item, every submenu walked. */
 function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
   return items.flatMap((item) => [
     item,
@@ -225,7 +210,6 @@ function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstr
   ]);
 }
 
-/** The menu bar a build draws once the windows have told it of their developer tools. */
 function drawnFor(packaged: boolean): MenuItemConstructorOptions[] {
   let last: MenuItemConstructorOptions[] = [];
   const show = menuBarDrawer({ appName: "Vespin", packaged }, (template) => {
@@ -265,15 +249,12 @@ describe("the developer tools", () => {
   });
 });
 
-/** A window of the app's, as the menu is handed the one it was chosen over. */
 function aWindow(): BaseWindow {
   return {} as BaseWindow;
 }
 
-/** What a press brought the panel back on: a command, or the window alone. */
 const WINDOW_ALONE = "the window alone";
 
-/** Presses a command's item as its key does, over the window in front, and answers what the panel was brought back on. */
 function pressKey(
   command: typeof APP_COMMAND.NEW_TASK | typeof APP_COMMAND.ACTUAL_SIZE,
   window: BaseWindow | undefined,
@@ -288,7 +269,6 @@ function pressKey(
   const show = menuBarDrawer({ appName: "Vespin", packaged: true }, (template) => {
     drawn = template;
   });
-  // The zoom's items stand only in the desktop app.
   show({ experiments: NO_EXPERIMENTS, capabilities: [HOST_CAPABILITY.DESKTOP_APP] });
   show({ panel });
   const item = everyItem(drawn).find((candidate) => candidate.id === command);
@@ -327,7 +307,6 @@ describe("⌘0", () => {
   });
 });
 
-/** View's first item, as the menu bar draws it once main has (or has not) told it of the reload. */
 function viewReload(reload?: ReloadMenu): MenuItemConstructorOptions | undefined {
   let drawn: MenuItemConstructorOptions[] = [];
   const show = menuBarDrawer({ appName: "Vespin", packaged: true }, (template) => {

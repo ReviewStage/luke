@@ -38,18 +38,10 @@ import { clientSettingSideEffects } from "./settings-side-effects";
 import { updateProcedures } from "./update-acts";
 import { windowSurfaceProcedures, windowSurfaceReports } from "./window-surface";
 
-/** The widest a still of part of a panel is kept, in device pixels: a card's preview at twice its width, and no more. */
 const STILL_WIDTH = 480;
 
-/** The JPEG quality a still is kept at: a preview, never read for its words. */
 const STILL_QUALITY = 70;
 
-/**
- * A still of part of a panel, as ⌃Tab's card previews the tab it left:
- * taken while the window may be hidden, downscaled, and answered as a
- * JPEG's data URL to that panel alone. Note that nothing here keeps it,
- * writes it, or counts it, because it is a picture of the panel's words.
- */
 async function windowStill(
   sender: WebContents,
   rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
@@ -66,10 +58,6 @@ async function windowStill(
   return `data:image/jpeg;base64,${scaled.toJPEG(STILL_QUALITY).toString("base64")}`;
 }
 
-/**
- * Opens a fresh channel to a panel's page under `channel`: main keeps one end
- * and posts the other to the page with the ticket.
- */
 function portTo(channel: string) {
   return (sender: WebContents, ticket: unknown) => {
     const { port1, port2 } = new MessageChannelMain();
@@ -84,16 +72,6 @@ function portTo(channel: string) {
   };
 }
 
-/**
- * Every channel the sandboxed renderers reach this process through, composed
- * once and attached between the composition and its start: a window that
- * loaded before its channels were registered would meet an unhandled invoke,
- * and the windows open in the window service's own start.
- *
- * What is composed here is the act port — the host's procedures, handed what
- * they reach of this process, beside the procedures only Electron can answer,
- * total by their type together — and the reports beside it. Nothing else registers IPC.
- */
 export function registerDesktopIpc(services: DesktopServices): void {
   const {
     config,
@@ -112,8 +90,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const { panels } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
-  // The acts main answers itself on the act port: its windows', ports', and
-  // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...browserLiveProcedures<WebContents>({
       host: operator.host,
@@ -227,8 +203,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         pushes: windowPushes,
         settings: {
           host: operator.host,
-          // The port names its window as an unknown sender; only a window of
-          // this process's own is one the reporter is minted for.
           reporterOf: (actor) => {
             const contents = webContents.getAllWebContents().find((open) => open === actor.sender);
             return contents === undefined ? undefined : windows.reporterOf(contents);
@@ -248,13 +222,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ),
     services: effectServices,
     reports,
-    /**
-     * The document as one window stands, answered before anything is drawn
-     * over it: the host read once so no window is handed a state it never
-     * told, and the microphone taken afresh, because macOS's answer is its
-     * own to move and moves while the app runs. Every later reading of the same
-     * document arrives on `app:state`.
-     */
     snapshotFor: async (sender): Promise<AppStateSnapshot> => {
       await run(operator.readBootstrap());
       native.refreshMicrophoneStatus();

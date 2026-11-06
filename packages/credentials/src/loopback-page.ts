@@ -1,21 +1,7 @@
 import { BRAND_PALETTE, GITHUB_PATH, GOOGLE_MARK_LAYERS, MARK_ART } from "@repo/brand";
 
-/**
- * The page the browser is left on after the OAuth redirect lands on the
- * loopback. It is the last thing the sign-in shows, so it dresses like the
- * sign-in and consent pages before it — one dark card, the mark, a status
- * pill, and a line saying where things stand — rather than a line of bare
- * text. Self-contained on purpose: the ephemeral 127.0.0.1 server serves
- * exactly one document, so nothing here may fetch a font, a script, or an
- * image from anywhere.
- *
- * Every string on the page is fixed by the build. Nothing the redirect
- * carried — code, state, error — is ever interpolated into the document.
- */
 export const LOOPBACK_PAGE_TONE = {
-  /** The sign-in reached a resting state worth a green pill. */
   COMPLETE: "complete",
-  /** Something needs the user back in the app. */
   ATTENTION: "attention",
 } as const;
 
@@ -31,17 +17,12 @@ export type LoopbackConnectionSource =
 
 interface LoopbackPage {
   tone: LoopbackPageTone;
-  /** The pill's one word or two: "Signed in", "Not completed". */
   badge: string;
   title: string;
   body: string;
   source?: LoopbackConnectionSource | undefined;
 }
 
-/**
- * The product's mark, drawn from the same generated constants the renderer
- * draws it from, so this copy cannot drift from the artwork.
- */
 function markSvg(ink = "currentColor", className = "mark"): string {
   return (
     `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="${MARK_ART.VIEW_BOX}" aria-hidden="true">` +
@@ -87,7 +68,6 @@ function connectionGraphic(source: LoopbackConnectionSource | undefined): string
   );
 }
 
-/** The page's colors: the brand's dark theme, since the page is drawn dark. */
 const INK = BRAND_PALETTE.DARK;
 
 const PAGE_STYLE = `
@@ -140,9 +120,6 @@ const PAGE_STYLE = `
 `;
 
 export function accountLoopbackPage(page: LoopbackPage): string {
-  // The same mark as the tab's icon, traveling inside the document like
-  // everything else on it: a data URL fetches nothing from anywhere. Inked
-  // outright, because `currentColor` resolves to black outside the page.
   const favicon = encodeURIComponent(markSvg(INK.TEXT));
   return (
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +

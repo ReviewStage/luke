@@ -3,12 +3,6 @@ import { EventEmitter } from "node:events";
 import { it } from "vitest";
 import { whenPageGone } from "./page-gone";
 
-/**
- * When the page behind a window's contents is gone, as the ports main posts
- * to it read it: a reload is an end as much as a close or a crash, and a
- * navigation inside the same document, or of a frame inside it, is none.
- */
-
 it("a page is gone when its contents are destroyed, its renderer dies, or it navigates to a new document", () => {
   const ends: string[] = [];
   const watched = (name: string) => {

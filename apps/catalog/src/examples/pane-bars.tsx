@@ -15,14 +15,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * pane-bars.tsx -- a tab's bar led by a title with a quiet detail, its
- * actions and its ⋯; one whose middle holds Back and Forward before a
- * path's crumbs; one led by a glyph and where a connection stands; and a
- * narrow bar, whose title fades where the bar cuts it rather than wrapping.
- */
-
-/** A press the catalog has nowhere to take. */
 function stay(): void {}
 
 const PAGE_TITLE = "Quarterly review of the onboarding funnel";

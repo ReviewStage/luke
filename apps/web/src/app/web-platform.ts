@@ -1,14 +1,3 @@
-/**
- * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, a cloud Browser tab's socket from the page, an agent's page through the service's frame of it, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
- *
- * The web client's shell beside the host in the tab (`web-host.ts`), which
- * hands it where a surface event is counted. An agent's page is framed
- * through the service's frame of its version on the tab's own origin, which
- * sends the frame on to a link on the sandbox's own site, minted for the
- * account as the frame loads, or to the page saying pages open in the Mac app
- * where the deployment has no sandbox (`@repo/features/page-frame`).
- */
-
 import { ADMIN_PAGE_PATH } from "@repo/features/admin-wire";
 import { APP_HOME_LINK } from "@repo/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@repo/features/link-open";
@@ -24,20 +13,12 @@ import { openBrowserLiveOverWebSocket } from "./web-browser-live";
 
 const ignore = (): void => undefined;
 
-/** A browser's `navigator` as far as it names its system: `userAgentData`, where the browser has it, is in no DOM type yet. */
 type SystemNaming = Pick<Navigator, "platform"> & {
   readonly userAgentData?: { readonly platform: string };
 };
 
-/**
- * The address of the file last downloaded, let go of once the next download
- * starts. Note that it is not let go of as its link is pressed, because a
- * browser may read it only once the download begins, after the press
- * returns, as Safari and Firefox can; the next download is a later press.
- */
 let downloaded: string | undefined;
 
-/** Saves the text as a file of the name given, through the browser's own download, letting go of the one before. */
 export function downloadText(file: {
   readonly name: string;
   readonly text: string;
@@ -51,11 +32,6 @@ export function downloadText(file: {
   return Promise.resolve(true);
 }
 
-/**
- * Puts a PNG, its bytes in base64 once drawn, on the browser's clipboard as
- * a picture. Note that the write is asked for now, with the picture still a
- * promise, because Safari takes a write only in the press's own task.
- */
 export function copyPng(png: Promise<string>): Promise<void> {
   const blob = png.then((base64) => {
     const bytes = Uint8Array.from(atob(base64), (each) => each.charCodeAt(0));
@@ -64,12 +40,6 @@ export function copyPng(png: Promise<string>): Promise<void> {
   return navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 }
 
-/**
- * Opens a page in a tab of its own, which reaches nothing of this one, where
- * its address is an http or https one, as the desktop's `web.open` takes it.
- * Any other opens nothing, because a `javascript:` or `data:` address would
- * run as script on this origin, and another app's scheme hand it to that app.
- */
 export function openTab(url: string): void {
   if (!isWebAddress(url)) {
     console.warn("A link that is not an http or https address was not opened.");
@@ -78,11 +48,6 @@ export function openTab(url: string): void {
   window.open(url, "_blank", "noopener");
 }
 
-/**
- * Opens a link outside the window, as the desktop's `web.open` takes it: a
- * mail address in the mail app, as the site's Contact link does, and a web
- * address in a tab of its own (`openTab`).
- */
 function openLink(url: string): void {
   if (isMailAddress(url)) {
     location.assign(url);
@@ -91,7 +56,6 @@ function openLink(url: string): void {
   openTab(url);
 }
 
-/** Opens a GitHub page in a tab of its own, where its address is GitHub's, as the desktop's `github.open` takes it; any other opens nothing. */
 function openGitHubTab(url: string): void {
   if (!isGitHubAddress(url)) {
     console.warn("A GitHub link whose address is not GitHub's was not opened.");
@@ -100,23 +64,10 @@ function openGitHubTab(url: string): void {
   openTab(url);
 }
 
-/**
- * The link that opens the Mac app on what the tab's address names, or on
- * the app's home where it names nothing, which still brings the app forward.
- */
 function macAppLink(): string {
   return openTargetOf(location.pathname, location.hash, location.search)?.appLink ?? APP_HOME_LINK;
 }
 
-/**
- * The tab's session replay, whose controller and masking
- * (`web-session-replay.ts`) are a chunk of their own that the entry leaves
- * out, loaded the first time the host lets the tab record. Each word on
- * recording is handed on in the order it came, so one that stands recording
- * down while the chunk loads still lands after the one that started it; a
- * word before that, which can only be no, has nothing to stand down. A chunk
- * that fails to load is tried again on the next word that lets the tab record.
- */
 function lazySessionReplay(): AppPlatform["applySessionReplay"] {
   let recording: Promise<AppPlatform["applySessionReplay"]> | undefined;
   return (bootstrap) => {
@@ -131,29 +82,11 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
   };
 }
 
-/**
- * The key a chord's Command is pressed with in this browser: ⌘ on Apple's
- * systems, an iPad's keyboard among them, and Ctrl on every other, read from
- * the system the browser names, `userAgentData`'s where it has one and the
- * older `platform` where it does not.
- */
 export function browserCommandKey(browser: SystemNaming = navigator): CommandKey {
   const system = browser.userAgentData?.platform ?? browser.platform;
   return /^(?:mac|iphone|ipad|ipod)/iu.test(system) ? COMMAND_KEY.META : COMMAND_KEY.CONTROL;
 }
 
-/**
- * The tab's platform. A browser has no menu bar, so that answers nothing; focus is the tab's own, so bringing the panel forward is
- * asking the window for it; a surface event is counted by the host in the
- * tab, as every other event is; unsaved work is held
- * by the tab's ways out (`page-leave.ts`); session replay is the desktop's
- * own masked recording (`web-session-replay.ts`); a cloud Browser tab's
- * live view is a socket the page opens itself (`web-browser-live.ts`); and the way to the Mac
- * app is offered only on the `linkPlatform` that can open it, a Mac; a
- * chord's Command is pressed with the browser's own `commandKey`, Ctrl off a
- * Mac; and a maintainer's sign-in as the member ends through Better Auth's
- * admin plugin (`auth-client.ts`).
- */
 export function webPlatform(
   shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork" | "unsavedDescriptionWords">,
   linkPlatform: LinkPlatform = browserLinkPlatform(),
@@ -171,15 +104,12 @@ export function webPlatform(
     recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openGitHubTab,
     openWeb: openLink,
-    // The dashboard is served on the tab's own origin, so the Admin row links to it there.
     adminDashboard: () => ({ href: new URL(ADMIN_PAGE_PATH, location.origin).href }),
     applySessionReplay: lazySessionReplay(),
     openBrowserLive: openBrowserLiveOverWebSocket,
-    // Only a tab's cookie session can be a maintainer's sign-in as the member.
     stopImpersonating,
     ...(linkPlatform === LINK_PLATFORM.MAC ? { macAppLink } : undefined),
   };
-  // A tab with no page leave to tell (a test's) holds nothing back.
   if (shell.unsavedWork !== undefined) platform.unsavedWork = shell.unsavedWork;
   if (shell.unsavedDescriptionWords !== undefined)
     platform.unsavedDescriptionWords = shell.unsavedDescriptionWords;

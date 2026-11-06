@@ -4,18 +4,6 @@ import { useRef } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * tooltips.tsx -- the window's tooltip: a pill naming a control, with the
- * chord of a command and of a key the control's own surface answers, a long
- * one held inside the window, and a card in a pill's place, under its
- * control, beside it, and beside a whole row it counts as its control. Each
- * shows once the pointer has rested on its control for the hint's wait, or
- * the keyboard reaches it, at once while the pointer moves on from a pill
- * seen, and goes when the pointer leaves, on a press, a key, or a scroll; a
- * card lingers for the pointer to cross onto it.
- */
-
-/** A row whose name hangs its card beside the whole row, the row's other act part of its control. */
 function CardedRow(): React.JSX.Element {
   const row = useRef<HTMLSpanElement>(null);
   return (

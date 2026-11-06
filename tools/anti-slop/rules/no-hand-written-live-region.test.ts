@@ -27,16 +27,11 @@ function panel(code: string): { code: string; filename: string } {
 
 tester.run("no-hand-written-live-region", noHandWrittenLiveRegionRule, {
   valid: [
-    // `@repo/ui` draws the visible blocks and the announcer, which keep their roles.
     { code: 'function A() { return <p role="alert">Words</p>; }', filename: UI_FILE },
     { code: 'function A() { return <div aria-live="polite" />; }', filename: UI_FILE },
-    // Other roles are no live region.
     panel('function A() { return <div role="dialog"><ul role="list" /></div>; }'),
-    // A component's own props name no intrinsic element.
     panel('function A() { return <ScrollArea role="log" aria-live="off" />; }'),
-    // A role no one can read as a literal is left alone.
     panel("function A() { return <div role={role} />; }"),
-    // Words said through the announcer.
     panel("function A() { announce(ANNOUNCE.POLITE, words); return <div>{words}</div>; }"),
   ],
   invalid: [
@@ -55,19 +50,16 @@ tester.run("no-hand-written-live-region", noHandWrittenLiveRegionRule, {
       filename: PANEL_FILE,
       errors: [{ messageId: "liveRegion", data: { tag: "ol", what: 'role="log"' } }],
     },
-    // Any `aria-live` is one, even one that says `off`.
     {
       code: 'function A() { return <div aria-live="off" />; }',
       filename: PANEL_FILE,
       errors: [{ messageId: "liveRegion", data: { tag: "div", what: "aria-live" } }],
     },
-    // A role chosen between two literals, one of them live.
     {
       code: 'function A({ s }) { return <span role={s ? "status" : undefined}>x</span>; }',
       filename: PANEL_FILE,
       errors: [{ messageId: "liveRegion", data: { tag: "span", what: 'role="status"' } }],
     },
-    // A test's fixture is drawn like any other file.
     {
       code: 'function A() { return <div role="status" />; }',
       filename: path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/example.test.tsx"),

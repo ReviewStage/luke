@@ -26,21 +26,6 @@ import {
 } from "../index.js";
 import { isStoredToolPart, toolPartName } from "./tool-parts.js";
 
-/**
- * A stored message as this build reads it back: the SDK's `UIMessage`, with
- * the row's role deciding which metadata it carries. Reading rows back is
- * where a stored shape is held to the vocabulary, and it goes through the
- * SDK's own `validateUIMessages` so the structure a row must have is the
- * SDK's own statement of it, not a second one kept here. What this wrapper
- * adds is what the SDK leaves to its caller: the metadata schema for each
- * role, the refusal of a tool name the catalog did not register, and the
- * refusal of a tool state a stored row never carries. The SDK's own
- * `metadataSchema` option reads one schema for every row regardless of its
- * role, so it cannot stand in for a check that a user row and an assistant
- * row answer to different shapes; the role dispatch below reads each row's
- * metadata through `readEither` against the wire vocabulary's own
- * `USER_MESSAGE_METADATA` and `ASSISTANT_MESSAGE_METADATA` declarations.
- */
 export type StoredUIMessage =
   | StoredMessageOf<typeof MESSAGE_ROLE.USER, UserMessageMetadata>
   | StoredMessageOf<typeof MESSAGE_ROLE.ASSISTANT, AssistantMessageMetadata>
@@ -51,33 +36,12 @@ type StoredMessageOf<Role extends UIMessage["role"], Metadata> = Omit<
   "role" | "metadata"
 > & { role: Role; metadata: Metadata };
 
-/**
- * What the SDK hands back before the metadata is read: a row it validated
- * structurally, whose metadata it passed through as it came off the wire.
- */
 type ValidatedMessage = UIMessage<WireBoundaryInput>;
 
 type ValidationOptions = Parameters<typeof safeValidateUIMessages<ValidatedMessage>>[0];
 
-/**
- * The type the SDK gives a tool part that names no registered tool. The SDK
- * converts an unregistered part that already answered into one of these
- * rather than refusing it, so a stored row is held to the registry before
- * the SDK sees it; one found afterwards is a registered tool whose input the
- * registered schema refused.
- */
 const DYNAMIC_TOOL_PART_TYPE = "dynamic-tool";
 
-/**
- * What a read does with a tool part naming a tool the registry does not hold.
- * The write door refuses: a call naming a tool the brain was never offered is
- * a bug in the turn, and the row must not land. A stored row is read with the
- * part dropped: its tool was registered when the row was written and has
- * since been retired, and one retired call must not make the whole
- * conversation unreadable on every device for as long as the row stands. A
- * `dynamic-tool` part is refused under either, because a stored row never
- * carries one and a retirement never produces one.
- */
 export const UNREGISTERED_TOOL_PART = {
   REFUSE: "refuse",
   DROP: "drop",
@@ -96,7 +60,6 @@ function refuse(
   return Result.fail(new SchemaRefusalError({ refusal, path }));
 }
 
-/** A metadata-shaped refusal read at the row's `metadata` field, rather than at the metadata value's own root. */
 function underMetadata<A>(
   read: Result.Result<A, SchemaRefusalError>,
 ): Result.Result<A, SchemaRefusalError> {
@@ -107,18 +70,12 @@ function underMetadata<A>(
   );
 }
 
-/** A static tool part naming a tool the registry does not hold: the part a retirement leaves behind. */
 function namesRetiredTool(part: UnparsedWireValue, tools: ToolSet): boolean {
   if (!isRecord(part) || !isWireString(part.type)) return false;
   const name = toolPartName(part.type);
   return name !== undefined && !Object.hasOwn(tools, name);
 }
 
-/**
- * The rows with every retired tool part cut out; a row that is not a record,
- * or whose parts are not a list, passes to the SDK to refuse. A refusal read
- * past this names a part's index among the parts that remain.
- */
 function withoutRetiredToolParts(
   messages: readonly UnparsedWireValue[],
   tools: ToolSet,
@@ -130,7 +87,6 @@ function withoutRetiredToolParts(
   });
 }
 
-/** The first tool part, as the rows arrived, whose name the registry does not hold. */
 function unregisteredToolPart(
   messages: readonly UnparsedWireValue[],
   tools: ToolSet,
@@ -149,7 +105,6 @@ function unregisteredToolPart(
   return undefined;
 }
 
-/** The first part a stored row may not carry: a converted dynamic part, or a tool state outside the set. */
 function refusedPart(
   parts: readonly UIMessagePart<UIDataTypes, UITools>[],
 ): SchemaPath | undefined {
@@ -162,7 +117,6 @@ function refusedPart(
   return undefined;
 }
 
-/** A validated row typed by its role, its metadata read under that role's schema. */
 function readStoredMessage(
   message: ValidatedMessage,
 ): Result.Result<StoredUIMessage, SchemaRefusalError> {
@@ -195,7 +149,6 @@ function readStoredMessage(
   }
 }
 
-/** Every validated message read under this build's metadata and tool-state set, or the first refusal with the row's index ahead of its path. */
 function readStoredMessages(
   messages: readonly ValidatedMessage[],
 ): Result.Result<StoredUIMessage[], SchemaRefusalError> {
@@ -215,21 +168,6 @@ function readStoredMessages(
   return Result.succeed(stored);
 }
 
-/**
- * Reads stored rows back under the vocabulary: the SDK's own structural
- * validation and, at the write door, the registered tools' schemas, then this
- * build's metadata by role and its tool-state set. A stored-row read is held
- * to the registry's names but not to each tool's schemas, which its write
- * already passed. The registry is the catalog's `tool()`
- * declarations keyed by the name a part spells. A tool part naming a tool the
- * registry does not hold is refused or dropped as `unregistered` says, the
- * write door refusing and a stored-row read dropping, since `unregistered` is
- * where the two doors tell themselves apart; a refusal is the same word and
- * path a wire schema answers with, so a store can tell a malformed row from
- * one naming a tool this build does not register. A conversation
- * with no rows yet reads as no messages: the SDK refuses an empty array, and
- * an empty conversation is not a malformed one.
- */
 export function readStoredUIMessagesEither(
   rows: UnparsedWireValue,
   tools: ToolSet,
@@ -243,19 +181,12 @@ export function readStoredUIMessagesEither(
   if (unregisteredPart) {
     return Effect.succeed(refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregisteredPart));
   }
-  // The SDK's validator answers its refusal as a value, so a rejection is a defect and not a refusal.
-  // Note that a stored row is held to the SDK's structure alone, not to each tool's schemas, because
-  // the write door admitted it under the same registry (`writer.ts`'s `admitted`), and walking every
-  // tool's input and output again on every page is the read's cost, not its safety.
   const validated = Effect.promise(() =>
     safeValidateUIMessages<ValidatedMessage>(
       storedRow
         ? { messages }
         : {
             messages,
-            // SAFETY: the SDK types this option for a message whose tool set is known statically, and a
-            // concrete `tool()` is not assignable to its `Tool<unknown, unknown>` (vercel/ai#9147); the
-            // validation itself reads each registered tool's schemas by name, which is what a `ToolSet` is.
             tools: tools as NonNullable<ValidationOptions["tools"]>,
           },
     ),
@@ -265,7 +196,6 @@ export function readStoredUIMessagesEither(
   );
 }
 
-/** The boundary entry point every store caller reads a `SchemaRead` from. */
 export function readStoredUIMessages(
   messages: UnparsedWireValue,
   tools: ToolSet,

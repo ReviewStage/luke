@@ -16,27 +16,13 @@ import type { WebServices } from "@repo/service/runtime";
 import { type Context, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
 
-/**
- * browser-client-orpc-route.test.ts -- what the GitHub connect page and the
- * invitation page read through their browser client, from the hosted oRPC
- * routes themselves on a migrated database: the claim of an intent as the
- * account it was made for, another account, or one the service never made;
- * an invitation's offer, and one the service does not hold; and a session
- * the route refuses, read as its status and slug. Each request leaves as
- * the pages' own did: on the page's cookies, and a body as JSON.
- *
- * Synthetic accounts throughout.
- */
-
 const ORIGIN = "https://app.test";
 const ADA = "user-ada";
 const GRACE = "user-grace";
 const INVITED = "ada@example.com";
 
-/** The deployment's session cookie the page's browser holds, which a request sent on the page's cookies carries. */
 const PAGE_COOKIE = "better-auth.session_token=page";
 
-/** A Better Auth call this test never makes, refused if it were. */
 const unmade = () => Effect.die(new Error("this test makes no Better Auth call"));
 
 const MEMBERS: MemberSeams = {
@@ -49,18 +35,11 @@ const MEMBERS: MemberSeams = {
   updateOrganization: unmade,
 };
 
-/** What a request carried as it left the client: its method, path, cookies, content type, and body. */
 interface Sent {
   readonly line: string;
   readonly body: string | undefined;
 }
 
-/**
- * The browser's network: every request the client sends handed to the
- * GitHub and workspace routes on the test's database, carrying the page's
- * cookie where the client sent it on the page's cookies, as a browser does,
- * and kept in `sent`. The page's cookie names the session given.
- */
 const serve = (session: string | null, sent: Sent[] = []) =>
   Effect.gen(function* () {
     const resolveSessionUserId = (request: Request) =>
@@ -78,11 +57,9 @@ const serve = (session: string | null, sent: Sent[] = []) =>
         members: MEMBERS,
       }),
     });
-    // SAFETY: the claim and the offer read the database alone, which is all a test provides of the web runtime's services.
     const services = (yield* Effect.context<DatabaseServices>()) as Context.Context<WebServices>;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = new URL(String(input), ORIGIN);
-      // Note that a body the client sends is only ever the JSON text it serialized.
       const body = init?.body === undefined || init.body === null ? undefined : String(init.body);
       sent.push({
         line: `${init?.method} ${url.pathname}${url.search} ${init?.credentials} ${new Headers(init?.headers).get("content-type")}`,
@@ -97,7 +74,6 @@ const serve = (session: string | null, sent: Sent[] = []) =>
     });
   });
 
-/** A procedure's answer, or the refusal it failed with. */
 const asked = <Answer>(call: () => Promise<Answer>) =>
   Effect.promise(() =>
     call().then(
@@ -106,7 +82,6 @@ const asked = <Answer>(call: () => Promise<Answer>) =>
     ),
   );
 
-/** Ada and Grace, under ids and addresses of the test's own `tag`, since the tests share one database. */
 const insertAccounts = (tag = "") =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -121,7 +96,6 @@ const insertAccounts = (tag = "") =>
     ]);
   });
 
-/** A workspace Grace owns, with a pending invitation for Ada; answers the invitation's id. */
 const insertInvitation = Effect.gen(function* () {
   const db = yield* Database;
   const createdAt = new Date(Date.UTC(2026, 0, 1));

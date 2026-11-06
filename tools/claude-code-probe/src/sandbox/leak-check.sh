@@ -1,18 +1,7 @@
 #!/usr/bin/env bash
-# leak-check.sh -- what the user running it can see of Claude Code's token and its placeholder, printed as counts and flags after one marker, never a value it read.
-#
-# Run from a Terminal's shell (the sandbox's default user, no sudo) as it is
-# today and with its capabilities dropped, and by the agent through its Bash
-# tool. The CLI's variable holds the launch's placeholder, which the agent's
-# commands inherit, while the token itself stands at the sandbox's firewall,
-# so each count is kept twice: any value of the variable, and a value shaped
-# like a token. The effective capabilities and /etc/shadow are reported
-# because the default user holds the full capability set without sudo. Every probe is allowed to fail; a failure is what a
-# private token looks like.
 set -u
 
 AGENT_HOME="/home/agent"
-# The shape of an Anthropic key or OAuth token; a shape, not a value.
 TOKEN_SHAPE='sk-ant-[a-z]{3}[0-9]{2}-[A-Za-z0-9_-]{16,}'
 
 flag() { if "$@" >/dev/null 2>&1; then echo true; else echo false; fi; }

@@ -9,15 +9,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * note-lines.tsx -- the centered line a combobox says where its rows would
- * stand, the same line as a status, and the quiet list line at the start of
- * a room, and the line that stands at a sidebar's rows' inset; a
- * transcript's quiet line, selectable, and its trail led by a glyph and
- * naming the agents that continued it, wrapping in a narrow column.
- */
-
-/** Nothing happens on a press: the catalog opens nowhere. */
 function press(): void {}
 
 function NoteLines(): React.JSX.Element {

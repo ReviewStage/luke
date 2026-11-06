@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { keepIdentity } from "./index.js";
 
-/** A value as a delivery hands it: the same data, every object of it new. */
 function delivered<Value>(value: Value): Value {
   return structuredClone(value);
 }

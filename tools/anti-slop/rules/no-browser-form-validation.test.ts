@@ -26,7 +26,6 @@ tester.run("no-browser-form-validation", noBrowserFormValidationRule, {
       code: "function A() { return <form noValidate onSubmit={save}><Field /></form>; }",
       filename: PANEL_FILE,
     },
-    // A component named Form is no intrinsic element.
     { code: "function A() { return <Form onSubmit={save} />; }", filename: PANEL_FILE },
   ],
   invalid: [
@@ -35,7 +34,6 @@ tester.run("no-browser-form-validation", noBrowserFormValidationRule, {
       filename: PANEL_FILE,
       errors: [{ messageId: "browserChecked" }],
     },
-    // `@repo/ui` is held too, and turning it back off is no escape.
     {
       code: "function A() { return <form noValidate={false} />; }",
       filename: UI_FILE,

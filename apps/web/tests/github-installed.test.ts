@@ -4,18 +4,8 @@ import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";
 
-/**
- * github-installed.test.ts -- the GitHub App's landing says where an
- * installation stands and what to do next: a confirmed one says the tab can
- * go, a refused one says why and how to try again, and an address whose
- * status the page does not know reads as an installation the service could not
- * confirm. The page runs as it does in the browser, mounted on its own
- * `#root`.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** The page with `status` on its address, or none. */
 async function openPage(status?: string): Promise<HTMLElement> {
   const search =
     status === undefined
@@ -32,7 +22,6 @@ async function openPage(status?: string): Promise<HTMLElement> {
   return root;
 }
 
-/** What the page says, one line per element: its title and description. */
 function said(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("p, h1"))
     .map((element) => element.textContent ?? "")

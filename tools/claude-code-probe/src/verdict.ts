@@ -1,25 +1,3 @@
-/**
- * verdict.ts -- the plan's two checks, each a list of conditions read off what the probe observed, and whether each held.
- *
- * Check one is that the plan works from inside the sandbox: a turn that
- * edits, runs a background command, waits with `ScheduleWakeup`, pushes, is
- * stopped, and resumes in a relaunched CLI after the sandbox stopped and
- * resumed, billed to the plan. Check two is that the token stays at the
- * sandbox's firewall: Claude Code runs on a placeholder the firewall swaps
- * for it, which is refused anywhere else, no command the agent runs and no
- * file holds the token, a Terminal's shell reads neither it nor the
- * placeholder, and Vespin can still launch as root through the Sandbox
- * API's sudo. Claude Code runs no command sandbox, so a command the agent
- * runs reads the placeholder, which is what the design accepts.
- *
- * The sandbox's default user holds the full capability set without sudo
- * (P16's finding), so a Terminal's shell as it is today reads another
- * user's environment whatever sudoers says. The gating Terminal conditions
- * are therefore read from a shell with every capability dropped, the remedy
- * P03 would carry; the shell as it is today is reported beside them as a
- * finding that gates nothing.
- */
-
 import type { WireValue } from "@repo/wire";
 import { PROBE_SANDBOX } from "./pins.js";
 import {
@@ -39,39 +17,25 @@ export const CHECK = {
 } as const;
 type Check = (typeof CHECK)[keyof typeof CHECK];
 
-/** The words each turn ends on, which the probe's prompts ask for. */
 export const TURN_DONE = {
   FIRST: "AGENT-PROBE-TURN-1-DONE",
   RESUMED: "AGENT-PROBE-TURN-3-DONE",
 } as const;
 
-/** What the probe saw, gathered by the run; every field is what a step observed, or none where the step never got there. */
 export interface ProbeObservations {
-  /** The run's own nonce, which names the file and branch the first turn makes. */
   readonly nonce: string;
-  /** The user a Sandbox API command with `sudo` reached. */
   readonly sudoApiUser: string | undefined;
-  /** The user and effective capabilities the launch's drop answered with (`AS_AGENT`). */
   readonly launchUser: string | undefined;
   readonly launchCapEff: string | undefined;
-  /** The first launch's messages, through the first turn and the stopped one. */
   readonly firstLaunch: readonly WireValue[];
-  /** Whether the turn the probe stopped ended with a result. */
   readonly stoppedTurnEnded: boolean;
-  /** Whether the branch the first turn pushed is on GitHub. */
   readonly branchPushed: boolean;
-  /** The session's files on the sandbox disk before the sandbox stopped, and after it resumed. */
   readonly sessionFilesBeforeStop: readonly string[];
   readonly sessionFilesAfterResume: readonly string[];
-  /** The launch after the resume, with `resume` set to the first launch's session. */
   readonly resumedLaunch: readonly WireValue[];
-  /** The leak check from a Terminal's shell as it is today: the default user, no sudo, capabilities kept, while the CLI ran. */
   readonly terminalAsToday: LeakReport | undefined;
-  /** The same shell with every capability dropped (`DROP_CAPABILITIES`). */
   readonly terminalCapsDropped: LeakReport | undefined;
-  /** What Anthropic answered the placeholder with from outside the sandbox, the probe's own machine. */
   readonly placeholderOutside: string | undefined;
-  /** How many files outside `/proc` hold a token-shaped string, as root sees the disk. */
   readonly rootFilesWithTokenShape: number | undefined;
 }
 
@@ -80,14 +44,11 @@ export interface Condition {
   readonly name: string;
   readonly pass: boolean;
   readonly detail: string;
-  /** Whether the check's verdict rests on it; a finding that gates nothing is reported alone. */
   readonly gating: boolean;
 }
 
-/** The effective capability set of a process that holds none. */
 const NO_CAPABILITIES = "0000000000000000";
 
-/** A status that says Anthropic answered and refused for want of a credential. */
 const UNAUTHENTICATED = /^(401|403)$/;
 
 const EDIT_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
@@ -100,7 +61,6 @@ function finding(check: Check, name: string, pass: boolean, detail: string): Con
   return { check, name, pass, detail, gating: false };
 }
 
-/** Whether a shell's report shows it can reach neither the token, the CLI's environment and the placeholder in it, the session, nor root's secrets. */
 function shellIsPrivate(report: LeakReport | undefined): boolean {
   return (
     report !== undefined &&
@@ -117,7 +77,6 @@ function describe(report: LeakReport | undefined): string {
   return report === undefined ? "no report" : JSON.stringify(report);
 }
 
-/** The leak check the agent ran through its Bash tool, read back from the tool's result. */
 function agentLeakReport(messages: readonly WireValue[]): LeakReport | undefined {
   for (const text of toolResultTexts(messages)) {
     const report = leakReportIn(text);
@@ -126,11 +85,6 @@ function agentLeakReport(messages: readonly WireValue[]): LeakReport | undefined
   return undefined;
 }
 
-/**
- * Whether the turn that said its closing words ended well: some message
- * says them, and a result after it reports no error. Note that the words
- * alone are not enough, because a turn can say them and still fail.
- */
 function endedWell(messages: readonly WireValue[], words: string): boolean {
   const said = messages.findIndex((message) => assistantText([message]).includes(words));
   if (said === -1) return false;
@@ -291,7 +245,6 @@ export function verdict(seen: ProbeObservations): readonly Condition[] {
   return [...sandboxRunConditions(seen), ...tokenConditions(seen)];
 }
 
-/** Whether every condition the verdict rests on held; findings that gate nothing are left out. */
 export function passed(conditions: readonly Condition[]): boolean {
   return conditions.every((each) => each.pass || !each.gating);
 }

@@ -13,15 +13,6 @@ import { landingDescription, useConnectReturn } from "./connect-return";
 import "./styles.css";
 import { mountPrerenderedPage } from "./mount-page";
 
-/**
- * Where GitHub leaves a developer once our GitHub App is installed, by
- * way of the service's Setup URL route, which confirmed the installation and
- * put one word of status on this page's address. Every string is fixed by
- * the build, worded once for every landing (`@repo/features/landing-outcome`):
- * the status chooses an outcome, and nothing the address carried is drawn.
- * The way back is the Open link (`connect-return.ts`).
- */
-
 function statusFromAddress(): GitHubInstallStatus {
   return (
     githubInstallStatusFromWire(
@@ -30,11 +21,6 @@ function statusFromAddress(): GitHubInstallStatus {
   );
 }
 
-/**
- * The page opens on GitHub's mark, badged with how the installation ended:
- * the title says what happened, the description what to do next, and the
- * Open link goes back.
- */
 function GitHubInstalled(): React.JSX.Element {
   const [status] = useState(statusFromAddress);
   const words = landingWords(

@@ -27,14 +27,6 @@ import {
   WORKSPACE_MEMBER,
 } from "./support/fake-service";
 
-/**
- * The shared host as a browser tab composes it, with no panel drawn: what it
- * keeps survives the tab in the browser's storage, an act the panel sends
- * reaches the service through the in-process bridge and comes back, and a
- * connect's address lands in the tab its press opened.
- */
-
-/** The host stood up in a scope of its own over the fake given, its acts run on the test's own services. */
 const standingHost = (service: ReturnType<typeof fakeService>) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<never>();
@@ -101,7 +93,6 @@ it.effect(
               INTEGRATION_PROVIDER.SLACK
             ],
         );
-        /** Gives the host's fibers turns, the clock a second on before each, until the tab's state draws Slack as `status`. */
         const drawsSlack = (status: string) =>
           Effect.gen(function* () {
             for (let second = 0; second < 60 && (yield* slack) !== status; second += 1) {
@@ -182,8 +173,6 @@ it.effect(
           askAct(ACT_KIND.SETTING_UPDATE, { field: "theme", value: THEME.DARK }),
         );
         assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
-        // The browser tells every tab but the writer's; jsdom holds one window, so the event is
-        // said here as the browser would, again until the reader has heard it.
         yield* Effect.promise(() =>
           vi.waitFor(async () => {
             window.dispatchEvent(
@@ -210,7 +199,6 @@ it.effect(
           location: { replace: (url: string) => sentTo.push(url) },
           sessionStorage: { setItem: () => undefined },
         };
-        // SAFETY: the tab's opener is cut, and its `closed`, `location.replace`, and `sessionStorage.setItem` read, alone, which this holds.
         vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
         const { bridge, actPort, actPortClient } = yield* standingHost(
           fakeService({ signedIn: true }),
@@ -223,7 +211,6 @@ it.effect(
         );
 
         assert.deepEqual(sentTo, [NOTION_SIGN_IN]);
-        // The provider's page reaches nothing of the app's tab.
         assert.equal(tab.opener, null);
       }),
     ),
@@ -238,7 +225,6 @@ it.effect("a workspace connect on the act port lands in the tab its press opened
         location: { replace: (url: string) => sentTo.push(url) },
         sessionStorage: { setItem: () => undefined },
       };
-      // SAFETY: the connect reads a tab's `closed`, `location.replace`, and `sessionStorage.setItem`, and cuts its opener, alone.
       vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
       const { bridge, actPort, actPortClient } = yield* standingHost(
         fakeService({ signedIn: true }),
@@ -291,7 +277,6 @@ it.effect(
     ),
 );
 
-/** A relay socket the test opens and feeds by hand, keeping what the tab sent on it. */
 class RelaySocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -316,14 +301,12 @@ class RelaySocket extends EventTarget {
   }
 }
 
-/** Gives the host's fibers turns until `condition` holds, or fails the test if it never does. */
 const until = (condition: () => boolean) =>
   Effect.gen(function* () {
     for (let turn = 0; turn < 200 && !condition(); turn += 1) yield* Effect.yieldNow;
     assert.ok(condition(), "the condition did not hold in time");
   });
 
-/** The next `count` messages a port hears, as the page's end of a shell's channel hears them. */
 const heardOn = (port: MessagePort, count: number) =>
   Effect.callback<readonly WireBoundaryInput[]>((resume) => {
     const heard: WireBoundaryInput[] = [];
@@ -333,7 +316,6 @@ const heardOn = (port: MessagePort, count: number) =>
     };
   });
 
-/** The next frame the tab sends on a relay socket. */
 const nextSent = (socket: RelaySocket) =>
   Effect.callback<void>((resume) => {
     socket.addEventListener("sent", () => resume(Effect.void), { once: true });
@@ -346,7 +328,6 @@ it.effect(
       Effect.gen(function* () {
         vi.stubGlobal("WebSocket", RelaySocket);
         const posted: { message: WireBoundaryInput; origin: string; ports: MessagePort[] }[] = [];
-        // jsdom's postMessage carries no port, so the page's own post is read where it is made.
         vi.spyOn(window, "postMessage").mockImplementation(
           ((message: WireBoundaryInput, origin: string, transfer: MessagePort[] = []) =>
             void posted.push({ message, origin, ports: transfer })) as typeof window.postMessage,
@@ -362,7 +343,6 @@ it.effect(
         yield* Effect.promise(() =>
           askAct(ACT_KIND.TERMINAL_ATTACH, { agentId, terminalId, cols: 120, rows: 32 }),
         );
-        // Note that the shell's relay is found by its path, because the tab's live reads open a socket of their own.
         const shellRelay = () =>
           RelaySocket.opened.find((socket) => new URL(socket.url).pathname === TERMINAL_RELAY.PATH);
         yield* until(() => shellRelay() !== undefined);
@@ -397,7 +377,6 @@ it.effect(
         const heard = yield* told;
         assert.deepEqual(
           heard.map((message) => {
-            // Note that the bytes are read as their text, because a port's copy of them is of Node's realm, not jsdom's.
             const read = unparsedWire(message);
             return isRecord(read) && ArrayBuffer.isView(read.data)
               ? { ...read, data: new TextDecoder().decode(read.data) }
@@ -419,7 +398,6 @@ it.effect(
     ),
 );
 
-/** The run the host states for a tab opened at an address, in a build whose `DEV` is as given. */
 const runAt = (address: string, development: boolean) =>
   Effect.scoped(
     Effect.gen(function* () {

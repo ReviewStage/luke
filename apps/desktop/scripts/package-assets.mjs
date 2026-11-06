@@ -35,8 +35,6 @@ export function packageAssetPaths({ appRoot }) {
 
 export function preparePackageAssets({ repoRoot, paths }) {
   for (const helperPath of paths.helperPaths) {
-    // A helper missing here is a feature missing at runtime with no other sign of
-    // it, so the package fails rather than shipping without one.
     if (!fs.existsSync(helperPath)) {
       throw new Error(`macOS helper is missing: ${helperPath}`);
     }

@@ -12,34 +12,8 @@ import {
   webFunctions,
 } from "./function-layout.js";
 
-/**
- * How the functions become bundles, declared once so the build script and the
- * test bundle the same way. A grouped function's entry is generated here: it
- * imports each member route and hands them to `dispatchRoutes`. A standalone
- * function's entry is its route file. Workspace packages and the web app's
- * declared runtime dependencies are inlined alike, so nothing is left for
- * Vercel's builder to trace; past Node's builtins and `INLINE_EXCEPTION`,
- * anything that resolves external is a dependency a bundled package reaches
- * that this app never declared.
- */
-
 const FUNCTION_BUNDLE_TARGET = "node24";
 
-/**
- * The specifiers left outside every bundle. Each is a guarded optional
- * `require` inside an inlined dependency: `pg` tries its native binding and
- * falls back to JavaScript, `ws` tries its two native accelerators and falls
- * back the same way. esbuild leaves an unresolvable require inside a try/catch
- * external on its own; naming them is what lets the externals record say
- * exactly these and refuse a fourth.
- */
-/**
- * Prepended to every bundle. esbuild turns a CommonJS `require` inside an
- * inlined dependency into a shim that throws "Dynamic require … is not
- * supported" in ES module output unless a `require` is in scope; `pg` asks
- * for `events` that way and every function would fail at load. A real
- * `require` built from the module's own URL is what the shim finds instead.
- */
 const REQUIRE_BANNER =
   'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);';
 
@@ -49,22 +23,12 @@ export const INLINE_EXCEPTION = {
   UTF8_VALIDATE: "utf-8-validate",
 } as const;
 
-/** Where the expected external set of every bundle is committed, compared as data. */
 export const FUNCTION_EXTERNALS_FILE = join("server", "function-externals.json");
 
-/**
- * The modules no function may carry, by their path in the web app: the local
- * server's own routes, which answer what no deployment may. The demo's
- * sign-in (`local-sign-in.ts`) mints a session with no sign-in at all, so a
- * route that came to import it, however many modules deep, would carry it
- * into a deploy.
- */
 const LOCAL_ONLY_MODULES = [join("server", "local-sign-in.ts")] as const;
 
-/** The metafile the build writes beside its bundles, for reading what actually shipped. */
 export const FUNCTION_METAFILE = join(FUNCTION_BUNDLE_DIRECTORY, "metafile.json");
 
-/** Each bundle's external imports, keyed by its file under `dist-functions/`, each set sorted. */
 const BundleExternalsSchema = Schema.Record(Schema.String, Schema.Array(Schema.String));
 
 export type BundleExternals = typeof BundleExternalsSchema.Type;
@@ -73,7 +37,6 @@ const decodeBundleExternals = Schema.decodeUnknownSync(
   Schema.fromJsonString(BundleExternalsSchema),
 );
 
-/** How one bundle's externals differ from the recorded set. */
 export interface ExternalsDrift {
   readonly bundle: string;
   readonly added: readonly string[];
@@ -83,22 +46,17 @@ const DISPATCHER_NAMESPACE = "function-dispatcher";
 const DISPATCH_MODULE = join("server", "function-dispatch.ts");
 
 export interface FunctionBundlePlan {
-  /** The functions the bundles are built for. */
   readonly functions: readonly FunctionDefinition[];
-  /** The declared runtime dependencies left external, by package name. */
   readonly externalPackages: ReadonlySet<string>;
-  /** The esbuild options the bundles are built with; `write` is the caller's, and the metafile is always asked for since the checks read it. */
   readonly options: BuildOptions & { readonly metafile: true };
 }
 
-/** The name of the package a specifier reaches: the scope and name of a scoped one, the first segment otherwise. */
 function packageNameOf(specifier: string): string {
   return specifier.startsWith("@")
     ? specifier.split("/").slice(0, 2).join("/")
     : (specifier.split("/")[0] ?? specifier);
 }
 
-/** One member's import: a route file's default export, or the hosted oRPC route by its name. */
 function routeImport(web: string, route: string, index: number): string {
   if (route === ORPC_ROUTE_KEY) {
     return `import { orpcRoute as route${index} } from ${JSON.stringify(join(web, ORPC_ROUTE_MODULE))};`;
@@ -106,7 +64,6 @@ function routeImport(web: string, route: string, index: number): string {
   return `import route${index} from ${JSON.stringify(join(web, routeSourcePath(route)))};`;
 }
 
-/** The generated entry of a grouped function: every member route, keyed for the dispatcher. */
 function dispatcherSource(web: string, definition: FunctionDefinition): string {
   const imports = definition.routes.map((route, index) => routeImport(web, route, index));
   const entries = definition.routes.map(
@@ -143,35 +100,19 @@ function dispatcherPlugin(web: string, functions: readonly FunctionDefinition[])
   };
 }
 
-/** zod's pure re-export entry modules, as a resolved path ends: the package root, `zod/v4`, and the classic index `zod/v4` re-exports. */
 const ZOD_ENTRY_MODULES = [
   "/node_modules/zod/index.js",
   "/node_modules/zod/v4/index.js",
   "/node_modules/zod/v4/classic/index.js",
 ];
-/** The specifiers that reach them: `zod` and `zod/v4` from a dependency, `./classic/index.js` from inside `zod/v4`. */
 const ZOD_ENTRY_SPECIFIER = /^(zod(\/v4)?|\.\/classic\/index\.js)$/;
 const ZOD_ENTRY_PLUGIN = "zod-entry-side-effects";
 
-/**
- * Keeps zod's re-export entry modules in every bundle. A module that some
- * bundled dependency reaches through a dynamic `import()` is wrapped by esbuild
- * in a lazy initializer, and Better Auth 1.7 dynamically imports modules that
- * reach `zod`, so zod's schemas are wrapped. A static importer of a wrapped
- * module is handed an `init_…()` call ahead of its own code, but the `ai`
- * package imports `zod/v4`, which reaches the schemas through two pure
- * re-export files that zod's `sideEffects` list lets esbuild drop, and esbuild
- * drops the initializer call with them (0.27.7 and 0.28.2 alike): `ai`'s top-level `z.lazy(…)` then runs before `ZodLazy`
- * is assigned and the function fails to load. Note that we mark only those
- * re-export files as having side effects, because keeping them costs a few
- * lines and keeps the initializer call esbuild would otherwise lose.
- */
 function zodEntryPlugin(): Plugin {
   return {
     name: ZOD_ENTRY_PLUGIN,
     setup(build) {
       build.onResolve({ filter: ZOD_ENTRY_SPECIFIER }, async (args) => {
-        // The plugin's own resolve below re-enters this hook; it is passed through by its marker.
         if (args.pluginData === ZOD_ENTRY_PLUGIN) return undefined;
         const resolved = await build.resolve(args.path, {
           kind: args.kind,
@@ -205,7 +146,6 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       ...builtinModules.map((name) => `node:${name}`),
     ]),
     options: {
-      // The metafile's paths are relative to this, so the build and the test key bundles the same way from any working directory.
       absWorkingDir: web,
       entryPoints,
       outdir: join(web, FUNCTION_BUNDLE_DIRECTORY),
@@ -217,7 +157,6 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       metafile: true,
       logLevel: "warning",
       plugins: [dispatcherPlugin(web, functions), zodEntryPlugin()],
-      // A shell script a route imports `?raw` is inlined as its text, as Vite answers it to a test: the host's install script (`server/routes/hosts/install-script.ts`).
       loader: { ".sh": "text" },
       external: exceptions,
       banner: { js: REQUIRE_BANNER },
@@ -225,22 +164,13 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
   };
 }
 
-/** The bundle's file under `dist-functions/`, POSIX-separated, whatever the metafile's output path was relative to. */
 function bundleKey(web: string, outputPath: string): string {
   const fromWeb = relative(join(web, FUNCTION_BUNDLE_DIRECTORY), join(web, outputPath));
   return fromWeb.split(sep).join(posix.sep);
 }
 
-/** esbuild's own helper module, recorded in the metafile as an external import of every bundle it shimmed a `require` in; not a dependency. */
 const ESBUILD_RUNTIME = "<runtime>";
 
-/**
- * The external imports no declared package accounts for, sorted: each a
- * module a bundle would fail to load. A module given to esbuild's `inject`,
- * as Sentry's plugin gives its release stub, is recorded external from every
- * importer even though it is bundled as an input, so an import the metafile
- * also lists as an input is not one.
- */
 export function undeclaredImports(
   metafile: Metafile,
   web: string,
@@ -257,7 +187,6 @@ export function undeclaredImports(
   return [...undeclared].sort();
 }
 
-/** Every bundle's external imports as the metafile records them, sorted and unique, keyed by bundle. */
 export function externalsByBundle(metafile: Metafile, web: string) {
   return Object.fromEntries(
     Object.entries(metafile.outputs).map(([path, output]) => [
@@ -269,12 +198,10 @@ export function externalsByBundle(metafile: Metafile, web: string) {
   ) satisfies BundleExternals;
 }
 
-/** The recorded external set of every bundle, as committed. */
 export async function expectedExternals(web: string): Promise<BundleExternals> {
   return decodeBundleExternals(await readFile(join(web, FUNCTION_EXTERNALS_FILE), "utf8"));
 }
 
-/** The committed map's text, stable under regeneration: bundles sorted, each set sorted. */
 export function externalsSource(externals: BundleExternals): string {
   const sorted = Object.fromEntries(
     Object.keys(externals)
@@ -284,12 +211,6 @@ export function externalsSource(externals: BundleExternals): string {
   return `${JSON.stringify(sorted, null, 2)}\n`;
 }
 
-/**
- * Where the bundles' externals differ from the recorded set: a bundle that
- * gained or lost an external, one no longer built, or one the record has
- * not seen. Empty when every bundle loads exactly what was recorded, which
- * is what a deploy is trusted on.
- */
 export function externalsDrift(
   expected: BundleExternals,
   actual: BundleExternals,
@@ -306,7 +227,6 @@ export function externalsDrift(
   return drift;
 }
 
-/** The bundles, by their output path, whose inputs include the module given, by its absolute path. */
 export function bundlesReaching(
   metafile: Metafile,
   web: string,
@@ -320,12 +240,6 @@ export function bundlesReaching(
   );
 }
 
-/**
- * Where a bundle reaches a module no function may carry, as `<bundle>
- * reaches <module>`: empty when none does, which is what a deploy is trusted
- * on. The deploy's bundle step refuses any, and the externals test fails on
- * one first.
- */
 export function localOnlyReach(metafile: Metafile, web: string): readonly string[] {
   return LOCAL_ONLY_MODULES.flatMap((module) =>
     [...bundlesReaching(metafile, web, join(web, module))].map(

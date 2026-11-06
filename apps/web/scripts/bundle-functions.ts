@@ -21,34 +21,8 @@ import {
 } from "../server/function-layout.js";
 import { agentImageReference } from "./agent-image.js";
 
-/**
- * Bundles the functions the routes under `server/routes/` and the hosted
- * oRPC route are grouped into,
- * each a plain ESM file under `dist-functions/`, so Vercel's builder finds JavaScript
- * and only traces dependencies. Handed TypeScript, the builder runs its own
- * compiler over each function's whole import graph separately — thirty-odd
- * passes over the same sixteen workspace packages, most of a deploy's build
- * time, under compiler options that are not this repository's.
- *
- * Each bundle is emitted whole into a `.func` of the Build Output tree
- * (`server/build-output.ts`), which is what Vercel deploys; nothing under
- * `api/` is committed, so Vercel's zero-config pass has nothing to build
- * beside it.
- *
- * Workspace packages and declared dependencies alike are inlined, since a
- * `.func` carries only what is under it. Anything that still resolved
- * external and is neither a Node builtin nor a named exception is a module
- * the function would fail to load, so the build refuses it here instead.
- */
 const WEB = join(import.meta.dirname, "..");
 
-/**
- * The module that reads the agents' image reference beside a function's
- * entry. Every function whose bundle reaches it ships the reference in its
- * `.func`, computed here as CI computes the tag it pushes the image under
- * (`agent-image.ts`), and a build without the runner's bundle the image
- * carries fails here rather than deploy a launch that names no image.
- */
 const AGENT_IMAGE_READER = join(
   WEB,
   "..",
@@ -60,13 +34,11 @@ const AGENT_IMAGE_READER = join(
   "coder-host",
   "agent-image.ts",
 );
-/** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
 
 const agentImage = Buffer.from(`${await agentImageReference()}\n`, "utf8");
 
 const task = await functionBundlePlan(WEB);
-// Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
 const result = await build({ ...task.options, metafile: true, write: true });
 
@@ -77,7 +49,6 @@ if (undeclared.length > 0) {
   );
 }
 
-// A route that reaches the local server's own routes would carry a session for anyone into the deploy.
 const localOnly = localOnlyReach(result.metafile, WEB);
 if (localOnly.length > 0) {
   throw new Error(

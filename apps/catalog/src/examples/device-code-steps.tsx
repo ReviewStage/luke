@@ -22,26 +22,15 @@ import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * device-code-steps.tsx -- a code entered on another site, said as two
- * numbered steps (a hint, then a code to copy over a page to open) and the
- * wait on the other site under them, drawn alone and in
- * a dialog with a line under its title and a close at its end, waiting or
- * ended in a failure with Try again. The catalog's copy act is the
- * browser's own clipboard, and its presses go nowhere.
- */
-
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
 
 const VERIFICATION_URL = "https://example.com/device";
 
-/** The refusal the failed dialog says. */
 const EXPIRED = {
   words: "The code expired before it was entered. Try again.",
   failure: CATALOG_FAILURE,
 };
 
-/** Where the dialog is opened at: waiting on the code, or ended in a failure. */
 const STANDING = {
   WAITING: "waiting",
   FAILED: "failed",
@@ -49,7 +38,6 @@ const STANDING = {
 
 type Standing = (typeof STANDING)[keyof typeof STANDING];
 
-/** The two steps, and the wait under them, as siblings so a dialog's card spaces them at its own gap. */
 function Steps(): React.JSX.Element {
   return (
     <>
@@ -79,7 +67,6 @@ function Steps(): React.JSX.Element {
   );
 }
 
-/** The steps in a dialog, opened waiting or failed, put away by its close, Escape, or a press on the dimmed window. */
 function StepsDialog(): React.JSX.Element {
   const [standing, setStanding] = useState<Standing | undefined>(undefined);
   const close = () => setStanding(undefined);

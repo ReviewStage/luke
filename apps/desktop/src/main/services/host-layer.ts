@@ -36,16 +36,12 @@ import type { DesktopConfig } from "./desktop-config";
 
 interface HostSeamDependencies {
   config: DesktopConfig;
-  /** The client's own credential protection; the host encrypts nothing without it. */
   cipher: SecretCipherSeam;
 }
 
-/** Every seam tag this process answers for, each stood up from what the launch already established. */
 function hostSeamLayersFor(dependencies: HostSeamDependencies) {
   const { config, cipher } = dependencies;
   const { runMode } = config;
-  // A press on a Mac with no network is answered at once, from Electron's own
-  // probe, rather than opening a page nobody can load.
   const consent = Layer.succeed(SignInConsent, {
     open: <Grant extends object>(options: LoopbackConsentOptions<Grant>) =>
       loopbackConsent({ ...options, isOnline: () => net.isOnline() }),
@@ -62,44 +58,22 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
-    // A forwarded cloud port is listened on at 127.0.0.1 alone, over `node:net`.
     Layer.succeed(LoopbackListener, listenOnLoopbackOverNet),
-    // Cloud agents' mirrors stand beside the local agents' clones under the member's own home, `~/.vespin`.
     Layer.succeed(MirrorPlatform, mirrorPlatform(os.homedir())),
     thisMacHostLayer(),
-    // The account is the OAuth sign-in, its tokens sealed by this Mac's
-    // cipher. Its consent is a loopback on this Mac: the browser hands the
-    // code back to a `node:http` listener on 127.0.0.1.
     Layer.provide(
       oauthAccountSourceLayer,
       Layer.merge(Layer.succeed(SecretCipher, cipher), consent),
     ),
-    // The protocol's shutdown answers accepted at once; the quit that follows
-    // is the one drain, which the entry's `before-quit` asks for.
     Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),
   );
 }
 
-/**
- * The host this client operates, constructed and linked with nothing yet
- * begun: the assembly is where the server the operator reaches comes from, so
- * it stands before any start, and `hostStandingLayer` over it is what begins
- * the composers, arms the loops, and registers the drain — which is why the
- * standing layer is a step of the desktop's own launch rather than something
- * this module builds.
- *
- * A live run keeps its settings and workspace files on disk under the app's own
- * application data; a fixture or capture run keeps nothing and is
- * network-silent. Either way this process is one operator over one
- * transport, and one node. Every call it makes to the service tells the
- * service's reach beside it, which the client's network watch follows.
- */
 export function hostAssemblyLayerFor(
   dependencies: HostSeamDependencies,
 ): Layer.Layer<HostAssemblyTag | ServiceReach, DuplicateGatewayMethod> {
   const seams = hostSeamLayersFor(dependencies);
   return Layer.provide(
-    // The desktop runs every platform concern: it is the host they were written for.
     hostAssemblyLayer(ALL_HOST_PLATFORM_CONCERNS),
     Layer.mergeAll(
       Layer.provideMerge(hostKernelLayer, seams),

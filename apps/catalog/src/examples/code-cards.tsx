@@ -9,16 +9,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * code-cards.tsx -- the one card for a block of code: a short block headed
- * by its language, one headed by its language's name after its glyph, one headed by its file with the host's colors on its
- * runs, a block of 60 lines cut at 40 behind Show all, a suggestion drawn
- * as rows on the added and removed grounds, a body the caller draws under
- * a header with an action of its own, and a file's lines with the file's
- * opening beside the Copy, as an Inbox item's code stands. The catalog's
- * copy act is the browser's own clipboard; an app hands in its shell's.
- */
-
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
 
 const SHORT = ["pnpm install", "pnpm exec vitest run packages/ui"].join("\n");
@@ -29,7 +19,6 @@ const COLORED = [
   "export const cut = 40;",
 ].join("\n");
 
-/** The colors the host's highlighter hands for `COLORED`, GitHub's own in each appearance. */
 const COLORED_LINES = [
   [
     { text: "import", color: "#ff7b72", lightColor: "#cf222e" },

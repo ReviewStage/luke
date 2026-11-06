@@ -18,12 +18,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * sidebar-parts.tsx -- the parts every surface drawing the app's sidebar
- * shares: the app's head, and the same head naming the surface it stands on;
- * the places over their rule; and the foot's account row.
- */
-
 function SidebarParts(): React.JSX.Element {
   return (
     <>

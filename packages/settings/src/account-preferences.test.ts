@@ -10,24 +10,7 @@ import {
   accountPreferencesToWrite,
 } from "./schema-access.js";
 
-/**
- * The keys v0.18.0 knows inside the snapshot's `preferences` part, read from
- * its tag (`git show v0.18.0:packages/settings/src/schema-access.ts`, its
- * `ACCOUNT_PREFERENCE_FIELDS`) and pinned here rather than read from this
- * build. Note that they are pinned, because that build's reader refuses the
- * whole part on any key it does not know, so a Mac still on it would lose
- * the account's preferences the moment the service answered a newer one; a
- * new preference rides a part of its own beside `preferences`, as `linkOpen`
- * does.
- */
 const V0_18_0_PREFERENCE_KEYS: readonly string[] = ["voice"];
-
-/**
- * What a device writes of its preferences: a link choice it let go of
- * since it last synced is written as the browser, so the service's earlier
- * choice does not come back; one it never held is left out, so it clears
- * no other device's.
- */
 
 test("a link choice cleared since the last sync is written as the browser", () => {
   const written = accountPreferencesToWrite({}, { linkOpen: LINK_OPEN.MAC_APP });
@@ -75,8 +58,6 @@ test("a push carries a link choice changed or cleared since the last sync", () =
 });
 
 test("the snapshot's preferences part carries only the keys v0.18.0 reads, whatever the account holds", () => {
-  // Note that every preference is held, and `Required` makes a new one a compile error here until
-  // it is given a value, so a preference added to the shared part is caught below.
   const everything = {
     linkOpen: LINK_OPEN.MAC_APP,
     agentEnter: AGENT_ENTER.QUEUE,

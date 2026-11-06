@@ -3,13 +3,6 @@ import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * event-notes.tsx -- the comments a review left on a pull request's lines,
- * as a transcript's card draws them under the reviewer's words: five, each
- * its place over its words, the last two folded behind the foot; and two,
- * each led by its file's glyph, with nothing before them.
- */
-
 const PULL_REQUEST = "https://github.com/acme/relay/pull/42";
 
 const COMMENTS = [
@@ -20,7 +13,6 @@ const COMMENTS = [
   ["README.md", 7, "Typo: recieve."],
 ] as const;
 
-/** A link in a note's place, opening nothing in the catalog. */
 function Link({ children }: { children: string }): React.JSX.Element {
   return (
     <TextLink href={PULL_REQUEST} look={TEXT_LINK_LOOK.UNDERLINED}>

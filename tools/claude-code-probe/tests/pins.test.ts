@@ -1,7 +1,3 @@
-/**
- * pins.test.ts -- the repository the probe clones and opens its firewall to is exactly one GitHub repository named owner/name.
- */
-
 import { describe, expect, it } from "vitest";
 import { isRepositoryName } from "../src/pins.js";
 

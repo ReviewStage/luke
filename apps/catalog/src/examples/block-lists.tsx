@@ -12,12 +12,6 @@ import {
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * block-lists.tsx -- blocks one under another in one box, a hairline
- * between each: pending review comments, each under its file and lines with
- * its presses; and a list holding one block.
- */
-
 const ignore = () => undefined;
 
 const COMMENTS = [
@@ -29,7 +23,6 @@ const COMMENTS = [
   },
 ] as const;
 
-/** One pending comment: where it is, its words, and its presses. */
 function Comment({ where, words }: { where: string; words: string }): React.JSX.Element {
   return (
     <BlockListItem>

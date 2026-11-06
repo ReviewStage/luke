@@ -3,28 +3,15 @@ import path from "node:path";
 
 import { parseSync } from "oxc-parser";
 
-/**
- * module-graph.ts -- a module's imports and exports as its text states them, read without running it.
- *
- * The guards that follow a graph (`@repo/ui`'s barrel, the catalog's
- * examples, the panel's launch bundle) read it with oxc's module record, so a
- * stylesheet import or a module that touches the DOM as it loads costs them
- * nothing, and a type-only edge is told apart from one a bundler follows.
- */
-
-/** One `import` or re-export a module states: the specifier, and the names it binds or passes on. */
 export interface ModuleEdge {
   readonly specifier: string;
-  /** Whether every name the edge carries is a type, so no bundler follows it. */
   readonly typeOnly: boolean;
-  /** Each name as the other module exports it and as this one binds or re-exports it; `*` for all. */
   readonly names: readonly { readonly imported: string; readonly local: string }[];
 }
 
 export interface ModuleRecord {
   readonly imports: readonly ModuleEdge[];
   readonly reexports: readonly ModuleEdge[];
-  /** The names the module declares and exports itself, with whether each is a type alone. */
   readonly declared: readonly { readonly name: string; readonly typeOnly: boolean }[];
   readonly program: unknown;
 }
@@ -33,7 +20,6 @@ function nameOf(name: { kind: string; name: string | null }): string {
   return name.kind === "Name" && name.name !== null ? name.name : "*";
 }
 
-/** What `source` imports, re-exports, and declares, read from its text as `file`. */
 export function moduleRecord(file: string, source: string): ModuleRecord {
   const parsed = parseSync(file, source);
   const imports = parsed.module.staticImports.map((one) => ({
@@ -63,7 +49,6 @@ export function moduleRecord(file: string, source: string): ModuleRecord {
   return { imports, reexports, declared, program: parsed.program };
 }
 
-/** The TypeScript file a relative specifier from `from` names, written with or without `.js`. */
 export function resolveRelative(from: string, specifier: string): string | undefined {
   if (!specifier.startsWith(".")) return undefined;
   const base = path.resolve(path.dirname(from), specifier.replace(/\.js$/u, ""));
@@ -72,12 +57,10 @@ export function resolveRelative(from: string, specifier: string): string | undef
   );
 }
 
-/** A file's module record, read from disk. */
 export function readModule(file: string): ModuleRecord {
   return moduleRecord(file, readFileSync(file, "utf8"));
 }
 
-/** Every identifier a subtree names, as JSX or as a value, imports aside. */
 export function namesUsed(program: unknown): ReadonlySet<string> {
   const used = new Set<string>();
   const visit = (value: unknown): void => {

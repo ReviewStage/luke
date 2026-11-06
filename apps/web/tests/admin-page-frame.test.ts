@@ -11,35 +11,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
-/**
- * admin-page-frame.test.ts -- every admin screen stands under the app's
- * toolbar, its title, or its way back and its name, at the start and its
- * controls at the end, loading or failed alike: a read that failed says why
- * in the page under that toolbar, with Retry, rather than in a page of its
- * own that drops the title and the controls, and an account no row carries
- * says it was not found under the same toolbar, its way back still there.
- * The network, the HTTP boundary to the service, is a fake that refuses each read,
- * or leaves it hanging.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** One screen as a maintainer reaches it, and the toolbar it should stand under. */
 interface Screen {
   readonly name: string;
   readonly element: () => React.ReactElement;
-  /** The words the toolbar heads the page with, its way back's first where it has one. */
   readonly heading: string;
-  /** Words each of the toolbar's controls reads. */
   readonly controls: readonly string[];
 }
 
 const VIEW_OPTIONS = "View options";
 
-/** The range every windowed screen here reads, said after its title. */
 const RANGE = "Last 7 days";
 
-/** Every prop a screen asks of its shell that this file does not watch. */
 const SHELL = {
   hideAdmins: false,
   onHideAdminsChange: () => undefined,
@@ -101,7 +85,6 @@ const SCREENS: readonly Screen[] = [
 
 let root: Root | undefined;
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks; the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -122,7 +105,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** `screen` with every read answered by `status`, or left hanging without one. */
 async function open(screen: Screen, status: number | undefined): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     status === undefined
@@ -137,19 +119,16 @@ async function open(screen: Screen, status: number | undefined): Promise<HTMLEle
   return page;
 }
 
-/** The toolbar heading the page, inside the page's own landmark. */
 function toolbar(page: HTMLElement): HTMLElement {
   const found = page.querySelector<HTMLElement>("main header.ui-toolbar");
   if (found === null) throw new Error("no toolbar heads the page");
   return found;
 }
 
-/** The toolbar's heading, its title or its way back and the page's name. */
 function heading(page: HTMLElement): string {
   return toolbar(page).querySelector(".ui-toolbar-heading")?.textContent ?? "";
 }
 
-/** The toolbar's controls at its end: their words, and the names of those drawn as a glyph alone. */
 function controls(page: HTMLElement): string {
   const actions = toolbar(page).querySelector(".ui-toolbar-actions");
   const named = [...(actions?.querySelectorAll("[aria-label]") ?? [])].map(

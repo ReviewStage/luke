@@ -30,7 +30,6 @@ import {
   WRITING_KEYS_IN_CONTEXT,
 } from "./shortcuts.js";
 
-/** What puts back the command key a test installed. */
 let restoreCommandKey: (() => void) | undefined;
 
 afterEach(() => {
@@ -38,12 +37,10 @@ afterEach(() => {
   restoreCommandKey = undefined;
 });
 
-/** Makes Ctrl the window's command key, as a browser on Windows or Linux does, for the rest of the test. */
 function commandIsCtrl(): void {
   restoreCommandKey = installCommandKey(COMMAND_KEY.CONTROL);
 }
 
-/** A press of K with the modifiers given held, and no other. */
 function pressK(held: { ctrlKey?: true; metaKey?: true; altGraph?: true }) {
   return {
     key: "k",
@@ -55,12 +52,6 @@ function pressK(held: { ctrlKey?: true; metaKey?: true; altGraph?: true }) {
     getModifierState: (key: string) => key === "AltGraph" && held.altGraph === true,
   };
 }
-
-/**
- * The Keyboard shortcuts page's table: every command a key reaches stands
- * in exactly one of its groups, so none is reachable by a key the page
- * never names.
- */
 
 test("every keyed command stands in exactly one group of the Keyboard shortcuts page", () => {
   const listed = APP_SHORTCUT_GROUPS.flatMap((group) => group.commands);

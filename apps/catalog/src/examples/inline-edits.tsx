@@ -9,14 +9,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * inline-edits.tsx -- an InlineEdit showing a name and renaming it in
- * place, as a field on its own ground, as a settings input, and bare in a
- * well that rings it, and
- * a long name in a narrow column.
- */
-
-/** A name the example renames in place, as a list renames a row. */
 function Renamed({ start, look }: { start: string; look: InlineEditLook }): React.JSX.Element {
   const [name, setName] = useState(start);
   const [editing, setEditing] = useState(false);

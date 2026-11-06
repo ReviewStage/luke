@@ -2,12 +2,6 @@ import { CheckIcon, PAGE_THUMB_SIZE, PageThumb } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * page-thumbs.tsx -- a small inert preview in a page's shape: a card's
- * preview as wide as its column, a row's tile with a picture, a glyph where
- * the page is gone, and the ground alone while it is read.
- */
-
 const PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="100%" height="100%" fill="#7aa7f4"/><rect x="12" y="12" width="70" height="10" rx="4" fill="#fff9"/></svg>',
 )}`;

@@ -2,12 +2,6 @@ import { GAP, LinkField, Stack } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * link-field.tsx -- the popover a link is written in: over words not linked
- * yet, empty; and over a link already there, holding it, with Open and
- * Remove beside it.
- */
-
 const ignore = () => undefined;
 
 function LinkFieldExample(): React.JSX.Element {

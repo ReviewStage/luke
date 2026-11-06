@@ -18,49 +18,14 @@ import {
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE, type LoopbackPageTone } from "./loopback-page.js";
 import { codeChallenge, createCodeVerifier } from "./pkce.js";
 
-/**
- * One consent trip, from a press to a grant: an authorization page opened in
- * the user's own browser, a code handed back on a loopback redirect that never
- * leaves this machine, and a PKCE-verified exchange with whoever issued the
- * page. Every provider we ask consent of runs this same trip — today the
- * account sign-in — and differs only in the four things the options below name: which ports the redirect may land on, what the
- * authorization page's URL is, what the exchange does with the code, and how
- * the landing card is worded.
- *
- * A trip begins at a press and nowhere else. The verifier is minted here, per
- * trip, so no flow can reach the authorization page with a challenge the
- * exchange will not answer for; nothing a provider sent back reaches the
- * landing page, whose every string is fixed by the build.
- *
- * The listener is one `Scope`'s worth of server: the trip's scope is what
- * binds it and what closes it, on a grant, on the deadline, and on an
- * interruption alike, so no path out of the trip can leave a port bound.
- */
-
 const LOOPBACK_HOST = "127.0.0.1";
 
-/**
- * What a flow naming no registered port binds: whatever the machine has free,
- * which is what a provider documenting loopback redirects as exempt from exact
- * matching allows.
- */
 const EPHEMERAL_PORT = 0;
 
-/** Long enough to find the right account; not an open door all afternoon. */
 const DEFAULT_TIMEOUT_MS = 180_000;
 
-/**
- * How long the deadline gives way for a request that was already on the
- * loopback when it came. Long enough for a redirect to be read and claimed,
- * short enough that a stray request buys nothing worth having.
- */
 const ARRIVAL_GRACE_MS = 1_000;
 
-/**
- * The reasons every flow shares, worded once. A flow words only the two that
- * name its own provider — a refusal and a timeout — because those are the two
- * a row shows beside the provider's name.
- */
 const SHARED_REASON = {
   UNAVAILABLE: "Could not open a sign-in callback on this machine.",
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
@@ -69,10 +34,6 @@ const SHARED_REASON = {
   OFFLINE: "This machine is offline.",
 } as const;
 
-/**
- * The card a second callback is answered with, in no flow's particular words
- * because it says nothing about the provider: the trip it belongs to is spent.
- */
 const ALREADY_USED_CARD = {
   badge: "Already used",
   title: "This sign-in has already been used",
@@ -86,15 +47,8 @@ const RESPONSE_STATUS = {
   ALREADY_USED: 409,
 } as const;
 
-/** The landing card is a whole document, and it says so of itself. */
 const CARD_CONTENT_TYPE = "text/html; charset=utf-8";
 
-/**
- * Anything that is not this trip's own redirect — another path, a stray
- * request, a state this trip never issued — is refused in the build's own
- * words, and without ending the wait: the real redirect may still be on its
- * way.
- */
 const NOT_FOUND = HttpServerResponse.text("Not found", {
   status: RESPONSE_STATUS.NOT_FOUND,
 });
@@ -104,7 +58,6 @@ function loopbackState(prefix: string | undefined): string {
   return prefix ? `${prefix}.${random}` : random;
 }
 
-/** The first occurrence of a redirect parameter, as a browser would send it. */
 function parameter(
   parameters: Readonly<Record<string, string | Array<string>>>,
   name: string,
@@ -113,19 +66,7 @@ function parameter(
   return Array.isArray(value) ? value[0] : value;
 }
 
-/**
- * Binds the first port that is free, or the one ephemeral port when the flow
- * named none, and answers the trip's own callback on it for as long as the scope
- * this is called in stands. A registered port already held is the ordinary
- * case — another copy of the app, or another app — and not a failure until every
- * address the provider knows has been tried, because a port it was never told
- * about would fail at the redirect instead. An attempt that never listened
- * releases as a no-op, so a port tried past costs the trip nothing.
- */
 const serveConsent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  // The request and the scope are both the server's to supply per request: the
-  // handler runs under a scope of its own, closed once the response has been
-  // written, which is the scope the landing card's finalizer settles on.
   app: Effect.Effect<
     HttpServerResponse.HttpServerResponse,
     never,
@@ -136,39 +77,22 @@ const serveConsent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<number | undefined, never, Scope.Scope> {
   for (const port of ports) {
     const node = yield* Effect.sync(() => createServer());
-    // The loopback answers this machine alone: the provider's redirect lands
-    // in the user's own browser, which hands the code back across localhost.
     const bound = yield* Effect.result(
       NodeHttpServer.make(() => node, { port, host: LOOPBACK_HOST }),
     );
     if (Result.isFailure(bound)) continue;
     const server = bound.success;
     yield* Effect.provideService(HttpServer.serveEffect(app), HttpServer.HttpServer, server);
-    // A request is announced here rather than in the handler because this is
-    // where the old synchronous callback cleared its timer: the handler runs
-    // in a fiber of its own, which the deadline could reach first.
     yield* Effect.sync(() => node.on("request", onRequest));
-    // The browser keeps its connection alive after the redirect, and a
-    // socket it holds open would keep this port bound — which, on a
-    // registered port rather than an ephemeral one, is the next trip's port.
-    // Ending those connections is what makes the flow repeatable, and this
-    // finalizer runs ahead of the server's own close because it was added
-    // after it.
     yield* Effect.addFinalizer(() => Effect.sync(() => node.closeAllConnections()));
     return NetAddress.isInetAddress(server.address) ? server.address.port : undefined;
   }
   return undefined;
 });
 
-/**
- * `Grant` is an object so a refusal can be told from a grant by the one field
- * a refusal has and no grant may: a flow whose grant carried `reason` would
- * make the two indistinguishable at the moment the landing card is chosen.
- */
 export function loopbackConsent<Grant extends object>(
   options: LoopbackConsentOptions<Grant>,
 ): LoopbackConsent<Grant> {
-  /** One trip at a time: a second ask while one stands is answered, not queued behind it. */
   const standing = Semaphore.makeUnsafe(1);
   let abandon: (() => void) | undefined;
   let reopenPage: (() => void) | undefined;
@@ -189,26 +113,15 @@ export function loopbackConsent<Grant extends object>(
     never,
     Scope.Scope
   > {
-    // A machine with no network is answered before anything is bound or
-    // opened: the provider's page could not load, and the wait would only
-    // run out the timeout on a tab that shows an error.
     if (options.isOnline?.() === false) {
       return { reason: SHARED_REASON.OFFLINE, failure: SIGN_IN_FAILURE.OFFLINE };
     }
     const codeVerifier = createCodeVerifier();
     const state = loopbackState(options.statePrefix);
     const settled = yield* Deferred.make<LoopbackConsentOutcome<Grant>>();
-    // Assigned once a port has bound, before the browser is opened — no
-    // request can arrive ahead of it.
     let redirectUri = "";
     let claimed = false;
     let arrived = false;
-    // Cancel is one door for the whole trip, armed before anything is bound
-    // and read back at every step that would carry the trip further. A press
-    // given before the loopback is listening has nothing to withdraw but the
-    // intention, which the steps below read; a press after it ends the wait
-    // where it stands. A callback already claimed is a code in hand rather
-    // than an open door, so a cancel that arrives after it withdraws nothing.
     let withdrawn = false;
     abandon = () => {
       if (claimed) return;
@@ -227,15 +140,6 @@ export function loopbackConsent<Grant extends object>(
         return card(RESPONSE_STATUS.ALREADY_USED, LOOPBACK_PAGE_TONE.COMPLETE, ALREADY_USED_CARD);
       }
       claimed = true;
-      // The landing card is the last thing the sign-in shows, so the trip is
-      // settled only once the card has been written: this finalizer runs when
-      // the request's own scope closes, which is after the last byte, and the
-      // trip's scope closing is what stops the server. It is registered
-      // before the exchange rather than after it, and the refusal stands
-      // until the exchange answers, because a claimed code that answered
-      // nothing at all — an exchange that broke its own contract and threw —
-      // must still end the trip rather than leave the loopback listening on
-      // a deadline its claim disarmed.
       let outcome: LoopbackConsentOutcome<Grant> = {
         reason: options.reasons.refused,
         failure: SIGN_IN_FAILURE.REFUSED,
@@ -253,8 +157,6 @@ export function loopbackConsent<Grant extends object>(
         });
       }
       const granted = !("reason" in outcome);
-      // Note that a continuation is read only off a grant, and asked of the
-      // flow inside this request, because the browser waits on the answer.
       const next =
         "reason" in outcome || !options.continueTo ? undefined : yield* options.continueTo(outcome);
       if (next !== undefined) {
@@ -267,10 +169,6 @@ export function loopbackConsent<Grant extends object>(
       );
     });
 
-    // The path match is the app's own first statement: every other path is
-    // refused in the build's own words rather than the platform's empty one,
-    // and the callback reads the query the request itself carries rather
-    // than a service a router would have provided.
     const app = Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
       const url = HttpServerRequest.toURL(request);
@@ -282,18 +180,11 @@ export function loopbackConsent<Grant extends object>(
     });
     if (port === undefined) return { reason: SHARED_REASON.UNAVAILABLE };
     redirectUri = `http://${LOOPBACK_HOST}:${port}${options.callbackPath}`;
-    // The digest suspends, so it is taken here, after the cancel door is armed
-    // and before the withdrawn read below: a press given while it ran is read.
     const challenge = yield* Effect.result(codeChallenge(codeVerifier));
     if (Result.isFailure(challenge)) {
       return { reason: withdrawn ? LOOPBACK_CONSENT_CANCELED : SHARED_REASON.CHALLENGE };
     }
 
-    // A press on Cancel given while the port was binding is read back here,
-    // and the scheduler is handed a turn before it is: a bound port resumes
-    // this fiber on the listening callback's own stack, so a cancel that
-    // has been waiting its turn since before the bind would otherwise still
-    // be queued when the trip walked past this line and opened the browser.
     yield* Effect.yieldNow;
     if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELED };
 
@@ -305,32 +196,17 @@ export function loopbackConsent<Grant extends object>(
     reopenPage = () => {
       void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);
     };
-    // Composing the page runs the flow's own callback, which is foreign code
-    // this module hands the trip's step to: a press it let through — a fiber
-    // it woke, a window it drew — is a cancel given before there was ever a
-    // tab, so the browser is not opened on it.
     if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELED };
     const opened = yield* Effect.result(
       Effect.tryPromise(() => Promise.resolve(options.openExternal(authorizationUrl))),
     );
-    // A page that never opened is a trip nobody can complete, and saying
-    // so beats waiting out the timeout on a tab that does not exist.
     if (Result.isFailure(opened)) {
       return { reason: SHARED_REASON.BROWSER, failure: SIGN_IN_FAILURE.BROWSER };
     }
 
     yield* Effect.forkScoped(
       Effect.sleep(Duration.millis(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)).pipe(
-        // A request already on the loopback when the deadline comes is not an
-        // abandoned trip, and a consent the developer has just given must not
-        // lose a race to the clock: the deadline gives way for as long as
-        // requests keep arriving unclaimed, and decides a grace period after
-        // the last one, so a stray request delays it rather than holding the
-        // trip open.
         Effect.andThen(
-          // The loop is stated rather than described: v4 removed the
-          // Effect-specific loop helper, so the grace period is a `while`
-          // over the same two flags the helper's condition read.
           Effect.gen(function* () {
             while (arrived && !claimed) {
               arrived = false;

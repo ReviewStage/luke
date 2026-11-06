@@ -8,20 +8,12 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * The plan pin backfill over a database whose pins still stand on the shared
- * plan row: each pinned plan becomes a pin of the account that started it, at
- * the instant it was pinned, and of no other member of its workspace, and a
- * plan never pinned becomes nobody's. Synthetic accounts throughout.
- */
-
 const BACKFILL = "20261015211326_plan_pin_per_account";
 
 const PINNED_AT = "2026-10-01T09:30:00.000Z";
 
 const PINNED_TASK = "00000000-0000-4000-8000-000000000001";
 
-/** A migrations folder holding every migration named before the backfill, and none after. */
 const foldersBeforeBackfill = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;

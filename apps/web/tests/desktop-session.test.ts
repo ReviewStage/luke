@@ -4,25 +4,12 @@ import { APP_HOME_LINK } from "@repo/features/link-home";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 
-/**
- * desktop-session.test.ts -- the desktop-session page says where the Mac's
- * hand-off stands: under way while the transfer is asked for and once it is
- * sent on, a link that did not come from us or a transfer the service refused
- * with the Open link on a Mac and nothing to press elsewhere, and a signed-out
- * browser offered the providers,
- * whose failure to start is announced. The page runs as it does in the
- * browser, mounted on its own `#root`; the network, the HTTP boundary to
- * Better Auth, is a fake.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const TRANSFER_PATH = "/api/auth/electron/transfer-user";
 
-/** The pages' answers, by path: a JSON body, or a status with none. */
 type Answer = { readonly status: number; readonly body?: unknown };
 
-/** The page as the Mac opens it, answering `answers` by path and leaving every other request hanging. */
 async function openPage(
   answers: ReadonlyMap<string, () => Answer>,
   address = desktopSessionPageUrl(window.location.origin, {
@@ -54,7 +41,6 @@ async function openPage(
   return root;
 }
 
-/** Every button's accessible name, in order. */
 function buttonNames(page: HTMLElement): (string | null)[] {
   return Array.from(page.querySelectorAll("button")).map(
     (button) => button.getAttribute("aria-label") ?? button.textContent,
@@ -69,12 +55,10 @@ function buttonNamed(page: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
-/** The page's title, once it says `title`. */
 async function titled(page: HTMLElement, title: string): Promise<void> {
   await vi.waitFor(() => expect(page.querySelector("h1")?.textContent).toBe(title));
 }
 
-/** The links the page offers, as their words and where they go. */
 function links(page: HTMLElement): (string | null)[][] {
   return Array.from(page.querySelectorAll("a")).map((a) => [a.textContent, a.getAttribute("href")]);
 }

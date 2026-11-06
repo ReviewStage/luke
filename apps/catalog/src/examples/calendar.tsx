@@ -3,16 +3,8 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * calendar.tsx -- a month with one day picked, with a range picked across
- * a month's edge, and with today picked; each answers its picks and pages
- * its months, the range taking a second pick as its end. Today is a fixed
- * day, so the catalog draws the same months whatever the day.
- */
-
 const TODAY = "2026-10-20";
 
-/** A calendar that keeps its own month and one picked day. */
 function OneDay({ from, picked }: { from: string; picked: string }): React.JSX.Element {
   const [month, setMonth] = useState(from);
   const [day, setDay] = useState(picked);
@@ -21,7 +13,6 @@ function OneDay({ from, picked }: { from: string; picked: string }): React.JSX.E
   );
 }
 
-/** A calendar that keeps its own month and a range: a pick starts one, the next ends it. */
 function Range({
   from,
   start,

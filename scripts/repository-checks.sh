@@ -5,14 +5,6 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-# The Node major is stated in more than one place because different readers look
-# in different files, so they have to agree. `.nvmrc` is what local shells and
-# CI read — the workflows name it as `node-version-file` — and Vercel reads
-# neither it nor the root manifest: it takes `engines.node` from the deployed
-# app and overrides its own dashboard setting with it. A stale `engines`
-# therefore fails nothing and announces nothing local, and quietly ships
-# production on a major no test ever ran on, which is how `22.x` outlived the
-# move to 24. `.nvmrc` is the source; every declared major is checked against it.
 nvmrc_major=$(sed -E 's/^v?([0-9]+).*$/\1/' "$APP_REPO_ROOT/.nvmrc" | head -1)
 engines_drift=""
 for manifest in "$APP_REPO_ROOT/package.json" \
@@ -34,26 +26,6 @@ if [[ -n "$engines_drift" ]]; then
     exit 1
 fi
 
-# The packages below the runtime (live, features) open
-# `@repo/runtime/vocabulary` precisely because it resolves no Node module
-# and no Effect layer that would carry one in. The renderer's own `node:` grep
-# (below) can only see files inside one directory; this walks the door's
-# actual relative-import graph, so a later re-export cannot quietly reintroduce
-# `@effect/platform-node` or `effect/sql` a few files deep.
-#
-# `@repo/host` and every door of it a browser loads are walked the same way:
-# `/effect`, `/client`, `/act-port`, `/service-layer`, `/agent-notices` and
-# `/task-code`, which the web app runs the host in a tab through, and
-# `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
-# (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
-# `electron`, no `@repo/host/node`, and no `Buffer` or `process` global, and
-# what needs one sits behind
-# `@repo/host/node`. The walk crosses into `@repo/credentials` through the
-# doors the host names (its barrel and `/snapshot`), since the account's
-# sign-in lives there: the loopback consent sits behind
-# `@repo/credentials/node`, handed to the host as its `SignInConsent` seam.
-# It crosses into `@repo/sync` too, since every row the host holds lives in
-# its pool. Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
@@ -129,42 +101,12 @@ node --input-type=module -e '
   if (failed) process.exit(1);
 ' "$APP_REPO_ROOT"
 
-# The vercel.json rewrites are what land a route on its grouped function, and
-# they are generated from server/routes/ and the functions, ending in the one
-# fallback onto the hosted oRPC route; --check fails if a rewrite went stale.
 pnpm --dir "$APP_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
-# The docs' Keyboard shortcuts page is generated from @repo/settings' shortcut
-# table, as the Mac app's own Keyboard shortcuts page lists it; --check fails
-# if a shortcut changed without the page.
 pnpm --dir "$APP_REPO_ROOT/packages/settings" exec tsx scripts/shortcuts-docs.ts --check
 
-# The constants clients build /api/ URLs from are the other half of that
-# table: a path constant can outlive its route and nothing fails until
-# production answers 404. Every /api/ literal and path builder under
-# apps/desktop/src, packages/*/src, scripts, and tools must resolve to an
-# extensionless alias the Build Output emits, a rewrite of the table ahead of
-# its fallback, or a procedure of the hosted oRPC contract; the fallback alone
-# resolves nothing, since a path no procedure matches is the router's 404.
 pnpm --dir "$APP_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
-# Every relative import the Vercel builder compiles must carry its .js
-# extension. The builder compiles this TypeScript into the web functions but
-# leaves the specifiers alone, and Node's ESM loader refuses an extensionless
-# one at run time — a break the build cannot see and production reports only as
-# FUNCTION_INVOCATION_FAILED. The desktop's esbuild and the web's Vite both
-# accept the .js form, so the stricter spelling costs the other consumers
-# nothing.
-#
-# The function sources are checked alongside the packages because the builder
-# treats them identically: `apps/web/server` — whose `routes/` subtree holds one
-# module per deployed function — is the entry point of the very graph the doors
-# in `packages/service/src/core.ts` exist to pull in, so a rule enforced on the packages alone
-# leaves the directory nearest the failure uncovered. Side-effect imports count
-# — a door is spelled `import "…"` with no names, and an extensionless one fails
-# exactly the same way. An import `?raw` is a file's text, which the function's
-# bundle inlines (`apps/web/server/function-bundles.ts`), so no loader ever
-# reads its specifier.
 extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
     "$APP_REPO_ROOT"/packages/*/src \
     "$APP_REPO_ROOT"/apps/web/server |
@@ -175,15 +117,6 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
-# The web functions are bundled from server/routes/ and server/orpc-route.ts
-# into dist-functions/ and
-# the Build Output tree with every workspace package inlined, so a bare
-# `@repo/…` specifier is resolved by
-# esbuild at build time from apps/web's own node_modules. pnpm links there only
-# what apps/web/package.json declares, so a specifier the web app's sources name
-# without declaring resolves in a developer's hoisted tree, typechecks, and
-# fails the deploy's bundle step, or, for the Vite client, ships a bundle that
-# happened to resolve through another package's link. Declare what is named.
 undeclared_packages() {
     local manifest=$1
     shift
@@ -209,17 +142,6 @@ if [[ -n "$undeclared_web_packages" ]]; then
     exit 1
 fi
 
-# The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `@repo/host/bridge`, `#shared/messages/*`,
-# and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
-# browser, and a `node:` import does the same — neither is a mistake the type
-# checker or esbuild can report, because both are real modules that simply are
-# not there at run time.
-#
-# A colocated test is not the renderer: it runs under Node and never enters
-# the bundle, so a `node:assert` import is its whole point. The main-process
-# door stays shut for it either way — a renderer test that needs main is
-# testing the wrong side.
 renderer_escapes=$(grep -ranE 'from "(#main/|node:)' \
     "$APP_REPO_ROOT/apps/desktop/src/renderer" "$APP_REPO_ROOT/packages/panel/src" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
@@ -229,10 +151,6 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
-# The changelog page splits releases on "## <version> — <YYYY-MM-DD>" and its
-# parser throws on any other shape — at module load in the browser, which no
-# build step executes. This check is what keeps a malformed heading out of a
-# visitor's tab.
 malformed_release_headings=$(grep -E '^## ' "$APP_REPO_ROOT/CHANGELOG.md" |
     grep -vE '^## [0-9]+\.[0-9]+\.[0-9]+ — [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
 if [[ -n "$malformed_release_headings" ]]; then
@@ -241,11 +159,6 @@ if [[ -n "$malformed_release_headings" ]]; then
     exit 1
 fi
 
-# Effect's Context.Service identity is per module instance: two resolved copies of
-# "effect" in the dependency tree mint two tags that fail their own equality
-# check. The catalog is what pins every package to the one resolved version, so
-# a literal version here is the one thing that can quietly reintroduce a second
-# copy.
 literal_effect_versions=$(grep -rnE '"effect": *"[^c]' --include=package.json \
     --exclude-dir=node_modules \
     "$APP_REPO_ROOT/apps" "$APP_REPO_ROOT/packages" "$APP_REPO_ROOT/tools" || true)
@@ -255,20 +168,6 @@ if [[ -n "$literal_effect_versions" ]]; then
     exit 1
 fi
 
-# The root `vitest.config.ts` names every workspace with tests, which is what
-# `pnpm exec vitest run <path>` from the root reads, and each of those
-# workspaces runs its tests through turbo under `lib/turbo.mjs`'s TEST_TASK,
-# which is what the checks and CI ask turbo for. A workspace that gains a
-# `vitest.config.ts` and is left off the list, or whose tests are under no
-# such name, has tests nothing runs, and CI stays green over them; one that
-# loses its config and stays on the list fails the run outright. All three are
-# the same drift. CI's job for the whole task may leave a workspace out with
-# `--filter=!<name>` only where another job in `ci.yml` runs that task for it
-# alone with `--filter=<name>`, and no job may run one the whole task's job
-# still runs, so each workspace's tests run in exactly one job. A workspace
-# cut into vitest shards (`-- --shard=<i>/<n>`) runs in one job per shard,
-# and must run in every shard of one set, or the files hashed to the missing
-# one never run.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -332,13 +231,6 @@ node --input-type=module -e '
   }
 ' "$APP_REPO_ROOT"
 
-# Turbo's global hash covers the lockfile, `globalDependencies`, `globalEnv`
-# values and its own flags, and no OS, CPU architecture, or Node version, so a
-# check that passed on one platform would replay as a pass on another.
-# `lib/turbo.mjs` names the platform in `APP_TURBO_PLATFORM` and `turbo.json`
-# hashes it through `globalEnv`; this holds both halves. The first asks turbo
-# for one task's hash, which its dry run documents as the key it caches under,
-# under two values of the variable; the second asks the wrapper what it sets.
 node --input-type=module -e '
   import { execFileSync } from "node:child_process";
   import path from "node:path";
@@ -371,13 +263,6 @@ node --input-type=module -e '
   }
 ' "$APP_REPO_ROOT"
 
-# `@effect/platform-node` and `effect/sql` reach `node:` modules, so an import
-# of either compiles and bundles happily and then fails where there is no Node:
-# the sandboxed renderer. The renderer's `node:` grep above catches the direct
-# reach; this catches the Effect layer that would carry it in behind a bare
-# specifier. (A web function inlines its whole graph and runs on Node, and the
-# isolation guard in apps/web/tests/build-output.test.ts is what proves each one
-# loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
     '"(@effect/platform-node|effect/sql)' \
     "$APP_REPO_ROOT/apps/desktop/src/renderer" "$APP_REPO_ROOT/packages/panel/src" || true)
@@ -387,25 +272,8 @@ if [[ -n "$node_reaching_effect" ]]; then
     exit 1
 fi
 
-# The rules about the repository's state a lint rule cannot see: the agents'
-# pins against what is installed, the coding agent's tool files against its
-# registry and what eve can build of each, the probes' committed fixtures
-# against their own leak guards, the lint rules' baselines against the files
-# they name, the catalog against `@repo/ui`'s components, the panel's launch
-# bundle, and the site's page heads and Tailwind entries. Each was a test that
-# read the repository, which root AGENTS.md's "Testing" leaves to a check
-# (`tools/anti-slop/repository-guard.ts`); several load the module whose
-# constants they compare, so they run under the tsx loader.
 (cd "$APP_REPO_ROOT" && node --import tsx tools/anti-slop/repository-guard.ts)
 
-# The repository is written in American English (AGENTS.md's "Code style"):
-# prose, comments, identifiers, user-facing words, and file names. A British
-# spelling is refused as a word or as one part of an identifier, but where the
-# name belongs to an outside spec or API (ARIA's `labelledby`, the Web Audio
-# `AnalyserNode`) or the value is already stored or on the wire (a `"cancelled"`
-# status, the `tasks.colourCode` kind), which keeps the spelling it shipped with.
-# Migrations, the generated Codex protocol, and patches against other source
-# are written as they must apply, so they are left out.
 node --input-type=module -e '
   import { execFileSync } from "node:child_process";
   import { readFileSync } from "node:fs";
@@ -459,17 +327,6 @@ node --input-type=module -e '
   }
 ' "$APP_REPO_ROOT"
 
-# This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
-# a test fixture shaped like a provider's live credential is what GitHub's
-# secret scanning raises an alert on, which history keeps open once pushed. So
-# a tracked file may hold no literal in the shape of a provider's key or token
-# (each pattern below is held to the length and characters the real one has),
-# an AWS access key id, or a private key block: a test that needs one builds it
-# at run time or uses a low-entropy fake shorter than the real shape.
-# Note that git grep answers 1 for no match and more for a scan that failed,
-# which must fail the check rather than pass it, and that a hit is named by its
-# file and line alone, so the literal never reaches a CI log. This file is
-# tracked too, so no pattern's own text may match a pattern.
 provider_shaped_status=0
 provider_shaped_literals=$(git -C "$APP_REPO_ROOT" grep -nIE \
     -e 'sk-ant-(api03|admin01|oat01)-[A-Za-z0-9_-]{93}AA' \

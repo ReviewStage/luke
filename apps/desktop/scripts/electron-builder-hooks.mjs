@@ -113,9 +113,6 @@ function writeSha256(artifactPath) {
 
 export async function finalizeElectronBuilderArtifacts(buildResult) {
   const artifacts = [...buildResult.artifactPaths];
-  // A `--dir` build (the evidence run's) stops at the unpacked app: there is no
-  // DMG or zip to checksum, notarize, or name latest, and demanding one would
-  // fail the very build that asked for none.
   const builtTargets = [...buildResult.platformToTargets.values()].flatMap((targets) => [
     ...targets.keys(),
   ]);

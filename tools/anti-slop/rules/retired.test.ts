@@ -26,20 +26,16 @@ RuleTester.it = it;
 
 const tester = new RuleTester();
 
-// The shipped example, `tools/anti-slop/retired/example.json`, read as the plugin reads it.
 tester.run("retired (example.json)", retiredRule, {
   valid: [
-    // The owner keeps what it owns.
     { code: '<div className="retired-example" />', filename: OWNER },
     { code: 'import { RetiredExampleIcon } from "@repo/ui/icons";', filename: OWNER },
     { code: 'import { x } from "retired-example";', filename: OWNER },
-    // Other classes, glyphs, props and modules, and a class only sharing a start with a retired one.
     {
       code: 'import { BotIcon, GLYPH } from "@repo/ui/icons"; <div className="retired-examples x" data-a={GLYPH.TASK} retired={1} />;',
       filename: PANEL,
     },
     { code: 'import { x } from "retired-example-not";', filename: PANEL },
-    // A retired word in prose is no class, nor a value compared against, a key, or another attribute's value.
     { code: "<p>the retired-example class</p>", filename: PANEL },
     { code: 'const label = "Drop the retired-example class.";', filename: PANEL },
     {
@@ -58,7 +54,6 @@ tester.run("retired (example.json)", retiredRule, {
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
-    // A prefix entry, and a class string inside a call or a template.
     {
       code: 'const on = true; <div className={cn("a", on && "retired-example-part-head")} />;',
       filename: PANEL,
@@ -69,7 +64,6 @@ tester.run("retired (example.json)", retiredRule, {
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
-    // A class kept in a constant or an object reaches the DOM all the same.
     {
       code: '<div className={"retired-example"} />;',
       filename: PANEL,
@@ -85,7 +79,6 @@ tester.run("retired (example.json)", retiredRule, {
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
-    // A glyph by any of Lucide's aliases, through the door or a namespace of it, and a concept off the registry.
     {
       code: 'import { LucideRetiredExample, RetiredExampleIcon as Mine } from "@repo/ui/icons";',
       filename: PANEL,
@@ -101,7 +94,6 @@ tester.run("retired (example.json)", retiredRule, {
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
-    // Drawn as a JSX member, once however many tags the element spells.
     {
       code: 'import { GLYPH as G } from "@repo/ui/icons"; <G.RETIRED_EXAMPLE></G.RETIRED_EXAMPLE>;',
       filename: PANEL,
@@ -117,7 +109,6 @@ tester.run("retired (example.json)", retiredRule, {
       filename: path.join(REPOSITORY_ROOT, "packages/ui/src/components/other.tsx"),
       errors: [{ messageId: "retired" }],
     },
-    // A banned prop, and a banned module or its subpath however it is reached.
     { code: "<Row retiredExample />", filename: PANEL, errors: [{ messageId: "retired" }] },
     {
       code: 'import "retired-example/sub"; export * from "retired-example"; await import("retired-example");',
@@ -141,33 +132,27 @@ const HELD_FILE = path.join(REPOSITORY_ROOT, HELD);
 
 tester.run("retired (baseline)", baselined, {
   valid: [
-    // A file at exactly its baseline.
     { code: '<a className="old-thing" /> ; <b className="old-thing" />;', filename: HELD_FILE },
-    // An import narrowed to names passes the module's other names, by name or off a namespace.
     { code: 'import { New } from "old-lib";', filename: PANEL },
     { code: 'import * as lib from "old-lib"; <lib.New />; lib.New;', filename: PANEL },
   ],
   invalid: [
-    // One place past the baseline: the new one is reported.
     {
       code: '<a className="old-thing" />; <b className="old-thing" />; <i className="old-thing" />;',
       filename: HELD_FILE,
       errors: [{ messageId: "retired", line: 1, column: 71 }],
     },
-    // Fewer places than the baseline: the count comes down with the fix.
     {
       code: '<a className="old-thing" />;',
       filename: HELD_FILE,
       errors: [{ messageId: "staleBaseline" }],
     },
-    // A file the baseline does not name holds none.
     { code: '<a className="old-thing" />;', filename: PANEL, errors: [{ messageId: "retired" }] },
     {
       code: 'import { New, Old } from "old-lib";',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
-    // A narrowed name read off a namespace or a default import, and a way in that takes every name at once.
     {
       code: 'import * as lib from "old-lib"; import dflt from "old-lib"; <lib.Old />; dflt.Old;',
       filename: PANEL,
@@ -181,7 +166,6 @@ tester.run("retired (baseline)", baselined, {
   ],
 });
 
-// The ⋯ guard as shipped, `tools/anti-slop/retired/more-button.json`: only MoreButton draws a thing's ⋯.
 const MORE_BUTTON = path.join(
   REPOSITORY_ROOT,
   "packages/ui/src/components/more-button/more-button.tsx",

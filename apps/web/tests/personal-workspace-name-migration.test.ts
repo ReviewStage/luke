@@ -8,18 +8,8 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * personal-workspace-name-migration.test.ts -- the backfill that gives an account's first workspace made as "Personal" its owner's name.
- *
- * Over a database migrated up to the backfill, holding a first workspace made
- * as "Personal" while #2740 stood, one made before it under its account's
- * name, and a team someone called "Personal": the backfill renames the first
- * alone, and a second run changes nothing. Synthetic accounts throughout.
- */
-
 const BACKFILL = "20261015131300_personal_workspace_owner_name";
 
-/** A migrations folder holding every migration named before the backfill, and none after. */
 const foldersBeforeBackfill = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;

@@ -7,11 +7,9 @@ import { CLIENT, type Client, pressedOn, SCENES, STEP } from "./scenes.ts";
 import { PIN_SCROLL_FADES_SCRIPT, scrollScript } from "./scroll.ts";
 import { sizedScript } from "./viewport.ts";
 
-// jsdom lays nothing out, so a box is given the rectangle it would stand in.
 const ON_SCREEN = { width: 20, height: 20, top: 10, left: 10, bottom: 30, right: 30 };
 const OFF_SCREEN = { ...ON_SCREEN, top: -100, bottom: -80 };
 
-/** Whether the readiness script calls a page ready, where its body holds `html` and its first box stands at `rect`. */
 function readyWith(html: string, rect = ON_SCREEN): boolean {
   const dom = new JSDOM(`<body>${html}</body>`, { runScripts: "outside-only" });
   const box = dom.window.document.querySelector("[data-box]");
@@ -38,7 +36,6 @@ describe("the readiness script", () => {
 });
 
 describe("the scroll script", () => {
-  /** A page whose body holds `html`, its boxes scrolled to `top`, what a scroll of `role` by `by` answered there, and each wheel the boxes heard with where their box stood then. */
   function scrolledWith(html: string, top: number, role: string, by: number) {
     const dom = new JSDOM(`<body>${html}</body>`, { runScripts: "outside-only" });
     const boxes = [...dom.window.document.querySelectorAll<HTMLElement>("[data-box]")];
@@ -76,7 +73,6 @@ describe("the scroll fade pin", () => {
       runScripts: "outside-only",
     });
     const { document } = dom.window;
-    // jsdom runs no scroll timeline, so the box is given the depths one would have eased it to.
     const depths: Record<string, string> = {
       "--ui-scroll-area-fade-start": "0px",
       "--ui-scroll-area-fade-end": "24px",
@@ -97,7 +93,6 @@ describe("the scroll fade pin", () => {
 });
 
 describe("the sized script", () => {
-  /** Whether the script for the least window at 125% calls a page laid out at `width` by `height` CSS px sized. */
   function sizedAt(width: number, height: number): boolean {
     const dom = new JSDOM("<body></body>", { runScripts: "outside-only" });
     Object.assign(dom.window, { innerWidth: width, innerHeight: height });
@@ -119,13 +114,11 @@ describe("the sized script", () => {
 describe("flattening a picture", () => {
   it("writes every pixel opaque, mixed with the ground by its alpha", () => {
     const picture = new PNG({ width: 3, height: 1 });
-    // Clear, half-clear white, and opaque red.
     picture.data.set([10, 20, 30, 0, 255, 255, 255, 128, 200, 0, 0, 255]);
     const flat = PNG.sync.read(
       flattenPng(PNG.sync.write(picture), { red: 32, green: 32, blue: 32 }),
     );
 
-    // (255·128 + 32·127) / 255 = 143.9 for the half-clear white.
     expect([...flat.data]).toEqual([32, 32, 32, 255, 144, 144, 144, 255, 200, 0, 0, 255]);
   });
 });

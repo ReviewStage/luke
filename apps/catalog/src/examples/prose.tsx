@@ -2,13 +2,6 @@ import { Prose } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * prose.tsx -- a generated document in the site's document type: headings at
- * each level, paragraphs, a list with a nested one, code, a chord of keys,
- * and links, and the same words in a narrow column. Every name and line is
- * made up.
- */
-
 const DOCUMENT = `
 <h2>What we collect</h2>
 <p>Acme keeps the words you say to it for <strong>thirty days</strong>, then deletes them. Read <a href="#prose-document">the policy</a> for the rest.</p>

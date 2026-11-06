@@ -10,15 +10,10 @@ if [[ -z "${APP_CODESIGN_IDENTITY:-}" ]]; then
     printf 'error: APP_CODESIGN_IDENTITY must name a Developer ID Application identity\n' >&2
     exit 1
 fi
-# Baked into the renderer at packaging; without it the recorder never starts,
-# and a release that records nothing is indistinguishable from one nobody
-# switched on. See .github/RELEASE.md.
 if [[ -z "${POSTHOG_PROJECT_API_KEY:-}" ]]; then
     printf 'error: POSTHOG_PROJECT_API_KEY must hold the PostHog project key\n' >&2
     exit 1
 fi
-# The DSN is baked into main while the token lets the three JavaScript builds
-# upload their source maps before electron-builder packages them.
 if [[ -z "${SENTRY_DSN:-}" ]]; then
     printf 'error: SENTRY_DSN must hold the Sentry project DSN\n' >&2
     exit 1

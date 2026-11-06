@@ -1,37 +1,13 @@
 import { Schema } from "effect";
 
-/**
- * The wire boundary: the values that arrive from outside this build, the
- * defensive readers that decode them, and the HTTP vocabulary the readers
- * answer for. A missing or mistyped field is undefined, never a throw, so one
- * bad record cannot fail an observation. The HTTP statuses and the injected
- * fetch sit here rather than with the adapters that read them, so the fake
- * that speaks this vocabulary is reachable without depending on every
- * provider.
- */
-
-/** A JSON primitive before this build has validated field names. */
 type WirePrimitive = string | number | boolean | null;
 
-/** A JSON object before this build has validated field names. */
 export type WireRecord = { readonly [key: string]: WireValue };
 
-/** Any value JSON can carry before this build has validated field names. */
 export type WireValue = WirePrimitive | WireRecord | readonly WireValue[];
 
-/**
- * Anything that may arrive from outside this package before parsing.
- * True I/O boundaries pass values here; every function below is the parser.
- */
 export type UnparsedWireValue = WireValue | undefined;
 
-/**
- * A record's own shape: not `null`, not an array, and not a boxed primitive
- * or a class instance arriving over structured clone, which carry a
- * prototype no plain object literal has. This is the one place that shape is
- * decided; {@link isWireRecordValue}, {@link WireValueSchema}, and
- * {@link isPlainRecord} below all read it back rather than restating it.
- */
 function isPlainWireRecordShape(value: unknown): value is WireRecord {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   if (Object.prototype.toString.call(value) !== "[object Object]") return false;
@@ -39,18 +15,11 @@ function isPlainWireRecordShape(value: unknown): value is WireRecord {
   return prototype === Object.prototype || prototype === null;
 }
 
-/** A record whose own shape is a wire record and whose every value is itself one. */
 function isWireRecordValue(value: unknown): value is WireRecord {
   if (!isPlainWireRecordShape(value)) return false;
   return Object.values(value).every((entry) => readsWireValue(entry));
 }
 
-/**
- * Any value JSON can carry, as an Effect `Schema` declared beside the type it
- * validates: a primitive, a record whose own values are themselves wire
- * values, or an array of them. `Schema.suspend` is what lets the record and
- * array arms refer to the whole union before it finishes being declared.
- */
 export const WireValueSchema: Schema.Codec<WireValue> = Schema.suspend(
   (): Schema.Codec<WireValue> =>
     Schema.Union([
@@ -67,69 +36,43 @@ const readsWireValue = Schema.is(WireValueSchema);
 
 const readsWireString = Schema.is(Schema.String);
 
-/**
- * Narrows a wire value to string. Effect's `Schema.is` narrows by `typeof`
- * rather than the runtime tag, because `Object.prototype.toString.call(new
- * String("x"))` is `"[object String]"`: a boxed primitive arriving over
- * structured clone would satisfy the tag and then fail every string
- * operation the caller believes it has narrowed to.
- */
 export function isWireString(value: UnparsedWireValue): value is string {
   return readsWireString(value);
 }
 
 const readsOptionalWireString = Schema.is(Schema.Union([Schema.String, Schema.Undefined]));
 
-/** An optional wire string: present as a string, or absent. */
 export function isOptionalWireString(value: UnparsedWireValue): value is string | undefined {
   return readsOptionalWireString(value);
 }
 
 const readsWireNumber = Schema.is(Schema.Number);
 
-/** Narrows a wire value to number; by `typeof` for the reason {@link isWireString} gives. */
 export function isWireNumber(value: UnparsedWireValue): value is number {
   return readsWireNumber(value);
 }
 
 const readsUnitLevel = Schema.is(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })));
 
-/**
- * A level a fraction of full, as every volume and pace on the wire is said:
- * finite and within 0 to 1 inclusive, so a bare {@link isWireNumber} cannot
- * pass an infinity or a value outside the scale into something that
- * multiplies by it.
- */
 export function isUnitLevel(value: UnparsedWireValue): value is number {
   return readsUnitLevel(value);
 }
 
 const readsWireBoolean = Schema.is(Schema.Boolean);
 
-/** Narrows a wire value to boolean; by `typeof` for the reason {@link isWireString} gives. */
 export function isWireBoolean(value: UnparsedWireValue): value is boolean {
   return readsWireBoolean(value);
 }
 
-/** A record's own shape as a Schema, for a struct field that holds a record whose values nothing reads yet. */
 export const WireRecordShapeSchema: Schema.Codec<WireRecord> =
   Schema.declare(isPlainWireRecordShape);
 
 const readsWireRecordShape = Schema.is(WireRecordShapeSchema);
 
-/**
- * A record's own shape, not whether its values are wire values: a record
- * nested in a record `isRecord` has not yet looked inside is still a record.
- */
 export function isRecord(value: UnparsedWireValue): value is WireRecord {
   return readsWireRecordShape(value);
 }
 
-/**
- * The same shape for data this build holds, read without Schema's own parse
- * around the predicate: for a walk that asks it of every node of a large
- * tree, where that parse, not the predicate, is the cost.
- */
 export function isPlainRecord(value: WireBoundaryInput): value is WireBoundaryRecord {
   return isPlainWireRecordShape(value);
 }
@@ -142,11 +85,6 @@ export function text(value: UnparsedWireValue): string | undefined {
 
 const readsInstant = Schema.is(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
 
-/**
- * An instant on the wire: epoch milliseconds, finite and never before the
- * epoch, so a record claiming a negative or infinite time reads as no time at
- * all rather than as an arithmetic hazard downstream.
- */
 export function isInstant(value: UnparsedWireValue): value is number {
   return readsInstant(value);
 }
@@ -156,16 +94,6 @@ export function wholeNumber(value: UnparsedWireValue): number | undefined {
   return value;
 }
 
-/**
- * Trims a field whose whole words are the point of reporting it, keeping the
- * line breaks they were written with: an agent's parting words are Markdown
- * as often as not, and a heading, a list, or a fenced block exists only
- * across lines. Line endings settle to one form, trailing space leaves each
- * line, a run of blank lines closes to one, and blank lines at either end
- * go, while a first line's own indent stays, because indented code or a
- * nested item may be where the words begin. That is all the structure
- * Markdown reads; a surface that draws one line collapses the rest itself.
- */
 export function wholeText(value: string | undefined): string | undefined {
   const normalized = value
     ?.replace(/\r\n?/gu, "\n")
@@ -175,27 +103,17 @@ export function wholeText(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
-/** JSON read back as the data it carries; text that is not JSON is kept as the text it is. */
 export function valueFromJsonText(text: string): WireValue {
   try {
-    // SAFETY: JSON.parse answers a wire value; a caller keeps it as data and validates what it reads off it.
     return JSON.parse(text) as WireValue;
   } catch {
     return text;
   }
 }
 
-/**
- * A value as JSON carries it: `undefined` fields dropped, prototypes and
- * boxed primitives gone, which is the plain-object form a schema emitted by
- * this build or a message stored by it is read back through. A wire value
- * round-trips to itself; anything else comes back unparsed, for the wire
- * guards to read.
- */
 export function jsonRoundTrip(value: WireValue): WireValue;
 export function jsonRoundTrip<Value>(value: Value): UnparsedWireValue;
 export function jsonRoundTrip<Value>(value: Value): UnparsedWireValue {
-  // SAFETY: the text is JSON.stringify's own serialization of the value; parsing it back yields a wire value.
   return JSON.parse(JSON.stringify(value)) as UnparsedWireValue;
 }
 
@@ -214,16 +132,8 @@ export function nonNegativeNumber(value: number | undefined, fallback: number): 
   return value;
 }
 
-/** Constructor options after defaults are merged and bounds are applied. */
 type ResolvedNumericOptions<K extends string> = { readonly [P in K]: number };
 
-/**
- * Bounds a bag of numeric constructor options against their defaults. Each
- * listed key is read from `options` and clamped by kind — a missing, infinite,
- * or out-of-range value keeps the default — so every adapter constructor does
- * not restate the same {@link positiveInteger} / {@link nonNegativeNumber}
- * calls.
- */
 export function resolveOptions<K extends string>(
   options: { readonly [P in K]?: number },
   defaults: { readonly [P in K]: number },
@@ -248,7 +158,6 @@ export function resolveOptions<K extends string>(
   return resolved;
 }
 
-/** JSON or structured-clone input before wire guards run. */
 export type WireBoundaryInput =
   | string
   | number
@@ -258,21 +167,16 @@ export type WireBoundaryInput =
   | readonly WireBoundaryInput[]
   | WireBoundaryRecord;
 
-/** A record of {@link WireBoundaryInput}, whose fields may stand undefined as a value this build holds may. */
 type WireBoundaryRecord = { readonly [key: string]: WireBoundaryInput };
 
-/** Accepts JSON or structured-clone input before wire guards run. */
 export function unparsedWire(value: WireBoundaryInput): UnparsedWireValue {
-  // SAFETY: WireBoundaryInput is the structured-clone shape; UnparsedWireValue is the same boundary one step in.
   return value as UnparsedWireValue;
 }
 
-/** Narrows JSON or IPC input before field guards run. */
 export function wireRecord(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
 }
 
-/** The methods this build's own requests are made with. */
 export const HTTP_METHOD = {
   GET: "GET",
   POST: "POST",
@@ -283,7 +187,6 @@ export const HTTP_METHOD = {
 
 export type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
-/** The statuses this build branches on at the HTTP boundary. */
 export const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
@@ -294,10 +197,6 @@ export const HTTP_STATUS = {
   TOO_MANY_REQUESTS: 429,
 } as const;
 
-/**
- * A base address with no trailing separator, so a path joined to it cannot
- * produce a doubled slash the upstream reads as a different route.
- */
 export function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }

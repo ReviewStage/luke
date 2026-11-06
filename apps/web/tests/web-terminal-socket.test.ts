@@ -6,21 +6,8 @@ import { Effect, Exit, Fiber, Scope, Stream } from "effect";
 import { afterEach, vi } from "vitest";
 import { openTerminalSocketFromPage } from "../src/app/web-terminal-socket";
 
-/**
- * An agent shell's relay socket as this page opens it: at the address the
- * host names, with no subprotocol and no header of the page's own, so the
- * browser carries the session cookie and the page's origin itself; binary
- * frames handed up as bytes and text frames as text, the close last; a
- * socket that closes before it opens read as one that never stood, as a
- * browser hides a refused upgrade's status; what the host sends going out
- * as bytes or text; a pause holding what arrived until the resume; and the
- * scope's close closing the socket. A stand-in WebSocket, which jsdom
- * opens nothing with.
- */
-
 const ADDRESS = "ws://localhost:3000/api/terminal/sessions?agent=a&terminal=t&cols=120&rows=32";
 
-/** A WebSocket the test opens, feeds, and closes by hand, keeping what was sent on it and how it was made. */
 class StandInSocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -44,33 +31,27 @@ class StandInSocket extends EventTarget {
     this.closedWith = code;
     this.readyState = StandInSocket.CLOSED;
   }
-  /** The relay accepting the upgrade. */
   accept(): void {
     this.readyState = StandInSocket.OPEN;
     this.dispatchEvent(new Event("open"));
   }
-  /** One frame from the relay. */
   receive(data: string | ArrayBuffer): void {
     this.dispatchEvent(new MessageEvent("message", { data }));
   }
-  /** The socket ending, with the code the relay closed it with or the browser's own. */
   end(code: number): void {
     this.readyState = StandInSocket.CLOSED;
     this.dispatchEvent(new CloseEvent("close", { code }));
   }
 }
 
-/** The one socket the seam made. */
 function standIn(): StandInSocket {
   const [socket] = StandInSocket.opened;
   assert.ok(socket, "the seam opened no socket");
   return socket;
 }
 
-/** The bytes of a binary frame, as the relay sends them. */
 const frame = (text: string) => new TextEncoder().encode(text).buffer;
 
-/** What a frame carries, its bytes read as the text they hold, so bytes made in either of jsdom's realms compare alike. */
 type Readable = { readonly bytes: string } | { readonly text: string } | { readonly close: number };
 
 function readable(sent: TerminalSocketArrival | string | Uint8Array): Readable {
@@ -203,12 +184,10 @@ it.effect("a pause holds what arrived in the page until the resume, in the order
   ),
 );
 
-/** A socket that had opened before the seam listened: its open event long gone. */
 class OpenedSocket extends StandInSocket {
   override readyState = StandInSocket.OPEN;
 }
 
-/** A socket that had closed before the seam listened, refused before it ever opened. */
 class RefusedSocket extends StandInSocket {
   override readyState = StandInSocket.CLOSED;
 }
@@ -241,7 +220,6 @@ it.effect(
         const opened = yield* Fiber.join(opening);
         assert.ok("socket" in opened);
 
-        // A screen that stopped drawing: paused, and five megabytes of a chatty shell arriving.
         yield* opened.socket.pause;
         const megabyte = new Uint8Array(1024 * 1024).buffer;
         for (let sent = 0; sent < 4; sent += 1) socket.receive(megabyte);

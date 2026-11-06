@@ -16,25 +16,12 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
-// The provider client forwards the authorization server's signed `oauth_query`
-// through social sign-in, so the new Better Auth session resumes this exact
-// authorization request, the desktop's or another client's, when Google or
-// GitHub returns.
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 function providerHint(): SocialProvider | undefined {
   return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
 }
 
-/**
- * The page opens on the provider's mark, unbadged while it offers that
- * provider's button, where the desktop's `state` names the provider its card
- * chose, and starts that sign-in at once. An authorization whose `state`
- * names no provider, another client's, opens on the app's mark and offers
- * every provider; either sign-in resumes the authorization, which goes on to
- * consent. It drops the closing note there, since the browser goes on to
- * that client rather than back to the app.
- */
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
   const { pending, failed, begin } = useSocialSignIn(authClient, {

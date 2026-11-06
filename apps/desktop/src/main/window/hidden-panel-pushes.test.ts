@@ -1,5 +1,3 @@
-/** hidden-panel-pushes.test.ts -- what a panel no one can see is pushed, as its window hides and shows. */
-
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { RunMode } from "@repo/host";
 import type { AppStateSnapshot } from "@repo/host/app-state";
@@ -10,14 +8,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { PanelManager } from "./panel-manager";
 import { windowPushes } from "./window-pushes";
 
-/** An app link to a task, as the system hands one to the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
-
-/**
- * What a panel no one can see is pushed: no document while it is hidden, the
- * newest one the moment it shows, and every document as before while it is
- * in view.
- */
 
 const { windows, FakeBrowserWindow } = await vi.hoisted(async () => {
   const { EventEmitter } = await import("node:events");
@@ -65,7 +56,6 @@ const RUN = {
 
 const stops: AbortController[] = [];
 
-/** The document at `version`, whose coding agents' unseen dots move with it, so every version moves a slice. */
 function documentAt(version: number): AppStateSnapshot {
   return {
     ...initialAppState(RUN, true, []),
@@ -75,7 +65,6 @@ function documentAt(version: number): AppStateSnapshot {
   };
 }
 
-/** The panel's one window, shown, with its page's push stream open. */
 function shownPanel() {
   const panels = new PanelManager({
     runMode: RUN_MODE,
@@ -89,7 +78,6 @@ function shownPanel() {
   panels.reconcile();
   const [window] = windows;
   expect(window).toBeDefined();
-  // SAFETY: the window is the fake above, whose page stands for Electron's.
   const page = window?.webContents as unknown as WebContents;
   window?.emit("show");
   const stop = new AbortController();
@@ -97,10 +85,8 @@ function shownPanel() {
   return { panels, window, stream: windowPushes.stream(page, stop.signal), page };
 }
 
-/** What the next read of a stream carries once everything pending has run, a document by its version; nothing while it waits. */
 async function nextHeard(stream: AsyncIteratorObject<PushEvent>) {
   let heard: number | string | undefined;
-  // Note that a read still waiting when its test ends is refused by the stream's abort, which ends nothing here.
   const read = stream.next().then(
     (result) => {
       if (result.done) return;
@@ -132,7 +118,6 @@ test("three documents pushed while the panel is hidden are one delivery, the thi
   window?.emit("show");
   await pending.read;
   expect(pending.heard()).toBe(3);
-  // Nothing else was held for it: the next read is the event pushed after.
   windowPushes.push(page, PUSH.SHOW_LINK, LINK);
   expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_LINK);
 });

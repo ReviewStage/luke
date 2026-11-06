@@ -8,33 +8,15 @@ import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { PANEL_PATH } from "../src/app/web-address";
 
-/**
- * accept-invitation.test.ts -- the invitation page says where an invitation
- * stands and offers the one action that moves it on: a valid invitation is
- * accepted from a button that says it is joining while it does; a reader
- * already in its workspace is offered the way in; a spent or unreachable one
- * offers nothing to press; and a signed-out visitor is
- * offered the providers, whose failure to start is announced. The page runs
- * as it does in the browser, mounted on its own `#root`; the network, the
- * HTTP boundary to Better Auth and our route, is a fake.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const INVITATION_ID = "invitation-1";
 const INVITED = "ada@example.com";
 
-/** The pages' answers, by path: a JSON body, or a status with none. */
 type Answer = { readonly status: number; readonly body?: unknown };
 
-/** Longer than Better Auth waits, after an accept, before it reads the session again. */
 const SESSION_REREAD_DELAY_MS = 1_000;
 
-/**
- * The page, answering `answers` by path and leaving every other request
- * hanging. The clock is the test's from the start: Better Auth reads the
- * session on timers and dates the test moves, never on real time.
- */
 async function openPage(answers: ReadonlyMap<string, () => Answer>): Promise<HTMLElement> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
@@ -102,7 +84,6 @@ function signedInReading(offer: Answer): Map<string, () => Answer> {
   ]);
 }
 
-/** Every button's accessible name, in order. */
 function buttonNames(page: HTMLElement): (string | null)[] {
   return Array.from(page.querySelectorAll("button")).map(
     (button) => button.getAttribute("aria-label") ?? button.textContent,
@@ -117,7 +98,6 @@ function buttonNamed(page: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
-/** The page's title, once it says `title`. */
 async function titled(page: HTMLElement, title: string): Promise<void> {
   await vi.waitFor(() => expect(page.querySelector("h1")?.textContent).toBe(title));
 }
@@ -148,12 +128,10 @@ test("a valid invitation names its workspace and inviter and is accepted from it
       }),
   );
   await act(async () => buttonNamed(page, "Accept invitation").click());
-  // Note that Query draws a mutation's pending state on its next scheduled tick.
   await vi.waitFor(() =>
     expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true"),
   );
 
-  // Note that accepting rereads the session on a timer, after which the route answers a member.
   offer = offerRead({ member: { workspaceName: "Atlas" } });
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
   await act(async () => vi.advanceTimersByTimeAsync(SESSION_REREAD_DELAY_MS));
@@ -233,8 +211,6 @@ test("a sign-in asked for again, after a session came and went, carries no earli
   await act(async () => buttonNamed(page, "Continue with GitHub").click());
   await vi.waitFor(() => expect(page.querySelector('[role="alert"]')?.textContent).not.toBe(""));
 
-  // Note that Better Auth refetches the session when the tab is shown again,
-  // but not within seconds of its last read, so the clock moves past that.
   const refocus = async (now: Answer) => {
     session = now;
     vi.setSystemTime(Date.now() + 60_000);
@@ -260,7 +236,6 @@ test("an address verified while the page stood open makes the invitation accepta
   );
   await titled(page, "Your address isn't verified");
 
-  // Note that Better Auth refetches on visibility only after the prior session read has aged out.
   session = SIGNED_IN;
   offer = VALID;
   vi.setSystemTime(Date.now() + 60_000);

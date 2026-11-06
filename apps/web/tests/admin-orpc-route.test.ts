@@ -12,28 +12,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
-/**
- * admin-orpc-route.test.ts -- the Users screen over the hosted oRPC route
- * itself, through the page's browser client: an admin reads the roster and
- * stars an account for themselves, a signed-in non-admin is refused as
- * before, a signed-out browser is offered the sign-in, an auth outage is
- * said as the service not answering, and an answer that came through a
- * redirect is said as something standing in front of the API. The route's
- * seams are fakes; the network between the page and the route is a `fetch`
- * that hands each request to the route as the browser sent it.
- *
- * Synthetic accounts throughout.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ADMIN: AdminViewer = { userId: "admin-1", role: "admin" };
 const MEMBER: AdminViewer = { userId: "user-1", role: "user" };
 
-/** What the page sent, as the route saw it: its method, path, and query. */
 type Sent = string;
 
-/** The admin resource's seams: the viewer given, a roster of one account, and a star that lands and is read back. */
 function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSeams {
   const unread = () => Effect.die(new Error("this screen reads only the roster"));
   return {
@@ -79,13 +64,8 @@ function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSea
   };
 }
 
-/**
- * The page's network: each request handed to the hosted oRPC route over the
- * seams given, every one it sent kept in `sent`.
- */
 function serve(handed: AdminProcedureSeams, sent: Sent[]): void {
   const route = hostedFetch({ admin: adminProcedures(handed) });
-  // SAFETY: the fake seams read nothing of the web runtime's services, so the route runs on none.
   const services = Context.empty() as Context.Context<WebServices>;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input), window.location.href);
@@ -93,7 +73,6 @@ function serve(handed: AdminProcedureSeams, sent: Sent[]): void {
     sent.push(
       `${method} ${url.pathname}${url.search} ${init?.credentials} ${new Headers(init?.headers).get("content-type")}`,
     );
-    // Note that the page's own abort signal is jsdom's, which Node's `Request` refuses, so the route is handed the rest.
     return route(
       new Request(url, { method, headers: init?.headers ?? {}, body: init?.body ?? null }),
       services,
@@ -154,7 +133,6 @@ test("an admin reads the roster through the route and stars an account for thems
         ?.getAttribute("aria-pressed"),
     ).toBe("true"),
   );
-  // Note that the roster is read again once the star has landed.
   await vi.waitFor(() =>
     expect(sent).toEqual([
       "GET /api/admin/users?scope=all&window=7 include null",

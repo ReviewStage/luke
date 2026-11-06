@@ -9,23 +9,11 @@ import { PRESS_LISTENER_BASELINE } from "../shared/press-listener-guard.ts";
 import { RETIRED } from "../shared/retired.ts";
 import type { RepositoryGuard } from "./guard.ts";
 
-/**
- * anti-slop-lists.ts -- the lint rules' baselines and exemptions name files that exist.
- *
- * An oxlint rule reads the files it lints, so it lowers a baseline's count
- * only for a file still there: a file deleted or moved leaves its row behind,
- * where it stands as room for the next file of that name. The style guard
- * reads every file and needs no such check; these lists are read by rules
- * alone.
- */
-
-/** A list a rule reads, by name, with the paths it names. */
 export interface NamedList {
   readonly name: string;
   readonly paths: readonly string[];
 }
 
-/** Each path a list names that is not there, and each file on both of two lists that must not share one. */
 export function listProblems(
   lists: readonly NamedList[],
   exists: (file: string) => boolean,

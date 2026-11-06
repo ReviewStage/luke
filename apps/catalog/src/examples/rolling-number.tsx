@@ -1,9 +1,3 @@
-/**
- * rolling-number.tsx -- a count beside the words that say it, as a to-do
- * list's line says how far it has got: each press moves it on or back, and
- * the digits that changed roll, up as it grows and down as it falls.
- */
-
 import {
   BUTTON_VARIANT,
   Button,

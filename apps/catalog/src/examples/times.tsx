@@ -2,12 +2,6 @@ import { Text, TIME_LOOK, Time } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * times.tsx -- the one time: a row's few letters, a line's words, a call's
- * day, the moment in full, and a run's length counting each second; an age
- * hangs its full moment in the window's tooltip.
- */
-
 const NOW = Date.now();
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

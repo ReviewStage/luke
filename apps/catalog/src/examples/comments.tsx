@@ -17,17 +17,6 @@ import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * comments.tsx -- a thread of comments: a person by their picture, a person
- * by their letter where no picture is given, an agent on its square, a
- * status and an action at a head's end, a line of what happened to the
- * thread, said after its writer's name, a draft not yet sent, which says
- * no time, a comment while it is read, and the pins of comments on what
- * they are on: one thread, a person's, three, an agent's first, and two
- * held in the reader's review, unsent.
- */
-
-/** A synthetic picture drawn in place, so the catalog renders offline. */
 const PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#f4b860"/><stop offset="1" stop-color="#c8553d"/></linearGradient></defs><rect width="40" height="40" fill="url(#g)"/><circle cx="20" cy="16" r="7" fill="#fff8"/><path d="M6 40a14 14 0 0 1 28 0" fill="#fff8"/></svg>',
 )}`;
@@ -35,7 +24,6 @@ const PICTURE = `data:image/svg+xml,${encodeURIComponent(
 const MINUTE = 60_000;
 
 function Comments(): React.JSX.Element {
-  // Note that the ages count from the catalog's own load, so each reads the same on every draw.
   const now = Date.now();
   return (
     <>

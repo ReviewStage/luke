@@ -18,16 +18,8 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * format-toolbar.tsx -- the toolbar over selected words: the description's, with
- * Turn into naming the block and Comment, whose marks toggle as they are
- * pressed; one over words spanning several kinds of block; a composer's,
- * marks alone; and the Turn into menu it drops, the current block checked.
- */
-
 const ignore = () => undefined;
 
-/** The marks pressed so far, each press laying a mark on or taking it off. */
 function useMarks(initial: readonly WritingMark[]) {
   const [marks, setMarks] = useState<readonly WritingMark[]>(initial);
   const toggle = (mark: WritingMark) =>
@@ -35,7 +27,6 @@ function useMarks(initial: readonly WritingMark[]) {
   return [marks, toggle] as const;
 }
 
-/** The description's toolbar over words in a heading, bold and linked. */
 function DescriptionToolbar(): React.JSX.Element {
   const [marks, toggle] = useMarks([WRITING_MARK.BOLD, WRITING_MARK.LINK]);
   const [block, setBlock] = useState<WritingBlock>(WRITING_BLOCK.HEADING_2);
@@ -49,7 +40,6 @@ function DescriptionToolbar(): React.JSX.Element {
   );
 }
 
-/** The description's toolbar over words spanning a paragraph and a list. */
 function SpanningToolbar(): React.JSX.Element {
   const [marks, toggle] = useMarks([WRITING_MARK.ITALIC]);
   return (
@@ -62,13 +52,11 @@ function SpanningToolbar(): React.JSX.Element {
   );
 }
 
-/** A composer's toolbar, which writes marks alone. */
 function ComposerToolbar(): React.JSX.Element {
   const [marks, toggle] = useMarks([WRITING_MARK.CODE]);
   return <FormatToolbar marks={marks} onMark={toggle} />;
 }
 
-/** The Turn into menu dropped from a button, over a line that is a to-do list. */
 function TurnInto(): React.JSX.Element {
   const menu = useMenu(true);
   const [block, setBlock] = useState<WritingBlock>(WRITING_BLOCK.TODO_LIST);

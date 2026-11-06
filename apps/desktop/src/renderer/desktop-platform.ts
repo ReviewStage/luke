@@ -1,7 +1,3 @@
-/**
- * desktop-platform.ts -- what the desktop's shell answers for the panel: each capability as the act or the preload event main already serves.
- */
-
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { ACT_KIND } from "@repo/host/acts";
 import { askAct, pressAct, tellAct } from "@repo/panel/act";
@@ -10,24 +6,11 @@ import type { AppPlatform } from "@repo/panel/app-platform";
 import { openBrowserLiveOverPort } from "@repo/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
-/** What of this window's work is unsaved: a page's, which stands an ask, and a description's words. */
 const unsaved = { page: false, descriptionWords: false };
 
-/** Tells main whether this window holds unsaved work, which a quit, a restart to update, and a sign-out ask about with its own sheet. */
 const tellUnsavedWork = (): void =>
   tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding: unsaved.page || unsaved.descriptionWords });
 
-/**
- * The desktop's platform. The clipboard, the save dialog, the panel's focus,
- * and the browser are main's, reached over the act channel, and so is a
- * cloud Browser tab's live view, which arrives on a port of its own; the menu bar,
- * the shortcut recording, and the counted events over the bridge's own
- * entries; a page is drawn from the `app-page:` scheme main serves; the
- * static files are the build's copies beside the document; and the session
- * recording is the desktop's own (`session-replay.ts`).
- * Each reads the bridge as it is called, so this is built before the bridge
- * is installed as safely as after.
- */
 export const DESKTOP_PLATFORM: AppPlatform = {
   copyText: (words) => askAct(ACT_KIND.WINDOW_COPY_TEXT, { words }),
   copyImage: (png) => png.then((drawn) => askAct(ACT_KIND.WINDOW_COPY_IMAGE, { png: drawn })),
@@ -40,9 +23,7 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
   openGitHub: (url) => pressAct(ACT_KIND.GITHUB_OPEN, { url }),
   openWeb: (url) => pressAct(ACT_KIND.WEB_OPEN, { url }),
-  // The host names the dashboard's address on the service's origin, and main opens it in the default browser.
   adminDashboard: () => ({ open: () => pressAct(ACT_KIND.ADMIN_OPEN) }),
-  // A cloud Browser tab's socket is the host's, under its bearer, and reaches this window on a port of its own.
   openBrowserLive: openBrowserLiveOverPort,
   applySessionReplay,
   unsavedWork: (ask) => {

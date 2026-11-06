@@ -11,26 +11,10 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * inbox-item-pre-v5-threads-migration.test.ts -- the migration that writes every inbox item from before version 5 as a thread.
- *
- * Over a database migrated up to it, holding items an agent posted before
- * version 5: once it runs, each reads as a thread its agent's message
- * opens, carrying its blocks as Markdown, a link's and a code block's
- * address escaped as a post writes them, its picture as that message's
- * file, and the ask its response stood for, open, answered, or withdrawn as
- * the item stood; an answer reads as the member's message answering that
- * ask, with the note as its words and the answer's files as its own; an item the version 4
- * tool posted after the bump is written the same way; and a second run
- * writes nothing twice. Synthetic accounts throughout.
- */
-
 const MIGRATION = "20261023183614_inbox_item_pre_v5_threads";
 
-/** A PNG's signature and nothing after it: bytes enough for a picture row. */
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-/** A migrations folder holding every migration named before this one, and this one too where asked, and none after. */
 const foldersUpTo = (through: boolean) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
@@ -45,7 +29,6 @@ const foldersUpTo = (through: boolean) =>
     return folder;
   });
 
-/** An account's row, in raw SQL naming only the columns it needs, since Drizzle's insert names every column the schema declares today. */
 const openUser = (id: string) =>
   Effect.flatMap(
     SqlClient.SqlClient,
@@ -61,13 +44,11 @@ it.effect(
         yield* runWebMigrations(yield* foldersUpTo(false));
         yield* openUser("dean");
         yield* openUser("charles");
-        // The task and its agent are written as the schema of then holds them, since the store writes columns later migrations add.
         const workspaceId = yield* openWorkspace("dean");
         yield* joinWorkspace(workspaceId, "charles");
         const taskId = randomUUID();
         yield* sql`insert into task (id, user_id, organization_id, number, name, document) values (${taskId}, 'dean', ${workspaceId}, 1, 'Teammate invitations', '')`;
         const agent = { id: randomUUID(), conversationId: randomUUID() };
-        // Note that the agent runs on Claude Code, so the later archive of every agent left on eve leaves it and its asks open.
         yield* sql`insert into conversations (id, user_id, kind, runtime) values (${agent.conversationId}, 'dean', 'coding_agent', 'claude_code')`;
         yield* sql`insert into coding_agent (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
           values (${agent.id}, ${taskId}, ${workspaceId}, 'dean', ${agent.conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})`;
@@ -132,7 +113,6 @@ it.effect(
           { type: "approval" },
           { closedReason: "Deployed it myself." },
         );
-        // The version 4 tool still posted for a while after the bump: version 5, its question in its blocks, its thread asking nothing.
         const rollback = yield* item(
           "rollback",
           "answered",
@@ -141,7 +121,6 @@ it.effect(
           { answer: { reply: "approved" }, version: 5 },
         );
 
-        // Note that it runs twice before a later migration drops the columns it reads.
         const through = yield* foldersUpTo(true);
         yield* runWebMigrations(through);
         yield* sql`delete from __drizzle_migrations where name = ${MIGRATION}`;

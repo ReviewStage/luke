@@ -10,12 +10,10 @@ import {
 } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
-/** A release section, newest first as CHANGELOG.md lists them, numbered from the oldest at 1.0.0. */
 function releaseSection(minor: number, body: string): string {
   return `## 1.${minor}.0 — 2026-09-${String(minor + 1).padStart(2, "0")}\n\n${body}\n`;
 }
 
-/** A changelog of `count` plain releases, 1.<count-1>.0 down to 1.0.0. */
 function changelogOf(count: number): string {
   const sections = Array.from({ length: count }, (_, index) => count - 1 - index).map((minor) =>
     releaseSection(minor, `### Fixes\n\n- Fixed thing ${minor}\n`),

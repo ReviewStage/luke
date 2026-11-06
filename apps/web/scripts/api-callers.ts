@@ -8,14 +8,6 @@ import {
 } from "../server/api-callers.js";
 import { API_REWRITES_FILE } from "../server/function-rewrites.js";
 
-/**
- * Every `/api/` path a client in the repository builds must resolve to a
- * route: an extensionless alias the Build Output emits, a rewrite of the
- * committed table ahead of its fallback, or a procedure of the hosted oRPC
- * router. Exits non-zero naming each path that resolves nowhere and
- * each builder the check could not read; on success it says what it counted,
- * because a check that found nothing and said nothing reads as coverage.
- */
 const WEB = join(import.meta.dirname, "..");
 const REPO_ROOT = join(WEB, "..", "..");
 

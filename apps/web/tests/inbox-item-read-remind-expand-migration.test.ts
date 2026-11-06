@@ -14,27 +14,10 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/**
- * inbox-item-read-remind-expand-migration.test.ts -- the migration that sets `remind_at` and `remind_through` beside `snoozed_until` and `snoozed_through`, over the release still serving beside it.
- *
- * Over a database migrated up to it, holding a reminder the release before
- * wrote in the old columns: once it runs, the new columns hold the same,
- * and for as long as both stand a write to either pair, by this release or
- * by the one before it, moves the other. A second run of its backfill
- * changes nothing. Synthetic accounts throughout.
- */
-
 const MIGRATION = "20261105235359_inbox_item_read_remind_expand";
 
-/**
- * The rename of the description's tables and columns, which a later
- * migration made. Note that it is taken with the ones before, because the
- * rows are written through today's models, which name the new columns, and
- * no migration between the two touches what it renames.
- */
 const DESCRIPTION_RENAME = "20261106055235_description_rename";
 
-/** A migrations folder holding every migration named before `MIGRATION`'s, and none after but the description's rename. */
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
@@ -60,7 +43,6 @@ it.effect(
         const agentId = yield* openTaskAgent("dean", workspaceId, null);
         const earlier = yield* openInboxItem("dean", workspaceId, null, agentId, true);
         const later = yield* openInboxItem("dean", workspaceId, null, agentId, true);
-        // The release before writes a reminder on the earlier item in its own columns.
         yield* sql`insert into inbox_item_read (item_id, user_id, read_through, snoozed_until, snoozed_through)
           values (${earlier}, 'dean', '2026-11-05T09:00:00Z', '2099-01-01T09:00:00Z', '2026-11-05T09:00:00Z')`;
 
@@ -83,7 +65,6 @@ it.effect(
           mirrored: true,
         });
 
-        // This release sets a reminder on the later item; the one before moves it on its own key.
         yield* remindInboxItem("dean", later, new Date("2099-02-01T09:00:00Z"));
         assert.equal((yield* marker(later))?.mirrored, true);
         yield* sql`insert into inbox_item_read (item_id, user_id, snoozed_until, snoozed_through)
@@ -96,7 +77,6 @@ it.effect(
           mirrored: true,
         });
 
-        // This release cancels the earlier item's reminder, which the one before then reads as come due.
         yield* remindInboxItem("dean", earlier, null);
         const [canceled] = yield* sql<{
           readonly due: boolean;
@@ -104,7 +84,6 @@ it.effect(
         assert.deepEqual(canceled, { due: true });
         assert.equal((yield* marker(earlier))?.mirrored, true);
 
-        // A second run of the backfill, as a deploy that ran it before recording it would, changes nothing.
         const fileSystem = yield* FileSystem;
         const path = yield* Path;
         const backfill = (yield* fileSystem.readFileString(

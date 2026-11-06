@@ -22,12 +22,6 @@ import type { ReportHandlers } from "../bridge-host";
 import type { MicrophoneRouteWatch } from "../native/microphone-route";
 import type { PanelManager } from "../window/panel-manager";
 
-/**
- * Which microphone answers a count can be built from. A total `Record` like
- * the bridges in `@repo/settings`, so a sixth status does not build until
- * someone has said whether the ask decided it — the three that map to nothing
- * are the point rather than an oversight.
- */
 const MICROPHONE_STATUS_COUNTED_AS = {
   [MICROPHONE_STATUS.GRANTED]: PRODUCT_PERMISSION_RESULT.GRANTED,
   [MICROPHONE_STATUS.DENIED]: PRODUCT_PERMISSION_RESULT.DENIED,
@@ -43,25 +37,16 @@ interface WindowSurfaceDependencies {
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   recordProductEvent: RecordProductEvent;
   openExternal: (url: string) => Promise<void>;
-  /** Writes words to the system's clipboard. */
   copyText: (words: string) => void;
-  /** Writes a PNG, its bytes in base64, to the system's clipboard as a picture; answers false where the bytes draw no picture. */
   copyImage: (png: string) => boolean;
-  /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
   saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
-  /** Carries a note to the people who make the app, answering whether it arrived. */
   deliverFeedback: (submission: FeedbackSubmission) => Effect.Effect<FeedbackResult>;
-  /** Takes a downscaled still of part of the asking window as a JPEG's data URL, none where nothing was drawn there. */
   captureStill: (sender: WebContents, rect: CapturedRect) => Promise<string | null>;
-  /** Keeps whether a panel holds unsaved work, which a quit, a restart to update, and a sign-out ask about. */
   tellUnsavedWork: (sender: WebContents, holding: boolean) => void;
-  /** Draws or hides a development build's label, answering false in a build that draws none. */
   showBuildLabel: (shown: boolean) => boolean;
-  /** Keeps which commands a panel offers now, which the menu bar dims the rest of while it is focused. */
   tellMenuOffers: (sender: WebContents, commands: readonly AppCommand[]) => void;
 }
 
-/** The part of a window a still is asked of, in its CSS pixels. */
 interface CapturedRect {
   readonly x: number;
   readonly y: number;
@@ -73,23 +58,11 @@ type WindowSurfaceActKind = (typeof WINDOW_SURFACE_ACT_KIND)[keyof typeof WINDOW
 
 const surfacePort = actPortFor<WebContents>();
 
-/**
- * What a window asks of the system it is drawn on. The focus is a panel's
- * own act and refused from anywhere else: it is about the display one panel
- * stands on, and no other surface has one. A save is a panel's too, since
- * only a panel draws a File tab, and its dialog hangs over the panel that
- * asked, and so is a still, of the panel that asked and answered to it
- * alone, since only a panel's ⌃Tab previews its tabs. An empty part is no
- * still. Unsaved work is a panel's to tell of, since only a panel edits,
- * and the build's label a panel's to hide, since only a panel draws it, and
- * refused in a build that draws none. The rest read no window.
- */
 export function windowSurfaceProcedures(
   dependencies: WindowSurfaceDependencies,
 ): Pick<PlatformActProcedures<WebContents>, WindowSurfaceActKind> {
   const { panels } = dependencies;
   return {
-    // A window that is not a panel, and a panel on no display, are the same refusal.
     [WINDOW_SURFACE_ACT_KIND.WINDOW_FOCUS_PANEL]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.WINDOW_FOCUS_PANEL
     ].effect(function* ({ context, errors }) {
@@ -110,16 +83,12 @@ export function windowSurfaceProcedures(
       }
       return status;
     }),
-    // Probed rather than read from the document: the route decides which
-    // device the press about to happen opens, and macOS moves the default
-    // between presses.
     [WINDOW_SURFACE_ACT_KIND.MICROPHONE_ROUTE]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.MICROPHONE_ROUTE
     ].handler(() => {
       dependencies.microphoneRouteWatcher()?.probe();
       return dependencies.microphoneRoute();
     }),
-    // Privacy & Security's Microphone pane, where a refused microphone is let back in.
     [WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS
     ].handler(() =>
@@ -127,7 +96,6 @@ export function windowSurfaceProcedures(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
       ),
     ),
-    // The pane that lists every app's notifications, ours among them.
     [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
     ].handler(() =>
@@ -188,28 +156,11 @@ export function windowSurfaceReports(
   dependencies: Pick<WindowSurfaceDependencies, "recordProductEvent">,
 ): Pick<ReportHandlers, "recordSurfaceEvent"> {
   return {
-    /**
-     * The one counting channel the renderer has. Every other event is emitted
-     * where its act happens, in this process; these are surface motion no
-     * main-process handler can see.
-     *
-     * Two gates rather than one. `isProductSurfaceEventName` is the narrowing
-     * that matters: it refuses every name outside the surface set, so a
-     * renderer cannot reach the acts — a forged `session:act_send` or
-     * `account:act` dies at the bridge guard rather than becoming a count of
-     * something nobody did. Then the vocabulary's own reader rebuilds the
-     * properties from that event's allowlist, so what is queued is what this
-     * build declared and never what arrived. A malformed send is dropped in
-     * silence, because a renderer that miscounts is a bug to find in the
-     * counts rather than a reason to throw into a `send` nothing is waiting on.
-     */
     recordSurfaceEvent(_context, name, properties) {
       const read = productEventFromWire({ name, at: Date.now(), properties: properties ?? {} });
       if (!read) return;
       dependencies.recordProductEvent(
         name,
-        // SAFETY: the reader above rebuilt these from this event's own
-        // allowlist, which is exactly the shape the name declares.
         read.properties as ProductEventPropertiesFor<ProductSurfaceEventName>,
       );
     },

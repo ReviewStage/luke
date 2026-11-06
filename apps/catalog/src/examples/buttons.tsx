@@ -26,17 +26,6 @@ import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
-/**
- * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
- * unavailable but focusable, and busy; a busy Save and Upload that land on a
- * check when Succeed ends them and just stop when Fail does; a Retry and a
- * Reload whose arrows turn once at each press; the IconButton's looks and toggle;
- * ButtonLink's looks and an IconButtonLink; the compact marks a row reveals
- * at its end, and a compact labeled button among words; a yes or no whose
- * recommended press wears its badge, offered and recorded; a message's submit in each of its states, and unavailable; and
- * a long label in a narrow column.
- */
-
 const STATES = [
   { id: "buttons-rest", name: "At rest", props: {} },
   { id: "buttons-unavailable", name: "Unavailable", props: { disabled: true } },
@@ -48,10 +37,6 @@ const STATES = [
   { id: "buttons-busy", name: "Busy", props: { busy: true, busyLabel: "Saving" } },
 ] as const;
 
-/**
- * A Save and an Upload made busy by their press, and ended by Succeed, which
- * lands them on a check, or by Fail, which stops their rings.
- */
 function Landing(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [succeeded, setSucceeded] = useState(false);

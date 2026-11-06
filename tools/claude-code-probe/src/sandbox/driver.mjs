@@ -1,13 +1,3 @@
-// driver.mjs -- the probe's stand-in for P05's runner, run in the sandbox as the agent user: query() in streaming input mode, Vespin's lines in on stdin, the SDK's messages out on stdout.
-//
-// The first stdin line is the config: the token, the model, the working
-// directory, the session to resume, and the options `query()` runs with.
-// The token goes into the CLI's own environment and nowhere else; it is
-// never printed. Each later line is a message for the session, a stop
-// (`interrupt()`), or the end of input. Every SDK message is printed as one
-// line of JSON, and the account the CLI is signed in as once the session has
-// started, which the probe sanitizes before anything is kept.
-
 import { EventEmitter, on } from "node:events";
 import { createInterface } from "node:readline";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -25,9 +15,6 @@ const config = JSON.parse(first.value);
 const env = { ...process.env, [config.tokenVariable]: config.token };
 config.token = undefined;
 
-// Note that stdin is read by a loop of its own rather than inside the prompt
-// stream, so a stop reaches interrupt() while a turn runs (a foreground
-// command included) whether or not the SDK is asking for the next prompt.
 const inbox = new EventEmitter();
 const messages = on(inbox, "message");
 
