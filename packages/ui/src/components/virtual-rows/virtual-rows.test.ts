@@ -1,17 +1,24 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement, createRef } from "react";
+import { act, createElement, createRef, type RefObject, useLayoutEffect, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { VIRTUAL_ROWS_ANCHOR, VirtualRows, type VirtualRowsHandle } from "./virtual-rows.js";
+import {
+  useVirtualRuns,
+  VIRTUAL_ROWS_ANCHOR,
+  VirtualRows,
+  type VirtualRowsHandle,
+  type VirtualRuns,
+} from "./virtual-rows.js";
 
 /**
  * virtual-rows.test.ts -- a run of rows is a list to a reader, and each row
  * drawn says how many rows the run holds and where it stands among them,
  * though the rows far from the view are not drawn at all; and a run read
  * from its top draws the rows its scroller shows, wherever in the scroller
- * the boxes around it place it.
+ * the boxes around it place it. A list of several runs answers every row's
+ * key, in the order its runs stand.
  */
 
 declare global {
@@ -150,4 +157,42 @@ test("a row moved to another place, the run's length unchanged, is drawn under i
   const drawn = [...container.querySelectorAll("p")].map((row) => row.textContent);
   assert.deepEqual(drawn, ["d", "a", "b", "c"]);
   assert.deepEqual(handle.current?.drawnKeys(), drawn);
+});
+
+test("a list's runs answer every row's key, those left undrawn among them, in the order the runs stand", () => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  const scroller = createRef<HTMLDivElement>();
+  const held: { runs?: VirtualRuns } = {};
+  const keysOf = (name: string) => Array.from({ length: 200 }, (_, index) => `${name}-${index}`);
+  function Run({ name, runs }: { name: string; runs: VirtualRuns }) {
+    const handle = useRef<VirtualRowsHandle>(null);
+    useLayoutEffect(() => runs.hold(handle), [runs]);
+    const keys = keysOf(name);
+    return createElement(VirtualRows, {
+      scroller: scroller as RefObject<HTMLElement | null>,
+      keys,
+      estimate: 100,
+      anchor: VIRTUAL_ROWS_ANCHOR.START,
+      listItems: true,
+      handle,
+      children: (index, place) => createElement("li", place, keys[index]),
+    });
+  }
+  function List({ above }: { above: boolean }) {
+    const runs = useVirtualRuns();
+    held.runs = runs;
+    return createElement(
+      "div",
+      { ref: scroller },
+      above ? createElement(Run, { key: "a", name: "a", runs }) : null,
+      createElement(Run, { key: "b", name: "b", runs }),
+    );
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  // Note that the run standing first is drawn last, so it is held after the one below it.
+  act(() => root.render(createElement(List, { above: false })));
+  act(() => root.render(createElement(List, { above: true })));
+  assert.deepEqual(held.runs?.keys(), [...keysOf("a"), ...keysOf("b")]);
 });

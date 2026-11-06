@@ -117,6 +117,9 @@ const MOVE_LIST = "data-row-moves";
 /** A list's rows that move; one on its way out (`ListMotion`) is no longer one of them, as `use-row-drag.ts` counts them. */
 const MOVING_ROW = ":scope > li:not([data-leaving])";
 
+/** What a row wears in a list drawing only the rows near the view, its place among them all (`VirtualRows`). */
+const ROW_INDEX = "data-index";
+
 /** A press of a key in what is typed into belongs to the field, so a row's own name being edited keeps ⇧⌘↑ for its text. */
 const TYPING = "input, textarea, select, [contenteditable]";
 
@@ -159,8 +162,13 @@ export function useRowMoveKeys(move: ((from: number, to: number) => void) | unde
     const control = document.activeElement;
     if (list === null || move === undefined || !(control instanceof HTMLElement)) return;
     const rows = [...list.querySelectorAll<HTMLElement>(MOVING_ROW)];
-    const at = rows.findIndex((row) => row.contains(control));
-    if (at < 0 || at + by < 0 || at + by >= rows.length) return;
+    const drawnAt = rows.findIndex((row) => row.contains(control));
+    const row = rows[drawnAt];
+    if (row === undefined) return;
+    // Note that a row of a run drawing only some of its rows is counted by its place among them all, the rows past either end of those drawn being the list's to refuse.
+    const placed = row.getAttribute(ROW_INDEX);
+    const at = placed === null ? drawnAt : Number(placed);
+    if (at + by < 0 || (placed === null && at + by >= rows.length)) return;
     flushSync(() => move(at, at + by));
     if (control.isConnected && document.activeElement !== control) control.focus();
   };

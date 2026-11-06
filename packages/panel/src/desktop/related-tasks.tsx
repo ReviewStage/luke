@@ -1,15 +1,20 @@
 import type { TaskSummary } from "@repo/features/task-wire";
+import { taskKey } from "@repo/features/workspace-key";
 import {
   type ListRowFold,
   RELATED_TASK_CELLS,
   TASK_ROW_CELL,
   type TaskRowCell,
-  TaskRows,
+  taskRowFit,
+  VirtualTaskRows,
 } from "@repo/ui";
 import { childTaskCounts } from "@repo/ui/task-list-model";
 import { LIST_COLUMN, type ListColumn, TASK_PROPERTY } from "@repo/ui/tasks-page-model";
 import { type ReactNode, useMemo, useState } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
+import { useFindOpen } from "../find-in-tab.js";
+import { pullRequestNumberLabel } from "../tasks/agent-model.js";
+import type { PlanRoom } from "../tasks/plan-body.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useFittedColumns } from "./fitted-columns.js";
@@ -23,7 +28,8 @@ import { useTasksSelection } from "./tasks-selection.js";
  * related-tasks.tsx -- a list of tasks standing on its own, outside the Tasks page: a task's child tasks or the tasks related to it, each drawn as the Tasks page's List draws it.
  *
  * Each row is the List's own (`task-list-row.tsx`) in a list of its own
- * (`TaskRows`), its columns fixed to the few a related task needs: what
+ * drawing only the rows near the view of the plan's scroller
+ * (`VirtualTaskRows`), every row while a find bar stands open, its columns fixed to the few a related task needs: what
  * its owner leads it with, its relation's kind in words, so the row reads
  * as a sentence, then its priority, key, and status before its name, then
  * its assignee, its open pull requests, and how many of its sub-tasks are
@@ -50,6 +56,8 @@ export interface RelatedTaskRow {
   readonly task: TaskSummary;
   /** What leads the row, before its priority: the relation's kind in words, say. */
   readonly relation?: ReactNode;
+  /** The words that lead it say, which the list's relation column stands as wide as at its widest (`taskRowFit`). */
+  readonly relationWords?: string;
   readonly depth?: number;
   readonly fold?: ListRowFold;
   /** Whether it stands settled beside the rows still open, its name muted: a blocker that is done. */
@@ -106,12 +114,15 @@ export function RelatedTasks({
   tasks,
   label,
   rows,
+  room,
   onOpenTask,
 }: {
   tasks: TasksControl;
   label: string;
   /** The rows drawn, in order, those folded away left out. */
   rows: readonly RelatedTaskRow[];
+  /** Where the plan's head stands: the scroller the rows are drawn near the view of. */
+  room: PlanRoom;
   /** Opens a row's task, as the surface the list stands on opens a task. */
   onOpenTask: (taskId: string) => void;
 }): React.JSX.Element {
@@ -129,39 +140,72 @@ export function RelatedTasks({
   const cells = filled.filter((cell) => !isListColumn(cell) || fitted.includes(cell));
   const more = !useCoarsePointer();
   const nests = nestsOf(rows.map(({ depth = 0 }) => ({ depth })));
+  const keys = useMemo(() => rows.map(({ task }) => task.id), [rows]);
+  // What every row says in the cells whose words differ row to row, which its columns stand as wide as, since each row lays them out itself (`taskRowFit`).
+  const fit = useMemo(
+    () =>
+      taskRowFit(
+        rows.map(({ task, relationWords }) => {
+          const counted = subTasks.get(task.id);
+          return {
+            key: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
+            relation: relationWords,
+            pullRequests: openPullRequests(task).map(pullRequestNumberLabel),
+            subTasks:
+              counted === undefined || counted.total === 0
+                ? undefined
+                : `${counted.finished}/${counted.total}`,
+          };
+        }),
+      ),
+    [rows, subTasks, workspaceName],
+  );
+  // Note that the rows are drawn only near the view, and every row while a find bar stands open over the plan.
+  const finding = useFindOpen();
   return (
     // Note that the list is measured from a box of its own, the width its rows stand in, so its columns fold for the room it has.
     <div ref={setList} className="related-tasks min-w-0">
-      <TaskRows
+      <VirtualTaskRows
         id={selection.regionId}
         label={label}
         cells={cells}
         more={more}
         selection={{ selected: selection.selected, onChange: selection.onChange }}
+        scroller={room.scroller}
+        shiftedBy={room.column}
+        keys={keys}
+        overscan={finding ? keys.length : undefined}
+        fit={fit}
       >
-        {rows.map(({ task, relation, depth, fold, settled, menu, unlisted }, at) => (
-          <TaskListRow
-            key={task.id}
-            tasks={rowTab}
-            task={task}
-            opened={opened}
-            workspaceName={workspaceName}
-            cells={cells}
-            subTasks={subTasks.get(task.id)}
-            content={{ [TASK_ROW_CELL.RELATION]: relation }}
-            chosen={selection.chosenOf(task.id)}
-            onOpen={() => onOpenTask(task.id)}
-            onStanding={(standing) => setStanding(task, standing)}
-            depth={depth}
-            nest={nests[at]}
-            fold={fold}
-            settled={settled}
-            menuGroups={menu}
-            unlisted={unlisted}
-            more={more}
-          />
-        ))}
-      </TaskRows>
+        {(index, place) => {
+          const row = rows[index];
+          if (row === undefined) return null;
+          const { task, relation, depth, fold, settled, menu, unlisted } = row;
+          return (
+            <TaskListRow
+              key={task.id}
+              place={place}
+              tasks={rowTab}
+              task={task}
+              opened={opened}
+              workspaceName={workspaceName}
+              cells={cells}
+              subTasks={subTasks.get(task.id)}
+              content={{ [TASK_ROW_CELL.RELATION]: relation }}
+              chosen={selection.chosenOf(task.id)}
+              onOpen={() => onOpenTask(task.id)}
+              onStanding={(standing) => setStanding(task, standing)}
+              depth={depth}
+              nest={nests[index]}
+              fold={fold}
+              settled={settled}
+              menuGroups={menu}
+              unlisted={unlisted}
+              more={more}
+            />
+          );
+        }}
+      </VirtualTaskRows>
       {selection.dialog}
     </div>
   );
