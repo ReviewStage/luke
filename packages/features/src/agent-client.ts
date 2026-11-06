@@ -43,6 +43,9 @@ import {
   type AgentReviewOptionsAnswerView,
   type AgentWorkspaceListParams,
   type AgentWorkspaceToolsAnswerView,
+  type ChatGptDeviceLoginParams,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -149,6 +152,7 @@ import {
   type ChatGptCredentialsSaveRequest,
   type ChatGptHostAnswer,
   chatGptCredentialsSaveRequestSchema,
+  chatGptDeviceLoginRequestSchema,
   PROVIDER_KEY_QUERY,
   providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
@@ -693,6 +697,33 @@ export class HostedAgentClient {
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
+  }
+
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses. */
+  startChatGptDeviceLogin(): Effect.Effect<
+    ChatGptDeviceStartAnswerView,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedAnswer(askHosted(this.#hosted.account.startChatGptDeviceLogin, undefined), {});
+  }
+
+  /** How a device-code login stands, the keys once it connected; a login id the service would refuse by shape never travels. */
+  pollChatGptDeviceLogin(
+    params: ChatGptDeviceLoginParams,
+  ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.pollChatGptDeviceLogin, admitted), {});
+  }
+
+  /** A device-code login withdrawn, answering how it then stands; a login id the service would refuse by shape never travels. */
+  cancelChatGptDeviceLogin(
+    params: ChatGptDeviceLoginParams,
+  ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.cancelChatGptDeviceLogin, admitted), {});
   }
 
   /**

@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { cn } from "../../cn.js";
-import { CheckIcon } from "../../face/glyphs.js";
+import { ArrowUpRightIcon, CheckIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
@@ -651,6 +651,7 @@ export function ButtonLink({
   shape,
   icon,
   label,
+  external = false,
   onClick,
   children,
   ...hint
@@ -659,6 +660,8 @@ export function ButtonLink({
   variant?: ButtonVariant;
   /** Its outline: the control's corner, or a pill. */
   shape?: ButtonShape;
+  /** Whether a press leaves the app, which a small ↗ after its words says, as an external text link's does. */
+  external?: boolean | undefined;
   /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
@@ -685,6 +688,7 @@ export function ButtonLink({
       >
         {icon}
         <span className={WORDS}>{children}</span>
+        {external ? <ArrowUpRightIcon /> : null}
       </span>
     </a>
   );

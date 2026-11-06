@@ -60,6 +60,9 @@ import {
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
 import {
+  chatGptDeviceLoginRequestSchema,
+  chatGptDevicePollAnswerSchema,
+  chatGptDeviceStartAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
@@ -227,6 +230,45 @@ export const chatGptSignInAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type ChatGptSignInAnswerView = typeof chatGptSignInAnswerViewSchema.Type;
+
+/**
+ * Codex's device-code login begun, as the window hears it: the code to
+ * enter, where, how often to ask again, and when it lapses; or why there is
+ * none. What claims the sign-in stays on the service.
+ */
+export const chatGptDeviceStartAnswerViewSchema = EffectSchema.Union([
+  chatGptDeviceStartAnswerSchema,
+  failed,
+]);
+
+export type ChatGptDeviceStartAnswerView = typeof chatGptDeviceStartAnswerViewSchema.Type;
+
+/** A device-code login canceled, as the window names it: by the login its start answered. */
+export const chatGptDeviceLoginParamsSchema = chatGptDeviceLoginRequestSchema;
+
+export type ChatGptDeviceLoginParams = typeof chatGptDeviceLoginParamsSchema.Type;
+
+/** No interval the service names is longer; one past it is none of its. */
+const CHATGPT_DEVICE_INTERVAL_MAX_SECONDS = 60;
+
+/** A device-code login waited on, as the window names it: the login its start answered, and how often its start said to ask after it. */
+export const chatGptDeviceWaitParamsSchema = EffectSchema.Struct({
+  ...chatGptDeviceLoginRequestSchema.fields,
+  intervalSeconds: EffectSchema.Int.check(
+    EffectSchema.isGreaterThan(0),
+    EffectSchema.isLessThanOrEqualTo(CHATGPT_DEVICE_INTERVAL_MAX_SECONDS),
+  ),
+});
+
+export type ChatGptDeviceWaitParams = typeof chatGptDeviceWaitParamsSchema.Type;
+
+/** How a device-code login stands, as the window hears a wait or a cancel end: its outcome, a failure's fixed sentence, and the keys once connected; or why there is no answer. */
+export const chatGptDevicePollAnswerViewSchema = EffectSchema.Union([
+  chatGptDevicePollAnswerSchema,
+  failed,
+]);
+
+export type ChatGptDevicePollAnswerView = typeof chatGptDevicePollAnswerViewSchema.Type;
 
 /** Saving a key, as the window asks it: the provider and the key, once. */
 export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;

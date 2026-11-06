@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { ANNOUNCE, type Announce, announce, type Retire } from "../announcer/announcer.js";
-import { type ButtonSize, IconButton } from "../button/button.js";
+import { BUTTON_VARIANT, Button, type ButtonSize, IconButton } from "../button/button.js";
 import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../chip/chip.js";
 import { TOAST_HOLD } from "../toast/toast.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -35,7 +35,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * glyph (`lead`) before them. The lead stands at rest; under the pointer or
  * the keyboard it gives way to the copy glyph, saying what a press does,
  * and the answer's check or alert stands in the same square for its hold,
- * so the chip never moves. A chip's hint is the whole name at rest.
+ * so the chip never moves. A chip's hint is the whole name at rest. A
+ * labeled look (`COPY_LOOK.BUTTON`) is an outlined button saying "Copy
+ * {what}" after the glyph, for a row of labeled presses; its glyph answers
+ * as the icon's does and its words stay, so it wears no hint.
  *
  * A second press starts the hold over from its own answer, and only the
  * last press's answer is shown, however the clipboard orders them. The hold
@@ -53,6 +56,8 @@ import { Tooltip } from "../tooltip/hint.js";
 export const COPY_LOOK = {
   ICON: "icon",
   CHIP: "chip",
+  /** An outlined button that says "Copy {what}" beside the glyph, standing beside other labeled buttons. */
+  BUTTON: "button",
 } as const;
 
 export type CopyLook = (typeof COPY_LOOK)[keyof typeof COPY_LOOK];
@@ -148,6 +153,10 @@ export type CopyButtonProps = CopyButtonBase &
         size?: ButtonSize | undefined;
       }
     | {
+        /** The glyph and its name in words, as a row of labeled buttons draws its presses. */
+        look: typeof COPY_LOOK.BUTTON;
+      }
+    | {
         /** A chip names `text` itself, in the code face, so it is drawn for a name. */
         look: typeof COPY_LOOK.CHIP;
         /** The glyph a chip leads with at rest: a branch's. */
@@ -200,12 +209,15 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
     },
     [hold],
   );
+  // Whether a press's copy is still out, which the labeled look shows as its busy.
+  const [copying, setCopying] = useState(false);
   const turn = (state: CopyState) => setShown((was) => ({ state, turns: was.turns + 1 }));
   const press = () => {
     latest.current += 1;
     const pressed = latest.current;
     const answer = (state: keyof typeof COPY_ANSWER) => {
       if (pressed !== latest.current) return;
+      setCopying(false);
       turn(state);
       said.current();
       said.current = announce(COPY_SAID[state], COPY_ANSWER[state]);
@@ -219,13 +231,14 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
     // Note that the act is called within the press, because a browser's
     // clipboard takes a write only while the press's activation stands, and
     // one that throws before it hands a promise back is a refused copy too.
-    let copying: Promise<void>;
+    setCopying(true);
+    let asked: Promise<void>;
     try {
-      copying = copy(text);
+      asked = copy(text);
     } catch (refusal) {
-      copying = Promise.reject(refusal);
+      asked = Promise.reject(refusal);
     }
-    copying.then(
+    asked.then(
       () => answer(COPY_STATE.COPIED),
       () => answer(COPY_STATE.FAILED),
     );
@@ -248,6 +261,20 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
           </ChipName>
         </Chip>
       </Tooltip>
+    );
+  }
+  if (props.look === COPY_LOOK.BUTTON) {
+    return (
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        icon={<CopyGlyph state={state} turns={turns} />}
+        disabled={disabled}
+        busy={copying}
+        busyLabel={label}
+        onClick={press}
+      >
+        {label}
+      </Button>
     );
   }
   return (

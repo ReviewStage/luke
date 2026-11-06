@@ -488,6 +488,12 @@ export const GATEWAY_METHOD = {
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
+  CHATGPT_DEVICE_START: "chatGpt.device.start",
+  /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
+  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
+  /** A device-code login withdrawn, by its login id; how it then stands. */
+  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * The member's own GitHub token as its login, hint, and status, never the
    * token, held for a window from now until it is let go, asked of the
