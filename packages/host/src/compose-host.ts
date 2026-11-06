@@ -585,6 +585,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ...automations.acts,
         ...installedSkills.acts,
         ...integrations.acts,
+        ...tasks.acts,
       },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),

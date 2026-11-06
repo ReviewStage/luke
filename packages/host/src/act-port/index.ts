@@ -153,7 +153,7 @@ export function createActPortHandler<Sender>(
     ...macCommandProcedures(dependencies.macCommands),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
-    ...workspaceProcedures(dependencies.workspaces),
+    ...workspaceProcedures(dependencies.workspaces, dependencies.acts),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
   return actPortHandlerOf({ ...router, ...pushProcedures(dependencies.pushes) });
 }
