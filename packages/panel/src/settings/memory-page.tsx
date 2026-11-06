@@ -65,9 +65,9 @@ import {
   type VirtualRowsHandle,
 } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { mutationOptions, useIsMutating, useMutation } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
-import { actMutation } from "../act-mutations.js";
+import { sendAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
@@ -536,20 +536,52 @@ function NothingShown({
   return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;
 }
 
+/**
+ * Memories forgotten in `workspaceId`, as Forget's question holds its own
+ * mutation over them: one after another through the port, each sent once
+ * the one before answered, the first refusal stopping the rest. Note that
+ * the host draws a forget gone the moment it is asked and keeps it gone
+ * until the read carries it, so the answer only says whether it was taken.
+ */
+function memoriesForgetMutation(workspaceId: string) {
+  return mutationOptions({
+    mutationKey: [ACT_KIND.MEMORIES_FORGET, workspaceId],
+    mutationFn: (ids: readonly string[]): Promise<ActionResult> =>
+      ids.reduce<Promise<ActionResult>>(
+        (before, id) =>
+          before.then((result) =>
+            result.status !== ACTION_RESULT_STATUS.ACCEPTED
+              ? result
+              : sendAct(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
+                  .catch(() => undefined)
+                  .then(
+                    (answer): ActionResult =>
+                      answer === undefined || "failure" in answer
+                        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED }
+                        : { status: ACTION_RESULT_STATUS.ACCEPTED },
+                  ),
+          ),
+        Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      ),
+  });
+}
+
 /** The memories as read: the search and the filter, the list, and the bar over what is chosen. */
 function MemoryList({
   readerId,
   memories,
-  forgetting,
-  onForget,
+  workspaceId,
 }: {
   /** The signed-in account, whose own memories read as You and Me. */
   readerId: string | undefined;
   memories: readonly MemorySummary[];
-  /** Whether a forget is out, which every Forget waits out. */
-  forgetting: boolean;
-  onForget: (ids: readonly string[]) => Promise<ActionResult>;
+  /** The workspace the memories are kept in, whose forgets every Forget waits out. */
+  workspaceId: string;
 }): React.JSX.Element {
+  const forgets = memoriesForgetMutation(workspaceId);
+  const forgettingAll = useMutation(forgets);
+  // Note that a forget out locks every Forget in its workspace until it answers.
+  const forgetting = useIsMutating({ mutationKey: forgets.mutationKey }) > 0;
   const { members, former } = useMemberDirectory();
   const copy = useCopyToast();
   const regionId = useId();
@@ -575,7 +607,7 @@ function MemoryList({
   const forgettable = asked.filter((memory) => memory.forgettable);
   const forgetConfirm = useConfirmDialog(
     { subject: asked.length > 0, surfaceOpen: true },
-    () => onForget(forgettable.map((memory) => memory.id)),
+    () => forgettingAll.mutateAsync(forgettable.map((memory) => memory.id)),
     confirmFailure(FAILURE_SURFACE.MEMORY_FORGET),
   );
   const askForget = (memories: readonly MemorySummary[]) => {
@@ -703,51 +735,9 @@ export function MemorySection({
   /** Asks for the workspaces again. */
   onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
-  const { mutateAsync: sendMemoriesForget } = useMutation(actMutation(ACT_KIND.MEMORIES_FORGET));
   const workspaceId = workspace?.id;
   // The memories as the host holds them, followed live while the page shows them, so a memory an agent keeps meanwhile draws as it lands.
   const memories = useHostRead(LIVE_READ.MEMORIES, signedIn ? workspaceId : undefined);
-  /** The forget out now, by the workspace it was asked in, which locks every Forget there until it answers. */
-  const [forgetting, setForgetting] = useState<
-    { readonly workspaceId: string; readonly id: string } | undefined
-  >(undefined);
-
-  // Note that the host draws a forget gone the moment it is asked and keeps it gone until the read carries it, so the answer only says whether it was taken.
-  const forget = useCallback(
-    (id: string): Promise<ActionResult> => {
-      if (workspaceId === undefined) {
-        return Promise.resolve({
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: PAGE_LINE.FORGET_FAILED,
-        });
-      }
-      const out = { workspaceId, id };
-      setForgetting(out);
-      return sendMemoriesForget({ workspaceId, id })
-        .catch(() => undefined)
-        .then((answer): ActionResult => {
-          setForgetting((current) => (current === out ? undefined : current));
-          return answer === undefined || "failure" in answer
-            ? { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED }
-            : { status: ACTION_RESULT_STATUS.ACCEPTED };
-        });
-    },
-    [sendMemoriesForget, workspaceId],
-  );
-
-  // Note that several are forgotten one after another, each sent once the one before answered, and the first refusal stops the rest.
-  const forgetAll = useCallback(
-    (ids: readonly string[]): Promise<ActionResult> =>
-      ids.reduce<Promise<ActionResult>>(
-        (before, id) =>
-          before.then((result) =>
-            result.status === ACTION_RESULT_STATUS.ACCEPTED ? forget(id) : result,
-          ),
-        Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      ),
-    [forget],
-  );
-
   if (!signedIn) return <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>;
   // Note that no workspace is a read not answered yet or one that failed, never a workspace-less account, which holds its own.
   if (workspace === undefined) {
@@ -769,12 +759,7 @@ export function MemorySection({
       {memories.rows !== undefined ? (
         // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
         <MemberDirectory workspace={workspace} readerId={readerId}>
-          <MemoryList
-            readerId={readerId}
-            memories={memories.rows}
-            forgetting={forgetting?.workspaceId === workspace.id}
-            onForget={forgetAll}
-          />
+          <MemoryList readerId={readerId} memories={memories.rows} workspaceId={workspace.id} />
         </MemberDirectory>
       ) : memories.status === HOST_READ_STATUS.FAILED ? (
         <SettingsLine>
