@@ -49,6 +49,9 @@ catalogs:
     '@types/node':
       specifier: 26.2.0
       version: 26.2.0
+    '@vercel/sandbox':
+      specifier: 3.9.1
+      version: 3.9.1
     ai:
       specifier: 7.0.135
       version: 7.0.135
@@ -1049,6 +1052,9 @@ importers:
       '@vercel/oidc':
         specifier: 4.0.0
         version: 4.0.0
+      '@vercel/sandbox':
+        specifier: 'catalog:'
+        version: 3.9.1
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
@@ -1305,8 +1311,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/wire
       '@vercel/sandbox':
-        specifier: 3.8.0
-        version: 3.8.0
+        specifier: 'catalog:'
+        version: 3.9.1
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -1336,8 +1342,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/wire
       '@vercel/sandbox':
-        specifier: 3.8.0
-        version: 3.8.0
+        specifier: 'catalog:'
+        version: 3.9.1
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -4757,8 +4763,8 @@ packages:
     resolution: {integrity: sha512-l//xMmDTj2WR6EMtfA2BEF2oR7ViKCD1SCxqFKCn1/8wOZBxgxhxkegSGi90ICTc1rB50ZbKuPIslc8aJxAqew==}
     engines: {node: '>= 20'}
 
-  '@vercel/sandbox@3.8.0':
-    resolution: {integrity: sha512-2ib+Dl8WG898OBmtep33UtE6pGbvNA9WClT7NHqQ0tch1Lq1OjQ/gmfjDT32C3HvyPA4YBXoLiJDVWZXURQW8w==}
+  '@vercel/sandbox@3.9.1':
+    resolution: {integrity: sha512-8/3vqPknI2WrE1Zd4O3LbMFbrD9elCXqCe0JjqSJH+EqsEtBHGafwwxx1raq1kTWvpLLk4lh0bZW9dMy6L5efA==}
 
   '@vitejs/plugin-react@5.1.2':
     resolution: {integrity: sha512-EcA07pHJouywpzsoTUqNh5NwGayl2PPVEJKUSinGGSxFGYn+shYbqMGBg6FXDqgXum9Ou/ecb+411ssw8HImJQ==}
@@ -10940,7 +10946,7 @@ snapshots:
       '@vercel/cli-exec': 1.0.1
       jose: 5.10.0
 
-  '@vercel/sandbox@3.8.0':
+  '@vercel/sandbox@3.9.1':
     dependencies:
       '@vercel/detect-agent': 1.2.5
       '@vercel/oidc': 4.0.0
