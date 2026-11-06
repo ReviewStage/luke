@@ -79,6 +79,7 @@ function portTo(channel: string) {
       post: (message: unknown) => port1.postMessage(message),
       onMessage: (listener: (message: WireBoundaryInput) => void) =>
         port1.on("message", (event) => listener(event.data)),
+      onClose: (then: () => void) => void port1.once("close", then),
       close: () => port1.close(),
     };
   };
@@ -132,7 +133,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         open: portTo(TERMINAL_PORT_CHANNEL),
         whenGone: whenPageGone,
       },
-      whenClosed: (contents, then) => void contents.once("destroyed", then),
       createId: randomUUID,
     }),
     ...macTerminalProcedures({

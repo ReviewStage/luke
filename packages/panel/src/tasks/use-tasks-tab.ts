@@ -225,6 +225,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
+import { useEndTerminal } from "./use-terminal-session.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -3839,11 +3840,14 @@ export function useTasksTab(input: {
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
   const endLocal = useEndLocal();
+  const endTerminal = useEndTerminal();
   // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab
   // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
+  // A Terminal tab's screens end with it too, its shells running on in the sandbox for it to open again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
       if (isLocalTab(tab)) endLocal(tab);
+      if (isTerminalTab(tab)) endTerminal(tab.terminal);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
       if (task !== undefined && at >= 0 && !isLocalTab(tab)) {
@@ -3861,6 +3865,7 @@ export function useTasksTab(input: {
       setClosedTabs,
       latestClosedTabs,
       endLocal,
+      endTerminal,
     ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's

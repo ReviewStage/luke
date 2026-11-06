@@ -3,14 +3,15 @@
 import assert from "node:assert/strict";
 import { COMMAND_KEY, installCommandKey } from "@repo/settings/shortcuts";
 import { afterEach, beforeEach, test } from "vitest";
-import type { TerminalHandle } from "./contract.js";
+import { TERMINAL_FIND, type TerminalHandle } from "./contract.js";
 import { terminal } from "./index.js";
 
 /**
- * The terminal bundle, through the one door a Terminal tab mounts it by
- * (its entry's `terminal`): which keys reach the shell, which pass to the
- * window, and a palette color drawn by its class rather than a style
- * attribute.
+ * The terminal bundle, through the one door a terminal session makes its
+ * screen by (its entry's `terminal`): which keys reach the shell, which pass
+ * to the window, a palette color drawn by its class rather than a style
+ * attribute, and a screen moved out of its box and into another keeping
+ * what it drew.
  */
 
 /** A key press as the window reports one: the key, its legacy code, and the modifiers held. */
@@ -47,12 +48,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  mounted?.unmount();
+  mounted?.dispose();
   mounted = undefined;
   document.body.innerHTML = "";
 });
 
-/** A terminal mounted in a host of its own, with what it sent the shell and what the window heard. */
+/** A terminal shown in a host of its own, with what it sent the shell, the sizes it said, and what the window heard. */
 function mountTerminal() {
   const host = document.createElement("div");
   document.body.append(host);
@@ -60,11 +61,12 @@ function mountTerminal() {
   const heard: KeyboardEvent[] = [];
   const hear = (event: KeyboardEvent) => heard.push(event);
   window.addEventListener("keydown", hear);
-  mounted = terminal.mount(host, {
+  mounted = terminal.create({
     onInput: (data) => sent.push(data),
     onResize: () => undefined,
     onLink: () => undefined,
   });
+  mounted.attach(host);
   const keyboard = host.querySelector("textarea");
   assert.ok(keyboard, "the terminal takes the keyboard through its own field");
   const press = (key: Press): KeyboardEvent => {
@@ -77,7 +79,13 @@ function mountTerminal() {
     }
     return event;
   };
-  return { host, sent, heard, press, done: () => window.removeEventListener("keydown", hear) };
+  return {
+    host,
+    sent,
+    heard,
+    press,
+    done: () => window.removeEventListener("keydown", hear),
+  };
 }
 
 test("a Command chord passes to the window, and the shell hears nothing of it", () => {
@@ -184,7 +192,8 @@ test("a face the page is still fetching is stood in for by the system's monospac
     },
   });
   const host = webFontHost();
-  mounted = terminal.mount(host, QUIET);
+  mounted = terminal.create(QUIET);
+  mounted.attach(host);
 
   assert.equal(drawnFace(host), "monospace", "the cells are measured in a face the page holds");
   landed.resolve([]);
@@ -209,9 +218,28 @@ test("a face already loaded is drawn in at once, and nothing is fetched", () => 
     },
   });
   const host = webFontHost();
-  mounted = terminal.mount(host, QUIET);
+  mounted = terminal.create(QUIET);
+  mounted.attach(host);
 
   assert.equal(drawnFace(host), '"JetBrains Mono Variable", monospace');
   assert.deepEqual(asked, []);
   Reflect.deleteProperty(document, "fonts");
+});
+
+test("a screen taken out of its box and shown in another keeps what it drew", async () => {
+  const terminal = mountTerminal();
+  terminal.done();
+  assert.ok(mounted);
+  await new Promise<void>((resolve) => mounted?.write("kept across tabs\r\n", resolve));
+  mounted.detach();
+  assert.equal(terminal.host.childElementCount, 0, "the old box holds nothing of the screen");
+  const other = document.createElement("div");
+  document.body.append(other);
+  mounted.attach(other);
+
+  const tallies: number[] = [];
+  const stop = mounted.find.onTally((tally) => tallies.push(tally.count));
+  mounted.find.find("kept across tabs", TERMINAL_FIND.TYPED);
+  stop();
+  assert.deepEqual(tallies, [1]);
 });

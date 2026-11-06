@@ -44,7 +44,7 @@ import { WorkingTime } from "./working-time.js";
  * something to do lays one slim bar over the screen with one text action
  * and its key, and the terminal prints a state with nothing to do as a dim
  * line at the end of its own scrollback (`terminal-model.ts`). The tab
- * connects only while it is shown (`use-terminal-session.ts`).
+ * keeps each of its shells' terminals while it is hidden (`use-terminal-session.ts`).
  *
  * The whole tab is left out of the screen recording, because the shell's
  * own words are drawn on a canvas the text masking cannot reach, and a
@@ -143,7 +143,7 @@ export function TerminalTab({
 }: {
   agentId: string;
   agents: AgentsControl;
-  /** Whether the tab is on screen, the one moment it holds a connection. */
+  /** Whether the tab is on screen, the one moment its screen stands in its box. */
   shown: boolean;
   /** Opens the agent's own tab in the task's column. */
   onOpenAgent: () => void;

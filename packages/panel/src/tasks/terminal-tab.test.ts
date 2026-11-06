@@ -40,7 +40,7 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { onPhone } from "../testing/phone-tab.js";
-import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
+import { bundleLanded, fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
@@ -124,9 +124,13 @@ interface Main {
 }
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 // The terminal bundle landed before any tab is drawn, as it is once a terminal has been shown in this window.
-beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
+let FITTED: SideBundles;
+beforeAll(async () => {
+  FITTED = await Effect.runPromise(fittedTerminalBundles());
+});
 let main: Main;
 
 beforeEach(() => {
@@ -245,10 +249,6 @@ beforeEach(() => {
       respond({ kind: ACT_KIND.TERMINAL_ATTACH, payload }) as Promise<
         PortActResult<typeof ACT_KIND.TERMINAL_ATTACH>
       >,
-    [ACT_KIND.TERMINAL_DETACH]: (payload) =>
-      respond({ kind: ACT_KIND.TERMINAL_DETACH, payload }) as Promise<
-        PortActResult<typeof ACT_KIND.TERMINAL_DETACH>
-      >,
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
   Object.defineProperty(document, "adoptedStyleSheets", {
@@ -271,6 +271,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Each registry lets its terminals go, as a window's does as it closes.
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   document.body.style.removeProperty("--ui-duration-pane");
@@ -292,7 +294,7 @@ async function mount(
   /** Whether the tab stands in a find scope holding the window's keys, as the side panel draws it. */
   findable = false,
   /** The bundles the tab reads its terminal from; the window's own, landed, unless a test hands others. */
-  bundles: SideBundles = SIDE_BUNDLES,
+  bundles: SideBundles = FITTED,
   /** Whether the tab is drawn as a phone's panel draws it, what it hands the task's header's ⋯ held. */
   phone = false,
 ) {
@@ -304,6 +306,7 @@ async function mount(
   // Note that the window's ticks never start here, because the working agent's mark steps on one
   // forever, and a test that runs every fake timer out would never finish.
   const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
+  registries.push(registry);
   before?.(registry);
   const wrapped = (tab: React.ReactElement) =>
     findable
@@ -445,7 +448,7 @@ test("the tab is left out of the screen recording, its screen and bar with it", 
   assert.ok(tab.container.querySelector(".ui-pane-bar")?.closest(".ph-no-capture"));
 });
 
-test("shown, the tab lists the agent's shells and attaches to the oldest; hidden, it lets the port go and attaches nothing more", async () => {
+test("shown, the tab lists the agent's shells and attaches to the oldest; hidden and shown again, it keeps its port and attaches nothing more", async () => {
   const tab = await mount();
   assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.attach"]);
   const attach = lastAttach();
@@ -457,7 +460,8 @@ test("shown, the tab lists the agent's shells and attaches to the oldest; hidden
   assert.equal(tab.standing(), "· sandbox · connected");
   assert.equal(tab.bar(), undefined);
   await tab.render(false);
-  assert.equal(port.closed(), true);
+  await tab.render(true);
+  assert.equal(port.closed(), false);
   assert.deepEqual(tab.kinds(2), []);
 });
 
@@ -469,13 +473,6 @@ test("what is typed goes to the shell's port while it is connected", async () =>
   await tab.type("Enter", 13);
   const typed = port.posted.flatMap((message) => (message.type === "input" ? [message.data] : []));
   assert.equal(typed.join(""), "l\r");
-});
-
-test("a port posted for a shell the tab did not ask for, or after it was hidden, is closed at once", async () => {
-  const tab = await mount();
-  assert.equal(main.post(NEWER).closed(), true);
-  await tab.render(false);
-  assert.equal(main.post(OLDEST).closed(), true);
 });
 
 test("a sandbox with no shell has one opened, and the tab attaches to it", async () => {
@@ -570,12 +567,12 @@ test("a dropped connection shows its bar, and its action asks for the shell agai
   assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
 });
 
-test("after five idle minutes the screen dims with no bar, and any key reconnects to the same shell", async () => {
+test("after five idle minutes the bar says so, and any key reconnects to the same shell", async () => {
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · disconnected");
-  assert.equal(tab.bar(), undefined);
+  assert.equal(tab.bar(), "Disconnected after 5 min without typing. Press any key to reconnect.");
   const before = main.sent.length;
   await tab.type("q", 81);
   assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
@@ -583,7 +580,10 @@ test("after five idle minutes the screen dims with no bar, and any key reconnect
   assert.ok(attach instanceof Object && "terminalId" in attach);
   assert.equal(attach.terminalId, OLDEST);
   // The key reconnected; it never reached the shell.
-  assert.equal(port.posted.length, 0);
+  assert.deepEqual(
+    port.posted.filter((message) => message.type === "input"),
+    [],
+  );
 });
 
 test("a shell that ended takes any key for a new one", async () => {
@@ -592,7 +592,7 @@ test("a shell that ended takes any key for a new one", async () => {
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "exited", code: 0 });
   assert.equal(tab.standing(), "· sandbox · exited");
-  assert.equal(tab.bar(), undefined);
+  assert.equal(tab.bar(), "Process exited with code 0. Press any key for a new shell.");
   main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
   const before = main.sent.length;
   await tab.type("a", 65);
@@ -625,12 +625,13 @@ test("the screen says it has drawn each five thousand characters of output, whic
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "attached" });
   vi.useFakeTimers();
+  const acks = () => port.posted.filter((message) => message.type === "ack");
   port.say({ type: "output", data: bytes("x".repeat(4_000)) });
   await act(async () => vi.runAllTimersAsync());
-  assert.deepEqual(port.posted, []);
+  assert.deepEqual(acks(), []);
   port.say({ type: "output", data: bytes("y".repeat(1_500)) });
   await act(async () => vi.runAllTimersAsync());
-  assert.deepEqual(port.posted, [{ type: "ack", bytes: 5_500 }]);
+  assert.deepEqual(acks(), [{ type: "ack", bytes: 5_500 }]);
   assert.equal(tab.standing(), "· sandbox · connected");
 });
 
@@ -706,43 +707,6 @@ test("a deployment that serves no terminal relay says so, and leaves the tab ope
   assert.equal(tab.closed(), 0);
 });
 
-test("of two attaches out at once, only the newest one's port is taken, and the late one is closed", async () => {
-  const tab = await mount();
-  // Hidden and shown again before the first attach's port lands, the tab attaches again.
-  await tab.render(false);
-  await tab.render(true);
-  assert.deepEqual(tab.kinds(), [
-    "terminal.list",
-    "terminal.attach",
-    "terminal.list",
-    "terminal.attach",
-  ]);
-  // Main posts the ports in the order the attaches went out.
-  const late = main.post(OLDEST);
-  assert.equal(late.closed(), true);
-  // What the late port says moves nothing: the tab waits on the newest.
-  late.say({ type: "state", state: "attached" });
-  assert.equal(tab.standing(), "· sandbox · connecting…");
-  const newest = main.post(OLDEST);
-  assert.equal(newest.closed(), false);
-  newest.say({ type: "state", state: "attached" });
-  await tab.type("x", 88);
-  assert.deepEqual(newest.posted, [{ type: "input", data: "x" }]);
-});
-
-test("output still being drawn when its port gives way is counted for no other port", async () => {
-  const tab = await mount();
-  const first = main.post(OLDEST);
-  first.say({ type: "state", state: "attached" });
-  vi.useFakeTimers();
-  first.say({ type: "output", data: bytes("x".repeat(6_000)) });
-  first.say({ type: "state", state: "reconnecting" });
-  await act(async () => tab.action()?.click());
-  const second = main.post(OLDEST);
-  await act(async () => vi.runAllTimersAsync());
-  assert.deepEqual(second.posted, []);
-});
-
 test("the bar's action hands the keyboard back to the screen, since its button goes with the bar", async () => {
   main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   const tab = await mount();
@@ -758,40 +722,17 @@ test("the bar's action hands the keyboard back to the screen, since its button g
   );
 });
 
-test("what is typed while the connection is still opening goes nowhere, as the host would drop it", async () => {
+test("what is typed before the shell's port opens reaches it once it does, after the screen's size", async () => {
   const tab = await mount();
+  await tab.type("l", 76);
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "connecting" });
-  await tab.type("l", 76);
-  assert.deepEqual(port.posted, []);
-  port.say({ type: "state", state: "attached" });
   await tab.type("s", 83);
-  assert.deepEqual(port.posted, [{ type: "input", data: "s" }]);
-});
-
-test("a port that answers no attach in line is closed without losing the tab its place, so a late one is still told apart", async () => {
-  const tab = await mount();
-  await tab.render(false);
-  await tab.render(true);
-  // Two attaches are out for the oldest shell; a port for another shell answers neither.
-  assert.equal(main.post(NEWER).closed(), true);
-  const late = main.post(OLDEST);
-  assert.equal(late.closed(), true);
-  const newest = main.post(OLDEST);
-  assert.equal(newest.closed(), false);
-});
-
-test("a tab taken down with an attach still out lets its shell go, and closes the port that lands after it", async () => {
-  await mount();
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the detach reaches the act port a few steps after the tab goes, as its mutation sends it.
-  await vi.waitFor(() =>
-    assert.deepEqual(main.sent.at(-1), {
-      kind: ACT_KIND.TERMINAL_DETACH,
-      payload: { agentId: AGENT.id, terminalId: OLDEST },
-    }),
-  );
-  assert.equal(main.post(OLDEST).closed(), true);
+  assert.deepEqual(port.posted, [
+    { type: "resize", cols: 80, rows: 24 },
+    { type: "input", data: "l" },
+    { type: "input", data: "s" },
+  ]);
 });
 
 test("a paste longer than one message is cut between characters, never inside one", async () => {
@@ -812,32 +753,6 @@ test("a paste longer than one message is cut between characters, never inside on
   const sent = port.posted.flatMap((message) => (message.type === "input" ? [message.data] : []));
   assert.equal(sent.join(""), paste);
   for (const part of sent) assert.doesNotMatch(part, /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/);
-});
-
-test("an attach refused after its tab was taken down leaves nothing waiting, so a later tab's port for the same shell stands", async () => {
-  main.down.add(ACT_KIND.TERMINAL_ATTACH);
-  await mount();
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  await settle();
-  main.down.clear();
-  const later = await mount();
-  const port = main.post(OLDEST);
-  port.say({ type: "state", state: "attached" });
-  assert.equal(later.standing(), "· sandbox · connected");
-});
-
-test("a tab taken down with attaches out for two shells closes both ports, whichever lands first", async () => {
-  const tab = await mount();
-  main.post(OLDEST).say({ type: "state", state: "idle" });
-  // A key re-attaches the oldest shell; hidden and shown, the tab attaches again before any port lands.
-  await tab.type("q", 81);
-  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [shell(NEWER, "dev server")] };
-  await tab.render(false);
-  await tab.render(true);
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  // The later attach's port lands first.
-  assert.equal(main.post(NEWER).closed(), true);
-  assert.equal(main.post(OLDEST).closed(), true);
 });
 
 /** The payload of the last act of the kind the tab sent, as main received it. */
@@ -1252,21 +1167,18 @@ test("ending the shown shell starts one shell in its place, though the host says
   ]);
 });
 
-test("an end the service refuses leaves the shown shell shown, attached again, and the question saying why", async () => {
+test("an end the service refuses leaves the shown shell shown on its port, and the question saying why", async () => {
   const tab = await mount();
-  main.post(OLDEST).say({ type: "state", state: "attached" });
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
   main.down.add(ACT_KIND.TERMINAL_KILL);
   const before = main.sent.length;
   await tab.press("End shell");
   await confirmWith("End shell");
   await settle();
-  assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
-  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
-    agentId: AGENT.id,
-    terminalId: OLDEST,
-    cols: 80,
-    rows: 24,
-  });
+  assert.deepEqual(tab.kinds(before), ["terminal.kill"]);
+  assert.equal(port.closed(), false);
+  assert.equal(tab.standing(), "· sandbox · connected");
   assert.match(
     document.querySelector('[role="alertdialog"]')?.textContent ?? "",
     /Could not end that shell\./,
@@ -1372,23 +1284,25 @@ test("a new shell asked for after an idle close connects again and starts it, as
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
   await settle();
-  assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.create", "terminal.attach"]);
+  assert.deepEqual(tab.kinds(before), ["terminal.create", "terminal.list", "terminal.attach"]);
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
 });
 
-test("a new shell asked for while the tab is hidden waits for a stopped sandbox's Resume, and is not lost", async () => {
+test("a new shell asked for while the sandbox is stopped waits for its Resume, and is not lost", async () => {
   const tab = await mount();
-  main.post(OLDEST).say({ type: "state", state: "attached" });
-  await tab.render(false);
-  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  port.say({ type: "state", state: "stopped" });
   act(() => {
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
-  await tab.render(true);
+  await settle();
   assert.equal(tab.bar(), "Sandbox stopped.");
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 1);
   assert.ok(!tab.kinds().includes("terminal.create"));
   await act(async () => tab.action()?.click());
+  await settle();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
   await settle();
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
   assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 1);
@@ -1526,7 +1440,7 @@ test("a shell chosen in the list floated over the screen takes the list down", a
 });
 
 test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ shows the shells over it and opens the agent, saying where the sandbox stands", async () => {
-  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  const tab = await mount(true, false, undefined, false, FITTED, true);
 
   assert.equal(tab.container.querySelector(".file-view-bar"), null);
   assert.deepEqual(tab.handed().labels(), ["Show shells", "Open agent"]);
@@ -1564,7 +1478,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
         onRegistry(
           registry,
           onSideBundles(
-            SIDE_BUNDLES,
+            FITTED,
             createElement(FindScope, {
               active: true,
               subject: { task: TASK, tab: { terminal: AGENT.id } },
@@ -1598,7 +1512,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
 });
 
 test("on a phone a connecting terminal says so in a bar over its screen, and a connected one draws no bar", async () => {
-  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  const tab = await mount(true, false, undefined, false, FITTED, true);
   assert.equal(tab.bar(), "Connecting…");
 
   main.post(OLDEST).say({ type: "state", state: "attached" });
@@ -1613,7 +1527,7 @@ test("in a wide room a connecting terminal draws no bar, the title bar saying so
 
 test("on a phone a drop after connecting waits out its own reveal, as a drop after a connection does", async () => {
   mountAnnouncer();
-  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  const tab = await mount(true, false, undefined, false, FITTED, true);
   revealBar();
   assert.equal(announcedPolitely(), "Connecting…");
 

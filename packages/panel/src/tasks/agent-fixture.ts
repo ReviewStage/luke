@@ -1042,7 +1042,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     const terminal = terminalStage(stage);
     if (terminal?.kind === TERMINAL_STAGE.PORT) postShellPort(terminal);
   },
-  [ACT_KIND.TERMINAL_DETACH]: () => closeHeldPort(),
 };
 
 /**

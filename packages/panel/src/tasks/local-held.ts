@@ -6,24 +6,21 @@ import * as Atom from "effect/reactivity/Atom";
  *
  * A terminal is minted here first, under an id of the window's own and its
  * name, so its tab stands at once; the tab then opens its shell
- * (`use-local-session.ts`) and writes the id main named the shell by
- * beside it. Main holds each shell and ends it with the window, but a
- * reload keeps them running (`@repo/host/act-port`'s
- * `mac-shell-procedures.ts`), so the window keeps its terminals in its
- * session storage, which a reload keeps and a closed window forgets with
- * its shells, and Show local opens their tabs again. Note that every
- * agent's list is kept under one key, nested by the agent's id, because a
- * key is never built from an id. It holds ids and names, never a byte a
- * shell printed. A terminal leaves its list as its tab closes.
+ * (`use-local-session.ts`). The window keeps its terminals in its session
+ * storage, which a reload keeps and a closed window forgets, and Show local
+ * opens their tabs again, each with a fresh shell, since a reload ends the
+ * shells (`@repo/host/act-port`'s `mac-shell-procedures.ts`). Note that
+ * every agent's list is kept under one key, nested by the agent's id,
+ * because a key is never built from an id. It holds ids and names, never a
+ * byte a shell printed. A terminal leaves its list as its tab closes.
  */
 
 /** The one key the window's shells are kept under. */
 const HELD_KEY = "vespin.localShells";
 
-/** One terminal the window holds: the id it minted the terminal under, the id main named its shell by once one is open, and its name. */
+/** One terminal the window holds: the id it minted the terminal under, and its name. */
 const heldShellSchema = Schema.Struct({
   shell: Schema.String,
-  terminalId: Schema.optionalKey(Schema.String),
   title: Schema.String,
 });
 

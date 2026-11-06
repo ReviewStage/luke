@@ -13,10 +13,8 @@
  * refused, so a refusal reads as a socket that never opened, which the host
  * waits out and opens again (`compose-terminals.ts`). A page's socket cannot
  * stop reading the network, so a pause holds what arrives in the page until
- * the resume, up to a bound past which the page lets the socket go, as a
- * screen that has stopped drawing, a hidden tab's, would otherwise hold a
- * chatty shell's output without end; the host's reconnect then redraws the
- * shell, which tmux kept.
+ * the resume; the screen goes on drawing and acking while its tab is hidden,
+ * so a pause lasts only as long as the screen takes to catch up.
  */
 
 import type {
@@ -29,14 +27,6 @@ import { type Cause, Effect, Latch, Queue, Stream } from "effect";
 /** How the page ends a socket it no longer wants: normally, the shell going on in tmux. */
 const NORMAL_CLOSE = 1000;
 
-/**
- * The most bytes of output the page holds for the host before it lets the
- * socket go: forty times the screen's own pause watermark
- * (`TERMINAL_FLOW.PAUSE_ABOVE_BYTES`), which a host still reading never
- * comes near.
- */
-const HELD_MAX_BYTES = 4 * 1024 * 1024;
-
 /** An open socket, as the host holds one. */
 type PageSocket = Extract<TerminalSocketOpening, { readonly socket: unknown }>["socket"];
 
@@ -46,28 +36,16 @@ function arrivalOf(event: MessageEvent<string | ArrayBuffer>): TerminalSocketArr
   return typeof data === "string" ? { text: data } : { bytes: new Uint8Array(data) };
 }
 
-/** The bytes an arrival carries toward the bound: a binary frame's, and nothing for text or the close. */
-function heldBytes(arrival: TerminalSocketArrival): number {
-  return "bytes" in arrival ? arrival.bytes.length : 0;
-}
-
 export const openTerminalSocketFromPage: OpenTerminalSocket = (url) =>
   Effect.gen(function* () {
     const arrivals = yield* Queue.unbounded<TerminalSocketArrival, Cause.Done>();
     const flowing = yield* Latch.make(true);
-    // The output that arrived and the host has not taken yet.
-    let held = 0;
     const socket = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const opened = new WebSocket(url);
         opened.binaryType = "arraybuffer";
         opened.addEventListener("message", (event) => {
-          const arrival = arrivalOf(event);
-          held += heldBytes(arrival);
-          Queue.offerUnsafe(arrivals, arrival);
-          if (held > HELD_MAX_BYTES && opened.readyState === WebSocket.OPEN) {
-            opened.close(NORMAL_CLOSE);
-          }
+          Queue.offerUnsafe(arrivals, arrivalOf(event));
         });
         opened.addEventListener("close", (event) => {
           Queue.offerUnsafe(arrivals, { close: event.code });
@@ -79,10 +57,7 @@ export const openTerminalSocketFromPage: OpenTerminalSocket = (url) =>
     );
     const open: PageSocket = {
       arrivals: Stream.mapEffect(Stream.fromQueue(arrivals), (arrival) =>
-        Effect.map(flowing.await, () => {
-          held -= heldBytes(arrival);
-          return arrival;
-        }),
+        Effect.as(flowing.await, arrival),
       ),
       send: (frame) =>
         Effect.sync(() => {
