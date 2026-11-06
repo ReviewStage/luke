@@ -266,6 +266,12 @@ export interface ThisMacHostSeam {
     never,
     ChildProcessSpawner.ChildProcessSpawner
   >;
+  /** The install's own `vespin-host uninstall` run: the host leaves the account and is removed from this Mac, its LaunchAgent, agents' folders, state and releases with it. */
+  readonly uninstall: Effect.Effect<
+    Result.Result<void, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
 }
 
 export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(

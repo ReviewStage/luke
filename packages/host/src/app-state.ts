@@ -549,6 +549,8 @@ export type AppWorkspaceInvitations = Readonly<
 export interface AppThisMacHost {
   deviceId?: string;
   machineId?: string;
+  /** Whether this Mac runs agents: a record of the account's stands, and its secret was not refused; absent reads as not. */
+  enrolled?: boolean;
 }
 
 /** This Mac as the host last read it, by the account signed in: the one key the host holds, none while nobody is signed in. */
