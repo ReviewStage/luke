@@ -66,7 +66,7 @@ export const descriptionCommentThread = pgTable(
     updatedAt: timestamptz("updated_at").notNull(),
   },
   (table) => [
-    index("plan_comment_thread_task_created").on(table.taskId, table.createdAt),
+    index("description_comment_thread_task_created").on(table.taskId, table.createdAt),
     // A page and its version stand together or not at all.
     check(
       "description_comment_thread_page",

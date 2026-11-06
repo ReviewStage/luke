@@ -151,7 +151,7 @@ export function descriptionCommentReads(dependencies: DescriptionCommentReadsDep
     empty: NO_DESCRIPTION_COMMENTS,
     path: (subject) =>
       subject.pageId === undefined
-        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        ? [COMMENT_SUBJECT.DESCRIPTION, subject.taskId]
         : [COMMENT_SUBJECT.PAGE, subject.pageId],
     gate: dependencies.gate,
     follow,

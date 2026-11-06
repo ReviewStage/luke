@@ -12,8 +12,8 @@ import {
 import { createTask } from "../../models/task-store.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
-  agentTablesRename,
   getTestDB,
+  laterRenames,
   migrationStatements,
   openWorkspace,
   syncCaptureTakenOff,
@@ -74,7 +74,7 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
         const digest = randomUUID();
         const holding = yield* agentHolding();
         const bare = yield* agentHolding();
-        const agentTables = yield* agentTablesRename();
+        const agentTables = yield* laterRenames();
         for (const statement of [...syncCaptureTakenOff(), ...agentTables.back, ...UNDO]) {
           yield* sql.unsafe(statement);
         }

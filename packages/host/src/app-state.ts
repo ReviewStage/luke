@@ -724,7 +724,7 @@ export type AppDescriptionComments = {
 
 /** No comments held, as the host stands before any window shows a plan or a page and after the session ends. */
 export const NO_DESCRIPTION_COMMENTS: AppDescriptionComments = {
-  [COMMENT_SUBJECT.PLAN]: {},
+  [COMMENT_SUBJECT.DESCRIPTION]: {},
   [COMMENT_SUBJECT.PAGE]: {},
 };
 

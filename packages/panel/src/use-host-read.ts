@@ -508,7 +508,7 @@ const HOST_READS = {
     slice: APP_SLICE.DESCRIPTION_COMMENTS,
     path: (subject: CommentSubject) =>
       subject.pageId === undefined
-        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        ? [COMMENT_SUBJECT.DESCRIPTION, subject.taskId]
         : [COMMENT_SUBJECT.PAGE, subject.pageId],
     hold: (subject) => askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, commentsFollowOf(subject)),
     retry: (subject) => tellAct(ACT_KIND.TASKS_COMMENTS_RETRY, commentsFollowOf(subject)),

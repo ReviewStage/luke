@@ -566,8 +566,8 @@ function commentsAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (staged === undefined) {
     staged = {
       ...held,
-      [COMMENT_SUBJECT.PLAN]: {
-        ...held[COMMENT_SUBJECT.PLAN],
+      [COMMENT_SUBJECT.DESCRIPTION]: {
+        ...held[COMMENT_SUBJECT.DESCRIPTION],
         [FIXTURE_TASK_ID]: { rows: FIXTURE_THREADS },
       },
     };

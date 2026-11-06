@@ -178,7 +178,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
       // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() =>
         reads.deliverComments({
-          [COMMENT_SUBJECT.PLAN]: { [TASK.id]: { rows: [thread] } },
+          [COMMENT_SUBJECT.DESCRIPTION]: { [TASK.id]: { rows: [thread] } },
           [COMMENT_SUBJECT.PAGE]: {},
         }),
       );

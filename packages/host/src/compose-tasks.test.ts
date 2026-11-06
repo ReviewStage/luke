@@ -5058,7 +5058,7 @@ it.effect(
       assert.deepEqual(pushed.at(-1), [
         GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
         {
-          [COMMENT_SUBJECT.PLAN]: { [INVITES]: { rows: [SEVEN_DAYS] } },
+          [COMMENT_SUBJECT.DESCRIPTION]: { [INVITES]: { rows: [SEVEN_DAYS] } },
           [COMMENT_SUBJECT.PAGE]: { [FUNNEL.id]: { rows: [withoutAnchor] } },
         },
       ]);
@@ -5071,7 +5071,7 @@ it.effect(
         pushed.findLast(([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED),
         [
           GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
-          { [COMMENT_SUBJECT.PLAN]: {}, [COMMENT_SUBJECT.PAGE]: {} },
+          { [COMMENT_SUBJECT.DESCRIPTION]: {}, [COMMENT_SUBJECT.PAGE]: {} },
         ],
       );
     }),
@@ -5088,8 +5088,9 @@ it.effect(
       const status = () => {
         const [, held] =
           pushed.findLast(([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED) ?? [];
-        const rows = (held as AppDescriptionComments | undefined)?.[COMMENT_SUBJECT.PLAN][INVITES]
-          ?.rows;
+        const rows = (held as AppDescriptionComments | undefined)?.[COMMENT_SUBJECT.DESCRIPTION][
+          INVITES
+        ]?.rows;
         return rows?.map((thread) => thread.status);
       };
       const resolve = call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {

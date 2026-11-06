@@ -1051,7 +1051,7 @@ const descriptionCommentFailedSchema = EffectSchema.Struct({
 
 /** What a task's comment threads stand on: its description, or one of its pages. */
 export const COMMENT_SUBJECT = {
-  PLAN: "plan",
+  DESCRIPTION: "description",
   PAGE: "page",
 } as const;
 

@@ -1981,7 +1981,7 @@ index 000000000..765ddc27b
 +    live: {
 +      [LIVE_READ.PAGES]: shotPages(SHOT_ID.PLAN, [PAGE]),
 +      [LIVE_READ.PLAN_COMMENTS]: {
-+        [COMMENT_SUBJECT.PLAN]: {},
++        [COMMENT_SUBJECT.DESCRIPTION]: {},
 +        [COMMENT_SUBJECT.PAGE]: { [PAGE.id]: { rows: threads() } },
 +      },
 +    },
