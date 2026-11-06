@@ -477,7 +477,8 @@ export const PLAN_RENEWAL = {
  * The plan's token behind a sandbox session's standing swap renewed, where
  * the swap still stands: the account's token as it stands, renewed first
  * where less than the token margin is left of it, set behind the same
- * placeholder where it is not what the swap already sets. A sign-in that no
+ * placeholder where it is not what the swap already sets, and held to the
+ * backend's paths where the swap was set before it was. A sign-in that no
  * longer answers a token leaves the swap as it stands, which OpenAI refuses
  * once its token lapses, as the route refused a Mac's command. So does a
  * plan connected again through the other flow since the launch, whose
@@ -497,14 +498,14 @@ export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSessio
           );
           return undefined;
         }
-        const host = PLAN_TARGET[access.plan.flow].domain;
-        if (!Redacted.value(standing.rules).every(([swapped]) => swapped === host)) {
+        const target: SwapTarget = PLAN_TARGET[access.plan.flow];
+        if (!Redacted.value(standing.rules).every(([swapped]) => swapped === target.domain)) {
           yield* Effect.logWarning(
             "a Codex plan's swap was not renewed: the plan was connected through another flow",
           );
           return undefined;
         }
-        return renewedSwap(standing, bearerOf(Redacted.value(access.accessToken)));
+        return renewedSwap(standing, bearerOf(Redacted.value(access.accessToken)), target.path);
       }).pipe(
         Effect.catch((failure) =>
           Effect.as(

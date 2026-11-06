@@ -340,20 +340,31 @@ export function placeholderSwap(swap: PlaceholderSwap): FirewallEntry {
 
 /**
  * The swap `placeholderSwap` made, renewed to set `value` in place of the
- * one it sets, its domain, header, and placeholder kept; none where it sets
- * `value` already, so a renewal that finds nothing new writes nothing.
+ * one it sets, and held to `path` where one is named, its domain, header,
+ * and placeholder kept; none where it sets `value` there already, so a
+ * renewal that finds nothing new writes nothing. Note that a path named
+ * narrows a swap made before it was held to one, so a launch from then
+ * stops carrying its credential elsewhere at its next renewal.
  */
 export function renewedSwap(
   entry: FirewallEntry,
   value: Redacted.Redacted,
+  path?: { readonly startsWith: string },
 ): FirewallEntry | undefined {
   const next = Redacted.value(value);
   const standing = Redacted.value(entry.rules);
   const sets = (headers: Readonly<Record<string, string>>) =>
     Object.values(headers).every((held) => held === next);
+  const held = (rule: NetworkRule) => {
+    const matched = rule.match?.path;
+    return (
+      path === undefined ||
+      (matched !== undefined && "startsWith" in matched && matched.startsWith === path.startsWith)
+    );
+  };
   if (
     standing.every(([, rules]) =>
-      rules.every((rule) => rule.transform.every((each) => sets(each.headers))),
+      rules.every((rule) => held(rule) && rule.transform.every((each) => sets(each.headers))),
     )
   ) {
     return undefined;
@@ -364,6 +375,7 @@ export function renewedSwap(
         host,
         rules.map((rule) => ({
           ...rule,
+          ...(path === undefined ? undefined : { match: { ...rule.match, path } }),
           transform: rule.transform.map((each) => ({
             headers: Object.fromEntries(Object.keys(each.headers).map((name) => [name, next])),
           })),

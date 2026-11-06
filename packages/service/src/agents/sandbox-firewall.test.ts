@@ -177,37 +177,45 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
   );
 
   it.effect(
-    "a renewal sets a new value behind the same placeholder only where its slot stands, and writes nothing where it finds nothing new",
+    "a renewal sets a new value behind the same placeholder only where its slot stands, narrows a swap to the path it names, and writes nothing where it finds nothing new",
     () =>
       Effect.gen(function* () {
         const api = vercel();
         const session = yield* ownSession;
         const firewall = yield* firewallOver(api.layer);
-        const swapOf = (value: string) =>
+        const path = { startsWith: "/v1/" };
+        const swapOf = (value: string, under?: typeof path) =>
           placeholderSwap({
             domain: "api.provider.test",
+            ...(under === undefined ? undefined : { path: under }),
             header: "authorization",
             placeholder: Redacted.make("Bearer placeholder-fixture"),
             value: Redacted.make(value),
           });
-        const renewTo = (value: string) =>
+        const renewTo = (value: string, under?: typeof path) =>
           firewall.renew(session, FIREWALL_SLOT.OPENAI_PLAN, (standing) =>
-            Effect.succeed(renewedSwap(standing, Redacted.make(value))),
+            Effect.succeed(renewedSwap(standing, Redacted.make(value), under)),
           );
 
         const renewals = yield* Effect.gen(function* () {
           yield* firewall.set(session, FIREWALL_SLOT.OPENAI_PLAN, swapOf("Bearer first-fixture"));
           const changed = yield* renewTo("Bearer second-fixture");
           const unchanged = yield* renewTo("Bearer second-fixture");
+          // The same value, held to a path the standing swap was set without.
+          const narrowed = yield* renewTo("Bearer second-fixture", path);
+          const narrowedAgain = yield* renewTo("Bearer second-fixture", path);
           yield* firewall.withdraw(session, FIREWALL_SLOT.OPENAI_PLAN);
           const afterWithdraw = yield* renewTo("Bearer third-fixture");
-          return [changed, unchanged, afterWithdraw];
+          return [changed, unchanged, narrowed, narrowedAgain, afterWithdraw];
         }).pipe(services(api.layer));
 
-        assert.deepEqual(renewals, [true, false, false]);
+        assert.deepEqual(renewals, [true, false, true, false, false]);
         assert.deepEqual(api.landed, [
           composePolicy(new Map([[FIREWALL_SLOT.OPENAI_PLAN, swapOf("Bearer first-fixture")]])),
           composePolicy(new Map([[FIREWALL_SLOT.OPENAI_PLAN, swapOf("Bearer second-fixture")]])),
+          composePolicy(
+            new Map([[FIREWALL_SLOT.OPENAI_PLAN, swapOf("Bearer second-fixture", path)]]),
+          ),
           { mode: "allow-all" },
         ]);
         assert.equal(yield* readStandingFirewall(session), undefined);
