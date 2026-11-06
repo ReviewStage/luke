@@ -1820,7 +1820,11 @@ export const runnerSessions = <
         const handed = yield* queues
           ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent, true))
           : Effect.map(
-              holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent, false)),
+              holdingRunner(
+                agent.id,
+                sendHolding(sessionId, message, layout, sent, false),
+                CODER.RUNNER_LEASE.SEND_WAIT,
+              ),
               Option.some,
             );
         if (Option.isSome(handed)) return handed.value;
