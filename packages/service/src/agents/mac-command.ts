@@ -171,7 +171,8 @@ export const RUN_ON_MAC_TOOL = {
   inputSchema: RUN_ON_MAC_INPUT,
 } as const;
 
-function notRun(reason: string): MacCommandAnswer {
+/** A call that ran nothing on the Mac, and why. */
+export function macCommandNotRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
 }
 
@@ -187,7 +188,7 @@ export function macListening(userId: string): TaskStoreEffect<boolean> {
 
 /** What a call answers for what the Mac said: what a shell command did, or why the Mac ran nothing. */
 function answered(result: MacCommandResult): MacCommandAnswer {
-  if ("refused" in result) return notRun(result.refused);
+  if ("refused" in result) return macCommandNotRun(result.refused);
   return { status: MAC_COMMAND_STATUS.RAN, ...result };
 }
 
@@ -233,18 +234,18 @@ export function askMac(
     timeoutSeconds: ask.timeoutSeconds ?? MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS,
   });
   // A command the Mac's read would refuse is refused here, before it is queued where it would spoil that read.
-  if (Result.isFailure(asked)) return Effect.succeed(notRun(refusal.UNREADABLE));
+  if (Result.isFailure(asked)) return Effect.succeed(macCommandNotRun(refusal.UNREADABLE));
   const queued = asked.success;
   const run = Effect.gen(function* () {
-    if (!(yield* macListening(userId))) return notRun(refusal.NO_MAC);
+    if (!(yield* macListening(userId))) return macCommandNotRun(refusal.NO_MAC);
     const result = yield* queueMacCommand(userId, queued).pipe(
       Effect.andThen(awaitedResult(userId, queued)),
       Effect.ensuring(Effect.ignore(withdrawMacCommand(userId, queued.id))),
     );
-    if (Option.isNone(result)) return notRun(MAC_COMMAND_REFUSAL.NO_ANSWER);
+    if (Option.isNone(result)) return macCommandNotRun(MAC_COMMAND_REFUSAL.NO_ANSWER);
     return answered(result.value);
   });
-  return Effect.catch(run, () => Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
+  return Effect.catch(run, () => Effect.succeed(macCommandNotRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
 }
 
 /**
@@ -258,7 +259,8 @@ export function runOnMacTool(
   input: UnparsedWireValue,
 ): Effect.Effect<MacCommandAnswer, never, DatabaseServices> {
   const read = readInput(input);
-  if (Result.isFailure(read)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
+  if (Result.isFailure(read))
+    return Effect.succeed(macCommandNotRun(MAC_COMMAND_REFUSAL.UNREADABLE));
   const { command, timeout_seconds } = read.success;
   const kind = MAC_COMMAND_KIND.SHELL;
   const ask: MacCommandAsk =
@@ -268,7 +270,7 @@ export function runOnMacTool(
   return Effect.gen(function* () {
     const owner = yield* Effect.result(macOwnerOf(target));
     // Note that a read that fails refuses, because a command run on a guess could land on the wrong Mac.
-    if (Result.isFailure(owner)) return notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE);
+    if (Result.isFailure(owner)) return macCommandNotRun(MAC_COMMAND_REFUSAL.UNAVAILABLE);
     return yield* askMac(owner.success, ask);
   });
 }
