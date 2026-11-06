@@ -96,7 +96,7 @@ import {
   type PullRequestPartAnswers,
 } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
@@ -2900,7 +2900,8 @@ async function answerQuestion(label: string): Promise<void> {
   await settle();
 }
 
-test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does; checks alone holding it up draw no chip, the Checks tab saying them", async () => {
+/** Each case of the merge control: its name, the pull request's control, and what the control shows. */
+function mergeCases() {
   const draft = controlAnswering(
     {
       pullRequest: () =>
@@ -3023,15 +3024,18 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     ],
     ["a draft, which its pill says", draft, undefined],
   ] as const;
-  for (const [name, control, expected] of cases) {
+  return cases;
+}
+
+test.each(mergeCases().map(([name]) => name))(
+  "the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does; checks alone holding it up draw no chip, the Checks tab saying them: %s",
+  async (name) => {
+    const [, control, expected] =
+      mergeCases().find(([each]) => each === name) ?? assert.fail(`no case ${name}`);
     const tab = await draw(control);
     await vi.waitFor(() => assert.deepEqual(mergeShown(tab), expected, name));
-    act(() => root?.unmount());
-    root = undefined;
-    // Note that each case is a window of its own, so none reads the last one's pull request while its own read lands.
-    testQueryClientNow().clear();
-  }
-});
+  },
+);
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
