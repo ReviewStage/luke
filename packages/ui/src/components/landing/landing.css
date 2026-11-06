@@ -459,22 +459,43 @@
   }
 
   /* A pane cut out of the window: one column of the app on the window's
-     frame, laid out at the room's width and drawn unscaled, so its type is
-     the app's own size. It stands in the window's place only on a phone's
-     page, and holds one height whatever its story's step, so the page under
-     it never moves; what runs past its foot is cut, as a window's is. */
+     frame, standing in the window's place only on a phone's page. Its
+     screen is laid out at least 440px wide (`landing-devices.tsx`'s
+     `SCREEN.PANE`) and scaled down to the room, as a window's is, so the
+     column reads as the app's own, a little smaller, in a box of fixed
+     proportions: 440px wide by the height its scene's whole story needs,
+     and never taller than that. So it never changes height as its story
+     plays, and what runs past its foot is cut, as a window's is. */
   .ui-landing-pane {
+    /* The height its story needs, in the screen's own pixels. */
+    --ui-landing-pane-tall: 600;
     display: none;
     box-sizing: border-box;
-    height: 560px;
+    /* off-scale: 440px, the pane's least width */
+    aspect-ratio: 440 / var(--ui-landing-pane-tall);
+    max-height: calc(var(--ui-landing-pane-tall) * 1px);
     overflow: hidden;
     border: 1px solid var(--ui-color-border-strong);
     border-radius: var(--ui-display-window-radius);
     background: var(--ui-color-sidebar);
   }
 
-  .ui-landing-pane-screen {
+  .ui-landing-stage[data-scene="inbox"] .ui-landing-pane {
+    --ui-landing-pane-tall: 580;
+  }
+
+  .ui-landing-pane-fit {
+    width: 100%;
     height: 100%;
+    overflow: hidden;
+  }
+
+  .ui-landing-pane-screen {
+    position: relative;
+    width: var(--ui-landing-pane-width, 440px);
+    height: calc(100% / var(--ui-landing-fit, 1));
+    transform: scale(var(--ui-landing-fit, 1));
+    transform-origin: 0 0;
     color: var(--ui-color-text);
   }
 
@@ -482,26 +503,6 @@
     box-sizing: border-box;
     display: grid;
     padding: 0 8px 8px;
-  }
-
-  /* The Inbox's pane is as tall as its thread's tallest step, which its
-     sheet holds unseen beneath the step on show (`ThreadColumn`), so the
-     whole story stands in view at any width and the pane never changes
-     height as it plays. */
-  .ui-landing-stage[data-scene="inbox"] .ui-landing-pane {
-    height: auto;
-  }
-
-  .ui-landing-fit {
-    display: grid;
-  }
-
-  .ui-landing-fit > * {
-    grid-area: 1 / 1;
-  }
-
-  .ui-landing-fit-room {
-    visibility: hidden;
   }
 
   /* A call keeps to its one line in a pane, as the panel's does on a phone:
@@ -1075,9 +1076,9 @@
   /* Under 640px of room the page keeps to one column: the ball under the
      words, and each stage under its heading. A whole window scaled to that
      room draws its words too small to read, so a stage shows the one pane
-     that tells its story at true size instead: the Inbox its thread, and
-     the task its agent's log. The devices keep both, the phone nearer the
-     window, since their story is that there are two. */
+     that tells its story instead, at nearly the app's size: the Inbox its
+     thread, and the task its agent's log. The devices keep both, the phone
+     nearer the window, since their story is that there are two. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {

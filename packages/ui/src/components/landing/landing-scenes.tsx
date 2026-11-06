@@ -105,7 +105,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
  * runs only while it is on screen (`landing-story.ts`). A page too narrow to
  * read a whole window crops the Inbox to its open thread and the task to its
- * agent's log, each drawn at true size.
+ * agent's log.
  */
 
 /** How long each scene holds a step, in milliseconds. */
@@ -478,19 +478,8 @@ function QuestionThread({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/**
- * The thread's steps that stand tallest: the draft with its options, and the
- * answer sent, whichever a width makes the taller.
- */
-const THREAD_TALLEST = [4, 5] as const;
-
-/**
- * The Inbox's last column at `step`: the empty choice, then the question's
- * thread once opened. Where it is `fitted`, its sheet keeps room for the
- * thread's tallest steps, drawn unseen beneath the one on show, so the column
- * holds every step whole at one height.
- */
-function ThreadColumn({ step, fitted }: { step: number; fitted: boolean }): React.JSX.Element {
+/** The Inbox's last column at `step`: the empty choice, then the question's thread once opened. */
+function ThreadColumn({ step }: { step: number }): React.JSX.Element {
   const open = step >= 2;
   return (
     <section className="ui-landing-inbox-thread">
@@ -499,14 +488,7 @@ function ThreadColumn({ step, fitted }: { step: number; fitted: boolean }): Reac
         title={open ? <ThreadPath /> : undefined}
         actions={open ? <MoreButton thing="thread" onClick={still} /> : undefined}
       />
-      <div className={fitted ? "ui-landing-sheet-end ui-landing-fit" : "ui-landing-sheet-end"}>
-        {fitted
-          ? THREAD_TALLEST.map((tall) => (
-              <div key={tall} className="ui-landing-fit-room">
-                <QuestionThread step={tall} />
-              </div>
-            ))
-          : null}
+      <div className="ui-landing-sheet-end">
         {open ? (
           <QuestionThread step={step} />
         ) : (
@@ -554,7 +536,7 @@ function InboxPage({ step }: { step: number }): React.JSX.Element {
             </div>
           </div>
         </nav>
-        <ThreadColumn step={step} fitted={false} />
+        <ThreadColumn step={step} />
       </div>
       <SidePanelToggle />
     </div>
@@ -565,8 +547,7 @@ const INBOX_LABEL = "The Inbox, where an agent's question is answered";
 
 /**
  * Note that the cropped thread opens on the question, because the list it
- * would arrive in is cut away: its story is the pick, the note, and the send,
- * all of it in view at every step.
+ * would arrive in is cut away: its story is the pick, the note, and the send.
  */
 function InboxScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.INBOX);
@@ -577,7 +558,7 @@ function InboxScene(): React.JSX.Element {
         <InboxPage step={at} />
       </DesktopWindow>
       <DesktopPane label={INBOX_LABEL}>
-        <ThreadColumn step={Math.max(at, 2)} fitted />
+        <ThreadColumn step={Math.max(at, 2)} />
       </DesktopPane>
     </div>
   );
@@ -724,8 +705,8 @@ function AgentLog({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The log's foot at `step`: the pull request once opened, over the composer with the model the agent runs on where `composer` is drawn. */
-function AgentFoot({ step, composer }: { step: number; composer: boolean }): React.JSX.Element {
+/** The log's foot at `step`: the pull request once opened, over the composer with the model the agent runs on. */
+function AgentFoot({ step }: { step: number }): React.JSX.Element {
   return (
     <div className="ui-landing-agent-foot">
       {step >= 5 ? (
@@ -748,40 +729,33 @@ function AgentFoot({ step, composer }: { step: number; composer: boolean }): Rea
           </List>
         </div>
       ) : null}
-      {composer ? <AgentComposer /> : null}
-    </div>
-  );
-}
-
-/** The agent's composer: its field over its foot, with where it runs and the model it runs on. */
-function AgentComposer(): React.JSX.Element {
-  return (
-    <div className="ui-landing-composer">
-      <ComposerFrame>
-        <ComposerField label="Follow up" placeholder="Send a follow up" />
-        <ComposerFoot
-          send={{ label: "Send", empty: true }}
-          stop={{ label: "Stop", onStop: still }}
-          tools={
-            <>
-              <IconButton icon={<PlusIcon />} label="Attach files" onClick={still} />
-              <Badge tone={STATUS_TONE.NEUTRAL} icon={<GLYPH.CLOUD />}>
-                Cloud
-              </Badge>
-            </>
-          }
-          actions={
-            <>
-              <Chip look={CHIP_LOOK.TOOLBAR} chevron onClick={still}>
-                <ChipName>
-                  Opus 5.5 <span className="ui-landing-effort">High</span>
-                </ChipName>
-              </Chip>
-              <IconButton icon={<MicrophoneIcon />} label="Dictate" onClick={still} />
-            </>
-          }
-        />
-      </ComposerFrame>
+      <div className="ui-landing-composer">
+        <ComposerFrame>
+          <ComposerField label="Follow up" placeholder="Send a follow up" />
+          <ComposerFoot
+            send={{ label: "Send", empty: true }}
+            stop={{ label: "Stop", onStop: still }}
+            tools={
+              <>
+                <IconButton icon={<PlusIcon />} label="Attach files" onClick={still} />
+                <Badge tone={STATUS_TONE.NEUTRAL} icon={<GLYPH.CLOUD />}>
+                  Cloud
+                </Badge>
+              </>
+            }
+            actions={
+              <>
+                <Chip look={CHIP_LOOK.TOOLBAR} chevron onClick={still}>
+                  <ChipName>
+                    Opus 5.5 <span className="ui-landing-effort">High</span>
+                  </ChipName>
+                </Chip>
+                <IconButton icon={<MicrophoneIcon />} label="Dictate" onClick={still} />
+              </>
+            }
+          />
+        </ComposerFrame>
+      </div>
     </div>
   );
 }
@@ -859,8 +833,8 @@ function PlanPanel({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The agent's column at `step`: its tabs over its log and its foot, the composer in it where `composer` is drawn. */
-function AgentColumn({ step, composer }: { step: number; composer: boolean }): React.JSX.Element {
+/** The agent's column at `step`: its tabs over its log and its foot. */
+function AgentColumn({ step }: { step: number }): React.JSX.Element {
   return (
     <section className="ui-landing-agent-log">
       <Toolbar
@@ -871,7 +845,7 @@ function AgentColumn({ step, composer }: { step: number; composer: boolean }): R
       />
       <div className="ui-landing-sheet-start ui-landing-log-sheet">
         <AgentLog step={step} />
-        <AgentFoot step={step} composer={composer} />
+        <AgentFoot step={step} />
       </div>
     </section>
   );
@@ -883,7 +857,7 @@ function TaskPage({ step }: { step: number }): React.JSX.Element {
     <div className="ui-landing-app">
       <DesktopSidebar place={DESKTOP_PLACE.TASK} openTask="invites" />
       <div className="ui-landing-main ui-landing-task">
-        <AgentColumn step={step} composer />
+        <AgentColumn step={step} />
         <PlanPanel step={step} />
       </div>
       <SidePanelToggle />
@@ -893,11 +867,7 @@ function TaskPage({ step }: { step: number }): React.JSX.Element {
 
 const AGENTS_LABEL = "A task's agent starting another agent, and the two trading messages";
 
-/**
- * Note that the cropped column is the agent's log, where the hand-off and the
- * messages are told, and leaves out its composer, whose controls a phone's
- * width has no room for and which tells none of it.
- */
+/** Note that the cropped column is the agent's log, where the hand-off and the messages are told. */
 function AgentsScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.AGENTS);
   const at = Math.min(step, 5);
@@ -907,7 +877,7 @@ function AgentsScene(): React.JSX.Element {
         <TaskPage step={at} />
       </DesktopWindow>
       <DesktopPane label={AGENTS_LABEL}>
-        <AgentColumn step={at} composer={false} />
+        <AgentColumn step={at} />
       </DesktopPane>
     </div>
   );
