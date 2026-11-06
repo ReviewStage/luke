@@ -1,6 +1,10 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
-import type { PlanCommentStart } from "@repo/features/plan-comment-wire";
+import {
+  PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_BOUNDS,
+  type PlanCommentStart,
+} from "@repo/features/plan-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
@@ -47,7 +51,9 @@ import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
  * of them every thread in one message, so the agent revises the page once
  * (the service's `reviewHandedOver`). A comment started held is marked so,
  * so a send that stopped part way and is tried again names it along rather
- * than starting it twice.
+ * than starting it twice, and Remove or Discard deletes its thread, which
+ * no agent was handed. A review holds as many comments as one send hands
+ * over (`MAX_REVIEW_THREADS`); past that, a comment posts at once.
  */
 
 /** What the review's press, panel, and the field's presses say. */
@@ -63,6 +69,8 @@ export const PAGE_REVIEW_WORDS = {
   REMOVE: "Remove",
   WHOLE_PAGE: "Whole page",
   NOT_SENT: "Some comments could not be sent.",
+  NOT_REMOVED: "A comment already posted could not be deleted.",
+  FULL: "Your review is full. Comments you write now post at once.",
   /** What the panel says of the comments it holds. */
   lead: (count: number) =>
     `${count} ${count === 1 ? "comment" : "comments"} only you can see. The agent hears them together when you send them.`,
@@ -75,7 +83,7 @@ export const PAGE_REVIEW_WORDS = {
 /** What Discard asks before it lets every held comment go. */
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard your review?",
-  body: `This deletes every comment you held in it. ${IRREVERSIBLE_WORDS}`,
+  body: `This deletes every comment you held in it, and the thread of any a send already posted, with its replies. ${IRREVERSIBLE_WORDS}`,
   verb: "Discard review",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -164,6 +172,10 @@ export interface PageReviewControl {
   readonly sending: boolean;
   /** Whether the last send stopped part way, until the next. */
   readonly failed: boolean;
+  /** Whether a comment posted by a send that stopped could not be deleted, until the next Remove or Discard. */
+  readonly unremoved: boolean;
+  /** Whether the review holds as many comments as one send hands over, so the next posts at once. */
+  readonly full: boolean;
   /** Holds a comment in the review, starting it where none was held. */
   readonly hold: (comment: Omit<HeldComment, "planId" | "pageId" | "posted">) => void;
   readonly remove: (clientKey: string) => void;
@@ -181,6 +193,7 @@ export function usePageReview(
   const setAll = useAtomSet(reviewAtom);
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [unremoved, setUnremoved] = useState(false);
   const held = useMemo(
     () => all.filter((comment) => heldOn(comment, planId, pageId)),
     [all, planId, pageId],
@@ -203,18 +216,40 @@ export function usePageReview(
       setAll((now) => now.filter((comment) => !keys.has(comment.clientKey)));
     });
   };
+  const drop = (keys: ReadonlySet<string>) =>
+    setAll((now) => now.filter((comment) => !keys.has(comment.clientKey)));
+  // Note that a comment a stopped send posted is deleted with its thread, kept where that did not land, and let go where its thread is gone already.
+  const removeAll = (comments: readonly HeldComment[]) => {
+    setUnremoved(false);
+    const posted = comments.filter(
+      (comment) =>
+        comment.posted && control?.threads.some((thread) => thread.id === comment.clientKey),
+    );
+    drop(new Set(comments.filter((comment) => !posted.includes(comment)).map((c) => c.clientKey)));
+    for (const comment of posted) {
+      void control
+        ?.act(comment.clientKey, { action: PLAN_COMMENT_ACTION.DELETE_THREAD })
+        .then((deleted) => {
+          if (deleted) drop(new Set([comment.clientKey]));
+          else setUnremoved(true);
+        });
+    }
+  };
+  const full = held.length >= PLAN_COMMENT_BOUNDS.MAX_REVIEW_THREADS;
   return {
     held,
     sending,
     failed,
+    unremoved,
+    full,
     hold: (comment) => {
-      if (planId === undefined) return;
+      if (planId === undefined || full) return;
       setAll((now) => [...now, { ...comment, planId, pageId, posted: false }]);
     },
-    remove: (clientKey) => setAll((now) => now.filter((each) => each.clientKey !== clientKey)),
+    remove: (clientKey) => removeAll(held.filter((comment) => comment.clientKey === clientKey)),
     discard: () => {
       setFailed(false);
-      setAll((now) => now.filter((comment) => !heldOn(comment, planId, pageId)));
+      removeAll(held);
     },
     send,
   };
@@ -321,7 +356,11 @@ export function PageReview({
           }}
         >
           <p className="m-0 -mt-ui-8 text-muted-foreground">
-            <ReplayUnmask>{PAGE_REVIEW_WORDS.lead(count)}</ReplayUnmask>
+            <ReplayUnmask>
+              {review.full
+                ? `${PAGE_REVIEW_WORDS.lead(count)} ${PAGE_REVIEW_WORDS.FULL}`
+                : PAGE_REVIEW_WORDS.lead(count)}
+            </ReplayUnmask>
           </p>
           <ul className="page-review-list m-0 flex list-none flex-col gap-item-gap p-0">
             {review.held.map((comment) => (
@@ -342,6 +381,16 @@ export function PageReview({
               })}
             >
               <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_SENT}</ReplayUnmask>
+            </FailureNote>
+          ) : null}
+          {review.unremoved ? (
+            <FailureNote
+              failure={failureShown({
+                surface: FAILURE_SURFACE.PLAN_COMMENT_DISCARD,
+                cause: FAILURE_CONDITION.REFUSED,
+              })}
+            >
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_REMOVED}</ReplayUnmask>
             </FailureNote>
           ) : null}
           <ReplayUnmask>

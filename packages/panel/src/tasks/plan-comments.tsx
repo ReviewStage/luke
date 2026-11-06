@@ -3347,8 +3347,9 @@ export function PageCommentLayer({
               })}
               onStarted={onStarted}
               onCancel={onCancel}
+              // Note that a full review holds no more, so the comment posts at once, as its panel says.
               review={
-                review === undefined
+                review === undefined || review.control.full
                   ? undefined
                   : {
                       open: review.control.held.length > 0,

@@ -543,22 +543,14 @@ function reviewKey(clientKey: string, threadId: string | undefined, to: PlanComm
   });
 }
 
-/** A Markdown blockquote of words, every line of it quoted, as a transcript draws a quote. */
-function quoted(words: string): string {
-  return words
-    .split("\n")
-    .map((line) => (line === "" ? ">" : `> ${line}`))
-    .join("\n");
-}
-
-/** A review's words as its line in the transcript draws them: each thread's element quoted over the member's words in it, cut to the line's bound. */
+/**
+ * A review's words as its line in the transcript draws them, and as the
+ * member's own words the agent's next turn reads: the member's words in each
+ * thread, which open with the quote of the element it is on as the page's
+ * comment field writes them, cut to the line's bound.
+ */
 function reviewLineWords(threads: readonly PlanCommentThread[], userId: string): string {
-  const words = threads
-    .map((thread) => {
-      const own = firstWordsOf(thread, userId) ?? "";
-      return thread.page?.element === undefined ? own : `${quoted(thread.quote)}\n\n${own}`;
-    })
-    .join("\n\n");
+  const words = threads.map((thread) => firstWordsOf(thread, userId) ?? "").join("\n\n");
   return words.length > COMMENT_LINE_BOUNDS.WORDS_CHARS
     ? `${words.slice(0, COMMENT_LINE_BOUNDS.WORDS_CHARS - 1)}…`
     : words;
@@ -566,18 +558,41 @@ function reviewLineWords(threads: readonly PlanCommentThread[], userId: string):
 
 /**
  * An ask written in each thread of a review the agent is in, and the
- * threads handed to it in one message, as the member's; every ask is taken
- * back where the hand-over fails, so no thread says someone was asked who
+ * threads handed to it in one message, as the member's. Where any step
+ * fails, every ask this hand-over wrote is taken back, and none an earlier
+ * send of the same review wrote, so no thread says someone was asked who
  * was not.
  */
-const reviewAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
+function reviewAsked(
   threads: readonly PlanCommentThread[],
   comment: MentioningComment,
   to: PlanCommentAsked,
   agent: CommentRecipient,
 ) {
+  const written: string[] = [];
+  const takeBack = Effect.suspend(() =>
+    Effect.forEach(
+      written,
+      (key) =>
+        withdrawPlanCommentAsk(comment.taskId, key).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.ignore,
+        ),
+      { discard: true },
+    ),
+  );
+  return reviewAskedOnce(threads, comment, to, agent, written).pipe(Effect.onError(() => takeBack));
+}
+
+/** `reviewAsked`'s asks and hand-over, each ask it newly wrote told to `written`. */
+const reviewAskedOnce = /* @__PURE__ */ Effect.fnUntraced(function* (
+  threads: readonly PlanCommentThread[],
+  comment: MentioningComment,
+  to: PlanCommentAsked,
+  agent: CommentRecipient,
+  written: string[],
+) {
   const { userId, taskId } = comment;
-  const keys: string[] = [];
   const asked: PlanCommentThread[] = [];
   for (const thread of threads) {
     const ask = {
@@ -589,21 +604,15 @@ const reviewAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
       actOnPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, taskId, thread.id, ask),
     );
     if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) continue;
-    keys.push(ask.clientKey);
+    // Note that an ask an earlier send of the review wrote stands whatever this one comes to.
+    if (outcome.repeated !== true) written.push(ask.clientKey);
     asked.push(outcome.answer.thread);
   }
   const last = asked.at(-1);
   if (last?.page === undefined) return;
-  const takeBack = Effect.forEach(
-    keys,
-    (key) =>
-      withdrawPlanCommentAsk(taskId, key).pipe(Effect.tapError(logStoreFailure), Effect.ignore),
-    { discard: true },
-  );
   const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   const page = yield* hostedStoreOrUnavailable(readPageById(userId, last.page.id, undefined));
   if (Option.isNone(task) || Option.isNone(page)) {
-    yield* takeBack;
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const shown = page.value.page;
@@ -626,7 +635,7 @@ const reviewAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
     threadId: last.id,
     words,
     line: { taskId, quote: undefined, page: { id: last.page.id, title: shown.title } },
-  }).pipe(Effect.onError(() => takeBack));
+  });
 });
 
 /** The plan comments resource: its held read, a start, and one thing done to a thread, each to a signed-in member. */
