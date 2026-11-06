@@ -289,6 +289,20 @@ const textsOf = (command: Parameters<typeof launchLines>[0]) =>
     ),
   );
 
+/** What the launch reads past its config: its own lines, and the messages no earlier launch took, as its runner is handed them. */
+const handedLines = (userId: string, command: Parameters<typeof launchLines>[0]) =>
+  Effect.gen(function* () {
+    const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
+    assert.ok(command?.agentId !== undefined);
+    const read = yield* runnerLinesPast(userId, command.agentId, {
+      launch: config.firstSequence,
+      after: 0,
+      since: new Date(0),
+      limit: 50,
+    });
+    return read.map((line) => JSON.parse(line.text) as InputLine);
+  });
+
 /** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
 const turnUnderWay = (userId: string, agent: Agent) =>
   Effect.gen(function* () {
@@ -1337,6 +1351,47 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect(
+    "a message to an agent whose sandbox stopped answers once its line is queued, and the sandbox resumes past the answer once the stop's snapshot is taken",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        sequence.next = 42;
+        yield* runnerTook(agent.id);
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        // The stop's snapshot is still being taken as the message arrives, past more than one try.
+        api.snapshotting.remaining = 3;
+        const kept = keptAfterResponse();
+
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes[0]?.status, "stopped");
+        assert.equal(api.commands.length, 1);
+        yield* across(kept.run, CODER.RESUME_WHILE_ENDING.SPACING, 4);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.equal(api.commands.length, 2);
+        const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.deepEqual((yield* handedLines(userId, api.commands[1])).map(developerContent), [
+          [{ type: "text", text: "Now the emails." }],
+        ]);
+      }),
+  );
+
   it.effect.each([
     ["at its upload of the message's files", (rest: string) => rest === "fs/write", asLaunched],
     ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), asLaunched],
@@ -1716,7 +1771,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(expired.deleted, true);
         assert.equal(api.sandboxes.length, 2);
         assert.equal(api.sandboxes.at(-1)?.status, "running");
-        const stdin = JSON.stringify(yield* Effect.forEach(api.commands.slice(1), launchLines));
+        const stdin = JSON.stringify(
+          yield* Effect.forEach(api.commands.slice(1), (command) => handedLines(userId, command)),
+        );
         assert.ok(stdin.includes("Now the emails."));
         assert.ok(stdin.includes("And the docs."));
       }),
@@ -1792,7 +1849,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes.at(-1)?.status, "running");
         assert.equal(expired.deleted, true);
         assert.ok(
-          JSON.stringify(yield* launchLines(api.commands.at(-1))).includes("Now the emails."),
+          JSON.stringify(yield* handedLines(userId, api.commands.at(-1))).includes(
+            "Now the emails.",
+          ),
         );
       }),
   );

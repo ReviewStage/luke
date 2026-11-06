@@ -263,6 +263,16 @@ export const CODER = {
    * (`TURN_ABANDON.CANCEL_AFTER_MS`).
    */
   STOP_CONFIRM: Duration.seconds(10),
+  /**
+   * How a resume past a message's answer that meets its sandbox still
+   * stopping or being snapshotted (Vercel's 422 `sandbox_stopping` or
+   * `sandbox_snapshotting`) is tried again: every `SPACING`, at most `TRIES`
+   * times, about a minute, which a turn's stop and its snapshot end within,
+   * and well under the five minutes work past an answer may run. A resume
+   * inside a request tries once more at once instead, since a wait there
+   * would outlast the store's dispatch deadline.
+   */
+  RESUME_WHILE_ENDING: { SPACING: Duration.seconds(2), TRIES: 30 },
 } as const;
 
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */
