@@ -12,8 +12,6 @@ import {
   Button,
   ButtonLink,
   COPY_FIELD_WIDTH,
-  COPY_LOOK,
-  CopyButton,
   CopyField,
   DIALOG_SIZE,
   Dialog,
@@ -197,7 +195,7 @@ function Steps({ login }: { login: ChatGptDeviceStartAnswer }): React.JSX.Elemen
               width={COPY_FIELD_WIDTH.HUG}
             />
           </ReplayMask>
-          <Inline gap={GAP.CONTROL}>
+          <Inline>
             <ButtonLink
               href={url}
               variant={BUTTON_VARIANT.OUTLINE}
@@ -206,7 +204,6 @@ function Steps({ login }: { login: ChatGptDeviceStartAnswer }): React.JSX.Elemen
             >
               {WORDS.VERIFICATION_PAGE}
             </ButtonLink>
-            <CopyButton look={COPY_LOOK.BUTTON} text={url} what="link" copy={copyThroughShell} />
           </Inline>
         </NumberedStep>
       </NumberedSteps>

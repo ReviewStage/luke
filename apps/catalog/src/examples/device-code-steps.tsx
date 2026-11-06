@@ -3,8 +3,6 @@ import {
   Button,
   ButtonLink,
   COPY_FIELD_WIDTH,
-  COPY_LOOK,
-  CopyButton,
   CopyField,
   DIALOG_SIZE,
   Dialog,
@@ -26,8 +24,8 @@ import { CatalogSection } from "../section";
 
 /**
  * device-code-steps.tsx -- a code entered on another site, said as two
- * numbered steps (a hint, then a code to copy over a page to open beside a
- * labeled Copy link) and the wait on the other site under them, drawn alone and in
+ * numbered steps (a hint, then a code to copy over a page to open) and the
+ * wait on the other site under them, drawn alone and in
  * a dialog with a line under its title and a close at its end, waiting or
  * ended in a failure with Try again. The catalog's copy act is the
  * browser's own clipboard, and its presses go nowhere.
@@ -69,16 +67,10 @@ function Steps(): React.JSX.Element {
             copy={copyToClipboard}
             width={COPY_FIELD_WIDTH.HUG}
           />
-          <Inline gap={GAP.CONTROL}>
+          <Inline>
             <ButtonLink href={VERIFICATION_URL} variant={BUTTON_VARIANT.OUTLINE} external>
               Verification page
             </ButtonLink>
-            <CopyButton
-              look={COPY_LOOK.BUTTON}
-              text={VERIFICATION_URL}
-              what="link"
-              copy={copyToClipboard}
-            />
           </Inline>
         </NumberedStep>
       </NumberedSteps>
