@@ -159,13 +159,6 @@ export type NativeMoment =
        * opens one, so why it failed is kept.
        */
       readonly launchFailed?: boolean;
-      /**
-       * The wakeups the agent is left to be delivered, each due in epoch
-       * milliseconds, which replace those it had: what a released wait named,
-       * or none for a Stop, which ends the CLI's own wakeups with it. Absent
-       * for any other end, which leaves them as they stood.
-       */
-      readonly wakeups?: readonly NativeWakeup[];
     };
 
 /**
@@ -177,12 +170,6 @@ export interface NativeContextUsage {
   readonly outputTokens: number;
   readonly cachedInputTokens: number;
   readonly cacheWriteTokens: number;
-}
-
-/** A wakeup we deliver to a native agent as a message once it comes due. */
-export interface NativeWakeup {
-  readonly at: number;
-  readonly prompt: string;
 }
 
 /**

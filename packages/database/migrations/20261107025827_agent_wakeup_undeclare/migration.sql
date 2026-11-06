@@ -1,0 +1,4 @@
+-- agent_wakeup is declared no longer, and this release reads and writes it nowhere, since a native agent's
+-- runner now keeps its CLI up through a wait on a wakeup and the CLI fires the wakeup itself; but the
+-- release before it still writes and sweeps it while this one migrates. A later release's migration drops
+-- it (apps/web/server/README.md, "Dropping a column ... takes two deployments").

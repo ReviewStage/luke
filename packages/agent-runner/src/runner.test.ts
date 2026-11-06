@@ -27,7 +27,6 @@ import { vi } from "vitest";
 import { claudeCodeLive } from "./claude-code.js";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
-import { processTable } from "./processes.js";
 import {
   EFFORT,
   IMAGE_MEDIA_TYPE,
@@ -40,7 +39,6 @@ import {
   RUNNER_HEARTBEAT,
   RUNNER_LINES,
   RUNNER_PLACE,
-  RUNNER_RELEASE,
   RUNNER_UNANSWERED,
   type RunnerConfig,
   type RunnerEvent,
@@ -48,12 +46,9 @@ import {
 import { runAgent } from "./runner.js";
 import { fakeAppServer } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
-import { type FakeProcess, fakeProc, UNREAD_PROC } from "./testing/fake-proc.js";
 import { ANSWER, type Answer, makeFakeService } from "./testing/fake-service.js";
 import {
-  BACKGROUND_WAIT,
   FOLLOW_UP_TURNS,
-  RECURRING_WAIT,
   SHORT_TURN,
   STOPPED_COMMAND,
   STOPPED_TURN,
@@ -65,7 +60,6 @@ import {
   WAKEUP,
   WAKEUP_STOPPED_TURN,
   WAKEUP_WAIT,
-  WAKEUP_WAIT_THEN_MESSAGE,
   WARM_TURNS,
   WORKFLOW_TURN,
 } from "./testing/recorded-stream.js";
@@ -80,8 +74,6 @@ const BEARER = "runner-bearer-for-tests";
 const CLAUDE_TOKEN = 'plan-token-"for\\tests\n';
 const EVENTS_URL = "https://app.test/runner/events";
 const FIRST_SEQUENCE = 7;
-/** The runner's own pid in the test's `/proc`. */
-const RUNNER_PID = 100;
 
 const ENV = {
   [RUNNER_ENV.BEARER]: BEARER,
@@ -147,7 +139,6 @@ function launch(
   steps: readonly Step[],
   service: ReturnType<typeof fakeService>,
   env: Record<string, string> = ENV,
-  proc: string = UNREAD_PROC,
   chain: readonly string[] = [],
   answering = true,
 ) {
@@ -158,14 +149,7 @@ function launch(
     const write = (line: RunnerConfig | InputLine) => writeText(JSON.stringify(line));
     const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env }).pipe(
       Effect.scoped,
-      Effect.provide(
-        Layer.mergeAll(
-          cli.layer,
-          service.layer,
-          fakeAppServer([]).layer,
-          processTable(proc, RUNNER_PID),
-        ),
-      ),
+      Effect.provide(Layer.mergeAll(cli.layer, service.layer, fakeAppServer([]).layer)),
       Effect.forkScoped,
     );
     return {
@@ -293,14 +277,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([], STOPPED_COMMAND);
-      const { cli, prompted, write, run } = yield* launch(
-        STOPPED_TURN,
-        service,
-        ENV,
-        UNREAD_PROC,
-        [],
-        false,
-      );
+      const { cli, prompted, write, run } = yield* launch(STOPPED_TURN, service, ENV, [], false);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
       yield* service.seen;
@@ -1227,14 +1204,7 @@ it.effect(
       const stdin = yield* Queue.unbounded<string, Cause.Done>();
       const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env: ENV }).pipe(
         Effect.scoped,
-        Effect.provide(
-          Layer.mergeAll(
-            claudeCodeLive,
-            service.layer,
-            fakeAppServer([]).layer,
-            processTable(UNREAD_PROC, RUNNER_PID),
-          ),
-        ),
+        Effect.provide(Layer.mergeAll(claudeCodeLive, service.layer, fakeAppServer([]).layer)),
         Effect.forkScoped,
       );
       yield* Queue.offer(stdin, JSON.stringify({ ...CONFIG, executable, cwd: directory }));
@@ -1299,146 +1269,22 @@ it.effect(
     }),
 );
 
-/** Our browser, which the agent opened earlier in the turn, as the sandbox's default user: Xvfb and Chromium, and a renderer of Chromium's. */
-const AGENT_BROWSER: readonly FakeProcess[] = [
-  { pid: 300, parent: 1, agents: false, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
-  {
-    pid: 310,
-    parent: 1,
-    agents: false,
-    argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9333", "about:blank"],
-  },
-  { pid: 311, parent: 310, agents: false, argv: ["/usr/local/chromium/chrome", "--type=renderer"] },
-];
-
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, and our browser, nothing of the agent's beside them. */
-const WAITING_PROCESSES: readonly FakeProcess[] = [
-  ...AGENT_BROWSER,
-  { pid: 1, parent: 0, agents: false },
-  { pid: RUNNER_PID, parent: 1, agents: true },
-  { pid: RUNNER_PID + 1, parent: RUNNER_PID, agents: true },
-];
-/** A dev server the agent started, detached from its shell onto the sandbox's init. */
-const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, agents: true };
-
-/** A Chromium of the agent's own, on another port. */
-const AGENT_CHROMIUM: FakeProcess = {
-  pid: 4444,
-  parent: 1,
-  agents: true,
-  argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9222", "--headless"],
-};
-
-/** When the recorded wakeup's one-shot schedule, `17 12 21 10 *`, next comes due from the test clock's start, in local time. */
-const WAKEUP_DUE = new Date(1970, 9, 21, 12, 17).toISOString();
-
 it.effect(
-  "releases a wait on a one-shot wakeup alone once it has lasted two minutes, naming the wakeup in its END",
+  "keeps a launch waiting on a wakeup up for as long as it waits, for the CLI to fire it",
   () =>
     Effect.gen(function* () {
-      const proc = yield* fakeProc(WAITING_PROCESSES);
       const service = fakeService([], WAKEUP.prompt);
-      const { cli, write, run } = yield* launch(WAKEUP_WAIT, service, ENV, proc);
+      const { cli, write, run } = yield* launch(WAKEUP_WAIT, service);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
       yield* service.seen;
 
-      yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS - 1);
+      yield* TestClock.adjust(Duration.days(1));
       assert.equal(run.pollUnsafe(), undefined);
-      yield* TestClock.adjust(1);
-      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
-      assert.deepEqual(service.applied.at(-1)?.message, {
-        type: RUNNER_EVENT.END,
-        reason: RUNNER_END.RELEASED,
-        wakeups: [{ at: WAKEUP_DUE, prompt: WAKEUP.prompt }],
-      });
-      assert.equal(cli.closed, true);
+      assert.equal(cli.closed, false);
+      yield* write({ type: INPUT_LINE.STOP });
+      assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
     }),
-);
-
-it.effect.each([
-  ["a dev server", DEV_SERVER],
-  ["a Chromium of its own", AGENT_CHROMIUM],
-] as const)(
-  "holds a wait while %s the agent started runs, and releases it once that process ends",
-  ([, process]) =>
-    Effect.gen(function* () {
-      const proc = yield* fakeProc([...WAITING_PROCESSES, process]);
-      const service = fakeService([], WAKEUP.prompt);
-      const { write, run } = yield* launch(WAKEUP_WAIT, service, ENV, proc);
-      yield* write(CONFIG);
-      yield* write(FIRST_MESSAGE);
-      yield* service.seen;
-
-      yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
-      assert.equal(run.pollUnsafe(), undefined);
-      rmSync(join(proc, String(process.pid)), { recursive: true });
-      yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
-      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
-    }),
-);
-
-it.effect("never releases a wait on a background task, the agent's own process", () =>
-  Effect.gen(function* () {
-    const proc = yield* fakeProc(WAITING_PROCESSES);
-    const service = fakeService([], RUNNER_EVENT.WAITING);
-    const { write, run } = yield* launch(BACKGROUND_WAIT, service, ENV, proc);
-    yield* write(CONFIG);
-    yield* write(FIRST_MESSAGE);
-    yield* service.seen;
-
-    yield* TestClock.adjust(2 * RUNNER_RELEASE.IDLE_CAP_MS);
-    assert.equal(run.pollUnsafe(), undefined);
-    yield* write({ type: INPUT_LINE.STOP });
-    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
-  }),
-);
-
-it.effect(
-  "holds a recurring task's wait for the idle cap, then releases it with no wakeup to deliver",
-  () =>
-    Effect.gen(function* () {
-      const proc = yield* fakeProc(WAITING_PROCESSES);
-      const service = fakeService([], RUNNER_EVENT.WAITING);
-      const { write, run } = yield* launch(RECURRING_WAIT, service, ENV, proc);
-      yield* write(CONFIG);
-      yield* write(FIRST_MESSAGE);
-      yield* service.seen;
-
-      yield* TestClock.adjust(RUNNER_RELEASE.IDLE_CAP_MS - RUNNER_RELEASE.RECHECK_MS);
-      assert.equal(run.pollUnsafe(), undefined);
-      yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
-      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
-      assert.deepEqual(service.applied.at(-1)?.message, {
-        type: RUNNER_EVENT.END,
-        reason: RUNNER_END.RELEASED,
-        wakeups: [],
-      });
-    }),
-);
-
-it.effect("keeps a waiting launch whose wait a message from Vespin turned into a turn", () =>
-  Effect.gen(function* () {
-    const proc = yield* fakeProc(WAITING_PROCESSES);
-    const service = fakeService([], WAKEUP.prompt);
-    const { prompted, release, write, run } = yield* launch(
-      WAKEUP_WAIT_THEN_MESSAGE,
-      service,
-      ENV,
-      proc,
-    );
-    yield* write(CONFIG);
-    yield* write(FIRST_MESSAGE);
-    yield* service.seen;
-    yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
-    yield* Queue.take(prompted);
-    yield* Queue.take(prompted);
-
-    yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + RUNNER_RELEASE.RECHECK_MS);
-    assert.equal(run.pollUnsafe(), undefined);
-    yield* release;
-    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-  }),
 );
 
 /** The stored session a rewind cuts: two answered prompts, each followed by the answer's entries. */
@@ -1471,7 +1317,7 @@ it.effect.each([
 ])("resumes a rewound session $case", ({ rewindBefore, resume, at }) =>
   Effect.gen(function* () {
     const service = fakeService();
-    const { cli, write, run } = yield* launch(SHORT_TURN, service, ENV, UNREAD_PROC, REWOUND_CHAIN);
+    const { cli, write, run } = yield* launch(SHORT_TURN, service, ENV, REWOUND_CHAIN);
     yield* write({ ...CONFIG, rewindBefore });
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);

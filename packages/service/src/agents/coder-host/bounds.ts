@@ -21,11 +21,9 @@ export const CODER = {
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
    * end (`sandbox-keep-alive.ts`). A native runner keeps its sandbox alive by
-   * its heartbeat for as long as it runs, warm included, and its end, once
-   * its warm window passes (`RUNNER_WARM`), stops it, or two minutes into a
-   * wait on wakeups alone
-   * (`@repo/agent-runner`'s `RUNNER_RELEASE`, whose process table tells the
-   * harness's own processes from the agent's). What its end leaves up, as a
+   * its heartbeat for as long as it runs, warm included and a wait on a
+   * wakeup too, since the CLI fires the wakeup only while it runs, and its
+   * end, once its warm window passes (`RUNNER_WARM`), stops it. What its end leaves up, as a
    * developer's Terminal holds it, is stopped by this timeout once nothing
    * keeps it alive, its snapshot taken as at any stop, so this is how an
    * idle sandbox ends, and it bills its memory until then: at the default

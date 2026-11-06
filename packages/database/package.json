@@ -71,7 +71,6 @@
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",
     "./models/agent-runner-lease": "./src/models/agent-runner-lease.js",
     "./models/agent-runner-record": "./src/models/agent-runner-record.js",
-    "./models/agent-wakeups": "./src/models/agent-wakeups.js",
     "./models/conversation-rewind": "./src/models/conversation-rewind.js",
     "./models/conversation-delete": "./src/models/conversation-delete.js",
     "./models/sync-log": "./src/models/sync-log.js",

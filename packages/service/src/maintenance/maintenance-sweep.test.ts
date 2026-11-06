@@ -24,30 +24,29 @@ function sweepRequest(
 
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
-  wakeups: number[];
   syncLog: number[];
+  portShares: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const recorded: Recorded = {
-    wakeups: [],
     syncLog: [],
+    portShares: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
     monitor: { run: (sweep) => sweep },
-    sweepNativeWakeups: (now) =>
-      Effect.sync(() => {
-        recorded.wakeups.push(now);
-        return { delivered: 1, failed: 0 };
-      }),
     pruneSyncLog: (now) =>
       Effect.sync(() => {
         recorded.syncLog.push(now);
         return 5;
       }),
-    sweepPortShares: () => Effect.succeed(0),
+    sweepPortShares: (now) =>
+      Effect.sync(() => {
+        recorded.portShares.push(now);
+        return 0;
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -68,8 +67,8 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
     assert.equal(answer.status, 503);
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
     assert.deepEqual(recorded, {
-      wakeups: [],
       syncLog: [],
+      portShares: [],
     });
   }),
 );
@@ -85,12 +84,12 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(wrongAnswer.body.error, HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal(missingAnswer.status, 401);
     assert.deepEqual(wrong.recorded, {
-      wakeups: [],
       syncLog: [],
+      portShares: [],
     });
     assert.deepEqual(missing.recorded, {
-      wakeups: [],
       syncLog: [],
+      portShares: [],
     });
   }),
 );
@@ -103,25 +102,27 @@ it.effect(
       const answer = yield* sweep(options);
 
       assert.equal(answer.status, 200);
-      assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.equal(answer.body.syncLog, 5);
-      const [instant] = recorded.wakeups;
+      const [instant] = recorded.syncLog;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
-        wakeups: [instant],
         syncLog: [instant],
+        portShares: [instant],
       });
     }),
 );
 
 it.effect(
-  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the sync log among them, and the run's cron check-in fails",
+  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, and the run's cron check-in fails",
   () =>
     Effect.gen(function* () {
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
-        sweepNativeWakeups: () => Effect.fail(new Error("a wakeup's row could not be read")),
-        sweepPortShares: () => Effect.die(new Error("a port share's row could not be read")),
+        pruneSyncLog: () => Effect.fail(new Error("a sync log row could not be read")),
+        sweepPortShares: (now) =>
+          Effect.sync(() => recorded.portShares.push(now)).pipe(
+            Effect.andThen(Effect.die(new Error("a port share's row could not be read"))),
+          ),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
           run: (run) =>
@@ -136,8 +137,8 @@ it.effect(
 
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
-      assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
+      assert.deepEqual(answer.body.syncLog, SWEEP_FAILED);
       assert.deepEqual(answer.body.portShares, SWEEP_FAILED);
-      assert.equal(recorded.syncLog.length, 1);
+      assert.equal(recorded.portShares.length, 1);
     }),
 );

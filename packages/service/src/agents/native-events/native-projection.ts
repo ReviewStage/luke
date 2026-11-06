@@ -22,7 +22,6 @@ import {
   NATIVE_MOMENT,
   type NativeContextUsage,
   type NativeMoment,
-  type NativeWakeup,
   PLAN_STATUS,
   type PlanStatus,
 } from "./native-moments.js";
@@ -181,8 +180,6 @@ export const NATIVE_WRITE = {
   COMPACTED: "compacted",
   /** Record how a turn found the plan that pays for the agent, on its row. */
   PLAN_STATUS: "plan_status",
-  /** Replace the wakeups we deliver to the agent once due (`agent-wakeups.ts`). */
-  WAKEUPS: "wakeups",
   /** Record what the newest model call read on the agent's row, which its context ring reads. */
   CONTEXT: "context",
   /** Say a turn's failure in the log, and as an issue where its user did not expect it. */
@@ -198,7 +195,6 @@ export type NativeWrite =
       readonly clientId: string;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
-  | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
   | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
   | { readonly kind: typeof NATIVE_WRITE.CONTEXT; readonly usage: NativeContextUsage }
   | {
@@ -455,10 +451,6 @@ class Fold {
 
   /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
   #ended(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>): void {
-    // Note that the wakeups are the launch's, written whether or not a turn was under way.
-    if (moment.wakeups !== undefined) {
-      this.writes.push({ kind: NATIVE_WRITE.WAKEUPS, wakeups: moment.wakeups });
-    }
     const held = this.#endedTurn(moment);
     const { warm: _warm, ...cold } = this.state;
     this.state = moment.warm === true ? { ...cold, warm: true } : cold;

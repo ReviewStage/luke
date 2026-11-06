@@ -99,8 +99,7 @@ export const RUNNER_PLACE = {
    * A machine its member runs our host on, a Linux box or a Mac, with
    * nobody signed in at it, where each launch runs straight on the box as
    * the host's own user, with full access to what that user reaches, beside
-   * the box's other processes, which the runner tells its agent's from by
-   * descent (`host-processes.ts`). No harness runs a sandbox of its own or
+   * the box's other processes. No harness runs a sandbox of its own or
    * asks an approval there, as in the cloud's sandbox: Claude Code under
    * `bypassPermissions`, and Codex in `danger-full-access` with approval
    * `never`.
@@ -620,13 +619,6 @@ export const RUNNER_END = {
   INPUT_CLOSED: "input_closed",
   /** The CLI or app-server failed, or Codex's turn did; the turn shows as failed, and the next message relaunches with `resume`. */
   FAILED: "failed",
-  /**
-   * A wait released (`RUNNER_RELEASE`): the agent waited on wakeups alone,
-   * with no process of its own still running, so the launch ended for its
-   * sandbox to stop; the END names the wakeups for the service to deliver as they
-   * come due. The turn is over, as a `turn_ended` one is.
-   */
-  RELEASED: "released",
   /** A warm launch ended with no turn under way: retired by the service or its host, or past its warm window on its own (`RUNNER_WARM`). Its turn was already over at its IDLE, or it never took a message. */
   IDLED: "idled",
 } as const;
@@ -663,50 +655,6 @@ export interface RunnerWaiting {
   readonly session_crons: readonly SessionCronSummary[];
 }
 
-/** A wakeup a released wait left for the service to deliver: the instant it comes due, and the prompt the CLI would have run then. */
-export interface RunnerWakeup {
-  /** An ISO 8601 instant. */
-  readonly at: string;
-  readonly prompt: string;
-}
-
-/**
- * When a waiting launch is released (`RUNNER_END.RELEASED`). Claude Code
- * fires a session's scheduled tasks only while its CLI runs, and a resumed
- * session restores neither a self-paced wakeup nor a one-shot task whose
- * time has passed (https://code.claude.com/docs/en/scheduled-tasks), so a
- * wait on a wakeup held the CLI, and the 8 GB sandbox under it, up until the
- * wakeup came. A launch waiting on one-shot wakeups alone, with no
- * background task and no process of the agent's still running, is ended
- * instead, and the service delivers each wakeup as a message when it comes due,
- * which relaunches the CLI on the session it resumes. Any launch hands the
- * wakeups back: the service drops what it held, the CLI restores on resume the
- * one-shot tasks the agent made itself, and the agent owns them again.
- */
-export const RUNNER_RELEASE = {
-  /**
-   * How long a wait lasts before it is released, and how far off its
-   * earliest wakeup must still be then. Vercel bills a sandbox's memory by
-   * the minute it runs, and a released wait costs a stop, a resume, and a
-   * relaunch of the CLI, so a wait shorter than two billed minutes is held.
-   */
-  SETTLE_MS: 2 * 60 * 1_000,
-  /** How often a wait not yet released is looked at again, for a process of the agent's that has since ended. */
-  RECHECK_MS: 60 * 1_000,
-  /**
-   * How long a wait on a recurring task is held before it is released all the
-   * same. A recurring task's next run is jittered by the CLI and cannot be
-   * told from its schedule here, so it is not delivered; the CLI restores it
-   * when the session is next resumed (the same page). An hour holds a
-   * recurring task that runs at least hourly, since each run starts a new
-   * wait and an evenly spaced task's runs keep their spacing (the same
-   * page), and bounds a loop nobody stopped. A self-paced loop's pending
-   * wakeup is listed as a one-shot task, so it is delivered rather than
-   * held.
-   */
-  IDLE_CAP_MS: 60 * 60 * 1_000,
-} as const;
-
 /**
  * How long a launch waits on the CLI's answer to one control request (a
  * model change, an interrupt). The input loop takes the service's lines one at a
@@ -725,12 +673,11 @@ export const RUNNER_UNANSWERED = {
   SILENCE_MS: 5 * 60 * 1_000,
 } as const;
 
-/** The END event; `detail` is the CLI's failure, with the launch's secrets taken out, where it failed, and `wakeups` what a released wait left to deliver. */
+/** The END event; `detail` is the CLI's failure, with the launch's secrets taken out, where it failed. */
 export interface RunnerEndEvent {
   readonly type: typeof RUNNER_EVENT.END;
   readonly reason: RunnerEnd;
   readonly detail?: string;
-  readonly wakeups?: readonly RunnerWakeup[];
 }
 
 /**

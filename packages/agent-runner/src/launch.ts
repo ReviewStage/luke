@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { Cause, Queue, Redacted } from "effect";
 import { Data } from "effect";
 import type { EventSink } from "./events.js";
-import { RUNNER_ENV, RUNNER_PLACE, type RunnerEnd, type RunnerWakeup } from "./protocol.js";
+import { RUNNER_ENV, RUNNER_PLACE, type RunnerEnd } from "./protocol.js";
 import type { LaunchTrace } from "./trace.js";
 
 /** Whether the runner runs on a host its member added (`RUNNER_PLACE.HOST`), as the environment it was started with says. */
@@ -49,11 +49,10 @@ export interface LaunchContext<Config> {
   readonly self?: RunnerSelf | undefined;
 }
 
-/** Why a launch ended, the harness's failure where it failed, and the wakeups a released wait left, for the last event. */
+/** Why a launch ended, and the harness's failure where it failed, for the last event. */
 export interface LaunchOutcome {
   readonly end: RunnerEnd;
   readonly failure: string;
-  readonly wakeups?: readonly RunnerWakeup[];
 }
 
 /**
