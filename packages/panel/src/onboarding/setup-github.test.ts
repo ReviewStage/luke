@@ -100,7 +100,7 @@ function onToken(fullName: string, updatedAt: number): GitHubRepository {
   };
 }
 
-test("the token's picker adds several repositories in one open menu, checking each, and keeps standing once the workspace reaches them, its chip naming them", async () => {
+test("the token's picker adds several repositories in one open menu, checking each, and keeps standing once the workspace reaches them, its chip naming them, and taking them all back after Back keeps the token's card", async () => {
   const reach = [onToken("octo/tools", 2), onToken("octo/notes", 1)];
   let added: WorkspaceTokenRepository[] = [];
   const reads = handHostReads({ tokenRepositories: { [WORKSPACE]: { rows: [] } } });
@@ -126,26 +126,29 @@ test("the token's picker adds several repositories in one open menu, checking ea
   }));
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: ({ repository }) => {
-      added = [
-        { fullName: repository, addedBy: "user-octo", addedAt: 2, removable: true },
-        ...added,
-      ];
+    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: ({ repository, added: adding }) => {
+      added = adding
+        ? [{ fullName: repository, addedBy: "user-octo", addedAt: 2, removable: true }, ...added]
+        : added.filter((one) => one.fullName !== repository);
       reads.deliverTokenRepositories({ [WORKSPACE]: { rows: added } });
       return Promise.resolve(added);
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(GitHubSetup, { workspaceId: WORKSPACE, onReached: () => undefined }),
+  const draw = () => {
+    const root = createRoot(container);
+    roots.push(root);
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(GitHubSetup, { workspaceId: WORKSPACE, onReached: () => undefined }),
+        ),
       ),
-    ),
-  );
+    );
+    return root;
+  };
+  const first = draw();
   await settle();
   const radio = (words: string) =>
     [...container.querySelectorAll<HTMLElement>('[role="radio"]')].find((one) =>
@@ -173,5 +176,23 @@ test("the token's picker adds several repositories in one open menu, checking ea
     ["tools", "notes"].map((name) => option(name).getAttribute("aria-current")),
     ["true", "true"],
   );
-  assert.equal(chip().textContent, "tools, notes");
+  const named = chip().textContent;
+  // Back draws the step again, which forgets the card last pressed.
+  act(() => first.unmount());
+  draw();
+  // The host hands a window opened again the token repositories as they stand now.
+  act(() => reads.deliverTokenRepositories({ [WORKSPACE]: { rows: added } }));
+  await settle();
+  act(() => chip().click());
+  await settle();
+  act(() => option("tools").click());
+  await settle();
+  act(() => option("notes").click());
+  await settle();
+  await act(() => lists.again());
+  await settle();
+
+  assert.equal(named, "tools, notes");
+  assert.equal(radio("Personal access token").getAttribute("aria-checked"), "true");
+  assert.equal(chip().textContent, "Add repositories");
 });

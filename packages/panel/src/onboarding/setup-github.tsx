@@ -48,8 +48,9 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * The App is one trip to GitHub, which also links the member's GitHub
  * (the service keeps the install's user token). The token is made on
  * GitHub's own page and pasted here, then the repositories it may push to
- * are picked, several at once, in a menu that checks each one added. The token stands on its own, needing no GitHub account linked
- * first. The step is done once the workspace
+ * are picked, several at once, in a menu that checks each one added. The
+ * token stands on its own, needing no GitHub account linked first. The step
+ * is done once the workspace
  * reaches a repository, which is read again whenever the window is focused,
  * so a trip finished in the browser lands on its own.
  */
@@ -225,6 +226,10 @@ export function GitHubSetup({
   useEffect(() => onReached(reached > 0), [reached, onReached]);
   // Note that once a repository is reached the route is the one that reaches it, never the card last chosen, which a remount forgets.
   const route = repositories !== undefined && reached > 0 ? reachedRoute(repositories) : chosen;
+  // Note that the reached route becomes the card chosen, so taking the last token repository back keeps the token's card rather than falling to the App's.
+  useEffect(() => {
+    if (reached > 0) setChosen(route);
+  }, [reached, route]);
   const done =
     reached > 0 ? (
       <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
