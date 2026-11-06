@@ -24,7 +24,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * stand (`AgentGlyph`, `SubagentGlyph`) in every one of those places, the
  * "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. A task wears its
- * status's mark (`PlanGlyph`), and so does a pin of its Plan tab, which is
+ * status's mark (`PlanGlyph`), and so does a pin of its Description tab, which is
  * named for the task wherever the place knows it; the task's Overview, which
  * holds its description in its column, wears the document's glyph and its word. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
@@ -126,7 +126,7 @@ export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
 }
 
 /**
- * The open task as its Plan tab wears it: its name, and its status as the
+ * The open task as its Description tab wears it: its name, and its status as the
  * task list holds it, which a status set from the sidebar moves first; none
  * while no task is open.
  */
