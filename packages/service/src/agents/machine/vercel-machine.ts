@@ -194,6 +194,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   claudeExecutable: undefined,
   codexExecutable: undefined,
   linesRead: true,
+  transcriptsKept: true,
 };
 
 /**

@@ -88,6 +88,13 @@ export interface MachineLayout {
    * release bundled.
    */
   readonly linesRead: boolean;
+  /**
+   * Whether the runner keeps the CLI's transcript at the service
+   * (`@repo/agent-runner`'s `RUNNER_TRANSCRIPTS`), as a sandbox's does, so
+   * a place made anew still resumes the CLI's session; a Mac's CLI keeps
+   * its own files on the Mac.
+   */
+  readonly transcriptsKept: boolean;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */

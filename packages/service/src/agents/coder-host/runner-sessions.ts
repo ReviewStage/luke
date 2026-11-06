@@ -229,6 +229,8 @@ export interface RunnerSessionsOptions {
   readonly linesUrl: string;
   /** Our MCP server's endpoint, which the composing edge names. */
   readonly mcpUrl: string;
+  /** Where a runner on a machine that keeps it keeps the CLI's transcript (`RUNNER_TRANSCRIPTS`), which the composing edge names. */
+  readonly transcriptsUrl: string;
   /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside ours. */
   readonly integrations: (agent: Agent) => Effect.Effect<readonly IntegrationServer[]>;
   /** Our coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
@@ -818,6 +820,8 @@ export const runnerSessions = <
       alongside: Effect.Effect<void, AE, AR>,
       /** The first message as the Start composed and queued it before it answered, which the launch takes over rather than composes again, its words marked handed once the runner has it. */
       queuedFirst?: OpenedLine,
+      /** Whether the session resumed is the source's of a continued or forked agent, which the CLI forks as its own. */
+      fork = false,
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
@@ -868,6 +872,10 @@ export const runnerSessions = <
                   config: {
                     ...config,
                     ...(layout.linesRead ? { linesUrl: options.linesUrl } : undefined),
+                    ...(layout.transcriptsKept
+                      ? { transcriptsUrl: options.transcriptsUrl }
+                      : undefined),
+                    ...(fork ? { fork } : undefined),
                     ...(warm ? { warm } : undefined),
                   },
                   rewind,
@@ -1074,6 +1082,24 @@ export const runnerSessions = <
       );
 
     /**
+     * The session a new place resumes where the service keeps the CLI's
+     * transcript: the conversation's own, as for a place made anew in place
+     * of one whose disk was lost, or, at a continued or forked agent's first
+     * open, its source's, whose transcript the Start copied, forked as its
+     * own; none for an agent that has neither.
+     */
+    const keptSessionOf = (agent: Agent) =>
+      Effect.gen(function* () {
+        const routing = yield* readAgentRouting(userId, agent.id);
+        const own = Option.getOrUndefined(
+          Option.flatMapNullishOr(routing, (read) => read.nativeSession),
+        );
+        if (own !== undefined) return { resume: own, fork: false };
+        const source = agent.startedFrom?.session;
+        return source === undefined ? {} : { resume: source, fork: true };
+      });
+
+    /**
      * A new place opened under the session given on the agent's machine, the
      * agent's repository checked out in it, then at once its finish
      * (`finishCheckoutWith`, the machine's `finishCheckout`): the
@@ -1096,6 +1122,7 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
+        const from = layout.transcriptsKept ? yield* keptSessionOf(agent) : {};
         yield* machine.open(
           {
             session: sessionId,
@@ -1117,13 +1144,14 @@ export const runnerSessions = <
                 { name: opened.name, running: opened.place, session: sessionId },
                 layout,
                 first,
-                undefined,
+                from.resume,
                 credential,
                 Effect.all([opened.finishCheckout, writeInstalledSkills(opened.place, skills)], {
                   concurrency: "unbounded",
                   discard: true,
                 }),
                 queuedFirst,
+                from.fork,
               ),
             ).pipe(Effect.annotateLogs(runningLogId(opened.place.running))),
         );
@@ -1135,8 +1163,10 @@ export const runnerSessions = <
      * of its own where it only hands on the lines an earlier launch never
      * took. In a place made anew in place of one whose disk was lost
      * (`created`), the harness's session and the member's installed skills
-     * went with that disk, so its session starts fresh and the skills are
-     * uploaded again, as a new place's are.
+     * went with that disk, so the skills are uploaded again, as a new
+     * place's are, and its session resumes only where the service keeps its
+     * transcript (`MachineLayout`'s `transcriptsKept`), starting fresh
+     * otherwise.
      */
     const relaunched = (
       agent: Agent,
@@ -1158,9 +1188,11 @@ export const runnerSessions = <
           ],
           { concurrency: "unbounded" },
         );
-        const resume = created
-          ? undefined
-          : Option.getOrUndefined(Option.flatMapNullishOr(routing, (read) => read.nativeSession));
+        // Note that a place made anew still resumes the session where the service keeps its transcript.
+        const resume =
+          created && !layout.transcriptsKept
+            ? undefined
+            : Option.getOrUndefined(Option.flatMapNullishOr(routing, (read) => read.nativeSession));
         yield* launch(
           agent,
           { name, running, session: sessionId },
@@ -1381,7 +1413,8 @@ export const runnerSessions = <
           // Note that the snapshot of a sandbox opened before `getOrCreate` expired
           // (`CODER.SANDBOX_SNAPSHOTS`), so it can never resume: the session goes on in a fresh one
           // under the session's tag, on the session's drive. The harness's own session files went
-          // with the old filesystem, so none is resumed. The expired sandbox is deleted only once
+          // with the old filesystem, so its session resumes from the transcript the service keeps
+          // (`keptSessionOf`). The expired sandbox is deleted only once
           // the fresh one runs, so a launch that fails (a clone refused, say) leaves the session
           // standing for the next message to try again rather than retired; a delete that fails
           // leaves the expired one beside the fresh one, which `listTagged` lists after it as the

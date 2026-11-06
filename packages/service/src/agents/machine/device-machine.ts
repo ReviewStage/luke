@@ -278,6 +278,7 @@ function deviceMachineOver(
         codexExecutable: device.value.codexExecutable ?? undefined,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
+        transcriptsKept: false,
       };
       return layout;
     });

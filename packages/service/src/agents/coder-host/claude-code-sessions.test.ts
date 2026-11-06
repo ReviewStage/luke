@@ -133,6 +133,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 const IMAGE = "agent-image:fixture";
 const EVENTS_URL = "https://app.test/api/agents/runner/events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
+const TRANSCRIPTS_URL = "https://app.test/api/agents/runner-transcripts";
 const MCP_URL = "https://app.test/api/agents/mcp";
 /** The host every address above names, which the firewall swaps the runner's bearer in on. */
 const SERVICE_HOST = "app.test";
@@ -248,6 +249,7 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     eventsUrl: EVENTS_URL,
     linesUrl: LINES_URL,
     mcpUrl: MCP_URL,
+    transcriptsUrl: TRANSCRIPTS_URL,
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
@@ -624,6 +626,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           eventsUrl: EVENTS_URL,
           linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
+          transcriptsUrl: TRANSCRIPTS_URL,
           integrations: [LINEAR_SERVER],
           allowedDomains: [],
           installedSkills: "/opt/agent/installed-skills",
@@ -1611,7 +1614,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, with no CLI session to resume and the installed skills written again",
+    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, resuming the CLI's session from the transcript the service keeps, and the installed skills written again",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1661,7 +1664,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
         const [config, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
-        assert.equal(config.resume, undefined);
+        assert.equal(config.resume, CLI_SESSION);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
         // The installed skills went with the expired disk, so the fresh sandbox is handed them again.
@@ -2302,6 +2305,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           eventsUrl: EVENTS_URL,
           linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
+          transcriptsUrl: TRANSCRIPTS_URL,
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
           nextSequence: () => Effect.sync(() => sequence.next),
@@ -2768,6 +2772,39 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ],
           [0, 0, 0],
         );
+      }),
+  );
+
+  it.effect(
+    "an agent continued from another whose transcript was carried forks the source's CLI session at its first open",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        assert.ok(agent.taskId !== null);
+        const started = yield* createAgent(userId, {
+          taskId: agent.taskId,
+          idempotencyKey: `start-${randomUUID()}`,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          descriptionSnapshot: "# Invitations\n",
+          prompt: null,
+          repository: null,
+          startedFrom: { agentId: agent.id, steps: 0, totalSteps: 0, session: CLI_SESSION },
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        const continued = Option.getOrThrow(started).agent;
+
+        const opened = yield* sessions.open(message(continued, "Go on."));
+
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [config] = (yield* launchLines(api.commands[0])) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.equal(config.fork, true);
       }),
   );
 

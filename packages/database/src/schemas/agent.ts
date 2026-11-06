@@ -193,6 +193,8 @@ export interface StoredStartedFrom {
   readonly branch?: string;
   /** The drive the source's work stood on as this agent was started, which this agent's own drive is forked from at its first open; absent for a source with no drive of its own. */
   readonly drive?: string;
+  /** The source's CLI session, whose transcript the Start copied to this agent's and which its first open forks as its own; absent where it was handed a replay instead. */
+  readonly session?: string;
 }
 
 /**
