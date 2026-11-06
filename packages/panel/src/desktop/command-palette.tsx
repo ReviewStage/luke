@@ -979,7 +979,7 @@ function agentRows(
   if (taskId === undefined) return [];
   const taskName = tasks.tasks.find((task) => task.id === taskId)?.name;
   // Note that an item main says waits on the task holds its Inbox with no agent read yet.
-  const waiting = tasks.listed.inbox.some((each) => each.taskId === taskId);
+  const waiting = tasks.inbox.find((each) => each.taskId === taskId)?.items.length ?? 0;
   const inbox = inboxEntries(tasks.agents, waiting, () => tasks.onShowInbox({ taskId }));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
