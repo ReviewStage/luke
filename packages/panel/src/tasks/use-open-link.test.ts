@@ -6,6 +6,7 @@ import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-g
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { useQuery } from "@tanstack/react-query";
 import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -15,7 +16,7 @@ import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectRun } from "../use-app-state.js";
 import {
   ListedPullRequests,
   OpenAddressesHere,
@@ -162,7 +163,7 @@ test("a link naming a listed task by its number is asked of the place it is pres
   let open: ((href: string) => void) | undefined;
   // Note that the part reads the window's document, so it is read by the press.
   function Opener(): null {
-    useAppSlice(APP_SLICE.RUN);
+    useQuery({ ...appStateQuery, select: selectRun });
     open = useOpenLink();
     return null;
   }

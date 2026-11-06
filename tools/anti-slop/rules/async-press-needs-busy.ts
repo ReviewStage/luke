@@ -24,7 +24,7 @@ type Node = ESTree.Node;
 
 /**
  * The rule: a `@repo/ui` button whose press is async, or hands back a
- * promise (`pressAct`, `useAct().press`, an awaited act, a `.then`), passes
+ * promise (`pressAct`, a handle's `press`, an awaited act, a `.then`), passes
  * `busy`, so a slow answer is seen working in the one busy shape every kind of
  * button takes. A handler is read where it is written, or by the name it is
  * held under in the same file; a press the rule cannot read (a prop, a

@@ -34,7 +34,7 @@ import { type AgentRun, agentStillWriting } from "./agent-model.js";
 /**
  * use-agent-transcript.ts -- one agent's transcript, or one of its workers', as its tab draws it, from the read the host holds of it on app state.
  *
- * The tab holds its transcript while it is shown (`useHostRead`), and the
+ * The tab holds its transcript while it is shown (`live-reads.ts`), and the
  * host follows it and lays every page on app state as it is read
  * (`LIVE_READ.TRANSCRIPT`), the messages that moved crossing alone, so
  * nothing here follows a cursor or keeps a loop. A transcript the host

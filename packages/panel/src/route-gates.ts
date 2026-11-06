@@ -21,10 +21,8 @@ import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import {
   appStateNow,
   appStateQuery,
+  selectExperimentChoices,
   selectSettingsHeld,
-  useAdminAccess,
-  useAdminAccessPending,
-  useExperimentChoices,
 } from "./use-app-state.js";
 
 /** What a workspace's gate reads of each of the reader's workspaces: what an address's first step may name it by. */
@@ -74,6 +72,11 @@ function stepOf(workspace: GateWorkspace | undefined): string | undefined {
   return workspace === undefined ? undefined : (workspace.slug ?? workspace.id);
 }
 
+/** Whether Admin may stand by main's document: an admin's, or while the account's access is still read. */
+function selectAdminStands(state: AppStateSnapshot): boolean {
+  return state.access.pending === true || state.access.admin === true;
+}
+
 /** The reader's workspaces as main's document holds them. */
 function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
   return state.tasks?.workspaces ?? NO_WORKSPACES;
@@ -87,21 +90,22 @@ function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
  * moves, and each new access asks the routes standing again.
  */
 export function useRouteAccess(): RouteAccess {
-  const admin = useAdminAccess();
-  const adminPending = useAdminAccessPending();
-  const experiments = useExperimentChoices();
+  // Note that Admin stands before the document is read, as a reloaded Admin address waits on the access.
+  const admin = useQuery({ ...appStateQuery, select: selectAdminStands }).data ?? true;
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data ?? NO_WORKSPACES;
   const listed = stepOf(useKeptChoice(workspaces));
   return useMemo(
     (): RouteAccess => ({
-      admin: admin || adminPending,
+      admin,
       experiments,
       experimentsRead,
       workspaces,
       listed,
     }),
-    [admin, adminPending, experiments, experimentsRead, workspaces, listed],
+    [admin, experiments, experimentsRead, workspaces, listed],
   );
 }
 

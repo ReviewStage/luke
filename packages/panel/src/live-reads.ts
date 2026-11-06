@@ -47,10 +47,9 @@
  *   drawn without holding it is `useQuery` with `enabled: false`, which
  *   holds nothing, or `getQueryData` in a callback.
  *
- * A read moved here leaves `use-host-read.ts`'s `HOST_READS`: its factory, its
- * Try again, and its follow are added below, and nothing else. This module,
- * and `use-host-read.ts` until its reads are all moved, are the only ones
- * that open a follow (`anti-slop/no-follow-outside-host-read`).
+ * A read added here is its factory, its Try again, and its follow below,
+ * and nothing else. This module is the only one that opens a follow
+ * (`anti-slop/no-follow-outside-host-read`).
  */
 
 import {
@@ -289,7 +288,7 @@ function transcriptOf(agentId: string, callId: string | undefined): AgentTranscr
     : { kind, agentId, callId };
 }
 
-/** Every live read moved here, by its name, which `use-host-read.ts` reads no more. */
+/** Every live read, by its name. */
 const LIVE_QUERY_READS = [
   LIVE_READ.ACCOUNT_PREFERENCES,
   LIVE_READ.MODELS,
@@ -332,9 +331,6 @@ const LIVE_QUERY_READS = [
   LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
   LIVE_READ.AUTOMATION_RUNS,
 ] as const satisfies readonly LiveReadName[];
-
-/** A live read moved here, by its name. */
-export type LiveQueryRead = (typeof LIVE_QUERY_READS)[number];
 
 /** What tells a live read's query from any other: its key's first element is one of these. */
 const MOVED: ReadonlySet<string> = new Set<LiveReadName>(LIVE_QUERY_READS);

@@ -102,7 +102,6 @@
 
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
 import { linkOf, type ReadLink, taskLinkStep } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { workspaceOfSlug } from "@repo/features/workspace-wire";
 import {
   isAgentTab,
@@ -120,6 +119,7 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { type HistoryLocation, type RouterHistory, useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
 import {
@@ -133,6 +133,7 @@ import {
 } from "react";
 import type { AutomationsRoute } from "./automations-route.js";
 import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
+import { workspaceMembersQuery } from "./live-reads.js";
 import {
   ROUTED_PLACE,
   type RoutedPlace,
@@ -147,7 +148,6 @@ import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import type { InboxChoice, LeaveGuard, TasksControl } from "./tasks/use-tasks-tab.js";
-import { useHostRead } from "./use-host-read.js";
 import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 import type { VersionHistoryRoute } from "./version-history-route.js";
 
@@ -1808,10 +1808,8 @@ export function useWindowHistory(input: {
           routedPlaceOf(router.matchRoutes(pathOf(entry.address))) === ROUTED_PLACE.PERSON,
       ),
   );
-  const members = useHostRead(
-    LIVE_READ.WORKSPACE_MEMBERS,
-    personListed ? tasks.workspace?.id : undefined,
-  ).rows?.members;
+  const members = useQuery(workspaceMembersQuery(personListed ? tasks.workspace?.id : undefined))
+    .data?.members;
   // The task a routed step's version history is of, where it is one's, which its step is listed by the name it goes by now.
   const historyOf = (to: Place): string | undefined =>
     to.kind === PLACE_KIND.ROUTED

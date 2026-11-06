@@ -136,7 +136,7 @@ function orderedChapters(chapters: readonly Chapter[]): readonly Chapter[] {
  * What the view draws from its read as it stands, and this window's own
  * Generate where one is out, which stands over whatever the read last said
  * until it answers. A read asked again after a failure stands unread until
- * it answers (`useHostRead`), so the failure gives way to the wait.
+ * it answers (`live-reads.ts`), so the failure gives way to the wait.
  */
 export function chaptersShown(
   answer: PullRequestChaptersAnswerView | undefined,

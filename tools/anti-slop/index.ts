@@ -32,7 +32,7 @@ import { skeletonThroughComponentsRule } from "./rules/skeleton-through-componen
  * and the design system's guards against controls and headings built outside `@repo/ui`,
  * forms the browser checks with its own bubble, loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, buttons that open a page, placeholders that end in an ellipsis,
  * popovers that close on a press through a listener of their own, view choices stored by hand rather than through `useKept`, a follow
- * opened beside `useHostRead`, a vendored
+ * opened beside the live reads' queries, a vendored
  * shadcn component hiding the keyboard's ring, a script asking the OS whether to move rather than the motion tokens, and the classes, glyphs and patterns phase 2 retired coming back; and the testing policy's
  * guards against a test that mocks a module of this repository, runs less than it declares, or reads source text.
  */

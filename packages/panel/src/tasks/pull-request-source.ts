@@ -18,7 +18,7 @@ import type { AgentsControl } from "./use-agents.js";
  * last read, its changed files, and its chapters' Generate, and make every
  * change through it, a review's among them. What the host holds for the tab
  * apart from these, its parts, the pickers' options, and the viewed marks,
- * each part draws through `useHostRead`, under the agent and the number the
+ * each part draws through its live read's query, under the agent and the number the
  * source names. A tab is an agent's for now (`agentPullRequestSource`), so each read
  * names the agent, and the pull request's number where the tab names one
  * (`pull-request-number.ts`). The tab hands its source down

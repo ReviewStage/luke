@@ -49,7 +49,7 @@ import {
  * use-task-inbox.ts -- the open task's inbox as one control: its items, drawn from the account's feed at once and from the holder's own read as the host holds it, and the answers on their way back.
  *
  * The holder's own read, a task's by its plan or an agent's by its own id,
- * is held (`use-host-read.ts`) while the window shows the tasks and a task
+ * is held (`live-reads.ts`) while the window shows the tasks and a task
  * with an agent, or one main says an item waits on, is open, so the tab's
  * count stands whichever tab is chosen; the host keeps it followed a while
  * after, so a task taken up again draws from where its read stands. The

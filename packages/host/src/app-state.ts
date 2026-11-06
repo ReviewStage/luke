@@ -28,6 +28,7 @@ import type {
   AutomationSummary,
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
@@ -45,7 +46,6 @@ import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
-import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type { PortForwarding } from "@repo/features/port-forward-acts";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
@@ -309,7 +309,7 @@ export interface AppInboxSlice {
  * window draws it: its rows as it last answered, absent until it first
  * does, and whether it said it could not answer before it ever had. A read
  * that stops answering once it has keeps its rows, since its next answer
- * brings them up to date. What the panel reads through `useHostRead`.
+ * brings them up to date. What the panel reads through a live read's query.
  */
 export interface AppHostRead<Rows> {
   rows?: Rows;

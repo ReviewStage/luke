@@ -42,7 +42,7 @@ import {
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handHostReads } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
@@ -1009,6 +1009,8 @@ test("Back's list names a person's page by the name the workspace's members give
     [workspace.id]: { rows: { members: [{ ...lee, role: WORKSPACE_ROLE.MEMBER }] } },
   });
   await settle();
+  // Note that the members are read through Query, which tells its readers on its own queue.
+  await settleQueries();
   assert.equal(window.history().steps.back[0]?.title?.label, "Lee Chen");
 });
 

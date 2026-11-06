@@ -105,7 +105,7 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
     },
     {
       ...panel(
-        "function A() { const { act } = useAct(); return <Button onClick={() => act.press(K)} />; }",
+        "function A() { const { act } = useActs(); return <Button onClick={() => act.press(K)} />; }",
       ),
       errors: [{ messageId: "noBusy" }],
     },

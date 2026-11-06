@@ -5,17 +5,17 @@
  * this module is its only caller. There are three ways to send one, by who
  * reads what comes back:
  *
- * - `askAct` (`act` on `useAct`): the caller reads the answer, and a refusal
+ * - `askAct`: the caller reads the answer, and a refusal
  *   rejects it with the sentence the host drew, for the caller to show.
- * - `pressAct` (`press`): a person pressed something and nothing reads the
+ * - `pressAct`: a person pressed something and nothing reads the
  *   answer. A refusal, or any other failure, raises a FAILED toast carrying
  *   the act's own refusal sentence, so a press never fails silently, and
  *   reports it, by the act's kind and the ids its payload names.
- * - `tellAct` (`tell`): a report nobody pressed, such as a browser view let
+ * - `tellAct`: a report nobody pressed, such as a browser view let
  *   go or a refresh after a turn. It stays quiet whatever comes back,
  *   because a toast nobody asked for is noise.
  *
- * A control's press is a `press`; reach for `tell` only where no person
+ * A control's press is a `pressAct`; reach for `tellAct` only where no person
  * pressed anything.
  */
 
@@ -23,19 +23,14 @@ import { ORPCError } from "@orpc/client";
 import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@repo/features/agent-view";
 import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import {
   ACT_ERROR,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
-  type SettingUpdatePayload,
 } from "@repo/host/contract";
-import type { AppSettingField, AppSettingValue } from "@repo/settings";
-import type { SettingsUpdateResult } from "@repo/settings/wire";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
 import type { ShownFailure } from "./failure-report.js";
 import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
@@ -282,43 +277,4 @@ export function askAct<Kind extends PortActKind>(
   ...[payload]: ActArguments<Kind>
 ): Promise<ActResult<Kind>> {
   return performAct<Kind>(kind, payload);
-}
-
-/**
- * The settings write, generic in the field it names. It is the act a row's
- * own press mints — there is no second way to write a setting.
- */
-interface SettingWriteActs {
-  updateSetting<Field extends AppSettingField>(
-    field: Field,
-    value: AppSettingValue<Field>,
-  ): Promise<SettingsUpdateResult>;
-}
-
-/**
- * What a component or hook reaches the act channel through, in one bundle.
- * Note that `act`, `press`, and `tell` are typed as `askAct`, `pressAct`,
- * and `tellAct` themselves, rather than restated as generic methods: with
- * every kind the act port answers, comparing two such generic signatures is
- * a union TypeScript can no longer represent.
- */
-export interface ActHandle extends SettingWriteActs {
-  act: typeof askAct;
-  press: typeof pressAct;
-  tell: typeof tellAct;
-}
-
-/** What a component or hook reaches the act channel through, in one bundle. */
-export function useAct(): ActHandle {
-  return useMemo<ActHandle>(
-    () => ({
-      act: askAct,
-      press: pressAct,
-      tell: tellAct,
-      // SAFETY: as updateSetting's own cast above, for this render tree's channel.
-      updateSetting: (field, value) =>
-        askAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
-    }),
-    [],
-  );
 }

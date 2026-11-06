@@ -23,7 +23,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract.js";
@@ -168,7 +168,6 @@ const waitAtom = (wait: Duration.Duration) =>
   );
 
 export function useLocalSession(agentId: string, shown: boolean): LocalSession {
-  const { act } = useAct();
   const registry = useContext(RegistryContext);
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
@@ -243,9 +242,9 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
   // A new shell in the agent's mirror, held in the window's list, or why
   // main could not make the mirror or the shell.
   const open = useCallback(async (): Promise<Opened> => {
-    const mirrored = await act(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(() => undefined);
+    const mirrored = await askAct(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(() => undefined);
     if (mirrored === undefined) return { why: TERMINAL_UNREACHED.MIRROR };
-    const opened = await act(ACT_KIND.MAC_SHELL_OPEN, {
+    const opened = await askAct(ACT_KIND.MAC_SHELL_OPEN, {
       agentId,
       folder: mirrored.folder,
     }).catch(() => undefined);
@@ -253,7 +252,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     const { terminalId } = opened;
     writeHeld((shells) => [...shells, { terminalId, title: nextShellTitle(shells) }]);
     return { terminalId };
-  }, [act, agentId, writeHeld]);
+  }, [agentId, writeHeld]);
 
   // Note that `connect` is read through a ref here, because a refused
   // attach finds the next shell, and `connect` is built over `attach`.
@@ -275,7 +274,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       // An attach main refused posts no port, so it is out of the line, and
       // its shell, which main no longer holds, out of the list; the next one
       // is found in its place, unless it was just opened, which says so.
-      void act(ACT_KIND.MAC_SHELL_ATTACH, { agentId, terminalId: target, ...size }).catch(() => {
+      void askAct(ACT_KIND.MAC_SHELL_ATTACH, { agentId, terminalId: target, ...size }).catch(() => {
         held.asked = held.asked.filter((each) => each !== asked);
         if (held.asked.length === 0) held.release?.();
         forget(target);
@@ -286,7 +285,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
         else void connectNow.current();
       });
     },
-    [act, agentId, enter, forget],
+    [agentId, enter, forget],
   );
 
   const connect = useCallback(async () => {
@@ -353,7 +352,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       }
       const generation = held.generation;
       try {
-        await act(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: target });
+        await askAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: target });
         forget(target);
         if (shown && held.generation === generation) await connect();
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -362,7 +361,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
       }
     },
-    [act, agentId, attach, connect, forget, letGo],
+    [agentId, attach, connect, forget, letGo],
   );
 
   // Note that the screen takes the keyboard back as the bar's action
@@ -383,10 +382,10 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     held.shell = undefined;
     if (ended !== undefined) {
       forget(ended);
-      void act(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended }).catch(() => undefined);
+      void askAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended }).catch(() => undefined);
     }
     void connect();
-  }, [act, agentId, connect, forget]);
+  }, [agentId, connect, forget]);
 
   // What is typed goes to the shell while one is attached, and otherwise
   // is the state's own: any key after the shell ended opens a new one in
