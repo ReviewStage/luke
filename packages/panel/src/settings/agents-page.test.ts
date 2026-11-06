@@ -302,10 +302,17 @@ test("Effort and Context are each a radio group, the stored value checked and th
   pressKeyIn(effort, "ArrowLeft");
   await settle();
   assert.equal(focusedSegment(), "Medium");
+  // Note that each row draws its option once the default the host lays after its write reaches the preferences' query, so the next write starts from it.
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Medium"]),
+  );
   act(() => segment(context, "200K").click());
   await settle();
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Context")).checked, ["200K"]),
+  );
   // A press on the option already chosen asks nothing of the service.
-  act(() => segment(context, "200K").click());
+  act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
 
   assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Medium"]);
@@ -368,11 +375,14 @@ test("the model, Effort and Context rows each tick Saved once their write lands,
 
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
-  assert.deepEqual(marks(), [[], ["Modified", "Saved"], []]);
+  // Note that each row ticks once the default the host lays after its write reaches the preferences' query.
+  await vi.waitFor(() => assert.deepEqual(marks(), [[], ["Modified", "Saved"], []]));
 
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
-  assert.deepEqual(marks(), [[], ["Modified", "Saved"], ["Modified", "Saved"]]);
+  await vi.waitFor(() =>
+    assert.deepEqual(marks(), [[], ["Modified", "Saved"], ["Modified", "Saved"]]),
+  );
 
   act(() => motion.finish());
   act(() =>
@@ -388,7 +398,9 @@ test("the model, Effort and Context rows each tick Saved once their write lands,
   );
   act(() => option?.click());
   await settle();
-  assert.deepEqual(marksIn(rowOf(page, "Default model")), ["Modified", "Saved"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(marksIn(rowOf(page, "Default model")), ["Modified", "Saved"]),
+  );
   assert.deepEqual(written().at(-1), { model: SONNET.id, effort: "low" });
 });
 
@@ -471,7 +483,9 @@ test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place
   act(() => segment(speed, "Ultrafast").click());
   await settle();
   assert.deepEqual(written(), [{ model: "openai/gpt-6.1-sol-ultrafast", effort: "high" }]);
-  assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]),
+  );
 });
 
 test("replacing the account's own Anthropic key moves the models the host holds, so Fast follows the new key's organization", async () => {
@@ -507,7 +521,8 @@ test("replacing the account's own Anthropic key moves the models the host holds,
   act(() => field.form?.requestSubmit());
   await settle();
 
-  assert.equal(fastSwitch(page).disabled, false);
+  // Note that Fast turns once the models the host lays after the save reach their query.
+  await vi.waitFor(() => assert.equal(fastSwitch(page).disabled, false));
 });
 
 test("a catalog that could not be read says so in the Default model menu with Retry, and Retry reads it again", async () => {

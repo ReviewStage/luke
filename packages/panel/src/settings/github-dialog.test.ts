@@ -196,7 +196,8 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
     sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_SAVE).map((each) => each.payload),
     [{ token: PASTED }],
   );
-  assert.equal(tokenField(), null);
+  // Note that the form gives way once the token the host lays after the save reaches its query.
+  await vi.waitFor(() => assert.equal(tokenField() === null, true, "the field closes"));
   act(() => button("Done").click());
   assert.match(
     document.body.textContent ?? "",
@@ -229,7 +230,7 @@ test("the dialog opens with the token field focused, and Disconnect's question g
 
   act(() => button("Manage").click());
   await settle();
-  assert.equal(tokenField(), null);
+  assert.equal(tokenField() === null, true);
   act(() => {
     button("Disconnect", dialog()).focus();
     button("Disconnect", dialog()).click();
@@ -251,7 +252,7 @@ test("the dialog opens with the token field focused, and Disconnect's question g
 test("a saved token's Manage opens it with Disconnect, which asks at the dialog's foot, then takes it away", async () => {
   stored = KEPT;
   await mountAndOpen();
-  assert.equal(tokenField(), null);
+  assert.equal(tokenField() === null, true);
   const asked = () => dialog().querySelector<HTMLElement>('[role="group"]');
 
   // Note that the press is made from Disconnect holding focus, as a pointer's or a key's press is.
@@ -283,7 +284,7 @@ test("a saved token's Manage opens it with Disconnect, which asks at the dialog'
   act(() => button("Disconnect token", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
-  assert.ok(tokenField(), "the field stands again");
+  await vi.waitFor(() => assert.equal(tokenField() !== null, true, "the field stands again"));
 });
 
 test("each refused save says why and what to do next, and keeps the field", async () => {

@@ -11,7 +11,7 @@ import type { AppStateDelivery, AppStateSnapshot, AppThisMacHost } from "@repo/h
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import {
   type FakeActPort,
   fakeActPort,
@@ -158,12 +158,14 @@ test("a host that joins while the page stands is said to be connected, and reads
   const lay = holdHosts(() => [...hosts]);
   drawHosts();
   await settle();
+  // Note that the page stands on the account's first list, read once it reaches the hosts' query, before a host joins.
+  await vi.waitFor(() => assert.ok(pageText().includes(`curl -fsSL ${SCRIPT} | sh`)));
 
   hosts.push({ id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "hel-02" });
   act(lay);
   await settle();
 
-  assert.ok(pageText().includes("hel-02 is connected."), pageText());
+  await vi.waitFor(() => assert.ok(pageText().includes("hel-02 is connected."), pageText()));
   assert.ok(pageText().includes("hel-02Setting up… · Linux server"), pageText());
 });
 
