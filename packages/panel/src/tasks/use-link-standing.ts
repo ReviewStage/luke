@@ -13,7 +13,6 @@ import {
   taskLinkStep,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type Mention, type NumberedTaskIdOf } from "@repo/features/mention-link";
 import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
@@ -21,8 +20,8 @@ import type { AppLinkStanding, AppStateSnapshot } from "@repo/host/app-state";
 import { repositoryParts } from "@repo/ui/task-list-model";
 import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo } from "react";
+import { linkStandingQuery } from "../live-reads.js";
 import { appStateNow, appStateQuery } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
@@ -369,7 +368,7 @@ function useStandingAt(
     asked !== undefined && address !== undefined && connectedFor(workspace)
       ? { workspaceId: workspace.id, address }
       : undefined;
-  const { rows } = useHostRead(LIVE_READ.LINK_STANDINGS, link);
+  const { data: rows } = useQuery(linkStandingQuery(link));
   const page = asked?.page;
   const repository = asked?.repository;
   const number = asked?.number;

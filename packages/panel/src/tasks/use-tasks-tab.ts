@@ -130,6 +130,7 @@ import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js"
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { pagesQuery, planDocumentQuery, planDocumentRetryMutation } from "../live-reads.js";
 import {
   beginPanelSpan,
   PANEL_SPAN,
@@ -143,7 +144,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -1602,11 +1603,14 @@ export function useTasksTab(input: {
   const page = tasksPage(tasks);
   // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
-  const heldPlan = useHostRead(LIVE_READ.PLAN_DOCUMENT, viewed.activeTaskId);
-  const heldPlanRows = heldPlan.rows;
-  const heldPlanFailed = heldPlan.status === HOST_READ_STATUS.FAILED;
-  const retryPlan = heldPlan.retry;
+  const heldPlan = useQuery(planDocumentQuery(viewed.activeTaskId));
+  const heldPlanRows = heldPlan.data;
+  const heldPlanFailed = heldPlan.isError;
+  const { mutate: retryPlanAct } = useMutation(planDocumentRetryMutation());
   const openedTaskId = viewed.activeTaskId;
+  const retryPlan = useCallback(() => {
+    if (openedTaskId !== undefined) retryPlanAct({ taskId: openedTaskId });
+  }, [retryPlanAct, openedTaskId]);
   const region = useMemo(
     () =>
       renamedRegion(
@@ -1701,10 +1705,9 @@ export function useTasksTab(input: {
   });
   // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
   // among them, so its page draws them from where they stand, and a page's tab is held to them.
-  const taskPages = useHostRead(
-    LIVE_READ.PAGES,
-    viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId },
-  ).rows;
+  const taskPages = useQuery(
+    pagesQuery(viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId }),
+  ).data;
   const pages = useMemo(() => (taskPages ?? NO_PAGES).map((page) => page.id), [taskPages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
   // Terminal's tabs, and nothing of the plan the host has open beneath it, which keeps its own.
@@ -1729,21 +1732,23 @@ export function useTasksTab(input: {
   const inboxAgent = inboxChosen === undefined ? undefined : choiceAgentOf(inboxChosen);
   // Note that an item of an agent on no task opens that agent's own pages beside it (`route.ts`), and that the
   // pages are held in the host while drawn and a while after, so choosing another item of the task, or the task again, reads none anew.
-  const inboxPages = useHostRead(
-    LIVE_READ.PAGES,
-    inboxView === undefined
-      ? undefined
-      : inboxTask !== undefined
-        ? { taskId: inboxTask }
-        : inboxAgent !== undefined
-          ? { agentId: inboxAgent }
-          : undefined,
-  ).rows;
+  const inboxPages = useQuery(
+    pagesQuery(
+      inboxView === undefined
+        ? undefined
+        : inboxTask !== undefined
+          ? { taskId: inboxTask }
+          : inboxAgent !== undefined
+            ? { agentId: inboxAgent }
+            : undefined,
+    ),
+  ).data;
   // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
-  const agentPages = useHostRead(
-    LIVE_READ.PAGES,
-    inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
-  ).rows;
+  const agentPages = useQuery(
+    pagesQuery(
+      inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
+    ),
+  ).data;
   const agentPageIds = useMemo(() => (agentPages ?? NO_PAGES).map((page) => page.id), [agentPages]);
   const inboxPageIds = useMemo(() => (inboxPages ?? NO_PAGES).map((page) => page.id), [inboxPages]);
   const inboxAgents = useMemo(

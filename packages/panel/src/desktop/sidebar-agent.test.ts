@@ -287,9 +287,13 @@ test("a refused rename reopens the row's field holding the name typed, and says 
   });
   await settle();
 
-  // Note that the refusal reaches React a tick after it lands, as the rename's mutation hands it on.
-  const reopened = () => row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
-  await vi.waitFor(() => assert.equal(reopened()?.value, "Remove the stale banners"));
+  // Note that the refusal reaches the row through the rename's mutation, a moment after the write is refused.
+  await vi.waitFor(() =>
+    assert.equal(
+      row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]')?.value,
+      "Remove the stale banners",
+    ),
+  );
   assert.ok(row.textContent?.includes("The agent could not be renamed. Try again."));
 });
 

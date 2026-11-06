@@ -156,16 +156,13 @@ type InboxFile = NonNullable<InboxMessage["files"]>[number];
  */
 export function inboxFileChips(
   files: readonly InboxFile[],
-  urls: ReadonlyMap<string, { readonly url: string } | { readonly failed: true }>,
+  urls: ReadonlyMap<string, string>,
 ): FileChip[] {
-  return files.map((file) => {
-    const read = urls.get(file.attachmentId);
-    return {
-      name: file.name,
-      mediaType: file.mediaType,
-      url: read !== undefined && "url" in read ? read.url : "",
-    };
-  });
+  return files.map((file) => ({
+    name: file.name,
+    mediaType: file.mediaType,
+    url: urls.get(file.attachmentId) ?? "",
+  }));
 }
 
 /** A comment's files as they are drawn after its words: its pictures, and every other file. */

@@ -427,6 +427,10 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
+  // Note that a card reading what it names draws its skeleton until the read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.ui-tooltip-card [class*="skeleton"]') === null, true),
+  );
   const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
@@ -676,9 +680,12 @@ test("an Inbox item's labeled chip is called by the item's title, whether it wai
     ].join(" "),
   );
 
-  assert.deepEqual(
-    chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
-    ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+  // Note that the feed's items name their chips once they reach its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
+      ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+    ),
   );
 });
 
