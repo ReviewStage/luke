@@ -15,6 +15,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAdminRoute } from "./admin/admin-route.js";
 import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
+import { type AutomationsRoute, useAutomationsRoute } from "./automations-route.js";
 import { stepTitle } from "./history-titles.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
@@ -40,7 +41,7 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handHostReads, handState } from "./testing/app-state.js";
+import { handHostReads } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
@@ -103,14 +104,27 @@ function mount(
   let admin: AdminViewControl | undefined;
   let board: BoardRoute | undefined;
   let person: PersonRoute | undefined;
+  let automations: AutomationsRoute | undefined;
   function Probe() {
     const [standing, setTasks] = useState(initial);
     restand = setTasks;
     // The Board and a person's page stand where the router does, as the window's root reads them, and are left for the state's place.
     board = useBoardRoute({ onClose: () => history?.onLeaveRouted() });
     person = usePersonRoute({ onClose: () => history?.onLeaveRouted() });
+    automations = useAutomationsRoute({ onClose: () => history?.onLeaveRouted() });
+    const listedStep = standing.workspaces.find((each) => each.id === standing.workspace?.id)?.slug;
     const tasks: TasksControl = {
       ...standing,
+      automationsView: {
+        open: automations.open,
+        place: automations.place,
+        runs: automations.runs,
+        onOpen: (to = { kind: AUTOMATIONS_PAGE.LIST }) => {
+          if (listedStep !== undefined) automations?.onOpen(to, listedStep);
+        },
+        onRuns: automations.onRuns,
+        onClose: automations.onClose,
+      },
       boardView: { ...standing.boardView, open: board.open },
       personView: {
         ...standing.personView,
@@ -142,6 +156,7 @@ function mount(
       routed: useRoutedStanding(),
       settingsList: undefined,
       onSettingsList: () => undefined,
+      automations,
       room: SHELL_ROOM.WIDE,
       title: titled?.(tasks),
       tasks,
@@ -168,6 +183,8 @@ function mount(
     /** Opens a person's page by the router, as a press on their name does. */
     openPerson: (userId: string, name: string | undefined, workspace: string) =>
       act(() => person?.onOpen(userId, name, workspace)),
+    /** Opens an Automations page by the router, as its own doors do. */
+    openAutomations: (to?: AutomationsPlace) => act(() => shown?.automationsView.onOpen(to)),
     /** The name the person's page standing was opened with. */
     personName: () => person?.name,
     /** Leaves the routed place standing for `tasks`, the place a door into the window's state opens, in one move as the door makes it. */
@@ -193,24 +210,6 @@ function mount(
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-}
-
-/** The window on the Automations page given, of the workspace given, each page it is asked to open recorded in `opened`. */
-function onAutomations(
-  page: AutomationsPlace | undefined,
-  opened: (AutomationsPlace | undefined)[],
-  workspaceId = "workspace-acme",
-): TasksControl {
-  return tasksControl({
-    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
-    automationsView: {
-      ...tasksControl().automationsView,
-      open: page !== undefined,
-      place: page ?? { kind: AUTOMATIONS_PAGE.LIST },
-      onOpen: (place) => opened.push(place),
-      onClose: () => undefined,
-    },
   });
 }
 
@@ -353,7 +352,7 @@ test("a move landing on an entry holding no step opens Home, as a page loaded th
   const homes: string[] = [];
   // An entry no window wrote, as one the page first loaded on, behind the one the window opens on.
   const loaded = () =>
-    createMemoryHistory({ initialEntries: ["/acme/automations", "/app"], initialIndex: 1 });
+    createMemoryHistory({ initialEntries: ["/acme/inbox", "/app"], initialIndex: 1 });
   const held = windowRouter(loaded());
   const window = mount(tasksControl(), held);
   window.stand(
@@ -527,76 +526,78 @@ test("a person's page opened again with a newer name keeps that name, which Back
 });
 
 test("an automation opened from the Automations list is a step of its own, which Back leaves for the list", async () => {
-  handState({});
-  const opened: (AutomationsPlace | undefined)[] = [];
-  const window = mount(
-    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
-  );
+  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
+  window.openAutomations();
   await settle();
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
+  await settle();
 
   act(() => window.history().onBack());
+  await settle();
 
-  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }]);
+  assert.equal(window.at(), "/acme/automations");
 });
 
 test("the automation a new automation's page made takes that page's step, so Back from it returns to the list it was opened from", async () => {
-  handState({});
-  const opened: (AutomationsPlace | undefined)[] = [];
-  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
+  window.openAutomations();
   await settle();
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, opened));
-  const made = { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID, created: true } as const;
-  window.stand(onAutomations(made, opened));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  window.openAutomations({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: AUTOMATION_ID,
+    created: true,
+  });
+  await settle();
 
   act(() => window.history().onBack());
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  assert.equal(window.at(), "/acme/automations");
   act(() => window.history().onForward());
-
-  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }, made]);
+  await settle();
+  assert.equal(window.at(), `/acme/automation/${AUTOMATION_ID}`);
 });
 
 test("another automation opened over a new automation's page, as a notification opens one, is a visit after it, which Back leaves for the new page", async () => {
-  handState({});
-  const opened: (AutomationsPlace | undefined)[] = [];
-  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, opened));
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
+  await settle();
 
   act(() => window.history().onBack());
+  await settle();
 
-  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.NEW }]);
+  assert.equal(window.at(), "/acme/automations/new");
 });
 
 test("an automation's page is of the workspace it stood in, so once another is listed Back passes over it", async () => {
-  handState({});
-  const opened: (AutomationsPlace | undefined)[] = [];
-  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  const window = mount(tasksControl({ workspaces: [ACME, PLATFORM], workspace: ACME }));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
   await settle();
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
-  const linked = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-of-platform" } as const;
-  window.stand(onAutomations(linked, opened, "workspace-platform"));
+  window.leaveFor(tasksControl({ workspaces: [ACME, PLATFORM], workspace: PLATFORM }));
+  await settle();
 
   act(() => window.history().onBack());
+  await settle();
 
-  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }]);
+  assert.notEqual(window.at(), `/acme/automation/${AUTOMATION_ID}`);
 });
 
 test("a deleted automation's page is passed over by Back, which returns to the page before it", async () => {
-  handState({});
-  const opened: (AutomationsPlace | undefined)[] = [];
-  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-kept" });
   await settle();
-  const kept = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-kept" } as const;
-  window.stand(onAutomations(kept, opened));
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST, deleted: AUTOMATION_ID }, opened));
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID });
+  await settle();
+  window.openAutomations({ kind: AUTOMATIONS_PAGE.LIST, deleted: AUTOMATION_ID });
+  await settle();
 
   act(() => window.history().onBack());
+  await settle();
 
-  assert.deepEqual(opened, [kept]);
+  assert.equal(window.at(), "/acme/automation/automation-kept");
 });
 
 test("the Board is its workspace's tasks, so Back returns to it in that workspace and passes over it once another is listed", async () => {
@@ -658,14 +659,6 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
     onTask([ACME], 42),
     tasksControl(listed),
     tasksControl({ ...listed, inboxView: { ...tasksControl().inboxView, open: true } }),
-    tasksControl({
-      ...listed,
-      automationsView: {
-        ...tasksControl().automationsView,
-        open: true,
-        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID },
-      },
-    }),
   ];
   const addresses: string[] = [];
   for (const tasks of places) {
@@ -682,13 +675,6 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
     addresses,
     copied.map((link) => new URL(link).pathname),
   );
-});
-
-test("a new automation's page has no link, so it stands at /app beside the list it was opened from", () => {
-  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, []));
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, []));
-
-  assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
 });
 
 test("the Board stands at its workspace's /tasks and a person's page at /person/<id> though a task stands under them, as Copy link copies each", async () => {
@@ -751,18 +737,6 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const none = { workspaces: [], workspace: undefined };
   const places: TasksControl[] = [
-    tasksControl({
-      ...none,
-      automationsView: { ...tasksControl().automationsView, open: true },
-    }),
-    tasksControl({
-      ...none,
-      automationsView: {
-        ...tasksControl().automationsView,
-        open: true,
-        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID },
-      },
-    }),
     tasksControl({ ...none, inboxView: { ...tasksControl().inboxView, open: true } }),
     tasksControl({ ...none, agentView: { ...tasksControl().agentView, agentId: "agent-1" } }),
   ];

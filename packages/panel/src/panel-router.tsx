@@ -6,15 +6,17 @@
  * `/connect/<code>`, and the bare `/app`, the address of a place with no
  * link (`navigation-history.ts`'s `NO_LINK_ADDRESS`), so a link written
  * before the router stood reads the same through it; Settings stands at
- * `/app/settings` too, while the window lists no workspace. A place's leaf
+ * `/app/settings` too, while the window lists no workspace, and the
+ * Automations pages hold the places no link names, their Runs tab, a new
+ * automation's page, and an automation's runs alone. A place's leaf
  * is an index route under the path it shares with the places beneath it,
  * so `/task/<id>` and `/task/<id>/version/<n>` are both a route of their own.
  *
  * The root draws `App`, whose shell draws the route standing through its
  * `Outlet` (`desktop-shell.tsx`). Every place but Settings stands beside the
  * sidebar, under the pathless `places` layout, which stays drawn as the
- * window moves between them. Settings, Admin, a workspace's Board, and a
- * person's page are routed places: the router alone says the window stands
+ * window moves between them. Settings, Admin, a workspace's Board, a
+ * person's page, and the Automations pages are routed places: the router alone says the window stands
  * on them, their routes draw them as lazy routes, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`). Every other place
@@ -42,6 +44,7 @@ import { useEffect, useRef } from "react";
 import { App } from "./app.js";
 import {
   AdminRouteLoading,
+  AutomationsRouteLoading,
   BoardRouteLoading,
   PersonRouteLoading,
   SettingsRouteLoading,
@@ -56,6 +59,7 @@ import {
   useRouteAccess,
   workspaceRouteStands,
 } from "./route-gates.js";
+import { pathUnder } from "./routed-location.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
 const taskSearchSchema = Schema.toStandardSchemaV1(
@@ -265,19 +269,49 @@ const inboxTaskRoute = createRoute({ getParentRoute: () => inboxRoute, path: "ta
 
 const inboxItemRoute = createRoute({ getParentRoute: () => inboxRoute, path: "$itemId" });
 
-const automationsRoute = createRoute({
+/**
+ * The Automations pages of one of the reader's workspaces: the list, its
+ * Runs tab, a new automation's page, and an automation's, its runs alone
+ * where a narrow room stands them apart, or one of its runs. One layout
+ * draws them all, so the new page's editor stands on as the automation it
+ * made takes its step, and moving between them draws no new page. An
+ * address naming none of the reader's workspaces opens the same page under
+ * the workspace listed, as a link to it does. Its pages are a chunk of
+ * their own, opened seldom, whose list's frame stands while it loads.
+ */
+const automationPagesRoute = createRoute({
   getParentRoute: () => workspaceRoute,
+  id: "automation-pages",
+  beforeLoad: ({ context, params, location }) => {
+    const { listed } = context.access;
+    if (workspaceRouteStands(params.workspace, context.access) || listed === undefined) return;
+    throw redirect({ href: pathUnder(location.pathname, listed), replace: true });
+  },
+  pendingComponent: AutomationsRouteLoading,
+  ...LAZY_ROUTE,
+}).lazy(() =>
+  import("./desktop/automations-route.lazy.js").then((loaded) => loaded.automationsLazyRoute),
+);
+
+const automationsRoute = createRoute({
+  getParentRoute: () => automationPagesRoute,
   path: "automations",
-  component: StatePlace,
 });
 
+const automationsIndexRoute = createRoute({ getParentRoute: () => automationsRoute, path: "/" });
+
+const automationsRunsRoute = createRoute({ getParentRoute: () => automationsRoute, path: "runs" });
+
+const automationsNewRoute = createRoute({ getParentRoute: () => automationsRoute, path: "new" });
+
 const automationRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
+  getParentRoute: () => automationPagesRoute,
   path: "automation/$automationId",
-  component: StatePlace,
 });
 
 const automationIndexRoute = createRoute({ getParentRoute: () => automationRoute, path: "/" });
+
+const automationRunsRoute = createRoute({ getParentRoute: () => automationRoute, path: "runs" });
 
 const automationRunRoute = createRoute({
   getParentRoute: () => automationRoute,
@@ -423,8 +457,18 @@ const routeTree = rootRoute.addChildren([
         agentInboxItemRoute,
       ]),
       inboxRoute.addChildren([inboxIndexRoute, inboxTaskRoute, inboxItemRoute]),
-      automationsRoute,
-      automationRoute.addChildren([automationIndexRoute, automationRunRoute]),
+      automationPagesRoute.addChildren([
+        automationsRoute.addChildren([
+          automationsIndexRoute,
+          automationsRunsRoute,
+          automationsNewRoute,
+        ]),
+        automationRoute.addChildren([
+          automationIndexRoute,
+          automationRunsRoute,
+          automationRunRoute,
+        ]),
+      ]),
       personRoute,
       adminRoute.addChildren([
         adminIndexRoute,

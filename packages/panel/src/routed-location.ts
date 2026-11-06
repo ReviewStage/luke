@@ -18,11 +18,19 @@ function useHistoryLocation(): HistoryLocation {
   return useSyncExternalStore(history.subscribe, () => history.location);
 }
 
-/** Where the history stands: the routed place there, where one is, and the params its routes read from the address. */
+/** Where the history stands: the routed place there, where one is, the route its address ends on, and the params its routes read from the address. */
 export interface RoutedLocation {
   readonly place: RoutedPlace | undefined;
   readonly href: string;
+  /** The id of the route the address ends on, the deepest it matches; none where it matches none. */
+  readonly leaf: string | undefined;
   readonly params: Readonly<Record<string, string | undefined>>;
+}
+
+/** The same path under the workspace whose address step is `workspace`, in place of the step it names first. */
+export function pathUnder(pathname: string, workspace: string): string {
+  const [, , ...rest] = pathname.split("/");
+  return ["", encodeURIComponent(workspace), ...rest].join("/");
 }
 
 /** The routed place the history stands on, and its params. */
@@ -34,6 +42,7 @@ export function useRoutedLocation(): RoutedLocation {
     () => ({
       place: routedPlaceOf(matches),
       href,
+      leaf: matches.at(-1)?.routeId,
       params: matches.at(-1)?.params ?? {},
     }),
     [matches, href],

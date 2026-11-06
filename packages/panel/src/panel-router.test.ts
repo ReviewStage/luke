@@ -177,19 +177,19 @@ const LINKS: readonly (readonly [LinkPlace, Landing])[] = [
   ],
   [
     { kind: LINK_PLACE.AUTOMATIONS },
-    { routeId: "/places/$workspace/automations", params: { workspace: W } },
+    { routeId: "/places/$workspace/automation-pages/automations/", params: { workspace: W } },
   ],
   [
     { kind: LINK_PLACE.AUTOMATION, automationId: "au1" },
     {
-      routeId: "/places/$workspace/automation/$automationId/",
+      routeId: "/places/$workspace/automation-pages/automation/$automationId/",
       params: { workspace: W, automationId: "au1" },
     },
   ],
   [
     { kind: LINK_PLACE.AUTOMATION_RUN, automationId: "au1", runId: "r1" },
     {
-      routeId: "/places/$workspace/automation/$automationId/run/$runId",
+      routeId: "/places/$workspace/automation-pages/automation/$automationId/run/$runId",
       params: { workspace: W, automationId: "au1", runId: "r1" },
     },
   ],
@@ -268,6 +268,20 @@ describe("the panel's route tree", () => {
     expect(landingOf("/app/settings/appearance")).toEqual({
       routeId: "/app/settings/$page",
       params: { page: "appearance" },
+      search: {},
+    });
+  });
+
+  it("names the Automations pages no link names, the Runs tab, a new automation's page, and an automation's runs alone", () => {
+    expect(landingOf(`/${W}/automations/runs`).routeId).toBe(
+      "/places/$workspace/automation-pages/automations/runs",
+    );
+    expect(landingOf(`/${W}/automations/new`).routeId).toBe(
+      "/places/$workspace/automation-pages/automations/new",
+    );
+    expect(landingOf(`/${W}/automation/au1/runs`)).toEqual({
+      routeId: "/places/$workspace/automation-pages/automation/$automationId/runs",
+      params: { workspace: W, automationId: "au1" },
       search: {},
     });
   });

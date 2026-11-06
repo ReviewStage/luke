@@ -5,8 +5,8 @@
  * (`desktop-shell.tsx`), so a test of it stands it under a router too: a
  * root drawing the shell under test, the places beside the sidebar
  * (`ShellPlaces`) with what the window's state says in their slot
- * (`StatePlace`), and the routed places, Settings, Admin, the Board, and a
- * person's page, as their own
+ * (`StatePlace`), and the routed places, Settings, Admin, the Board, a
+ * person's page, and the Automations pages, as their own
  * lazy modules and frames draw them. It is built from TanStack Router's own
  * routes over the same components `panel-router.tsx` mounts, rather than
  * the window's router, whose root is `App`, so the test's props are what
@@ -28,6 +28,7 @@ import { createContext, createElement, type ReactElement, useContext } from "rea
 import { beforeEach } from "vitest";
 import {
   AdminRouteLoading,
+  AutomationsRouteLoading,
   BoardRouteLoading,
   PersonRouteLoading,
   SettingsRouteLoading,
@@ -38,12 +39,13 @@ import { LAZY_ROUTE } from "../panel-router.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { routeAccessNow } from "../route-gates.js";
 
-/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, or a person's page. */
+/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, or a person's page. */
 export const SHELL_AT = {
   PLACES: "/app",
   SETTINGS: "/app/settings",
   ADMIN: "/acme/admin",
   BOARD: "/acme/tasks",
+  AUTOMATIONS: "/acme/automations",
 } as const;
 
 /** A person's page in the shell under test, under the same workspace as its Board. */
@@ -76,16 +78,18 @@ interface StandingProps {
     readonly adminView?: { readonly open?: boolean };
     readonly boardView?: { readonly open?: boolean };
     readonly personView?: { readonly userId?: string | undefined };
+    readonly automationsView?: { readonly open?: boolean };
   };
 }
 
-/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, or a person's page where one stands, else the places. */
+/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, or a person's page where one stands, else the places. */
 function standingOf(shell: ReactElement): string {
   const props: StandingProps =
     typeof shell.props === "object" && shell.props !== null ? shell.props : {};
   if (props.tab === PANEL_TAB.SETTINGS) return SHELL_AT.SETTINGS;
   if (props.tasks?.adminView?.open === true) return SHELL_AT.ADMIN;
   if (props.tasks?.boardView?.open === true) return SHELL_AT.BOARD;
+  if (props.tasks?.automationsView?.open === true) return SHELL_AT.AUTOMATIONS;
   const person = props.tasks?.personView?.userId;
   return person === undefined ? SHELL_AT.PLACES : personAt(person);
 }
@@ -117,6 +121,24 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     pendingComponent: PersonRouteLoading,
     ...LAZY_ROUTE,
   }).lazy(() => import("../desktop/person-route.lazy.js").then((loaded) => loaded.personLazyRoute));
+  // Note that the pages' layout stands under a workspace's step, as in the window's tree, so their lazy module's id is theirs here too.
+  const workspace = createRoute({ getParentRoute: () => places, path: "/$workspace" });
+  const automationPages = createRoute({
+    getParentRoute: () => workspace,
+    id: "automation-pages",
+    pendingComponent: AutomationsRouteLoading,
+    ...LAZY_ROUTE,
+  }).lazy(() =>
+    import("../desktop/automations-route.lazy.js").then((loaded) => loaded.automationsLazyRoute),
+  );
+  const automations = createRoute({
+    getParentRoute: () => automationPages,
+    path: "automations",
+  });
+  const automation = createRoute({
+    getParentRoute: () => automationPages,
+    path: "automation/$automationId",
+  });
   const settings = createRoute({
     getParentRoute: () => root,
     path: SHELL_AT.SETTINGS,
@@ -128,7 +150,13 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
   const settingsPage = createRoute({ getParentRoute: () => settings, path: "$page" });
   const router = createRouter({
     routeTree: root.addChildren([
-      places.addChildren([stateRoute, admin, board, person]),
+      places.addChildren([
+        stateRoute,
+        admin,
+        board,
+        person,
+        workspace.addChildren([automationPages.addChildren([automations, automation])]),
+      ]),
       settings.addChildren([settingsPage]),
     ]),
     history: createMemoryHistory({ initialEntries: [at] }),

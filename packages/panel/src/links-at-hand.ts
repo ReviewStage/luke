@@ -285,7 +285,7 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
   }
-  // A person's page and the Board are routed places over whatever the window's state says, on the same terms as Admin;
+  // A person's page, the Board, and the Automations pages are routed places over whatever the window's state says, on the same terms as Admin;
   // a person's page is theirs in the workspace it opened in, which their link names.
   const { userId, workspaceId } = tasks.personView;
   if (userId !== undefined && at.underRouted !== true) {
@@ -294,6 +294,22 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   }
   if (tasks.boardView.open && at.underRouted !== true) {
     return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
+  }
+  if (tasks.automationsView.open && at.underRouted !== true) {
+    const list: LinkPlace = { kind: LINK_PLACE.AUTOMATIONS };
+    const { place } = tasks.automationsView;
+    if (place.kind === AUTOMATIONS_PAGE.EDIT) {
+      return [
+        at_(
+          { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
+          LINK_THING.AUTOMATION,
+        ),
+        within(list, LINK_THING.AUTOMATIONS),
+      ];
+    }
+    // A new automation's page is a step with no link of its own, so it offers the list it is in.
+    if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
+    return [at_(list, LINK_THING.AUTOMATIONS)];
   }
   const { agentId } = tasks.agentView;
   if (agentId !== undefined) {
@@ -322,22 +338,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
       return [at_(item, LINK_THING.INBOX_ITEM), within(inboxPlace, LINK_THING.INBOX)];
     }
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
-  }
-  if (tasks.automationsView.open) {
-    const list: LinkPlace = { kind: LINK_PLACE.AUTOMATIONS };
-    const { place } = tasks.automationsView;
-    if (place.kind === AUTOMATIONS_PAGE.EDIT) {
-      return [
-        at_(
-          { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
-          LINK_THING.AUTOMATION,
-        ),
-        within(list, LINK_THING.AUTOMATIONS),
-      ];
-    }
-    // A new automation's page is a step with no link of its own, so it offers the list it is in.
-    if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
-    return [at_(list, LINK_THING.AUTOMATIONS)];
   }
   // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
   if (tasks.unknownWorkspace.open) return [];

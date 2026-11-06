@@ -48,6 +48,7 @@ import {
 } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { type SettingsDoors, useSettingsPanel, useShownUpdate } from "./app-settings.js";
+import { useAutomationsRoute } from "./automations-route.js";
 import { useDraftsOwner } from "./composer-drafts.js";
 import { useConnected } from "./connection.js";
 import { CommandPalette } from "./desktop/command-palette.js";
@@ -408,6 +409,7 @@ function AppWindow(): React.JSX.Element {
   });
   const boardView = useBoardRoute({ onClose: () => leaveRouted.current() });
   const personView = usePersonRoute({ onClose: () => leaveRouted.current() });
+  const automationsView = useAutomationsRoute({ onClose: () => leaveRouted.current() });
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -429,6 +431,7 @@ function AppWindow(): React.JSX.Element {
     adminView,
     boardView,
     personView,
+    automationsView,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -488,14 +491,18 @@ function AppWindow(): React.JSX.Element {
     room,
     adminView.open ? adminView.view : undefined,
   );
-  // A fixture run's profile opens the window on its place once, as a link to it would.
+  // A fixture run's profile opens the window on its place once, as a link to it would; an Automations page once its workspace is listed, whose address it stands under.
   const launchedOnce = useRef(false);
+  const listedForLaunch = tasks.workspace !== undefined;
+  const openAutomations = tasks.automationsView.onOpen;
   useEffect(() => {
     if (launchedOnce.current || launched === undefined) return;
+    if ("automations" in launched && !listedForLaunch) return;
     launchedOnce.current = true;
     if ("settings" in launched) goSettings(launched.settings);
     else if ("admin" in launched) adminView.onOpen();
-  }, [launched, goSettings, adminView]);
+    else openAutomations(launched.automations);
+  }, [launched, goSettings, adminView, listedForLaunch, openAutomations]);
   // An app link, handed by the system or pressed in the window, opens where its place stands (`@repo/ui/link-route`).
   // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
@@ -547,6 +554,7 @@ function AppWindow(): React.JSX.Element {
     routed: routedHere,
     settingsList: settingsPlace.listAddress,
     onSettingsList: settingsPlace.list,
+    automations: automationsView,
     room,
     tasks,
   });
