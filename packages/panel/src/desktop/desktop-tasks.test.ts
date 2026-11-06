@@ -283,16 +283,18 @@ test("a wide task's details with no agent offer New agent at their head, which o
 
   act(() => newAgent(container.querySelector(".plan-agents [aria-label='Agents']")).click());
   const back =
-    [
-      ...container.querySelectorAll<HTMLButtonElement>(".desktop-task-main .ui-toolbar button"),
-    ].find((each) => each.textContent === "Agents") ??
-    assert.fail("the way back to the agents stands");
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document button")].find(
+      (each) => each.textContent === "Agents",
+    ) ?? assert.fail("the way back to the agents stands");
   act(() => back.click());
 
   assert.deepEqual(chosen, [{ draft: "draft" }, { draft: "draft" }], "both open a draft alike");
   act(() => root.unmount());
   container.remove();
 });
+
+/** A draft agent's tab, which a page beside its side panel shows. */
+const DRAFT_TAB = { draft: "draft" };
 
 /** The task's page with the side panel open on `tab`, as markup. */
 function panelTab(tab: FixedSidePanelTab): HTMLElement {
@@ -304,6 +306,12 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
         page: TASKS_PAGE.DOCUMENT,
         activeTaskId: TASK.id,
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
+        // Note that the panel stands beside an agent's tab, since the task's details take its room.
+        mainTabs: {
+          ...tasksControl().mainTabs,
+          tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
+          tab: DRAFT_TAB,
+        },
         sidePanel: { ...tasksControl().sidePanel, open: true, tab },
       }),
     }),
@@ -530,7 +538,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
+test("a plan's document opens on the way back to the agents, then its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -570,12 +578,14 @@ test("a plan's document opens on its path, its repository as plain words, then i
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   // A task from before statuses draws no standing chip.
-  const path = body?.firstElementChild;
+  const back = body?.firstElementChild;
+  const path = back?.nextElementSibling;
   const first = path?.nextElementSibling;
   const byline = first?.nextElementSibling;
 
   assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
-  assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
+  assert.equal(back?.textContent, "Agents", "the way back to the agents leads the document");
+  assert.equal(path?.classList.contains("plan-task-path"), true, "the path stands under it");
   assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
   assert.equal(
     [...(path?.querySelectorAll("button") ?? [])].some((each) =>
@@ -908,7 +918,7 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
-      tab: MAIN_TAB.OVERVIEW,
+      tab: { agent: agentId },
       onClose: () => closed.push("column"),
     },
     sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },

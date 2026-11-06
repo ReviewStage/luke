@@ -318,7 +318,10 @@ test("the topbar's ⋯ offers the task's own document menu, which pins the task,
     return readAndClose();
   };
   const details = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
-  const fromDetails = taskMore(bars(details).task);
+  // The task's details stand in place of the column's bar and the panel, under the topbar alone.
+  const topbar = details.querySelector<HTMLElement>(".task-topbar .ui-toolbar");
+  assert.ok(topbar, "the topbar stands over the details");
+  const fromDetails = taskMore(topbar);
   assert.deepEqual(fromDetails, [
     "Copy plan",
     "Copy link",

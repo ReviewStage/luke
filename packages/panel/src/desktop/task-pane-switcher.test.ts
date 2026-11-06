@@ -360,11 +360,11 @@ test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find
   assert.equal(document.activeElement, field);
 });
 
-test("a wide window keeps the panel's strip and the column's toolbar, the task's ⋯ Overview's, and draws no row of a phone's", () => {
-  const page = mount(SHELL_ROOM.WIDE, true);
+test("a wide window keeps the panel's strip and the column's toolbar beside an agent, the task's ⋯ the topbar's, and draws no row of a phone's", () => {
+  const page = mount(SHELL_ROOM.WIDE, true, SIDE_PANEL_TAB.COMMENTS, false, true);
   assert.equal(page.container.querySelector(".task-head"), null);
   assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
-  assert.ok(page.labeled(`${TASK.name} actions`), "the task's first tab keeps the task's ⋯");
+  assert.ok(page.labeled(`${TASK.name} actions`), "the topbar keeps the task's ⋯");
   assert.equal(page.labeled("Task actions"), false, "the column's toolbar draws none");
 });
 

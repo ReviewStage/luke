@@ -1007,6 +1007,7 @@ export const PlanBody = memo(function PlanBody({
   agents,
   standing: taskStanding,
   head,
+  lead,
   titleActions = true,
 }: {
   task: Task;
@@ -1029,6 +1030,8 @@ export const PlanBody = memo(function PlanBody({
   standing?: TaskStandingDoor;
   /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
   head?: React.ReactNode;
+  /** What the task's own page draws first, over its path: the way back to its agents; nothing elsewhere. */
+  lead?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
 }): React.JSX.Element {
@@ -1323,6 +1326,7 @@ export const PlanBody = memo(function PlanBody({
     <DocumentScroll ref={scroller}>
       <PlanBodyColumn ref={bodyHost}>
         <WordsDatePickerRoom>
+          {lead}
           {taskStanding === undefined ? null : <TaskPath task={task} door={taskStanding} />}
           {titled ? (
             // Keyed by the plan, so words typed for one are saved to it as another opens.

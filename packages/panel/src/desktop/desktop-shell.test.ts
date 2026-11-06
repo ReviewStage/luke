@@ -33,6 +33,7 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -1034,6 +1035,9 @@ const PLACE = {
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
+/** A draft agent's tab, which the column shows beside a panel. */
+const DRAFT_TAB = { draft: "draft" };
+
 /** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
   const control = tasksControl();
@@ -1048,8 +1052,10 @@ function placed(place: Place) {
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
     [PLACE.PERSON_PAGE]: { personView: { ...control.personView, userId: "user-charles" } },
     [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
+    // Note that the panel fills the window over an agent's tab, since the task's details take its room.
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
       ...onTask,
+      mainTabs: { ...control.mainTabs, tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB], tab: DRAFT_TAB },
       sidePanel: { ...control.sidePanel, open: true, fullScreen: true },
     },
     [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },

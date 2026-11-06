@@ -127,7 +127,7 @@ async function settle(): Promise<void> {
 }
 
 /**
- * The task open on its details, or the tab given, a working agent's tab and a draft's beside
+ * The task open on its working agent's tab, or the tab given, a draft's beside
  * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
 async function mount(
@@ -148,7 +148,7 @@ async function mount(
     mainTabs: {
       ...base.mainTabs,
       tabs: [MAIN_TAB.OVERVIEW, { agent: WORKING.id }, { draft: DRAFT }],
-      tab: shown.main ?? MAIN_TAB.OVERVIEW,
+      tab: shown.main ?? { agent: WORKING.id },
       openAgents: [WORKING.id],
     },
     sidePanel: {
@@ -295,14 +295,10 @@ test("the task's topbar names the task, as the list names it now, over a strip o
 
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
   const url = "https://github.com/acme/relay/pull/42";
-  const container = await mount({
-    body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
-  });
-  const tab = [...container.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
+  // Note that the task's details stand in the panel's place, so the tab is read beside an agent and the links on the details.
+  const beside = await mount();
+  const tab = [...beside.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === "#42 Expire invitations",
-  );
-  const [chip, files] = container.querySelectorAll<HTMLElement>(
-    'a[data-mention-ref][data-kind="link"]',
   );
   const cardOf = (control: HTMLElement | undefined) => {
     assert.ok(control, "the pull request is named");
@@ -322,6 +318,13 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
 
   const own = cardOf(tab);
   assert.deepEqual(own, { card: true, name: "Expire invitations", agent: DONE.title });
+  const container = await mount({
+    body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
+    main: MAIN_TAB.OVERVIEW,
+  });
+  const [chip, files] = container.querySelectorAll<HTMLElement>(
+    'a[data-mention-ref][data-kind="link"]',
+  );
   assert.deepEqual(cardOf(chip), own, "the chip hangs the tab's card");
   assert.deepEqual(cardOf(files), own, "a link to its files hangs it too");
 });

@@ -13,6 +13,7 @@ import { readingWords } from "@repo/features/words";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -86,7 +87,9 @@ import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopHome } from "./desktop-home.js";
 import {
+  AGENTS_SECTION,
   AgentPane,
+  DETAILS_WORDS,
   MainTabBars,
   mainTabLabel,
   newAgentStarts,
@@ -151,10 +154,10 @@ import {
  * task's ⋯ (`main-tabs.tsx`'s `TaskTopbar`). Under it, on one row of the
  * frame, the column's bar holds the agents' tabs, the "+", and the chosen
  * agent's ⋯, and the side panel's its own. Details opens the task's details,
- * its Overview, in the column's place: its path over its title (its
+ * its Overview, across the page in place of the column's bar and the side
+ * panel: the way back to the agents, then its path over its title (its
  * repository, the task it is a child of, and its key), its chips, its
- * relations, its agents, and its plan; the column's bar then holds the way
- * back to the agents. A phone heads the task with its own row instead (`TaskHead`).
+ * relations, its agents, and its plan. A phone heads the task with its own row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the column's bar, listing what
  * both "+" menus open, with its button last in that bar (`task-summary.tsx`).
@@ -197,6 +200,7 @@ function TaskPage({
   columnRef,
   panelOpen,
   fullScreen,
+  barless = false,
   column,
   children,
 }: {
@@ -204,6 +208,8 @@ function TaskPage({
   columnRef: (column: HTMLElement | null) => void;
   panelOpen: boolean;
   fullScreen: boolean;
+  /** Whether the column stands with no bar of its own, its sheet starting under the topbar: the task's details. */
+  barless?: boolean;
   column: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
@@ -212,6 +218,7 @@ function TaskPage({
       ref={areaRef}
       className="desktop-task relative flex min-h-0 flex-1"
       data-panel-open={String(panelOpen)}
+      data-barless={barless ? "true" : undefined}
     >
       <Fill ref={columnRef} className="desktop-task-main" hidden={fullScreen}>
         {column}
@@ -578,6 +585,24 @@ function PlanDocument({
   // Details opens the task's details in the column's place, and pressed again goes back to the agents.
   const toggleDetails = () =>
     tab !== undefined && isOverviewTab(tab) ? leaveDetails() : openOverview();
+  // The way back to the agents stands in the details' own card, over its path; a phone's head is its way back.
+  const leaveDetailsDoor = useSteadyDoor(leaveDetails);
+  const detailsLead = useMemo(
+    () =>
+      phone ? undefined : (
+        <BackButton label={AGENTS_SECTION} place={DETAILS_WORDS.PLACE} onBack={leaveDetailsDoor} />
+      ),
+    [phone, leaveDetailsDoor],
+  );
+  // The panel opened over the task's details, as its toggle opens it, goes back to the agents,
+  // beside which the panel stands, since the details take the panel's room too.
+  const detailsOver = isOverviewTab(tab) && !phone;
+  const panelWasOpen = useRef(sidePanel.open);
+  useEffect(() => {
+    const opened = sidePanel.open && !panelWasOpen.current;
+    panelWasOpen.current = sidePanel.open;
+    if (opened && detailsOver) leaveDetailsDoor();
+  }, [sidePanel.open, detailsOver, leaveDetailsDoor]);
   // A row that opens the comments, which stand in the side panel, shows the
   // panel on them and hands it the keys, as a terminal shown does.
   const openPanelTab = (opened: SidePanelTab) => {
@@ -1094,6 +1119,8 @@ function PlanDocument({
   // Note that the document stays laid out while another tab of the column is
   // shown, so coming back to Overview finds it where it was left.
   const overviewShown = isOverviewTab(tab);
+  // Wider than a phone, the task's details take the whole page, its column and its side panel alike.
+  const detailsWide = overviewShown && !phone;
   const documentBody = (
     <Fill
       ref={setDocumentBox}
@@ -1118,6 +1145,7 @@ function PlanDocument({
         standing={standing}
         head={planHead}
         titleActions={!phone}
+        lead={detailsLead}
       />
     </Fill>
   );
@@ -1282,12 +1310,16 @@ function PlanDocument({
                   <TaskPage
                     areaRef={setArea}
                     columnRef={setColumn}
-                    panelOpen={sidePanel.open}
+                    panelOpen={sidePanel.open && !detailsWide}
                     fullScreen={sidePanel.fullScreen}
+                    barless={detailsWide}
                     column={
                       <>
-                        {/* On a phone no strip stands, its details listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
-                        <div className={phone ? undefined : "contents"} hidden={phone}>
+                        {/* On a phone no strip stands, its details listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`); wider, the task's details stand in place of the strip and the panel alike. */}
+                        <div
+                          className={phone || detailsWide ? undefined : "contents"}
+                          hidden={phone || detailsWide}
+                        >
                           <MainTabBars
                             task={listed}
                             main={mainTabs}
@@ -1306,7 +1338,6 @@ function PlanDocument({
                             slots={!phone}
                             onShown={phone ? setShownAgentTab : undefined}
                             waiting={waitingOf}
-                            onBack={leaveDetails}
                             actions={<SummaryButton layout={summaryLayout} cardId={summaryCard} />}
                           />
                         </div>
@@ -1348,20 +1379,22 @@ function PlanDocument({
                               />
                             )}
                           </FindScope>
-                          <TaskSummary
-                            tasks={summaryTasks}
-                            layout={summaryLayout}
-                            cardId={summaryCard}
-                            inbox={inbox.board}
-                            held={views.held}
-                            onOpenAgent={openAgentColumn}
-                          />
+                          {detailsWide ? null : (
+                            <TaskSummary
+                              tasks={summaryTasks}
+                              layout={summaryLayout}
+                              cardId={summaryCard}
+                              inbox={inbox.board}
+                              held={views.held}
+                              onOpenAgent={openAgentColumn}
+                            />
+                          )}
                         </TaskBody>
                       </>
                     }
                   >
                     {/* Note that the panel stands while its toggle asks for its "+" with nothing to show, drawing the menu alone. */}
-                    {drawing.panel !== undefined || sidePanel.toggleAsked ? (
+                    {!detailsWide && (drawing.panel !== undefined || sidePanel.toggleAsked) ? (
                       <SidePanel
                         {...drawing}
                         panel={drawing.panel ?? sidePanel}

@@ -538,6 +538,16 @@ body,
   padding-left: 0;
 }
 
+/* The task's details stand across the page with no bar of their own, so
+   their sheet starts right under the topbar. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task[data-barless="true"]
+  > .desktop-task-main::before {
+  top: 0;
+}
+
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
    controls give way before its tabs do: where the column is narrowest the
    agents' Retry draws its glyph alone (`FoldingButton`). */

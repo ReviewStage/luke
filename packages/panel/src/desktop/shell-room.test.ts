@@ -18,6 +18,7 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { useStageRoom } from "../stage-room.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -146,6 +147,12 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
       // An account with a task, so Home rests on its own page rather than a new account's welcome.
       tasks: [DOCUMENT_TASK],
       region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+      // Note that the panel stands beside a draft agent's tab, since the task's details take its room.
+      mainTabs: {
+        ...tasksControl().mainTabs,
+        tabs: [MAIN_TAB.OVERVIEW, { draft: "draft" }],
+        tab: { draft: "draft" },
+      },
       sidePanel,
     }),
     history: {
@@ -322,8 +329,8 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     null,
     "the header's way back stands for the sidebar's toggle and New task",
   );
-  // Note that the panel opens on the board, a tab pushed over the column's plan, which its way back names by the task.
-  assert.equal(headBack(page).getAttribute("aria-label"), `Back to ${DOCUMENT_TASK.name}`);
+  // Note that the panel opens on the board, a tab pushed over the column's draft, which its way back names.
+  assert.equal(headBack(page).getAttribute("aria-label"), "Back to New agent");
 
   resizeStage(WIDE);
   assert.deepEqual(
@@ -344,8 +351,8 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   );
   assert.equal(
     headBack(page).getAttribute("aria-label"),
-    null,
-    "over the column's Overview, whose way back leads out of the task by its words",
+    `Back to ${DOCUMENT_TASK.name}`,
+    "over the column's draft, whose way back leads to the task's details",
   );
 });
 
