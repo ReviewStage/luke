@@ -126,6 +126,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...cliProcedures({ install: () => installCli(config.hostedServiceBaseUrl) }),
     ...macShellProcedures<WebContents>({
+      mirror: (agentId) => operator.host.mirrorEnsure({ agentId }),
       spawn: spawnMacShell,
       ports: {
         open: portTo(TERMINAL_PORT_CHANNEL),

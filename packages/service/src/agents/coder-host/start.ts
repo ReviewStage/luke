@@ -245,8 +245,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * (`alsoRepositories`), kept after it as the agent's extras
  * (`agent-repositories.ts`), each cloned beside its checkout under one token
  * for them all, and only in the cloud, through the one installation of the
- * App that reaches its own, for a starter with the Several repositories
- * experiment on (`extraRepositoriesOf`); a Start that names none reads and
+ * App that reaches its own (`extraRepositoriesOf`); a Start that names none reads and
  * writes exactly what it did before.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh, and so does one that could not be
@@ -1166,22 +1165,19 @@ const keptPick = (userId: string, runsOn: AgentRunsOnRequest | undefined) =>
  * The repositories a Start names beside its agent's own, as GitHub spells
  * them, each with the branch its checkout is cloned at, read before
  * anything is written; none for a Start that names none, which reads
- * nothing more. They are refused, by why, for a starter with the Several
- * repositories experiment off, for an agent with no repository of its own,
- * and for one that would run on a device; refused as invalid where one is
- * named twice, the agent's own among them; and the agent's own and every
+ * nothing more. They are refused, by why, for an agent with no repository
+ * of its own and for one that would run on a device; refused as invalid
+ * where one is named twice, the agent's own among them; and the agent's own and every
  * extra must be reached through the one installation of the App that
  * reaches the first, so one token reaches them all (`repositorySetReach`),
  * each refused by name where it is reached only on the starter's token or
  * through another installation, and as not reachable, with why, where
  * neither reaches it. A branch named is confirmed on GitHub as the agent's
- * own is. Those a start from another agent carries from it (`inherited`)
- * ask no experiment, since its starter turned it on already, and one whose
- * branch GitHub no longer holds is cloned at its default branch, as the
+ * own is. Of those a start from another agent carries from it
+ * (`inherited`), one whose branch GitHub no longer holds is cloned at its default branch, as the
  * agent's own inherited branch is (`startBranchOf`).
  */
 const extraRepositoriesOf = Effect.fnUntraced(function* (
-  userId: string,
   named: readonly AgentAlsoRepository[] | undefined,
   landing: Pick<StartLanding, "workspaceId" | "repository">,
   where: StartMachine,
@@ -1193,11 +1189,6 @@ const extraRepositoriesOf = Effect.fnUntraced(function* (
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   if (named === undefined || named.length === 0) return undefined;
-  const on =
-    inherited ||
-    (yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.SEVERAL_REPOSITORIES)));
-  if (!on)
-    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
   const own = landing.repository;
   if (own === null) {
     return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY));
@@ -1398,7 +1389,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       ? yield* carriedExtrasOf(userId, from.source, landing.repository)
       : undefined;
   const extras = yield* extraRepositoriesOf(
-    userId,
     ask.alsoRepositories ?? carried,
     landing,
     where,

@@ -57,7 +57,7 @@ import {
   treeKind,
   treeRelationOf,
 } from "./new-task-relation.js";
-import { AlsoRepositoryChips, CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
+import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { NewTaskRunsOnChip, newTaskRunsOn, useNewTaskRunsOn } from "./runs-on.js";
 import { SkillFiles } from "./skill-chip.js";
@@ -101,6 +101,15 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * that its GitHub reaches, else the first its read lists, and stands on none
  * only where it reaches none or No repository was picked. A repository a read
  * does not list is dropped, so a later read listing it does not bring it back.
+ * A task's card for an agent in the cloud picks several repositories in that
+ * one chip, each checked in its menu: the first the task's own, marked
+ * Primary, where the agent starts, and the rest beside it, cloned beside its
+ * checkout; unchecking the primary makes the next pick the task's. The
+ * repository the card chose, the default or a preset, stands in until the
+ * first pick, which replaces it; only picks after it add. A tree's card
+ * holds the other task's repository as the first, its row checked and
+ * disabled saying why, and picks others beside it; a card on a device
+ * picks one.
  *
  * While the Pilot experiment is on, a task's card offers Pilot or Agent at
  * the head row's end, set to Pilot: how the task is worked, kept on the task
@@ -394,6 +403,9 @@ export function NewTaskComposer({
   const [alsoChosen, setAlsoChosen] = useState<readonly string[]>(
     refused?.card.press.ask.agent.alsoRepositories ?? NONE_ALSO,
   );
+  // Whether the chip's repositories are the member's own picks, as a refused card's were pressed,
+  // rather than the default or a preset standing in until the first pick.
+  const [pickedByHand, setPickedByHand] = useState(refused !== undefined);
   // The servers the + menu switched off, a refused card's as it was pressed.
   const [disabledServers, setDisabledServers] = useState<readonly string[]>(
     refused?.card.press.ask.agent.disabledServers ?? NONE_OFF,
@@ -501,6 +513,7 @@ export function NewTaskComposer({
     if (scope !== undefined) {
       setChosen(undefined);
       setAlsoChosen(NONE_ALSO);
+      setPickedByHand(false);
       setDropped(NONE_DROPPED);
     }
     setScope(repositories.scope);
@@ -538,17 +551,38 @@ export function NewTaskComposer({
       : candidate;
   // A tree's two tasks work in one repository, the other task's, which the chip is held to.
   const repository = treeRelation === undefined ? picked : treeRelation.task.repository;
-  // Several repositories offers repositories beside the task's on a task's card, once the task names
-  // one; a pick the chip's read does not list, or the task's own, is let go as the task's is.
-  const offersAlso =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) })
-      .data === true && !forAutomation;
+  // A task's card picks several repositories in its one chip, the first the task's own, for an agent
+  // in the cloud; one on a device picks one, as the service refuses others beside it there. A tree's
+  // card holds the other task's repository as the first, picking others beside it where it names one.
+  // A pick the chip's read does not list, or the task's own, is let go as the task's is.
+  const offersAlso = !forAutomation && device === undefined && !(tree && repository === null);
   const also =
     !offersAlso || repository === null
       ? NONE_ALSO
-      : alsoChosen.filter(
-          (each) => each.toLowerCase() !== repository.toLowerCase() && isListed(each),
-        );
+      : alsoChosen.filter((each) => !sameRepository(each, repository) && isListed(each));
+  // A press checks a row after the others or unchecks it, the first pick left standing the task's.
+  // Note that the first press replaces a repository the card chose rather than the member, the
+  // default or a preset, because the commonest pick is another single repository, not a second.
+  const togglePick = (name: string) => {
+    // A tree's repository is held as the first, so a press checks or unchecks only those beside it.
+    if (tree) {
+      if (repository !== null && sameRepository(repository, name)) return;
+      setAlsoChosen(
+        also.some((each) => sameRepository(each, name))
+          ? also.filter((each) => !sameRepository(each, name))
+          : [...also, name],
+      );
+      return;
+    }
+    const picks = repository === null || !pickedByHand ? [] : [repository, ...also];
+    const next = picks.some((each) => sameRepository(each, name))
+      ? picks.filter((each) => !sameRepository(each, name))
+      : [...picks, name];
+    const [first = null, ...rest] = next;
+    setChosen(first);
+    setAlsoChosen(rest);
+    setPickedByHand(true);
+  };
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
@@ -687,12 +721,33 @@ export function NewTaskComposer({
       align={POPOVER_ALIGN.START}
       value={repository}
       chooser={repositories}
-      onChoose={setChosen}
+      onChoose={(name) => {
+        setChosen(name);
+        setPickedByHand(true);
+      }}
       onUnreached={judged && repository !== null ? () => drop(repository) : undefined}
-      onClear={tree ? undefined : () => setChosen(null)}
+      onClear={
+        tree
+          ? undefined
+          : () => {
+              setChosen(null);
+              setAlsoChosen(NONE_ALSO);
+              setPickedByHand(true);
+            }
+      }
       onListed={setListed}
       pending={!tree && chosen !== null && repository === null}
-      held={tree ? REPOSITORY_HELD : undefined}
+      held={tree && !offersAlso ? REPOSITORY_HELD : undefined}
+      several={
+        offersAlso
+          ? {
+              also,
+              onToggle: togglePick,
+              held: tree ? REPOSITORY_HELD : undefined,
+              standIn: !tree && !pickedByHand,
+            }
+          : undefined
+      }
     />
   );
   const composer: AgentComposerControl = {
@@ -745,14 +800,6 @@ export function NewTaskComposer({
             <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
           {repositoryChip}
-          {offersAlso && repository !== null ? (
-            <AlsoRepositoryChips
-              own={repository}
-              value={also}
-              chooser={repositories}
-              onChange={setAlsoChosen}
-            />
-          ) : null}
         </div>
         {offersPilot ? (
           <div className="new-task-mode ml-auto shrink-0">

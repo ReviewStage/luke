@@ -1,15 +1,6 @@
-import {
-  AuthPage,
-  AuthStepFoot,
-  ProductMark,
-  SETTINGS_ROW_STATE,
-  SettingsRowStateLine,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@repo/ui";
+import { AuthPage, AuthStepFoot, ProductMark } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
@@ -27,8 +18,10 @@ import { TeamForm, useTeamForm } from "./setup-team.js";
  * where setup's Sign out does, and Escape presses it: before Create it makes
  * nothing; after it the workspace stands and is listed, so it reads Close,
  * and leaving at any step lands on the new workspace's Home. A photo or an
- * invitation refused holds the first card on what was refused, as setup's
- * does, rather than a toast the window would bury.
+ * invitation refused holds the first card on what was refused, each refused
+ * address marked with why, as setup's does, rather than a toast the window
+ * would bury; once made, the first card holds the workspace to change, as
+ * setup's coming back does.
  */
 
 /** The flow's two cards, in order. */
@@ -64,7 +57,6 @@ export function NewWorkspaceSteps(props: NewWorkspaceStepsProps): React.JSX.Elem
 function NewWorkspaceStep({ tasks, onClose }: NewWorkspaceStepsProps): React.JSX.Element {
   const [at, setAt] = useState<Step>(STEP.TEAM);
   const [made, setMade] = useState<string | undefined>(undefined);
-  const [refused, setRefused] = useState<readonly string[]>([]);
   const [reached, setReached] = useState(false);
   const onReached = useCallback((now: boolean) => setReached(now), []);
   // The caret lands in the name as the cards open, since the name is all Create needs.
@@ -72,12 +64,15 @@ function NewWorkspaceStep({ tasks, onClose }: NewWorkspaceStepsProps): React.JSX
   useEffect(() => nameField.current?.focus(), []);
   const { onChooseWorkspace, onGoHome } = tasks;
   const teamForm = useTeamForm({
+    made:
+      made === undefined
+        ? undefined
+        : { id: made, name: tasks.newTask.workspaces.find((one) => one.id === made)?.name },
     onCreated: (workspaceId) => {
       setMade(workspaceId);
       onChooseWorkspace(workspaceId);
     },
     onDone: (failed) => {
-      setRefused(failed);
       if (failed.length === 0) setAt(STEP.GITHUB);
     },
   });
@@ -121,46 +116,32 @@ function NewWorkspaceStep({ tasks, onClose }: NewWorkspaceStepsProps): React.JSX
       </AuthPage>
     );
   }
-  // Note that Create is the card's way on until the workspace is made, and Continue after it, as setup's team card does.
-  const forming = made === undefined || busy;
+  // Note that the press makes the workspace until it stands, then saves what was changed in it, or goes on, as setup's team card does.
   return (
     <AuthPage
       mark={<ProductMark />}
       exit={exit}
-      title="Create a workspace"
-      description="Tasks, agents, and repositories, shared with your team."
+      title={made === undefined ? "Create a workspace" : "Your new workspace"}
+      description={
+        made === undefined
+          ? "Tasks, agents, and repositories, shared with your team."
+          : "Change its name or photo, or invite more of your team."
+      }
       foot={
         <AuthStepFoot
           at={STEP.TEAM + 1}
           total={TOTAL}
-          next={
-            forming
-              ? {
-                  label: "Create",
-                  onPress: teamForm.create,
-                  disabled: !teamForm.ready,
-                  busy,
-                  busyLabel: "Creating",
-                }
-              : { label: "Continue", onPress: () => setAt(STEP.GITHUB) }
-          }
+          next={{
+            label: teamForm.label,
+            onPress: teamForm.create,
+            disabled: !teamForm.ready,
+            busy,
+            busyLabel: teamForm.busyLabel,
+          }}
         />
       }
     >
-      {forming ? (
-        <TeamForm form={teamForm} nameRef={nameField} disabled={busy} />
-      ) : (
-        <>
-          <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-            Workspace created
-          </SettingsRowStateLine>
-          {refused.map((words) => (
-            <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              <ReplayMask>{words}</ReplayMask>
-            </Text>
-          ))}
-        </>
-      )}
+      <TeamForm form={teamForm} nameRef={nameField} disabled={busy} />
     </AuthPage>
   );
 }

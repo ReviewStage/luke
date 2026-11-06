@@ -90,6 +90,7 @@ function fixture() {
   };
   const actPort = testActPort(
     macShellProcedures<Window>({
+      mirror: () => Effect.succeed(undefined),
       spawn,
       ports: {
         open: (sender, ticket) => {

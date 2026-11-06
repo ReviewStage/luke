@@ -863,14 +863,15 @@ test("the identity row says who shares the workspace and nothing of the account'
 
 test("a personal workspace shows its owner's name with no Rename to its owner and an admin alike, and still offers its photo, and its slug to the owner alone", async () => {
   for (const [role, acts] of [
-    [WORKSPACE_ROLE.OWNER, ["Upload photo", "Change slug"]],
-    [WORKSPACE_ROLE.ADMIN, ["Upload photo"]],
+    [WORKSPACE_ROLE.OWNER, ["Change slug"]],
+    [WORKSPACE_ROLE.ADMIN, []],
   ] as const) {
     const { page } = await mount({ ...FIRST, role });
 
     assert.equal(nameShown(page), FIRST.name);
     assert.equal(buttons(page, "Rename").length, 0);
     assert.deepEqual(rowActions(identity(page)), acts);
+    assert.ok(photoTile(page), "the photo is still offered, on its tile");
   }
   const team = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   assert.equal(buttons(team.page, "Rename").length, 1);
@@ -923,7 +924,18 @@ async function drain(): Promise<void> {
   await settle();
 }
 
-/** Picks `file` in the identity row's hidden picker, as the dialog Upload photo opens would. */
+/** The identity row's tile, the press that picks the photo or offers Replace and Remove; none for a reader who manages nothing. */
+function photoTile(page: HTMLElement): HTMLButtonElement | null {
+  return identity(page).querySelector<HTMLButtonElement>('button[aria-label$="photo"]');
+}
+
+/** The items the tile's menu offers once pressed, by their words. */
+function tileMenu(page: HTMLElement): HTMLElement[] {
+  act(() => photoTile(page)?.click());
+  return [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
+}
+
+/** Picks `file` in the identity row's hidden picker, as the tile's press opens it. */
 async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
   const picker =
     identity(page).querySelector<HTMLInputElement>('input[type="file"]') ??
@@ -935,7 +947,7 @@ async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
   await drain();
 }
 
-test("an owner's picked photo is sent drawn as its center square in WebP, 256 pixels a side, and Upload photo in the ⋯ opens the picker", async () => {
+test("an owner's picked photo is sent drawn as its center square in WebP, 256 pixels a side, and a press on the tile opens the picker", async () => {
   const webp = webpBytes();
   const drawn = stubCanvas(400, 300, webp);
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
@@ -946,7 +958,7 @@ test("an owner's picked photo is sent drawn as its center square in WebP, 256 pi
     opened += 1;
   });
 
-  await chooseAction(row, "Upload photo");
+  act(() => photoTile(page)?.click());
   await pickPhoto(page, new File([new Uint8Array([1, 2, 3])], "team.png", { type: "image/png" }));
 
   assert.equal(opened, 1);
@@ -979,30 +991,25 @@ test("a photo the service refuses, a file that is no PNG, JPEG, or WebP, and a p
   assert.equal(photos().length, 1);
 });
 
-test("Remove photo stands disabled while an upload is still under way, so the upload cannot put a removed photo back", async () => {
+test("the tile stands still while an upload is under way, so the upload cannot put a removed photo back", async () => {
   // The picked image is still being drawn: the encoder's bitmap never arrives.
   vi.stubGlobal("createImageBitmap", () => new Promise(() => undefined));
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
   await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
-  const ellipsis =
-    identity(page).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
-    assert.fail("the row draws no ⋯");
-  act(() => ellipsis.click());
-  const remove =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
-      (each) => each.textContent === "Remove photo",
-    ) ?? assert.fail("no Remove photo in the row's menu");
 
-  assert.equal(remove.disabled || remove.getAttribute("aria-disabled") === "true", true);
+  assert.equal(photoTile(page)?.disabled, true);
 });
 
-test("Remove photo, offered only where a photo is set, asks first and then sends no photo, and a set photo is replaced rather than uploaded", async () => {
+test("Remove photo, offered on the tile only where a photo is set, asks first and then sends no photo", async () => {
   const bare = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  assert.deepEqual(rowActions(identity(bare.page)), ["Upload photo"]);
+  const bareTile = photoTile(bare.page)?.getAttribute("aria-label");
+  const bareMenu = tileMenu(bare.page).map((each) => each.textContent);
 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN, photoVersion: "v1" });
-  assert.deepEqual(rowActions(identity(page)), ["Replace photo", "Remove photo"]);
-  await chooseAction(identity(page), "Remove photo");
+  const offered = tileMenu(page);
+  const remove = offered.find((each) => each.textContent === "Remove photo");
+  act(() => remove?.click());
+  await settle();
   assert.deepEqual(photos(), []);
   // The confirm repeats the menu's verb and says in one line what goes, with no ellipsis.
   assert.match(
@@ -1012,6 +1019,11 @@ test("Remove photo, offered only where a photo is set, asks first and then sends
   assert.equal((dialog().textContent ?? "").includes("…"), false);
   await confirm("Remove photo");
 
+  assert.deepEqual([bareTile, bareMenu], ["Add photo", []]);
+  assert.deepEqual(
+    offered.map((each) => each.textContent),
+    ["Replace photo", "Remove photo"],
+  );
   assert.deepEqual(photos(), [{ workspaceId: ACME.id, photo: null }]);
 });
 
@@ -1019,6 +1031,7 @@ test("a member is offered none of the photo's acts", async () => {
   const { page } = await mount(ACME);
 
   assert.deepEqual(rowActions(identity(page)), []);
+  assert.equal(photoTile(page), null);
   assert.equal(page.querySelector('input[type="file"]') === null, true);
 });
 
@@ -2143,19 +2156,10 @@ test("the Invite card's address field is named by a visible label, and, being re
   assert.equal(address.getAttribute("aria-required"), "true");
 });
 
-test("an address the service would refuse is said under the field and nothing is sent until it is fixed", async () => {
+test("an address the service would not read as one is left unsent, its chip saying why, and the rest are invited", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com, ada", WORKSPACE_ROLE.MEMBER);
-
-  assert.equal(
-    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
-    "Enter only email addresses.",
-  );
-  assert.equal(addressField().getAttribute("aria-invalid"), "true");
-  assert.deepEqual(invitedAddresses(), []);
-
-  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
 
   assert.deepEqual(invitedAddresses(), ["alan@example.com"]);
 });
@@ -2184,14 +2188,19 @@ test("several addresses typed at once are invited in turn, each once", async () 
   );
 });
 
-test("an address refused partway stops the run there, saying why, and leaves it and those after it in the field", async () => {
+test("an address refused partway stops the run there, saying why, and leaves it and those after it in the field as chips", async () => {
   alreadyInvited = ["sam@example.com"];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com, sam@example.com, ada@example.com", WORKSPACE_ROLE.MEMBER);
 
   assert.deepEqual(invitedAddresses(), ["alan@example.com", "sam@example.com"]);
-  assert.equal(addressField().value, "sam@example.com, ada@example.com");
+  assert.deepEqual(
+    [...inviteDialog().querySelectorAll('[aria-label^="Remove "]')].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["Remove sam@example.com", "Remove ada@example.com"],
+  );
   assert.equal(
     inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
     ALREADY_INVITED_REFUSAL,
@@ -2201,6 +2210,17 @@ test("an address refused partway stops the run there, saying why, and leaves it 
       invitationRows(page).map((row) => addressOf(row)?.textContent),
       ["alan@example.com"],
     ),
+  );
+  act(() =>
+    (
+      inviteDialog().querySelector<HTMLButtonElement>('[aria-label="Remove sam@example.com"]') ??
+      assert.fail("no Remove sam@example.com")
+    ).click(),
+  );
+  assert.equal(
+    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent ?? "",
+    "",
+    "lifting the refused address takes back what the field said",
   );
 });
 

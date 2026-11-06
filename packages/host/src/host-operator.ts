@@ -343,6 +343,8 @@ import type {
   AppAutomationReads,
   AppBrowserTabs,
   AppChapters,
+  AppDescriptionComments,
+  AppDescriptionDocuments,
   AppDevicePresences,
   AppGitHubTokens,
   AppHistories,
@@ -358,8 +360,6 @@ import type {
   AppMemories,
   AppModels,
   AppPages,
-  AppDescriptionComments,
-  AppDescriptionDocuments,
   AppProviderKeys,
   AppPullRequestParts,
   AppRepositoryLists,
@@ -1010,6 +1010,8 @@ export interface HostOperator {
   ): () => void;
   /** How an attached shell's connection stands, by its connection. */
   onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
+  /** A cloud agent's mirror on this Mac made where none stands, answered with its folder; none where the host could not. */
+  mirrorEnsure(params: { agentId: string }): Effect.Effect<string | undefined>;
   /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
   browserLiveConnect(params: {
     connectionId: string;
@@ -2733,6 +2735,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.TERMINAL_STATE,
         (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
         listener,
+      ),
+    mirrorEnsure: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MIRRORS_ENSURE, { agentId: params.agentId }),
+        (answer) => {
+          const folder = record(answer)?.folder;
+          return typeof folder === "string" ? folder : undefined;
+        },
       ),
     browserLiveConnect: (params) =>
       Effect.map(

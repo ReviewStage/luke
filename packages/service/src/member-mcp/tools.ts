@@ -1049,8 +1049,7 @@ const UpdateAgentInputSchema = Schema.Struct({
         "checked out in a folder of its own, which its token then reaches and it is told of; " +
         "named alone, with no other change. Only for an agent the member started, in the cloud, " +
         "in a repository of its own, its repositories all reached through one GitHub App " +
-        "installation, and the member with the Several repositories experiment on. Nothing " +
-        "removes one.",
+        "installation. Nothing removes one.",
     ),
   ),
 });

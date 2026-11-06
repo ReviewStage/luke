@@ -7,37 +7,29 @@ import {
   type TerminalAsk,
   terminalTarget,
 } from "@repo/features/terminal-entry";
-import { sandboxRead, shellsAsked } from "@repo/features/terminal-store";
+import { shellsAsked } from "@repo/features/terminal-store";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useContext, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { terminalListQueryOptions } from "./agent-reads.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 import { TerminalPicker } from "./terminal-picker.js";
 import type { AgentsControl } from "./use-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
 
 /**
- * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its Terminal tab shown, and the picker where the rules ask.
+ * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its Terminal tab shown, and the offer to start an agent on a task with none.
  *
  * Both commands are offers on the window's one keymap (`app-commands.ts`), so
  * the menu bar and ⌘K run them as ⌘J does. Each decides the agent
- * (`terminal-entry.ts`) from where the developer is, then shows that agent's
- * Terminal tab in the side panel, New terminal asking its sandbox for a new
- * shell first (`terminal-store.ts`'s `shellsAsked`), which the tab starts
- * once the sandbox runs. Where the rules leave the agent to the developer
- * the picker asks, and what it is answered with is done as the command
- * would have done it.
+ * (`terminal-entry.ts`) from where the developer is, never asking, then
+ * shows that agent's Terminal tab in the side panel, New terminal asking its
+ * sandbox for a new shell first (`terminal-store.ts`'s `shellsAsked`), which
+ * the tab starts once the sandbox runs. A task with no agent offers to start one; one whose
+ * agents are still being read waits on them, and lands as the rules have it
+ * once they are.
  */
-
-/** What the picker stands open for: the command that asked, and the agent chosen to begin with. */
-interface Asking {
-  readonly ask: TerminalAsk;
-  readonly chosen: string | undefined;
-}
 
 /**
  * Opens an agent's terminal as a command means it: its Terminal tab shown,
@@ -72,48 +64,34 @@ export function TerminalCommands({
   /** Hands the keyboard to the side panel, where the terminal now stands. */
   onShown: () => void;
 }): React.JSX.Element {
-  const registry = useContext(RegistryContext);
   const toast = useToast();
   const repositoryRemedy = useRepositoryRemedy();
-  const [asking, setAsking] = useState<Asking | undefined>(undefined);
+  const [asking, setAsking] = useState<TerminalAsk | undefined>(undefined);
   const open = useOpenTerminal(sidePanel, onShown);
-  const run = (ask: TerminalAsk) => {
-    // A task whose agents are not read yet asks, rather than offer to start one it may not need.
-    if (agents.agents === undefined && here === undefined) {
-      return setAsking({ ask, chosen: undefined });
-    }
-    const agentIds = (agents.agents ?? []).map((agent) => agent.id);
-    const target = terminalTarget(ask, {
+  const target = () =>
+    terminalTarget({
       here,
-      agents: agentIds,
+      agents: (agents.agents ?? []).map((agent) => agent.id),
       lastUsed: sidePanel.lastTerminal,
     });
-    switch (target.kind) {
-      case TERMINAL_TARGET.AGENT:
-        return open(target.agentId, ask);
-      case TERMINAL_TARGET.PICK:
-        return setAsking({ ask, chosen: target.chosen });
-      case TERMINAL_TARGET.NO_AGENT:
-        return setAsking({ ask, chosen: undefined });
-    }
+  const run = (ask: TerminalAsk) => {
+    const landed = target();
+    if (landed.kind === TERMINAL_TARGET.AGENT) return open(landed.agentId, ask);
+    // A task with no agent offers to start one; one whose agents are not read yet waits on them.
+    setAsking(ask);
   };
+  // The task's agents read while the command waits on them: it lands on one where there is one.
+  const waiting = asking !== undefined && agents.agents !== undefined && agents.agents.length > 0;
+  useEffect(() => {
+    if (!waiting || asking === undefined) return;
+    setAsking(undefined);
+    const landed = target();
+    if (landed.kind === TERMINAL_TARGET.AGENT) open(landed.agentId, asking);
+  });
   useAppCommand(APP_COMMAND.SHOW_TERMINAL, () => run(TERMINAL_ASK.SHOW));
   useAppCommand(APP_COMMAND.NEW_TERMINAL, () => run(TERMINAL_ASK.NEW));
-  // How each sandbox stands, read as the picker opens, which never wakes one.
-  const queryClient = useQueryClient();
-  const readSandbox = useCallback(
-    (agentId: string) => {
-      void queryClient.fetchQuery(terminalListQueryOptions(agentId)).then(
-        (answer) => {
-          if (!("refused" in answer)) registry.set(sandboxRead(agentId), answer);
-        },
-        () => undefined,
-      );
-    },
-    [queryClient, registry],
-  );
   // A refused start says why on the toast, its repository's remedy as its action where it has one,
-  // since the picker that pressed it has closed; a move starts the agent again once it lands.
+  // since the palette that pressed it has closed; a move starts the agent again once it lands.
   const startAgent = () => {
     void agents.start.onPress().then((failure) => {
       if (failure === undefined) return;
@@ -143,11 +121,8 @@ export function TerminalCommands({
   };
   return (
     <TerminalPicker
-      pick={asking}
+      open={asking !== undefined && !waiting}
       agents={agents}
-      lastUsed={sidePanel.lastTerminal}
-      readSandbox={readSandbox}
-      onPick={(agentId) => open(agentId, asking?.ask ?? TERMINAL_ASK.SHOW)}
       onStartAgent={startAgent}
       start={agents.start}
       onClose={() => setAsking(undefined)}

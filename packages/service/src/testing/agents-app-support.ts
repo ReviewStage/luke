@@ -348,6 +348,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */
