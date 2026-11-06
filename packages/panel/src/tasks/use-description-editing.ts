@@ -23,7 +23,7 @@ import {
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TasksEditAnswer } from "@repo/features/tasks-view";
 import { STATUS_TONE } from "@repo/ui";
-import { MutationObserver, useMutation, useQueryClient } from "@tanstack/react-query";
+import { MutationObserver, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import * as Atom from "effect/reactivity/Atom";
@@ -40,6 +40,7 @@ import {
 import type { DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
+import { appStateQuery, signedInKey } from "../use-app-state.js";
 import type { DescriptionEditMutation } from "./description-edit-mutation.js";
 import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
 
@@ -75,7 +76,7 @@ type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
 const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
 
-/** The account signed in as the window last said, which words a task is left with belong to. */
+/** The account signed in as the window's owner hook last drew it, whose change lets go of the words tasks were left with. */
 const wordsOwnerAtom = Atom.keepAlive(Atom.make<string | undefined>(undefined));
 
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
@@ -114,10 +115,11 @@ const LEFT_UNSAVED = {
   KEEP_MINE: "Keep mine",
 } as const;
 
-/** What a task's words are saved through once it is left: its id, the account that wrote them, its save, who its conflict is named for, and where they are kept and said. */
+/** What a task's words are saved through once it is left: its id, the account that wrote them and the one signed in as it asks, its save, who its conflict is named for, and where they are kept and said. */
 interface LeftTask {
   readonly taskId: string;
   readonly owner: string | undefined;
+  readonly signedIn: () => string | undefined;
   readonly save: LeftSave;
   readonly place: EditPlace;
   readonly registry: AtomRegistry.AtomRegistry;
@@ -150,7 +152,7 @@ function failureOf(answered: object): object | undefined {
 function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: unknown): void {
   const { taskId, registry } = left;
   // Note that a save answered after another account signed in keeps nothing, because its words are no longer the account's signed in.
-  const kept = registry.get(wordsOwnerAtom) === left.owner ? editorLeft(now) : undefined;
+  const kept = left.signedIn() === left.owner ? editorLeft(now) : undefined;
   const held = new Map(registry.get(leftUnsavedAtom));
   if (kept === undefined) held.delete(taskId);
   else held.set(taskId, kept);
@@ -203,8 +205,8 @@ function saveLeft(
   saving = Symbol(left.taskId),
   cause?: unknown,
 ): void {
-  // Note that words whose save waited on one out are not sent once another account has signed in, because they would save as it.
-  if (left.registry.get(wordsOwnerAtom) !== left.owner) {
+  // Note that words are never sent once another account has signed in, because they would save as it.
+  if (left.signedIn() !== left.owner) {
     mark(left.registry, savingLeftAtom, saving, false);
     return;
   }
@@ -275,10 +277,11 @@ export function useDescriptionWordsUnsaved(): boolean {
  * Tells the descriptions' words which account is signed in: once another
  * signs in, the words its tasks were left with go, and the toasts over them,
  * because they are the words of the account that wrote them and a Retry or a
- * return would save them as the next. The window calls it once, with the key
- * of the account signed in, none while none is.
+ * return would save them as the next. The window calls it once; it reads
+ * the account from main's document.
  */
-export function useDescriptionWordsOwner(account: string | undefined): void {
+export function useDescriptionWordsOwner(): void {
+  const account = useQuery({ ...appStateQuery, select: signedInKey }).data;
   const registry = useContext(RegistryContext);
   const withdrawToast = useWithdrawToast();
   useLayoutEffect(() => {
@@ -326,7 +329,10 @@ export function useDescriptionEditing(
   // Whether the open editor holds words typed since its last hand-over.
   const [holding, setHolding] = useState(false);
   const registry = useContext(RegistryContext);
-  const owner = useAtomValue(wordsOwnerAtom);
+  const owner = useQuery({ ...appStateQuery, select: signedInKey }).data;
+  // Note that whose words are sent is read from main's document as it stands
+  // at the send, never as a render drew it, so no order of draws sends them as another.
+  const signedInNow = () => signedInKey(queryClient.getQueryData(appStateQuery.queryKey));
   // The account signed in as the open editor opened, whose words it holds.
   const wroteAs = useRef(owner);
   const toast = useToast();
@@ -355,7 +361,7 @@ export function useDescriptionEditing(
   // so a pause and a close landing in one flush start one save, not two.
   const send = () => {
     const held = latest.current;
-    if (held === undefined || registry.get(wordsOwnerAtom) !== wroteAs.current) return;
+    if (held === undefined || signedInNow() !== wroteAs.current) return;
     const request = pendingSave(held);
     if (request === undefined) return;
     const sentFrom = opening.current;
@@ -424,7 +430,7 @@ export function useDescriptionEditing(
     opening.current += 1;
     const kept = text === undefined ? undefined : takeLeft(registry, taskId);
     if (kept !== undefined) withdrawToast(taskId);
-    wroteAs.current = registry.get(wordsOwnerAtom);
+    wroteAs.current = signedInNow();
     latest.current = kept;
     setEditor(kept);
     setSelecting(undefined);
@@ -438,6 +444,7 @@ export function useDescriptionEditing(
       const left: LeftTask = {
         taskId,
         owner: wroteAs.current,
+        signedIn: signedInNow,
         save: (request) => leaving.mutate(request),
         place: drawnPlace.current,
         registry,
@@ -465,7 +472,7 @@ export function useDescriptionEditing(
       if (text === undefined) return;
       if (editor !== undefined && !editorCloses(editorCloseAsked(editor))) return;
       opening.current += 1;
-      wroteAs.current = registry.get(wordsOwnerAtom);
+      wroteAs.current = signedInNow();
       setEditor(editorOpened(text));
       setPlacement(place);
       setSelecting(undefined);

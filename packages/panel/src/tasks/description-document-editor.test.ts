@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
@@ -36,8 +37,8 @@ import {
   type PlacedWords,
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { registryWith } from "../testing/app-state.js";
-import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
+import { registryWith, stateWith } from "../testing/app-state.js";
+import { onRegistry, settledWrites, writeAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -73,9 +74,6 @@ let wordsLine: (() => number) | undefined;
 
 /** The words the stand-in's caret stands in as it closes, as a laid-out editor answers; none unless a test lays them out. */
 let caretOn: PlacedWords | undefined;
-
-/** The account the window says is signed in, which a test switches and draws again. */
-let signedIn = "account-charles";
 
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: DescriptionEditorModule = {
@@ -155,7 +153,6 @@ afterEach(async () => {
   releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
-  signedIn = "account-charles";
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a description left as it went answer before its atoms go.
@@ -222,10 +219,25 @@ function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
 }
 
-/** The account signed in, told to the descriptions' words as the window tells them. */
+/** The descriptions' words told which account is signed in, as the window tells them. */
 function WordsOwner(): null {
-  useDescriptionWordsOwner(signedIn);
+  useDescriptionWordsOwner();
   return null;
+}
+
+/** Main's document handed again with a teammate signed in, as an account switch hands it. */
+function signInTeammate(): void {
+  writeAppState(
+    stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
+      account: {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        id: "user-teammate",
+        email: "teammate@example.com",
+        name: "Teammate",
+        provider: "github",
+      },
+    }),
+  );
 }
 
 /** Whether the window says a description holds words not saved. */
@@ -961,7 +973,7 @@ test("words a description was left with go once another account signs in, so nei
   await settle();
   const retry = newestToastAction();
 
-  signedIn = "account-teammate";
+  signInTeammate();
   render(other);
   await settle();
   act(() => retry?.click());
@@ -981,7 +993,7 @@ test("an editor open on words not yet saved closes once another account signs in
   act(() => block(container, "Goal").click());
   act(() => open().onDraft(`${BODY}Mine.\n`));
 
-  signedIn = "account-teammate";
+  signInTeammate();
   render(DOCUMENT_TASK);
   await settle();
   const closed = container.querySelector(".description-document-editor") === null;
@@ -990,6 +1002,51 @@ test("an editor open on words not yet saved closes once another account signs in
 
   assert.ok(closed, "the editor closed as the account changed");
   assert.equal(sent.length, 0, "nothing saves them as the account now signed in");
+  assert.equal(unsavedWords(container), false);
+});
+
+test("words left before the window has drawn another account signing in are not sent as it", async () => {
+  const { container, sent, unmount } = mount();
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  signInTeammate();
+  unmount();
+  await settle();
+
+  assert.equal(sent.length, 0, "nothing saves them as the account now signed in");
+});
+
+test("words whose leaving save waits on one still out are not sent once another account signs in", async () => {
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: DescriptionEditRequest[] = [];
+  const door = (request: DescriptionEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return sent.length === 1 ? first.promise : Promise.resolve({ saved: true });
+  };
+  const { container, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  render(DOCUMENT_TASK, door);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  act(() => open().onDraft(`${BODY}Mine, and more.\n`));
+  render(other, door);
+  await settle();
+  const outFirst = sent.length;
+
+  signInTeammate();
+  render(other, door);
+  await settle();
+  first.resolve({ saved: true });
+  await settle();
+
+  assert.equal(outFirst, 1, "one save was out as the description was left");
+  assert.equal(
+    sent.length,
+    1,
+    "the words that waited on it are not sent as the account now signed in",
+  );
   assert.equal(unsavedWords(container), false);
 });
 

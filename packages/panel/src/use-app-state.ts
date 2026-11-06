@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
   type AppStateDelivery,
@@ -438,6 +439,12 @@ export function capabilityNow(capability: HostCapability): boolean {
 export const selectRun = (state: AppStateSnapshot) => state.run;
 export const selectSettings = (state: AppStateSnapshot) => state.settings;
 export const selectAccount = (state: AppStateSnapshot) => state.account;
+
+/** The key of the account signed in, its id or else its address; none while none is. */
+export const signedInKey = (state: AppStateSnapshot | undefined): string | undefined =>
+  state?.account.status === ACCOUNT_STATUS.SIGNED_IN
+    ? (state.account.id ?? state.account.email)
+    : undefined;
 export const selectAccess = (state: AppStateSnapshot) => state.access;
 export const selectUpdate = (state: AppStateSnapshot) => state.update;
 export const selectAudio = (state: AppStateSnapshot) => state.audio;

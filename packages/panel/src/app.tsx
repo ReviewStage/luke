@@ -255,7 +255,7 @@ function AppWindow(): React.JSX.Element {
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // So are the description words a task was left with: another account signing in lets go of them.
-  useDescriptionWordsOwner(accountKey);
+  useDescriptionWordsOwner();
   // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
   const [launched] = useState(() => {
     const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
