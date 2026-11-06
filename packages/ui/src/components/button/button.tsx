@@ -11,6 +11,7 @@ import {
 } from "react";
 import { cn } from "../../cn.js";
 import { ArrowUpRightIcon, CheckIcon } from "../../face/glyphs.js";
+import { middlePressOf } from "../../middle-press.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
@@ -662,7 +663,7 @@ export function ButtonLink({
   shape?: ButtonShape;
   /** Whether a press leaves the app, which a small ↗ after its words says, as an external text link's does. */
   external?: boolean | undefined;
-  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
   icon?: ReactNode;
@@ -670,6 +671,10 @@ export function ButtonLink({
   label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
+  const press = (event: MouseEvent<HTMLAnchorElement>) => {
+    pulse(event.currentTarget, variant);
+    onClick?.(event);
+  };
   return (
     <a
       className={linkClasses(buttonLook({ variant, size: undefined, shape, iconOnly: false }))}
@@ -677,10 +682,8 @@ export function ButtonLink({
       {...hint}
       href={href}
       aria-label={label}
-      onClick={(event) => {
-        pulse(event.currentTarget, variant);
-        onClick?.(event);
-      }}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
     >
       <span
         className={faceClasses(boxSize(variant, undefined, false), false, false)}
@@ -711,9 +714,13 @@ export function IconButtonLink({
   variant?: ButtonVariant;
   /** Whether it opens in a new tab, leaving the page it is on where it was. */
   newTab?: boolean;
-  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
 }): React.JSX.Element {
+  const press = (event: MouseEvent<HTMLAnchorElement>) => {
+    pulse(event.currentTarget, variant);
+    onClick?.(event);
+  };
   return (
     <a
       className={linkClasses(
@@ -724,10 +731,8 @@ export function IconButtonLink({
       {...hint}
       href={href}
       aria-label={label}
-      onClick={(event) => {
-        pulse(event.currentTarget, variant);
-        onClick?.(event);
-      }}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >

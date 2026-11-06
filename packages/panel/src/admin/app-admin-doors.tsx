@@ -11,7 +11,9 @@
  * the page as the app's centered failure rather than a sign-in card. The app
  * keeps its places in its own history, whose step for each view has an app
  * link of its own (`links-at-hand.ts`), so a screen here keeps its search
- * to itself and an account opens on a press, as a step of that history.
+ * to itself and an account opens on a press, as a step of that history. A
+ * page outside the dashboard opens as every link in the window does
+ * (`useOpenLink`), since the window opens no browser tab of its own.
  */
 
 import type { AdminReadParams, AdminRefused } from "@repo/features/admin-wire";
@@ -19,8 +21,10 @@ import { ADMIN_UNANSWERED } from "@repo/features/admin-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
 import { COLLECTION_STATE, ERROR_STATE_PLACEMENT, ErrorState } from "@repo/ui";
+import { useMemo } from "react";
 import { askAct } from "../act.js";
 import { failureShown } from "../failure-report.js";
+import { useOpenLink } from "../tasks/use-open-link.js";
 import {
   type AdminDoors,
   AdminDoorsProvider,
@@ -108,7 +112,9 @@ const APP_ADMIN_DOORS: AdminDoors = {
   },
 };
 
-/** The app's doors, handed to every admin screen under it. */
+/** The app's doors, handed to every admin screen under it, a page outside the dashboard opening as the window opens links. */
 export function AppAdminDoors({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <AdminDoorsProvider value={APP_ADMIN_DOORS}>{children}</AdminDoorsProvider>;
+  const openLink = useOpenLink();
+  const doors = useMemo<AdminDoors>(() => ({ ...APP_ADMIN_DOORS, openLink }), [openLink]);
+  return <AdminDoorsProvider value={doors}>{children}</AdminDoorsProvider>;
 }
