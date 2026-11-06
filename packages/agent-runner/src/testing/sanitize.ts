@@ -1,5 +1,9 @@
 /**
- * sanitize.ts -- the app-server's messages made safe to commit as fixtures: no token, no account id, no email, and every id renamed consistently so P20 and P22 can still follow a thread through them.
+ * sanitize.ts -- the app-server's messages made safe to commit as fixtures: no token, no account id, no email, and every id renamed consistently so a thread can still be followed through them.
+ *
+ * Its leak guard (`findLeaks`) is what the repository guard holds the
+ * committed recording, `app-server.jsonl`, to
+ * (`tools/anti-slop/guards/probe-fixtures.ts`).
  *
  * Three passes over every string, in order: the secrets this run knows by
  * value (the access, refresh and ID tokens, the issued client id, the host

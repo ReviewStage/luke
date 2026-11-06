@@ -21,8 +21,6 @@ export const HOST_CAPABILITY = {
   TERMINALS: "terminals",
   /** Install command-line tool, which runs the `vespin` command's install script in the account of the machine the client runs on. */
   CLI_INSTALL: "cliInstall",
-  /** Sign in with ChatGPT, whose loopback only a client on the machine itself can listen on. */
-  CHATGPT_SIGN_IN: "chatGptSignIn",
   /**
    * An app installed on the machine rather than a page in a browser tab:
    * the window's zoom, opening at login, the menu bar whose chords the

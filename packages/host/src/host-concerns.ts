@@ -32,7 +32,6 @@ export const HOST_CONCERN = {
   MAC_COMMANDS: "macCommands",
   THIS_MAC_HOST: "thisMacHost",
   TERMINALS: "terminals",
-  CHATGPT_SIGN_IN: "chatGptSignIn",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -42,7 +41,6 @@ export const HOST_PLATFORM_CONCERN = {
   MAC_COMMANDS: HOST_CONCERN.MAC_COMMANDS,
   THIS_MAC_HOST: HOST_CONCERN.THIS_MAC_HOST,
   TERMINALS: HOST_CONCERN.TERMINALS,
-  CHATGPT_SIGN_IN: HOST_CONCERN.CHATGPT_SIGN_IN,
 } as const;
 
 export type HostPlatformConcern =
@@ -62,7 +60,6 @@ export const isPlatformConcern = (concern: HostConcern): concern is HostPlatform
 const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
   [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
-  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: HOST_CAPABILITY.CHATGPT_SIGN_IN,
 } as const satisfies Readonly<Partial<Record<HostPlatformConcern, HostCapability>>>;
 
 /** `CAPABILITY_OF_CONCERN` read by any platform concern, one that offers none among them. */
@@ -128,10 +125,6 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.BROWSER_LIVE_CONNECT,
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
-  ],
-  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: [
-    GATEWAY_METHOD.CHATGPT_SIGN_IN,
-    GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL,
   ],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 

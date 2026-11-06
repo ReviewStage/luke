@@ -1,0 +1,6 @@
+-- Expand step of dropping the account's ChatGPT host id, "account_chatgpt_host": the modules no longer declare
+-- it, and nothing this deployment runs reads or writes it, since the third-party Sign in with ChatGPT that named
+-- it is retired and a plan connects through Codex's device-code login alone. Note that the table itself stays one
+-- deployment longer, because a build migrates while the deployment before it still serves and still writes it on
+-- its host route; a later release's migration drops it
+-- (apps/web/server/README.md, "Dropping a column ... takes two deployments").

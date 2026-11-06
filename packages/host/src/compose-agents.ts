@@ -68,7 +68,6 @@ import {
   agentWorkspaceListParamsSchema,
   type ChatGptDevicePollAnswerView,
   type ChatGptDeviceStartAnswerView,
-  type ChatGptSignInAnswerView,
   chatGptDeviceLoginParamsSchema,
   chatGptDeviceWaitParamsSchema,
   type DictationTranscribeAnswerView,
@@ -391,10 +390,6 @@ export interface AgentsDependencies {
 export interface AgentsComposer extends Composer {
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
-  /** The account's keys as an answer of the service's leaves them, as a ChatGPT sign-in answers them, laid where the windows hold them; nothing where it carries none. */
-  readonly keysAnswered: (
-    answer: ProviderKeysAnswerView | ChatGptSignInAnswerView,
-  ) => Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
   /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
@@ -1220,7 +1215,7 @@ function composed(
   const keysWritten = (answer: ProviderKeysAnswerView) =>
     Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
   /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them, and the models asked again, whose marks they move. */
-  const keysAnswered = (answer: ProviderKeysAnswerView | ChatGptSignInAnswerView) =>
+  const keysAnswered = (answer: ProviderKeysAnswerView) =>
     Effect.suspend(() => {
       const userId = dependencies.accountId();
       return userId === undefined || !("keys" in answer)
@@ -2089,7 +2084,6 @@ function composed(
     lifetime: Effect.void,
     open,
     reset,
-    keysAnswered,
     queueable: [
       anyWrite(started),
       anyWrite(renamed),

@@ -149,9 +149,6 @@ import {
   modelChoiceSchema,
 } from "./models-wire.js";
 import {
-  type ChatGptCredentialsSaveRequest,
-  type ChatGptHostAnswer,
-  chatGptCredentialsSaveRequestSchema,
   chatGptDeviceLoginRequestSchema,
   PROVIDER_KEY_QUERY,
   providerKeyForAgentsRequestSchema,
@@ -677,26 +674,6 @@ export class HostedAgentClient {
     const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
-  }
-
-  /** The account's `ext_agent_host_id` for our hosted runtime, which a ChatGPT sign-in names as its host. */
-  chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
-  }
-
-  /**
-   * A ChatGPT sign-in the desktop completed, handed to the service once,
-   * answering the keys as they then stand and, where the service kept
-   * nothing, why; a sign-in the service would refuse by shape never travels.
-   */
-  saveChatGptCredentials(
-    credentials: ChatGptCredentialsSaveRequest,
-  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(chatGptCredentialsSaveRequestSchema)(credentials),
-    );
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
   }
 
   /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses. */
