@@ -1646,6 +1646,55 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
   assert.ok(wide.querySelector('.title-bar-controls[data-edge="end"]'), "and the panel's toggle");
 });
 
+test("a find on the Tasks page stands as it was after a visit to Admin over it", async () => {
+  handState({}, { access: { admin: true } });
+  // The Tasks page is a chunk of its own, read the first time it is drawn.
+  await import("./tasks-page.js");
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  let setAdmin: (open: boolean) => void = ignore;
+  function Shell() {
+    const [admin, setAdminOpen] = useState(false);
+    setAdmin = setAdminOpen;
+    const tasks = tasksControl({
+      page: TASKS_PAGE.HOME,
+      workspaces: [ACME],
+      workspace: ACME,
+      boardView: { ...tasksControl().boardView, open: true },
+      adminView: { ...tasksControl().adminView, open: admin },
+    });
+    return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
+  }
+  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
+  await settle();
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.FIND), "⌘F is offered on the Tasks page");
+  });
+  const field = () =>
+    container.querySelector<HTMLInputElement>('[role="search"][aria-label="Find"] input');
+  const input = field();
+  assert.ok(input, "the find bar stands");
+  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "auth");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => {
+    setAdmin(true);
+    routed().go(SHELL_AT.ADMIN);
+  });
+  await act(() => routed().settled());
+  assert.ok(container.querySelector("section[aria-label=Admin]"), "Admin stands over the page");
+  act(() => {
+    setAdmin(false);
+    routed().go(SHELL_AT.PLACES);
+  });
+  await act(() => routed().settled());
+
+  assert.equal(field()?.value, "auth", "the find stands as it was");
+});
+
 /** Whether a reader is shown `element`: nothing over it hides it, as a box drawn with `display: none` is hidden from the screen and the accessibility tree alike. */
 function shownToReader(element: Element): boolean {
   for (let at: Element | null = element; at !== null; at = at.parentElement) {

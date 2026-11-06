@@ -1019,6 +1019,7 @@ export function ShellPlaces(): React.JSX.Element {
     focusHolder,
     inboxKept,
     phoneAccount,
+    boardKept,
   } = useShellPlaces();
   const { account } = settings;
   useFocusHandedBack(focusHolder);
@@ -1059,6 +1060,7 @@ export function ShellPlaces(): React.JSX.Element {
   }
   const inboxOpen = tasks.inboxView.open;
   const inboxShown = inboxOpen && !tasks.adminView.open;
+  const boardShown = tasks.boardView.open && !tasks.adminView.open;
   const pageAgent = tasks.agentView.agentId;
   const boardOpen = tasks.boardView.open;
   const inboxItemShown = tasks.inboxView.chosen !== undefined;
@@ -1113,9 +1115,18 @@ export function ShellPlaces(): React.JSX.Element {
             <Outlet />
           </ChipCards>
         </MentionedAgents>
-        {/* Note that the Inbox kept stands after the place shown, so a lookup of the place's first box finds the place's,
-            and beside every place's route rather than in one, so a routed place standing over it, Admin, lets go of
-            nothing it held; Admin stands over the Inbox the window's state still holds, which is then no Inbox shown. */}
+        {/* Note that the pages kept stand after the place shown, so a lookup of the place's first box finds the place's,
+            the Tasks page before the Inbox, so it is the first box while it is shown, and beside every place's route
+            rather than in one, so a routed place standing over them, Admin, lets go of nothing they held; Admin stands
+            over the page the window's state still holds, which is then no page shown. */}
+        {(boardOpen || boardKept) && !phoneTasks ? (
+          <KeptPage shown={boardShown} chipCards={chipCards} mentionedAgents={mentionedAgents}>
+            {/* The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board. */}
+            <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
+              <TASKS_ROUTE.Route tasks={tasks} room={room} />
+            </Suspense>
+          </KeptPage>
+        ) : null}
         {inboxOpen || inboxKept ? (
           <KeptPage shown={inboxShown} chipCards={chipCards} mentionedAgents={mentionedAgents}>
             <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
@@ -1187,23 +1198,12 @@ export function ShellPlaces(): React.JSX.Element {
 /**
  * What a place the window's state says draws in the places' content slot:
  * a task, an agent's or a person's page, the Automations pages, a workspace
- * not there for the reader, or nothing where the Inbox, kept beside every
- * place's route (`ShellPlaces`), or the Tasks page, kept beside it here, stands. Every route not yet moved onto the router draws
+ * not there for the reader, or nothing where the Inbox or the Tasks page,
+ * kept beside every place's route (`ShellPlaces`), stands. Every route not yet moved onto the router draws
  * this one component, so moving between them keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
-  const {
-    tasks,
-    room,
-    sidebar,
-    settings,
-    looks,
-    summary,
-    away,
-    chipCards,
-    mentionedAgents,
-    boardKept,
-  } = useShellPlaces();
+  const { tasks, room, sidebar, settings, looks, summary, away } = useShellPlaces();
   const { account } = settings;
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
@@ -1211,8 +1211,6 @@ export function StatePlace(): React.JSX.Element {
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
   const unknownWorkspace = tasks.unknownWorkspace.open;
-  // A phone's Tasks page is the sidebar's tree, pinned in the work's place, so it keeps no page of its own (`mobile-bar.tsx`).
-  const phoneTasks = mobileBarShown(room, tasks) && boardOpen;
   return (
     <>
       {inboxOpen ? null : pageAgent !== undefined ? (
@@ -1277,16 +1275,6 @@ export function StatePlace(): React.JSX.Element {
           staged={sidebar.staged}
         />
       )}
-      {/* Note that a page kept stands after the page shown in its place, so a lookup of the page's first box finds the page's,
-          and the Tasks page before the Inbox, so it is the first box while it is shown. */}
-      {(boardOpen || boardKept) && !phoneTasks ? (
-        <KeptPage shown={boardOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-          {/* The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board. */}
-          <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-            <TASKS_ROUTE.Route tasks={tasks} room={room} />
-          </Suspense>
-        </KeptPage>
-      ) : null}
     </>
   );
 }
