@@ -239,6 +239,23 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     }),
   );
 
+  it.effect("a model replying instead of titling names neither the agent nor its task", () =>
+    Effect.gen(function* () {
+      const owner = yield* openGithubUser();
+      const organizationId = yield* openWorkspace(owner);
+      const task = yield* createTask(owner, { organizationId });
+      const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
+
+      yield* titledAs(
+        owner,
+        agent,
+        "I'm not sure what you're asking about. Could you clarify what you mean?",
+      );
+
+      assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).title, null);
+    }),
+  );
+
   it.effect("a task named by a member keeps its name when its agent is titled", () =>
     Effect.gen(function* () {
       const owner = yield* openGithubUser();

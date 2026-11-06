@@ -82,6 +82,8 @@ const AGENT_TITLE = {
   EFFORT: "low",
   /** Anthropic's word for no thinking at all: Haiku thinks by default, and its thinking would spend the few output tokens a title has before any of its words. */
   THINKING: "disabled",
+  /** The most words a model's answer may hold and still be a title, which is asked for in three to six. */
+  MAX_ANSWER_WORDS: 12,
   /** The most words of its first line a title falls back to where no model names it. */
   FALLBACK_WORDS: 6,
   /** The most of each message the call reads, which is enough to tell the task from. */
@@ -91,7 +93,7 @@ const AGENT_TITLE = {
 } as const;
 
 const INSTRUCTIONS =
-  "Name the task below in three to six words, as a sentence-case title: a capital on the first word only, no quotes, and no punctuation at the end. Answer with the title and nothing else, or with nothing at all where no task is named yet, as in a greeting.";
+  "Name the task below in three to six words, as a sentence-case title: a capital on the first word only, no quotes, and no punctuation at the end. Answer with the title and nothing else, never a reply to the text or a question about it, or with nothing at all where no task is named yet, as in a greeting.";
 
 /** The quotes a model wraps a title in, and the punctuation it ends one with. */
 const SURROUNDING_QUOTES = /^["'“”‘’`]+|["'“”‘’`]+$/gu;
@@ -111,6 +113,16 @@ const SPEAKER = {
   DEVELOPER: "Developer",
   AGENT: "Agent",
 } as const;
+
+/** A sentence ending inside the answer, followed by more words. */
+const SENTENCE_BREAK = /[.!?]\s+\S/u;
+
+/** Whether the model replied to the text instead of naming its task: a question, a second sentence, or more words than any title holds. */
+function repliesInsteadOfTitling(answer: string): boolean {
+  const line = answer.trim().split("\n")[0] ?? "";
+  const words = line.split(/\s+/u).length;
+  return line.includes("?") || SENTENCE_BREAK.test(line) || words > AGENT_TITLE.MAX_ANSWER_WORDS;
+}
 
 /** The model's answer as a title: its first line, unquoted, unpunctuated, and bounded; nothing where nothing is left. */
 function tidyAgentTitle(answer: string): Option.Option<string> {
@@ -338,7 +350,9 @@ function generateAgentTitle(
       },
     }),
   ).pipe(
-    Effect.map((answer) => tidyAgentTitle(answer.text)),
+    Effect.map((answer) =>
+      repliesInsteadOfTitling(answer.text) ? Option.none() : tidyAgentTitle(answer.text),
+    ),
     Effect.timeoutOption(AGENT_TITLE.TIMEOUT),
     Effect.map(Option.flatten),
     Effect.catch((failure) =>
