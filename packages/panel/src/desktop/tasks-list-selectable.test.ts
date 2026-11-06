@@ -85,9 +85,6 @@ async function mount() {
   const opened: string[] = [];
   function Page() {
     const control = useTasksTab({
-      acts: {
-        act: () => Promise.reject(new Error("unasked")),
-      },
       tasks: {
         ...IDLE_TASKS_VIEW,
         listStatus: TASKS_READ.READY,

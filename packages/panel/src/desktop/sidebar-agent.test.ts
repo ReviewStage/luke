@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_MACHINE,
   AGENT_SOURCE,
@@ -16,8 +17,13 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
-import type { AgentsControl } from "../tasks/use-agents.js";
+import {
+  AGENT_RENAME_SHAPE,
+  type AgentsControl,
+  agentRenameMutation,
+} from "../tasks/use-agents.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -28,6 +34,7 @@ import {
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { AGENT } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
@@ -128,9 +135,15 @@ function mount(
       archives.push({ agentId, archived });
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
-    onRename: (agentId, title) => {
-      renames.push({ agentId, title });
-      return Promise.resolve(renameTaken);
+    rename: {
+      ...AGENT_RENAME_SHAPE,
+      options: agentRenameMutation(({ agentId, title }) => {
+        renames.push({ agentId, title });
+        const answer: AgentActAnswer = renameTaken
+          ? { agent: AGENT }
+          : { failure: AGENT_CALL_FAILURE.UNANSWERED, cause: undefined };
+        return Promise.resolve(answer);
+      }),
     },
     onDelete: (agentId) => {
       deletes.push(agentId);

@@ -28,6 +28,7 @@ import { askKept } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
@@ -189,10 +190,10 @@ async function mountBoard(
       sent.push([taskId, standing]);
       return askKept(Promise.resolve(keeps));
     },
-    onRenameTask: (taskId, name) => {
+    renameTask: taskRenameMutation(({ taskId, name }) => {
       renamed.push([taskId, name]);
       return Promise.resolve(true);
-    },
+    }, undefined),
     ...overrides,
   });
   const registry = AtomRegistry.make();

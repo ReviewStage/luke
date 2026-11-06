@@ -12,7 +12,7 @@ import type { AppStateSnapshot } from "@repo/host/app-state";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createContext, createElement, type ReactElement, type ReactNode, useContext } from "react";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
@@ -87,6 +87,18 @@ export function onRegistry(
   element: ReactElement,
 ): ReactElement {
   return createElement(RegistryContext.Provider, { value: registry }, withQueryClient(element));
+}
+
+/**
+ * Waits until no write of the test's client is out, and the answers its
+ * callers read have landed, as a plan's saves sent while it was left do:
+ * for a teardown that disposes the atoms those answers write into.
+ */
+export async function settledWrites(): Promise<void> {
+  await vi.waitFor(() => {
+    if (testQueryClient.isMutating() > 0) throw new Error("A write is still out.");
+  });
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
 }
 
 /** The test's own Query client, for a case that looks at or changes what it keeps from outside a component, as code outside one takes the client it is handed. */

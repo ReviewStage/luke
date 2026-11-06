@@ -38,7 +38,6 @@ import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-reque
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useCallback, useMemo, useState } from "react";
-import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -423,7 +422,6 @@ export function DesktopAgentPage({
     APP_COMMAND.EXIT_AGENT_PAGE,
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
   );
-  const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -443,7 +441,6 @@ export function DesktopAgentPage({
     [liveAgents, agentId],
   );
   const agents = useAgents({
-    acts: { act },
     taskId: undefined,
     agentId,
     repository: null,

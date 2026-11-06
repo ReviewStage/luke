@@ -475,13 +475,16 @@ test("View reads the skill and draws its text as written and every file with its
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_READ), [{ skillId: PR_STYLE.id }]);
   const shown = dialog();
   assert.equal(shown.querySelector("h2")?.textContent, "pr-style");
-  assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u);
+  // Note that the skill's text lands through a query, so it is read once drawn.
+  await vi.waitFor(() =>
+    assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u),
+  );
   assert.deepEqual(
     [...shown.querySelectorAll("dt, dd")].map((each) => each.textContent),
     ["SKILL.md", "48 B", "examples/good.md", "2.0 kB"],
   );
   act(() => button("Done", shown).click());
-  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.querySelector('[role="dialog"]') === null, true);
 });
 
 test("Delete asks first, red for a personal skill whose files go, then takes it off the page", async () => {

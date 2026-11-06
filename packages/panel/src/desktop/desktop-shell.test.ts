@@ -27,7 +27,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -1374,7 +1374,10 @@ test("Admin stands in the plan's place beside the sidebar, its row marked and no
   const page = mount(true, { adminView: { ...tasksControl().adminView, open: true } });
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
-  assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");
+  // Note that the account's access lands through the app-state query, so its row is read once drawn.
+  await vi.waitFor(() =>
+    assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page"),
+  );
   assert.equal(placeRow(page, "Inbox")?.getAttribute("aria-current") ?? null, null);
   const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
   assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
