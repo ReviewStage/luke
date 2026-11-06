@@ -4,6 +4,7 @@ import {
   type TaskAssigneeNotMember,
   type TaskIdTaken,
 } from "@repo/database/models/task-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_KIND } from "@repo/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -34,7 +35,6 @@ import {
   type TaskCreateAsked,
   type TaskCreateRelationRefused,
 } from "../tasks/task-create-relation.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_CALLER,
   AGENT_TOOL_REFUSAL,
