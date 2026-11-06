@@ -188,6 +188,8 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
+  // On is the default, so Off is the choice that has to survive a reopen.
+  forwardPorts: false,
   // Steer is the default, so Queue is the choice that has to survive a reopen.
   agentEnter: AGENT_ENTER.QUEUE,
   // You with our bot as co-author is the default, so the bot alone is the choice that has to survive a reopen.
