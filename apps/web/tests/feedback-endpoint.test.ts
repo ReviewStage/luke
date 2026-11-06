@@ -23,6 +23,7 @@ const POSTHOG_HOST = "https://posthog.app.test";
 function mailService() {
   vi.stubEnv("RESEND_API_KEY", "re_test");
   vi.stubEnv("FEEDBACK_TO", "founders@app.test");
+  vi.stubEnv("FEEDBACK_FROM", "Vespin <feedback@app.test>");
   const mailed: { subject?: unknown }[] = [];
   const recorded: { url: string; body: string }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
@@ -63,6 +64,15 @@ test("a note about an experiment is mailed under a subject naming it", async () 
     mailed.map((mail) => mail.subject),
     ["Feedback on the browser experiment"],
   );
+});
+
+test("without a configured sender the endpoint is unavailable, and nothing is mailed", async () => {
+  const { mailed } = mailService();
+  vi.stubEnv("FEEDBACK_FROM", "");
+  const answered = await POST(note({}));
+
+  assert.equal(answered.status, 503);
+  assert.deepEqual(mailed, []);
 });
 
 test("an experiment that is not a key's shape is refused, and nothing is mailed", async () => {
