@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, openTaskAgent, openWorkspace } from "../../testing/index.js";
 import {
   clearStandingFirewall,
   countStandingFirewalls,
@@ -19,8 +21,8 @@ import {
  * The swaps a runner's launch keeps for its sandbox session, over a real
  * dialect: a launch replaces the one kept before it, a renewal writes over
  * the row as it stands and never makes one, one account's session row is
- * neither read nor renewed through another's, and a clear and the sweep's drop delete rows by session and by
- * age. The sealed column is
+ * neither read nor renewed through another's, a clear and the sweep's drop delete rows by session and by
+ * age, and a row goes with its agent. The sealed column is
  * opaque text here, as the store holds it. Synthetic accounts, sessions,
  * agents, and seals throughout.
  */
@@ -28,19 +30,20 @@ import {
 const AT = new Date("2026-11-04T12:00:00Z");
 const LATER = new Date("2026-11-04T12:05:00Z");
 
-/** An account of its own and a sandbox session of its agent's. */
+/** An account of its own, its agent, and a sandbox session of that agent's. */
 const openOwner = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
-  return { userId, sandboxSessionId: `sbx_${randomUUID()}` };
+  const agentId = yield* openTaskAgent(userId, yield* openWorkspace(userId), null);
+  return { userId, sandboxSessionId: `sbx_${randomUUID()}`, agentId };
 });
 
-/** A launch under a fresh id, its seal standing in as text. */
-const launchOf = (sealedEntries: string) => ({
+/** A launch of the agent's under a fresh id, its seal standing in as text. */
+const launchOf = (agentId: string, sealedEntries: string) => ({
   version: randomUUID(),
-  agentId: "agent-fixture",
+  agentId,
   sealedEntries,
 });
 
@@ -51,15 +54,15 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
       Effect.gen(function* () {
         const owner = yield* openOwner;
 
-        yield* keepFirewallLaunch(owner, launchOf("sealed-first"), AT);
-        yield* keepFirewallLaunch(owner, launchOf("sealed-relaunch"), LATER);
+        yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-first"), AT);
+        yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-relaunch"), LATER);
         assert.deepEqual(yield* readFirewallLaunch(owner), {
-          agentId: "agent-fixture",
+          agentId: owner.agentId,
           sealedEntries: "sealed-relaunch",
         });
         yield* renewFirewallLaunch(owner, "sealed-renewed", LATER);
         assert.deepEqual(yield* readFirewallLaunch(owner), {
-          agentId: "agent-fixture",
+          agentId: owner.agentId,
           sealedEntries: "sealed-renewed",
         });
 
@@ -76,11 +79,11 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
         const owner = yield* openOwner;
         const other = yield* openOwner;
         const theirs = { userId: other.userId, sandboxSessionId: owner.sandboxSessionId };
-        yield* keepFirewallLaunch(owner, launchOf("sealed-owner"), AT);
+        yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-owner"), AT);
 
         assert.equal(yield* readFirewallLaunch(theirs), undefined);
         yield* renewFirewallLaunch(theirs, "sealed-other", LATER);
-        yield* keepFirewallLaunch(theirs, launchOf("sealed-other-own"), LATER);
+        yield* keepFirewallLaunch(theirs, launchOf(other.agentId, "sealed-other-own"), LATER);
 
         assert.equal((yield* readFirewallLaunch(owner))?.sealedEntries, "sealed-owner");
         assert.equal((yield* readFirewallLaunch(theirs))?.sealedEntries, "sealed-other-own");
@@ -94,9 +97,9 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
         const cleared = yield* openOwner;
         const stale = yield* openOwner;
         const fresh = yield* openOwner;
-        yield* keepFirewallLaunch(cleared, launchOf("sealed-cleared"), LATER);
-        yield* keepFirewallLaunch(stale, launchOf("sealed-stale"), AT);
-        const kept = launchOf("sealed-fresh");
+        yield* keepFirewallLaunch(cleared, launchOf(cleared.agentId, "sealed-cleared"), LATER);
+        yield* keepFirewallLaunch(stale, launchOf(stale.agentId, "sealed-stale"), AT);
+        const kept = launchOf(fresh.agentId, "sealed-fresh");
         yield* keepFirewallLaunch(fresh, kept, LATER);
 
         yield* clearStandingFirewall(cleared.sandboxSessionId);
@@ -114,5 +117,18 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
         assert.ok(listed.includes(fresh.sandboxSessionId));
         assert.ok(!listed.includes(cleared.sandboxSessionId));
       }),
+  );
+
+  it.effect("deleting the agent deletes its rows", () =>
+    Effect.gen(function* () {
+      const owner = yield* openOwner;
+      yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-gone"), AT);
+
+      yield* Effect.flatMap(Database, (db) =>
+        db.delete(agentTable).where(eq(agentTable.id, owner.agentId)),
+      );
+
+      assert.equal(yield* readFirewallLaunch(owner), undefined);
+    }),
   );
 });
