@@ -131,11 +131,8 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       tags: {},
       timeoutMs: Duration.toMillis(BASE_DRIVE.FILL_TIMEOUT),
       vcpus: CODER.SANDBOX_VCPUS,
-      keepLastSnapshots: {
-        count: 1,
-        expiration: Duration.toMillis(BASE_DRIVE.FILL_TIMEOUT),
-        deleteEvicted: true,
-      },
+      // Note that no expiration is sent, because Vercel refuses one as short as the fill, and a sandbox that is not persistent takes no snapshot to expire.
+      keepLastSnapshots: { count: 1, deleteEvicted: true },
       env: {},
       mounts: { [BASE_DRIVE.MOUNT_PATH]: name },
       persistent: false,
