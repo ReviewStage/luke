@@ -1,9 +1,8 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { LINK_PLACE, linkOf, taskLinkStep } from "@repo/features/link-grammar";
 import type { MentionPlace } from "@repo/features/mention-link";
 import type { TaskSummary } from "@repo/features/task-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
-import { Atom } from "effect/reactivity";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { useEffect } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { copyLinkItem } from "../copy-link-item.js";
@@ -73,7 +72,7 @@ export interface OpenTaskRename {
 }
 
 /** The rename door the open task's page offers, none while no task's page stands. */
-const openTaskRenameAtom = Atom.keepAlive(Atom.make<OpenTaskRename | undefined>(undefined));
+const openTaskRenameStore = createStore<OpenTaskRename | undefined>(undefined);
 
 /**
  * Offers the open task's rename door for as long as its page stands, so a
@@ -82,18 +81,17 @@ const openTaskRenameAtom = Atom.keepAlive(Atom.make<OpenTaskRename | undefined>(
  * read as it is called, so it should be a steady door.
  */
 export function useOfferTaskRename(taskId: string | undefined, begin: () => void): void {
-  const offer = useAtomSet(openTaskRenameAtom);
   useEffect(() => {
     if (taskId === undefined) return;
     const offered = { taskId, begin };
-    offer(offered);
-    return () => offer((held) => (held === offered ? undefined : held));
-  }, [taskId, begin, offer]);
+    openTaskRenameStore.setState(() => offered);
+    return () => openTaskRenameStore.setState((held) => (held === offered ? undefined : held));
+  }, [taskId, begin]);
 }
 
 /** The rename door the open task's page offers now, none while no task's page stands. */
 export function useTaskRenameOffer(): OpenTaskRename | undefined {
-  return useAtomValue(openTaskRenameAtom);
+  return useSelector(openTaskRenameStore);
 }
 
 /** Version history, opening the description's versions over the window, printing ⌥⇧⌘H where `keyed`: on the open task's menu, whose versions the chord opens. */

@@ -42,18 +42,16 @@
  * glyph.
  */
 
-import { useAtomSet } from "@effect/atom-react";
 import type { TaskSummary } from "@repo/features/task-wire";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
-import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
+import { DIALOG_SIZE, Dialog, makeWait, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
 import { STRIP_TAB_KIND, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
@@ -64,7 +62,6 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { RoutedPlace } from "../places/routed-places.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { stripTabLook } from "../tasks/strip-tab-kinds.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
@@ -127,17 +124,11 @@ const TASK_WORDS = "Task";
 /** What a person's page is called where the name is not known. */
 const PERSON_WORDS = "Profile";
 
-/** The hold before the cards show, as an atom whose work is the wait; handed its door inside a record, as a function handed to an atom's setter is called at once. */
-const holdAtom = () =>
-  rendererRuntime.fn(({ show }: { readonly show: () => void }) =>
-    Effect.andThen(Effect.sleep(HOLD_SHOWS), Effect.sync(show)),
-  );
+/** The hold before the cards show: the window's one, as it has one switcher, so each press held afresh calls off the one before. */
+const holdWait = makeWait();
 
-/** The wait before a still is taken of the stop the window settled on. */
-const settleAtom = () =>
-  rendererRuntime.fn(({ take }: { readonly take: () => void }) =>
-    Effect.andThen(Effect.sleep(STILL_SETTLES), Effect.sync(take)),
-  );
+/** The wait before a still is taken of the stop the window settled on, each settle calling off the one before. */
+const settleWait = makeWait();
 
 /** A still kept of a stop. */
 interface HeldStill {
@@ -371,10 +362,14 @@ export function TabSwitcher({
   const listed = useRef(new Set<string>());
   const doors = useRef({ tab, tasks, onTabChange });
   doors.current = { tab, tasks, onTabChange };
-  const [hold] = useState(holdAtom);
-  const startHold = useAtomSet(hold);
-  const [settle] = useState(settleAtom);
-  const startSettle = useAtomSet(settle);
+  // The switcher's waits are called off as it leaves, since what they would do is draw it.
+  useEffect(
+    () => () => {
+      holdWait.stop();
+      settleWait.stop();
+    },
+    [],
+  );
   useOverlayHold(state.held);
   const titleId = useId();
   const [face, setFace] = useState<SwitcherState>(state);
@@ -449,12 +444,15 @@ export function TabSwitcher({
     ];
     const settled = stops.current[0];
     if (settled === undefined || (first !== undefined && sameStop(first, settled))) return;
-    startSettle({
-      take: () => {
-        const standingOn = here();
-        if (standingOn !== undefined && sameStop(standingOn, settled)) takeStill(settled);
-      },
-    });
+    settleWait.start(
+      Effect.andThen(
+        Effect.sleep(STILL_SETTLES),
+        Effect.sync(() => {
+          const standingOn = here();
+          if (standingOn !== undefined && sameStop(standingOn, settled)) takeStill(settled);
+        }),
+      ),
+    );
   });
 
   // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave canceled moves nothing, the stops' order included.
@@ -521,14 +519,19 @@ export function TabSwitcher({
       // The stop being left is taken afresh, before the cards can cover it.
       const leaving = here();
       if (leaving !== undefined) takeStill(leaving);
-      startHold({ show: () => move(switcherShown(latest.current)) });
+      holdWait.start(
+        Effect.andThen(
+          Effect.sleep(HOLD_SHOWS),
+          Effect.sync(() => move(switcherShown(latest.current))),
+        ),
+      );
     }
     move(next);
   };
 
   const letGo = (going: boolean) => {
     const target = going ? switcherTarget(latest.current) : undefined;
-    startHold(Atom.Interrupt);
+    holdWait.stop();
     move(SWITCHER_LET_GO);
     if (target !== undefined) go(target);
   };
