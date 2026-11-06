@@ -30,12 +30,8 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     BRANCH: "APP_BRANCH",
     /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
     URL: "APP_CLONE_URL",
-    /** How deep the clone is; unset, the whole history, which a coding agent's branch and pull request need. */
-    DEPTH: "APP_CLONE_DEPTH",
     /** The model's command, which bash reads from the variable and never from shell text. */
     COMMAND: "APP_COMMAND",
-    /** Which step of deepening a shallow checkout the run is (`DEEPEN_STEP`); its presence is what makes a run one. */
-    DEEPEN: "APP_DEEPEN",
     /** Set on the run that brings a checkout a repository snapshot holds up to its branch; its presence is what makes a run the refresh. */
     REFRESH: "APP_REFRESH",
     /** The folder under the workspace an extra repository's checkout is cloned into; its presence is what makes a run an extra's clone. */
@@ -78,8 +74,3 @@ export function extraCheckoutPaths(repositories: readonly string[]): readonly st
     return `${REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE}/${folder}`;
   });
 }
-
-/** The step a coding agent's shallow checkout is deepened by: the fetch of the rest of its history. */
-export const DEEPEN_STEP = {
-  FETCH: "fetch",
-} as const;

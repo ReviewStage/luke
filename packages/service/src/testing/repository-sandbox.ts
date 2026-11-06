@@ -4,8 +4,7 @@
  * The double stands where eve's `ctx.getSandbox()` hands the shell a live
  * Vercel Sandbox: it answers each run from the contract the shell hands the
  * sandbox (`REPOSITORY_SANDBOX_CONTRACT`), keeping the one thing a sandbox
- * keeps between calls, which repository stands checked out and whether it
- * is shallow, and writing
+ * keeps between calls, which repository stands checked out, and writing
  * down every run and every firewall policy in the order they came, each
  * composed from the sources its write named as the service composes them
  * (`sandbox-firewall.ts`), with no launch kept beside them. A clone
@@ -15,7 +14,7 @@
 
 import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
 import { Effect } from "effect";
-import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import type {
   CommandResult,
   RepositorySandbox,
@@ -44,12 +43,6 @@ export interface SandboxDouble extends RepositorySandbox {
   readonly policies: NetworkPolicy[];
   /** The policy that stood while each clone ran, in order. */
   readonly policiesDuringClone: NetworkPolicy[];
-  /** The policy that stood while each deepen's fetch ran, in order. */
-  readonly policiesDuringFetch: NetworkPolicy[];
-  /** Whether the checkout standing is shallow: cloned at a depth and not deepened since. */
-  shallow: boolean;
-  /** How many fetches found the checkout shallow and deepened it. */
-  deepened: number;
   /** The repository checked out now, as the sandbox's record names it; nothing before a clone. */
   checkedOut: string | undefined;
   /** The clone's arguments, as the last clone was handed them. */
@@ -90,9 +83,6 @@ export function sandboxDouble(
     runs: [],
     policies: [],
     policiesDuringClone: [],
-    policiesDuringFetch: [],
-    shallow: false,
-    deepened: 0,
     checkedOut: undefined,
     clones: [],
     extraClones: [],
@@ -102,16 +92,6 @@ export function sandboxDouble(
     run: (run: SandboxRunOptions) => {
       const env = run.env;
       double.runs.push({ command: run.command, workingDirectory: run.workingDirectory, env });
-      // A deepen's step: the fetch of the rest of its history.
-      if (env?.[VARIABLE.DEEPEN] === DEEPEN_STEP.FETCH) {
-        double.policiesDuringFetch.push(policy);
-        if (double.checkedOut === undefined) {
-          return Promise.resolve(result(128, "", "fatal: not a git repository"));
-        }
-        if (double.shallow) double.deepened += 1;
-        double.shallow = false;
-        return Promise.resolve(result(EXIT.OK));
-      }
       // The checkout probe: which repository the record names, and whether a checkout stands.
       if (env?.[VARIABLE.URL] === undefined && env?.[VARIABLE.REPOSITORY] !== undefined) {
         const standing = double.checkedOut === env[VARIABLE.REPOSITORY];
@@ -142,7 +122,6 @@ export function sandboxDouble(
           return Promise.resolve(result(scripted.exitCode, "", scripted.stderr));
         }
         double.checkedOut = env?.[VARIABLE.REPOSITORY];
-        double.shallow = env?.[VARIABLE.DEPTH] !== undefined;
         return Promise.resolve(result(EXIT.OK));
       }
       if (run.workingDirectory === PATH.CHECKOUT && double.checkedOut === undefined) {

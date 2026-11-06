@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
@@ -20,8 +20,9 @@ import {
  * machine. A repository with no commits yet is cloned empty onto its default
  * branch, and its snapshot's checkout refreshes while it stays empty and
  * once its first commit lands; a branch missing from a repository with
- * commits still fails the clone in git's own words. Synthetic repositories
- * throughout.
+ * commits still fails the clone in git's own words; and what a clone or a
+ * refresh writes is the group's, though the sandbox's default user runs it
+ * at umask 0022. Synthetic repositories throughout.
  */
 
 const REPOSITORY = "acme/fresh";
@@ -58,9 +59,9 @@ function gitSucceeds(cwd: string, ...args: string[]): boolean {
 /**
  * The test's world: a folder of its own holding GitHub's bare repository of
  * `acme/fresh` with no commits, on `main`, and the sandbox's workspace, and
- * the sandbox over them, whose runs are a real bash with GitHub's address
- * rewritten to the bare repositories; the folder is removed as the test's
- * scope closes.
+ * the sandbox over them, whose runs are a real bash at the default user's
+ * umask, 0022, with GitHub's address rewritten to the bare repositories; the
+ * folder is removed as the test's scope closes.
  */
 const world = Effect.acquireRelease(
   Effect.sync(() => {
@@ -73,7 +74,7 @@ const world = Effect.acquireRelease(
     git(remote, "init", "--quiet", "--bare", "--initial-branch=main");
     const sandbox: RepositorySandbox = {
       run: async ({ command, workingDirectory, env }) => {
-        const ran = spawnSync("bash", ["-c", command], {
+        const ran = spawnSync("bash", ["-c", `umask 0022\n${command}`], {
           cwd: join(workspace, (workingDirectory ?? PATH.WORKSPACE).slice(PATH.WORKSPACE.length)),
           encoding: "utf8",
           env: {
@@ -110,9 +111,7 @@ it.effect(
       Effect.gen(function* () {
         const { checkout, sandbox } = yield* world;
 
-        yield* cloneRepository(sandbox, { fullName: REPOSITORY, defaultBranch: "main" }, TOKEN, {
-          depth: "1",
-        });
+        yield* cloneRepository(sandbox, { fullName: REPOSITORY, defaultBranch: "main" }, TOKEN);
 
         assert.equal(git(checkout, "symbolic-ref", "HEAD"), "refs/heads/main");
         assert.equal(gitSucceeds(checkout, "rev-parse", "--quiet", "--verify", "HEAD"), false);
@@ -133,7 +132,6 @@ it.effect(
           sandbox,
           { fullName: REPOSITORY, defaultBranch: "deleted-since" },
           TOKEN,
-          { depth: "1" },
         ).pipe(Effect.flip);
 
         assert.match(refused.reason, /Remote branch deleted-since not found/u);
@@ -162,6 +160,49 @@ it.effect(
         yield* refreshRepository(sandbox, confirmed, TOKEN);
         assert.equal(git(checkout, "rev-parse", "HEAD"), first);
         assert.equal(git(checkout, "symbolic-ref", "HEAD"), "refs/heads/main");
+      }),
+    ),
+);
+
+/** A commit adding the file named pushed to the bare repository's `main`, from the seed clone, made where it is missing. */
+function pushFile(root: string, remote: string, name: string): void {
+  const seed = join(root, "seed");
+  if (!gitSucceeds(root, "-C", seed, "rev-parse", "--git-dir")) {
+    git(root, "clone", "--quiet", remote, seed);
+  }
+  writeFileSync(join(seed, name), `${name}\n`);
+  git(seed, "add", name);
+  git(seed, "commit", "--quiet", "--message", `Add ${name}`);
+  git(seed, "push", "--quiet", "origin", "HEAD:main");
+}
+
+/** Whether the group may write the path, as a user in the default user's group needs to. */
+function groupWrites(path: string): boolean {
+  return (statSync(path).mode & 0o020) !== 0;
+}
+
+it.effect(
+  "what a clone and a refresh write is the group's, its repository shared with the group, though the sandbox runs them at umask 0022",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { root, remote, checkout, sandbox } = yield* world;
+        pushFile(root, remote, "cloned.txt");
+        const confirmed = { fullName: REPOSITORY, defaultBranch: "main", recordedAs: REPOSITORY };
+        yield* cloneRepository(
+          sandbox,
+          { ...confirmed, recordedAs: snapshotRecordOf(REPOSITORY) },
+          TOKEN,
+        );
+        pushFile(root, remote, "fetched.txt");
+
+        yield* refreshRepository(sandbox, confirmed, TOKEN);
+
+        assert.deepEqual(
+          [checkout, join(checkout, "cloned.txt"), join(checkout, "fetched.txt")].map(groupWrites),
+          [true, true, true],
+        );
+        assert.equal(git(checkout, "config", "--get", "core.sharedRepository"), "group");
       }),
     ),
 );
