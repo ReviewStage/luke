@@ -115,6 +115,7 @@ import {
   recordAgentRunnerToken,
 } from "@repo/database/models/agent-store";
 import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
+import { holdsSessionEntries } from "@repo/database/models/claude-session-entries";
 import {
   clearNativeRewindHanded,
   readNativeRewind,
@@ -1083,8 +1084,9 @@ export const runnerSessions = <
 
     /**
      * The session a new place resumes where the service keeps the CLI's
-     * transcript: the conversation's own, as for a place made anew in place
-     * of one whose disk was lost, or, at a continued or forked agent's first
+     * transcript: the conversation's own where the service holds it, as for
+     * a place made anew in place of one whose disk was lost, or, at a
+     * continued or forked agent's first
      * open, its source's, whose transcript the Start copied, forked as its
      * own; none for an agent that has neither.
      */
@@ -1094,7 +1096,11 @@ export const runnerSessions = <
         const own = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
-        if (own !== undefined) return { resume: own, fork: false };
+        // Note that an agent from before the store keeps no transcript there, so its session starts fresh.
+        if (own !== undefined) {
+          const held = yield* holdsSessionEntries(userId, agent.conversationId);
+          return held ? { resume: own, fork: false } : {};
+        }
         const source = agent.startedFrom?.session;
         return source === undefined ? {} : { resume: source, fork: true };
       });
@@ -1165,8 +1171,8 @@ export const runnerSessions = <
      * (`created`), the harness's session and the member's installed skills
      * went with that disk, so the skills are uploaded again, as a new
      * place's are, and its session resumes only where the service keeps its
-     * transcript (`MachineLayout`'s `transcriptsKept`), starting fresh
-     * otherwise.
+     * transcript (`MachineLayout`'s `transcriptsKept`) and holds it, starting
+     * fresh otherwise.
      */
     const relaunched = (
       agent: Agent,
@@ -1189,10 +1195,13 @@ export const runnerSessions = <
           { concurrency: "unbounded" },
         );
         // Note that a place made anew still resumes the session where the service keeps its transcript.
-        const resume =
-          created && !layout.transcriptsKept
-            ? undefined
-            : Option.getOrUndefined(Option.flatMapNullishOr(routing, (read) => read.nativeSession));
+        const kept =
+          created && layout.transcriptsKept
+            ? yield* holdsSessionEntries(userId, agent.conversationId)
+            : !created;
+        const resume = kept
+          ? Option.getOrUndefined(Option.flatMapNullishOr(routing, (read) => read.nativeSession))
+          : undefined;
         yield* launch(
           agent,
           { name, running, session: sessionId },
