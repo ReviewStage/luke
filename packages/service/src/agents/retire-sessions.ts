@@ -33,19 +33,31 @@ import {
  * sweep.
  */
 
+/**
+ * The retires' bounds, held under the shortest deadline of a client that
+ * waits on a delete: a task's or an agent's delete on the account call's
+ * ten seconds (`@repo/features/account-call`'s `REQUEST_TIMEOUT_MS`), an
+ * account's deletion on the desktop's fifteen
+ * (`@repo/credentials/account/client`'s `DELETE_TIMEOUT_MS`). Note that a
+ * native reset is a few store writes and one sandbox delete
+ * (`runner-sessions.ts`'s `reset`, `machine.discard`), so a reset that has
+ * not answered in seconds is one the sandbox queue finishes better than
+ * the caller waits on; past these the client would say the delete did not
+ * answer while it went on and deleted all the same.
+ */
 const RETIRE_SESSIONS = {
   CONCURRENCY: 4,
   /** How long one reset is waited on before it is logged and left. */
-  TIMEOUT: Duration.seconds(35),
+  TIMEOUT: Duration.seconds(5),
   /**
-   * How long a delete spends on its retires in all. Note that the whole is
-   * bounded as well as each, because a large account's retires, four at a
-   * time at up to thirty-five seconds apiece, would otherwise outlast the
-   * function, which would end with the sessions retired and the account
-   * still standing. Past this the rest are skipped and logged, as one past
-   * its own timeout is, and the delete goes on.
+   * How long a delete spends on its retires in all, leaving the rest of the
+   * ten seconds to the delete behind them. Note that the whole is bounded
+   * as well as each, because a large account's retires, four at a time at
+   * up to five seconds apiece, would otherwise outlast the client's
+   * deadline. Past this the rest are skipped and logged, as one past its
+   * own timeout is, and the delete goes on.
    */
-  BUDGET: Duration.seconds(60),
+  BUDGET: Duration.seconds(8),
 } as const;
 
 /** The sessions a delete retires what it deletes through, typed to retire a session and nothing else. */

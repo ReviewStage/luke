@@ -39,19 +39,19 @@ function eveRetiring(hanging: ReadonlySet<string>) {
 
 it.layer(getTestDB())("sessions retired", (it) => {
   it.effect(
-    "a large account's retires end a minute in, however many are left waiting, so the erase behind them runs",
+    "a large account's retires end eight seconds in, however many are left waiting, so the erase behind them runs",
     () =>
       Effect.gen(function* () {
-        // Twelve sessions never answered: each alone would give up at thirty-five seconds, four
-        // at a time, so the three rounds without a budget would run to a hundred and five.
+        // Twelve sessions never answered: each alone would give up at five seconds, four at a
+        // time, so the three rounds without a budget would run to fifteen.
         const hung = sessionsNamed(12, "hung");
         const { eveAt } = eveRetiring(new Set(hung.map(({ sessionId }) => sessionId)));
         const retiring = yield* Effect.forkChild(retireSessions(eveAt, hung));
 
-        yield* TestClock.adjust(Duration.seconds(59));
-        assert.equal(retiring.pollUnsafe(), undefined, "still retiring before the minute");
+        yield* TestClock.adjust(Duration.seconds(7));
+        assert.equal(retiring.pollUnsafe(), undefined, "still retiring before the budget");
         yield* TestClock.adjust(Duration.seconds(1));
-        assert.notEqual(retiring.pollUnsafe(), undefined, "done at the minute");
+        assert.notEqual(retiring.pollUnsafe(), undefined, "done at the budget");
       }).pipe(Effect.provide(noNetwork)),
   );
 
@@ -63,7 +63,7 @@ it.layer(getTestDB())("sessions retired", (it) => {
         retireSessions(eveAt, [...sessionsNamed(1, "hung"), ...answered]),
       );
 
-      yield* TestClock.adjust(Duration.seconds(60));
+      yield* TestClock.adjust(Duration.seconds(8));
       yield* Fiber.join(retiring);
       assert.deepEqual(
         [...retired].sort(),
