@@ -9,6 +9,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -124,8 +125,8 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
     }),
     mainTabs: {
       ...base.mainTabs,
-      tabs: [{ agent: AGENT.id }],
-      tab: shown === "agent" ? { agent: AGENT.id } : base.mainTabs.tab,
+      tabs: [agentTab(AGENT.id)],
+      tab: shown === "agent" ? agentTab(AGENT.id) : base.mainTabs.tab,
     },
   });
   const page = document.createElement("div");

@@ -6,6 +6,7 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { IMAGE_OPENING, type ImageOpening } from "@repo/ui";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import type { ImageView } from "@repo/ui/image-zoom";
+import { fileTab } from "@repo/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -518,7 +519,7 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
         registry,
         createElement(
           FindScope,
-          { active: true, subject: { task: "task-1", tab: { file: "plan.md" } } },
+          { active: true, subject: { task: "task-1", tab: fileTab("plan.md") } },
           createElement("p", null, "One seat in the tab"),
           createElement(AttachmentViewer, {
             files: [notes],

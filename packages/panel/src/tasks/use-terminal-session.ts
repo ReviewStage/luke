@@ -15,8 +15,10 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   isTerminalTab,
   type LocalStripTab,
+  localTab,
   sameTab,
   type TerminalStripTab,
+  terminalTab,
 } from "@repo/ui/tab-strip-model";
 import { Duration, Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -228,8 +230,8 @@ function shellOf(tab: ShellTab): {
 /** The tab of one of an agent's terminals of the kind. */
 function tabOf(kind: TerminalKind, agentId: string, held: HeldShell): ShellTab {
   return kind === TERMINAL_KIND.CLOUD
-    ? { terminal: agentId, shell: held.shell, title: held.title }
-    : { local: agentId, shell: held.shell, title: held.title };
+    ? terminalTab(agentId, held.shell, held.title)
+    : localTab(agentId, held.shell, held.title);
 }
 
 /** A new terminal of the kind minted in the window's list after the agent's others, and its tab. */

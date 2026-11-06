@@ -5,7 +5,9 @@ import {
   type AgentStripTab,
   type ChangesStripTab,
   type CloudBrowserStripTab,
+  cloudBrowserTab,
   type FileStripTab,
+  fileTab,
   inTaskOrder,
   isAgentTab,
   isChangesTab,
@@ -21,10 +23,12 @@ import {
   openedOrder,
   type PageStripTab,
   replacementOf,
+  STRIP_TAB_KIND,
   type StripTab,
   type SubagentStripTab,
   sameTab,
   stampedViewed,
+  storedStripTab,
   TAB_WORDS,
   type TerminalStripTab,
   type TranscriptStripTab,
@@ -370,15 +374,13 @@ const sidePanelTabSchema = Schema.Literals([
   ...Object.values(RETIRED_SIDE_PANEL_TAB),
 ]);
 /** An agent's Changes tab as it is kept, on the task it was opened on, with the number of the pull request it names where it names one. */
-const changesTabSchema = Schema.Struct({
+const changesTabSchema = storedStripTab(STRIP_TAB_KIND.CHANGES, {
   changes: Schema.String,
   number: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
 });
-const anyTabSchema = Schema.Union([
-  sidePanelTabSchema,
-  Schema.Struct({ agent: Schema.String }),
-  changesTabSchema,
-]);
+/** An agent's tab as an earlier version kept it. */
+const agentTabSchema = storedStripTab(STRIP_TAB_KIND.AGENT, { agent: Schema.String });
+const anyTabSchema = Schema.Union([sidePanelTabSchema, agentTabSchema, changesTabSchema]);
 
 /**
  * How many tabs are kept pinned to the sidebar, the latest pinned. Note that
@@ -396,15 +398,12 @@ const PINS_KEPT = 100;
  */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
-  Schema.Struct({ file: Schema.String }),
+  storedStripTab(STRIP_TAB_KIND.FILE, { file: Schema.String }),
   changesTabSchema,
 ]);
 
 /** The tab a pin an earlier version kept on a task opens: today's kinds, or a coding agent's, which the account pins now. */
-const keptTaskPinTabSchema = Schema.Union([
-  pinnableTabSchema,
-  Schema.Struct({ agent: Schema.String }),
-]);
+const keptTaskPinTabSchema = Schema.Union([pinnableTabSchema, agentTabSchema]);
 
 /**
  * A tab pinned to the sidebar on a task: the task, the tab, the name the
@@ -505,7 +504,7 @@ interface PinNames {
 /** A tab an earlier version pinned in the strip itself, of any kind it then held but a draft agent's. */
 const stripPinSchema = Schema.Union([
   keptTaskPinTabSchema,
-  Schema.Struct({
+  storedStripTab(STRIP_TAB_KIND.SUBAGENT, {
     subagent: Schema.String,
     delegation: Schema.optionalKey(Schema.Struct({ agent: Schema.String, task: Schema.String })),
   }),
@@ -1253,7 +1252,7 @@ function withFileOpened(
     standing === undefined
       ? [...held.files, opened]
       : held.files.map((each) => (each === standing ? opened : each));
-  return { ...held, files, tab: { file: ref.path }, open: true };
+  return { ...held, files, tab: fileTab(ref.path), open: true };
 }
 
 /**
@@ -1269,7 +1268,7 @@ function withOpenFileChosen(
   taskId: string | undefined,
   reads: FileReads | undefined,
 ): HeldState {
-  const tab: SidePanelTab = { file: open.path };
+  const tab: SidePanelTab = fileTab(open.path);
   const drawnHere = drawn.files.includes(open.path)
     ? held
     : {
@@ -1298,7 +1297,7 @@ function withFileShown(
 ): HeldState {
   const open = held.files.find((each) => each.path === path);
   if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId, reads);
-  const tab: SidePanelTab = { file: path };
+  const tab: SidePanelTab = fileTab(path);
   const placed = withTabLast(withChosenViewed(held, tab, drawn), tab, drawn);
   return withFileBrowsed(placed, taskId, undefined, path, reads);
 }
@@ -1333,7 +1332,7 @@ function withFileStepped(
   };
   const files = held.files.map((each) => (each === from ? stepped : each));
   const placed = withFileInPlace(held, taskId, from.path, to.path);
-  return { ...placed, files, tab: { file: to.path }, open: true };
+  return { ...placed, files, tab: fileTab(to.path), open: true };
 }
 
 /**
@@ -1362,7 +1361,7 @@ function withFileBrowsed(
       ? [...held.files, browsed]
       : held.files.map((each) => (each === from ? browsed : each));
   const placed = from === undefined ? held : withFileInPlace(held, taskId, from.path, to);
-  return { ...placed, files, tab: { file: to }, open: true };
+  return { ...placed, files, tab: fileTab(to), open: true };
 }
 
 /**
@@ -1440,7 +1439,7 @@ const cloudBrowserTabs = new Map<string, CloudBrowserStripTab>();
 function cloudBrowserTabOf(id: string): CloudBrowserStripTab {
   const held = cloudBrowserTabs.get(id);
   if (held !== undefined) return held;
-  const made = { cloudBrowser: id };
+  const made = cloudBrowserTab(id);
   cloudBrowserTabs.set(id, made);
   return made;
 }
@@ -1472,7 +1471,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnFixed(held, drawn.task),
     ...held.transcripts.filter((each) => drawsTranscript(each, drawn)),
     ...drawnSubagents(held, drawn),
-    ...drawnFiles(held, drawn).map((file) => ({ file })),
+    ...drawnFiles(held, drawn).map((file) => fileTab(file)),
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
@@ -1600,9 +1599,9 @@ function withPreviewMoved(
   to: string,
 ): HeldState {
   const preview = taskId === undefined ? undefined : held.previews[taskId];
-  if (taskId === undefined || preview === undefined || !sameTab(preview, { file: from }))
+  if (taskId === undefined || preview === undefined || !sameTab(preview, fileTab(from)))
     return held;
-  return { ...held, previews: { ...held.previews, [taskId]: { file: to } } };
+  return { ...held, previews: { ...held.previews, [taskId]: fileTab(to) } };
 }
 
 /**
@@ -1644,7 +1643,7 @@ function withFileAsked(
   if (ref.startLine === undefined && commit === undefined) {
     return withFileShown(held, ref.path, drawn, taskId, reads);
   }
-  const tab: SidePanelTab = { file: ref.path };
+  const tab: SidePanelTab = fileTab(ref.path);
   return withFileOpened(
     withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
     ref,
@@ -1721,7 +1720,7 @@ function withFileInPlace(
   const others = order.filter((tab) => !isFileTab(tab) || tab.file !== to);
   return withTaskTabs(held, taskId, (choices) => ({
     ...choices,
-    order: others.map((tab) => (isFileTab(tab) && tab.file === from ? { file: to } : tab)),
+    order: others.map((tab) => (isFileTab(tab) && tab.file === from ? fileTab(to) : tab)),
   }));
 }
 
@@ -2295,7 +2294,7 @@ export function useSidePanel(
     (ref: CodeRef, commit?: string, reads?: FileReads) => {
       setOpened((was) => was + 1);
       update((held) => ({
-        ...withPreview(held, { file: ref.path }, drawn, (from) =>
+        ...withPreview(held, fileTab(ref.path), drawn, (from) =>
           withFileAsked(from, ref, commit, drawn, taskId, reads ?? fileReads),
         ),
         open: true,
@@ -2320,7 +2319,7 @@ export function useSidePanel(
         if (standing === undefined || held.files.some((each) => each.path === path)) {
           return withFileShown(held, path, drawn, taskId, tree?.reads ?? fileReads);
         }
-        const viewed = withChosenViewed(held, { file: path }, drawn);
+        const viewed = withChosenViewed(held, fileTab(path), drawn);
         return withPreviewMoved(
           withFileBrowsed(viewed, taskId, standing, path, standing.reads),
           taskId,
@@ -2345,7 +2344,7 @@ export function useSidePanel(
         if (open !== undefined)
           return withOpenFileChosen(held, open, drawn, taskId, standing.reads);
         const stepped = withFileStepped(
-          withChosenViewed(held, { file: to }, drawn),
+          withChosenViewed(held, fileTab(to), drawn),
           taskId,
           standing,
           step,
