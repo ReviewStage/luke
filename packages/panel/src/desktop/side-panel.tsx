@@ -145,6 +145,7 @@ import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
+import { stripTabTitle } from "../tasks/strip-tab-kinds.js";
 import {
   AgentGlyph,
   agentEndMark,
@@ -2698,24 +2699,18 @@ export function SidePanel({
     const line = listed?.find((each) => each.id === tab.page);
     return line === undefined ? [] : [{ tab, line, place }];
   });
+  // The strip is named by its tab as the panel draws it: a file by its whole path, and an agent the task does not list by the word for one.
   const label =
     tab === undefined
       ? undefined
-      : isTranscriptTab(tab)
-        ? (taskAgentLabel(agents, tab.transcript) ?? TAB_WORDS.AGENT)
-        : isSubagentTab(tab)
-          ? subagents.find((each) => sameTab(each.tab, tab))?.label
-          : isFileTab(tab)
-            ? tab.file
-            : isChangesTab(tab)
-              ? changesLook(tab, agentsOf(tab.changes)).label
-              : isPageTab(tab)
-                ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
-                : isTerminalTab(tab) || isLocalTab(tab)
-                  ? tab.title
-                  : isCloudBrowserTab(tab)
-                    ? cloudBrowserLabel(tab.cloudBrowser)
-                    : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+      : stripTabTitle(tab, {
+          agent: (agentId) => taskAgentLabel(agents, agentId) ?? TAB_WORDS.AGENT,
+          subagent: (subagent) => subagents.find((each) => sameTab(each.tab, subagent))?.label,
+          file: (path) => path,
+          pullRequest: (changes) => changesLook(changes, agentsOf(changes.changes)).label,
+          page: (page) => pageTabs.find((each) => sameTab(each.tab, page))?.line.title,
+          browser: cloudBrowserLabel,
+        });
   // A page or a file of another task than the panel's own names that task under the bar, and Open task goes
   // there with the tab still chosen, the panel standing as it is.
   const ownTask = holder === SIDE_PANEL_HOLDER.AGENT || onAgent ? undefined : taskId;

@@ -103,22 +103,7 @@
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
 import { linkOf, type ReadLink, taskLinkStep } from "@repo/features/link-grammar";
 import { workspaceOfSlug } from "@repo/features/workspace-wire";
-import {
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isDraftTab,
-  isFileTab,
-  isLocalTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  isTranscriptTab,
-  type StripTab,
-  sameTab,
-  tabKey,
-  taggedStripTab,
-} from "@repo/ui/tab-strip-model";
+import { type StripTab, sameTab, tabKey, taggedStripTab } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
 import { type HistoryLocation, type RouterHistory, useRouter } from "@tanstack/react-router";
@@ -146,8 +131,9 @@ import {
 import { useRoutedLocation } from "./routed-location.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
+import { stripTabSurface } from "./tasks/strip-tab-kinds.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
+import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import type { InboxChoice, LeaveGuard, TasksControl } from "./tasks/use-tasks-tab.js";
 import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 import type { VersionHistoryRoute } from "./version-history-route.js";
@@ -449,23 +435,8 @@ function ledWithin(one: Place, other: Place, pressed: boolean, opened: boolean):
 }
 
 /** The surface a tab of a task's column or side panel shows, which a task's own fixed tabs name by the task; `side` marks one of the side panel's, which stands beside the column's of the same kind. */
-function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
-  if (isAgentTab(tab) || isDraftTab(tab) || isTranscriptTab(tab)) {
-    return { surface: PRODUCT_SURFACE.AGENT, of: tabKey(tab), side };
-  }
-  const of = tabKey(tab);
-  if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of, side };
-  if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of, side };
-  if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of, side };
-  if (isTerminalTab(tab) || isLocalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
-  if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
-  if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
-  // A word of a strip's own: the column's Overview, which shows the task, the task's Inbox, or its comments.
-  if (tab === SIDE_PANEL_TAB.INBOX) return { surface: PRODUCT_SURFACE.INBOX, of: taskId, side };
-  if (tab === SIDE_PANEL_TAB.COMMENTS) {
-    return { surface: PRODUCT_SURFACE.COMMENTS, of: taskId, side };
-  }
-  return { surface: PRODUCT_SURFACE.TASK, of: taskId, side };
+function tabSurface(taskId: string, tab: SidePanelTab | MainTab, side: boolean): OpenSurface {
+  return { ...stripTabSurface(tab, taskId), side };
 }
 
 /**
