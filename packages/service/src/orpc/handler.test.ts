@@ -21,7 +21,7 @@ import { HOSTED_API_ERROR } from "@repo/features";
 import { bodyCap, HOSTED_ERRORS } from "@repo/features/contract";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { HTTP_METHOD } from "@repo/wire";
-import { Context, Effect, Layer, Schema, SchemaTransformation } from "effect";
+import { Cause, Context, Effect, ErrorReporter, Layer, Schema, SchemaTransformation } from "effect";
 import { HttpRouter } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -33,6 +33,7 @@ import {
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
 import type { HostedContext } from "./base.js";
+import { UndeclaredRefusal } from "./errors.js";
 import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "./handler.js";
 
 const ORIGIN = "https://app.test";
@@ -42,6 +43,8 @@ const ITEMS_PATH = "/api/test/items";
 const DEFECT_PATH = "/api/test/defect";
 const CAPPED_PATH = "/api/test/capped";
 const LIMITED_PATH = "/api/test/limited";
+const DECLARED_PATH = "/api/test/declared";
+const UNDECLARED_PATH = "/api/test/undeclared";
 
 /** A small cap of the capped procedure's own, in bytes, well under the handler's ceiling. */
 const CAP = 64;
@@ -91,6 +94,16 @@ const testContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: CAPPED_PATH }), bodyCap(CAP))
     .input(itemSchema)
     .output(Schema.flip(itemSchema)),
+  declared: oc
+    .errors({
+      [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]:
+        HOSTED_ERRORS[HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE],
+    })
+    .meta(openapi({ method: HTTP_METHOD.GET, path: DECLARED_PATH }))
+    .output(Schema.flip(itemSchema)),
+  undeclared: oc
+    .meta(openapi({ method: HTTP_METHOD.GET, path: UNDECLARED_PATH }))
+    .output(Schema.flip(itemSchema)),
 };
 
 const test = implement(testContract).$context<HostedContext>();
@@ -108,6 +121,12 @@ const testRouter = test.router({
     return yield* Effect.die(new Error("a defect"));
   }),
   capped: test.capped.handler(({ input }) => ({ name: input.name })),
+  declared: test.declared.effect(function* () {
+    return yield* Effect.fail(repositoryNotReachable(UNREACHED));
+  }),
+  undeclared: test.undeclared.effect(function* () {
+    return yield* Effect.fail(repositoryNotReachable(UNREACHED));
+  }),
 });
 
 /** The route groups' way of answering the same values: `hostedJsonResponse`, `hostedRefusing`, and a defect left to the platform. */
@@ -133,6 +152,16 @@ const oldGroup = Layer.mergeAll(
     hostedRefusing(Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
   ),
   HttpRouter.add(HTTP_METHOD.GET, DEFECT_PATH, Effect.die(new Error("a defect"))),
+  HttpRouter.add(
+    HTTP_METHOD.GET,
+    DECLARED_PATH,
+    hostedRefusing(Effect.fail(repositoryNotReachable(UNREACHED))),
+  ),
+  HttpRouter.add(
+    HTTP_METHOD.GET,
+    UNDECLARED_PATH,
+    hostedRefusing(Effect.fail(repositoryNotReachable(UNREACHED))),
+  ),
 );
 
 interface Bytes {
@@ -154,7 +183,11 @@ const read = (response: Response) =>
   );
 
 /** The same request answered by the oRPC router and by the old group. */
-const bothAnswer = (init: { path: string; method?: string; body?: string }) =>
+const bothAnswer = (
+  init: { path: string; method?: string; body?: string },
+  // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+  services = Context.empty() as Context.Context<WebServices>,
+) =>
   Effect.gen(function* () {
     const request = () => {
       const requestInit: RequestInit = { method: init.method ?? HTTP_METHOD.GET };
@@ -164,8 +197,6 @@ const bothAnswer = (init: { path: string; method?: string; body?: string }) =>
       }
       return new Request(new URL(init.path, ORIGIN), requestInit);
     };
-    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
-    const services = Context.empty() as Context.Context<WebServices>;
     const handle = hostedFetch(testRouter);
     const orpc = yield* read(yield* Effect.promise(() => handle(request(), services)));
     const { handler, dispose } = HttpRouter.toWebHandler(oldGroup, { disableLogger: true });
@@ -221,6 +252,33 @@ it.effect("an input its schema refuses is the hosted vocabulary's invalid reques
     assert.deepEqual(orpc, old);
     assert.equal(orpc.text, '{"error":"invalid-request"}');
   }),
+);
+
+it.effect(
+  "a refusal its procedure does not declare is reported as a defect by its path and slug alone, and answered as a declared one is",
+  () =>
+    Effect.gen(function* () {
+      const reported: { defect: unknown; attributes: object }[] = [];
+      const reporter = ErrorReporter.make(({ cause, attributes }) => {
+        reported.push({ defect: Cause.squash(cause), attributes });
+      });
+      // SAFETY: the test procedures yield no service but the reporters, which stand in for the web runtime's.
+      const services = Context.make(
+        ErrorReporter.CurrentErrorReporters,
+        new Set([reporter]),
+      ) as Context.Context<WebServices>;
+      const declared = yield* bothAnswer({ path: DECLARED_PATH }, services);
+      assert.deepEqual(declared.orpc, declared.old);
+      assert.deepEqual(reported, []);
+      const undeclared = yield* bothAnswer({ path: UNDECLARED_PATH }, services);
+      assert.deepEqual(undeclared.orpc, undeclared.old);
+      assert.equal(reported.length, 1);
+      assert.ok(reported[0]?.defect instanceof UndeclaredRefusal);
+      assert.deepEqual(reported[0]?.attributes, {
+        procedure: "undeclared",
+        refusal: "repository-not-reachable",
+      });
+    }),
 );
 
 it.effect("a defect is a bare 500, as the platform's web handler answered one", () =>
