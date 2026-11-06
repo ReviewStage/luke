@@ -24,6 +24,8 @@ import {
   agentInboxAttachmentParamsSchema,
   agentInboxAttachmentViewSchema,
   agentInboxCloseParamsSchema,
+  agentInboxCloseReleasedViewSchema,
+  agentInboxCloseReleaseParamsSchema,
   agentInboxItemHomeParamsSchema,
   agentInboxItemHomeViewSchema,
   agentInboxMessagedViewSchema,
@@ -68,6 +70,11 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(agentInboxCloseParamsSchema))
     .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE]: actProcedure(
+    "Could not undo resolving the inbox item on this system.",
+  )
+    .input(exactInput(agentInboxCloseReleaseParamsSchema))
+    .output(agentInboxCloseReleasedViewSchema),
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: actProcedure(
     "Could not send the message on this system.",
   )

@@ -231,7 +231,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     reading,
     choose,
     clear,
-    closeItem,
+    resolveItems,
     onRetry,
   } = useInboxListing(tasks, narrowedTask);
   const unread = useMemo(() => anyUnread(standing), [standing]);
@@ -534,7 +534,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   openPlace: openPlaceHere,
                 }),
                 onMark: markItem,
-                onClose: closeItem,
+                onClose: resolveItems,
                 onRemind: marks.onRemind,
               }}
             />
@@ -649,7 +649,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   }
                   onChoose={open}
                   onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                  onClose={closeItem}
+                  onClose={resolveItems}
                   onRemind={marks.onRemind}
                   onPointing={onPointing}
                 />

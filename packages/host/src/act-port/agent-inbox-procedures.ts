@@ -21,6 +21,8 @@ import type {
   AgentInboxAttachmentParams,
   AgentInboxAttachmentView,
   AgentInboxCloseParams,
+  AgentInboxCloseReleasedView,
+  AgentInboxCloseReleaseParams,
   AgentInboxItemHomeParams,
   AgentInboxItemHomeView,
   AgentInboxMessagedView,
@@ -51,6 +53,10 @@ export interface AgentInboxProceduresDependencies {
     agentInboxItemsRetry(): Effect.Effect<void>;
     agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
     agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
+    /** A held close let go by its key: sent, or taken back as its Undo asks. */
+    agentInboxCloseRelease(
+      params: AgentInboxCloseReleaseParams,
+    ): Effect.Effect<AgentInboxCloseReleasedView>;
     agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
@@ -116,6 +122,12 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentInboxClose(input);
+    }),
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentInboxCloseRelease(input);
     }),
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE
