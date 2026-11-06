@@ -3,8 +3,8 @@
  *
  * Every concern but the platform ones runs wherever the host does. A
  * platform concern reaches something only some hosts have: a process
- * spawner, This Mac's host, a terminal's relay socket, a
- * loopback the browser hands a sign-in back to. The
+ * spawner, This Mac's host, a terminal's relay socket, a listener on the
+ * machine's own loopback, a loopback the browser hands a sign-in back to. The
  * assembly is built with the platform concerns its host chose; one left out
  * is never started, asks for nothing, and answers each of its methods with a
  * refusal, so a client that asks anyway is told no rather than crashing.
@@ -32,6 +32,7 @@ export const HOST_CONCERN = {
   MAC_COMMANDS: "macCommands",
   THIS_MAC_HOST: "thisMacHost",
   TERMINALS: "terminals",
+  PORT_FORWARDS: "portForwards",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -41,6 +42,7 @@ export const HOST_PLATFORM_CONCERN = {
   MAC_COMMANDS: HOST_CONCERN.MAC_COMMANDS,
   THIS_MAC_HOST: HOST_CONCERN.THIS_MAC_HOST,
   TERMINALS: HOST_CONCERN.TERMINALS,
+  PORT_FORWARDS: HOST_CONCERN.PORT_FORWARDS,
 } as const;
 
 export type HostPlatformConcern =
@@ -60,6 +62,7 @@ export const isPlatformConcern = (concern: HostConcern): concern is HostPlatform
 const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
   [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: HOST_CAPABILITY.PORT_FORWARDS,
 } as const satisfies Readonly<Partial<Record<HostPlatformConcern, HostCapability>>>;
 
 /** `CAPABILITY_OF_CONCERN` read by any platform concern, one that offers none among them. */
@@ -125,6 +128,10 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.BROWSER_LIVE_CONNECT,
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
+  ],
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [
+    GATEWAY_METHOD.PORT_FORWARDS_READ,
+    GATEWAY_METHOD.PORT_FORWARDS_SET,
   ],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 

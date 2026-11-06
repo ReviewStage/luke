@@ -19,6 +19,7 @@ import {
   AppIdentity,
   Environment,
   IdSource,
+  LoopbackListener,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -137,6 +138,7 @@ describe("the host's platform concerns", () => {
             desktopAccountSource,
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
+            Layer.succeed(LoopbackListener, () => Effect.succeed(undefined)),
             Layer.succeed(ThisMacHost, {
               stateRoot,
               runsHost: false,
@@ -166,6 +168,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.PORT_FORWARDS,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
       assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
@@ -174,6 +177,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.PORT_FORWARDS,
         HOST_CAPABILITY.CLI_INSTALL,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);
