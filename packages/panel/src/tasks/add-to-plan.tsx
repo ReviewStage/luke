@@ -15,13 +15,13 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
-import { keepPictureRead } from "@repo/ui/picture-cache";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
 import { unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { encodeImage } from "../feedback-images.js";
+import { keepPictureRead } from "../picture-query.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { ViewerAction } from "./attachment-viewer.js";
@@ -133,6 +133,7 @@ export function useAddToPlan(): ViewerAction | undefined {
   const page = useTaskMentions();
   const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
   const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
+  const queryClient = useQueryClient();
   const toast = useToast();
   const working = useWorkingToast();
   return useMemo(() => {
@@ -166,7 +167,7 @@ export function useAddToPlan(): ViewerAction | undefined {
         unreachedAs(PICTURE_KEEP_FAILURE.UNANSWERED),
       );
       if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure], kept);
-      keepPictureRead(taskId, kept.id, url);
+      keepPictureRead(queryClient, taskId, kept.id, url);
       const address = planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace);
       const line = taskPictureLine(wordsOf(chip), address);
       // Note that the edit is written on the plan's words as the page last read
@@ -215,5 +216,5 @@ export function useAddToPlan(): ViewerAction | undefined {
       icon: <ImagePlusIcon aria-hidden="true" />,
       onPress: (chip: FileChip) => void add(chip),
     };
-  }, [plansOn, sendEdit, sendKeep, page, toast, working]);
+  }, [plansOn, sendEdit, sendKeep, queryClient, page, toast, working]);
 }

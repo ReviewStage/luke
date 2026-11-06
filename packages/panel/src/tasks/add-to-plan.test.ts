@@ -12,7 +12,7 @@ import { experimentsOn } from "@repo/settings/testing";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
@@ -208,9 +208,13 @@ async function drawn(
 /** The viewer opened over the picture, by a press on it, or over the recording, by its Expand. */
 async function opened(container: HTMLElement) {
   // Note that a recording opens by its bar's Expand, and a picture by its tile.
-  const picture =
+  const pressed = () =>
     container.querySelector<HTMLButtonElement>('.picture-block button[aria-label="Expand"]') ??
     container.querySelector<HTMLButtonElement>(".picture-block button");
+  await vi.waitFor(() =>
+    assert.equal(pressed() === null, false, "the picture is drawn, its bytes read"),
+  );
+  const picture = pressed();
   assert.ok(picture, "the picture is drawn, its bytes read");
   await act(async () => picture.click());
 }

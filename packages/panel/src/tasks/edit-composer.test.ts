@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import {
   composerEditor,
   editorBundleLanded,
@@ -272,7 +272,12 @@ test("a picture still being read holds Send, and joins the box once it lands", a
   assert.deepEqual(box.ended, [], "nothing goes while the picture is read");
 
   await act(async () => land?.());
-  await settle();
+  await vi.waitFor(() =>
+    assert.equal(
+      box.container.querySelector(`img[src="data:image/png;base64,${PIXEL}"]`) === null,
+      false,
+    ),
+  );
   pressInComposer(box.container, "Enter");
   await settle();
 
