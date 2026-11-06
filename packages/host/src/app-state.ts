@@ -28,6 +28,7 @@ import type {
   AutomationSummary,
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
@@ -45,7 +46,6 @@ import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
-import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type { PortForwarding } from "@repo/features/port-forward-acts";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
@@ -970,12 +970,6 @@ export interface AppState {
  */
 export interface AppWindowFacts {
   fullScreen: boolean;
-  /**
-   * Whether a development build's label, the branch it was cut from, is
-   * hidden for now, as View > Developer > Show Build Label leaves it for a
-   * demo; absent while it is drawn, and in every build that draws none.
-   */
-  buildLabelHidden?: boolean;
 }
 
 /**

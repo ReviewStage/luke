@@ -55,8 +55,6 @@ interface WindowSurfaceDependencies {
   captureStill: (sender: WebContents, rect: CapturedRect) => Promise<string | null>;
   /** Keeps whether a panel holds unsaved work, which a quit, a restart to update, and a sign-out ask about. */
   tellUnsavedWork: (sender: WebContents, holding: boolean) => void;
-  /** Draws or hides a development build's label, answering false in a build that draws none. */
-  showBuildLabel: (shown: boolean) => boolean;
   /** Keeps which commands a panel offers now, which the menu bar dims the rest of while it is focused. */
   tellMenuOffers: (sender: WebContents, commands: readonly AppCommand[]) => void;
 }
@@ -164,11 +162,6 @@ export function windowSurfaceProcedures(
     ].handler(({ input, context, errors }) => {
       if (!context.actor.panel) throw errors.REFUSED();
       dependencies.tellUnsavedWork(context.actor.sender, input.holding);
-    }),
-    [WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL]: surfacePort[
-      WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL
-    ].handler(({ input, context, errors }) => {
-      if (!context.actor.panel || !dependencies.showBuildLabel(input.shown)) throw errors.REFUSED();
     }),
     [WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS

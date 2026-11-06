@@ -732,12 +732,6 @@ export const WINDOW_SURFACE_ACT_KIND = {
    */
   WINDOW_UNSAVED_WORK: "window.unsavedWork",
   /**
-   * A development build's label, the branch it was cut from, drawn or hidden
-   * for a demo: the sidebar's branch row in every window and the Dock tile's
-   * band, as View > Developer > Show Build Label turns them.
-   */
-  WINDOW_SHOW_BUILD_LABEL: "window.showBuildLabel",
-  /**
    * The commands the asking panel offers now, as its controls offer them,
    * told whenever they change, so the menu bar dims an item whose command
    * nothing in the focused panel would run.
@@ -1017,7 +1011,6 @@ export const PORT_ACT_USE = {
   WINDOW_SAVE_FILE: ACT_USE.WRITE,
   WINDOW_CAPTURE: ACT_USE.FETCH,
   WINDOW_UNSAVED_WORK: ACT_USE.WRITE,
-  WINDOW_SHOW_BUILD_LABEL: ACT_USE.WRITE,
   WINDOW_MENU_OFFERS: ACT_USE.WRITE,
   FEEDBACK_SEND: ACT_USE.WRITE,
 

@@ -3,7 +3,6 @@ import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { VERB } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
-import { devBuildDetail } from "@repo/settings/dev-build";
 import type { UpdateControl } from "@repo/settings/settings-controls";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS } from "@repo/settings/update";
@@ -19,16 +18,9 @@ import {
   GearIcon,
   IconButton,
   KeyboardIcon,
-  LIST_DENSITY,
-  LIST_ROW_ACTIONS,
-  LIST_ROW_INK,
-  List,
-  ListRow,
   NAV_ITEM_VARIANT,
   NavItem,
-  OneLine,
   ProviderMark,
-  RowHint,
   riseAbove,
   SidebarAccountRow,
   SidebarFoot as SidebarFootBox,
@@ -40,7 +32,6 @@ import {
   useMenu,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
-import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -56,13 +47,11 @@ import { pressMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { useCopyToast } from "../copy-feedback.js";
 import { useOpenPerson } from "../person-door.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
-import { appStateQuery, selectCapability, selectRun, selectWindow } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
-import { type RowMark, RowMarks } from "./task-actions.js";
 
 /**
  * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, the Mac offline, a release on its way in, Send feedback, and Settings' gear.
@@ -172,67 +161,6 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
       variant={BUTTON_VARIANT.DANGER_TINT}
       onClick={updates.onOpenLatest}
     />
-  );
-}
-
-/**
- * A development build's row over the account's: the branch it was cut from,
- * as a sidebar row draws a place, which a press copies with its commit, so
- * builds run side by side are told apart without opening Settings. Hide
- * stands at its end under the pointer, as a task row's acts do, the name
- * giving way to it; it hides the row and the Dock band for a demo. A hidden
- * row keeps its place unseen and comes in under the pointer as Show branch,
- * the way back without the menu bar's View > Developer > Show Build Label.
- * A release, the web, and a fixture run, whose captures are the product's
- * pictures, draw none.
- */
-function SidebarBuild(): React.JSX.Element | null {
-  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
-  const facts = useQuery({ ...appStateQuery, select: selectWindow }).data;
-  const { mutate: showBuildLabel } = useMutation(pressMutation(ACT_KIND.WINDOW_SHOW_BUILD_LABEL));
-  const copy = useCopyToast();
-  if (run === undefined || run.packaged || run.fixtureMode) return null;
-  const show = (shown: boolean) => showBuildLabel({ shown });
-  if (facts?.buildLabelHidden === true) {
-    return (
-      <List label="Build" density={LIST_DENSITY.DENSE}>
-        <ListRow
-          leading={<GLYPH.SHOW />}
-          title="Show branch"
-          ink={LIST_ROW_INK.SIDEBAR}
-          more={false}
-          muted
-          latent
-          onPress={() => show(true)}
-        />
-      </List>
-    );
-  }
-  const detail = devBuildDetail(run.commit);
-  const branch = run.commit?.branch ?? detail;
-  const hide: RowMark = {
-    key: "hide",
-    label: "Hide branch",
-    icon: <GLYPH.HIDE />,
-    onSelect: () => show(false),
-  };
-  return (
-    <List label="Build" density={LIST_DENSITY.DENSE}>
-      <ListRow
-        leading={<GLYPH.BRANCH />}
-        title={
-          <OneLine words={branch}>
-            <ReplayMask>{branch}</ReplayMask>
-          </OneLine>
-        }
-        ink={LIST_ROW_INK.SIDEBAR}
-        hint={{ Hint: RowHint, label: `Copy ${detail}` }}
-        onPress={() => copy(detail, "Branch copied")}
-        more={false}
-        actionsAt={LIST_ROW_ACTIONS.HOVER}
-        actions={<RowMarks marks={[hide]} />}
-      />
-    </List>
   );
 }
 
@@ -411,7 +339,6 @@ export function SidebarFoot({
 }): React.JSX.Element {
   return (
     <SidebarFootBox>
-      <SidebarBuild />
       <SidebarAccountRow>
         <AccountMenu account={account} shown={shown} onSignOut={onSignOut} />
         <OfflineMark />

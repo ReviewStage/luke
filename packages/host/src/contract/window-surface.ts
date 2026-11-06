@@ -6,8 +6,8 @@
  * page can carry and refuses the rest (`apps/web/src/app/web-host.ts`).
  */
 
-import { type FeedbackSubmission, feedbackSubmission } from "@repo/features/feedback";
 import { DESCRIPTION_MARKDOWN_MAX_CHARS } from "@repo/features/description-markdown";
+import { type FeedbackSubmission, feedbackSubmission } from "@repo/features/feedback";
 import {
   LID_STATE,
   MICROPHONE_STATUS,
@@ -167,11 +167,6 @@ export const windowSurfaceActsContract = {
     "Could not tell this system about unsaved work.",
   )
     .input(exactInput(EffectSchema.Struct({ holding: EffectSchema.Boolean })))
-    .output(EffectSchema.Void),
-  [WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL]: actProcedure(
-    "Could not show or hide this build's label.",
-  )
-    .input(exactInput(EffectSchema.Struct({ shown: EffectSchema.Boolean })))
     .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS]: actProcedure(
     "Could not tell the menu bar what this window offers.",
