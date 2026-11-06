@@ -1,0 +1,69 @@
+---
+title: "CLI"
+description: "Work with tasks, agents, and your Inbox from a terminal"
+---
+
+`vespin` is Vespin's command-line tool. It does what the app does from a shell: create tasks, start and follow agents, check out their branches, and answer your Inbox. It prints JSON for scripts and for coding agents that call it.
+
+## Install
+
+On a Mac with the app, open **Settings › Vespin CLI** and click **Install**. Anywhere else, use one of these:
+
+```sh
+npm i -g vespin                                   # Node 20 or later
+curl -fsSL https://vespin.dev/install.sh | sh -s cli   # bundles its own Node; macOS (Apple silicon) or Linux
+npx vespin --help                                 # run once without installing
+```
+
+`vespin update` updates a curl install in place. For an npm install it prints the command to run.
+
+## Sign in
+
+```sh
+vespin login
+```
+
+It opens your browser. On a machine with no browser, such as one you reach over SSH, run `vespin login --no-browser` and paste back the address your browser lands on. The CLI appears under **Connected** in Settings › Vespin MCP, where you can disconnect it.
+
+If you're in more than one workspace, set the default with `vespin workspace use <slug>`, or pass `--workspace <slug>` to any command.
+
+## Work from a repository
+
+Run these inside a checkout. The CLI reads the repository from the folder.
+
+```sh
+# Create a task here, with an agent on it
+echo "Fix the login redirect" | vespin task create "Login redirect" --prompt -
+
+vespin agent logs <id> --follow                       # stream the agent's turn
+vespin agent wait <id>                                # block until the turn ends
+vespin agent checkout <id>                            # fetch its branch, as gh pr checkout does
+vespin agent send <id> "Also cover the signup page"   # message the agent
+```
+
+## Answer your Inbox
+
+```sh
+vespin inbox list                   # open threads, unread marked ●
+vespin inbox view <id>              # a thread and its open ask
+vespin inbox answer <id> <option>   # pick an option, or done for a to-do
+vespin inbox reply <id> "…"         # write on the thread
+```
+
+## Scripts and coding agents
+
+Output is a table at a terminal, and JSON when piped or with `--json`. `--quiet` prints only ids. The exit code says how a command ended:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Done |
+| 1 | Refused |
+| 2 | Usage error |
+| 3 | Not signed in |
+| 4 | Unreachable, or a server error |
+| 5 | The agent's turn failed or was stopped |
+| 6 | Timed out waiting |
+
+The npm package ships a skill, `skills/vespin/SKILL.md`, that teaches a coding agent the commands, `--json`, and these codes. For Claude Code, copy the `skills/vespin` folder into `~/.claude/skills/`. For Codex and Cursor, add the skill's text to your `AGENTS.md`. To connect an agent to Vespin without a shell, use [Vespin MCP](/vespin-mcp) instead.
+
+`vespin --help`, and `--help` on any command, lists every command with examples.

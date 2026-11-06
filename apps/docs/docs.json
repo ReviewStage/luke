@@ -67,7 +67,7 @@
       },
       {
         "group": "Guides",
-        "pages": ["vespin-mcp", "automations", "slack"]
+        "pages": ["vespin-mcp", "cli", "automations", "slack"]
       },
       {
         "group": "Reference",
