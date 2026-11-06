@@ -1088,7 +1088,7 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
 test("Back to another task whose panel stood shut leaves the panel to shut as that task arrives, rather than shutting it over the task the window is leaving", () => {
   const OTHER_TASK = "7e8f9a0b-0000-4000-8000-0000000000c4";
   const done: string[] = [];
-  const notes = { file: "docs/notes.md" };
+  const notes = fileTab("docs/notes.md");
   const onTask = (taskId: string, side: SidePanelTab | undefined) => {
     const base = tasksControl();
     return tasksControl({

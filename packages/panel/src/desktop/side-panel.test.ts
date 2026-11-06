@@ -281,7 +281,7 @@ test("a panel shut by going to another stop is drawn there no longer, rather tha
     return null;
   };
   const draw = (panel: SidePanelControl) => act(() => root.render(createElement(Drawn, { panel })));
-  draw({ ...shut, open: true, stop: TASK, tab: { changes: FIRST.id } });
+  draw({ ...shut, open: true, stop: TASK, tab: changesTab(FIRST.id) });
   draw({ ...shut, open: false, stop: "0e9c4b1d-6a2f-4e3b-9c7d-1f2a3b4c5d6e" });
   assert.equal(drawing?.panel, undefined);
   act(() => root.unmount());
