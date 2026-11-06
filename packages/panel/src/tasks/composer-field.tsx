@@ -9,18 +9,18 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useEditedLinksHost } from "../link-menu.js";
+import { type KeystrokeSpanName, PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerInput,
   ComposerQuote,
   ComposerTrigger,
-  DescriptionEditorModule,
   MentionNode,
   MentionNodeDoors,
+  DescriptionEditorModule,
 } from "../description-editor/contract.js";
-import { useEditedLinksHost } from "../link-menu.js";
-import { type KeystrokeSpanName, PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import { useSelectionToolbar } from "./selection-toolbar.js";
 
 /**

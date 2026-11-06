@@ -5,17 +5,17 @@ import { Effect } from "effect";
 import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS } from "./agent-wire.js";
-import { DESCRIPTION_ATTACHMENT_REFUSAL } from "./description-attachment-wire.js";
 import { FAILURE_FACT } from "./failure-facts.js";
 import { WRITE_UNTAKEN } from "./keyed-write.js";
 import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import { DESCRIPTION_ATTACHMENT_REFUSAL } from "./description-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
 import { TASK_BOUNDS, TASK_FILE_REFUSAL } from "./task-wire.js";
 import {
-  DESCRIPTION_COMMENT_CALL_FAILURE,
   PICTURE_KEEP_FAILURE,
+  DESCRIPTION_COMMENT_CALL_FAILURE,
   TASK_CALL_FAILURE,
 } from "./tasks-view.js";
 

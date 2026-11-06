@@ -16,17 +16,17 @@ import {
   readNativeHanded,
   recordNativeHanded,
 } from "@repo/database/models/agent-store";
+import { turnsBefore } from "@repo/database/models/message-reads";
 import { readDescriptionCommentThreads } from "@repo/database/models/description-comments";
 import { listRevisions } from "@repo/database/models/description-revisions";
-import { turnsBefore } from "@repo/database/models/message-reads";
 import { readTask } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import {
   handedAfterCompaction,
   savedByAnotherSince,

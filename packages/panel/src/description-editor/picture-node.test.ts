@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "vitest";
 import type {
+  PictureTaken,
   DescriptionEditorHandle,
   DescriptionEditorPictures,
-  PictureTaken,
 } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 

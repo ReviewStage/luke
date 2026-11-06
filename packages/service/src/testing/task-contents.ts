@@ -1,4 +1,4 @@
-import { type DescriptionNote, NOTE_KIND } from "@repo/features/description-notes";
+import { NOTE_KIND, type DescriptionNote } from "@repo/features/description-notes";
 
 /**
  * task-contents.ts -- the notes a notetaker would take, as a test writes them.

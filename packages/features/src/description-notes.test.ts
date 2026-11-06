@@ -5,8 +5,8 @@ import { taskPicturesIn } from "./description-attachment-link.js";
 import { descriptionSections } from "./description-document.js";
 import {
   applyNotesToText,
-  type DescriptionNote,
   NOTE_KIND,
+  type DescriptionNote,
   readNotes,
   withAgentEdit,
 } from "./description-notes.js";

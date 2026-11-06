@@ -14,9 +14,11 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { Equal } from "effect";
 import { useCallback, useRef, useState } from "react";
-import { type ActHandle, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
@@ -91,8 +93,9 @@ interface Attempt {
   readonly words: string;
 }
 
-/** The Inbox's closes, sent through `act`. */
-export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser {
+/** The Inbox's closes, each sent on the close's mutation. */
+export function useInboxCloser(): InboxCloser {
+  const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_CLOSE));
   const writer = useDraftWriter();
   const toast = useToast();
   const attempts = useRef(new Map<string, Attempt>());
@@ -131,7 +134,7 @@ export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser 
         }
         return notKept(cause);
       };
-      return act(ACT_KIND.AGENTS_INBOX_CLOSE, {
+      return sendClose({
         itemId: item.id,
         revision: item.revision,
         clientKey: key,
@@ -157,7 +160,7 @@ export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser 
           return KEPT;
         });
     },
-    [act, toast, writer],
+    [sendClose, toast, writer],
   );
 }
 

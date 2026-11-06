@@ -29,7 +29,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { type FakeActPort, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
@@ -68,6 +68,28 @@ interface Asked {
   payload: unknown;
 }
 
+/** The kinds the hook sends on mutations or reads through Query rather than its `act`. */
+const SENT_ON_MUTATIONS: readonly AnyKind[] = [
+  ACT_KIND.AGENTS_START,
+  ACT_KIND.AGENTS_STOP,
+  ACT_KIND.AGENTS_REWIND,
+  ACT_KIND.AGENTS_MESSAGE,
+  ACT_KIND.AGENTS_CHOOSE,
+  ACT_KIND.AGENTS_SERVERS,
+  ACT_KIND.AGENTS_ADD_REPOSITORY,
+  ACT_KIND.AGENTS_RENAME,
+  ACT_KIND.AGENTS_ARCHIVE,
+  ACT_KIND.AGENTS_DELETE,
+  ACT_KIND.CHAPTERS_GENERATE,
+  ACT_KIND.AGENTS_INBOX_ANSWER,
+  ACT_KIND.AGENTS_INBOX_MESSAGE,
+  ACT_KIND.AGENTS_INBOX_START,
+  // The reads asked through fetchQuery reach the act port too.
+  ACT_KIND.TASKS_SKILLS,
+  ACT_KIND.AGENTS_PAGE,
+  ACT_KIND.AGENTS_MESSAGES,
+];
+
 const roots: Root[] = [];
 
 beforeEach(() => holdFrames());
@@ -102,19 +124,29 @@ function mount(
   let keys = 0;
   let control: AgentsControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
+  /** One ask answered from its kind's queue, and written down. */
+  const scripted = (kind: AnyKind, payload: unknown): Promise<WireBoundaryInput> => {
+    asked.push({ kind, payload });
+    const next = answers.get(kind)?.shift();
+    if (next === undefined) return Promise.reject(new Error("Not answered in this test."));
+    return Promise.resolve(next);
+  };
+  // Note that the writes the hook sends on its mutations reach the act port, which answers them from the same script.
+  fakeActPort({
+    ...fakeActPortCalls(),
+    // SAFETY: the test scripts each kind's answer in that kind's own shape.
+    ...(Object.fromEntries(
+      SENT_ON_MUTATIONS.map((kind) => [kind, (payload: unknown) => scripted(kind, payload)]),
+    ) as Partial<FakeActPort>),
+  });
   function Probe() {
     const [held, setHeld] = useState(initial);
     restand = setHeld;
     control = useAgents({
       acts: {
         // SAFETY: the test scripts each kind's answer in that kind's own shape, whichever side carries it.
-        act: ((kind: AnyKind, ...[payload]: WireBoundaryInput[]): Promise<WireBoundaryInput> => {
-          asked.push({ kind, payload });
-          const queue = answers.get(kind);
-          const next = queue?.shift();
-          if (next === undefined) return Promise.reject(new Error("Not answered in this test."));
-          return Promise.resolve(next);
-        }) as ActHandle["act"],
+        act: ((kind: AnyKind, ...[payload]: WireBoundaryInput[]): Promise<WireBoundaryInput> =>
+          scripted(kind, payload)) as ActHandle["act"],
       },
       taskId: held.taskId,
       agentId: held.agentId,

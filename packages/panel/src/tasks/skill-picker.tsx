@@ -29,12 +29,12 @@ import {
   useMemo,
   useState,
 } from "react";
+import { SettingsPageLink } from "../open-settings.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerTrigger,
 } from "../description-editor/contract.js";
-import { SettingsPageLink } from "../open-settings.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide, wordBox } from "./mention-picker.js";
 import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-ref.js";
 

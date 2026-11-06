@@ -31,7 +31,6 @@ import {
   type AppAutomationReads,
   type AppBrowserTabs,
   type AppChapters,
-  type AppDescriptionComments,
   type AppDevicePresence,
   type AppGitHubToken,
   type AppHolderInboxes,
@@ -41,6 +40,7 @@ import {
   type AppInboxItems,
   type AppIntegrationTools,
   type AppPages,
+  type AppDescriptionComments,
   type AppProviderKeyList,
   type AppPullRequestParts,
   type AppRepositoryLists,
@@ -58,10 +58,10 @@ import {
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
-  NO_DESCRIPTION_COMMENTS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
+  NO_DESCRIPTION_COMMENTS,
   NO_TRANSCRIPTS,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
@@ -99,6 +99,7 @@ import {
   heldUntilClosed,
   quietHold,
 } from "./app-bridge.js";
+import { holdAppStateForFile, writeAppState } from "./copy-feedback.js";
 
 /** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
@@ -246,6 +247,8 @@ export async function readExperiments(
   registry: AtomRegistry.AtomRegistry = defaultRegistry(),
 ): Promise<void> {
   handState(experiments);
+  // Note that every test's Query client of this file starts on the same document, so a reader through Query draws it at once too.
+  holdAppStateForFile(stateWith(experiments, {}));
   const release = registry.mount(APP_SLICE.SETTINGS);
   // Note that the read lands a task after it is asked for, since the renderer's runtime runs it.
   await vi.waitFor(
@@ -269,7 +272,10 @@ export function registryWith(
   experiments: ExperimentChoices,
   initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
 ): AtomRegistry.AtomRegistry {
-  const { settings } = snapshotWith(experiments);
+  const snapshot = snapshotWith(experiments);
+  const { settings } = snapshot;
+  // Note that the test's Query client is handed the same document, so a reader through Query draws it at once too.
+  writeAppState(snapshot);
   return AtomRegistry.make({
     initialValues: [[APP_SLICE.SETTINGS, settings], ...initialValues],
   });

@@ -12,32 +12,32 @@ import {
   PageHeader,
   RetryButton,
 } from "@repo/ui";
-import { openThread, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { markdownClass } from "@repo/ui/markdown-class";
+import { openThread, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import {
-  DESCRIPTION_PLACEHOLDER,
-  type DescriptionEditorHandle,
-  type DescriptionEditorPlacement,
   type EditorAnchor,
   type EditorAnchors,
   PLACEMENT_END,
+  DESCRIPTION_PLACEHOLDER,
   type PlacedWords,
+  type DescriptionEditorHandle,
+  type DescriptionEditorPlacement,
 } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { type MentionDoors, retargetedMention } from "./mention-chip.js";
+import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 import { useTaskMentions } from "./task-mentions.js";
 import {
-  type DescriptionEditing,
   EDITOR_PLACE,
   type EditorHost,
+  type DescriptionEditing,
   useMarkTitleUnsaved,
 } from "./use-description-editing.js";
 

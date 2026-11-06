@@ -86,8 +86,6 @@ async function mount() {
     const control = useTasksTab({
       acts: {
         act: () => Promise.reject(new Error("unasked")),
-        press: () => Promise.resolve(),
-        tell: () => undefined,
       },
       tasks: {
         ...IDLE_TASKS_VIEW,

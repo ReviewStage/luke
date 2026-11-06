@@ -29,8 +29,8 @@ import {
   useHeadingAway,
   useMinute,
 } from "@repo/ui";
-import { DescriptionCommentsProvider } from "@repo/ui/description-comments";
 import { GLYPH } from "@repo/ui/icons";
+import { DescriptionCommentsProvider } from "@repo/ui/description-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import {
   agentOfTab,
@@ -41,6 +41,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import { useQuery } from "@tanstack/react-query";
 import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -56,9 +57,14 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
-import { DescriptionBody, type SectionLinks, type TitleRename } from "../tasks/description-body.js";
-import { CommentFocusScope } from "../tasks/description-comments.js";
 import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
+import {
+  DescriptionBody,
+  type DescriptionRoom,
+  type SectionLinks,
+  type TitleRename,
+} from "../tasks/description-body.js";
+import { CommentFocusScope } from "../tasks/description-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -73,15 +79,15 @@ import type { TaskRelationsDoor } from "../tasks/task-relation-menu.js";
 import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useDescriptionComments } from "../tasks/use-description-comments.js";
-import { useDescriptionEditDoor } from "../tasks/use-description-editing.js";
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenAddressesHere, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
+import { useDescriptionComments } from "../tasks/use-description-comments.js";
+import { useDescriptionEditDoor } from "../tasks/use-description-editing.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -346,7 +352,9 @@ function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
   // While Descriptions is off there is no description to copy, so the chord is an agent's alone.
   useAppCommand(
     APP_COMMAND.COPY_CONTENT,
-    useExperiment(EXPERIMENT.DESCRIPTIONS) ? copy.onPress : undefined,
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
+      ? copy.onPress
+      : undefined,
   );
   return null;
 }
@@ -414,7 +422,8 @@ function DescriptionDocument({
     agents: tasks.agents,
   });
   // The task's comments are held from its open while it is shown, for its description's margin and list, so its first ready frame marks them; none are read while Descriptions is off.
-  const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptionsOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const commentsTaskId = tasks.shown && descriptionsOn ? tasks.activeTaskId : undefined;
   const comments = useDescriptionComments(
     useMemo(
@@ -946,11 +955,17 @@ function DescriptionDocument({
   // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
   // so another task's groups start folded rather than as this one's were left. Note that the
   // key is the head's alone, because two siblings under one key leave the old task's drawn.
-  const descriptionHead = useMemo(
-    () => (
+  const descriptionHead = useCallback(
+    (room: DescriptionRoom) => (
       <Fragment key={openedId}>
         {opened === undefined ? null : (
-          <PlanRelations task={opened} tasks={tasks} door={relations} onOpenTask={openTask} />
+          <PlanRelations
+            task={opened}
+            tasks={tasks}
+            door={relations}
+            room={room}
+            onOpenTask={openTask}
+          />
         )}
         {planAgents}
       </Fragment>

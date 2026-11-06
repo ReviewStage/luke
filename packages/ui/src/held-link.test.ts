@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
+import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
 import { act, createElement, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

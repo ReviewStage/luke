@@ -9,8 +9,8 @@ import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
 import {
-  DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
 } from "@repo/database/models/description-attachments";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -19,9 +19,9 @@ import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
-import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@repo/features/picture-wire";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { EXPERIMENT } from "@repo/settings";
 import {
   TURN_ORIGIN,
@@ -77,10 +77,10 @@ import {
   runAgentShowPage,
   runAgentTools,
 } from "../coder-host/agent-doors.js";
-import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
+import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   WORKSPACE_INTEGRATION_MCP_PATH,

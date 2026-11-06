@@ -4,9 +4,9 @@ import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
-import type { DescriptionEditorModule } from "./description-editor/contract.js";
 import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
+import type { DescriptionEditorModule } from "./description-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import type { TerminalModule } from "./terminal/contract.js";
 

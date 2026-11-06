@@ -11,8 +11,8 @@ import {
 import { agentTable } from "@repo/database/schemas/agent";
 import { member, user } from "@repo/database/schemas/auth";
 import { automation } from "@repo/database/schemas/automation";
-import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { inboxItem } from "@repo/database/schemas/inbox";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import { pinnedPictureUrl } from "@repo/features/account-picture";
 import { AUTOMATION_SCOPE } from "@repo/features/automation-wire";

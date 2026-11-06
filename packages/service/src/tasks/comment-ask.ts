@@ -15,8 +15,8 @@ import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**

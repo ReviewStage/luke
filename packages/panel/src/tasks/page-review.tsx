@@ -12,8 +12,8 @@ import {
   FailureNote,
   useConfirmDialog,
 } from "@repo/ui";
-import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import { GLYPH } from "@repo/ui/icons";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Schema } from "effect";

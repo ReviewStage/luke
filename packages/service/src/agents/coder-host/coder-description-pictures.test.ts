@@ -5,36 +5,36 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import {
-  DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
   readDescriptionAttachment,
 } from "@repo/database/models/description-attachments";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
-import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
-import { descriptionSections } from "@repo/features/description-document";
 import {
   PICTURE_BOUNDS,
   PICTURE_MEDIA_TYPE,
   PICTURE_TYPE,
   type Picture,
 } from "@repo/features/picture-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import { unparsedWire } from "@repo/wire";
 import { paddedTo, webmBytes } from "@repo/wire/testing";
 import { Effect, Option } from "effect";
 import { Base64 } from "effect/encoding";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   DESCRIPTION_EDIT_REFUSAL,
   descriptionEditRejected,
   recordDescriptionEdit,
   TASK_PICTURE_FILE_REFUSAL,
 } from "./description-edit.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * A coding agent's `edit_description` adding a screenshot from its sandbox to its

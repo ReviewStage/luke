@@ -1,4 +1,6 @@
 import { Schema as EffectSchema } from "effect";
+import { sealedLiveQuerySchema } from "./live-wire.js";
+import { pageVersionNumberSchema } from "./page-wire.js";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
@@ -10,8 +12,6 @@ import {
   type DescriptionCommentThread,
   descriptionCommentActorSchema,
 } from "./description-comment-wire.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
-import { pageVersionNumberSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**

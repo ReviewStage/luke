@@ -3,6 +3,8 @@
  */
 
 import { ORPCError } from "@orpc/client";
+import type { TaskFileRequest } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import type { AppBridge } from "@repo/host/bridge";
 import {
   ACCOUNT_ASK_ACT_KIND,
@@ -202,6 +204,26 @@ export function openingLinks(
       opened({ kind: TASKS_ACT_KIND.WEB_OPEN, payload: { url } });
       return Promise.resolve();
     },
+  };
+}
+
+/**
+ * The act port's file read answered through `read`, which hears each window
+ * of a file as the surface asked it, the place it is read through left out,
+ * for a test to spread into its `fakeActPort`.
+ */
+export function readingFiles(
+  read: (request: TaskFileRequest) => Promise<TasksFileAnswer>,
+): Pick<FakeActPort, typeof TASKS_ACT_KIND.TASKS_FILE> {
+  return {
+    [TASKS_ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw, ref }) =>
+      read({
+        path,
+        firstLine,
+        lastLine,
+        ...(raw === undefined ? undefined : { raw }),
+        ...(ref === undefined ? undefined : { ref }),
+      }),
   };
 }
 

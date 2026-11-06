@@ -20,8 +20,8 @@ import {
 } from "@repo/database/models/agent-store";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import type { StoreWriter } from "@repo/database/models/writer";
-import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
@@ -65,21 +65,21 @@ import {
   runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { runMessageAgent } from "./agent-message.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
+  editedTaskOf,
   DESCRIPTION_EDIT_REFUSAL,
   type DescriptionEditResult,
   descriptionEditRejected,
-  editedTaskOf,
   recordDescriptionEdit,
 } from "./description-edit.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   openPullRequest,
   PULL_REQUEST_UNAVAILABLE,

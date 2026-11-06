@@ -23,9 +23,9 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER } from "./bounds.js";
 import { COMMIT_BY, type CommitAuthorship } from "./checkout.js";
-import { EDIT_DESCRIPTION_TOOL } from "./description-edit.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
+import { EDIT_DESCRIPTION_TOOL } from "./description-edit.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 const AGENT_EDIT_DESCRIPTION_TOOL = EDIT_DESCRIPTION_TOOL.name;

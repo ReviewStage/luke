@@ -11,7 +11,6 @@ import {
   readerZone,
   suggestedDates,
 } from "@repo/features/date-mention";
-import { descriptionSections } from "@repo/features/description-document";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
@@ -26,6 +25,7 @@ import {
 } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import type { PageLine } from "@repo/features/page-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
 import { thingOfMention } from "@repo/features/thing-kind";
@@ -97,21 +97,26 @@ import {
 import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { askAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
+import { useAutomations } from "../desktop/use-automations.js";
+import { unreadShown } from "../failure-report.js";
+import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
+import { useMemberDirectory } from "../member-directory.js";
+import { memberRows, YOU_WORD } from "../member-rows.js";
 import {
   type ComposerTrigger,
   type EditorAria,
   listAria,
   type MentionNode,
 } from "../description-editor/contract.js";
-import { useAutomations } from "../desktop/use-automations.js";
-import { unreadShown } from "../failure-report.js";
-import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
-import { useMemberDirectory } from "../member-directory.js";
-import { memberRows, YOU_WORD } from "../member-rows.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
-import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
+import {
+  appStateDerivedAtom,
+  appStateQuery,
+  selectExperiment,
+  useAppSlice,
+} from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
@@ -1108,10 +1113,7 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
-  const description = {
-    label: MENTION_GROUP.DESCRIPTION,
-    rows: best(rows.description, term, PER_GROUP),
-  };
+  const description = { label: MENTION_GROUP.DESCRIPTION, rows: best(rows.description, term, PER_GROUP) };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
     label: MENTION_GROUP.TASKS,
@@ -1794,7 +1796,8 @@ export function useMentionPicker({
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   // While Descriptions is off there is no description to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptionsOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const taskRowsOffered = open
     ? workspaceTaskRows(descriptionsOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];

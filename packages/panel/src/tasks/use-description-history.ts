@@ -4,9 +4,12 @@ import type {
   DescriptionRevisionsAnswer,
 } from "@repo/features/task-wire";
 import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { queryOptions, skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ActedResult, askKept, type Kept } from "../act.js";
+import { type ActedResult, askAct, askKept, type Kept } from "../act.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { HOST_READ_STATUS, type HostRead } from "../use-host-read.js";
 import { useRegained } from "../use-regained.js";
 import { revisionOfSave } from "./description-history-model.js";
@@ -70,11 +73,10 @@ export interface ViewedVersion {
   readonly read: VersionRead;
 }
 
-/** Where the history's older pages and its versions are read from, and a version is restored: main's acts, or a test's own. */
+/** Where the history's older pages are read from, and a version is restored: main's acts, or a test's own. */
 export interface DescriptionHistorySource {
   /** Reads the page before `before`, which main lays after the history it holds. */
   readPage: (taskId: string, before: number) => Promise<TasksRevisionsAnswer>;
-  readRevision: (taskId: string, seq: number) => Promise<TasksRevisionAnswer>;
   restore: (taskId: string, seq: number) => Promise<boolean>;
 }
 
@@ -147,19 +149,15 @@ const RESTORE_REFUSED: ActionResult = {
  * A version chosen on one task: its revision, none while the newest is
  * followed, so a save landing moves the view onto it; the moment of the save
  * it was opened to find, until the pages read show which revision made it;
- * its content as read and the revision that read was for; how many times
- * it was asked for, so choosing one whose read failed reads it again; the
- * revision whose sections are open, drawn only while it is the one chosen;
- * and whether the list stands rather than the version.
+ * the revision whose sections are open, drawn only while it is the one
+ * chosen; and whether the list stands rather than the version. Its content
+ * is read through TanStack Query (`taskRevisionQueryOptions`).
  */
 interface HeldVersion {
   readonly taskId: string;
   readonly seq: number | undefined;
   readonly seeking: number | undefined;
   readonly opened: OpenedSections | undefined;
-  readonly read: VersionRead;
-  readonly readOf: number | undefined;
-  readonly asked: number;
   readonly listed: boolean;
 }
 
@@ -174,9 +172,6 @@ function openedOn(
     seq: returnTo?.revision,
     seeking: seek,
     opened: returnTo?.opened,
-    read: { kind: HISTORY_READ.READING },
-    readOf: undefined,
-    asked: 1,
     listed: returnTo?.listed ?? (seek === undefined && returnTo === undefined),
   };
 }
@@ -184,7 +179,7 @@ function openedOn(
 /**
  * The version history standing open on `held` moved to `spot`: its list kept
  * as it was where the spot is the list, and the version and sections the spot
- * names otherwise, read again only where the version is another.
+ * names otherwise.
  */
 function stoodAt(held: HeldVersion, spot: HistorySpot): HeldVersion {
   if (spot.listed === true) return { ...held, listed: true };
@@ -196,9 +191,6 @@ function stoodAt(held: HeldVersion, spot: HistorySpot): HeldVersion {
     seq: spot.revision,
     seeking: undefined,
     opened: spot.opened,
-    read: { kind: HISTORY_READ.READING },
-    readOf: undefined,
-    asked: held.asked + 1,
     listed: false,
   };
 }
@@ -214,15 +206,40 @@ function listOf(
   return failed ? { kind: HISTORY_READ.FAILED } : undefined;
 }
 
-/** A version's content as the view holds it, or the failure it stands for. */
-function versionOf(answer: TasksRevisionAnswer): VersionRead {
-  return "failure" in answer
-    ? { kind: HISTORY_READ.FAILED }
-    : {
-        kind: HISTORY_READ.READY,
-        document: answer.revision.document,
-        previous: answer.revision.previous,
-      };
+/**
+ * One version's content: the plan after the revision and before it. A
+ * revision never changes, but the plan's last edit and its name are in its
+ * key, since a save and a rename read the version drawn again, as before.
+ * A failed read is answered at once, and read again on Retry.
+ */
+function taskRevisionQueryOptions(
+  taskId: string | undefined,
+  seq: number | undefined,
+  editedAt: number | undefined,
+  name: string | undefined,
+) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.TASK_REVISION, taskId, seq, editedAt ?? null, name ?? null],
+    queryFn:
+      taskId === undefined || seq === undefined
+        ? skipToken
+        : () => askAct(ACT_KIND.TASKS_REVISION, { taskId, seq }),
+    retry: false,
+  });
+}
+
+/** A version's content as the view holds it: reading, a read again after a failure among them, the failure it stands for, or the content. */
+function versionRead(version: UseQueryResult<TasksRevisionAnswer>): VersionRead {
+  const failed = version.isError || (version.data !== undefined && "failure" in version.data);
+  if (version.isPending || (version.isFetching && failed)) return { kind: HISTORY_READ.READING };
+  if (version.isError || version.data === undefined || "failure" in version.data) {
+    return { kind: HISTORY_READ.FAILED };
+  }
+  return {
+    kind: HISTORY_READ.READY,
+    document: version.data.revision.document,
+    previous: version.data.revision.previous,
+  };
 }
 
 /**
@@ -254,9 +271,6 @@ export function useDescriptionHistory(input: {
 }): DescriptionHistoryControl {
   const { source, taskId, history, editedAt, name, shown, seek, returnTo, onRestored } = input;
   const [version, setVersion] = useState<HeldVersion | undefined>(undefined);
-  // Note that every read counts itself, because an answer landing after a
-  // newer read was made, or after another task opened, is not the version's.
-  const versionReads = useRef(0);
   // Note that the source is read where it is called rather than named by the
   // reads below, because a caller's acts are a new object on each of its
   // renders, and a read keyed on them would read again on every one.
@@ -312,70 +326,47 @@ export function useDescriptionHistory(input: {
       : chosen.seeking === undefined
         ? (chosen.seq ?? newest)
         : sought;
-  const asked = chosen?.asked;
-  useEffect(() => {
-    if (taskId === undefined || seq === undefined || asked === undefined) return;
-    versionReads.current += 1;
-    const read = versionReads.current;
-    const land = (landed: VersionRead) => {
-      if (read !== versionReads.current) return;
-      setVersion((held) =>
-        held?.taskId === taskId ? { ...held, read: landed, readOf: seq } : held,
-      );
-    };
-    latest.current.readRevision(taskId, seq).then(
-      (answer) => land(versionOf(answer)),
-      () => land({ kind: HISTORY_READ.FAILED }),
-    );
-  }, [taskId, seq, asked, editedAt, name]);
+  const versionQuery = useQuery({
+    ...taskRevisionQueryOptions(taskId, chosen === undefined ? undefined : seq, editedAt, name),
+    // Note that the version drawn stands while a save or a rename reads it again, never another version's.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === taskId && previousQuery?.queryKey[2] === seq
+        ? previous
+        : undefined,
+  });
+  const read = versionRead(versionQuery);
+  const readAgain = versionQuery.refetch;
 
   // Choosing the version drawn again leaves it as it is, unless its read
   // failed; choosing the newest follows the newest from then on.
   const onSelect = useCallback(
     (chosenSeq: number) => {
       if (taskId === undefined) return;
+      const same =
+        chosen?.taskId === taskId &&
+        chosen.seeking === undefined &&
+        (chosen.seq ?? newest) === chosenSeq;
+      if (same && read.kind === HISTORY_READ.FAILED) void readAgain();
       setVersion((held) => {
-        const same =
-          held?.taskId === taskId &&
-          held.seeking === undefined &&
-          (held.seq ?? newest) === chosenSeq;
-        if (same && held.read.kind !== HISTORY_READ.FAILED) {
-          return held.listed ? { ...held, listed: false } : held;
-        }
+        if (same && held !== undefined) return held.listed ? { ...held, listed: false } : held;
         return {
           taskId,
           seq: chosenSeq === newest ? undefined : chosenSeq,
           seeking: undefined,
           opened: undefined,
-          read: { kind: HISTORY_READ.READING },
-          readOf: undefined,
-          asked: (same ? held.asked : 0) + 1,
           listed: false,
         };
       });
     },
-    [taskId, newest],
+    [taskId, newest, chosen, read.kind, readAgain],
   );
   const onRetry = history.retry;
   // Note that the sections stay open, since they are drawn from the very version this reads again.
-  const onRetryVersion = useCallback(
-    () =>
-      setVersion(
-        (held) =>
-          held && {
-            ...held,
-            read: { kind: HISTORY_READ.READING },
-            asked: held.asked + 1,
-          },
-      ),
-    [],
-  );
+  const onRetryVersion = useCallback(() => void readAgain(), [readAgain]);
   // A version whose read failed, or is still out and may have been sent while the connection was gone, is read again as the app reaches the service again, as its Try again reads it.
   useRegained(() => {
     if (chosen === undefined) return;
-    // Note that a read of another version than the one sought now is out for it still.
-    const read = chosen.readOf === seq ? chosen.read.kind : HISTORY_READ.READING;
-    if (read === HISTORY_READ.FAILED || read === HISTORY_READ.READING) onRetryVersion();
+    if (read.kind === HISTORY_READ.FAILED || read.kind === HISTORY_READ.READING) onRetryVersion();
   });
   // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
   const onOpenSections = (sectionsOf: number) => {
@@ -456,8 +447,7 @@ export function useDescriptionHistory(input: {
         : {
             line,
             current: newest === line.seq,
-            // A read made for the revision followed before a save moved it on is not this one's.
-            read: chosen.readOf === seq ? chosen.read : { kind: HISTORY_READ.READING },
+            read,
           },
     onSelect,
     spot,

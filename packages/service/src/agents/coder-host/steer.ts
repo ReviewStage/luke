@@ -52,7 +52,6 @@ import {
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -63,6 +62,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";

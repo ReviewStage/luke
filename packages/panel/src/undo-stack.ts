@@ -32,9 +32,18 @@ import { FAILURE_SURFACE, type FailureSurface } from "@repo/features/shown-failu
 import type { TaskPriority, TaskStatus, TaskSummary } from "@repo/features/task-wire";
 import type { TasksView } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind } from "@repo/host/contract";
 import { STATUS_TONE } from "@repo/ui";
 import * as Atom from "effect/reactivity/Atom";
-import { type ActHandle, askKept, firstRefusal, KEPT, type Kept, notKept } from "./act.js";
+import {
+  type ActResult,
+  type ActVariables,
+  askKept,
+  firstRefusal,
+  KEPT,
+  type Kept,
+  notKept,
+} from "./act.js";
 import { priorityOf, statusOf } from "./desktop/task-row-parts.js";
 import type { ShownFailure } from "./failure-report.js";
 import { rendererRegistry } from "./renderer-runtime.js";
@@ -223,19 +232,27 @@ export function forgetUndo(): void {
   rendererRegistry.set(undoLineAtom, EMPTY_LINE);
 }
 
+/** How a row write's act is sent: the `mutateAsync` of its kind's mutation (`act-mutations.ts`). */
+export type RowSend<Kind extends PortActKind> = (
+  variables: ActVariables<Kind>,
+) => Promise<ActResult<Kind>>;
+
 /**
  * A kind of row write, as an entry takes it back and puts it back: the
  * fields it sets as the rows a caller draws (`Rows`) show them on one row,
- * whether a row still holds some, and the act that sets them. `Fields`
- * names every field the act may set; one press sets those its `after` names.
+ * whether a row still holds some, and the act that sets them, by its `kind`.
+ * `Fields` names every field the act may set; one press sets those its
+ * `after` names.
  */
-export interface RowWrite<Rows, Fields extends object> {
+export interface RowWrite<Rows, Fields extends object, Kind extends PortActKind> {
   /** The fields of `id`'s row as `rows` show it; none where they show no such row. */
   readonly read: (rows: Rows, id: string) => Fields | undefined;
   /** Whether `now` holds what `wanted` names, of the fields it names. */
   readonly holds: (now: Fields, wanted: Fields) => boolean;
-  /** Sends `id`'s row the fields `fields` names on `act`, with the act that sets them, answering whether the service kept it. */
-  readonly send: (act: ActHandle["act"], id: string, fields: Fields) => Promise<Kept>;
+  /** The act that sets the fields, whose mutation a caller's doors send it on. */
+  readonly kind: Kind;
+  /** Sends `id`'s row the fields `fields` names on `send`, answering whether the service kept it. */
+  readonly send: (send: RowSend<Kind>, id: string, fields: Fields) => Promise<Kept>;
   /** What a refusal of it is reported as. */
   readonly surface: FailureSurface;
 }
@@ -243,11 +260,13 @@ export interface RowWrite<Rows, Fields extends object> {
 /**
  * Where a press's rows are read and its writes sent, for as long as its
  * entry waits: the rows its caller draws, as they stand at each call, which
- * are the window's own (`app:state`), and the caller's act.
+ * are the window's own (`app:state`), and the caller's mutation of the
+ * write's act. Note that a mutation sent after its caller is gone still
+ * reaches the act port, so ⌘Z sends through it after the row's surface left.
  */
-export interface RowDoors<Rows> {
+export interface RowDoors<Rows, Kind extends PortActKind> {
   readonly rows: () => Rows;
-  readonly act: ActHandle["act"];
+  readonly send: RowSend<Kind>;
 }
 
 /** One row a press writes: its id, and the fields the act sets on it, as it sets them. */
@@ -294,9 +313,9 @@ function holdsEach<Fields extends object>(now: Fields, wanted: Fields): boolean 
  * names, as one run: it applied where every row sent was kept, and changed
  * where no row still held it.
  */
-function rowsRun<Rows, Fields extends object>(
-  write: RowWrite<Rows, Fields>,
-  doors: RowDoors<Rows>,
+function rowsRun<Rows, Fields extends object, Kind extends PortActKind>(
+  write: RowWrite<Rows, Fields, Kind>,
+  doors: RowDoors<Rows, Kind>,
   changes: readonly RowChange<Fields>[],
   from: (change: RowChange<Fields>) => Fields,
   to: (change: RowChange<Fields>) => Fields,
@@ -307,7 +326,7 @@ function rowsRun<Rows, Fields extends object>(
     return now !== undefined && write.holds(now, from(change));
   });
   if (due.length === 0) return Promise.resolve({ ran: UNDO_RAN.CHANGED });
-  return Promise.all(due.map((change) => write.send(doors.act, change.id, to(change)))).then(
+  return Promise.all(due.map((change) => write.send(doors.send, change.id, to(change)))).then(
     (answers) =>
       answers.every((answer) => answer.kept)
         ? { ran: UNDO_RAN.APPLIED }
@@ -326,9 +345,9 @@ function rowsRun<Rows, Fields extends object>(
  * put back on it. Each row is taken back to its fields before, and put back
  * to its fields after, only while it still holds the other.
  */
-export function pressRows<Rows, Fields extends object>(
-  write: RowWrite<Rows, Fields>,
-  doors: RowDoors<Rows>,
+export function pressRows<Rows, Fields extends object, Kind extends PortActKind>(
+  write: RowWrite<Rows, Fields, Kind>,
+  doors: RowDoors<Rows, Kind>,
   asked: readonly RowAsked<Fields>[],
 ): PressedRows {
   const rows = doors.rows();
@@ -424,9 +443,10 @@ export const ROW_WRITE = {
       return task === undefined ? undefined : { name: task.name };
     },
     holds: holdsEach,
-    send: (act, taskId, { name }) => askKept(act(ACT_KIND.TASKS_RENAME, { taskId, name })),
+    kind: ACT_KIND.TASKS_RENAME,
+    send: (send, taskId, { name }) => askKept(send({ taskId, name })),
     surface: FAILURE_SURFACE.TASK_RENAME,
-  } satisfies RowWrite<TasksView, { readonly name: string }>,
+  } satisfies RowWrite<TasksView, { readonly name: string }, typeof ACT_KIND.TASKS_RENAME>,
   TASK_STANDING: {
     read: (tasks, taskId) => {
       const task = taskRow(tasks, taskId);
@@ -441,9 +461,10 @@ export const ROW_WRITE = {
     holds: ({ assignee, ...now }, { assignee: wanted, ...rest }) =>
       holdsEach(now, rest) &&
       (wanted === undefined || (assignee?.userId ?? null) === (wanted?.userId ?? null)),
-    send: (act, taskId, { assignee, ...standing }) =>
+    kind: ACT_KIND.TASKS_SET_STANDING,
+    send: (send, taskId, { assignee, ...standing }) =>
       askKept(
-        act(ACT_KIND.TASKS_SET_STANDING, {
+        send({
           taskId,
           ...standing,
           ...(assignee === undefined
@@ -454,7 +475,7 @@ export const ROW_WRITE = {
         }),
       ),
     surface: FAILURE_SURFACE.TASK_STANDING,
-  } satisfies RowWrite<TasksView, StandingFields>,
+  } satisfies RowWrite<TasksView, StandingFields, typeof ACT_KIND.TASKS_SET_STANDING>,
   TASK_PIN: {
     read: (tasks, taskId) => {
       const task = taskRow(tasks, taskId);
@@ -462,23 +483,29 @@ export const ROW_WRITE = {
       return { pinned: task.pinnedAt !== undefined, position: task.pinPosition ?? null };
     },
     holds: holdsEach,
-    send: (act, taskId, pin) => askKept(act(ACT_KIND.TASKS_PIN, { taskId, ...pinSent(pin) })),
+    kind: ACT_KIND.TASKS_PIN,
+    send: (send, taskId, pin) => askKept(send({ taskId, ...pinSent(pin) })),
     surface: FAILURE_SURFACE.TASK_MARK,
-  } satisfies RowWrite<TasksView, PinFields>,
+  } satisfies RowWrite<TasksView, PinFields, typeof ACT_KIND.TASKS_PIN>,
   AGENT_PIN: {
     read: agentPin,
     holds: holdsEach,
-    send: (act, agentId, pin) => agentKept(act(ACT_KIND.AGENTS_PIN, { agentId, ...pinSent(pin) })),
+    kind: ACT_KIND.AGENTS_PIN,
+    send: (send, agentId, pin) => agentKept(send({ agentId, ...pinSent(pin) })),
     surface: FAILURE_SURFACE.AGENT_PIN,
-  } satisfies RowWrite<TasksView, PinFields>,
+  } satisfies RowWrite<TasksView, PinFields, typeof ACT_KIND.AGENTS_PIN>,
   AGENT_ARCHIVE: {
     read: (agents, agentId) => {
       const agent = agents.find((each) => each.id === agentId);
       return agent === undefined ? undefined : { archived: agent.archivedAt !== undefined };
     },
     holds: holdsEach,
-    send: (act, agentId, { archived }) =>
-      agentKept(act(ACT_KIND.AGENTS_ARCHIVE, { agentId, archived })),
+    kind: ACT_KIND.AGENTS_ARCHIVE,
+    send: (send, agentId, { archived }) => agentKept(send({ agentId, archived })),
     surface: FAILURE_SURFACE.AGENT_ARCHIVE,
-  } satisfies RowWrite<readonly AgentSummary[], { readonly archived: boolean }>,
+  } satisfies RowWrite<
+    readonly AgentSummary[],
+    { readonly archived: boolean },
+    typeof ACT_KIND.AGENTS_ARCHIVE
+  >,
 } as const;

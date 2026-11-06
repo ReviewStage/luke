@@ -4,8 +4,8 @@ import {
   withPictureLine,
 } from "@repo/features/agent-pictures-model";
 import type { FileChip } from "@repo/features/attachment-model";
-import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   PICTURE_KEEP_FAILURE,
@@ -16,12 +16,14 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
 import { keepPictureRead } from "@repo/ui/picture-cache";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
-import { unreachedAs, useAct } from "../act.js";
+import { unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -126,9 +128,11 @@ async function edited(
  * account has Descriptions off.
  */
 export function useAddToDescription(): ViewerAction | undefined {
-  const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptionsOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const page = useTaskMentions();
-  const { act } = useAct();
+  const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
+  const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
   const toast = useToast();
   const working = useWorkingToast();
   return useMemo(() => {
@@ -138,7 +142,7 @@ export function useAddToDescription(): ViewerAction | undefined {
     }
     const { workspace } = page;
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
-      act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
+      sendEdit({ taskId: taskId, edit: { document: { base, value } } }).catch(
         unreachedAs(TASK_CALL_FAILURE.UNANSWERED),
       );
     const add = async (chip: FileChip) => {
@@ -158,7 +162,7 @@ export function useAddToDescription(): ViewerAction | undefined {
       const keeping = await keptUrlOf(chip);
       if ("refused" in keeping) return failed(keeping.refused, keeping.refused, true);
       const { url } = keeping;
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
+      const kept = await sendKeep({ planId: taskId, picture: url }).catch(
         unreachedAs(PICTURE_KEEP_FAILURE.UNANSWERED),
       );
       if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure], kept);
@@ -214,5 +218,5 @@ export function useAddToDescription(): ViewerAction | undefined {
       icon: <ImagePlusIcon aria-hidden="true" />,
       onPress: (chip: FileChip) => void add(chip),
     };
-  }, [descriptionsOn, act, page, toast, working]);
+  }, [descriptionsOn, sendEdit, sendKeep, page, toast, working]);
 }

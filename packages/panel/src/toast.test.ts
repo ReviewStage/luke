@@ -15,7 +15,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import type { ActHandle } from "./act.js";
 import { installShownFailureReporter } from "./failure-report.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
@@ -521,12 +520,11 @@ test("an Undo toast's Undo takes a row write back once, leaving ⌘Z nothing to 
   };
   let drawn: TasksView = { ...IDLE_TASKS_VIEW, tasks: [task] };
   const sent: TasksPinParams[] = [];
-  // SAFETY: the toast's Undo sends this act nothing but the task's pin, which it answers as kept.
-  const pinAct = ((_kind: string, payload: TasksPinParams) => {
+  const sendPin = (payload: TasksPinParams) => {
     sent.push(payload);
     return Promise.resolve(true);
-  }) as ActHandle["act"];
-  const pressed = pressRows(ROW_WRITE.TASK_PIN, { rows: () => drawn, act: pinAct }, [
+  };
+  const pressed = pressRows(ROW_WRITE.TASK_PIN, { rows: () => drawn, send: sendPin }, [
     { id: taskId, after: { pinned: true, position: null } },
   ]);
   // The pin is kept and drawn, as the host draws it.

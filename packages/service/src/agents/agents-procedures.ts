@@ -124,9 +124,9 @@ import {
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { descriptionsOnFor } from "./descriptions-on.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 import { memoryOnFor } from "./memory-tools.js";
+import { descriptionsOnFor } from "./descriptions-on.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import type { SandboxStopReach } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";

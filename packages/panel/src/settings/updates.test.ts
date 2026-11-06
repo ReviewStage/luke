@@ -10,9 +10,10 @@ import { ACT_KIND } from "@repo/host/acts";
 import { UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { installShownFailureReporter } from "../failure-report.js";
 import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { UpdatesSection } from "./updates.js";
 
 /**
@@ -77,7 +78,7 @@ function about(initial: UpdateSnapshot): AboutGroup {
   document.body.append(page);
   const root = createRoot(page);
   roots.push(root);
-  act(() => root.render(createElement(MainProcess)));
+  act(() => root.render(withQueryClient(createElement(MainProcess))));
   return { page, asked: () => asked, openedLatest: () => openedLatest, moved: () => moved };
 }
 
@@ -216,7 +217,7 @@ test("Download is a link to the release page whose press opens it through the up
   assert.equal(openedLatest(), 1);
 });
 
-test("Open changelog is a link to the changelog page whose press sends the changelog act", () => {
+test("Open changelog is a link to the changelog page whose press sends the changelog act", async () => {
   const sent: AnyAct[] = [];
   fakeActs({
     act: (request) => {
@@ -237,5 +238,5 @@ test("Open changelog is a link to the changelog page whose press sends the chang
   const leftFree = pressed(open);
 
   assert.equal(leftFree, false, "the browser does not follow the address a second time");
-  assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
+  await vi.waitFor(() => assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]));
 });

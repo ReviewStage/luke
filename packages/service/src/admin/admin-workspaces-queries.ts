@@ -20,9 +20,9 @@ import { InstantColumnSchema } from "@repo/database/models/columns";
 import { WORKSPACE_NAME } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { invitation, member, organization, user } from "@repo/database/schemas/auth";
-import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import {
   ADMIN_METRICS_SCOPE,

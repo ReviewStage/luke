@@ -5,7 +5,7 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
+import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
 import {

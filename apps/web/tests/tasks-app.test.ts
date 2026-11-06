@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
-import { DESCRIPTION_REVISION } from "@repo/database/models/description-revisions";
 import { writePage } from "@repo/database/models/task-pages";
+import { DESCRIPTION_REVISION } from "@repo/database/models/description-revisions";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { personalWorkspaceOf } from "@repo/database/models/workspace-store";
 import { user } from "@repo/database/schemas/auth";
@@ -15,11 +15,11 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@repo/database/testing";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   DESCRIPTION_EDIT_REFUSAL,
   descriptionEditAnswerSchema,
 } from "@repo/features/description-edit";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -57,11 +57,6 @@ import { taskFilesProcedures } from "@repo/service/tasks/task-files-procedures";
 import { tasksApp } from "@repo/service/tasks/tasks-app";
 import { tasksProcedures } from "@repo/service/tasks/tasks-procedures";
 import {
-  INVITATIONS_TEXT,
-  makeDocumentTask,
-  makeSavedDocumentTask,
-} from "@repo/service/testing/description-documents";
-import {
   connectWorkspaceGitHub,
   type FakeGitHub,
   fakeGitHub,
@@ -73,6 +68,11 @@ import {
   type SentToGitHub,
 } from "@repo/service/testing/github-app-fake";
 import { integrationConnectOver } from "@repo/service/testing/integration-connect";
+import {
+  INVITATIONS_TEXT,
+  makeDocumentTask,
+  makeSavedDocumentTask,
+} from "@repo/service/testing/description-documents";
 import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
 import { added } from "@repo/service/testing/task-contents";
 import { EXPERIMENT } from "@repo/settings";

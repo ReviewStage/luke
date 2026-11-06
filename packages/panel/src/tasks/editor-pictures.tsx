@@ -1,8 +1,8 @@
+import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
 import {
   descriptionAttachmentAddress,
   descriptionAttachmentOf,
 } from "@repo/features/description-attachment-link";
-import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { PICTURE_KEEP_FAILURE } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -26,17 +26,11 @@ import {
 } from "@repo/ui";
 import { CaptionsIcon, GLYPH, Maximize2Icon, TextCursorInputIcon } from "@repo/ui/icons";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { useAppCommand } from "../app-commands.js";
-import type {
-  DescriptionEditorHandle,
-  DescriptionEditorPictures,
-  PictureNode,
-  PictureNodeDoors,
-  PictureTaken,
-} from "../description-editor/contract.js";
 import { failureShown, pictureUnread } from "../failure-report.js";
 import { encodeImage } from "../feedback-images.js";
 import {
@@ -46,11 +40,18 @@ import {
   PICTURE_PENDING_CLASS,
   PictureBlock,
 } from "../picture-block.js";
+import type {
+  PictureNode,
+  PictureNodeDoors,
+  PictureTaken,
+  DescriptionEditorHandle,
+  DescriptionEditorPictures,
+} from "../description-editor/contract.js";
+import { documentScrollerOf } from "./document-frame.js";
 import {
   type DescriptionPicturesDoor,
   useDescriptionPicturesDoor,
 } from "./description-pictures.js";
-import { documentScrollerOf } from "./document-frame.js";
 
 /**
  * editor-pictures.tsx -- a description's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
@@ -414,7 +415,7 @@ export function useEditorPictures(
   workspace: string | undefined,
   handle: React.RefObject<DescriptionEditorHandle | undefined>,
 ): EditorPictures {
-  const { act } = useAct();
+  const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
   const door = useDescriptionPicturesDoor();
   const [drawn, setDrawn] = useState<readonly DrawnPicture[]>([]);
   const [uploads, setUploads] = useState<ReadonlyMap<string, Upload>>(new Map());
@@ -435,9 +436,7 @@ export function useEditorPictures(
       settled(taken.upload, { kind: UPLOAD.SENDING, url });
       const failed = (reason: string) =>
         settled(taken.upload, { kind: UPLOAD.FAILED, url, reason, taken });
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
-        () => undefined,
-      );
+      const kept = await sendKeep({ planId: taskId, picture: url }).catch(() => undefined);
       if (kept === undefined || "failure" in kept) return failed(keepFailedWords(kept?.failure));
       keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
@@ -446,7 +445,7 @@ export function useEditorPictures(
       );
       settled(taken.upload, undefined);
     },
-    [act, handle, taskId, settled, workspace],
+    [sendKeep, handle, taskId, settled, workspace],
   );
   // Note that a picture of another description is read as that description's before it is kept again.
   const begin = useCallback(

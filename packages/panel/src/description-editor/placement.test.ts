@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "vitest";
 import { installEditorLayout } from "../testing/composer.js";
 import {
+  PLACEMENT_END,
   type DescriptionEditorHandle,
   type DescriptionEditorPlacement,
-  PLACEMENT_END,
 } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 

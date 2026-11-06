@@ -6,8 +6,8 @@ import {
 import { queryBuilder } from "@repo/database/core/query";
 import { taskSeenBy } from "@repo/database/models/workspace-store";
 import { member } from "@repo/database/schemas/auth";
-import { task } from "@repo/database/schemas/task";
 import { taskPageVersion } from "@repo/database/schemas/task-page";
+import { task } from "@repo/database/schemas/task";
 import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 

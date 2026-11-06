@@ -12,8 +12,6 @@ import {
   type AgentTodos,
   agentTodosInputSchema,
 } from "@repo/features/agent-wire";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
-import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -37,6 +35,8 @@ import {
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
 import { linkLabels } from "@repo/features/mention-link";
 import type { ModelChoice } from "@repo/features/models-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
+import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   browserCallWords,
   CALL_KIND,

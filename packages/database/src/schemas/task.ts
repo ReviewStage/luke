@@ -1,5 +1,5 @@
-import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   DESCRIPTION_ACTOR,
   TASK_MODE,

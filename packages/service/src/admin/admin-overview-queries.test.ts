@@ -9,10 +9,10 @@ import {
 import { agentTable, type StoredPullRequest } from "@repo/database/schemas/agent";
 import { session, user } from "@repo/database/schemas/auth";
 import { automation, automationRun } from "@repo/database/schemas/automation";
-import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { integrationConnection } from "@repo/database/schemas/integration";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { conversations } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";

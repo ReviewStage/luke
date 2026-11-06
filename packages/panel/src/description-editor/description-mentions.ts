@@ -11,9 +11,9 @@ import {
 import type { EditorView } from "@tiptap/pm/view";
 import {
   type ComposerTrigger,
-  type DescriptionEditorMentions,
   type HeadingsChange,
   type MentionNode,
+  type DescriptionEditorMentions,
   sameTrigger,
 } from "./contract.js";
 import { MENTION_NODE } from "./mention-node.js";

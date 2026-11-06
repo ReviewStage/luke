@@ -10,9 +10,9 @@ import {
   upsertBrowserTab,
 } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, renameAgent } from "@repo/database/models/agent-store";
-import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
 import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
 import { readGitHubTokenRow, removeGitHubToken } from "@repo/database/models/github-token-store";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
 import { writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -27,8 +27,8 @@ import {
 } from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
-import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { saveNotes } from "../tasks/description-notes.js";

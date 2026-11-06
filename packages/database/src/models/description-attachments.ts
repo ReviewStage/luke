@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import {
   isVideoPicture,
   PICTURE_MEDIA_TYPE,
   type Picture,
   pictureMediaTypeSchema,
 } from "@repo/features/picture-wire";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

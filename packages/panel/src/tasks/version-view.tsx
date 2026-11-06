@@ -26,17 +26,17 @@ import { PhoneHead, PlaceMore, phoneFindGroups } from "../desktop/phone-head.js"
 import { unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
+import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./description-history-model.js";
 import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
-import { DocumentScroll } from "./document-frame.js";
 import { type MentionedTask, useMentionLink } from "./task-mentions.js";
 import { TextTitle } from "./task-title.js";
+import { useOpenLink } from "./use-open-link.js";
 import {
-  type DescriptionHistoryControl,
   HISTORY_READ,
+  type DescriptionHistoryControl,
   type ViewedVersion,
 } from "./use-description-history.js";
-import { useOpenLink } from "./use-open-link.js";
 
 /**
  * version-view.tsx -- one version of a description, drawn read-only with what it changed marked, under a bar with its restore.

@@ -12,6 +12,8 @@ import {
 import { readPageById } from "@repo/database/models/task-pages";
 import { readTaskHeader, readTaskWorkspace } from "@repo/database/models/task-store";
 import { TOPIC } from "@repo/database/sync/notification";
+import { askedInWords } from "@repo/features/mention-link";
+import { PAGE_SHOWER } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -23,8 +25,6 @@ import {
   type DescriptionCommentThread,
   type DescriptionCommentThreadAnswer,
 } from "@repo/features/description-comment-wire";
-import { askedInWords } from "@repo/features/mention-link";
-import { PAGE_SHOWER } from "@repo/features/page-wire";
 import { COMMENT_LINE_BOUNDS } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";

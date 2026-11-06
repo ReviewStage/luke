@@ -20,13 +20,13 @@ import {
   type AdminReadAnswer,
 } from "@repo/features/admin-wire";
 import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { pagePlaceId } from "@repo/features/page-wire";
+import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_REFUSAL,
   DESCRIPTION_COMMENT_SCOPE,
 } from "@repo/features/description-comment-wire";
-import { pagePlaceId } from "@repo/features/page-wire";
-import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { READ_MARK } from "@repo/features/read-mark";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@repo/features/task-wire";

@@ -12,7 +12,7 @@
  */
 
 import { scheduleTask } from "@effect/atom-react/RegistryContext";
-import { type Context, Duration, Effect, Layer } from "effect";
+import { Cause, type Context, Duration, Effect, Exit, Layer } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -61,3 +61,15 @@ export const rendererFork = (effect: Effect.Effect<void>): (() => void) => {
   const fiber = Effect.runForkWith(rendererServicesNow())(effect);
   return () => fiber.interruptUnsafe();
 };
+
+/**
+ * An effect run to a promise on the renderer's services, for a caller that
+ * awaits one: a TanStack Query `queryFn` (`use-app-state.ts`'s
+ * `appStateQuery`). Note that a failure rejects with `Cause.squash` of its
+ * cause, so the caller holds the failure the effect raised rather than a
+ * fiber's own wrapping of it.
+ */
+export const rendererPromise = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  Effect.runPromiseExitWith(rendererServicesNow())(effect).then((exit) =>
+    Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
+  );

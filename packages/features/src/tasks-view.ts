@@ -9,17 +9,6 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
-import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
-import {
-  descriptionCommentActionRequestSchema,
-  descriptionCommentStartRequestSchema,
-  descriptionCommentThreadAnswerSchema,
-} from "./description-comment-wire.js";
-import {
-  DESCRIPTION_EDIT_REFUSAL,
-  descriptionEditConflictSchema,
-  descriptionEditRequestSchema,
-} from "./description-edit.js";
 import { failureFactsSchema } from "./failure-facts.js";
 import {
   githubRepositoryFullNameSchema,
@@ -32,6 +21,17 @@ import {
 } from "./page-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
+import {
+  descriptionCommentActionRequestSchema,
+  descriptionCommentStartRequestSchema,
+  descriptionCommentThreadAnswerSchema,
+} from "./description-comment-wire.js";
+import {
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditConflictSchema,
+  descriptionEditRequestSchema,
+} from "./description-edit.js";
 import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
@@ -46,10 +46,10 @@ import {
 } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
+  listedPullRequestSchema,
   descriptionRevisionAnswerSchema,
   descriptionRevisionSeqSchema,
   descriptionRevisionsAnswerSchema,
-  listedPullRequestSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   type Task,

@@ -1,7 +1,7 @@
-import { descriptionSections } from "@repo/features/description-document";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
 import { HashIcon } from "lucide-react";

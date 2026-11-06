@@ -27,7 +27,7 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { heardWords } from "../testing/heard-words.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -91,7 +91,7 @@ function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMenti
   act(() =>
     root.render(
       page === undefined
-        ? turn
+        ? withQueryClient(turn)
         : onRegistry(
             AtomRegistry.make(),
             createElement(TaskMentions, {
@@ -481,18 +481,20 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   ]);
   act(() =>
     root.render(
-      createElement(AgentMessage, {
-        message,
-        description: false,
-        lead: AGENT_LEAD,
-        moving: false,
-        delegation: {
-          models: [],
-          onOpen: () => undefined,
-          onOpenTarget: () => undefined,
-          cards: cards.agent("agent-1"),
-        },
-      }),
+      withQueryClient(
+        createElement(AgentMessage, {
+          message,
+          description: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: {
+            models: [],
+            onOpen: () => undefined,
+            onOpenTarget: () => undefined,
+            cards: cards.agent("agent-1"),
+          },
+        }),
+      ),
     ),
   );
   const row = (callId: string) =>
@@ -532,18 +534,20 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
   ]);
   act(() =>
     root.render(
-      createElement(AgentMessage, {
-        message,
-        description: false,
-        lead: AGENT_LEAD,
-        moving: false,
-        delegation: {
-          models: [],
-          onOpen: () => undefined,
-          onOpenTarget: () => undefined,
-          cards: cards.agent("agent-1"),
-        },
-      }),
+      withQueryClient(
+        createElement(AgentMessage, {
+          message,
+          description: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: {
+            models: [],
+            onOpen: () => undefined,
+            onOpenTarget: () => undefined,
+            cards: cards.agent("agent-1"),
+          },
+        }),
+      ),
     ),
   );
   // A call run alone is folded under its own line, which a press opens.
@@ -591,17 +595,19 @@ test("a call about an agent names it by its chip in the place of the words, as i
   ]);
   act(() =>
     root.render(
-      createElement(AgentMessage, {
-        message,
-        description: false,
-        lead: AGENT_LEAD,
-        moving: true,
-        delegation: {
-          models: [],
-          onOpenTarget: (target) => opened.push(target),
-          cards: cards.call,
-        },
-      }),
+      withQueryClient(
+        createElement(AgentMessage, {
+          message,
+          description: false,
+          lead: AGENT_LEAD,
+          moving: true,
+          delegation: {
+            models: [],
+            onOpenTarget: (target) => opened.push(target),
+            cards: cards.call,
+          },
+        }),
+      ),
     ),
   );
   const line = (callId: string) =>

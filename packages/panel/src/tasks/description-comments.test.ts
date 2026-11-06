@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { formatCount } from "@repo/features/number-format";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -13,7 +14,6 @@ import {
   type DescriptionCommentThread,
   type DescriptionCommentWriter,
 } from "@repo/features/description-comment-wire";
-import { formatCount } from "@repo/features/number-format";
 import type { Task } from "@repo/features/task-wire";
 import { pasteCutWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -45,9 +45,9 @@ import { AGENT } from "../testing/desktop-inbox.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
+import type { EditAgents } from "./edit-ref.js";
 import { DescriptionBody } from "./description-body.js";
 import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./description-comments.js";
-import type { EditAgents } from "./edit-ref.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.

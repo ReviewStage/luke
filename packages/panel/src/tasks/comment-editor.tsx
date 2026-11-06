@@ -10,14 +10,14 @@ import {
 import { FileDiffIcon } from "@repo/ui/icons";
 import { markdownClass } from "@repo/ui/markdown-class";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { enterSends } from "../enter-sends.js";
 import {
-  type DescriptionEditorHandle,
   EDITOR_ROOT_SELECTOR,
   FINISH,
   type Finish,
   PLACEMENT_END,
+  type DescriptionEditorHandle,
 } from "../description-editor/contract.js";
-import { enterSends } from "../enter-sends.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import type { OwnBlock } from "./block-picker.js";
 import { MarkdownEditor } from "./markdown-editor.js";

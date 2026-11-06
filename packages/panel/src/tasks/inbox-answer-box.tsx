@@ -19,15 +19,15 @@ import { type ReactNode, type RefObject, useEffect, useRef, useState } from "rea
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { useConnected } from "../connection.js";
+import { failureShown, unreadShown } from "../failure-report.js";
+import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
+import { PANEL_SPAN } from "../panel-spans.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
   type ComposerQuote,
   type DescriptionEditorModule,
 } from "../description-editor/contract.js";
-import { failureShown, unreadShown } from "../failure-report.js";
-import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
-import { PANEL_SPAN } from "../panel-spans.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";

@@ -15,22 +15,20 @@ import StarterKit from "@tiptap/starter-kit";
 import { enterSends, modEnterSends } from "../enter-sends.js";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import {
-  DESCRIPTION_PLACEHOLDER,
-  type DescriptionEditorHandle,
-  type DescriptionEditorPictures,
-  type DescriptionEditorPlacement,
-  type DescriptionEditorProps,
   type EditorAria,
   type EditorSpan,
   FINISH,
   type MentionDrawer,
+  DESCRIPTION_PLACEHOLDER,
   type PlacedWords,
+  type DescriptionEditorHandle,
+  type DescriptionEditorPictures,
+  type DescriptionEditorPlacement,
+  type DescriptionEditorProps,
   rootAria,
   sameAria,
   type TaskBoxDrawer,
 } from "./contract.js";
-import { descriptionMentions } from "./description-mentions.js";
-import { descriptionSlash } from "./description-slash.js";
 import { diagramPreview } from "./diagram-preview.js";
 import {
   documentManager,
@@ -54,6 +52,8 @@ import {
   removedPicture,
   settledPicture,
 } from "./picture-node.js";
+import { descriptionMentions } from "./description-mentions.js";
+import { descriptionSlash } from "./description-slash.js";
 import { editorFormatting, formatReports } from "./writing-format.js";
 import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writing-keys.js";
 

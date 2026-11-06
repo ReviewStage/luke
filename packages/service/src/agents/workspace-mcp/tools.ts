@@ -106,15 +106,15 @@ import {
   runAgentTools,
 } from "../coder-host/agent-doors.js";
 import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
-import {
-  DESCRIPTION_EDIT_REFUSAL,
-  descriptionEditRejected,
-  EDIT_DESCRIPTION_TOOL,
-  requestedNotes,
-} from "../coder-host/description-edit.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
+import {
+  EDIT_DESCRIPTION_TOOL,
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditRejected,
+  requestedNotes,
+} from "../coder-host/description-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {

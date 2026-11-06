@@ -1,12 +1,18 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { descriptionSections } from "@repo/features/description-document";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
 import type { CatalogModel } from "@repo/features/models-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { TASKS_READ } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
-import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
@@ -17,9 +23,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { askAct, useAct } from "../act.js";
-import type { MentionNode } from "../description-editor/contract.js";
+import { askAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import type { LinkDrawer } from "../markdown-message.js";
+import type { MentionNode } from "../description-editor/contract.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { useHeldRows } from "../use-host-read.js";
 import { agentActor, agentName } from "./agent-model.js";
@@ -361,8 +368,8 @@ export function useMentionAgentsReader(
   tasks: readonly { readonly id: string; readonly name: string }[],
   models: readonly CatalogModel[] | undefined,
 ): MentionAgentsReader | undefined {
-  const { tell } = useAct();
   const queryClient = useQueryClient();
+  const { mutate: refreshTasks } = useMutation(actMutation(ACT_KIND.TASKS_REFRESH));
   const newest = useWorkspaceAgents(workspaceId, null);
   const listFailed = newest !== undefined && "failed" in newest;
   const carried = newest !== undefined && !listFailed;
@@ -382,7 +389,8 @@ export function useMentionAgentsReader(
       };
       if (words === undefined) {
         if (listFailed) {
-          tell(ACT_KIND.TASKS_REFRESH);
+          // Note that the refresh is quiet whatever comes back, since no person pressed for it, and needs no invalidation: the lists it reads again land through app state.
+          refreshTasks();
           return Promise.reject(new Error(TASKS_READ.FAILED));
         }
         return Promise.resolve(carried ? offered(naming.current.newest) : NO_AGENTS);
@@ -394,7 +402,7 @@ export function useMentionAgentsReader(
           return offered(answer.agents);
         });
     },
-    [queryClient, tell, workspaceId, listFailed, carried],
+    [queryClient, refreshTasks, workspaceId, listFailed, carried],
   );
   return workspaceId === undefined ? undefined : read;
 }

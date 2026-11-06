@@ -10,7 +10,6 @@ import { imageTypeOfPath } from "@repo/features/github-image";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wire";
 import { REFRESH_FAILED_WORDS } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import {
   BUTTON_SIZE,
   Button,
@@ -43,6 +42,7 @@ import {
   ImageIcon,
   UnfoldVerticalIcon,
 } from "@repo/ui/icons";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
   type ReactNode,
@@ -53,7 +53,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useDraft } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -143,6 +142,7 @@ import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 import { PullRequestWriteNote, type ReadAgain } from "./pull-request-writes.js";
+import { refusedAnswer, taskFileQueryOptions } from "./repository-reads.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
@@ -1446,7 +1446,7 @@ function useFileTexts(
   } | null,
   files: readonly AgentChangedFile[],
 ): FileTexts {
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   const [refusals, setRefusals] = useState<{
     readonly of: unknown;
     readonly refused: ReadonlyMap<string, ExpansionRefusal>;
@@ -1476,18 +1476,25 @@ function useFileTexts(
         refused: new Map(was.of === pullRequest ? was.refused : NONE_REFUSED).set(path, why),
       }));
     const rawAt = (ref: string, path: string): Promise<RawRead> =>
-      act(ACT_KIND.TASKS_FILE, { taskId, path, firstLine: 1, lastLine: 1, raw: true, ref }).then(
-        (answer) =>
-          "text" in answer
-            ? { text: answer.text.text }
-            : {
-                refused:
-                  "refusal" in answer
-                    ? expansionRefusalOf(answer.refusal)
-                    : EXPANSION_REFUSAL.UNAVAILABLE,
-              },
-        () => ({ refused: EXPANSION_REFUSAL.UNAVAILABLE }),
-      );
+      queryClient
+        .fetchQuery(
+          taskFileQueryOptions({ taskId }, { path, firstLine: 1, lastLine: 1, raw: true, ref }),
+        )
+        .then(
+          (answer) =>
+            "text" in answer
+              ? { text: answer.text.text }
+              : { refused: EXPANSION_REFUSAL.UNAVAILABLE },
+          (error: unknown) => {
+            const refused = refusedAnswer(error);
+            return {
+              refused:
+                "refusal" in refused
+                  ? expansionRefusalOf(refused.refusal)
+                  : EXPANSION_REFUSAL.UNAVAILABLE,
+            };
+          },
+        );
     const textsAt = async (file: AgentChangedFile): Promise<TextsRead> => {
       if (!tooLargeToDiff(file)) {
         const after = await rawAt(headSha, file.path);
@@ -1524,7 +1531,7 @@ function useFileTexts(
       kept.set(path, reading);
       return reading;
     };
-  }, [act, taskId, repository, pullRequest, files, baseSha, drawable]);
+  }, [queryClient, taskId, repository, pullRequest, files, baseSha, drawable]);
   // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
   const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
   const whole = useCallback((file: AgentChangedFile) => own.has(file), [own]);

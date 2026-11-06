@@ -14,7 +14,6 @@ import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-
 import type { TaskStatus } from "@repo/features/task-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@repo/features/terminal-entry";
 import { readingWords } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
@@ -74,6 +73,7 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
+import { useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import {
   Fragment,
@@ -88,7 +88,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useAct } from "../act.js";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
@@ -156,8 +155,8 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import { useDescriptionComments } from "../tasks/use-description-comments.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
+import { useDescriptionComments } from "../tasks/use-description-comments.js";
 import {
   DRAWN_KINDS,
   type DrawnTabs,
@@ -180,7 +179,7 @@ import {
   type SidePanelTab,
   sameHolder,
 } from "../tasks/use-side-panel.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useHostReads, usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
@@ -1975,7 +1974,6 @@ function TabContent({
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: TabActionGroups | undefined) => void;
 }): React.JSX.Element | null {
-  const { act } = useAct();
   const directory = useMemberDirectory();
   if (isTranscriptTab(tab)) return <>{transcript?.(tab.transcript)}</>;
   if (isCloudBrowserTab(tab)) {
@@ -2027,9 +2025,6 @@ function TabContent({
         key={page.id}
         place={place}
         page={page}
-        readSource={(version) =>
-          act(ACT_KIND.TASKS_PAGE_SOURCE, { ...place, pageId: page.id, version })
-        }
         findActive={findActive}
         doors={{
           agents: {
@@ -2074,19 +2069,14 @@ function TabContent({
     if (file === undefined) return <SpinnerRegion delay label={readingWords("the file")} />;
     const reads = fileReadsOf(file, { place: repositoryPlace ?? { taskId }, repository });
     const { place } = reads;
-    // Note that a task's tree is asked for by its plan, and a repository's by its workspace.
-    const tree = "taskId" in place ? { planId: place.taskId } : place;
     // Note that the task given another repository draws the file afresh,
     // because the lines held were read from the one before.
     return (
       <Fragment key={reads.repository ?? undefined}>
         <FileView
-          taskId={"taskId" in place ? place.taskId : taskId}
+          place={place}
           repository={reads.repository}
           file={file}
-          readFile={(window) => act(ACT_KIND.TASKS_FILE, { ...place, ...window })}
-          readFolder={(path) => act(ACT_KIND.TASKS_TREE, { ...tree, path })}
-          readWhole={() => act(ACT_KIND.TASKS_TREE, { ...tree, path: "", recursive: true })}
           openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
@@ -2534,7 +2524,9 @@ export function SidePanel({
     drawsChanges(each, { taskAgents: agents.heldIds }),
   );
   // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox or where the platform runs no terminals.
-  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const terminalsOffered =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+    true;
   const terminalsHere = terminalsOffered && holder !== SIDE_PANEL_HOLDER.INBOX;
   const terminals = !terminalsHere
     ? NO_TERMINALS

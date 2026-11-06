@@ -1,12 +1,12 @@
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import { namedServers } from "@repo/ui/agent-servers-model";
 import type { ReactNode, RefObject } from "react";
+import type { IntegrationStatuses } from "../integration-statuses.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerTrigger,
 } from "../description-editor/contract.js";
-import type { IntegrationStatuses } from "../integration-statuses.js";
 import type { ComposerFieldMentions } from "./composer-field.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";

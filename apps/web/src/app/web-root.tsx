@@ -35,7 +35,7 @@ import { installShownFailureReporter } from "@repo/panel/failure-report";
 import { createPanelRouter } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
-import { appStateFirstRead } from "@repo/panel/use-app-state";
+import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
 import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
 import { createBrowserHistory, RouterProvider } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
@@ -142,7 +142,9 @@ export async function mountWebApp(
     installed.push(installAppPlatform(web.platform));
     // Every failure the panel shows is reported through the tab's Sentry.
     installed.push(installShownFailureReporter(sentry.reportShownFailure));
-    await runtime.runPromise(appStateFirstRead);
+    // The document is read into the window's Query client before anything is drawn over it, so
+    // no reader draws a first frame without it.
+    await queryClient.ensureQueryData(appStateQuery);
   } catch (error) {
     console.error(
       "The tab's host could not stand or its state be read; its panel is not drawn.",
@@ -163,6 +165,7 @@ export async function mountWebApp(
     <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
+          <AppStateSubscription />
           <WebAppearance />
           <RouterProvider router={router} />
         </QueryProvider>

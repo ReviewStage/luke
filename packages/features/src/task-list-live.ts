@@ -30,8 +30,8 @@ import { sealedLiveQuerySchema } from "./live-wire.js";
 import { readMarkOf } from "./read-mark.js";
 import { countedNumber } from "./service-wire.js";
 import {
-  DESCRIPTION_ACTOR,
   type ListedPullRequest,
+  DESCRIPTION_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
   type TaskAgentPin,

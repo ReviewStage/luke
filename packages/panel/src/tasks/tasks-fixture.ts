@@ -1,3 +1,4 @@
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
@@ -7,7 +8,6 @@ import {
   type DescriptionCommentThread,
   type DescriptionCommentWriter,
 } from "@repo/features/description-comment-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   DESCRIPTION_ACTOR,
   type DescriptionDocument,
@@ -27,10 +27,10 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  type AppDescriptionComments,
-  type AppDescriptionDocuments,
   type AppHeldById,
   type AppHistories,
+  type AppDescriptionComments,
+  type AppDescriptionDocuments,
   type AppRepositoryLists,
   type AppStateSnapshot,
   EVERY_WORKSPACE,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -13,7 +14,6 @@ import {
   type DescriptionCommentStartRequest,
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -23,10 +23,10 @@ import { createAgent } from "../agent-store.js";
 import { readDescriptionAttachment } from "../description-attachments.js";
 import {
   actOnDescriptionCommentThread,
+  moveDescriptionCommentAnchors,
   DESCRIPTION_COMMENT_OUTCOME,
   type DescriptionCommentOutcome,
   type DescriptionCommentWriterRef,
-  moveDescriptionCommentAnchors,
   readDescriptionCommentFile,
   readDescriptionCommentThreads,
   startDescriptionCommentThread,

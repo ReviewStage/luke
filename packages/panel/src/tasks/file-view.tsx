@@ -22,6 +22,7 @@ import {
   Tooltip,
   useResizeEdge,
 } from "@repo/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
   Fragment,
@@ -29,7 +30,6 @@ import {
   type RefObject,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -44,7 +44,7 @@ import { usePhoneRoom } from "../stage-room.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { useFileMenu } from "./file-menu.js";
-import { FileTab, type ReadFileWindow } from "./file-tab.js";
+import { FileTab } from "./file-tab.js";
 import {
   FILE_READ,
   type FileRead,
@@ -55,9 +55,21 @@ import {
   wholeTextOf,
 } from "./file-tab-model.js";
 import { FileTreePane } from "./file-tree-pane.js";
-import { keptListings, type ListFolder, listingOf } from "./folder-listings.js";
+import { listingOf } from "./folder-listings.js";
+import {
+  ReadRefused,
+  refusedAnswer,
+  taskFileQueryOptions,
+  taskTreeKey,
+  taskTreeQueryOptions,
+} from "./repository-reads.js";
 import { linkPressOf } from "./use-open-link.js";
-import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel.js";
+import {
+  FILE_HISTORY_STEP,
+  type FileHistoryStep,
+  type FileReadPlace,
+  type OpenFile,
+} from "./use-side-panel.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
@@ -666,12 +678,9 @@ export function useFileViewEnd(
 const HEAD_READ = "head";
 
 export function FileView({
-  taskId,
+  place,
   repository,
   file,
-  readFile,
-  readFolder,
-  readWhole,
   openGitHub,
   treeOpen,
   onToggleTree,
@@ -679,15 +688,11 @@ export function FileView({
   onBrowse,
   history,
 }: {
-  taskId: string;
+  /** Where the file, its folders, and the whole repository are read: through the task, or the workspace's repository. */
+  place: FileReadPlace;
   /** The task's repository, `owner/name`, which the tree browses; none draws the tab alone. */
   repository: string | null;
   file: OpenFile;
-  readFile: ReadFileWindow;
-  /** Lists one folder of the repository through the service. */
-  readFolder: ListFolder;
-  /** Lists the whole repository in one read through the service, which the tree's search narrows. */
-  readWhole: () => Promise<TasksTreeAnswer>;
   openGitHub: (url: string) => void;
   treeOpen: boolean;
   onToggleTree: () => void;
@@ -697,23 +702,30 @@ export function FileView({
   onBrowse: (path: string, newTab: boolean) => void;
   history: FileHistory;
 }): React.JSX.Element {
-  // The view's store of listings, one per task and repository. Note that
-  // it lists through a ref to the latest door, so a parent drawing a fresh
-  // door neither forgets the listings nor lists the root again.
-  const latestRead = useRef(readFolder);
-  latestRead.current = readFolder;
-  const latestWhole = useRef(readWhole);
-  latestWhole.current = readWhole;
-  const listFolder = useMemo(
-    () => keptListings((path) => latestRead.current(path)),
-    [taskId, repository],
+  // Note that the tree and its search read the latest place through a ref, so a parent drawing a fresh place lists nothing again.
+  const queryClient = useQueryClient();
+  const latestPlace = useRef(place);
+  latestPlace.current = place;
+  const taskId = "taskId" in place ? place.taskId : undefined;
+  const workspaceId = "workspaceId" in place ? place.workspaceId : undefined;
+  const readRepository = "repository" in place ? place.repository : undefined;
+  // Coming back to a File tab from another tab lists the repository afresh, as GitHub holds it then; within the view a folder is listed once.
+  useEffect(() => {
+    // Note that refetchOnMount cannot do it, because the listings are read through fetchQuery, which no mount reaches.
+    void queryClient.invalidateQueries({
+      queryKey: taskTreeKey(latestPlace.current),
+      refetchType: "none",
+    });
+  }, [queryClient, taskId, workspaceId, readRepository]);
+  const listFolder = useCallback(
+    (path: string, recursive = false): Promise<TasksTreeAnswer> =>
+      queryClient
+        .fetchQuery(taskTreeQueryOptions(latestPlace.current, path, recursive))
+        .catch((error: unknown): TasksTreeAnswer => refusedAnswer(error)),
+    [queryClient],
   );
-  // The whole repository is kept beside the folders, read once however many
-  // File tabs search it.
-  const listWhole = useMemo(() => {
-    const kept = keptListings(() => latestWhole.current());
-    return () => kept("");
-  }, [taskId, repository]);
+  // The whole repository is listed beside the folders, read once however many File tabs search it.
+  const listWhole = useCallback(() => listFolder("", true), [listFolder]);
 
   const commit = file.commit;
 
@@ -724,19 +736,27 @@ export function FileView({
     (next: FileRead) => setTold({ path: file.path, commit, read: next }),
     [file.path, commit],
   );
-  // Every read of the tab's file asks it at the tab's commit, where one pins it.
-  const readAt: ReadFileWindow = (window) =>
-    readFile(commit === undefined ? window : { ...window, ref: commit });
   // The whole text, for a copy or a download: the text the tab draws, so a
   // copy holds the lines shown at the commit they were read at, or, before
-  // the tab holds it, read raw through the tab's door in one read.
+  // the tab holds it, read raw at the tab's commit in one read.
   const readText = (): Promise<WholeText> =>
     read.kind === FILE_READ.READY
       ? Promise.resolve({ kind: WHOLE_TEXT.READ, text: read.text })
-      : readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(
-          wholeTextOf,
-          (cause: unknown) => ({ kind: WHOLE_TEXT.UNREAD, cause }),
-        );
+      : queryClient
+          .fetchQuery(
+            taskFileQueryOptions(place, {
+              path: file.path,
+              firstLine: 1,
+              lastLine: 1,
+              raw: true,
+              ...(commit === undefined ? undefined : { ref: commit }),
+            }),
+          )
+          .then(wholeTextOf, (error: unknown) =>
+            error instanceof ReadRefused
+              ? wholeTextOf(error.answer)
+              : { kind: WHOLE_TEXT.UNREAD, cause: error },
+          );
   const fileViewEnd = useFileViewEnd({
     path: file.path,
     ready: read.kind === FILE_READ.READY,
@@ -816,7 +836,7 @@ export function FileView({
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
-          <FileTab key={commit ?? HEAD_READ} file={file} readFile={readAt} onRead={onRead} />
+          <FileTab key={commit ?? HEAD_READ} place={place} file={file} onRead={onRead} />
         </Fragment>
         {browsing ? (
           <FileTreePane

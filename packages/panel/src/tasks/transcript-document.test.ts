@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
-import type { TaskFileRequest } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -17,6 +16,7 @@ import {
   openingLinks,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 import { LinkBlock } from "./inbox-pane.js";
@@ -109,14 +109,18 @@ function inPane(
   asked: string[] = [],
   read: { path: string; ref: string | undefined }[] = [],
 ): ReactNode {
+  // A file's lines are held unread, so a code card stands as it reads them.
+  fakeActPort({
+    ...openingLinks((link) => told.push(link)),
+    [ACT_KIND.TASKS_FILE]: (window) => {
+      read.push({ path: window.path, ref: window.ref });
+      return new Promise<never>(() => undefined);
+    },
+  });
   const doors = {
     code: {
       repository: REPOSITORY,
-      // A file's lines are held unread, so a code card stands as it reads them.
-      readFile: (window: TaskFileRequest) => {
-        read.push({ path: window.path, ref: window.ref });
-        return new Promise<never>(() => undefined);
-      },
+      place: { taskId: "task-1" },
       onOpenFile: () => undefined,
     },
   };
@@ -137,7 +141,7 @@ function drawn(node: ReactNode): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(node));
+  act(() => root.render(withQueryClient(node)));
   return container;
 }
 
@@ -265,7 +269,7 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(draw(reading)));
+  act(() => root.render(withQueryClient(draw(reading))));
   assert.equal(container.querySelectorAll('button[aria-label="Enlarge Another\'s"]').length, 1);
 
   const press = container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
@@ -293,7 +297,7 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   assert.deepEqual(viewer(), ["Before.png", "1 of 2"]);
 
   // The third's bytes land, and it joins the walk where it is drawn.
-  act(() => root.render(draw(new Map([...reading, [third, HELD]]))));
+  act(() => root.render(withQueryClient(draw(new Map([...reading, [third, HELD]])))));
   assert.deepEqual(viewer(), ["Before.png", "1 of 3"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["After.png", "2 of 3"]);
@@ -307,7 +311,9 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   // A picture drawn while the viewer stands, as a newer read of the item adds one, joins the walk.
   const fourth = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d05";
   text = `${text}\n\n![Fourth](${pictureOf(ITEM_ID, fourth)})`;
-  act(() => root.render(draw(new Map([...reading, [third, HELD], [fourth, HELD]]))));
+  act(() =>
+    root.render(withQueryClient(draw(new Map([...reading, [third, HELD], [fourth, HELD]])))),
+  );
   assert.deepEqual(viewer(), ["Third.png", "3 of 4"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["Fourth.png", "4 of 4"]);
@@ -339,7 +345,7 @@ test("a picture far from the screen is neither asked for nor drawn until it come
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(draw(new Map())));
+  act(() => root.render(withQueryClient(draw(new Map()))));
   assert.deepEqual(asked, []);
 
   const scrolled = (isIntersecting: boolean) => {
@@ -348,7 +354,7 @@ test("a picture far from the screen is neither asked for nor drawn until it come
   };
   scrolled(true);
   assert.deepEqual(asked, [`${ITEM_ID}/${far}`]);
-  act(() => root.render(draw(new Map([[far, HELD]]))));
+  act(() => root.render(withQueryClient(draw(new Map([[far, HELD]])))));
   assert.equal(container.querySelector("img")?.alt, "Far");
 
   scrolled(false);

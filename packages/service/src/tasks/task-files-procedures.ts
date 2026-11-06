@@ -31,17 +31,17 @@
  */
 
 import {
-  DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
 } from "@repo/database/models/description-attachments";
 import { listPages, readPageVersion } from "@repo/database/models/task-pages";
 import { readTaskWorkspace } from "@repo/database/models/task-store";
+import { pageVersionNumberSchema, taskPageOwner } from "@repo/features/page-wire";
+import { pictureOfDataUrl } from "@repo/features/picture-wire";
 import {
   DESCRIPTION_ATTACHMENT_REFUSAL,
   DESCRIPTION_ATTACHMENT_STATUS,
 } from "@repo/features/description-attachment-wire";
-import { pageVersionNumberSchema, taskPageOwner } from "@repo/features/page-wire";
-import { pictureOfDataUrl } from "@repo/features/picture-wire";
 import {
   type TaskFileRequest,
   type TaskTreeRequest,

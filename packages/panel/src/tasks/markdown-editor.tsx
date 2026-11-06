@@ -16,10 +16,6 @@ import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { DiagramPreview } from "../description-diagram.js";
 import {
-  type DescriptionEditorHandle,
-  type DescriptionEditorModule,
-  type DescriptionEditorPlacement,
-  type DescriptionEditorProps,
   type EditorAnchor,
   type EditorAnchors,
   type EditorDiagram,
@@ -28,6 +24,10 @@ import {
   type HeadingsChange,
   type MentionNode,
   type MentionNodeDoors,
+  type DescriptionEditorHandle,
+  type DescriptionEditorModule,
+  type DescriptionEditorPlacement,
+  type DescriptionEditorProps,
   SLASH_INSERT,
   type SlashBlock,
 } from "../description-editor/contract.js";

@@ -30,4 +30,19 @@ export const QUERY_ROOT = {
   WORKSPACE_AGENTS: "workspace-agents",
   REPOSITORY_PATHS: "repository-paths",
   AGENT_PART: "agent-part",
+  /** The window's one app-state document (`use-app-state.ts`'s `appStateQuery`), read by no id. */
+  APP_STATE: "appState",
+  TASK_FILE: "task-file",
+  TASK_TREE: "task-tree",
+  PAGE_SOURCE: "page-source",
+  CODE_COLORING: "code-coloring",
+  /** The one-off reads asked as a reader acts (`tasks/agent-reads.ts`). */
+  AGENT_PAGE: "agent-page",
+  INBOX_ITEM_HOME: "inbox-item-home",
+  TASK_BY_NUMBER: "task-by-number",
+  AGENT_MESSAGES: "agent-messages",
+  REPOSITORY_SKILLS: "repository-skills",
+  TERMINAL_LIST: "terminal-list",
+  /** One version of a plan, as its version history draws it (`tasks/use-description-history.ts`). */
+  TASK_REVISION: "task-revision",
 } as const;

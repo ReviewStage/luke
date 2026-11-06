@@ -6,8 +6,8 @@
  * page can carry and refuses the rest (`apps/web/src/app/web-host.ts`).
  */
 
-import { DESCRIPTION_MARKDOWN_MAX_CHARS } from "@repo/features/description-markdown";
 import { type FeedbackSubmission, feedbackSubmission } from "@repo/features/feedback";
+import { DESCRIPTION_MARKDOWN_MAX_CHARS } from "@repo/features/description-markdown";
 import {
   LID_STATE,
   MICROPHONE_STATUS,

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { descriptionSections } from "@repo/features/description-document";
 import {
   MENTION_KIND,
   type MentionPlace,
@@ -9,12 +8,13 @@ import {
   mentionsIn,
   sectionAnchors,
 } from "@repo/features/mention-link";
+import { descriptionSections } from "@repo/features/description-document";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
 import { retargetedMention } from "../tasks/mention-chip.js";
 import { installEditorLayout } from "../testing/composer.js";
-import type { ComposerTrigger, DescriptionEditorHandle, MentionNode } from "./contract.js";
+import type { ComposerTrigger, MentionNode, DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**

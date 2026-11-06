@@ -15,6 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
@@ -191,11 +192,13 @@ async function drawn(
   );
   await act(async () =>
     root.render(
-      createElement(
-        "div",
-        null,
-        page === undefined ? turn : createElement(TaskMentions, { value: page, children: turn }),
-        createElement(ToastHost),
+      withQueryClient(
+        createElement(
+          "div",
+          null,
+          page === undefined ? turn : createElement(TaskMentions, { value: page, children: turn }),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );

@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readDescriptionAttachment } from "@repo/database/models/description-attachments";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { type Picture, type PictureType, pictureTypeSchema } from "@repo/features/picture-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import { type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";

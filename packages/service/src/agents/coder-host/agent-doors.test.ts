@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
 import {
-  DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
 } from "@repo/database/models/description-attachments";
 import {
   readDescriptionCommentThreads,
@@ -20,6 +20,7 @@ import {
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
+import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
   DESCRIPTION_COMMENT_ACTOR,
@@ -27,7 +28,6 @@ import {
   DESCRIPTION_COMMENT_STATUS,
 } from "@repo/features/description-comment-wire";
 import { descriptionSections } from "@repo/features/description-document";
-import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { Clock, Effect, Option } from "effect";
 import { ACTION_RESULT_STATUS, unparsedWire } from "../../core.js";
@@ -46,8 +46,8 @@ import {
   runAgentOpenPullRequest,
 } from "./agent-doors.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
+import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**

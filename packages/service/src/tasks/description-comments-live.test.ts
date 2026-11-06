@@ -18,6 +18,7 @@ import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   taskCommentsLiveRowsSchema,
   threadsOfLiveRows,
@@ -28,7 +29,6 @@ import {
   DESCRIPTION_COMMENT_SCOPE,
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";

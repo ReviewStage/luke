@@ -16,11 +16,11 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@repo/features/tasks-vi
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import {
   type DescriptionCommentsControl,
   DescriptionCommentsProvider,
 } from "@repo/ui/description-comments";
-import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
@@ -28,12 +28,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
-  type DescriptionEditorModule,
-  type DescriptionEditorPlacement,
-  type DescriptionEditorProps,
   FINISH,
   PLACEMENT_END,
   type PlacedWords,
+  type DescriptionEditorModule,
+  type DescriptionEditorPlacement,
+  type DescriptionEditorProps,
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";

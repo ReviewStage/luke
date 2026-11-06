@@ -4,16 +4,16 @@ import {
   type AgentMachineKind,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { DEVICE_KIND } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import { agentName } from "@repo/features/model-label";
 import { descriptionAttachmentIdsIn } from "@repo/features/description-attachment-link";
 import type { DescriptionSectionWriter } from "@repo/features/description-document";
 import {
   type DescriptionAgentEdit,
   descriptionAgentEditSchema,
 } from "@repo/features/description-notes";
-import { DEVICE_KIND } from "@repo/features/device-agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
-import { INBOX_STATUS } from "@repo/features/inbox-wire";
-import { agentName } from "@repo/features/model-label";
 import { READ_MARK, type ReadMark } from "@repo/features/read-mark";
 import {
   DESCRIPTION_ACTOR,
@@ -69,8 +69,6 @@ import { taskRead } from "../schemas/task-read.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
-import { stampSavedAttachments } from "./description-attachments.js";
-import { readLastEdit, readSectionWriters } from "./description-revisions.js";
 import { type Device, devicesNamed } from "./device-store.js";
 import {
   reopenAgentInboxItems,
@@ -78,6 +76,8 @@ import {
   settleAgentInboxItems,
   settleTaskInboxItems,
 } from "./inbox-settle.js";
+import { stampSavedAttachments } from "./description-attachments.js";
+import { readLastEdit, readSectionWriters } from "./description-revisions.js";
 import { taskMadeByRun } from "./run-tasks.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
 import {

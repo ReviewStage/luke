@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ORPCError } from "@orpc/client";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
@@ -1146,7 +1147,14 @@ test("a write answered while a later one to the same setting is out leaves the l
 });
 
 test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
-  await drawTab({ beside: onRegistry(rendererRegistry, createElement(ToastHost)) });
+  // Note that the toasts read the window's own registry, beside the tab's, on the one Query client the tab stands on.
+  await drawTab({
+    beside: createElement(
+      RegistryContext.Provider,
+      { value: rendererRegistry },
+      createElement(ToastHost),
+    ),
+  });
   const held = holdSettingWrites();
   const popover = openSettings();
 
@@ -1156,6 +1164,8 @@ test("a refused write flips the switch back and is said in a toast, and the swit
     "true",
     "the switch flips before the write answers",
   );
+  // Note that the write reaches the act port a few steps after the press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.("Could not save that setting.");
   await flush();
 
@@ -1865,8 +1875,10 @@ test("a mark GitHub took stands where the press queued after it is refused, as G
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
+  await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.answer(DONE);
   await flush();
+  await vi.waitFor(() => assert.equal(held.length, 2));
   held[1]?.answer(REFUSED);
   await flush();
 

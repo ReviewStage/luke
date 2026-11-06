@@ -5,7 +5,7 @@ import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
 import { installEditorLayout } from "../testing/composer.js";
-import type { DescriptionEditorHandle, EditorAnchors } from "./contract.js";
+import type { EditorAnchors, DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**

@@ -1,5 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@repo/features/agent-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { FrameBox, PagePicked } from "@repo/features/page-pick";
 import { textChange } from "@repo/features/description-comment-anchor";
 import {
   DESCRIPTION_COMMENT_ACTION,
@@ -14,8 +16,6 @@ import {
   type DescriptionCommentWriter,
 } from "@repo/features/description-comment-wire";
 import type { DescriptionSection } from "@repo/features/description-document";
-import { LINK_PLACE } from "@repo/features/link-grammar";
-import type { FrameBox, PagePicked } from "@repo/features/page-pick";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS, pasteCutWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -96,16 +96,6 @@ import {
 } from "@repo/ui";
 import { type Actor, APP_ACTOR } from "@repo/ui/actor-model";
 import {
-  type DescriptionCommentsControl,
-  hungTop,
-  type MarginView,
-  marginTops,
-  openThread,
-  PENDING_THREAD,
-  type PendingThread,
-  useDescriptionCommentsControl as useDescriptionCommentsControlOrUndefined,
-} from "@repo/ui/description-comments";
-import {
   CheckIcon,
   CircleCheckIcon,
   GLYPH,
@@ -113,6 +103,16 @@ import {
   MessageSquarePlusIcon,
   RotateCcwIcon,
 } from "@repo/ui/icons";
+import {
+  hungTop,
+  type MarginView,
+  marginTops,
+  openThread,
+  PENDING_THREAD,
+  type PendingThread,
+  type DescriptionCommentsControl,
+  useDescriptionCommentsControl as useDescriptionCommentsControlOrUndefined,
+} from "@repo/ui/description-comments";
 import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@repo/ui/reply-quote";
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { ReplayUnmask, writeWithheldSheet } from "@repo/ui/session-replay-marks";
@@ -140,28 +140,28 @@ import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import {
-  type DescriptionCommentPlace,
   DRAFT_PLACE,
   type DraftPlace,
   EMPTY_DRAFT,
   heldLines,
+  type DescriptionCommentPlace,
   useDraft,
   useDraftWriter,
 } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import {
-  COMPOSER_INPUT,
-  type ComposerEditorHandle,
-  type DescriptionEditorHandle,
-  type DescriptionEditorModule,
-  type EditorSpan,
-} from "../description-editor/contract.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { enterSubmitKey } from "../enter-sends.js";
 import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type EditorSpan,
+  type DescriptionEditorHandle,
+  type DescriptionEditorModule,
+} from "../description-editor/contract.js";
 import { centerWithin } from "../scroll-within.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
@@ -169,14 +169,14 @@ import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
-import { CommentFiles } from "./description-comment-files.js";
-import { EDITOR_ROOM_CLASS } from "./description-document-editor.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { type HeldComment, PAGE_REVIEW_WORDS, type PageReviewControl } from "./page-review.js";
+import { CommentFiles } from "./description-comment-files.js";
+import { EDITOR_ROOM_CLASS } from "./description-document-editor.js";
 import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";

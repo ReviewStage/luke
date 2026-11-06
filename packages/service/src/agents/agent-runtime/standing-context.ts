@@ -11,9 +11,9 @@
 
 import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-store";
 import { dateLabel } from "@repo/features/date-mention";
-import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
-import { type DescriptionAgentEdit, NOTE_KIND } from "@repo/features/description-notes";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import { NOTE_KIND, type DescriptionAgentEdit } from "@repo/features/description-notes";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 

@@ -21,8 +21,8 @@ import {
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
-import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
 import { readPageById } from "@repo/database/models/task-pages";
+import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   deleteTask,

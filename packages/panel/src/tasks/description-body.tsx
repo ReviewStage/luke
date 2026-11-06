@@ -1,12 +1,12 @@
-import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
-import { type DescriptionSection, descriptionSections } from "@repo/features/description-document";
 import { LINK_PLACE, linkOf, taskLinkStep } from "@repo/features/link-grammar";
 import {
-  type DescriptionMention,
   type MentionLines,
   type MentionPlace,
+  type DescriptionMention,
   sectionAnchors,
 } from "@repo/features/mention-link";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import { type DescriptionSection, descriptionSections } from "@repo/features/description-document";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   DESCRIPTION_ACTOR,
@@ -31,21 +31,26 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { actorName } from "@repo/ui/actor-model";
-import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
+import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import {
-  DESCRIPTION_PLACEHOLDER,
-  type DescriptionEditorHandle,
-  PLACEMENT_END,
-} from "../description-editor/contract.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import { useEditedLinksHost } from "../link-menu.js";
 import {
@@ -55,29 +60,14 @@ import {
   MarkdownMessage,
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
+import {
+  PLACEMENT_END,
+  DESCRIPTION_PLACEHOLDER,
+  type DescriptionEditorHandle,
+} from "../description-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
-import {
-  CommentsToggle,
-  DescriptionCommentLayer,
-  useCommentFocus,
-  useEditorComment,
-} from "./description-comments.js";
-import {
-  DescriptionDocumentEditor,
-  DocumentBlock,
-  EditableTitle,
-  textBoxOf,
-  useTextRoom,
-  useWordsKeptOnClose,
-} from "./description-document-editor.js";
-import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
-import {
-  UNIT_ATTRIBUTED_CLASS,
-  UNIT_BYLINE_CLASS,
-  UNIT_MORE_CLASS,
-} from "./description-unit-look.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -88,14 +78,34 @@ import {
   useEditReader,
 } from "./edit-ref.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
+import {
+  CommentsToggle,
+  DescriptionCommentLayer,
+  useCommentFocus,
+  useEditorComment,
+} from "./description-comments.js";
+import {
+  DocumentBlock,
+  EditableTitle,
+  DescriptionDocumentEditor,
+  textBoxOf,
+  useTextRoom,
+  useWordsKeptOnClose,
+} from "./description-document-editor.js";
+import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
+import {
+  UNIT_ATTRIBUTED_CLASS,
+  UNIT_BYLINE_CLASS,
+  UNIT_MORE_CLASS,
+} from "./description-unit-look.js";
 import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
+import { useOpenLink } from "./use-open-link.js";
 import {
-  type DescriptionEditDoor,
   EDITOR_PLACE,
+  type DescriptionEditDoor,
   useDescriptionEditing,
 } from "./use-description-editing.js";
-import { useOpenLink } from "./use-open-link.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 import { useTaskMaker } from "./use-task-origin.js";
 import {
@@ -986,6 +996,12 @@ function DescriptionBodyColumn({
   );
 }
 
+/** Where the plan's head stands: the document's scroller, and its column, whose resizing moves what stands in it below what grew (`VirtualRows`' `shiftedBy`). */
+export interface DescriptionRoom {
+  readonly scroller: RefObject<HTMLElement | null>;
+  readonly column: RefObject<HTMLElement | null>;
+}
+
 /**
  * The open task's one rename door as its title reads it (`desktop-tasks.tsx`):
  * how many times Rename was asked for, each putting the caret in the title,
@@ -1053,8 +1069,8 @@ export const DescriptionBody = memo(function DescriptionBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
-  head?: React.ReactNode;
+  /** What the task's own page draws at the head of its text, under its byline, as its agents, in the room the document gives it; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
+  head?: ((room: DescriptionRoom) => React.ReactNode) | undefined;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
   /** Whether the description is the tab its column shows, rather than kept hidden behind another; shown unless said. */
@@ -1062,7 +1078,8 @@ export const DescriptionBody = memo(function DescriptionBody({
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
   // While Descriptions is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const documented =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
@@ -1093,6 +1110,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const room = useMemo((): DescriptionRoom => ({ scroller, column: body }), []);
   // A link in the description's words being edited opens, from its right-click, where the description stands.
   const editedLinks = useEditedLinksHost();
   const bodyHost = useCallback(
@@ -1386,7 +1404,7 @@ export const DescriptionBody = memo(function DescriptionBody({
             comments={documented && commentsHere}
           />
           {documented ? <ChangedLine looks={looks} marks={marks} /> : null}
-          <Fragment key={HEAD_KEY}>{head}</Fragment>
+          <Fragment key={HEAD_KEY}>{head?.(room)}</Fragment>
           {!documented ? null : editing.editor === undefined ? (
             editable && views.length === 0 ? (
               <EmptyDescriptionLine onOpen={() => editing.open(PLACEMENT_END)} />

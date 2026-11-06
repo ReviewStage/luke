@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
-import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import {
   PICTURE_BOUNDS,
   PICTURE_MEDIA_TYPE,
   PICTURE_TYPE,
   type Picture,
 } from "@repo/features/picture-wire";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import { paddedTo, pngBytes, webmBytes } from "@repo/wire/testing";
 import { Effect, Exit, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
-  DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
   purgeUnsavedAttachments,
   readDescriptionAttachment,
 } from "../description-attachments.js";

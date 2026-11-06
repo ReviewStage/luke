@@ -14,7 +14,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
@@ -104,7 +104,9 @@ function drawn(input: {
   roots.push(root);
   act(() =>
     root.render(
-      input.provided === false ? message : createElement(ForkProvider, { value: doors }, message),
+      withQueryClient(
+        input.provided === false ? message : createElement(ForkProvider, { value: doors }, message),
+      ),
     ),
   );
   const fork = container.querySelector<HTMLButtonElement>(`button[aria-label="${FORK_LABEL}"]`);

@@ -28,7 +28,6 @@ import type {
   AutomationSummary,
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
-import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
@@ -46,6 +45,7 @@ import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type { PortForwarding } from "@repo/features/port-forward-acts";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";

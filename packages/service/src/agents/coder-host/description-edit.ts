@@ -1,25 +1,25 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
-  DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
 } from "@repo/database/models/description-attachments";
 import type { DescriptionWriter } from "@repo/database/models/description-revisions";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import { workspaceOf } from "@repo/database/models/workspace-store";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { PICTURE_BOUNDS, type Picture } from "@repo/features/picture-wire";
 import {
   descriptionAttachmentAddress,
   taskPictureMarkdown,
 } from "@repo/features/description-attachment-link";
 import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import {
+  NOTE_KIND,
   type DescriptionNote,
   descriptionNoteSectionSchema,
   descriptionNotesSchema,
-  NOTE_KIND,
   readNotes,
 } from "@repo/features/description-notes";
-import { PICTURE_BOUNDS, type Picture } from "@repo/features/picture-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { describeWire, readEither } from "@repo/wire/effect";

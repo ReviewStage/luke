@@ -15,11 +15,11 @@ import {
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
-import { type DescriptionEditorPlacement, PLACEMENT_END } from "../description-editor/contract.js";
 import { confirmFailure } from "../failure-report.js";
+import { PLACEMENT_END, type DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { clickPlacement, documentWordsAt } from "./description-document-editor.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
+import { clickPlacement, documentWordsAt } from "./description-document-editor.js";
 import {
   PullRequestWriteNote,
   type ReadAgain,

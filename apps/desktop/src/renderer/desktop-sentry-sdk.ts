@@ -15,7 +15,7 @@ import {
 } from "@repo/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@repo/features/sentry-tracing";
 import { sendShownFailure } from "@repo/features/shown-failure";
-import { appStateNow } from "@repo/panel/use-app-state";
+import { appStateQuery } from "@repo/panel/use-app-state";
 import {
   browserProfilingIntegration,
   browserTracingIntegration,
@@ -29,6 +29,7 @@ import {
   uiProfiler,
   withStreamedSpan,
 } from "@sentry/electron/renderer";
+import type { QueryClient } from "@tanstack/react-query";
 import { BLANK_WINDOW, type BlankWindow, type DesktopSentry } from "./desktop-sentry";
 
 /** The mechanism each blank window's report names, so Sentry's issue says which path caught it. */
@@ -72,7 +73,7 @@ const PANEL_SPAN_OP = "ui.panel";
  * is mostly the work no trace was open for. A profile is the panel's own
  * stack frames, function names and bundle paths, and none of a person's words.
  */
-export function initDesktopSentry(): DesktopSentry {
+export function initDesktopSentry(queryClient: QueryClient): DesktopSentry {
   init({
     integrations: [
       browserTracingIntegration({
@@ -86,7 +87,11 @@ export function initDesktopSentry(): DesktopSentry {
     profileSessionSampleRate: 1,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendLog: (log) => logNamingAccount(log, signedInAccountId(appStateNow()?.account)),
+    beforeSendLog: (log) =>
+      logNamingAccount(
+        log,
+        signedInAccountId(queryClient.getQueryData(appStateQuery.queryKey)?.account),
+      ),
     ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
     beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });

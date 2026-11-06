@@ -4,9 +4,9 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import {
+  listRevisions,
   DESCRIPTION_REVISION,
   type DescriptionWriter,
-  listRevisions,
 } from "@repo/database/models/description-revisions";
 import { readTask } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";

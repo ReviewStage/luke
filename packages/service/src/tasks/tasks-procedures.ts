@@ -55,8 +55,8 @@
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
-import { listRevisions, readRevision } from "@repo/database/models/description-revisions";
 import { devicesNamed } from "@repo/database/models/device-store";
+import { listRevisions, readRevision } from "@repo/database/models/description-revisions";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   addTaskBlock,

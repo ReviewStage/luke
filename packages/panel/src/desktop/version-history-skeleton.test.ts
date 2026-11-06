@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { type DescriptionHistoryControl, HISTORY_READ } from "../tasks/use-description-history.js";
+import { HISTORY_READ, type DescriptionHistoryControl } from "../tasks/use-description-history.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";

@@ -5,9 +5,9 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
+import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import type { DescriptionEditorModule } from "../description-editor/contract.js";
 import { descriptionEditor } from "../description-editor/index.js";
-import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import {
   composerEditor,
   installEditorLayout,

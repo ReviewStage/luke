@@ -20,9 +20,9 @@ import {
 import { INBOX_ATTACHMENT_KIND, type InboxAttachmentKind } from "../storage-vocabulary.js";
 import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
-import { descriptionComment } from "./description-comment.js";
 import { inboxItem } from "./inbox.js";
 import { inboxMessage } from "./inbox-message.js";
+import { descriptionComment } from "./description-comment.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
 

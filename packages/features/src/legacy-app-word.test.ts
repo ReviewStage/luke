@@ -19,11 +19,11 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "./automation-wire.js";
 import { keptPictureIdOf } from "./conversation-picture-wire.js";
+import { PAGE_SHOWER, pageShowerSchema } from "./page-wire.js";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   descriptionCommentActorSchema,
 } from "./description-comment-wire.js";
-import { PAGE_SHOWER, pageShowerSchema } from "./page-wire.js";
 
 const PULL_REQUEST_OPENED = {
   kind: AUTOMATION_TRIGGER.GITHUB,

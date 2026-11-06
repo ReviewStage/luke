@@ -1,9 +1,9 @@
 import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { taskPicturesIn } from "./description-attachment-link.js";
-import { descriptionSections, openFenceAt } from "./description-document.js";
 import { mentionLinksIn } from "./mention-link.js";
+import { taskPicturesIn } from "./description-attachment-link.js";
+import { openFenceAt, descriptionSections } from "./description-document.js";
 import { DESCRIPTION_SECTION_BOUNDS, TASK_BOUNDS } from "./task-wire.js";
 import { trimmedText } from "./text-schema.js";
 

@@ -15,22 +15,6 @@ import type { AgentAgentAnswer } from "./agent-view.js";
 import type { LocalAgentRefusal } from "./agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
-import {
-  DESCRIPTION_ATTACHMENT_REFUSAL,
-  descriptionAttachmentTypeSchema,
-} from "./description-attachment-wire.js";
-import type { TaskCommentsLiveAnswer } from "./description-comment-live.js";
-import {
-  type DescriptionCommentActionRequest,
-  type DescriptionCommentStart,
-  descriptionCommentActionRequestSchema,
-  descriptionCommentStartRequestSchema,
-} from "./description-comment-wire.js";
-import {
-  type DescriptionEditAnswer,
-  type DescriptionEditRequest,
-  descriptionEditRequestSchema,
-} from "./description-edit.js";
 import type { FailureFacts } from "./failure-facts.js";
 import type {
   GitHubRepositoriesAnswer,
@@ -58,6 +42,22 @@ import {
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
 import { type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
+import {
+  DESCRIPTION_ATTACHMENT_REFUSAL,
+  descriptionAttachmentTypeSchema,
+} from "./description-attachment-wire.js";
+import type { TaskCommentsLiveAnswer } from "./description-comment-live.js";
+import {
+  type DescriptionCommentActionRequest,
+  type DescriptionCommentStart,
+  descriptionCommentActionRequestSchema,
+  descriptionCommentStartRequestSchema,
+} from "./description-comment-wire.js";
+import {
+  type DescriptionEditAnswer,
+  type DescriptionEditRequest,
+  descriptionEditRequestSchema,
+} from "./description-edit.js";
 import {
   descriptionAttachmentPath,
   type RepositoryPlace,
@@ -111,9 +111,9 @@ import {
   type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
   type BrowserTabOpenFailure,
-  DESCRIPTION_COMMENT_CALL_FAILURE,
   type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
+  DESCRIPTION_COMMENT_CALL_FAILURE,
   type RelationCallFailure,
   type RepositoryCallFailure,
   type RepositoryListFailure,

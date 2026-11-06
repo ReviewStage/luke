@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { archiveAgent, createAgent } from "@repo/database/models/agent-store";
-import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { writePage } from "@repo/database/models/task-pages";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { createTask, saveDescriptionText } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { messages } from "@repo/database/schemas/storage";
@@ -17,6 +17,7 @@ import {
   openWorkspace,
 } from "@repo/database/testing";
 import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -33,7 +34,6 @@ import {
   descriptionCommentThreadAnswerSchema,
 } from "@repo/features/description-comment-wire";
 import type { DescriptionEditRequest } from "@repo/features/description-edit";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { CODER } from "@repo/service/agents/coder-host/bounds";
 import {
   type AgentSessions,

@@ -54,6 +54,8 @@ import {
   type TaskMark,
 } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useQuery } from "@tanstack/react-query";
 import {
   type RefObject,
   useCallback,
@@ -81,9 +83,9 @@ import { leftMark } from "../draft-mark.js";
 import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { lastEditOf } from "../tasks/description-body.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { useTaskSendFailed } from "../tasks/failed-lines.js";
+import { lastEditOf } from "../tasks/description-body.js";
 import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import {
@@ -110,7 +112,7 @@ import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
@@ -717,7 +719,8 @@ function TaskMenuFooter({
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
   // Note that the open task's last editor is its description's, so while Descriptions is off it is said only by when the task last changed, as another task is.
-  const descriptions = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptions =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const edit = opened === undefined || !descriptions ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
@@ -850,7 +853,8 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
-  const descriptions = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptions =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -956,7 +960,9 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   useAppCommand(
     APP_COMMAND.VERSION_HISTORY,
-    useExperiment(EXPERIMENT.DESCRIPTIONS) ? () => tasks.history.onOpen(task.id) : undefined,
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
+      ? () => tasks.history.onOpen(task.id)
+      : undefined,
   );
   return actions.dialog;
 }
@@ -1048,6 +1054,7 @@ export function SidebarTask({
   faces = EVERY_FACE,
   depth,
   nest,
+  place,
   fold,
   childCount,
   onOpen,
@@ -1072,6 +1079,8 @@ export function SidebarTask({
   depth?: number | undefined;
   /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place?: VirtualRowPlace | undefined;
   /** The child tasks nested under the row, which it folds; none where the list holds none. */
   fold?: ListRowFold | undefined;
   /** How many of the task's child tasks are finished, of all of them, said before its time; none where it has none. */
@@ -1201,6 +1210,7 @@ export function SidebarTask({
           more={!coarse}
           depth={depth}
           nest={nest}
+          place={place}
           fold={fold}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={

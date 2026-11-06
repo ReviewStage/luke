@@ -1,7 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { type AgentAttachment, DIFF_SIDE } from "@repo/features/agent-wire";
-import { DESCRIPTION_COMMENT_SCOPE } from "@repo/features/description-comment-wire";
 import {
   INBOX_REPLY,
   INBOX_STATUS,
@@ -10,6 +9,7 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@repo/features/inbox-wire";
+import { DESCRIPTION_COMMENT_SCOPE } from "@repo/features/description-comment-wire";
 import { Duration, Effect, Equal, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";

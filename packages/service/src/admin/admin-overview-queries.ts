@@ -17,10 +17,10 @@ import { InstantColumnSchema } from "@repo/database/models/columns";
 import { agentTable } from "@repo/database/schemas/agent";
 import { member, session, user } from "@repo/database/schemas/auth";
 import { automationRun } from "@repo/database/schemas/automation";
-import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { integrationConnection } from "@repo/database/schemas/integration";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import {
   DAILY_COUNT,

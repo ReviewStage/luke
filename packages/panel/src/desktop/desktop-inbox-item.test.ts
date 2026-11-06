@@ -1173,10 +1173,13 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   const pane = itemPane(page);
 
   typeInComposer(pane, "See @roll");
-  await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
-    (name) => name.textContent,
-  );
+  // Note that the repository's paths land through a query, so the list is read once they have.
+  const listed = () =>
+    [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
+      (name) => name.textContent,
+    );
+  await vi.waitFor(() => assert.deepEqual(listed(), ["rollout-store.ts"]));
+  const offered = listed();
   pressInComposer(pane, "Enter");
   await settle();
   const chips = [...composerEditor(pane).querySelectorAll("[data-mention-ref]")].map(
@@ -1225,12 +1228,15 @@ test("in the window's Inbox an @ in the box of a task's item offers that descrip
   const pane = itemPane(page);
 
   typeInComposer(pane, "See @thresh");
-  await settle();
 
-  const offered = [
-    ...pane.querySelectorAll('.mention-menu [aria-label="Description"] .ui-combobox-option-label'),
-  ].map((name) => name.textContent);
-  assert.deepEqual(offered, ["Thresholds"]);
+  // Note that the plan's saved words land through a query, so its sections are read once they have.
+  const offered = () =>
+    [
+      ...pane.querySelectorAll(
+        '.mention-menu [aria-label="Description"] .ui-combobox-option-label',
+      ),
+    ].map((name) => name.textContent);
+  await vi.waitFor(() => assert.deepEqual(offered(), ["Thresholds"]));
 });
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {

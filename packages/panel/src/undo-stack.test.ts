@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, type TasksPinParams, type TasksView } from "@repo/features/tasks-view";
-import { ACT_KIND } from "@repo/host/acts";
+import type { ACT_KIND } from "@repo/host/acts";
 import { afterEach, test } from "vitest";
-import type { ActHandle } from "./act.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { pressRows, ROW_WRITE, type RowDoors, redoLast, UNDO_RAN, undoLast } from "./undo-stack.js";
 
@@ -38,7 +37,7 @@ function tasksShowing(pinned: boolean): TasksView {
 
 /** A window drawing the task unpinned, its act keeping each pin and drawing the task as the pin leaves it. */
 interface PinWindow {
-  readonly doors: RowDoors<TasksView>;
+  readonly doors: RowDoors<TasksView, typeof ACT_KIND.TASKS_PIN>;
   /** Every pin the act was sent, in order. */
   readonly sent: TasksPinParams[];
   /** Draws the task pinned or not, as another Mac's pin would. */
@@ -51,14 +50,12 @@ function standWindow(): PinWindow {
   const show = (pinned: boolean) => {
     drawn = tasksShowing(pinned);
   };
-  // SAFETY: the window sends this act nothing but the task's pins, which it answers as kept.
-  const act = ((kind: string, payload: TasksPinParams) => {
-    assert.equal(kind, ACT_KIND.TASKS_PIN);
+  const send = (payload: TasksPinParams) => {
     sent.push(payload);
     show(payload.pinned);
     return Promise.resolve(true);
-  }) as ActHandle["act"];
-  return { doors: { rows: () => drawn, act }, sent, show };
+  };
+  return { doors: { rows: () => drawn, send }, sent, show };
 }
 
 /** Pins the task as its menu's Pin does: its row read as pressed, the pin sent, and kept for ⌘Z once the act keeps it. */
@@ -66,7 +63,7 @@ async function pin(window: PinWindow): Promise<void> {
   const pressed = pressRows(ROW_WRITE.TASK_PIN, window.doors, [
     { id: TASK_ID, after: { pinned: true, position: null } },
   ]);
-  assert.equal(await window.doors.act(ACT_KIND.TASKS_PIN, { taskId: TASK_ID, pinned: true }), true);
+  assert.equal(await window.doors.send({ taskId: TASK_ID, pinned: true }), true);
   pressed.keep("Task pinned");
 }
 

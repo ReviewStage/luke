@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
@@ -21,12 +22,12 @@ import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace } from "../settings-link.js";
 import { useStageRoom } from "../stage-room.js";
 import {
-  type DescriptionHistorySource,
   type HistorySpot,
+  type DescriptionHistorySource,
   useDescriptionHistory,
 } from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
@@ -126,13 +127,9 @@ const HELD_HISTORY = {
   retry: () => Promise.resolve(),
 };
 
-/** Each version as the service answers it, the description as it stands. */
+/** The history's older pages and its restore, as the service answers them. */
 const HISTORY: DescriptionHistorySource = {
   readPage: () => Promise.resolve({ revisions: [] }),
-  readRevision: (_taskId, seq) =>
-    Promise.resolve({
-      revision: { seq, document: DOCUMENT_TASK.document, previous: DOCUMENT_TASK.document },
-    }),
   restore: () => Promise.resolve(false),
 };
 
@@ -158,6 +155,13 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({});
+  // Each version reads as the service answers it, the plan as it stands.
+  fakeActPort({
+    [ACT_KIND.TASKS_REVISION]: ({ seq }) =>
+      Promise.resolve({
+        revision: { seq, document: DOCUMENT_TASK.document, previous: DOCUMENT_TASK.document },
+      }),
+  });
   sheets = layContainersAt({});
 });
 

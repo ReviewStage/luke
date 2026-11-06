@@ -46,11 +46,11 @@ import {
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { useConnected } from "../connection.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";

@@ -36,9 +36,9 @@ import {
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  type AppDescriptionDocuments,
   type AppInboxTask,
   type AppInboxTaskHolding,
+  type AppDescriptionDocuments,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
@@ -69,7 +69,9 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   FAKE_ANSWER,
+  type FakeActPort,
   fakeActPort,
+  fakeActPortCalls,
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
@@ -95,9 +97,9 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
-import { HISTORY_READ } from "./use-description-history.js";
 import { useInboxTask } from "./use-inbox-task.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -181,11 +183,53 @@ interface Standing {
  * quiet, unless `press` hands the window's own press door, which goes out on
  * the act port the test installed.
  */
+/** The kinds the tab and its agents send on mutations or read through Query rather than their `acts`. */
+const SENT_ON_MUTATIONS: readonly PortActKind[] = [
+  ACT_KIND.AGENTS_START,
+  ACT_KIND.AGENTS_STOP,
+  ACT_KIND.AGENTS_REWIND,
+  ACT_KIND.AGENTS_MESSAGE,
+  ACT_KIND.AGENTS_CHOOSE,
+  ACT_KIND.AGENTS_SERVERS,
+  ACT_KIND.AGENTS_ADD_REPOSITORY,
+  ACT_KIND.AGENTS_RENAME,
+  ACT_KIND.AGENTS_ARCHIVE,
+  ACT_KIND.AGENTS_DELETE,
+  ACT_KIND.CHAPTERS_GENERATE,
+  ACT_KIND.AGENTS_INBOX_ANSWER,
+  ACT_KIND.AGENTS_INBOX_MESSAGE,
+  ACT_KIND.AGENTS_INBOX_START,
+  ACT_KIND.TASKS_SELECT,
+  ACT_KIND.TASKS_CLOSE,
+  ACT_KIND.TASKS_DELETE,
+  ACT_KIND.TASKS_RENAME,
+  ACT_KIND.TASKS_PIN,
+  ACT_KIND.TASKS_PIN_REPOSITORY,
+  ACT_KIND.AGENTS_PIN,
+  ACT_KIND.TASKS_WRITE_SECTION,
+  ACT_KIND.TASKS_SET_STANDING,
+  ACT_KIND.WORKSPACE_CREATE,
+  ACT_KIND.WORKSPACE_PHOTO_SET,
+  ACT_KIND.WORKSPACE_INVITE,
+  ACT_KIND.TASKS_SET_REPOSITORY,
+  ACT_KIND.TASKS_BLOCK,
+  ACT_KIND.TASKS_SET_PARENT,
+  ACT_KIND.TASKS_CHANGE_RELATION,
+  ACT_KIND.TASKS_MOVE,
+  ACT_KIND.TASKS_EDIT,
+  ACT_KIND.TASKS_RESTORE,
+  ACT_KIND.TASKS_START,
+  ACT_KIND.TASKS_REFRESH,
+  // The reads asked through fetchQuery reach the act port too.
+  ACT_KIND.TASKS_FIND,
+  ACT_KIND.AGENTS_PAGE,
+  ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+];
+
 function mount(
   initial: Partial<Standing> = {},
   answers: { [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>> } = {},
   registry?: AtomRegistry,
-  press?: ActHandle["press"],
 ) {
   const told: PortActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
@@ -248,6 +292,20 @@ function mount(
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
   }
+  // Note that the writes sent on mutations reach the act port, which answers them as the test's `acts` would.
+  fakeActPort({
+    ...fakeActPortCalls(),
+    // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
+    ...(Object.fromEntries(
+      SENT_ON_MUTATIONS.map((kind) => [kind, (payload: unknown) => portAnswer(kind, payload)]),
+    ) as Partial<FakeActPort>),
+    // The one told payload the tests read, parsed as the boundary would, and answered as an asked one is.
+    [ACT_KIND.AGENTS_SHOWN]: (payload) => {
+      const shown = Option.getOrUndefined(readShown(payload));
+      if (shown !== undefined) shownAgents.push(shown.agentId);
+      return portAnswer(ACT_KIND.AGENTS_SHOWN, payload);
+    },
+  });
   function Probe() {
     const [held, setHeld] = useState(standing);
     restand = setHeld;
@@ -257,24 +315,6 @@ function mount(
         // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
         act: (<Kind extends PortActKind>(kind: Kind, ...args: unknown[]) =>
           portAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: a pressed kind is recorded as an asked one is, the dispatch on the kind the one erasure.
-        press:
-          press ??
-          (((kind: PortActKind, ...args: unknown[]) =>
-            portAnswer(kind, ...args).then(
-              () => undefined,
-              () => undefined,
-            )) as ActHandle["press"]),
-        // A told port kind is answered as an asked one is, recorded there, its answer or refusal read by no one, as `tell` reads none.
-        // SAFETY: a told kind is recorded as an asked one is, the dispatch on the kind the one erasure.
-        tell: ((kind: PortActKind, ...args: unknown[]) => {
-          void portAnswer(kind, ...args).catch(() => undefined);
-          // The one told payload the tests read, parsed as the boundary would.
-          const shown = Option.getOrUndefined(readShown(args[0]));
-          if (kind === ACT_KIND.AGENTS_SHOWN && shown !== undefined) {
-            shownAgents.push(shown.agentId);
-          }
-        }) as ActHandle["tell"],
       },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
@@ -860,7 +900,7 @@ test("a column whose last agent is archived opens a new agent's draft in its pla
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, shown]);
 });
 
-test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
+test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -870,7 +910,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT);
+  // Note that a write reaches the act port a few steps after its press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT));
   assert.equal(tab.control().boundFor, TASK.id);
 
   tab.stand({ tasks: OPEN });
@@ -1094,7 +1135,7 @@ test("a Vespin link naming a task by its number opens the task the service finds
   assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID, "43"]);
 });
 
-test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
+test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -1105,7 +1146,7 @@ test("a Vespin link to another plan's section opens that plan and asks its page 
   const first = tab.control().sectionReveal;
   act(() => tab.control().onShowMention(section));
 
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT);
+  await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT));
   assert.deepEqual(first, { taskId: OTHER_TASK_ID, reveal: { anchor: "rollout", ask: 1 } });
   assert.deepEqual(tab.control().sectionReveal, {
     taskId: OTHER_TASK_ID,
@@ -2603,11 +2644,13 @@ test("a plan moved lists the workspace it moved to while it is still open, and a
 
   const staying = tab.control().onMoveTask("billing", ACME.id);
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } });
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
   const late = tab.control().workspace?.id;
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   const moved = tab.control().onMoveTask("billing", ACME.id);
+  await vi.waitFor(() => assert.equal(answers.length, 2));
   answers[1]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2648,6 +2691,7 @@ test("a move pressed before the workspaces were read still lists the workspace i
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2665,6 +2709,7 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   const moved = tab.control().onMoveTask("billing", ACME.id);
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2672,7 +2717,7 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-test("a workspace left lists the account's own workspace, whichever was listed, and turns to the home page", () => {
+test("a workspace left lists the account's own workspace, whichever was listed, and turns to the home page", async () => {
   const own = { ...PERSONAL, personal: true as const };
   const tab = mount({
     shown: true,
@@ -2689,10 +2734,12 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   assert.equal(chosen, ACME.id);
   assert.equal(afterListed, PERSONAL.id);
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
-  assert.equal(
-    tab.told.includes(ACT_KIND.TASKS_CLOSE),
-    true,
-    "the open plan is left for the home page",
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.told.includes(ACT_KIND.TASKS_CLOSE),
+      true,
+      "the open plan is left for the home page",
+    ),
   );
 });
 
@@ -2803,19 +2850,20 @@ test("the Board and the Inbox stand in the plan's place in turn: opening one put
   assert.equal(tab.control().boardView.open, false);
 });
 
-test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", () => {
+test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", async () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
   act(() => tab.control().onGoHome());
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
+  await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE));
   assert.equal(tab.control().boundFor, undefined);
 
   const home = mount({ shown: true, tasks: listRead([]) });
   act(() => home.control().inboxView.onOpen());
   const toldBefore = home.told.length;
   act(() => home.control().onGoHome());
+  await settle();
   assert.equal(home.control().inboxView.open, false);
   assert.equal(home.control().page, TASKS_PAGE.HOME);
   assert.deepEqual(home.told.slice(toldBefore), [], "the host is asked nothing");
@@ -3282,6 +3330,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
   assert.deepEqual(tab.control().starting?.choice, choice, "and on the model picked");
 
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
     await note;
   });
@@ -3316,6 +3365,7 @@ test("what the developer opened while New task's agent start was out, a page and
   act(() => tab.control().onNewTask());
 
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
     await note;
   });
@@ -3366,6 +3416,7 @@ test("New task's agent start refused after its page opened opens the card again 
 
   let refused: Failure | undefined;
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
     refused = await note;
   });
@@ -3412,6 +3463,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
   });
   assert.equal(tab.control().newTask.open, false);
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
     await note;
   });

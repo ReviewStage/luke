@@ -8,7 +8,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
-import { markdownExtensions } from "./description-editor.js";
 import {
   documentManager,
   documentMarkdown,
@@ -16,6 +15,7 @@ import {
   documentTook,
   sourcesOf,
 } from "./document-source.js";
+import { markdownExtensions } from "./description-editor.js";
 
 /**
  * A whole description in the editor keeps every block's exact source but the ones

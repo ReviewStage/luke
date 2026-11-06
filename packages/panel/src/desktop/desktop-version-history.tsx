@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { descriptionSections } from "@repo/features/description-document";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
+import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { DescriptionRevisionLine } from "@repo/features/task-wire";
 import { readFailedWords, readingWords } from "@repo/features/words";
@@ -81,13 +81,13 @@ import {
   versionDiff,
 } from "../tasks/description-history-model.js";
 import type { MentionedTask } from "../tasks/task-mentions.js";
+import { useNumberedPlace } from "../tasks/use-link-standing.js";
 import {
-  type DescriptionHistoryControl,
   HISTORY_READ,
   type OpenedSections,
+  type DescriptionHistoryControl,
   type ViewedVersion,
 } from "../tasks/use-description-history.js";
-import { useNumberedPlace } from "../tasks/use-link-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useVersionRestore,

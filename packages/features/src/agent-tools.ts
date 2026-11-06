@@ -11,9 +11,9 @@
  */
 
 import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
-import { DESCRIPTION_COMMENT_TOOL } from "./description-comment-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
+import { DESCRIPTION_COMMENT_TOOL } from "./description-comment-wire.js";
 
 /** Every tool we author or declare for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {

@@ -1,7 +1,5 @@
 import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
-import { descriptionSections } from "@repo/features/description-document";
-import { descriptionMarkdown } from "@repo/features/description-markdown";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
@@ -16,7 +14,6 @@ import {
 } from "@repo/features/link-grammar";
 import { LINK_SITE, type LinkSite } from "@repo/features/link-site";
 import {
-  type DescriptionMention,
   handedMentionsIn,
   linkMention,
   MENTION_KIND,
@@ -24,11 +21,14 @@ import {
   mentionName,
   type NumberedTaskIdOf,
   type PersonMention,
+  type DescriptionMention,
   type ServerMention,
   sectionAnchors,
   type TaskMention,
 } from "@repo/features/mention-link";
 import { PAGE_OWNER, type PageLine, type PageOwner } from "@repo/features/page-wire";
+import { descriptionSections } from "@repo/features/description-document";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 

@@ -11,6 +11,7 @@ import { attachment } from "@repo/database/schemas/attachment";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PICTURE_BOUNDS, PICTURE_MEDIA_TYPE, PICTURE_TYPE } from "@repo/features/picture-wire";
 import {
   DESCRIPTION_ATTACHMENT_BOUNDS,
   DESCRIPTION_ATTACHMENT_REFUSAL,
@@ -20,7 +21,6 @@ import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_SCOPE,
 } from "@repo/features/description-comment-wire";
-import { PICTURE_BOUNDS, PICTURE_MEDIA_TYPE, PICTURE_TYPE } from "@repo/features/picture-wire";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import type { UserIdResolver } from "@repo/service/http/http-effect";
 import { hostedFetch } from "@repo/service/orpc/handler";

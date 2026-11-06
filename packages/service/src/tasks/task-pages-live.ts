@@ -7,8 +7,8 @@ import { queryBuilder } from "@repo/database/core/query";
 import { agentVisibleTo, taskSeenBy } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { member } from "@repo/database/schemas/auth";
-import { task } from "@repo/database/schemas/task";
 import { taskPageVersion } from "@repo/database/schemas/task-page";
+import { task } from "@repo/database/schemas/task";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Option } from "effect";
 

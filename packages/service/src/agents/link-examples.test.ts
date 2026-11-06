@@ -3,9 +3,9 @@ import { AGENT_BRIEF } from "@repo/features/agent-wire";
 import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@repo/features/mention-link";
 import { test } from "vitest";
-import { EDIT_DESCRIPTION_TOOL } from "./coder-host/description-edit.js";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
+import { EDIT_DESCRIPTION_TOOL } from "./coder-host/description-edit.js";
 
 /**
  * link-examples.test.ts -- the link every author is shown how to write a
