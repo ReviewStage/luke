@@ -5,10 +5,10 @@
  * `PORT_FORWARDS_CHANGED` each time it moves, which the client lays in app
  * state (`portForwarding`); nothing reads it on a timer of its own.
  *
- * Turning forwarding on asks the service to start it (`agentPorts.startForwarding`:
- * the sandbox woken, the repository's run command started where nothing
- * listens), then reads the agent's listening ports every few seconds for as
- * long as it is on. Each port read is listened on at `127.0.0.1` (the
+ * Turning forwarding on reads the agent's listening ports every few seconds
+ * for as long as it is on, forwarding what already listens; nothing is
+ * started or woken in the sandbox on its behalf, and a stopped sandbox reads
+ * as not running. Each port read is listened on at `127.0.0.1` (the
  * `ListenOnLoopback` seam the desktop's launch hands over `node:net`), on
  * the same port where it is free and on the next free one where it is not;
  * a port no longer read is let go, its connections with it. Turning it on
@@ -73,7 +73,7 @@ export const PORT_FORWARD = {
 } as const;
 
 /** The service's side of the forward, as this concern asks it. */
-type PortForwardClient = Pick<HostedAgentPortsClient, "list" | "startForwarding">;
+type PortForwardClient = Pick<HostedAgentPortsClient, "list">;
 
 export interface PortForwardsDependencies {
   kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "emit"> & {
@@ -295,18 +295,10 @@ export function composePortForwards(
         : Effect.andThen(Scope.close(ending.scope, Exit.void), tell);
     });
 
-    /** Forwarding started for the agent, and whichever agent was forwarded before let go; refused where the service did not start it. */
+    /** Forwarding started for the agent, and whichever agent was forwarded before let go. */
     const turnOn = (agentId: string) =>
       Effect.gen(function* () {
         if (forwarding?.agentId === agentId) return;
-        const started = yield* Effect.provideService(
-          client.startForwarding(agentId),
-          HttpClient.HttpClient,
-          http,
-        );
-        if (started === undefined) {
-          return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
-        }
         yield* turnOff;
         const current: Forwarding = {
           agentId,

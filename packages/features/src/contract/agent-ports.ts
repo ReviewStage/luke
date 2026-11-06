@@ -4,17 +4,13 @@
  * The agent travels in the path. The read is cheap enough for the desktop
  * to ask every few seconds while the control is open or forwarding is on:
  * one look at whether the sandbox is running, and one short command in it
- * while it runs. It never wakes a stopped sandbox; only turning forwarding
- * on does, which also starts the repository's run command.
+ * while it runs. It never wakes a stopped sandbox.
  */
 
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
-import {
-  forwardingStartAnswerSchema,
-  listeningPortsAnswerSchema,
-} from "../listening-ports-wire.js";
+import { listeningPortsAnswerSchema } from "../listening-ports-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { hostedProcedure } from "./base.js";
 
@@ -27,18 +23,4 @@ export const agentPortsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}/{id}/ports` }))
     .input(agentParamsSchema)
     .output(EffectSchema.flip(listeningPortsAnswerSchema)),
-  /**
-   * Forwarding turned on: the sandbox woken where it was stopped, and the
-   * repository's run command started where no port listens; answered at
-   * once, before the command listens.
-   */
-  startForwarding: hostedProcedure
-    .meta(
-      openapi({
-        method: HTTP_METHOD.POST,
-        path: `${HOSTED_SERVICE_PATH.AGENTS}/{id}/ports/forwarding`,
-      }),
-    )
-    .input(agentParamsSchema)
-    .output(EffectSchema.flip(forwardingStartAnswerSchema)),
 };
