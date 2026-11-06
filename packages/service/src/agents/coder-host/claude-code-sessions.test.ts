@@ -929,7 +929,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const onKey = runnerSandboxApi();
         const machines = agentMachinesLayer({
           readToken: deploymentOidcToken,
-          run: (effect) => Effect.runPromise(effect),
+          run: () => assert.fail("a Mac's launch runs no sandbox checkout"),
         }).pipe(Layer.provide(onKey.layer));
         // Note that the machines are provided innermost, so the Mac's machine answers rather than the fake sandbox's.
         const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(
