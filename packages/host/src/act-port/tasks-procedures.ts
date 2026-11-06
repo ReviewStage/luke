@@ -24,7 +24,7 @@ import type {
   TasksLinkStandingParams,
   TasksRepositoriesParams,
 } from "@repo/features/tasks-view";
-import { Data, Effect, MutableHashMap, Option, Stream } from "effect";
+import { Data, Effect, MutableHashMap, Stream } from "effect";
 import { isWebAddress } from "../acts.js";
 import { EVERY_WORKSPACE } from "../app-state.js";
 import { TASKS_ACT_KIND, TASKS_ACTS } from "../contract/index.js";
@@ -109,32 +109,29 @@ interface CommentsHeld {
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, acts, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
-  const openPages: OpenFollows<never> = MutableHashMap.empty();
+  const openPages: OpenFollows = MutableHashMap.empty();
   /** Every workspace's repositories a window holds a stream open of, so the host lets them go only with the last. */
-  const openRepositories: OpenFollows<never> = MutableHashMap.empty();
+  const openRepositories: OpenFollows = MutableHashMap.empty();
   /** Every link's standing a window holds a stream open of, so the host lets it go only with the last. */
-  const openLinks: OpenFollows<never, LinkStandingStreamKey> = MutableHashMap.empty();
+  const openLinks: OpenFollows<LinkStandingStreamKey> = MutableHashMap.empty();
   /** Every task's description a window holds a stream open of, so the host lets one go only with the last. */
-  const openDocuments: OpenFollows<never> = MutableHashMap.empty();
+  const openDocuments: OpenFollows = MutableHashMap.empty();
   /** How many streams stand open of each agent's or task's Browser tabs, by its id, which never collide. */
-  const openBrowserTabs: OpenFollows<never> = MutableHashMap.empty();
+  const openBrowserTabs: OpenFollows = MutableHashMap.empty();
   /** How many streams stand open of each description's comments, and each page's, by the task and the page. */
-  const openComments: OpenFollows<never, CommentsHeld> = MutableHashMap.empty();
+  const openComments: OpenFollows<CommentsHeld> = MutableHashMap.empty();
   /** Every task's history a window holds a stream open of, so the host lets one go only with the last. */
-  const openHistories: OpenFollows<never> = MutableHashMap.empty();
+  const openHistories: OpenFollows = MutableHashMap.empty();
   return {
     [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: actPort[
       TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held repositories reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (scope: TasksRepositoriesParams) => scope.workspaceId ?? EVERY_WORKSPACE,
           follow: host.tasksRepositoriesFollow,
           unfollow: host.tasksRepositoriesUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openRepositories,
         input,
@@ -205,14 +202,11 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held standing reaches the panel on app state.
       const hold = followedStream(
         {
           keyOf: (link: TasksLinkStandingParams) => new LinkStandingStreamKey(link),
           follow: host.tasksLinkStandingFollow,
           unfollow: host.tasksLinkStandingUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openLinks,
         input,
@@ -224,14 +218,11 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held tabs reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (scope: TaskBrowserTabsFollow) => browserTabsPlaceId(scope),
           follow: host.tasksBrowserTabsFollow,
           unfollow: host.tasksBrowserTabsUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openBrowserTabs,
         input,
@@ -249,14 +240,11 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held pages reach the panel on app state.
         const hold = followedStream(
           {
             keyOf: (scope: TaskPagesFollow) => pagePlaceId(scope),
             follow: host.tasksPagesFollow,
             unfollow: host.tasksPagesUnfollow,
-            onChanged: () => () => undefined,
-            valueOf: () => Option.none<never>(),
           },
           openPages,
           input,
@@ -267,14 +255,11 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held description reaches the panel on app state.
         const hold = followedStream(
           {
             keyOf: (scope: TaskDocumentFollow) => scope.taskId,
             follow: host.tasksDocumentFollow,
             unfollow: host.tasksDocumentUnfollow,
-            onChanged: () => () => undefined,
-            valueOf: () => Option.none<never>(),
           },
           openDocuments,
           input,
@@ -291,14 +276,11 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held history reaches the panel on app state.
         const hold = followedStream(
           {
             keyOf: (scope: TaskHistoryFollow) => scope.taskId,
             follow: host.tasksHistoryFollow,
             unfollow: host.tasksHistoryUnfollow,
-            onChanged: () => () => undefined,
-            valueOf: () => Option.none<never>(),
           },
           openHistories,
           input,
@@ -315,7 +297,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held comments reach the panel on app state.
         const hold = followedStream(
           {
             keyOf: (scope: TasksCommentsFollow): CommentsHeld => ({
@@ -324,8 +305,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
             }),
             follow: host.tasksCommentsFollow,
             unfollow: host.tasksCommentsUnfollow,
-            onChanged: () => () => undefined,
-            valueOf: () => Option.none<never>(),
           },
           openComments,
           input,

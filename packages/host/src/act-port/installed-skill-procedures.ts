@@ -1,5 +1,5 @@
 import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { INSTALLED_SKILL_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -29,7 +29,7 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
   const { host } = dependencies;
   const KIND = INSTALLED_SKILL_ACT_KIND;
   /** Each workspace's skills while a window holds a stream open of them, by the workspace. */
-  const openSkills: OpenFollows<never> = MutableHashMap.empty();
+  const openSkills: OpenFollows = MutableHashMap.empty();
   return {
     [KIND.INSTALLED_SKILLS_FOLLOW]: actPort[KIND.INSTALLED_SKILLS_FOLLOW].effect(function* ({
       input,
@@ -37,14 +37,11 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
       errors,
     }) {
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held skills reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (held: InstalledSkillFollowParams) => held.workspaceId,
           follow: host.installedSkillsFollow,
           unfollow: host.installedSkillsUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openSkills,
         input,
