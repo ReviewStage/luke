@@ -32,11 +32,10 @@ import {
   type SameValue,
 } from "@repo/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { usePendingNow } from "../pending-clock.js";
@@ -44,6 +43,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract.js";
 import { onTerminalPort } from "../terminal/terminal-port.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { terminalListQueryOptions } from "./agent-reads.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -301,7 +301,7 @@ export function useTerminalSession(
   /** Closes the tab, once the service says the agent was archived or retired. */
   onGone: () => void,
 ): TerminalSession {
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   const { mutateAsync: sendAttach } = useMutation(actMutation(ACT_KIND.TERMINAL_ATTACH));
   const { mutateAsync: sendCreate } = useMutation(actMutation(ACT_KIND.TERMINAL_CREATE));
   const { mutateAsync: sendRename } = useMutation(actMutation(ACT_KIND.TERMINAL_RENAME));
@@ -421,7 +421,10 @@ export function useTerminalSession(
       });
     };
     try {
-      const listed = await act(ACT_KIND.TERMINAL_LIST, { agentId });
+      // Note that a reread still out may predate what made the tab connect, a shell ending among them, so it gives way to a read of its own.
+      const listing = terminalListQueryOptions(agentId);
+      await queryClient.cancelQueries({ queryKey: listing.queryKey });
+      const listed = await queryClient.fetchQuery(listing);
       if (!current()) return;
       if ("refused" in listed) return wait(refusedState(listed.refused));
       setListed(listed);
@@ -441,7 +444,7 @@ export function useTerminalSession(
     } catch {
       if (current()) enter(SERVICE_UNREACHED);
     }
-  }, [act, sendCreate, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
+  }, [queryClient, sendCreate, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
 
   // The list as an answer says it, every read since let go.
   const writeList = useCallback(
@@ -458,12 +461,12 @@ export function useTerminalSession(
   const reread = useCallback(async () => {
     const seen = live.current.listMoves;
     try {
-      const answer = await act(ACT_KIND.TERMINAL_LIST, { agentId });
+      const answer = await queryClient.fetchQuery(terminalListQueryOptions(agentId));
       if (!("refused" in answer) && live.current.listMoves === seen) writeList(answer);
     } catch {
       // The next read, a few seconds on, asks again.
     }
-  }, [act, agentId, writeList]);
+  }, [queryClient, agentId, writeList]);
 
   // Note that a shell shown on the same screen as another starts from a
   // clear screen, which its tmux session then redraws.

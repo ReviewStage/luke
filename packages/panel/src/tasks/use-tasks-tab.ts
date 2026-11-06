@@ -2666,7 +2666,6 @@ export function useTasksTab(input: {
   const historySource = useMemo(
     (): PlanHistorySource => ({
       readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
-      readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
     [act, sendRestore],
