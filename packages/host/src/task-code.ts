@@ -156,9 +156,7 @@ export interface TaskCodeColoring {
  * The colorings over the highlighter `load` builds: this process's own
  * below, over Shiki's chunk, and a test's over a load it scripts.
  */
-export function taskCodeColoring(
-  load: Effect.Effect<HighlighterCore, unknown>,
-): TaskCodeColoring {
+export function taskCodeColoring(load: Effect.Effect<HighlighterCore, unknown>): TaskCodeColoring {
   const sharedHighlighter = sharedHighlighterOf(load);
   return {
     highlightSnippet: (language, code) =>

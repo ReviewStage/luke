@@ -20,9 +20,40 @@
 import "@orpc/experimental-effect/extensions/input-output";
 import { defineMeta, oc } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
+import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
 import { HOSTED_ERRORS } from "./errors.js";
 
+/**
+ * The refusals any procedure may answer whatever it does, through the
+ * service's handler and the caller middleware every procedure runs behind
+ * (`packages/service/src/orpc/`): a bearer or session it does not take,
+ * an input its schema refuses or an idempotency key past its bound, a
+ * body past its cap, and a store or auth service that could not answer
+ * while its caller was read. A client reads each as no answer unless it
+ * names it (`hosted-call.ts`).
+ */
+export const ANY_PROCEDURE_REFUSALS = [
+  HOSTED_API_ERROR.INVALID_TOKEN,
+  HOSTED_API_ERROR.INVALID_REQUEST,
+  HOSTED_API_ERROR.REQUEST_TOO_LARGE,
+  HOSTED_API_ERROR.UNAVAILABLE,
+] as const;
+
+/** The refusals named, each as the one map declares it, its fields included. */
+export function refuses<const Slugs extends readonly HostedApiError[]>(
+  ...slugs: Slugs
+): Pick<typeof HOSTED_ERRORS, Slugs[number]> {
+  const declared: Partial<Record<HostedApiError, (typeof HOSTED_ERRORS)[HostedApiError]>> = {};
+  for (const slug of slugs) declared[slug] = HOSTED_ERRORS[slug];
+  // SAFETY: every slug named was copied from the map above, and only those.
+  return declared as Pick<typeof HOSTED_ERRORS, Slugs[number]>;
+}
+
+/** The builder a procedure that declares every refusal starts from, until each domain declares its own. */
 export const hostedProcedure = oc.errors(HOSTED_ERRORS);
+
+/** The builder a procedure that declares its own refusals starts from: those any procedure may answer, and its own added with `.errors(refuses(...))`. */
+export const declaredProcedure = oc.errors(refuses(...ANY_PROCEDURE_REFUSALS));
 
 /**
  * The most bytes a procedure's body may carry, and its reader: the cap is

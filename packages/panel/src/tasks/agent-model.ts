@@ -570,6 +570,9 @@ export const CONTINUE_LABEL = "Continue in new agent";
 /** What that press says once another agent continued the agent, in the same place on the failed end line. */
 export const CONTINUE_AGAIN_LABEL = "Continue again";
 
+/** What the press that sends a failed agent a line again says, on the failed end line where a message carries it on (`endLineOffersTryAgain`). */
+export const TRY_AGAIN_LABEL = "Try again";
+
 /** What the line naming the agents that continued another says before their chips. */
 export const CONTINUED_IN = "Continued in";
 
@@ -647,6 +650,40 @@ export function endLineOffersContinue(input: {
 }
 
 /**
+ * The failures a message sent again would only meet again, since what mends
+ * them is a choice the line's words name: a teammate's key, which only they
+ * replace, or Fast, which a model chosen with it off mends.
+ */
+const MENDED_BY_CHOICE: ReadonlySet<AgentFailure> = new Set([
+  AGENT_FAILURE.PROVIDER_KEY,
+  AGENT_FAILURE.FAST_ON_OWN_KEY,
+  AGENT_FAILURE.FAST_NOT_ENABLED,
+]);
+
+/**
+ * Whether the failed end line's row ends on Try again, which sends the
+ * agent a line of the developer's own (`RETRY_LINE`), as the GitHub sign-in
+ * card's Retry does: where a message carries the agent on, its box stands
+ * open to send it, and nothing else ends the row. So never where Continue
+ * does (`endLineOffersContinue`), on a key the reader mends in Settings, or
+ * on a failure a choice mends (`MENDED_BY_CHOICE`). Note that the line
+ * hands on, beside its own words, every message the failed launch never
+ * took, so the prompt is never typed again.
+ */
+export function endLineOffersTryAgain(input: {
+  readonly status: AgentStatus;
+  readonly endReason: FailureReason;
+  readonly failure: AgentFailure | undefined;
+  readonly continued: boolean;
+  readonly boxClosed: boolean;
+}): boolean {
+  if (!endLineContinues(input.status, input.endReason)) return false;
+  if (input.continued || input.boxClosed) return false;
+  if (input.failure === undefined) return true;
+  return !mendedByNewAgent(input.failure) && !MENDED_BY_CHOICE.has(input.failure);
+}
+
+/**
  * Whether the developer starts agents of their own on a task worked in this
  * mode: New agent, the draft a task with no tab opens, and a Fork. A pilot
  * task offers none, because its pilot starts every agent on it; a task read
@@ -711,7 +748,7 @@ export const STOP_FAILED = "The agent could not be stopped. Try again.";
 export const RENAME_FAILED = "The agent could not be renamed. Try again.";
 
 /** What the toast says when the service did not switch an agent's MCP servers, whose switches fall back. */
-export const SERVERS_FAILED = "The agent's integrations could not be changed. Try again.";
+export const SERVERS_FAILED = "The agent's MCP servers could not be changed. Try again.";
 
 /** What an agent's archive says once it landed, and what it says refused. */
 const ARCHIVED_WORDS = {

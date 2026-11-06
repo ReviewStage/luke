@@ -10,7 +10,6 @@ import {
   countStandingFirewalls,
   dropStaleFirewalls,
   keepFirewallLaunch,
-  letGoFirewallLaunch,
   listStandingFirewalls,
   readFirewallLaunch,
   renewFirewallLaunch,
@@ -19,9 +18,8 @@ import {
 /**
  * The swaps a runner's launch keeps for its sandbox session, over a real
  * dialect: a launch replaces the one kept before it, a renewal writes over
- * the row as it stands and never makes one, a let-go deletes the row, one
- * account's session row is neither read, renewed, nor let go through
- * another's, and a clear and the sweep's drop delete rows by session and by
+ * the row as it stands and never makes one, one account's session row is
+ * neither read nor renewed through another's, and a clear and the sweep's drop delete rows by session and by
  * age. The sealed column is
  * opaque text here, as the store holds it. Synthetic accounts, sessions,
  * agents, and seals throughout.
@@ -48,7 +46,7 @@ const launchOf = (sealedEntries: string) => ({
 
 it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) => {
   it.effect(
-    "a launch replaces the one kept before it, a renewal writes over the row as it stands, and a let-go deletes the row, which no renewal brings back",
+    "a launch replaces the one kept before it, a renewal writes over the row as it stands, and a cleared row no renewal brings back",
     () =>
       Effect.gen(function* () {
         const owner = yield* openOwner;
@@ -65,14 +63,14 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
           sealedEntries: "sealed-renewed",
         });
 
-        yield* letGoFirewallLaunch(owner);
+        yield* clearStandingFirewall(owner.sandboxSessionId);
         yield* renewFirewallLaunch(owner, "sealed-late", LATER);
         assert.equal(yield* readFirewallLaunch(owner), undefined);
       }),
   );
 
   it.effect(
-    "one account's session row is neither read, renewed, nor let go through another's, whose launch keeps to a row of its own",
+    "one account's session row is neither read nor renewed through another's, whose launch keeps to a row of its own",
     () =>
       Effect.gen(function* () {
         const owner = yield* openOwner;
@@ -82,7 +80,6 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
 
         assert.equal(yield* readFirewallLaunch(theirs), undefined);
         yield* renewFirewallLaunch(theirs, "sealed-other", LATER);
-        yield* letGoFirewallLaunch(theirs);
         yield* keepFirewallLaunch(theirs, launchOf("sealed-other-own"), LATER);
 
         assert.equal((yield* readFirewallLaunch(owner))?.sealedEntries, "sealed-owner");

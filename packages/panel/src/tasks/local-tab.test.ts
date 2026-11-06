@@ -19,6 +19,7 @@ import {
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { timeRuntime } from "@repo/ui";
 import type { LocalStripTab, ViewedAt } from "@repo/ui/tab-strip-model";
+import { localTab } from "@repo/ui/tab-strip-model";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -36,11 +37,12 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
-import type { HeldShell } from "./local-held.js";
-import { LocalStanding, LocalTab } from "./local-tab.js";
-import { useEndLocal, useOpenLocal } from "./use-local-session.js";
+import type { HeldShell } from "./terminal-held.js";
+import { TERMINAL_KIND } from "./terminal-session.js";
+import { TerminalCount, TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 import type { SidePanelTab } from "./use-side-panel.js";
+import { useEndTerminalTab, useOpenTerminalTab } from "./use-terminal-session.js";
 
 /**
  * A cloud agent's Local tab as the developer meets it: one terminal on
@@ -78,23 +80,23 @@ const SECOND = "7d5a9e1f-3b6c-4f0d-8e5a-7c9d1e3f5b64";
 
 /** The terminals the window holds for the agent unless a test keeps others, oldest first. */
 const HELD: readonly HeldShell[] = [
-  { shell: FIRST, title: "Terminal 1" },
-  { shell: SECOND, title: "Terminal 2" },
+  { shell: FIRST, title: "Local 1" },
+  { shell: SECOND, title: "Local 2" },
 ];
 
 /** The agent's terminals as the window keeps them in its session storage. */
 function kept(): readonly HeldShell[] {
-  const all: Record<string, readonly HeldShell[]> = JSON.parse(
-    window.sessionStorage.getItem("vespin.localShells") ?? "{}",
+  const all: { local?: Record<string, readonly HeldShell[]> } = JSON.parse(
+    window.sessionStorage.getItem("vespin.terminals") ?? "{}",
   );
-  return all[AGENT.id] ?? [];
+  return all.local?.[AGENT.id] ?? [];
 }
 
 /** Keeps the window's terminals for the agent, as a page before a reload left them in session storage. */
 function keep(shells: readonly HeldShell[]): void {
   window.sessionStorage.setItem(
-    "vespin.localShells",
-    JSON.stringify(shells.length === 0 ? {} : { [AGENT.id]: shells }),
+    "vespin.terminals",
+    JSON.stringify({ cloud: {}, local: shells.length === 0 ? {} : { [AGENT.id]: shells } }),
   );
 }
 
@@ -295,21 +297,21 @@ async function mount(
     findable
       ? createElement(FindScope, {
           active: true,
-          subject: { task: TASK, tab: { local: AGENT.id, shell, title: "Terminal 1" } },
+          subject: { task: TASK, tab: localTab(AGENT.id, shell, "Local 1") },
           children: tab,
         })
       : tab;
   let agentOpened = 0;
   let handed = onPhone(null).handed;
   const render = (on: boolean) => {
-    const tab = createElement(LocalTab, {
-      agentId: AGENT.id,
-      shell,
+    const tab = createElement(TerminalTab, {
+      tab: localTab(AGENT.id, shell, "Local 1"),
       agents,
       shown: on,
       onOpenAgent: () => {
         agentOpened += 1;
       },
+      onClose: () => undefined,
     });
     const drawn = onPhone(tab);
     handed = drawn.handed;
@@ -593,7 +595,10 @@ function lastPayload(kind: PortActKind | ShellKind) {
 test("a terminal's row in the panel's + counts the agent's Local terminals, leaving whether the agent works to its glyph", async () => {
   const tab = await mount();
   const standing = renderToStaticMarkup(
-    onRegistry(tab.registry, createElement(LocalStanding, { agentId: AGENT.id })),
+    onRegistry(
+      tab.registry,
+      createElement(TerminalCount, { kind: TERMINAL_KIND.LOCAL, agentId: AGENT.id }),
+    ),
   );
   assert.equal(standing, "2 terminals");
 });
@@ -608,11 +613,12 @@ function localDoors(
   const chosen: SidePanelTab[] = [];
   let doors: { open: (agentId: string, fresh: boolean) => void; end: (tab: LocalStripTab) => void };
   const Doors = () => {
-    const opened = useOpenLocal(
-      { onChoose: (tab) => chosen.push(tab), locals: open, viewedAt },
+    const opened = useOpenTerminalTab(
+      TERMINAL_KIND.LOCAL,
+      { onChoose: (tab) => chosen.push(tab), terminals: [], locals: open, viewedAt },
       () => undefined,
     );
-    doors = { open: opened, end: useEndLocal() };
+    doors = { open: opened, end: useEndTerminalTab() };
     return null;
   };
   const container = document.createElement("div");
@@ -634,14 +640,14 @@ test("a new terminal asked for from the + or ⌘K opens a tab of its own, named 
   doors.open(true);
   const [made] = kept().slice(2);
   assert.ok(made);
-  assert.equal(made.title, "Terminal 3");
-  assert.deepEqual(doors.chosen, [{ local: AGENT.id, shell: made.shell, title: "Terminal 3" }]);
+  assert.equal(made.title, "Local 3");
+  assert.deepEqual(doors.chosen, [localTab(AGENT.id, made.shell, "Local 3")]);
   assert.deepEqual(main.sent, []);
 });
 
 test("Show local goes to the agent's Local tab viewed last, and with none open, as after a reload, opens a tab for each terminal the window still holds, the newest last", async () => {
-  const first = { local: AGENT.id, shell: FIRST, title: "Terminal 1" };
-  const second = { local: AGENT.id, shell: SECOND, title: "Terminal 2" };
+  const first = localTab(AGENT.id, FIRST, "Local 1");
+  const second = localTab(AGENT.id, SECOND, "Local 2");
   const open = localDoors(
     [first, second],
     [
@@ -662,7 +668,7 @@ test("closing a Local tab ends its terminal: out of the window's list, its port 
   const tab = await mount();
   const port = main.post(MADE);
   const doors = localDoors([], [], tab.registry);
-  await doors.end({ local: AGENT.id, shell: FIRST, title: "Terminal 1" });
+  await doors.end(localTab(AGENT.id, FIRST, "Local 1"));
   assert.deepEqual(
     kept().map((each) => each.shell),
     [SECOND],
@@ -753,12 +759,12 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
-  const tab = createElement(LocalTab, {
-    agentId: AGENT.id,
-    shell: FIRST,
+  const tab = createElement(TerminalTab, {
+    tab: localTab(AGENT.id, FIRST, "Local 1"),
     agents,
     shown: true,
     onOpenAgent: () => undefined,
+    onClose: () => undefined,
   });
   // The window's opener is a new closure whenever what it reads changes, as the window draws it.
   const draw = () =>
@@ -770,7 +776,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
             FITTED,
             createElement(FindScope, {
               active: true,
-              subject: { task: TASK, tab: { local: AGENT.id, shell: FIRST, title: "Terminal 1" } },
+              subject: { task: TASK, tab: localTab(AGENT.id, FIRST, "Local 1") },
               children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
             }),
           ),

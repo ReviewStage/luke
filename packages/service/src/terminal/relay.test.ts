@@ -92,13 +92,10 @@ function world(options: {
   readonly tokensWait?: Deferred.Deferred<void>;
   /** Whether the agent's credential is its starter's own token. */
   readonly memberToken?: boolean;
-  /** Whether a turn of the agent is under way. */
-  readonly turnUnderWay?: boolean;
 }) {
   let heldUntil = 0;
   let credentialAt: number | undefined;
   const policies: string[] = [];
-  const withdrawn: string[] = [];
   const keptAlive: { readonly sessionId: string; readonly at: number }[] = [];
   const asked = {
     attached: 0,
@@ -106,7 +103,6 @@ function world(options: {
     tokens: 0,
     released: 0,
     policies,
-    withdrawn,
     keptAlive,
   };
   const sandbox: AgentSandboxService = {
@@ -139,8 +135,6 @@ function world(options: {
     open: () => Effect.die("the relay opens no PTY of its own"),
     setCredential: ({ sandboxSessionId }) =>
       Effect.sync(() => void asked.policies.push(sandboxSessionId)),
-    withdrawCredential: ({ sandboxSessionId }) =>
-      Effect.sync(() => void asked.withdrawn.push(sandboxSessionId)),
   };
   const agent: RelayAgent = {
     userId: "user-relay",
@@ -157,7 +151,6 @@ function world(options: {
         : Effect.andThen(Deferred.await(options.tokensWait), answer);
     }),
     memberToken: options.memberToken ?? false,
-    turnUnderWay: Effect.succeed(options.turnUnderWay ?? false),
   };
   const deps: RelayDependencies = {
     reach: () => Effect.succeed(options.agent ?? Option.some(agent)),
@@ -209,7 +202,6 @@ it.effect(
           sessionId: undefined,
           repositoryCredential: Effect.die("no token"),
           memberToken: false,
-          turnUnderWay: Effect.die("no turn"),
         }),
         pty,
       });
@@ -411,42 +403,24 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a member's own token is set at every check rather than claimed, and taken off as the terminal closes unless a turn of the agent is under way",
-  () =>
-    Effect.gen(function* () {
-      const pty = yield* scriptedSocket;
-      const idle = yield* scriptedSocket;
-      const busy = yield* scriptedSocket;
-      const alone = world({ pty, memberToken: true });
-      const beside = world({ pty, memberToken: true, turnUnderWay: true });
+it.effect("a member's own token is set at every check rather than claimed", () =>
+  Effect.gen(function* () {
+    const pty = yield* scriptedSocket;
+    const idle = yield* scriptedSocket;
+    const alone = world({ pty, memberToken: true });
 
-      const one = yield* Effect.forkChild(
-        Effect.scoped(relayTerminal(idle.socket, ASK, alone.deps)),
-      );
-      yield* settle;
-      yield* TestClock.adjust(Duration.minutes(4));
-      yield* idle.push({ bytes: encode("x") });
-      yield* settle;
-      yield* TestClock.adjust(Duration.minutes(1));
-      yield* settle;
-      const setWhileOpen = [...alone.asked.policies];
-      const withdrawnWhileOpen = [...alone.asked.withdrawn];
-      yield* idle.leave;
-      yield* Fiber.join(one);
-      yield* Effect.scoped(
-        Effect.andThen(
-          Effect.forkScoped(relayTerminal(busy.socket, ASK, beside.deps)),
-          Effect.andThen(settle, busy.leave),
-        ),
-      );
+    const one = yield* Effect.forkChild(Effect.scoped(relayTerminal(idle.socket, ASK, alone.deps)));
+    yield* settle;
+    yield* TestClock.adjust(Duration.minutes(4));
+    yield* idle.push({ bytes: encode("x") });
+    yield* settle;
+    yield* TestClock.adjust(Duration.minutes(1));
+    yield* settle;
+    yield* idle.leave;
+    yield* Fiber.join(one);
 
-      assert.deepEqual(setWhileOpen, [SANDBOX_SESSION, SANDBOX_SESSION]);
-      assert.deepEqual(withdrawnWhileOpen, []);
-      assert.deepEqual(alone.asked.withdrawn, [SANDBOX_SESSION]);
-      assert.deepEqual(beside.asked.policies, [SANDBOX_SESSION]);
-      assert.deepEqual(beside.asked.withdrawn, [], "a turn under way keeps the token");
-    }),
+    assert.deepEqual(alone.asked.policies, [SANDBOX_SESSION, SANDBOX_SESSION]);
+  }),
 );
 
 it.effect("a renewal GitHub refused gives its claim back, and the next check renews", () =>

@@ -13,7 +13,8 @@ import {
   type TasklessAgent,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
-import { Effect, Layer, Queue, Stream } from "effect";
+import { Duration, Effect, Layer, Queue, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import { type AgentNotice, AgentNoticeDoors, createAgentNotices } from "./agent-notices.js";
 import type { AppInboxSlice, AppInboxTask, AppInboxTaskHolding } from "./app-state.js";
 
@@ -306,6 +307,8 @@ const READ_AT = 1_800_000_000_000;
 const ITEM_A = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
 const ITEM_B = "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f";
 const ITEM_C = "7a4f9e5c-3d6b-4a8c-8e1f-2b3c4d5e6f7a";
+
+const DAY = Duration.toMillis(Duration.days(1));
 it.effect(
   "another account ends the follow of the last and lets go of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in follows nothing",
   () =>
@@ -878,28 +881,43 @@ it.effect(
 );
 
 it.effect(
-  "the badge counts the open asks that wait on the account, an ask with no task addressed to it among them, and no notice or teammate's ask",
+  "the badge counts what waits on the account as Open lists it, a question and an unopened update alike but one snoozed, until its reminder comes due",
   () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(READ_AT);
       const f = fixture();
       yield* f.notices;
       const teammate = "user-charles";
-      f.answerInbox({
-        items: [
-          waitingItem(ITEM_A, { waitsOn: ACCOUNT_ID, asking: true }),
-          waitingItem(ITEM_B, { waitsOn: ACCOUNT_ID, asking: false }),
-          waitingItem(ITEM_C, { waitsOn: teammate, asking: true }),
-        ],
-        planless: [
-          tasklessItem(ITEM_B, { startedBy: teammate, waitsOn: ACCOUNT_ID, asking: true }),
-          tasklessItem(ITEM_C, { startedBy: ACCOUNT_ID, waitsOn: teammate, asking: true }),
-        ],
-        cursor: "1",
-        readAt: READ_AT,
+      const question = waitingItem(ITEM_A, { waitsOn: ACCOUNT_ID, asking: true });
+      const snoozed = tasklessItem(ITEM_C, {
+        startedBy: teammate,
+        waitsOn: ACCOUNT_ID,
+        asking: true,
+        remindAt: READ_AT + DAY,
       });
+      const answer = (cursor: string, items: readonly AccountInboxEntry[]) =>
+        f.answerInbox({
+          items: [...items, waitingItem(ITEM_C, { waitsOn: teammate, asking: true })],
+          planless: [
+            snoozed,
+            tasklessItem(ITEM_B, { startedBy: ACCOUNT_ID, waitsOn: teammate, asking: true }),
+          ],
+          cursor,
+          readAt: READ_AT,
+        });
+      answer("1", [
+        question,
+        waitingItem(ITEM_B, { waitsOn: ACCOUNT_ID, asking: false, unread: true }),
+      ]);
+      yield* settled;
+      const before = f.badges.at(-1);
+      yield* TestClock.adjust(Duration.days(1));
+      yield* settled;
+      const due = f.badges.at(-1);
+      answer("2", [question]);
       yield* settled;
 
-      assert.equal(f.badges.at(-1), 2);
+      assert.deepEqual([before, due, f.badges.at(-1)], [2, 3, 2]);
     }),
 );
 

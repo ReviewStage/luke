@@ -532,12 +532,22 @@ const OWN_TASKS: readonly TaskSummary[] = [
  */
 export function inboxTasksView(profile: string, list: TasksView): TasksView {
   if (!STAGED_PROFILES.has(profile)) return list;
-  const tasks = list.tasks.map((task) =>
-    task.id === TASK.INVITES
-      ? { ...task, ownerId: ADA.userId, createdBy: ADA, assignee: ADA, ...agentsLine(task.id) }
-      : task,
-  );
-  return { ...list, tasks: [...tasks, ...OWN_TASKS] };
+  const tasks = [
+    ...list.tasks.map((task) =>
+      task.id === TASK.INVITES
+        ? { ...task, ownerId: ADA.userId, createdBy: ADA, assignee: ADA, ...agentsLine(task.id) }
+        : task,
+    ),
+    ...OWN_TASKS,
+  ];
+  // Note that the list follows each task's agent live too, which a person's page lists them from.
+  const followed = tasks.flatMap((task) => {
+    const agent = AGENTS.get(task.id);
+    return agent === undefined
+      ? []
+      : [{ ...agent, workspaceId: task.workspaceId, repository: task.repository }];
+  });
+  return { ...list, tasks, taskAgents: [...(list.taskAgents ?? []), ...followed] };
 }
 
 /* ----- The window's document ----- */

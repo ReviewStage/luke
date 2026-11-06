@@ -11,8 +11,7 @@
 
 import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@repo/features/link-grammar";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { ROUTED_PLACE } from "../route-gates.js";
-import { useRoutedLocation } from "../routed-location.js";
+import { ROUTED_PLACE, useWindowPlace } from "../places/routed-places.js";
 import type { AdminViewControl } from "../tasks/use-tasks-tab.js";
 import {
   ADMIN_TAB,
@@ -37,7 +36,7 @@ export function useAdminRoute(input: {
 }): AdminViewControl {
   const router = useRouter();
   const navigate = useNavigate();
-  const here = useRoutedLocation();
+  const here = useWindowPlace();
   const open = here.place === ROUTED_PLACE.ADMIN;
   const { params } = here;
   const view = open

@@ -23,7 +23,6 @@ import {
   sandboxFetchOver,
   sandboxFound,
   sandboxListRefusal,
-  sessionAnswered,
 } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 
@@ -65,8 +64,6 @@ function vercel(
   /** The detached commands, by id, with their exit code, or null while they run, and what they printed on stderr. */
   const commands = new Map<string, ReadCommand & { readonly stderr?: string }>();
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
-  /** Each network policy sent, by the session it was sent to. */
-  const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const method = init.method ?? "GET";
@@ -104,11 +101,7 @@ function vercel(
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
-    const [, sessionId = "", rest = ""] = session;
-    if (rest === "network-policy") {
-      policies.push({ session: sessionId, policy: JSON.parse(String(init.body)) });
-      return Response.json(sessionAnswered({ id: sessionId, status: "running" }));
-    }
+    const [, , rest = ""] = session;
     const command = /^cmd\/([^/]+)(\/logs)?$/u.exec(rest);
     assert.ok(command !== null, `an unexpected call: ${method} ${parsed.pathname}`);
     const found = commands.get(command[1] ?? "");
@@ -124,7 +117,6 @@ function vercel(
     sandboxes,
     commands,
     pagesListed,
-    policies,
   };
 }
 
@@ -231,7 +223,7 @@ afterEach(() => {
 
 it.layer(getTestDB())("the native sandbox sweep", (it) => {
   it.effect(
-    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone, every credential taken off its firewall; a runner still up keeps its turn",
+    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone; a runner still up keeps its turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -297,31 +289,25 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           .from(conversations)
           .where(eq(conversations.id, crashed.conversationId));
         assert.deepEqual(projection?.projection, { session: "cli-session" });
-        assert.deepEqual(api.policies, [
-          { session: dead.currentSessionId, policy: { mode: "allow-all" } },
-        ]);
         assert.equal(dead.status, "running");
         assert.equal(alive.status, "running");
       }),
   );
 
-  it.effect(
-    "a lost runner whose agent's runner lease a message holds keeps its turn and its firewall",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel();
-        const sandbox = yield* lostSandbox(api);
-        api.sandboxes.push(sandbox);
-        const agentId = sandbox.tags.agentId ?? "";
-        const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.ok(yield* claimAgentRunnerLease(agentId, randomUUID(), NOW, heldUntil));
+  it.effect("a lost runner whose agent's runner lease a message holds keeps its turn", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel();
+      const sandbox = yield* lostSandbox(api);
+      api.sandboxes.push(sandbox);
+      const agentId = sandbox.tags.agentId ?? "";
+      const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+      assert.ok(yield* claimAgentRunnerLease(agentId, randomUUID(), NOW, heldUntil));
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { lost: 0 });
-        assert.deepEqual(api.policies, []);
-      }),
+      assert.deepEqual(outcome, { lost: 0 });
+    }),
   );
 
   it.effect(

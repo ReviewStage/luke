@@ -16,7 +16,11 @@ import { LIVE_POLL } from "./live-wire.js";
  * a success is the output's wire schema encoded, so it is decoded here with
  * that schema, a key a newer service added dropped as `readServiceAnswer`
  * drops one; a refusal is `{ error: slug, ...data }`, read into the slug
- * and the fields its declared error carries.
+ * and the fields its declared error carries. A refusal the procedure's
+ * contract does not declare is read as no answer, kept with its status and
+ * slug, so a caller only ever hears a refusal its procedure says it may
+ * answer. Each procedure's client is typed with the errors its contract
+ * declares, which `hostedCall` (`hosted-call.ts`) reads its failures from.
  *
  * Note that the link's transport is a promise door: oRPC calls `fetch` and
  * awaits it, so the account call is run there, on the services the calling
@@ -33,7 +37,12 @@ import {
   MalformedResponseError,
   ORPCError,
 } from "@orpc/client";
-import type { InferSchemaInput, ProcedureContract } from "@orpc/contract";
+import type {
+  ErrorMap,
+  InferSchemaInput,
+  ORPCErrorFromErrorMap,
+  ProcedureContract,
+} from "@orpc/contract";
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
 import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@repo/wire";
@@ -47,20 +56,12 @@ import {
   callAnswered,
   sendInSession,
 } from "./account-call.js";
-import {
-  credentialMissingDataSchema,
-  localAgentRefusedDataSchema,
-  planLimitReachedDataSchema,
-  repositoryNotReachableDataSchema,
-} from "./contract/errors.js";
+import { HOSTED_REFUSAL_DATA, refusalCarriesData } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
-import { outputWireSchema } from "./contract/output-schema.js";
+import { outputWireSchema, refusalDeclared } from "./contract/output-schema.js";
 import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
-import { hostPairingHeldDataSchema, hostUpgradeNeededDataSchema } from "./host-wire.js";
-import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
 import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
 import {
-  HOSTED_API_ERROR,
   type HostedApiError,
   hostedErrorSchema,
   IDEMPOTENCY_KEY,
@@ -123,14 +124,18 @@ interface HostedLinkContext {
   readonly idempotencyKey?: string;
 }
 
-/** The fields a refusal carries beside its slug, by the declared error that carries them. */
-type HostedRefusalData = typeof repositoryNotReachableDataSchema.Type &
-  typeof planLimitReachedDataSchema.Type &
-  typeof credentialMissingDataSchema.Type &
-  typeof installedSkillRefusedDataSchema.Type &
-  typeof localAgentRefusedDataSchema.Type &
-  typeof hostUpgradeNeededDataSchema.Type &
-  typeof hostPairingHeldDataSchema.Type;
+/** The refusals that carry fields beside their slug. */
+type RefusalWithData = keyof typeof HOSTED_REFUSAL_DATA;
+
+/** A union of records as the one record that holds each of their fields. */
+type Merged<Union> = (Union extends unknown ? (record: Union) => void : never) extends (
+  record: infer Record,
+) => void
+  ? Record
+  : never;
+
+/** The fields a refusal carries beside its slug, by the declared error that carries them, every one optional. */
+type HostedRefusalData = Merged<(typeof HOSTED_REFUSAL_DATA)[RefusalWithData]["Type"]>;
 
 /** The service refused the procedure: its slug, and the fields its declared error carries where they read. */
 export class HostedRefused extends Data.TaggedError("HostedRefused")<{
@@ -196,28 +201,36 @@ export function hostedFailureFacts(failed: HostedFailure): FailureFacts {
 }
 
 /**
+ * What a procedure's call may fail with: a refusal its contract declares,
+ * as oRPC names one (its slug the code), or any other error the link or
+ * oRPC throws.
+ */
+type HostedLinkError<Errors extends ErrorMap> = ORPCErrorFromErrorMap<Errors> | Error;
+
+/**
  * Each procedure as the link answers it: the output as the wire schema
  * decodes it, so its type is the schema's own (the contract declares the
- * schema flipped, which oRPC would read as the encoded side).
+ * schema flipped, which oRPC would read as the encoded side), and the
+ * refusals its contract declares.
  */
 type HostedLinkClient<Router> =
-  Router extends ProcedureContract<infer InputSchema, infer OutputSchema, infer _Errors>
+  Router extends ProcedureContract<infer InputSchema, infer OutputSchema, infer Errors>
     ? Client<
         HostedLinkContext,
         InferSchemaInput<InputSchema>,
         InferSchemaInput<OutputSchema>,
-        unknown
+        HostedLinkError<Errors>
       >
     : { readonly [Key in keyof Router]: HostedLinkClient<Router[Key]> };
 
 /** Every hosted procedure, one lazy Effect each. */
 export type HostedClient = EffectClient<HostedLinkClient<typeof hostedContract>>;
 
-/** One procedure of the client, asked with its input and the link's context. */
-export type HostedProcedure<Input, Output> = (
+/** One procedure of the client, asked with its input and the link's context, failing with what its contract declares. */
+export type HostedProcedure<Input, Output, Failure = unknown> = (
   input: Input,
   options: { readonly context: HostedLinkContext },
-) => Effect.Effect<Output, unknown>;
+) => Effect.Effect<Output, Failure>;
 
 export interface HostedClientOptions {
   /** The service origin; any trailing separator is trimmed once. */
@@ -257,33 +270,38 @@ function callRequest(url: string, init: RequestInit): CallRequest {
 
 /**
  * A refusal as the service writes it, `{ error: slug, ...data }`, read into
- * its slug and the fields its declared error carries; a repository out of
- * reach whose reason this build cannot read is the bare refusal. Anything
- * else is no refusal, which oRPC then reads as a malformed answer.
+ * its slug and the fields its declared error carries; fields this build
+ * cannot read, or none at all, leave the bare refusal. Anything else is no refusal, which
+ * oRPC then reads as a malformed answer.
  */
 function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   if (refusal === undefined) return undefined;
-  const schema =
-    refusal === HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE
-      ? repositoryNotReachableDataSchema
-      : refusal === HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED
-        ? planLimitReachedDataSchema
-        : refusal === HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING
-          ? credentialMissingDataSchema
-          : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
-              refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
-            ? installedSkillRefusedDataSchema
-            : refusal === HOSTED_API_ERROR.LOCAL_AGENT_REFUSED
-              ? localAgentRefusedDataSchema
-              : refusal === HOSTED_API_ERROR.HOST_UPGRADE_NEEDED
-                ? hostUpgradeNeededDataSchema
-                : refusal === HOSTED_API_ERROR.HOST_PAIRING_HELD
-                  ? hostPairingHeldDataSchema
-                  : undefined;
-  if (schema === undefined) return new HostedRefused({ refusal });
-  const data = Result.getOrUndefined(readServiceAnswer(schema)(payload));
-  return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }) });
+  if (!refusalCarriesData(refusal)) return new HostedRefused({ refusal });
+  const data: HostedRefusalData | undefined = Result.getOrUndefined(
+    readServiceAnswer(HOSTED_REFUSAL_DATA[refusal])(payload),
+  );
+  // Note that a refusal that carries none of its fields is the bare refusal, as one that declares none is.
+  const carried = data !== undefined && Object.keys(data).length > 0;
+  return new HostedRefused({ refusal, ...(carried ? { data } : undefined) });
+}
+
+/** What the link's own error for a refusal carries beside it: the status the refusal came under. */
+const isRefusedStatus = Schema.is(Schema.Struct({ status: Schema.Number }));
+
+/**
+ * A procedure's failure, a refusal its contract does not declare read as no
+ * answer, kept with the status it came under and its slug as the code.
+ */
+function declaredOnly(path: readonly string[], error: unknown): unknown {
+  if (!(error instanceof ORPCError) || !(error.cause instanceof HostedRefused)) return error;
+  const { refusal } = error.cause;
+  if (refusalDeclared(path, refusal)) return error;
+  const status = isRefusedStatus(error.data) ? error.data.status : undefined;
+  return new HostedUnanswered({
+    code: refusal,
+    ...(status === undefined ? undefined : { status }),
+  });
 }
 
 /** A body's text, read to its end. */
@@ -383,7 +401,13 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
     customErrorResponseBodyDecoder: (body, response) => {
       // SAFETY: the link's serializer read the body out of the response's JSON text.
       const refused = refusalOf(body as UnparsedWireValue);
-      if (refused !== undefined) return new ORPCError(refused.refusal, { cause: refused });
+      // Note that the status rides as the link's own error's data, which only `declaredOnly` reads, since oRPC's error carries no status.
+      if (refused !== undefined) {
+        return new ORPCError(refused.refusal, {
+          cause: refused,
+          data: { status: response.status },
+        });
+      }
       // Note that an error the service declares no refusal for, a server error among them, keeps its status and oRPC code, since oRPC's own error carries no status.
       const code = isORPCErrorJson(body) ? body.code : undefined;
       const unanswered = new HostedUnanswered({
@@ -394,7 +418,9 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
     },
     interceptors: [
       async ({ next, path }) => {
-        const output = await next();
+        const output = await next().catch((error: unknown) => {
+          throw declaredOnly(path, error);
+        });
         const wire = outputWireSchema(path);
         if (wire === undefined) return output;
         // SAFETY: the link's serializer read the output out of the response's JSON text.

@@ -435,10 +435,18 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           failure: TURN_FAILURE.SESSION_ENDED,
         });
         yield* lineOf(orphaned, 1, "Try again.", null, 60_000);
+        // The newest agent's failure, which alone the row counts, since every other failed before an agent was started after it.
+        const latest = yield* openAgent(owner, { taskId: plan.id }, 30_000);
+        yield* turnOf(latest, TURN_STATUS.FAILED, 20_000, { settled: true });
 
         // A settled plan the owner pinned, and an agent with no plan, pinned and archived.
         // An agent started blank, long past the starting grace: it reads completed, not failed.
         yield* openAgent(owner, { taskId: shelved.id, blank: true }, STARTING_GRACE_MILLIS * 3);
+        // A failure a later agent took over from, which stays taken over once that agent is archived.
+        const retried = yield* openAgent(owner, { taskId: shelved.id }, 20 * 60_000);
+        yield* turnOf(retried, TURN_STATUS.FAILED, 15 * 60_000, { settled: true });
+        const retry = yield* openAgent(owner, { taskId: shelved.id }, 10 * 60_000);
+        yield* archiveAgent(owner, retry.id, true);
         yield* updateTask(owner, plan.id, { assigneeId: teammate });
         yield* updateTask(owner, shelved.id, { pinned: true });
         yield* updateTask(owner, shelved.id, { status: TASK_STATUS.DONE });
@@ -555,8 +563,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual(
           [agents?.total, agents?.working, agents?.failed, agents?.pullRequestTotal],
-          [7, 2, 3, 1],
+          [8, 2, 1, 1],
         );
+        assert.equal(read.plans.find((each) => each.id === shelved.id)?.agents?.failed, 0);
         assert.equal(agents?.pullRequests[0]?.queued, true, "a queued pull request says so");
         assert.equal(agents?.pullRequests[0]?.author, "octo-dev", "it names who opened it");
         assert.ok(

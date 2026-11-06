@@ -554,7 +554,7 @@ export function paneToggleAction(
 }
 
 /** Open on GitHub as an item of a phone's ⋯, dimmed with no page to open yet, as the bar's button is. */
-export function gitHubAction(onGitHub: (() => void) | undefined, detail?: string): MenuAction {
+function gitHubAction(onGitHub: (() => void) | undefined, detail?: string): MenuAction {
   return {
     ...commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => onGitHub?.(), false),
     detail,
@@ -592,7 +592,7 @@ function historyActions(history: FileHistory): MenuAction[] {
 /**
  * The bar across a File tab and its tree, or a Changes tab and its own, drawn
  * by `PaneBar`: Back and Forward where the tab keeps a history, then what
- * leads it (a File tab's path, where there is one), the GitHub button, dimmed with no page to open yet, the tab's own
+ * leads it (a File tab's path, where there is one), the tab's own
  * controls, the ⋯, and the tree's toggle last, where there is a tree, at
  * the bar's very end beside the tree it opens, as the window's title bar
  * ends with the side panel's.
@@ -600,7 +600,6 @@ function historyActions(history: FileHistory): MenuAction[] {
 export function FileViewBar({
   history,
   lead,
-  github,
   menu,
   more,
   tree,
@@ -608,9 +607,7 @@ export function FileViewBar({
   history?: FileHistory | undefined;
   /** What leads the bar after Back and Forward: a File tab's path and the commit it is read at; none leads with nothing. */
   lead?: ReactNode;
-  /** The page on GitHub, and the door that opens it; none dims the button. */
-  github: { readonly href: string; readonly open: (url: string) => void } | undefined;
-  /** The tab's own controls after the GitHub button: View settings, or a ⋯ of its own. */
+  /** The tab's own controls: a File tab's GitHub button and View settings, or a ⋯ of its own. */
   menu: ReactNode;
   /** The bar's ⋯, drawn after the tab's own controls, before the tree's toggle; none draws none. */
   more?: PaneBarMenu | undefined;
@@ -630,30 +627,37 @@ export function FileViewBar({
         ) : null
       }
       detail={crumbs ? undefined : lead}
-      actions={
-        <>
-          <Tooltip label="Open on GitHub">
-            {github === undefined ? (
-              <IconButton
-                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-                label="Open on GitHub"
-                disabled
-              />
-            ) : (
-              <IconButtonLink
-                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-                label="Open on GitHub"
-                href={github.href}
-                onClick={linkPressOf(github.open, github.href)}
-              />
-            )}
-          </Tooltip>
-          {menu}
-        </>
-      }
+      actions={menu}
       menu={more}
       end={tree === undefined ? undefined : <TreeToggle toggles={tree} />}
     />
+  );
+}
+
+/** A File tab's Open on GitHub in its bar: a link to the file's page, which the window opens itself, dimmed with no page to open yet. */
+export function FileGitHubButton({
+  github,
+}: {
+  /** The page on GitHub, and the door that opens it; none dims the button. */
+  github: { readonly href: string; readonly open: (url: string) => void } | undefined;
+}): React.JSX.Element {
+  return (
+    <Tooltip label="Open on GitHub">
+      {github === undefined ? (
+        <IconButton
+          icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+          label="Open on GitHub"
+          disabled
+        />
+      ) : (
+        <IconButtonLink
+          icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+          label="Open on GitHub"
+          href={github.href}
+          onClick={linkPressOf(github.open, github.href)}
+        />
+      )}
+    </Tooltip>
   );
 }
 
@@ -823,12 +827,19 @@ export function FileView({
               )}
             </>
           }
-          github={
-            read.kind === FILE_READ.READY
-              ? { href: fileUrl(read, file), open: openGitHub }
-              : undefined
-          }
           {...fileViewEnd}
+          menu={
+            <>
+              <FileGitHubButton
+                github={
+                  read.kind === FILE_READ.READY
+                    ? { href: fileUrl(read, file), open: openGitHub }
+                    : undefined
+                }
+              />
+              {fileViewEnd.menu}
+            </>
+          }
           tree={browsing ? tree.toggles : undefined}
         />
       )}

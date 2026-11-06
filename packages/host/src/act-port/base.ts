@@ -2,7 +2,7 @@ import "@orpc/experimental-effect/extensions/effect";
 import { createORPCErrorConstructorMap } from "@orpc/contract";
 import type { WithEffectContext } from "@orpc/experimental-effect";
 import { type AnyProcedure, implement, ORPCError } from "@orpc/server";
-import { ACT_ERROR, actPortContract } from "../contract/index.js";
+import { ACT_ERROR, actPortContract, panelOnlyOf } from "../contract/index.js";
 
 /**
  * base.ts -- the implementer every act procedure is built from: who asked, and the refusal of a sender this build does not trust.
@@ -56,14 +56,16 @@ export function isRefusal(error: unknown): error is ORPCError<string, unknown> {
 /**
  * The act port's contract to implement, for a platform whose handle on a window is
  * a `Sender`. Every procedure first refuses a sender this build does not
- * trust, in its own sentence, before its input is read or its row asks
- * anything.
+ * trust, and a window that is not a panel where its contract marks it the
+ * panel's alone, in its own sentence, before its input is read or its row
+ * asks anything.
  */
 export function actPortFor<Sender>() {
   return implement(actPortContract)
     .$context<ActPortContext<Sender>>()
     .use(({ context, next, procedure }) => {
       if (!context.trusted) throw refusedBy(procedure);
+      if (panelOnlyOf(procedure) === true && !context.actor.panel) throw refusedBy(procedure);
       return next();
     });
 }

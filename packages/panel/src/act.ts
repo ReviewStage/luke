@@ -33,9 +33,9 @@ import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { actPort } from "./app-bridge.js";
 import type { ShownFailure } from "./failure-report.js";
-import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
+import { fixtureClient, loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
-import { appStateNow } from "./use-app-state.js";
+import { appStateIn } from "./use-app-state.js";
 
 /**
  * What each kind takes and answers, keyed by the kind. Note that a kind's own
@@ -78,7 +78,8 @@ function stagedAnswer(
   // Note that only a fixture run, which loads the fixture, reads the run, because a read starts the document's follow.
   const fixture = loadedTasksFixture();
   if (fixture === undefined) return undefined;
-  const run = appStateNow()?.run;
+  const client = fixtureClient();
+  const run = client === undefined ? undefined : appStateIn(client)?.run;
   if (run?.fixtureMode !== true) return undefined;
   return fixture.fixtureActAnswer(run, kind, payload);
 }

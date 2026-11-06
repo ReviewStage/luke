@@ -13,6 +13,7 @@ export * from "./agent-wakeup.js";
 export * from "./attachment.js";
 export * from "./auth.js";
 export * from "./automation.js";
+export * from "./claude-session-entry.js";
 export * from "./description-comment.js";
 export * from "./description-revision.js";
 export * from "./device.js";

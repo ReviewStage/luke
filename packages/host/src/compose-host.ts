@@ -63,6 +63,7 @@ import {
   type HostConcern,
   type HostPlatformConcern,
   isPlatformConcern,
+  NOT_ON_THIS_PLATFORM,
   unavailableConcern,
 } from "./host-concerns.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
@@ -378,7 +379,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST),
+          // Note that a host without This Mac refuses its set, which the act draws as unanswered, as the Gateway's refusal of its method was.
+          acts: { HOSTS_THIS_MAC_SET: () => Effect.fail(new Error(NOT_ON_THIS_PLATFORM)) },
+        };
     const terminals: TerminalsComposer =
       openSocket !== undefined
         ? yield* served(
@@ -555,13 +560,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
      * one client is this process, so the step that closed it now only begins
      * the counted events' flush. No run of this Mac's own is under way to
      * cancel, settle, or count: every ask is the service's, so the drain
-     * cancels nothing and counts nothing unresolved.
+     * cancels nothing and counts nothing unresolved. A close a window still
+     * holds for its Undo is let go as sent and waited for, since the window
+     * that would have let it go is quitting with the host.
      */
     const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
         closeAdmissions: Effect.void,
         cancelActive: Effect.succeed([]),
-        awaitSettled: Effect.void,
+        awaitSettled: agents.flushHeldCloses,
         persistUnresolved: Effect.succeed(0),
       },
       settings.flushProductEvents,
@@ -570,6 +577,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     const assembly: HostAssembly = {
       gateway: service.gateway,
+      // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
+      acts: {
+        ...agents.acts,
+        ...thisMacHost.acts,
+        ...automations.acts,
+        ...installedSkills.acts,
+        ...integrations.acts,
+      },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
       startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),

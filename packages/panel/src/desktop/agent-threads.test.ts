@@ -13,6 +13,7 @@ import {
 } from "@repo/features/inbox-wire";
 import type { Task } from "@repo/features/task-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -143,8 +144,8 @@ async function mount(
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [{ agent: AGENT.id }],
-      tab: { agent: AGENT.id },
+      tabs: [agentTab(AGENT.id)],
+      tab: agentTab(AGENT.id),
       openAgents: [AGENT.id],
     },
     agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id, OTHER_AGENT] }),

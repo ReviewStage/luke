@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentStatus, type TasklessAgent } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { Deferred, Effect, Exit, Layer, Scope } from "effect";
@@ -40,8 +39,6 @@ const SILENT_DOORS = Layer.succeed(AgentNoticeDoors, {
   badge: () => undefined,
 });
 
-const UNANSWERED = Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-
 /**
  * The notices linked into `scope` over a host whose workspaces read is
  * `workspacesRefresh`, with every report written to `reported`; the focus
@@ -59,8 +56,6 @@ function linked(
     yield* linkClientNotices({
       state,
       host: {
-        agentList: () => UNANSWERED,
-        agentPage: () => UNANSWERED,
         agentAccountInboxFollow: () => Effect.void,
         agentAccountInboxUnfollow: () => Effect.void,
         onAccountInboxChanged: () => () => undefined,

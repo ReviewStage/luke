@@ -146,10 +146,13 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+} from "../../testing/integration-connect.js";
+import { LOCAL_AGENT_ENVIRONMENT } from "../../testing/local-agent.js";
 import { scriptedHarness } from "../../testing/native-harness-fake.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
-import { AGENT_ROLE } from "../agent-runtime/role.js";
-import { toolsOf } from "../agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
@@ -162,6 +165,7 @@ import {
   UPDATE_TASK_REFUSAL,
 } from "../agent-tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
+import { AgentBrowser } from "../browser/agent-browser.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { type AdmittedConversation, claimRuntimeSession } from "../eve-host/conversation.js";
 import {
@@ -174,15 +178,17 @@ import {
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { NO_SECTION_DELETED, TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
+import { callTool, type ServedTool } from "../tool-catalog/catalog.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
 import { EXPERIMENT_OFF_REFUSAL, NO_EXPERIMENT_ON } from "../workspace-experiment-on.js";
-import { type AgentDoorSeams, type AgentToolCall, runAgentTools } from "./agent-doors.js";
+import type { AgentDoorSeams } from "./agent-doors.js";
 import {
   MAX_MESSAGE_WORDS_CHARS,
   MESSAGE_AGENT_REFUSAL,
   MESSAGE_AGENT_TOOL,
 } from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { SummaryModelOf } from "./replay-summary.js";
 import { NativeAgentSessions, RUNNER_CHECKOUT, type RunnerCheckout } from "./runtime-sessions.js";
@@ -507,7 +513,36 @@ const SENTRY_CONFIGURED = Layer.succeed(
   ),
 );
 
-/** A caller of the agent tools from the agent's own session, as the MCP door runs them under the seams given, over the suite's catalog and a configured Sentry integration unless others are given. */
+/** A sandbox no agent tool opens, since none reads a file the agent names. */
+const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
+
+/** What the catalog's call runs against beside the suite's, none of which an agent tool reaches: an agent browser and the integrations, whose every ask dies, and an environment. */
+const UNREACHED = Layer.mergeAll(
+  Layer.mock(AgentBrowser)({}),
+  integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
+  LOCAL_AGENT_ENVIRONMENT,
+);
+
+/**
+ * One call of an agent tool from the agent's own session, through the
+ * catalog as the MCP server's `tools/call` runs it (`callTool`), under the
+ * call id given as its key and the seams given; answers the tool's own result.
+ */
+function callAsAgent(
+  host: AgentDoorSeams,
+  agent: StartedAgent,
+  tool: ServedTool,
+  input: WireBoundaryInput,
+  callId: string,
+) {
+  const context = { sandbox: NO_SANDBOX, callKey: Effect.succeed(callId), seams: host };
+  return Effect.map(callTool(admittedOf(agent), tool, unparsedWire(input), context), (answer) => {
+    const result = unparsedWire(answer.result);
+    return isRecord(result) ? result : assert.fail(JSON.stringify(answer.result));
+  });
+}
+
+/** A caller of the agent tools from the agent's own session, as the MCP server runs them through the catalog under the seams given, over the suite's catalog and a configured Sentry integration unless others are given. */
 async function peerCaller(
   host: AgentDoorSeams,
   agent: StartedAgent,
@@ -515,15 +550,10 @@ async function peerCaller(
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
   sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
-  const admitted = admittedOf(agent);
-  return (
-    tool: AgentToolCall["tool"],
-    input: WireBoundaryInput,
-    callId = "call-1",
-  ): Promise<WireRecord> =>
+  return (tool: ServedTool, input: WireBoundaryInput, callId = "call-1"): Promise<WireRecord> =>
     database.run(
-      runAgentTools(host, admitted, { tool, input: unparsedWire(input), callId }).pipe(
-        Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry)),
+      callAsAgent(host, agent, tool, input, callId).pipe(
+        Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry, UNREACHED)),
       ),
     );
 }
@@ -537,8 +567,8 @@ function sentWords(body: string | undefined): string {
 }
 
 /**
- * The agent's own `message_agent` to another agent, run through the agent
- * tools door as the MCP door runs it, which is how one agent messages
+ * The agent's own `message_agent` to another agent, run through the catalog
+ * as the MCP server runs it, which is how one agent messages
  * another; answers what the tool answers.
  */
 async function directMessage(
@@ -549,13 +579,15 @@ async function directMessage(
   callId = "call-1",
 ): Promise<WireRecord> {
   return database.run(
-    runAgentTools(host, admittedOf(from), {
-      tool: CODER_TOOL.MESSAGE_AGENT,
-      input: unparsedWire({ agentId: to.id, text: NOTE }),
-      callId,
-    }).pipe(
+    callAsAgent(host, from, CODER_TOOL.MESSAGE_AGENT, { agentId: to.id, text: NOTE }, callId).pipe(
       Effect.provide(
-        Layer.mergeAll(services, modelCatalogOf(CATALOG), ANALYTICS.layer, SENTRY_CONFIGURED),
+        Layer.mergeAll(
+          services,
+          modelCatalogOf(CATALOG),
+          ANALYTICS.layer,
+          SENTRY_CONFIGURED,
+          UNREACHED,
+        ),
       ),
     ),
   );
@@ -4546,7 +4578,7 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   );
 });
 
-test("while its workspace has Memory off, a coding agent's remember and recall are refused and nothing is kept", async () => {
+test("while its workspace has Memory off, a coding agent's remember and recall are refused at the catalog's gate and nothing is kept", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf();
@@ -4561,25 +4593,12 @@ test("while its workspace has Memory off, a coding agent's remember and recall a
   });
   const recalled = await asCaller(CODER_TOOL.SEARCH_MEMORY, {});
 
-  assert.equal(kept.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(recalled.memories, undefined);
+  const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: EXPERIMENT_OFF_REFUSAL };
+  assert.deepEqual(kept, refused);
+  assert.deepEqual(recalled, refused);
   assert.deepEqual(
     (await database.run(listMemories(workspaceId))).map((memory) => memory.text),
     ["Deploys go out from main."],
-  );
-});
-
-test("remember and recall are a coding agent's alone, never a worker's", () => {
-  assert.deepEqual(
-    [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY].map((tool) => [
-      toolsOf(AGENT_ROLE.CODER).has(tool),
-      toolsOf(AGENT_ROLE.CODER_WORKER).has(tool),
-    ]),
-    [
-      [true, false],
-      [true, false],
-    ],
   );
 });
 

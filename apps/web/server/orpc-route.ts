@@ -24,8 +24,8 @@ import { type HostedRouterSeams, hostedRouter } from "@repo/service/orpc/router"
 import type { Route } from "@repo/service/route";
 import type { WebServices } from "@repo/service/runtime";
 import { waitUntil } from "@vercel/functions";
-import { Effect, type Layer } from "effect";
-import { nativeAgents } from "./native-agents.js";
+import { Effect, Layer } from "effect";
+import { agentImage, nativeAgents } from "./native-agents.js";
 import { routeFromWebServices } from "./route-effect.js";
 
 /**
@@ -72,8 +72,8 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   supportAccess: supportAccessCalls(auth.api),
   memberMcpServerUrl: memberMcpResourceUrl(authDeployment(process.env).baseURL),
   workspaces: workspaceSeams(auth.api),
-  sandbox: agentSandboxLayer,
-  agentBrowser: agentBrowserServices,
+  sandbox: agentSandboxLayer.pipe(Layer.provide(agentImage)),
+  agentBrowser: agentBrowserServices.pipe(Layer.provide(agentImage)),
   sessionSandboxes: sessionSandboxesLayer,
   keepAwake,
   members: memberSeams(auth.api),

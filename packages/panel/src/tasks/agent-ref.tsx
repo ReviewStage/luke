@@ -152,6 +152,32 @@ export function lineSubject(
 }
 
 /**
+ * An agent on a task as the list followed live carries it, as a person's
+ * page names it: its tab's card (`agentCardReading`), with no step to
+ * preview since no tab of it is held, but that a settled one last moved
+ * when `at` says, the end of its newest turn where the task's row names it.
+ */
+export function listedRowSubject(
+  agent: AgentSummary,
+  at: number,
+  agents: Pick<AgentsControl, "models" | "me" | "pullRequests">,
+): AgentSubject {
+  const name = agentName(agent, agents.models);
+  const base = agentCardReading(agent, name, NOTHING_HELD, false, agents);
+  const writing = agentStillWriting(agent.status);
+  const read = (): CardReading => ({
+    ...base(),
+    corner: cardCorner({
+      writing,
+      startedAt: agent.runStartedAt,
+      movedAt: writing ? undefined : at,
+      state: agentStateWords(agent.status),
+    }),
+  });
+  return { name, tile: agentActor(agent, name), agent, read };
+}
+
+/**
  * An agent with no task as the sidebar's list carries it, as its row's card
  * says it: its tab's card (`agentCardReading`), but that it last moved when
  * the list says it did, the end of its newest run included, and that it

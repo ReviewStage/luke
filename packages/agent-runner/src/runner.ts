@@ -92,6 +92,7 @@ import {
   type RunnerWaiting,
   type RunnerWakeup,
 } from "./protocol.js";
+import { transcriptStore } from "./transcripts.js";
 import { oneShotDueAt } from "./wakeups.js";
 
 /** The name our MCP server is registered under, so its tools reach the model as `mcp__workspace__<tool>` (`@repo/features/agent-tools`'s `WORKSPACE_MCP_SERVER`). */
@@ -181,6 +182,7 @@ function queryOptions(
   servers: Readonly<Record<string, McpSdkServerConfigWithInstance>>,
   onStop: HookCallback,
   from: ResumePoint,
+  bearer: Redacted.Redacted,
 ): Options {
   const options: Options = {
     cwd: config.cwd,
@@ -211,6 +213,11 @@ function queryOptions(
   if (config.fast === true) options.settings = { fastMode: true };
   if (from.resume !== undefined) options.resume = from.resume;
   if (from.at !== undefined) options.resumeSessionAt = from.at;
+  if (config.fork === true) options.forkSession = true;
+  // The SDK mirrors the transcript to the service as the CLI writes it, and loads it from there to resume.
+  if (config.transcriptsUrl !== undefined) {
+    options.sessionStore = transcriptStore(config.transcriptsUrl, bearer);
+  }
   // The member's installed skills load as a local plugin, which leaves the checkout and the
   // settings Claude Code reads (`project` alone) as they stand; we hold its MCP servers.
   const manifest = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.MANIFEST);
@@ -626,7 +633,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
   const from = yield* resumePointOf(claudeCode, config);
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, context.env, servers, onStop, from),
+    options: queryOptions(config, context.env, servers, onStop, from, bearer),
   });
   const launch: Launch = {
     session,

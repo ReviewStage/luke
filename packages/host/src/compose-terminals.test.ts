@@ -45,7 +45,7 @@ import {
  * no sandbox yet is asked after every five seconds; output past the
  * watermark pauses the socket until the tab acks; a refused bearer is
  * renewed once; a wake cuts a wait short; and a detach or a sign-out ends
- * the connection. Synthetic ids and bytes throughout.
+ * the connection, as ten minutes unused does. Synthetic ids and bytes throughout.
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -322,6 +322,49 @@ it.effect("a shell's exit, a stopped sandbox, and an archived agent each end the
       assert.equal(opened.length, 1);
     }
   }),
+);
+
+it.effect(
+  "a connection ends as idle ten minutes after its last typing, output, or word that its tab is shown, its reopens no use, and its socket is let go",
+  () =>
+    Effect.gen(function* () {
+      const { call, hand, opened, states, printed } = yield* subject();
+      const first = yield* scriptedSocket;
+      const second = yield* scriptedSocket;
+      const minutes = (count: number) =>
+        Effect.forEach(
+          Array.from({ length: count }),
+          () => Effect.andThen(TestClock.adjust(Duration.minutes(1)), settle),
+          { discard: true },
+        );
+
+      yield* call(GATEWAY_METHOD.TERMINALS_CONNECT, connected());
+      yield* hand(first.opening);
+      yield* first.attached;
+      yield* minutes(9);
+      yield* call(GATEWAY_METHOD.TERMINALS_INPUT, { connectionId: CONNECTION_ID, data: "ls\r" });
+      yield* minutes(9);
+      yield* first.push({ bytes: encode("GET / 200\r\n") });
+      yield* minutes(9);
+      yield* call(GATEWAY_METHOD.TERMINALS_SHOWN, { connectionId: CONNECTION_ID });
+      // The relay function's bound drops the socket a minute on, and it is opened again.
+      yield* minutes(1);
+      yield* first.close(1006);
+      yield* settle;
+      yield* TestClock.adjust(TERMINAL_RECONNECT.FIRST);
+      yield* hand(second.opening);
+      yield* second.attached;
+      yield* minutes(8);
+      const beforeBound = states().at(-1);
+      yield* minutes(1);
+      yield* second.push({ bytes: encode("after\r\n") });
+      yield* settle;
+
+      assert.deepEqual(beforeBound, state(TERMINAL_CONNECTION.ATTACHED));
+      assert.deepEqual(states().at(-1), state(TERMINAL_CONNECTION.IDLE));
+      assert.equal(opened.length, 2);
+      assert.deepEqual(printed(), ["GET / 200\r\n"], "an idle connection's socket is read no more");
+    }),
 );
 
 it.effect(

@@ -68,7 +68,6 @@ import {
   moreLabel,
   PaneBar,
   POPOVER_SIDE,
-  QuietWords,
   RectFloat,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
@@ -177,6 +176,7 @@ import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { type HeldComment, PAGE_REVIEW_WORDS, type PageReviewControl } from "./page-review.js";
+import { PendingWords } from "./pending-comments.js";
 import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
@@ -433,7 +433,6 @@ const COMMENT_WORDS = {
   OPEN_THREAD: "Open thread",
   SHOW_WORDS: "Show in the description",
   SHOW_ELEMENT: "Show on the page",
-  WHOLE_PAGE: "Whole page",
   DISCARD: "Discard",
   NOT_SENT: "This comment could not be sent.",
   NOT_SENT_MANY: "These comments could not be sent.",
@@ -695,9 +694,9 @@ function CommentEntry({
     planId: doors.control.planId,
     threadId: thread.id,
   });
-  const menu = useMenu(true);
-  const trigger = menu.trigger();
   const mine = writtenByReader(entry, doors.me);
+  // Note that a page thread's first comment is drawn without the quote its quote line already says.
+  const shown = first ? ownWordsOf(thread, entry.words ?? "") : (entry.words ?? "");
   // Note that a reply copies its thread's link, since a link names a comment thread and no comment of one (`LINK_PLACE.COMMENT`).
   const copies: MenuAction[] = copyLink === undefined ? [] : [copyLink];
   const edits: MenuAction[] = mine
@@ -705,8 +704,7 @@ function CommentEntry({
         {
           label: COMMENT_WORDS.EDIT,
           icon: <GLYPH.RENAME />,
-          onSelect: () =>
-            setEditing(edited.draft.text === "" ? (entry.words ?? "") : edited.draft.text),
+          onSelect: () => setEditing(edited.draft.text === "" ? shown : edited.draft.text),
         },
       ]
     : [];
@@ -769,7 +767,7 @@ function CommentEntry({
     // Note that words as the comment holds them, or none, keep no draft, so the box reopens on the comment as it stands.
     edited.update((was) => ({
       ...was,
-      text: words.trim() === "" || words === entry.words ? "" : words,
+      text: words.trim() === "" || words === shown ? "" : words,
     }));
   };
   const save = () => {
@@ -816,19 +814,7 @@ function CommentEntry({
                   />
                 </Tooltip>
               ) : null}
-              {/* Note that a comment offering nothing draws no ⋯, rather than one opening an empty menu. */}
-              {groups.length === 0 ? null : (
-                <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
-              )}
-              {groups.length === 0 || menu.drawn === undefined ? null : (
-                <ActionMenu
-                  replayUnmasked
-                  label={moreLabel(COMMENT_WORDS.THING)}
-                  menu={menu.drawn}
-                  groups={groups}
-                  onClose={menu.close}
-                />
-              )}
+              <CommentMenu groups={groups} />
             </div>
             <ConfirmDialog
               open
@@ -846,33 +832,94 @@ function CommentEntry({
               <CommentFiles planId={doors.control.planId} files={entry.files} />
             )}
             <WordsDatesContext.Provider value={dates}>
-              <CommentWords words={entry.words ?? ""} />
+              <CommentWords words={shown} />
             </WordsDatesContext.Provider>
           </>
         ) : (
-          <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
-            <CommentText
-              value={editing}
-              label={COMMENT_WORDS.EDIT}
-              onChange={write}
-              onSubmit={save}
-              onCancel={() => setEditing(undefined)}
-              autoFocus
-            />
-            <div className="comment-field-foot">
-              <Button onClick={() => setEditing(undefined)}>
-                <ReplayUnmask>{COMMENT_WORDS.CANCEL}</ReplayUnmask>
-              </Button>
-              {/* Note that the host draws the edit on the press, which closes the field, so Save is never busy. */}
-              <Button variant={BUTTON_VARIANT.PRIMARY} busy={false} onClick={save}>
-                <ReplayUnmask>{COMMENT_WORDS.SAVE}</ReplayUnmask>
-              </Button>
-            </div>
-          </ComposerFrame>
+          <CommentEditField
+            value={editing}
+            onChange={write}
+            onSave={save}
+            onCancel={() => setEditing(undefined)}
+          />
         )}
       </WrittenComment>
     </div>
   );
+}
+
+/** A comment's ⋯ and the menu it drops, its writer's acts on it; nothing where it offers none, rather than a ⋯ opening an empty menu. */
+function CommentMenu({ groups }: { groups: readonly MenuAction[][] }): React.JSX.Element | null {
+  const menu = useMenu(true);
+  const trigger = menu.trigger();
+  if (groups.length === 0) return null;
+  return (
+    <>
+      <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          replayUnmasked
+          label={moreLabel(COMMENT_WORDS.THING)}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** The field a comment's words are edited in, in its place: Cancel, then Save. */
+function CommentEditField({
+  value,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  value: string;
+  onChange: (words: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  return (
+    <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
+      <CommentText
+        value={value}
+        label={COMMENT_WORDS.EDIT}
+        onChange={onChange}
+        onSubmit={onSave}
+        onCancel={onCancel}
+        autoFocus
+      />
+      <div className="comment-field-foot">
+        <Button onClick={onCancel}>
+          <ReplayUnmask>{COMMENT_WORDS.CANCEL}</ReplayUnmask>
+        </Button>
+        {/* Note that an edit is drawn on the press, which closes the field, so Save is never busy. */}
+        <Button variant={BUTTON_VARIANT.PRIMARY} busy={false} onClick={onSave}>
+          <ReplayUnmask>{COMMENT_WORDS.SAVE}</ReplayUnmask>
+        </Button>
+      </div>
+    </ComposerFrame>
+  );
+}
+
+/**
+ * A comment's words without the quote of `quote` they open with, which a
+ * page comment's quote line already says: a comment started on an element
+ * used to carry its element's words as its first quote. Words holding
+ * nothing past that quote are kept whole, so a comment never reads empty.
+ */
+function leadQuoteDropped(words: string, quote: string): string {
+  const [lead, ...rest] = messageBlocks(words);
+  if (lead?.kind !== MESSAGE_BLOCK.QUOTE || lead.words !== replyOf(quote)) return words;
+  const own = messageText(rest).trim();
+  return own === "" ? words : own;
+}
+
+/** A thread's first comment's words as drawn: on a page's element, without the element's words it opens with. */
+function ownWordsOf(thread: DescriptionCommentThread, words: string): string {
+  return thread.page?.element === undefined ? words : leadQuoteDropped(words, thread.quote);
 }
 
 /** A comment's words as Markdown, its mentions drawn as their chips, as a message's are. */
@@ -1391,13 +1438,37 @@ function GoneQuote({
   );
 }
 
-/** What a thread's quote says: the words of the description it is on; on a page, the way to what it is on, which its comments quote, or that it is on the whole page. */
-function quoteWords(thread: DescriptionCommentThread): string {
-  if (thread.page === undefined) return thread.quote;
-  return thread.page.element === undefined ? COMMENT_WORDS.WHOLE_PAGE : COMMENT_WORDS.SHOW_ELEMENT;
+/** A quote line over a comment: the words it is on, or a press that shows them where they stand, labeled `label`, where one is offered. */
+function QuoteLine({
+  words,
+  label,
+  gone = false,
+  onShow,
+}: {
+  words: string;
+  label: string;
+  gone?: boolean;
+  onShow?: (() => void) | undefined;
+}): React.JSX.Element {
+  if (onShow === undefined) {
+    return (
+      <blockquote className={QUOTE_CLASS} data-gone={gone}>
+        {words}
+      </blockquote>
+    );
+  }
+  return (
+    <blockquote className={QUOTE_CLASS} data-gone={gone}>
+      <Tooltip label={label}>
+        <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShow}>
+          {words}
+        </LineButton>
+      </Tooltip>
+    </blockquote>
+  );
 }
 
-/** A thread's quote over it: its words, or a press that shows them in the description, or its element on the page, where it is offered. */
+/** A thread's quote over it, the words it is on (on a page, its element's, or the page's title for the whole page), or a press that shows them in the description, or its element on the page, where it is offered. */
 function ThreadQuote({
   thread,
   gone = false,
@@ -1407,23 +1478,13 @@ function ThreadQuote({
   gone?: boolean;
   onShowWords?: (() => void) | undefined;
 }): React.JSX.Element {
-  if (onShowWords === undefined) {
-    return (
-      <blockquote className={QUOTE_CLASS} data-gone={gone}>
-        {quoteWords(thread)}
-      </blockquote>
-    );
-  }
   return (
-    <blockquote className={QUOTE_CLASS} data-gone={gone}>
-      <Tooltip
-        label={thread.page === undefined ? COMMENT_WORDS.SHOW_WORDS : COMMENT_WORDS.SHOW_ELEMENT}
-      >
-        <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
-          {quoteWords(thread)}
-        </LineButton>
-      </Tooltip>
-    </blockquote>
+    <QuoteLine
+      words={thread.quote}
+      label={thread.page === undefined ? COMMENT_WORDS.SHOW_WORDS : COMMENT_WORDS.SHOW_ELEMENT}
+      gone={gone}
+      onShow={onShowWords}
+    />
   );
 }
 
@@ -1554,7 +1615,7 @@ function ThreadCard({
         {first === undefined ? null : (
           <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
             <div className="comment-clamp line-clamp-3">
-              <CommentWords words={first.words ?? ""} />
+              <CommentWords words={ownWordsOf(thread, first.words ?? "")} />
             </div>
           </WrittenComment>
         )}
@@ -2778,7 +2839,7 @@ function threadFindRow(thread: DescriptionCommentThread): FindRow {
     entry.words ?? "",
     ...(entry.files ?? []).map((file) => file.name),
   ]);
-  return { key: thread.id, words: [quoteWords(thread), ...entries].join("\n") };
+  return { key: thread.id, words: [thread.quote, ...entries].join("\n") };
 }
 
 /**
@@ -3073,12 +3134,9 @@ function ThreadsPane({
   run,
   className,
   onShowWords,
-  lead,
 }: {
   control: DescriptionCommentsControl;
   doors: ThreadDoors;
-  /** What stands over the threads in the list: the reader's review of a page; nothing elsewhere. */
-  lead?: ReactNode;
   filter: CommentsFilter;
   onFilter: (filter: CommentsFilter) => void;
   /** What the list says when it holds nothing, by its filter. */
@@ -3111,9 +3169,6 @@ function ThreadsPane({
           }
         />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-          {lead === undefined || lead === null ? null : (
-            <div className="box-border px-ui-16 pt-ui-16">{lead}</div>
-          )}
           <ThreadList
             key={filter}
             control={control}
@@ -3210,12 +3265,9 @@ export function PageComments({
   filter,
   onFilter,
   onOpen,
-  lead,
 }: {
   /** The page's threads, as `useDescriptionComments` holds them for the page. */
   control: DescriptionCommentsControl;
-  /** What stands over the threads: the reader's review of the page, while they hold one. */
-  lead?: ReactNode;
   doors: Omit<ThreadDoors, "control">;
   /** The threads whose element is outlined, by their ids. */
   open: readonly string[] | undefined;
@@ -3259,7 +3311,6 @@ export function PageComments({
       empty={NO_PAGE_COMMENTS}
       list={list}
       run={run}
-      lead={lead}
       className="page-comments relative h-full"
       onShowWords={(thread) =>
         thread.page?.element === undefined ? undefined : () => onOpen(thread)
@@ -3312,6 +3363,23 @@ function firstLine(words: string): string {
   return line ?? words;
 }
 
+/** What the pointer over a pin is told: the first comment's head, as every comment draws it, over its first line. */
+function PinPreview({
+  head,
+  words,
+}: {
+  head: Pick<Parameters<typeof Comment>[0], "author" | "nameRef" | "at" | "now" | "trailing">;
+  words: string;
+}): React.JSX.Element {
+  return (
+    <HoverCard>
+      <Comment {...head}>
+        <div className="comment-clamp line-clamp-2">{firstLine(words)}</div>
+      </Comment>
+    </HoverCard>
+  );
+}
+
 /**
  * The pin of the threads on one element: the bubble wearing the face of
  * whoever started the first, told over it by that comment's writer and
@@ -3337,7 +3405,7 @@ function PagePin({
     (entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT,
   );
   const fallback: DescriptionCommentWriter = { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER };
-  const { author } = useWriter(first?.writer ?? fallback, doors.agents);
+  const { author, nameRef } = useWriter(first?.writer ?? fallback, doors.agents);
   const comments = threads.length;
   return (
     <CommentPin
@@ -3350,62 +3418,134 @@ function PagePin({
       onHover={onHint}
       preview={
         first === undefined ? null : (
-          <HoverCard>
-            <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
-              <div className="comment-clamp line-clamp-2">{firstLine(first.words ?? "")}</div>
-            </WrittenComment>
-          </HoverCard>
+          <PinPreview head={{ author, nameRef, at: first.at, now }} words={first.words ?? ""} />
         )
       }
     />
   );
 }
 
-/**
- * A comment held in the reader's review, drawn in the comments column as a
- * thread's first comment is, in their name and marked Pending, with Remove.
- */
-export function HeldCommentCard({
-  comment,
-  onRemove,
-}: {
-  comment: HeldComment;
-  /** Takes it out of the review; none while the review is on its way. */
-  onRemove: (() => void) | undefined;
-}): React.JSX.Element {
+/** The reader as a comment of theirs draws them: their face and their name. */
+function useReaderWriter(): { author: CommentAuthor; nameRef: ReactNode } {
   const { readerId } = useMemberDirectory();
   const reader = usePerson(readerId === undefined ? undefined : { userId: readerId, name: "" });
+  return { author: commentAuthor(reader), nameRef: <ActorRef actor={reader} nameOnly /> };
+}
+
+/** A held comment's words as drawn: without its element's words it opens with, which its quote line says. */
+function heldWords(comment: HeldComment): string {
+  return comment.element === undefined
+    ? comment.words
+    : leadQuoteDropped(comment.words, comment.element.quote);
+}
+
+/**
+ * A comment held in the reader's review, drawn as a posted comment is, in
+ * their name: Pending where its time would stand, and its ⋯ at the head's
+ * end with Edit, which opens its words in place in a posted comment's edit
+ * field, and Delete, which takes it out of the review at once with Undo.
+ * Where it stands apart from its element, in the Review panel, its quote line
+ * says what it is on, its element's words or the page's title, and pressed,
+ * shows its element on the page.
+ */
+export function PendingPageComment({
+  comment,
+  review,
+  busy,
+  title,
+  onShow,
+}: {
+  comment: HeldComment;
+  review: Pick<PageReviewControl, "edit" | "remove" | "markEditing">;
+  /** Whether the review is on its way, which offers no Edit or Delete. */
+  busy: boolean;
+  /** The page's title, the quote line of a comment on the whole page; none draws no quote line, as by its element. */
+  title?: string | undefined;
+  /** Shows its element on the page; none where its quote line is only words. */
+  onShow?: ((path: string) => void) | undefined;
+}): React.JSX.Element {
+  const { author, nameRef } = useReaderWriter();
+  const [editing, setEditing] = useState<string | undefined>(undefined);
+  const words = heldWords(comment);
+  const open = editing !== undefined;
+  const { markEditing } = review;
+  // Note that the review waits on an edit standing open, so it never sends words the edit is about to change.
+  useEffect(() => {
+    if (!open) return undefined;
+    markEditing(comment.clientKey, true);
+    return () => markEditing(comment.clientKey, false);
+  }, [open, markEditing, comment.clientKey]);
+  const { clientKey, element } = comment;
+  // Note that one a send posted already is the service's as it stood, so it offers neither.
+  const groups: MenuAction[][] =
+    busy || comment.landed === true
+      ? []
+      : [
+          [
+            {
+              label: COMMENT_WORDS.EDIT,
+              icon: <GLYPH.RENAME />,
+              onSelect: () => setEditing(words),
+            },
+          ],
+          [
+            {
+              label: COMMENT_WORDS.DELETE,
+              icon: <TrashIcon />,
+              danger: true,
+              onSelect: () => review.remove(clientKey),
+            },
+          ],
+        ];
+  // Note that an edit emptied deletes the comment, as a posted one's does, here at once with Undo.
+  const save = () => {
+    const next = editing?.trim() ?? "";
+    setEditing(undefined);
+    if (next === "") review.remove(clientKey);
+    else review.edit(clientKey, next);
+  };
   return (
-    <CommentCard place={THREAD_PLACE.LIST} open data-thread={comment.clientKey}>
-      <div className="flex min-w-0 flex-col gap-tight-gap">
-        <Comment
-          author={commentAuthor(reader)}
-          nameRef={<ActorRef actor={reader} nameOnly />}
-          trailing={
-            <QuietWords>
-              <ReplayUnmask>{PAGE_REVIEW_WORDS.PENDING}</ReplayUnmask>
-            </QuietWords>
-          }
-        >
-          {comment.element === undefined ? (
-            <QuietWords>
-              <ReplayUnmask>{PAGE_REVIEW_WORDS.WHOLE_PAGE}</ReplayUnmask>
-            </QuietWords>
-          ) : null}
-          {comment.attachments.length > 0 ? (
-            <AttachedFileChips files={attachmentChips(comment.attachments)} />
-          ) : null}
-          <CommentWords words={comment.words} />
-        </Comment>
-        {onRemove === undefined ? null : (
-          <div>
-            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
-              <ReplayUnmask>{PAGE_REVIEW_WORDS.REMOVE}</ReplayUnmask>
-            </TextButton>
-          </div>
+    <div className="comment-entry relative py-tight-gap" data-pending={clientKey}>
+      <Comment
+        author={author}
+        nameRef={nameRef}
+        trailing={
+          <>
+            <PendingWords />
+            {editing === undefined ? (
+              <div className="comment-tools">
+                <CommentMenu groups={groups} />
+              </div>
+            ) : null}
+          </>
+        }
+      >
+        {title === undefined ? null : (
+          <QuoteLine
+            words={element?.quote ?? title}
+            label={COMMENT_WORDS.SHOW_ELEMENT}
+            onShow={
+              element === undefined || onShow === undefined ? undefined : () => onShow(element.path)
+            }
+          />
         )}
-      </div>
-    </CommentCard>
+        {editing === undefined ? (
+          <>
+            {comment.attachments.length > 0 ? (
+              <AttachedFileChips files={attachmentChips(comment.attachments)} />
+            ) : null}
+            <CommentWords words={words} />
+          </>
+        ) : (
+          <CommentEditField
+            value={editing}
+            onChange={setEditing}
+            onSave={save}
+            onCancel={() => setEditing(undefined)}
+          />
+        )}
+      </Comment>
+    </div>
   );
 }
 
@@ -3414,38 +3554,41 @@ const HELD_PIN_STEP = 28;
 
 /**
  * The pin of the comments the reader holds on one element in their review,
- * dashed, wearing their own face and told the first's first line; a press
- * opens the review.
+ * dashed, wearing their own face, told over it as a posted pin is, its
+ * writer and the first's first line, Pending where the time would stand; a
+ * press opens them by the element, as a posted pin opens its threads.
  */
 function HeldPin({
   held,
+  open,
   stands,
   onOpen,
   onHint,
 }: {
   held: readonly HeldComment[];
+  open: boolean;
   stands: CommentPinStands;
   onOpen: () => void;
   onHint: (over: boolean) => void;
 }): React.JSX.Element {
-  const { readerId } = useMemberDirectory();
-  const reader = usePerson(readerId === undefined ? undefined : { userId: readerId, name: "" });
+  const { author, nameRef } = useReaderWriter();
   const first = held[0];
   return (
     <CommentPin
-      author={commentAuthor(reader)}
+      author={author}
       count={held.length}
       label={PAGE_REVIEW_WORDS.pin(held.length)}
-      open={false}
+      open={open}
       look={COMMENT_PIN_LOOK.HELD}
       stands={stands}
       onPress={onOpen}
       onHover={onHint}
       preview={
         first === undefined ? null : (
-          <HoverCard>
-            <div className="comment-clamp line-clamp-2">{firstLine(first.words)}</div>
-          </HoverCard>
+          <PinPreview
+            head={{ author, nameRef, trailing: <PendingWords /> }}
+            words={heldWords(first)}
+          />
         )
       }
     />
@@ -3473,7 +3616,10 @@ function heldByElement(held: readonly HeldComment[]): ReadonlyMap<string, readon
  * and Cancel; and Reply by words selected in the page, which quotes them
  * into the comment being written, or starts one on the element holding
  * them. A comment being started may be held in the reader's review
- * instead, pinned dashed to its element until the review is sent. A card
+ * instead, pinned dashed to its element until the review is sent, its pin
+ * opening the comments held there in a card by the element, as a posted
+ * pin opens its threads, column or no column, since the column lists
+ * posted threads alone. A card
  * closes on a press away, a press in the page among them, as a
  * description's does. It stands over the frame's room, where every box the frame
  * says it measured in its own viewport stands as it is, and takes no press
@@ -3501,8 +3647,8 @@ export function PageCommentLayer({
 }: {
   control: DescriptionCommentsControl;
   doors: Omit<ThreadDoors, "control">;
-  /** The reader's review of the page and what opens it; none where comments are not held, which posts each at once. */
-  review?: { readonly control: PageReviewControl; readonly onOpen: () => void } | undefined;
+  /** The reader's review of the page; none where comments are not held, which posts each at once. */
+  review?: PageReviewControl | undefined;
   /** The page and the version shown, which a thread is started on. */
   page: { readonly id: string; readonly version: number };
   /** The frame's room, which the layer fills. */
@@ -3531,13 +3677,21 @@ export function PageCommentLayer({
   const opened = control.threads.filter((thread) => open?.includes(thread.id) === true);
   const at = opened[0]?.page?.element;
   const starting = useRef<HTMLDivElement>(null);
+  // The element whose held comments stand open by it, by its path; none open.
+  const [heldOpen, setHeldOpen] = useState<string | undefined>(undefined);
+  const heldThere =
+    heldOpen === undefined ? [] : (heldByElement(review?.held ?? []).get(heldOpen) ?? []);
+  // Note that the last held comment on the element deleted lets the element go, so the next held there opens nothing until its pin is pressed.
+  useEffect(() => {
+    if (heldOpen !== undefined && heldThere.length === 0) setHeldOpen(undefined);
+  }, [heldOpen, heldThere.length]);
   const pins = [...byElement].flatMap(([path, threads]) => {
     const box = marks.get(path);
     // Note that an element scrolled up out of the frame is pinned nowhere until it comes back, and one below it stands past the room's foot, which clips it.
     if (box === undefined || box === null || box.bottom < 0) return [];
     return [{ path, threads, box }];
   });
-  const heldPins = [...heldByElement(review?.control.held ?? [])].flatMap(([path, held]) => {
+  const heldPins = [...heldByElement(review?.held ?? [])].flatMap(([path, held]) => {
     const box = marks.get(path);
     if (box === undefined || box === null || box.bottom < 0) return [];
     return [{ path, held, box, step: byElement.has(path) ? HELD_PIN_STEP : 0 }];
@@ -3555,8 +3709,12 @@ export function PageCommentLayer({
             >
               <HeldPin
                 held={held}
+                open={heldOpen === path}
                 stands={pinStands(box)}
-                onOpen={review.onOpen}
+                onOpen={() => {
+                  onOpen(undefined);
+                  setHeldOpen(heldOpen === path ? undefined : path);
+                }}
                 onHint={(over) => onHint(over ? path : undefined)}
               />
             </span>
@@ -3573,13 +3731,14 @@ export function PageCommentLayer({
             threads={threads}
             doors={doors}
             open={threads.some((thread) => open?.includes(thread.id) === true)}
-            onOpen={() =>
+            onOpen={() => {
+              setHeldOpen(undefined);
               onOpen(
                 threads.some((thread) => open?.includes(thread.id) === true)
                   ? undefined
                   : threads.map((thread) => thread.id),
-              )
-            }
+              );
+            }}
             onHint={(over) => onHint(over ? path : undefined)}
             stands={pinStands(box)}
           />
@@ -3612,6 +3771,37 @@ export function PageCommentLayer({
         </div>
       </RectFloat>
       <RectFloat
+        open={review !== undefined && heldThere.length > 0}
+        anchor={() =>
+          inWindow(
+            room.current,
+            heldOpen === undefined ? undefined : (marks.get(heldOpen) ?? undefined),
+          )
+        }
+        side={POPOVER_SIDE.BELOW}
+        onPressAway={() => setHeldOpen(undefined)}
+        holds={keepsPageCardOpen}
+      >
+        {review === undefined ? null : (
+          <div className="page-comment-float page-comment-threads">
+            <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
+              <div className="comment-float-cards">
+                <CommentCard place={THREAD_PLACE.FLOAT} open>
+                  {heldThere.map((comment) => (
+                    <PendingPageComment
+                      key={comment.clientKey}
+                      comment={comment}
+                      review={review}
+                      busy={review.sending}
+                    />
+                  ))}
+                </CommentCard>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+      </RectFloat>
+      <RectFloat
         open={pending !== undefined}
         anchor={() => inWindow(room.current, pending?.box ?? PAGE_TOP)}
         side={POPOVER_SIDE.BELOW}
@@ -3626,6 +3816,12 @@ export function PageCommentLayer({
             <PendingCard
               on={pageDraftOn(page.id)}
               place={THREAD_PLACE.FLOAT}
+              // Note that the element's words stand over the field as the thread's quote line will, rather than as a quote in its words.
+              head={
+                pending.element === undefined ? undefined : (
+                  <QuoteLine words={pending.element.quote} label={COMMENT_WORDS.SHOW_ELEMENT} />
+                )
+              }
               doors={full}
               begin={(first) => ({
                 ...first,
@@ -3638,9 +3834,9 @@ export function PageCommentLayer({
                 review === undefined
                   ? undefined
                   : {
-                      open: review.control.held.length > 0,
+                      open: review.held.length > 0,
                       onHold: (words, attachments) =>
-                        review.control.hold({
+                        review.hold({
                           clientKey: crypto.randomUUID(),
                           version: page.version,
                           element: pending.element,

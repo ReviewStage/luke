@@ -43,6 +43,7 @@ export const APP_COMMAND = {
   OPEN_ON_GITHUB: "open-on-github",
   TOGGLE_READ: "toggle-read",
   REMIND_ME: "remind-me",
+  RESOLVE: "resolve",
   PIN: "pin",
   OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
@@ -450,6 +451,11 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.REMIND_ME]: {
     label: "Remind me",
     chord: { key: SHORTCUT_KEY.H, plain: true },
+  },
+  // Note that E resolves the chosen Inbox items, as Gmail's and GitHub's E marks theirs done; ⌘E is Code in the editor, so it stands bare.
+  [APP_COMMAND.RESOLVE]: {
+    label: "Resolve",
+    chord: { key: SHORTCUT_KEY.E, plain: true },
   },
   [APP_COMMAND.PIN]: {
     label: "Pin or unpin",
@@ -894,6 +900,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COMMENT_ON_SELECTION,
       APP_COMMAND.TOGGLE_READ,
       APP_COMMAND.REMIND_ME,
+      APP_COMMAND.RESOLVE,
       APP_COMMAND.PIN,
       APP_COMMAND.VERSION_HISTORY,
       APP_COMMAND.OPEN_ON_GITHUB,

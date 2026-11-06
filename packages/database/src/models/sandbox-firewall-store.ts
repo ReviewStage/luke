@@ -1,5 +1,5 @@
 /**
- * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, renewed in place, let go at its end or cleared ahead of a stop, and dropped once its session is long gone.
+ * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, renewed in place, cleared ahead of a stop, and dropped once its session is long gone.
  *
  * Every write to a session's firewall composes the whole policy, and the one
  * source a writer cannot gather again is the launch's, whose placeholders are
@@ -10,7 +10,7 @@
  * a row. The sweep's renewal of a swap's value writes over the row as it
  * stands, the last write winning, and never makes one where none stands.
  * A row is the account's own, keyed by the account and the session,
- * so a read, a keep, a renewal, and a let-go reach that account's row alone;
+ * so a read, a keep, and a renewal reach that account's row alone;
  * a clear, made by the service ahead of a stop, and the sweep's drop read
  * nothing and are the deployment's, as are the sweep's count and list of the
  * sessions whose row stands, which name each row's account and session and
@@ -99,12 +99,6 @@ const updateLaunch = SqlSchema.void({
     ),
 });
 
-const deleteLaunch = SqlSchema.void({
-  Request: Schema.Struct(OwnerFields),
-  execute: ({ userId, sandboxSessionId }) =>
-    Database.use((db) => db.delete(sandboxFirewall).where(ownRow(userId, sandboxSessionId))),
-});
-
 const deleteSession = SqlSchema.void({
   Request: Schema.Struct({ sandboxSessionId: Schema.String }),
   execute: ({ sandboxSessionId }) =>
@@ -171,11 +165,6 @@ export function renewFirewallLaunch(
   updatedAt: Date,
 ): FirewallEffect<void> {
   return updateLaunch({ ...owner, sealedEntries, updatedAt });
-}
-
-/** The launch kept for the account's session let go, as its runner ends. */
-export function letGoFirewallLaunch(owner: FirewallOwner): FirewallEffect<void> {
-  return deleteLaunch(owner);
 }
 
 /** The session's rows deleted, whoever's they are, as the session's firewall is cleared ahead of a stop. */

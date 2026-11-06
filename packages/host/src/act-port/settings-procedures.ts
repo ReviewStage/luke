@@ -1,3 +1,4 @@
+import type { ORPCError } from "@orpc/server";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -6,7 +7,6 @@ import {
 } from "@repo/settings";
 import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import type { ORPCError } from "@orpc/server";
 import { Effect, Option } from "effect";
 import { SETTINGS_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";

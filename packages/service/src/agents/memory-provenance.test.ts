@@ -136,7 +136,7 @@ const writeTurn = (
 const remember = (agent: Agent) => {
   const { sessions } = recordingEve();
   const call: AgentCall = {
-    caller: { kind: AGENT_CALLER.AGENT, agent },
+    caller: { kind: AGENT_CALLER.AGENT, agent, descriptionsOn: false },
     eve: sessions,
     eveAs: () => sessions,
     writer: Effect.die(new Error("a memory call writes no line")),

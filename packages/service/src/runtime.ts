@@ -10,6 +10,7 @@
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { invitationMailFromEnvironment } from "./accounts/invitation-mail.js";
+import { onboardingEventsFromEnvironment } from "./accounts/onboarding-events.js";
 import { welcomeMailFromEnvironment } from "./accounts/welcome-mail.js";
 import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
@@ -149,6 +150,7 @@ export const webServices = Layer.mergeAll(
   ),
   invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
   welcomeMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
+  onboardingEventsFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */

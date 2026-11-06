@@ -123,7 +123,7 @@ const POST_THREAD_WORDS =
   "An answer to any ask, decide, do, or answer, always reaches you as a message. " +
   `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your threads as they stand, each with the mention you name it by.`;
 
-/** The tools as the model is shown them (`../workspace-mcp/tools.ts`): each one's name, words, and input. */
+/** The tools as the model is shown them (`../tool-catalog/catalog.ts`): each one's name, words, and input. */
 export const INBOX_TOOLS = {
   POST: {
     name: INBOX_TOOL.POST,

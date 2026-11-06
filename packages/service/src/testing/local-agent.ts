@@ -109,6 +109,7 @@ export const localAgentSessions = (userId: string) =>
     userId,
     eventsUrl: "https://app.test/api/agents/runner/events",
     linesUrl: "https://app.test/api/agents/runner-lines",
+    transcriptsUrl: "https://app.test/api/agents/runner-transcripts",
     mcpUrl: "https://app.test/api/agents/mcp",
     integrations: () => Effect.succeed([]),
     instructions: () => Effect.succeed("You are a Vespin coding agent."),

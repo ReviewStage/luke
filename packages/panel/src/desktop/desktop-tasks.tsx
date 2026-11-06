@@ -34,9 +34,14 @@ import { GLYPH } from "@repo/ui/icons";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import {
   agentOfTab,
+  agentTab,
+  cloudBrowserTab,
+  draftTab,
   followedAgent,
-  isDraftTab,
+  pageTab,
+  STRIP_TAB_KIND,
   sameTab,
+  subagentTab,
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -606,7 +611,7 @@ function DescriptionDocument({
   // the keys handed to the page, as a tab of this column opens.
   const openAgentColumn = (agent: string) => {
     if (agents.archived?.some((each) => each.id === agent) !== true) {
-      openColumnTab({ agent });
+      openColumnTab(agentTab(agent));
       return;
     }
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
@@ -678,7 +683,7 @@ function DescriptionDocument({
         );
       }
       case TOOL_TARGET.PAGE:
-        return sidePanel.onPreview({ page: target.page });
+        return sidePanel.onPreview(pageTab(target.page));
       case TOOL_TARGET.TASK:
         // A call that named this very task opens its plan in the column, as one on its own plan does.
         if (target.agent === undefined && target.task === taskId) return openOverview();
@@ -689,7 +694,7 @@ function DescriptionDocument({
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
+    sidePanel.onPreview(subagentTab(callId, { agent, task }));
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
@@ -744,7 +749,7 @@ function DescriptionDocument({
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview({ page }, place),
+    sidePanel.onPreview(pageTab(page), place),
   );
   const openAgent = useSteadyDoor(openAgentColumn);
   const openAgentTab = useSteadyDoor(openColumnTab);
@@ -754,7 +759,7 @@ function DescriptionDocument({
   const { onFork: forkDoor, onContinue: continueDoor } = useAgentDraftDoors(
     agents,
     false,
-    (draft) => openColumnTab({ draft }),
+    (draft) => openColumnTab(draftTab(draft)),
   );
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
@@ -987,7 +992,7 @@ function DescriptionDocument({
         // Overview's agents stand open, its list the task's own rather than a fold under the description's head.
         folded={false}
         waiting={waitingOf}
-        onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
+        onOpenAgent={(agentId) => openAgentTab(agentTab(agentId))}
         onOpenPullRequest={openPullRequestDoor}
         // Note that New agent stands at every width, a fresh plan's one next step, as the "+" offers it.
         starts={
@@ -1260,9 +1265,7 @@ function DescriptionDocument({
     const newest = (agentBrowsers ?? [])
       .filter((each) => each.agentId === agentId)
       .toSorted((one, other) => other.createdAt - one.createdAt)[0];
-    openPanelTab({
-      cloudBrowser: newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id,
-    });
+    openPanelTab(cloudBrowserTab(newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id));
   };
   // ⌘T on a phone starts New agent at once, since no "+" stands in sight to drop its menu.
   const newAgentOnPhone = () => {
@@ -1278,7 +1281,12 @@ function DescriptionDocument({
   const columnLabel =
     tab === undefined || isOverviewTab(tab) ? planLabel : mainTabLabel(tab, agents);
   const draftShown =
-    pane === TASK_PANE.AGENT && tab !== undefined && isDraftTab(tab) ? tab : undefined;
+    pane === TASK_PANE.AGENT &&
+    tab !== undefined &&
+    !isOverviewTab(tab) &&
+    tab.kind === STRIP_TAB_KIND.DRAFT
+      ? tab
+      : undefined;
   // Back leaves the task on Overview, and goes back a screen anywhere else: the panel shuts over
   // the column, and the column goes back to Overview, which lets an empty draft go (`use-main-tabs.ts`).
   const back =
@@ -1438,6 +1446,7 @@ function DescriptionDocument({
                             onOpenLocal={terminalDoors.onOpenLocal}
                             onOpenBrowser={phone ? openBrowser : undefined}
                             onShown={phone ? setShownAgentTab : undefined}
+                            onOpenAgent={openAgentColumn}
                             waiting={waitingOf}
                           />
                         </TaskTabsRow>

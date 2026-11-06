@@ -41,6 +41,7 @@ import {
 import { LAZY_ROUTE } from "../panel-router.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { routeAccessNow } from "../route-gates.js";
+import { testQueryClientNow } from "./copy-feedback.js";
 
 /** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, a version history's list, the Inbox, or a person's page. */
 export const SHELL_AT = {
@@ -198,7 +199,7 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
       versionHistory.addChildren([versions, version]),
     ]),
     history: createMemoryHistory({ initialEntries: [at] }),
-    context: { queryClient: new QueryClient(), access: routeAccessNow() },
+    context: { queryClient: new QueryClient(), access: routeAccessNow(testQueryClientNow()) },
   });
   // The router's latest move, which a test awaits rather than guessing how many turns its chunk takes to read.
   let moving: Promise<void> = Promise.resolve();
