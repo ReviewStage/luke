@@ -6,13 +6,13 @@ import { APP_SETTING_DEFAULTS, HOST_CAPABILITY } from "@repo/settings";
 import {
   CHIP_LOOK,
   Chip,
-  ChipCount,
   ChipName,
   MENU_DETAIL,
   MENU_ITEM_MARK,
   riseAbove,
   STATUS_TONE,
   StatusGlyph,
+  Tooltip,
   useMenu,
 } from "@repo/ui";
 import { GlobeIcon, PlugIcon } from "@repo/ui/icons";
@@ -31,7 +31,7 @@ import {
 import { agentStillWriting } from "./agent-model.js";
 
 /**
- * agent-forward.tsx -- an agent's cloud ports forwarded to this Mac's localhost: forwarded on their own while its tab is open, a toast saying so once, a chip at its box's foot while they are, and the + menu's switch while they are not.
+ * agent-forward.tsx -- an agent's cloud ports forwarded to this Mac's localhost: forwarded on their own while its tab is open, a toast saying so once, and a plug at its box's foot that says whether they are and turns them on or off.
  *
  * Only the desktop's host listens on the Mac's loopback
  * (`HOST_CAPABILITY.PORT_FORWARDS`), and only an agent in a cloud sandbox
@@ -40,7 +40,7 @@ import { agentStillWriting } from "./agent-model.js";
  * it keeps in app state (`portForwarding`), so all of this only reads it and
  * asks the host to turn forwarding on or off.
  *
- * With Forward cloud agents' ports to this Mac on (Settings › This Mac, on
+ * With Forward cloud agents' ports automatically on (Settings › This Mac, on
  * by default), an agent at work whose tab is open is forwarded once no agent
  * is: the first keeps the ports until its forwarding is turned off or its
  * sandbox stops, so a browser tab open on one never starts showing another
@@ -48,24 +48,25 @@ import { agentStillWriting } from "./agent-model.js";
  * until they turn it on again. As the first port reaches the Mac, a toast
  * says its address once, with Open.
  *
- * While the agent is forwarded, its box's foot wears a chip after the
- * Cloud chip: the plug wearing a dot in the complete tone and the first
- * address, "localhost:3000", how many more beside it. Its menu holds the
- * Forward to localhost switch and one row per port, "localhost:3000", whose
- * press opens it in the default browser, with where it came from beside it
- * where the Mac's port differs ("from :3000"). While it is not, the + menu
- * offers the same switch. Every word drawn is the app's own, port numbers
- * among them, so a screen recording shows them as they read.
+ * The box's foot wears a plug after the Cloud chip, its glyph alone, as
+ * Cursor's cloud agents wear one: while the agent is forwarded it wears a
+ * dot in the complete tone, and its hint says the address,
+ * "Forwarding to localhost:3000". Its menu holds the Forward to localhost
+ * switch and, while on, one row per port, "localhost:3000", whose press
+ * opens it in the default browser, with where it came from beside it where
+ * the Mac's port differs ("from :3000"). Every word drawn is the app's own,
+ * port numbers among them, so a screen recording shows them as they read.
  */
 
 /** What an agent forwarding is off for reads. */
 const OFF: PortForwardingAnswer = { on: false, running: false, ports: [] };
 
-/** What the chip, its menu, the + row, and the toast say. */
+/** What the plug, its menu, and the toast say. */
 const WORDS = {
   SWITCH: "Forward to localhost",
-  PLUS: "Forward ports to localhost",
+  OFF: "Ports not forwarded",
   FORWARDING: "Forwarding to this Mac",
+  FORWARDING_TO: "Forwarding to",
   PORTS: "Ports",
   WAITING: "Waiting for a port to listen",
   BUSY: "Port busy on this Mac",
@@ -197,52 +198,57 @@ function portRows(answer: PortForwardingAnswer): MenuAction[] {
 }
 
 /**
- * The chip at the agent's box's foot while its ports are forwarded: the
- * first address and how many more, its menu the switch and the ports; none
- * while they are not.
+ * The plug at the agent's box's foot, for an agent whose ports this Mac
+ * can forward: a dot in the complete tone while they are, the address in
+ * its hint; its menu the switch and, while on, the ports.
  */
 export function ForwardChip({
   agent,
-  narrow = false,
 }: {
   agent: Pick<AgentSummary, "id" | "machine">;
-  /** Whether the box is too narrow for the chip's words, so it draws its plug alone. */
-  narrow?: boolean;
 }): React.JSX.Element | null {
   const { offered, answer } = useForwarding(agent);
   const menu = useMenu(true);
-  if (!offered || !answer.on) return null;
-  const ports = reached(answer);
-  const first = ports[0];
-  const words = first === undefined ? WORDS.FORWARDING : localAddress(first);
+  if (!offered) return null;
+  const first = reached(answer)[0];
+  const words = !answer.on
+    ? WORDS.OFF
+    : first === undefined
+      ? WORDS.FORWARDING
+      : `${WORDS.FORWARDING_TO} ${localAddress(first)}`;
   const groups: MenuAction[][] = [
     [
       {
         label: WORDS.SWITCH,
         icon: <PlugIcon aria-hidden="true" />,
-        checked: true,
+        checked: answer.on,
         mark: MENU_ITEM_MARK.SWITCH,
-        onSelect: () => setForwarding(agent.id, false),
+        onSelect: () => setForwarding(agent.id, !answer.on),
       },
     ],
-    portRows(answer),
+    ...(answer.on ? [portRows(answer)] : []),
   ];
-  return (
-    <>
-      <Chip
-        look={CHIP_LOOK.PILL}
-        chevron
-        iconOnly={narrow}
-        aria-label={`${WORDS.PORTS}: ${words}`}
-        {...menu.trigger(riseAbove)}
-      >
-        {/* The dot's hint, Forwarding to this Mac, is the chip's, so no hint of its own hangs over it. */}
-        <StatusGlyph tone={STATUS_TONE.COMPLETE} label={WORDS.FORWARDING}>
+  const chip = (
+    <Chip
+      look={CHIP_LOOK.TOOLBAR}
+      iconOnly
+      aria-label={`${WORDS.PORTS}: ${words}`}
+      {...menu.trigger(riseAbove)}
+    >
+      {answer.on ? (
+        // Note that the dot's hint is the chip's, the address it forwards to, so no hint of its own hangs over it.
+        <StatusGlyph tone={STATUS_TONE.COMPLETE} label={words}>
           <PlugIcon aria-hidden="true" />
         </StatusGlyph>
-        <ChipName mono>{words}</ChipName>
-        {ports.length > 1 ? <ChipCount>{`+${ports.length - 1}`}</ChipCount> : null}
-      </Chip>
+      ) : (
+        <PlugIcon aria-hidden="true" />
+      )}
+      <ChipName>{words}</ChipName>
+    </Chip>
+  );
+  return (
+    <>
+      {answer.on ? chip : <Tooltip label={words}>{chip}</Tooltip>}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           replayUnmasked
@@ -254,23 +260,4 @@ export function ForwardChip({
       )}
     </>
   );
-}
-
-/**
- * The + menu's switch that forwards the agent's ports, while they are not
- * forwarded on a platform that forwards them; none otherwise, the chip
- * holding it while they are.
- */
-export function useForwardEntry(
-  agent: Pick<AgentSummary, "id" | "machine">,
-): MenuAction | undefined {
-  const { offered, answer } = useForwarding(agent);
-  if (!offered || answer.on) return undefined;
-  return {
-    label: WORDS.PLUS,
-    icon: <PlugIcon aria-hidden="true" />,
-    checked: false,
-    mark: MENU_ITEM_MARK.SWITCH,
-    onSelect: () => setForwarding(agent.id, true),
-  };
 }

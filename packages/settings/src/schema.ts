@@ -199,7 +199,7 @@ export const APP_SETTING_SCHEMA = {
   /*
    * Whether a cloud agent's ports reach this Mac on their own: the agent whose
    * tab is open is forwarded once nothing else is, a toast saying so. Off,
-   * an agent's ports are forwarded only from its + menu.
+   * an agent's ports are forwarded only from the plug at its box's foot.
    */
   forwardPorts: toggleSetting({
     field: "forwardPorts",

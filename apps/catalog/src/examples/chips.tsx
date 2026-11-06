@@ -213,14 +213,17 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-status-glyph" title="A glyph wearing a status dot">
         <Inline>
-          <Chip look={CHIP_LOOK.PILL} chevron>
-            <StatusGlyph tone={STATUS_TONE.COMPLETE} label="Forwarding to this Mac">
+          <Chip look={CHIP_LOOK.TOOLBAR} iconOnly aria-label="Ports: Ports not forwarded">
+            <PlugIcon aria-hidden="true" />
+            <ChipName>Ports not forwarded</ChipName>
+          </Chip>
+          <Chip look={CHIP_LOOK.TOOLBAR} iconOnly aria-label="Ports: Forwarding to localhost:3000">
+            <StatusGlyph tone={STATUS_TONE.COMPLETE} label="Forwarding to localhost:3000">
               <PlugIcon aria-hidden="true" />
             </StatusGlyph>
-            <ChipName mono>localhost:3000</ChipName>
-            <ChipCount>+1</ChipCount>
+            <ChipName>Forwarding to localhost:3000</ChipName>
           </Chip>
-          <Chip look={CHIP_LOOK.PILL} chevron iconOnly aria-label="Ports: localhost:3000">
+          <Chip look={CHIP_LOOK.PILL} chevron>
             <StatusGlyph tone={STATUS_TONE.COMPLETE} label="Forwarding to this Mac">
               <PlugIcon aria-hidden="true" />
             </StatusGlyph>
