@@ -310,14 +310,18 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
   assert.deepEqual(cardOf(files), own, "a link to its files hangs it too");
 });
 
-test("a cloud terminal tab wears its agent's glyph, says its name with the agent's beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
+test("a cloud terminal tab wears the still terminal glyph though its agent works, says its name with the agent's beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
     (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Cloud 1",
   );
   assert.ok(tab, "the strip has a cloud terminal tab");
   assert.equal(tab.querySelector(".ui-tab-detail")?.textContent, WORKING.title);
-  assert.match(tab.querySelector(".ui-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
+  assert.doesNotMatch(
+    tab.querySelector(".ui-tab-icon")?.innerHTML ?? "",
+    /data-state=/u,
+    "no agent's working glyph",
+  );
   restOn(tab);
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");

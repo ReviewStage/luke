@@ -174,9 +174,8 @@ function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined)
   if (isAgentTab(tab)) return tabLook({ kind: TAB_KIND.AGENT, name: undefined, agent: undefined });
   if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
   if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
-  if (isTerminalTab(tab))
-    return tabLook({ kind: TAB_KIND.TERMINAL, agent: undefined, title: tab.title });
-  if (isLocalTab(tab)) return tabLook({ kind: TAB_KIND.LOCAL, agent: undefined, title: tab.title });
+  if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, title: tab.title });
+  if (isLocalTab(tab)) return tabLook({ kind: TAB_KIND.LOCAL, title: tab.title });
   if (isCloudBrowserTab(tab)) {
     return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
   }
