@@ -52,7 +52,7 @@ import {
 } from "../settings/pages.js";
 import { pageResetControl } from "../settings/reset.js";
 import { SettingsPanel, type SettingsPanelProps } from "../settings/settings-panel.js";
-import { settingsRowsInput, shownWorkspace } from "../settings/settings-rows.js";
+import { experimentsShown, settingsRowsInput, shownWorkspace } from "../settings/settings-rows.js";
 import { useSettingsWrites } from "../settings/writes.js";
 import {
   bestSettingsStop,
@@ -66,7 +66,7 @@ import {
   settingsSearchStops,
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { appStateQuery, selectExperimentChoices } from "../use-app-state.js";
+import { appStateQuery, selectStoredExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
@@ -344,8 +344,6 @@ export function DesktopSettings({
   const [active, setActive] = useState(-1);
   const listId = useId();
   const page = useRef<HTMLElement>(null);
-  const experiments =
-    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   // The pages, or the results of a search, are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
   // The Integrations page's search is the page's, so turning to another page leaves it.
@@ -363,6 +361,11 @@ export function DesktopSettings({
   const title = named ? listed.name : shown.title;
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
+  // The experiments on where Settings shows: the account's own, and the listed workspace's.
+  const experiments = experimentsShown(
+    useQuery({ ...appStateQuery, select: selectStoredExperimentChoices }).data ?? NO_EXPERIMENTS,
+    listed,
+  );
   // A page standing alone is headed as a phone's, whose ⋯ holds its reset.
   const split = useScreenSplit(room);
   const reset = pageResetControl(

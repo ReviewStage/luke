@@ -9,6 +9,12 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import {
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+} from "@repo/features/description-comment-wire";
+import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
@@ -20,12 +26,6 @@ import {
   type InboxReadAsk,
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
-import {
-  DESCRIPTION_COMMENT_ACTOR,
-  DESCRIPTION_COMMENT_ENTRY,
-  DESCRIPTION_COMMENT_SCOPE,
-  DESCRIPTION_COMMENT_STATUS,
-} from "@repo/features/description-comment-wire";
 import {
   DESCRIPTION_ACTOR,
   TASK_PRIORITY,
@@ -185,13 +185,26 @@ test("a task's comments are held from its open, so its first ready frame marks t
       return quietHold();
     },
   });
+  const listed = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
   const opened = (region: TasksControl["region"]) =>
     onRegistry(
       registry,
       createElement(DesktopTasks, {
         summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
-        tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK.id, region }),
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region,
+          // The task's own workspace is listed, whose Descriptions holds its comments while it is read.
+          workspaces: [listed],
+          workspace: listed,
+        }),
       }),
     );
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));

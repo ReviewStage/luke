@@ -11,7 +11,13 @@
 
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import type { AppStateSnapshot } from "@repo/host/app-state";
-import { EXPERIMENT, type ExperimentChoices, experimentOn, NO_EXPERIMENTS } from "@repo/settings";
+import {
+  EXPERIMENT,
+  type ExperimentChoices,
+  experimentOn,
+  experimentsIn,
+  NO_EXPERIMENTS,
+} from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import { useQuery } from "@tanstack/react-query";
 import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
@@ -21,12 +27,13 @@ import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import {
   appStateNow,
   appStateQuery,
-  selectExperimentChoices,
   selectSettingsHeld,
+  selectStoredExperimentChoices,
 } from "./use-app-state.js";
+import { workspaceExperimentChoices } from "./workspace-experiments.js";
 
-/** What a workspace's gate reads of each of the reader's workspaces: what an address's first step may name it by. */
-type GateWorkspace = Pick<Workspace, "id" | "slug" | "formerSlugs">;
+/** What a workspace's gate reads of each of the reader's workspaces: what an address's first step may name it by, and the experiments it chose. */
+type GateWorkspace = Pick<Workspace, "id" | "slug" | "formerSlugs" | "experiments">;
 
 /** The reader's workspaces before their first read lands. */
 const NO_WORKSPACES: readonly GateWorkspace[] = [];
@@ -34,6 +41,7 @@ const NO_WORKSPACES: readonly GateWorkspace[] = [];
 /** What the gates read: whether the account may reach Admin, its access still being read counting as may, its experiments, and whether they are read yet. */
 export interface RouteAccess {
   readonly admin: boolean;
+  /** The account's choices as its settings hold them, of which only its own experiments are read: a workspace experiment is its workspace's. */
   readonly experiments: ExperimentChoices;
   /** Whether the account's settings, its experiments among them, have been read; a page an experiment holds waits on the read rather than giving way. */
   readonly experimentsRead: boolean;
@@ -93,7 +101,7 @@ export function useRouteAccess(): RouteAccess {
   // Note that Admin stands before the document is read, as a reloaded Admin address waits on the access.
   const admin = useQuery({ ...appStateQuery, select: selectAdminStands }).data ?? true;
   const experiments =
-    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
+    useQuery({ ...appStateQuery, select: selectStoredExperimentChoices }).data ?? NO_EXPERIMENTS;
   const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data ?? NO_WORKSPACES;
   const listed = stepOf(useKeptChoice(workspaces));
@@ -126,16 +134,39 @@ export function settingsViewOfPage(page: string): SettingsView | undefined {
   return SETTINGS_PAGE_LIST.find((view) => view === page);
 }
 
-/** Whether a Settings page stands: every page but one an experiment the account has off holds, which waits on the account's settings while they are unread, as a reloaded address's does. */
-export function settingsPageRouteStands(page: string, access: RouteAccess): boolean {
-  const view = settingsViewOfPage(page);
-  if (view === undefined || !access.experimentsRead) return true;
-  return settingsPageExperimentStands(view, access.experiments);
+/** The experiments on in the workspace an address's first step names, else the listed one, beside the account's own. */
+function experimentsAt(workspace: string | undefined, access: RouteAccess): ExperimentChoices {
+  const step = workspace ?? access.listed;
+  const named = step === undefined ? undefined : workspaceOfSlug(access.workspaces, step);
+  return experimentsIn(
+    access.experiments,
+    workspaceExperimentChoices(access.workspaces, named?.id),
+  );
 }
 
-/** Whether a task's version history stands: it is the description's, so only while the account has Descriptions on, which waits on the account's settings while they are unread. */
-export function versionHistoryRouteStands(access: RouteAccess): boolean {
-  return !access.experimentsRead || experimentOn(access.experiments, EXPERIMENT.DESCRIPTIONS);
+/**
+ * Whether a Settings page stands: every page but one an experiment holds
+ * that is off, the account's own or, for a workspace experiment, that of the
+ * workspace Settings stands under (`workspace`), else the listed one. It
+ * waits on the account's settings, and on its workspaces, while they are
+ * unread, as a reloaded address's does.
+ */
+export function settingsPageRouteStands(
+  page: string,
+  access: RouteAccess,
+  workspace?: string,
+): boolean {
+  const view = settingsViewOfPage(page);
+  if (view === undefined || !access.experimentsRead || access.workspaces.length === 0) return true;
+  return settingsPageExperimentStands(view, experimentsAt(workspace, access));
+}
+
+/** Whether a task's version history stands: it is the description's, so only while the workspace its address names has Descriptions on, which waits on the reader's workspaces while they are unread. */
+export function versionHistoryRouteStands(access: RouteAccess, workspace: string): boolean {
+  return (
+    access.workspaces.length === 0 ||
+    experimentOn(experimentsAt(workspace, access), EXPERIMENT.DESCRIPTIONS)
+  );
 }
 
 /** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, a person's page, the Automations pages, a task's version history, and the Inbox. */
@@ -182,18 +213,19 @@ export function routedPlaceOf(matches: readonly RouteMatchSeen[]): RoutedPlace |
 export function routedStands(matches: readonly RouteMatchSeen[], access: RouteAccess): boolean {
   const place = routedPlaceOf(matches);
   if (place === ROUTED_PLACE.ADMIN) return adminRouteStands(access);
-  if (place === ROUTED_PLACE.VERSION_HISTORY) return versionHistoryRouteStands(access);
+  const workspace = matches.find((match) => match.params.workspace !== undefined)?.params.workspace;
+  if (place === ROUTED_PLACE.VERSION_HISTORY) {
+    return workspace === undefined || versionHistoryRouteStands(access, workspace);
+  }
   if (
     place === ROUTED_PLACE.BOARD ||
     place === ROUTED_PLACE.PERSON ||
     place === ROUTED_PLACE.AUTOMATIONS ||
     place === ROUTED_PLACE.INBOX
   ) {
-    const workspace = matches.find((match) => match.params.workspace !== undefined)?.params
-      .workspace;
     return workspace === undefined || workspaceRouteStands(workspace, access);
   }
   if (place !== ROUTED_PLACE.SETTINGS) return true;
   const page = matches.find((match) => match.params.page !== undefined)?.params.page;
-  return page === undefined || settingsPageRouteStands(page, access);
+  return page === undefined || settingsPageRouteStands(page, access, workspace);
 }

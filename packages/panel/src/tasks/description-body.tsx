@@ -36,7 +36,7 @@ import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/descript
 import { GLYPH } from "@repo/ui/icons";
 import { type MarkdownTaskBox, TaskBox, type TaskBoxItem } from "@repo/ui/markdown";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { diffArrays } from "diff";
 import {
   Fragment,
@@ -65,7 +65,7 @@ import {
 import { useCreator } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import { useWorkspaceExperiment } from "../workspace-experiments.js";
 import {
   CommentsToggle,
   DescriptionCommentLayer,
@@ -1100,9 +1100,8 @@ export const DescriptionBody = memo(function DescriptionBody({
   shown?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
-  // While Descriptions is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
+  // While its workspace has Descriptions off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
+  const documented = useWorkspaceExperiment(task.workspaceId, EXPERIMENT.DESCRIPTIONS);
   const editable = edit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
