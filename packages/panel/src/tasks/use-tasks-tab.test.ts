@@ -57,6 +57,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type ActHandle, KEPT, type Kept } from "../act.js";
+import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -233,8 +234,8 @@ function mount(
   const agentActs: PortActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
-  /** Each time the tab opened Admin through its own door. */
-  const adminOpens: string[] = [];
+  /** Each time the tab opened Admin through its own door, by the view it named, none for its Overview. */
+  const adminOpens: (AdminView | undefined)[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
@@ -331,7 +332,7 @@ function mount(
       adminView: {
         ...ADMIN_AWAY,
         open: held.admin === true,
-        onOpen: () => adminOpens.push("admin"),
+        onOpen: (view) => adminOpens.push(view),
       },
     });
     return held.history
@@ -3994,11 +3995,23 @@ test("Admin opened while a page holds unsaved work waits on the leave question, 
   assert.deepEqual(tab.adminOpens, [], "Admin waits on the question");
 
   act(() => asked[0]?.());
-  assert.deepEqual(tab.adminOpens, ["admin"]);
+  assert.deepEqual(tab.adminOpens, [undefined]);
 });
 
 test("New task over Home under Admin opens its dialog, since Home's composer is not on screen", () => {
   const tab = mount({ shown: true, admin: true });
   act(() => tab.control().onNewTask());
   assert.equal(tab.control().newTask.open, true);
+});
+
+test("a link to Admin opens it through the router's door on the view it names, and its Overview where it names none", () => {
+  const tab = mount({ shown: true });
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.ADMIN } }));
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.ADMIN, userId: "user-charles" },
+    }),
+  );
+  assert.deepEqual(tab.adminOpens, [undefined, { kind: ADMIN_PAGE.ACCOUNT, id: "user-charles" }]);
 });

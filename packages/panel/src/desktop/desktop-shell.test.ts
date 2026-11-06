@@ -714,9 +714,12 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   document.body.innerHTML = "";
 
   handCapabilities(DESKTOP_CAPABILITIES);
-  mount(false);
+  const tabs: PanelTab[] = [];
+  mount(false, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab));
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
+  // Note that choosing the page is what opens Settings on it, so no tab change makes a second step before it.
+  assert.deepEqual(tabs, []);
 });
 
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {

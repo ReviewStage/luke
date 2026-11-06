@@ -582,12 +582,8 @@ function usePlaceCommands(
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
     pastGate && desktopApp
-      ? () => {
-          // Arriving at Settings lands on Account, so the page is turned
-          // after.
-          onTabChange(PANEL_TAB.SETTINGS);
-          settings.onViewChange(SETTINGS_VIEW.SHORTCUTS);
-        }
+      ? // Choosing the page opens Settings on it, one step (`settings-link.ts`).
+        () => settings.onViewChange(SETTINGS_VIEW.SHORTCUTS)
       : undefined,
   );
 }
